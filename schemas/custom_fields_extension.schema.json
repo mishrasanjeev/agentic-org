@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Custom Fields Extension",
+  "description": "Append to any schema for org-specific fields without breaking the base schema version.",
+  "type": "object",
+  "additionalProperties": true
+}

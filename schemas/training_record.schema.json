@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Training Record",
+  "type": "object",
+  "required": [
+    "record_id",
+    "employee_id",
+    "course_name",
+    "completion_status"
+  ],
+  "properties": {
+    "record_id": {
+      "type": "string"
+    },
+    "employee_id": {
+      "type": "string"
+    },
+    "course_name": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "course_type": {
+      "type": "string",
+      "enum": [
+        "mandatory",
+        "optional",
+        "certification"
+      ]
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "completion_status": {
+      "type": "string",
+      "enum": [
+        "enrolled",
+        "in_progress",
+        "completed",
+        "expired",
+        "failed"
+      ]
+    },
+    "score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "certificate_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cost": {
+      "type": "number"
+    }
+  }
+}

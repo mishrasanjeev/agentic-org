@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fixed Asset",
+  "type": "object",
+  "required": [
+    "asset_id",
+    "name",
+    "category",
+    "purchase_date",
+    "cost",
+    "status"
+  ],
+  "properties": {
+    "asset_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "purchase_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "cost": {
+      "type": "number"
+    },
+    "useful_life_years": {
+      "type": "number"
+    },
+    "depreciation_method": {
+      "type": "string",
+      "enum": [
+        "slm",
+        "wdv"
+      ]
+    },
+    "book_value": {
+      "type": "number"
+    },
+    "accumulated_depreciation": {
+      "type": "number"
+    },
+    "disposal_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "disposed",
+        "fully_depreciated"
+      ]
+    }
+  }
+}

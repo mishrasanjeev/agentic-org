@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Contract",
+  "type": "object",
+  "required": [
+    "contract_id",
+    "title",
+    "counterparty",
+    "contract_type",
+    "start_date",
+    "end_date",
+    "status"
+  ],
+  "properties": {
+    "contract_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "counterparty": {
+      "type": "string"
+    },
+    "contract_type": {
+      "type": "string",
+      "enum": [
+        "MSA",
+        "NDA",
+        "SLA",
+        "SOW",
+        "lease",
+        "employment",
+        "purchase"
+      ]
+    },
+    "value": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "auto_renewal": {
+      "type": "boolean"
+    },
+    "notice_period_days": {
+      "type": "number"
+    },
+    "key_obligations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sla_terms": {
+      "type": "object"
+    },
+    "penalty_clauses": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "governing_law": {
+      "type": "string"
+    },
+    "non_standard_clauses": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "expiring",
+        "expired",
+        "terminated"
+      ]
+    },
+    "custom_fields": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

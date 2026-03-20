@@ -1,0 +1,82 @@
+name: AgentFlow OS CI/CD
+on:
+  push: { branches: [main], tags: ["v*"] }
+  pull_request: { branches: [main] }
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install ruff mypy
+      - run: ruff check .
+      - run: mypy --ignore-missing-imports .
+
+  unit-tests:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/unit/ --cov=. --cov-report=xml
+      - uses: codecov/codecov-action@v4
+
+  integration-tests:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    services:
+      postgres: { image: "pgvector/pgvector:pg16", env: { POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test }, ports: ["5432:5432"] }
+      redis: { image: "redis:7-alpine", ports: ["6379:6379"] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/integration/
+
+  security-scan:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install bandit pip-audit
+      - run: bandit -r core/ connectors/ api/ auth/ -ll
+      - run: pip-audit
+
+  build:
+    needs: [unit-tests, integration-tests, security-scan]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t agentflow-os:${{ github.sha }} .
+      - run: docker build -t agentflow-os-ui:${{ github.sha }} -f Dockerfile.ui .
+
+  deploy-staging:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Deploy to staging via Helm"
+
+  e2e-tests:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Run Playwright + API e2e tests"
+
+  deploy-production:
+    needs: e2e-tests
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Deploy to production via Helm with canary"

@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Compliance Filing",
+  "type": "object",
+  "required": [
+    "filing_id",
+    "regulation",
+    "filing_type",
+    "period",
+    "due_date",
+    "status"
+  ],
+  "properties": {
+    "filing_id": {
+      "type": "string"
+    },
+    "regulation": {
+      "type": "string",
+      "enum": [
+        "GST",
+        "TDS",
+        "MCA",
+        "EPFO",
+        "SEBI",
+        "RBI",
+        "Labour"
+      ]
+    },
+    "filing_type": {
+      "type": "string"
+    },
+    "period": {
+      "type": "string"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "filed_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "filed_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "acknowledgement_number": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "late_fee": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "draft_ready",
+        "filed",
+        "late",
+        "notice_received"
+      ]
+    },
+    "attachment_s3_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

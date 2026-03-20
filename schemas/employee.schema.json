@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Employee",
+  "type": "object",
+  "required": [
+    "employee_id",
+    "full_name",
+    "email",
+    "department",
+    "designation",
+    "date_of_joining",
+    "status"
+  ],
+  "properties": {
+    "employee_id": {
+      "type": "string"
+    },
+    "full_name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "department": {
+      "type": "string"
+    },
+    "designation": {
+      "type": "string"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L9",
+        "L10"
+      ]
+    },
+    "employment_type": {
+      "type": "string",
+      "enum": [
+        "full_time",
+        "contract",
+        "intern",
+        "advisor"
+      ]
+    },
+    "date_of_joining": {
+      "type": "string",
+      "format": "date"
+    },
+    "date_of_leaving": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "ctc": {
+      "type": "number"
+    },
+    "variable_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "esop_units": {
+      "type": "integer"
+    },
+    "manager_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "location": {
+      "type": "string"
+    },
+    "work_mode": {
+      "type": "string",
+      "enum": [
+        "office",
+        "remote",
+        "hybrid"
+      ]
+    },
+    "probation_end_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "probation",
+        "on_leave",
+        "notice_period",
+        "terminated"
+      ]
+    },
+    "custom_fields": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

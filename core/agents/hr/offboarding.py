@@ -1,0 +1,16 @@
+"""Offboarding agent implementation."""
+from __future__ import annotations
+from typing import Any
+from core.agents.base import BaseAgent
+from core.agents.registry import AgentRegistry
+
+@AgentRegistry.register
+class OffboardingAgentAgent(BaseAgent):
+    agent_type = "offboarding_agent"
+    domain = "hr"
+    confidence_floor = 0.95
+    prompt_file = "offboarding_agent.prompt.txt"
+
+    async def execute(self, task):
+        """Execute offboarding task with domain-specific logic."""
+        return await super().execute(task)

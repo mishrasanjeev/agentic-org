@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Campaign",
+  "type": "object",
+  "required": [
+    "campaign_id",
+    "name",
+    "channel",
+    "status"
+  ],
+  "properties": {
+    "campaign_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "google",
+        "meta",
+        "linkedin",
+        "email",
+        "organic"
+      ]
+    },
+    "objective": {
+      "type": "string",
+      "enum": [
+        "awareness",
+        "consideration",
+        "conversion",
+        "retention"
+      ]
+    },
+    "budget_total": {
+      "type": "number"
+    },
+    "budget_spent": {
+      "type": "number"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "target_audience": {
+      "type": "object",
+      "properties": {
+        "industries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "company_size": {
+          "type": "string"
+        },
+        "seniority": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "impressions": {
+          "type": "number"
+        },
+        "clicks": {
+          "type": "number"
+        },
+        "conversions": {
+          "type": "number"
+        },
+        "roas": {
+          "type": "number"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "paused",
+        "completed"
+      ]
+    },
+    "custom_fields": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

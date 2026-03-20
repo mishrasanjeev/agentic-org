@@ -1,0 +1,49 @@
+name: invoice-processing-v2
+version: "2.0"
+trigger:
+  type: email_received
+  filter: { subject_contains: ["invoice", "bill"] }
+timeout_hours: 48
+on_timeout: escalate_to_human
+
+steps:
+  - id: extract
+    type: agent
+    agent: ap-processor
+    action: extract_invoice
+    output_schema: Invoice
+    on_failure: retry(3)
+
+  - id: parallel_validations
+    type: parallel
+    wait_for: all
+    steps: [validate_gstin, check_duplicate]
+
+  - id: match
+    type: agent
+    agent: ap-processor
+    action: three_way_match
+    depends_on: [parallel_validations]
+
+  - id: amount_gate
+    type: condition
+    condition: "match.output.total > 500000 OR match.output.status == 'mismatch'"
+    true_path: hitl_approval
+    false_path: auto_post
+
+  - id: hitl_approval
+    type: human_in_loop
+    assignee_role: cfo
+    timeout_hours: 4
+    on_timeout: escalate_ceo
+
+  - id: post_gl
+    type: agent
+    agent: ap-processor
+    action: post_journal_entry
+    depends_on: [hitl_approval, auto_post]
+
+  - id: notify_vendor
+    type: notify
+    connector: email
+    template: remittance_advice

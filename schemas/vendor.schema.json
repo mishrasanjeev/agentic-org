@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Vendor",
+  "type": "object",
+  "required": [
+    "vendor_id",
+    "name",
+    "status"
+  ],
+  "properties": {
+    "vendor_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "gstin": {
+      "type": "string"
+    },
+    "pan": {
+      "type": "string"
+    },
+    "bank": {
+      "type": "object",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "ifsc": {
+          "type": "string"
+        }
+      }
+    },
+    "risk_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "sanctions_clear": {
+      "type": "boolean"
+    },
+    "sanctions_checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "category": {
+      "type": "string"
+    },
+    "approved_spend_limit": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "blacklisted",
+        "suspended"
+      ]
+    }
+  }
+}

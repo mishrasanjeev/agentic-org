@@ -1,0 +1,35 @@
+name: employee-onboarding
+version: "1.0"
+trigger:
+  type: api_event
+  filter: { event_type: "connector.darwinbox.employee_joined" }
+
+steps:
+  - id: provision_accounts
+    type: agent
+    agent: onboarding-agent
+    action: provision_all_systems
+
+  - id: setup_equipment
+    type: agent
+    agent: onboarding-agent
+    action: request_equipment
+    depends_on: [provision_accounts]
+
+  - id: enrol_training
+    type: agent
+    agent: onboarding-agent
+    action: enrol_compliance_training
+    depends_on: [provision_accounts]
+
+  - id: setup_plan
+    type: agent
+    agent: onboarding-agent
+    action: create_30_60_90_plan
+    depends_on: [provision_accounts]
+
+  - id: notify_manager
+    type: notify
+    connector: slack
+    template: new_hire_welcome
+    depends_on: [provision_accounts]

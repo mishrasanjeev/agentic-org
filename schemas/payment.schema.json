@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Payment",
+  "type": "object",
+  "required": [
+    "payment_id",
+    "amount",
+    "currency",
+    "method",
+    "status"
+  ],
+  "properties": {
+    "payment_id": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "neft",
+        "rtgs",
+        "imps",
+        "upi",
+        "card",
+        "wallet"
+      ]
+    },
+    "beneficiary": {
+      "type": "object",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "ifsc": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "reference_number": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "processing",
+        "completed",
+        "failed",
+        "reversed"
+      ]
+    },
+    "executed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

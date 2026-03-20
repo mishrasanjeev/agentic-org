@@ -1,0 +1,33 @@
+name: support-triage
+version: "1.0"
+trigger:
+  type: api_event
+  filter: { event_type: "connector.zendesk.ticket_created" }
+
+steps:
+  - id: classify
+    type: agent
+    agent: support-triage
+    action: classify_ticket
+
+  - id: severity_check
+    type: condition
+    condition: "classify.output.classification == 'L1'"
+    true_path: auto_resolve
+    false_path: enrich_and_route
+
+  - id: auto_resolve
+    type: agent
+    agent: support-triage
+    action: resolve_l1
+
+  - id: enrich_and_route
+    type: agent
+    agent: support-triage
+    action: enrich_and_route_l2
+
+  - id: notify_agent
+    type: notify
+    connector: slack
+    template: ticket_assigned
+    depends_on: [enrich_and_route]

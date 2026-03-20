@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Product Catalogue",
+  "type": "object",
+  "required": [
+    "product_id",
+    "name",
+    "sku",
+    "price",
+    "status"
+  ],
+  "properties": {
+    "product_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "price": {
+      "type": "number"
+    },
+    "tax_rate": {
+      "type": "number"
+    },
+    "inventory_qty": {
+      "type": "integer"
+    },
+    "unit": {
+      "type": "string"
+    },
+    "hsn_sac_code": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "discontinued",
+        "draft"
+      ]
+    },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

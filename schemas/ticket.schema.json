@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Support Ticket",
+  "type": "object",
+  "required": [
+    "ticket_id",
+    "channel",
+    "priority",
+    "status"
+  ],
+  "properties": {
+    "ticket_id": {
+      "type": "string"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "email",
+        "chat",
+        "phone",
+        "portal",
+        "social"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "category": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "customer_tier": {
+      "type": "string"
+    },
+    "sentiment_score": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "assigned_to": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "pending",
+        "escalated",
+        "resolved",
+        "closed"
+      ]
+    },
+    "csat_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    }
+  }
+}

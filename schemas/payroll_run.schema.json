@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Payroll Run",
+  "type": "object",
+  "required": [
+    "run_id",
+    "period",
+    "run_date",
+    "employee_count",
+    "status"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "period": {
+      "type": "string"
+    },
+    "run_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "employee_count": {
+      "type": "integer"
+    },
+    "total_gross": {
+      "type": "number"
+    },
+    "total_deductions": {
+      "type": "number"
+    },
+    "total_net": {
+      "type": "number"
+    },
+    "pf_total": {
+      "type": "number"
+    },
+    "esi_total": {
+      "type": "number"
+    },
+    "tds_total": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "computed",
+        "approved",
+        "disbursed"
+      ]
+    },
+    "approved_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "disbursed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

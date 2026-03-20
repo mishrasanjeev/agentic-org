@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Job Requisition",
+  "type": "object",
+  "required": [
+    "job_id",
+    "title",
+    "department",
+    "hiring_manager_id",
+    "status"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "department": {
+      "type": "string"
+    },
+    "hiring_manager_id": {
+      "type": "string"
+    },
+    "level": {
+      "type": "string"
+    },
+    "location": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "employment_type": {
+      "type": "string",
+      "enum": [
+        "full_time",
+        "contract",
+        "intern"
+      ]
+    },
+    "ctc_band": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string"
+        }
+      }
+    },
+    "must_have": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nice_to_have": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "jd_text": {
+      "type": "string"
+    },
+    "open_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "target_close_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "on_hold",
+        "filled",
+        "cancelled"
+      ]
+    }
+  }
+}

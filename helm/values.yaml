@@ -1,0 +1,44 @@
+replicaCount:
+  api: 3
+  orchestrator: 3
+  workers: 6
+
+image:
+  repository: agentflow-os
+  tag: latest
+  pullPolicy: IfNotPresent
+
+agentScaling:
+  ap_processor:
+    minReplicas: 2
+    maxReplicas: 20
+    metrics:
+      - type: queue_depth
+        target: 30
+  recon_agent:
+    minReplicas: 1
+    maxReplicas: 5
+    metrics:
+      - type: schedule
+        schedules:
+          - cron: "0 22 25-31 * *"
+            replicas: 4
+  _default:
+    minReplicas: 1
+    maxReplicas: 5
+    metrics:
+      - type: cpu
+        targetAverageUtilization: 70
+
+fleetLimits:
+  maxActiveAgents: 50
+  maxAgentsPerDomain: 20
+  maxShadowAgents: 10
+  maxReplicasGlobalCeiling: 20
+
+postgresql:
+  enabled: true
+  auth:
+    database: agentflow
+redis:
+  enabled: true

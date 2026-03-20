@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Lead",
+  "type": "object",
+  "required": [
+    "lead_id",
+    "email",
+    "status"
+  ],
+  "properties": {
+    "lead_id": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "name": {
+      "type": "string"
+    },
+    "company": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "industry": {
+      "type": "string"
+    },
+    "company_size": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "lead_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "lifecycle_stage": {
+      "type": "string"
+    },
+    "intent_signals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "new",
+        "contacted",
+        "qualified",
+        "mql",
+        "sql",
+        "won",
+        "lost"
+      ]
+    }
+  }
+}

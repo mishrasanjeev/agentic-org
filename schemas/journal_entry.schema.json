@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GL Journal Entry",
+  "type": "object",
+  "required": [
+    "entry_id",
+    "period",
+    "posting_date",
+    "debit_account",
+    "credit_account",
+    "amount",
+    "status"
+  ],
+  "properties": {
+    "entry_id": {
+      "type": "string"
+    },
+    "period": {
+      "type": "string"
+    },
+    "posting_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "debit_account": {
+      "type": "string"
+    },
+    "credit_account": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "cost_center": {
+      "type": "string"
+    },
+    "narration": {
+      "type": "string"
+    },
+    "reference_doc": {
+      "type": "string"
+    },
+    "posted_by": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "posted",
+        "reversed"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string"
+    }
+  }
+}
