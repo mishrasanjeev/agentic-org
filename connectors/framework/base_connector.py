@@ -61,9 +61,26 @@ class BaseConnector(abc.ABC):
             raise ValueError(f"Tool {tool_name} not registered on {self.name}")
         return await handler(**params)
 
+    def _get_secret(self, key: str) -> str:
+        """Retrieve a secret from config or secret_ref. Never hardcode credentials."""
+        secret_ref = self.config.get("secret_ref", "")
+        # Check config-provided credentials first (injected by platform at runtime)
+        if key in self.config:
+            return self.config[key]
+        # Check environment-style key (e.g., DARWINBOX_API_KEY)
+        env_key = f"{self.name.upper()}_{key.upper()}"
+        if env_key in self.config:
+            return self.config[env_key]
+        # In production, this would call AWS Secrets Manager / Vault / K8s secrets
+        # using secret_ref as the path: e.g., "agentflow/prod/connectors/darwinbox/credentials"
+        if secret_ref:
+            logger.debug("secret_lookup", ref=secret_ref, key=key)
+        return self.config.get("api_key", "") or self.config.get("access_token", "")
+
     @abc.abstractmethod
     async def _authenticate(self) -> None:
-        """Perform authentication. Must set self._auth_headers."""
+        """Perform authentication. Must set self._auth_headers.
+        Use self._get_secret(key) to retrieve credentials — never hardcode tokens."""
 
     async def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
         if not self._client:

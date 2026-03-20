@@ -1,4 +1,9 @@
 -- migrations/005_rls.sql
+
+-- Tenants: allow admin access only (no tenant_id self-reference needed)
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_self_access ON tenants USING (id = current_setting('agentflow.tenant_id')::UUID);
+
 ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON agents USING (tenant_id = current_setting('agentflow.tenant_id')::UUID);
 

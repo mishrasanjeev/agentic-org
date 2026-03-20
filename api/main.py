@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1 import agents, workflows, approvals, audit, schemas, connectors, compliance, config, health, agent_teams
+from api.websocket.feed import router as ws_feed_router
 from api.error_handlers import register_error_handlers
 from auth.middleware import AuthMiddleware
 
@@ -37,3 +38,4 @@ app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
+app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])

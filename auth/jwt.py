@@ -53,6 +53,8 @@ async def validate_token(token: str) -> dict[str, Any]:
             rsa_key,
             algorithms=["RS256"],
             audience="agentflow-tool-gateway",
+            issuer=settings.jwt_issuer,
+            options={"verify_iss": True},
         )
         return payload
     except JWTError as e:

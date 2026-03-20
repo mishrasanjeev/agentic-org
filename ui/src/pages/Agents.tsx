@@ -1,8 +1,102 @@
+import { useState, useEffect } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import AgentCard from "@/components/AgentCard";
+import KillSwitch from "@/components/KillSwitch";
+import type { Agent } from "@/types";
+
+const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice"];
+const STATUSES = ["all", "active", "shadow", "paused", "staging", "deprecated"];
+
 export default function Agents() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [domainFilter, setDomainFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetchAgents();
+  }, [domainFilter, statusFilter]);
+
+  async function fetchAgents() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (domainFilter !== "all") params.set("domain", domainFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const resp = await fetch(`/api/v1/agents?${params}`);
+      const data = await resp.json();
+      setAgents(data.items || []);
+    } catch {
+      setAgents([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const filtered = agents.filter(
+    (a) => !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.agent_type.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const stats = {
+    total: agents.length,
+    active: agents.filter((a) => a.status === "active").length,
+    shadow: agents.filter((a) => a.status === "shadow").length,
+    paused: agents.filter((a) => a.status === "paused").length,
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Agent Fleet</h2>
-      <p className="text-muted-foreground">Manage agent fleet here.</p>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Agent Fleet</h2>
+        <Button onClick={() => window.location.href = "/agents/new"}>Create Agent</Button>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        {Object.entries(stats).map(([label, value]) => (
+          <Card key={label}>
+            <CardHeader><CardTitle className="text-sm text-muted-foreground capitalize">{label}</CardTitle></CardHeader>
+            <CardContent><p className="text-3xl font-bold">{value}</p></CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex gap-4 items-center">
+        <input
+          type="text"
+          placeholder="Search agents..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border rounded px-3 py-2 text-sm w-64"
+        />
+        <select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} className="border rounded px-3 py-2 text-sm">
+          {DOMAINS.map((d) => <option key={d} value={d}>{d === "all" ? "All Domains" : d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border rounded px-3 py-2 text-sm">
+          {STATUSES.map((s) => <option key={s} value={s}>{s === "all" ? "All Statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+        </select>
+      </div>
+
+      {loading ? (
+        <p className="text-muted-foreground">Loading agents...</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-muted-foreground">No agents found.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {filtered.map((agent) => (
+            <div key={agent.id} className="relative">
+              <AgentCard agent={agent} onClick={() => window.location.href = `/agents/${agent.id}`} />
+              {agent.status === "active" && (
+                <div className="absolute top-2 right-2">
+                  <KillSwitch agentId={agent.id} agentName={agent.name} onPaused={fetchAgents} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

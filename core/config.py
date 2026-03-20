@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # Auth
     auth_provider: str = "grantex"
     jwt_public_key_url: str = ""
+    jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTFLOW_JWT_ISSUER)
     token_ttl_minutes: int = 60
 
     # Platform behaviour

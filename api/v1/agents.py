@@ -19,6 +19,10 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 async def get_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     return {"id": str(agent_id), "status": "active"}
 
+@router.put("/agents/{agent_id}")
+async def replace_agent(agent_id: UUID, body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
+    return {"id": str(agent_id), "replaced": True}
+
 @router.patch("/agents/{agent_id}")
 async def update_agent(agent_id: UUID, body: AgentUpdate, tenant_id: str = Depends(get_current_tenant)):
     return {"id": str(agent_id), "updated": True}

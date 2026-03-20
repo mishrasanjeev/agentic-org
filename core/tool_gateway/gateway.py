@@ -73,9 +73,15 @@ class ToolGateway:
             return {"error": {"code": "E1007", "message": f"Scope denied: {reason}"}}
 
         # 2. Check rate limit
-        allowed_rl = await self.rate_limiter.check(tenant_id, connector_name)
-        if not allowed_rl:
-            return {"error": {"code": "E1003", "message": "Rate limit exceeded", "retry_after_seconds": 60}}
+        rl_result = await self.rate_limiter.check(tenant_id, connector_name)
+        if not rl_result.allowed:
+            return {
+                "error": {
+                    "code": "E1003",
+                    "message": "Rate limit exceeded",
+                    "retry_after_seconds": rl_result.retry_after_seconds,
+                }
+            }
 
         # 3. Check idempotency
         if idempotency_key:
