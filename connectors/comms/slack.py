@@ -19,7 +19,8 @@ class SlackConnector(BaseConnector):
     self._tool_registry["search_message_history"] = self.search_message_history
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        bot_token = self._get_secret("bot_token")
+        self._auth_headers = {"Authorization": f"Bearer {bot_token}"}
 
 async def send_message(self, **params):
     """Execute send_message on slack."""

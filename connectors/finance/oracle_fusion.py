@@ -1,5 +1,6 @@
 """Oracle Fusion connector — finance."""
 from __future__ import annotations
+import base64
 from typing import Any
 from connectors.framework.base_connector import BaseConnector
 
@@ -23,7 +24,10 @@ class OracleFusionConnector(BaseConnector):
     self._tool_registry["get_trial_balance"] = self.get_trial_balance
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        username = self._get_secret("username")
+        password = self._get_secret("password")
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+        self._auth_headers = {"Authorization": f"Basic {credentials}"}
 
 async def post_journal_entry(self, **params):
     """Execute post_journal_entry on oracle_fusion."""

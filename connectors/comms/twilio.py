@@ -1,5 +1,6 @@
 """Twilio connector — comms."""
 from __future__ import annotations
+import base64
 from typing import Any
 from connectors.framework.base_connector import BaseConnector
 
@@ -18,7 +19,10 @@ class TwilioConnector(BaseConnector):
     self._tool_registry["trigger_tts_call_with_script"] = self.trigger_tts_call_with_script
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        key_id = self._get_secret("key_id")
+        key_secret = self._get_secret("key_secret")
+        credentials = base64.b64encode(f"{key_id}:{key_secret}".encode()).decode()
+        self._auth_headers = {"Authorization": f"Basic {credentials}"}
 
 async def make_outbound_call(self, **params):
     """Execute make_outbound_call on twilio."""

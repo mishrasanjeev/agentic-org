@@ -18,7 +18,8 @@ class WhatsappConnector(BaseConnector):
     self._tool_registry["manage_opt_out"] = self.manage_opt_out
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def send_approved_template_message(self, **params):
     """Execute send_approved_template_message on whatsapp."""

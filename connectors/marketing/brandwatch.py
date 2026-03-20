@@ -1,6 +1,7 @@
 """Brandwatch connector — marketing."""
 from __future__ import annotations
 from typing import Any
+import httpx
 from connectors.framework.base_connector import BaseConnector
 
 class BrandwatchConnector(BaseConnector):
@@ -18,7 +19,18 @@ class BrandwatchConnector(BaseConnector):
     self._tool_registry["export_mention_report"] = self.export_mention_report
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        client_id = self._get_secret("client_id")
+        client_secret = self._get_secret("client_secret")
+        token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(token_url, data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+            })
+            resp.raise_for_status()
+            token = resp.json()["access_token"]
+        self._auth_headers = {"Authorization": f"Bearer {token}"}
 
 async def get_brand_mentions(self, **params):
     """Execute get_brand_mentions on brandwatch."""

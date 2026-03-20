@@ -19,7 +19,9 @@ class EpfoConnector(BaseConnector):
     self._tool_registry["verify_member"] = self.verify_member
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        dsc_path = self._get_secret("dsc_path")
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"X-API-Key": api_key, "X-DSC-Path": dsc_path}
 
 async def file_ecr(self, **params):
     """Execute file_ecr on epfo."""

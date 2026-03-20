@@ -18,7 +18,8 @@ class SanctionsApiConnector(BaseConnector):
     self._tool_registry["generate_screening_report"] = self.generate_screening_report
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def screen_entity_name(self, **params):
     """Execute screen_entity_name on sanctions_api."""

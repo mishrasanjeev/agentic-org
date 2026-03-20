@@ -19,7 +19,8 @@ class PagerdutyConnector(BaseConnector):
     self._tool_registry["acknowledge_incident"] = self.acknowledge_incident
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def create_incident(self, **params):
     """Execute create_incident on pagerduty."""

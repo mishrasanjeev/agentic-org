@@ -1,5 +1,6 @@
 """Jira connector — ops."""
 from __future__ import annotations
+import base64
 from typing import Any
 from connectors.framework.base_connector import BaseConnector
 
@@ -20,7 +21,10 @@ class JiraConnector(BaseConnector):
     self._tool_registry["create_dashboard_widget"] = self.create_dashboard_widget
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        email = self._get_secret("email")
+        api_token = self._get_secret("api_token")
+        credentials = base64.b64encode(f"{email}:{api_token}".encode()).decode()
+        self._auth_headers = {"Authorization": f"Basic {credentials}"}
 
 async def create_issue(self, **params):
     """Execute create_issue on jira."""

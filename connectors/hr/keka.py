@@ -19,7 +19,8 @@ class KekaConnector(BaseConnector):
     self._tool_registry["get_attendance_summary"] = self.get_attendance_summary
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def get_employee(self, **params):
     """Execute get_employee on keka."""

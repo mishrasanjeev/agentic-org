@@ -19,7 +19,8 @@ class DocusignConnector(BaseConnector):
     self._tool_registry["create_template"] = self.create_template
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def send_envelope(self, **params):
     """Execute send_envelope on docusign."""

@@ -23,7 +23,8 @@ class DarwinboxConnector(BaseConnector):
     self._tool_registry["get_payslip"] = self.get_payslip
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def get_employee(self, **params):
     """Execute get_employee on darwinbox."""

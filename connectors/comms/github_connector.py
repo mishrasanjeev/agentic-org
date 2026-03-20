@@ -18,7 +18,8 @@ class GithubConnector(BaseConnector):
     self._tool_registry["create_release"] = self.create_release
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        personal_access_token = self._get_secret("personal_access_token")
+        self._auth_headers = {"Authorization": f"Bearer {personal_access_token}"}
 
 async def create_pull_request(self, **params):
     """Execute create_pull_request on github."""

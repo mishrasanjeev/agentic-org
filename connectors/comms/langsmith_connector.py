@@ -18,7 +18,8 @@ class LangsmithConnector(BaseConnector):
     self._tool_registry["export_evaluation_dataset"] = self.export_evaluation_dataset
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def log_agent_trace(self, **params):
     """Execute log_agent_trace on langsmith."""

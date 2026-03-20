@@ -20,7 +20,9 @@ class IncomeTaxIndiaConnector(BaseConnector):
     self._tool_registry["pay_tax_challan"] = self.pay_tax_challan
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        dsc_path = self._get_secret("dsc_path")
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"X-API-Key": api_key, "X-DSC-Path": dsc_path}
 
 async def file_26q_return(self, **params):
     """Execute file_26q_return on income_tax_india."""

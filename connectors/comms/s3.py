@@ -19,7 +19,10 @@ class S3Connector(BaseConnector):
     self._tool_registry["copy_object"] = self.copy_object
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        access_key = self._get_secret("aws_access_key_id")
+        secret_key = self._get_secret("aws_secret_access_key")
+        self._auth_headers = {"X-AWS-Access-Key": access_key}
+        # Actual SigV4 signing handled by boto3/botocore at request time
 
 async def upload_document(self, **params):
     """Execute upload_document on s3."""

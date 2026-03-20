@@ -19,7 +19,8 @@ class StripeConnector(BaseConnector):
     self._tool_registry["generate_financial_report"] = self.generate_financial_report
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def create_charge(self, **params):
     """Execute create_charge on stripe."""

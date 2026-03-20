@@ -1,5 +1,6 @@
 """Pinelabs Plural connector — finance."""
 from __future__ import annotations
+import base64
 from typing import Any
 from connectors.framework.base_connector import BaseConnector
 
@@ -19,7 +20,10 @@ class PinelabsPluralConnector(BaseConnector):
     self._tool_registry["get_payout_analytics"] = self.get_payout_analytics
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        key_id = self._get_secret("key_id")
+        key_secret = self._get_secret("key_secret")
+        credentials = base64.b64encode(f"{key_id}:{key_secret}".encode()).decode()
+        self._auth_headers = {"Authorization": f"Basic {credentials}"}
 
 async def create_payout(self, **params):
     """Execute create_payout on pinelabs_plural."""

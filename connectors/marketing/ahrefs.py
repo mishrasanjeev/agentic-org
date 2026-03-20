@@ -18,7 +18,8 @@ class AhrefsConnector(BaseConnector):
     self._tool_registry["export_crawl_issues"] = self.export_crawl_issues
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def get_keyword_ranking_history(self, **params):
     """Execute get_keyword_ranking_history on ahrefs."""

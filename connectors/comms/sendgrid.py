@@ -18,7 +18,8 @@ class SendgridConnector(BaseConnector):
     self._tool_registry["validate_email_address"] = self.validate_email_address
 
     async def _authenticate(self):
-        self._auth_headers = {"Authorization": "Bearer <token>"}
+        api_key = self._get_secret("api_key")
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
 async def send_transactional_email(self, **params):
     """Execute send_transactional_email on sendgrid."""
