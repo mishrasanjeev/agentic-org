@@ -123,7 +123,7 @@ CONNECTORS = [
      ["send_approved_template_message","send_interactive_message","send_media_message","get_delivery_status","manage_opt_out"]),
     ("connectors/comms/google_calendar.py", "google_calendar", "comms", "oauth2", "https://www.googleapis.com/calendar/v3", 100,
      ["create_calendar_event","check_participant_availability","book_meeting_room","cancel_event","find_optimal_meeting_slot"]),
-    ("connectors/comms/s3.py", "s3", "comms", "iam_sigv4", "https://s3.amazonaws.com", 1000,
+    ("connectors/comms/s3.py", "object_storage", "comms", "gcs_service_account", "https://storage.googleapis.com", 1000,
      ["upload_document","download_document","list_bucket_objects","generate_presigned_download_url","delete_object","copy_object"]),
     ("connectors/comms/github_connector.py", "github", "comms", "pat_oauth2", "https://api.github.com", 100,
      ["create_pull_request","list_repository_issues","trigger_github_action_workflow","get_repository_statistics","create_release"]),

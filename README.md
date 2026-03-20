@@ -33,7 +33,7 @@ AgentFlow OS deploys **24 specialist AI agents** across Finance, HR, Marketing, 
 ```
 Layer 8 — Auth & Compliance    Grantex/OAuth2 · OPA · WORM audit
 Layer 7 — Observability        OpenTelemetry · LangSmith · Prometheus · Grafana
-Layer 6 — Data                 PostgreSQL 16 + pgvector · Redis 7 · S3
+Layer 6 — Data                 PostgreSQL 16 + pgvector · Redis 7 · Cloud Storage (GCS)
 Layer 5 — Connectors           42 typed adapters (REST/SOAP/SCIM)
 Layer 4 — Tool Gateway         Scope enforcement · Rate limiting · PII masking
 Layer 3 — NEXUS Orchestrator   Task routing · Conflict resolution · Checkpointing
@@ -128,7 +128,7 @@ agentflow-os/
 │   ├── hr/                 # Darwinbox, Greenhouse, Okta, EPFO, etc.
 │   ├── marketing/          # HubSpot, Salesforce, Google Ads, Ahrefs, etc.
 │   ├── ops/                # Jira, Zendesk, ServiceNow, PagerDuty, etc.
-│   ├── comms/              # Slack, SendGrid, Twilio, WhatsApp, S3, GitHub
+│   ├── comms/              # Slack, SendGrid, Twilio, WhatsApp, Cloud Storage (GCS), GitHub
 │   └── framework/          # BaseConnector, auth adapters, circuit breaker
 ├── core/
 │   ├── agents/             # 24 agent implementations + prompts
@@ -222,7 +222,7 @@ draft → shadow → review_ready → staging → production_ready → active
 
 | Feature | Implementation |
 |---------|---------------|
-| **Tenant isolation** | PostgreSQL RLS on all 18 tables, Redis key namespacing, S3 prefix isolation |
+| **Tenant isolation** | PostgreSQL RLS on all 18 tables, Redis key namespacing, Cloud Storage (GCS) prefix isolation |
 | **Token scoping** | Per-agent OAuth2 tokens with fine-grained tool:connector:action scopes |
 | **PII masking** | Default-on masking of email, phone, Aadhaar, PAN, bank accounts |
 | **Audit trail** | Append-only, HMAC-SHA256 signed, 7-year retention, WORM storage |

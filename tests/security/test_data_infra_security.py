@@ -163,39 +163,39 @@ class TestSECDATA003:
 
 
 # ---------------------------------------------------------------------------
-# SEC-DATA-004: Data residency India (all data in ap-south-1)
+# SEC-DATA-004: Data residency India (all data in asia-south1)
 # ---------------------------------------------------------------------------
 
 class TestSECDATA004:
-    """All data must reside in ap-south-1 (India) per regulatory requirements."""
+    """All data must reside in asia-south1 (India) per regulatory requirements."""
 
-    def test_s3_region_is_ap_south_1(self):
-        """SEC-DATA-004: The default S3 region must be ap-south-1."""
+    def test_storage_region_is_asia_south1(self):
+        """SEC-DATA-004: The default storage region must be asia-south1."""
         with patch("core.config.Settings") as MockSettings:
             s = Settings(secret_key="test-secret-key-16chars")
-            assert s.s3_region == "ap-south-1"
+            assert s.storage_region == "asia-south1"
 
     def test_data_region_is_india(self):
         """SEC-DATA-004: The data_region setting must be 'IN' (India)."""
         s = Settings(secret_key="test-secret-key-16chars")
         assert s.data_region == "IN"
 
-    def test_s3_bucket_contains_region_indicator(self):
-        """SEC-DATA-004: The default S3 bucket name implies document storage.
-        In production, it must be in ap-south-1.
+    def test_storage_bucket_contains_region_indicator(self):
+        """SEC-DATA-004: The default storage bucket name implies document storage.
+        In production, it must be in asia-south1.
         """
         s = Settings(secret_key="test-secret-key-16chars")
         # The bucket exists and is configured
-        assert s.s3_bucket is not None
-        assert len(s.s3_bucket) > 0
+        assert s.storage_bucket is not None
+        assert len(s.storage_bucket) > 0
 
 
 # ---------------------------------------------------------------------------
-# SEC-DATA-005: Connector credentials not in DB (all in Secret Manager)
+# SEC-DATA-005: Connector credentials not in DB (all in Google Secret Manager)
 # ---------------------------------------------------------------------------
 
 class TestSECDATA005:
-    """Connector credentials must be loaded from environment/Secret Manager, not DB."""
+    """Connector credentials must be loaded from environment/Google Secret Manager, not DB."""
 
     def test_external_keys_from_env_not_db(self):
         """SEC-DATA-005: External API keys must be loaded from environment
@@ -222,7 +222,7 @@ class TestSECDATA005:
         # External keys are separate from the DB connection
         from core.config import ExternalKeys
         ek = ExternalKeys()
-        # These default to empty -- filled from env/Secret Manager at runtime
+        # These default to empty -- filled from env/Google Secret Manager at runtime
         assert isinstance(ek.anthropic_api_key, str)
         assert isinstance(ek.grantex_client_secret, str)
 

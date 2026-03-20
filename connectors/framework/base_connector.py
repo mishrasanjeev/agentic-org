@@ -71,7 +71,7 @@ class BaseConnector(abc.ABC):
         env_key = f"{self.name.upper()}_{key.upper()}"
         if env_key in self.config:
             return self.config[env_key]
-        # In production, this would call AWS Secrets Manager / Vault / K8s secrets
+        # In production, this would call Google Secret Manager / Vault / K8s secrets
         # using secret_ref as the path: e.g., "agentflow/prod/connectors/darwinbox/credentials"
         if secret_ref:
             logger.debug("secret_lookup", ref=secret_ref, key=key)

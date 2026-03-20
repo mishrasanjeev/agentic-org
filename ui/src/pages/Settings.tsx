@@ -105,9 +105,9 @@ export default function Settings() {
             <div>
               <label className="text-sm font-medium">Data Region</label>
               <select value={dataRegion} onChange={(e) => setDataRegion(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                <option value="IN">India (ap-south-1)</option>
-                <option value="EU">EU (eu-west-1)</option>
-                <option value="US">US (us-east-1)</option>
+                <option value="IN">India (asia-south1)</option>
+                <option value="EU">EU (europe-west1)</option>
+                <option value="US">US (us-central1)</option>
               </select>
             </div>
             <div>

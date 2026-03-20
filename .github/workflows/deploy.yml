@@ -4,8 +4,9 @@ on:
   pull_request: { branches: [main] }
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
-  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/agentflow
   HELM_RELEASE: agentflow-os
   HELM_CHART_PATH: ./helm
 
@@ -67,33 +68,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Login to Amazon ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
       - name: Build and push API image
         run: |
           docker build \
-            -t ${{ env.ECR_REGISTRY }}/agentflow-os:${{ github.sha }} \
-            -t ${{ env.ECR_REGISTRY }}/agentflow-os:latest \
+            -t ${{ env.GAR_REGISTRY }}/agentflow-os:${{ github.sha }} \
+            -t ${{ env.GAR_REGISTRY }}/agentflow-os:latest \
             .
-          docker push ${{ env.ECR_REGISTRY }}/agentflow-os:${{ github.sha }}
-          docker push ${{ env.ECR_REGISTRY }}/agentflow-os:latest
+          docker push ${{ env.GAR_REGISTRY }}/agentflow-os:${{ github.sha }}
+          docker push ${{ env.GAR_REGISTRY }}/agentflow-os:latest
 
       - name: Build and push UI image
         run: |
           docker build \
-            -t ${{ env.ECR_REGISTRY }}/agentflow-os-ui:${{ github.sha }} \
-            -t ${{ env.ECR_REGISTRY }}/agentflow-os-ui:latest \
+            -t ${{ env.GAR_REGISTRY }}/agentflow-os-ui:${{ github.sha }} \
+            -t ${{ env.GAR_REGISTRY }}/agentflow-os-ui:latest \
             -f Dockerfile.ui .
-          docker push ${{ env.ECR_REGISTRY }}/agentflow-os-ui:${{ github.sha }}
-          docker push ${{ env.ECR_REGISTRY }}/agentflow-os-ui:latest
+          docker push ${{ env.GAR_REGISTRY }}/agentflow-os-ui:${{ github.sha }}
+          docker push ${{ env.GAR_REGISTRY }}/agentflow-os-ui:latest
 
   deploy-staging:
     needs: build
@@ -106,25 +109,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Configure kubectl for staging
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Configure kubectl for GKE staging
         run: |
-          aws eks update-kubeconfig \
-            --region ${{ env.AWS_REGION }} \
-            --name ${{ secrets.EKS_CLUSTER_STAGING }} \
-            --role-arn ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_STAGING }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Deploy to staging via Helm
         run: |
           helm upgrade --install ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
             --namespace agentflow-staging \
             --create-namespace \
-            --set image.repository=${{ env.ECR_REGISTRY }}/agentflow-os \
+            --set image.repository=${{ env.GAR_REGISTRY }}/agentflow-os \
             --set image.tag=${{ github.sha }} \
             --set postgresql.auth.password=${{ secrets.STAGING_DB_PASSWORD }} \
             --set redis.auth.password=${{ secrets.STAGING_REDIS_PASSWORD }} \
@@ -223,24 +231,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_PROD_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_PROD_SERVICE_ACCOUNT }}
 
-      - name: Configure kubectl for production
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Configure kubectl for GKE production
         run: |
-          aws eks update-kubeconfig \
-            --region ${{ env.AWS_REGION }} \
-            --name ${{ secrets.EKS_CLUSTER_PRODUCTION }} \
-            --role-arn ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_PRODUCTION }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Deploy canary (10% traffic)
         run: |
           helm upgrade --install ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
             --namespace agentflow-prod \
-            --set image.repository=${{ env.ECR_REGISTRY }}/agentflow-os \
+            --set image.repository=${{ env.GAR_REGISTRY }}/agentflow-os \
             --set image.tag=${{ github.sha }} \
             --set canary.enabled=true \
             --set canary.weight=10 \
@@ -276,7 +289,7 @@ jobs:
         run: |
           helm upgrade ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
             --namespace agentflow-prod \
-            --set image.repository=${{ env.ECR_REGISTRY }}/agentflow-os \
+            --set image.repository=${{ env.GAR_REGISTRY }}/agentflow-os \
             --set image.tag=${{ github.sha }} \
             --set canary.enabled=false \
             --set postgresql.auth.password=${{ secrets.PROD_DB_PASSWORD }} \

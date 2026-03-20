@@ -58,8 +58,8 @@ services:
       AGENTFLOW_ENV: development
       AGENTFLOW_DB_URL: postgresql+asyncpg://agentflow:agentflow_dev@postgres:5432/agentflow
       AGENTFLOW_REDIS_URL: redis://redis:6379/0
-      AGENTFLOW_S3_BUCKET: agentflow-docs-dev
-      AGENTFLOW_S3_ENDPOINT: http://minio:9000
+      AGENTFLOW_STORAGE_BUCKET: agentflow-docs-dev
+      AGENTFLOW_STORAGE_ENDPOINT: http://minio:9000
       AGENTFLOW_SECRET_KEY: dev-secret-key-change-in-production-32chars
       AGENTFLOW_PII_MASKING: "true"
       AGENTFLOW_LOG_LEVEL: DEBUG
@@ -82,8 +82,8 @@ services:
       AGENTFLOW_ENV: development
       AGENTFLOW_DB_URL: postgresql+asyncpg://agentflow:agentflow_dev@postgres:5432/agentflow
       AGENTFLOW_REDIS_URL: redis://redis:6379/0
-      AGENTFLOW_S3_BUCKET: agentflow-docs-dev
-      AGENTFLOW_S3_ENDPOINT: http://minio:9000
+      AGENTFLOW_STORAGE_BUCKET: agentflow-docs-dev
+      AGENTFLOW_STORAGE_ENDPOINT: http://minio:9000
       AGENTFLOW_SECRET_KEY: dev-secret-key-change-in-production-32chars
       AGENTFLOW_PII_MASKING: "true"
     depends_on:

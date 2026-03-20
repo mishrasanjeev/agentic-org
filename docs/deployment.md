@@ -18,7 +18,7 @@ docker compose up -d
 # - API:        http://localhost:8000
 # - PostgreSQL:  localhost:5432
 # - Redis:       localhost:6379
-# - MinIO (S3):  http://localhost:9000 (console: :9001)
+# - MinIO (S3-compat): http://localhost:9000 (console: :9001)
 ```
 
 ## Kubernetes (Production)
@@ -26,17 +26,30 @@ docker compose up -d
 ### Prerequisites
 - Kubernetes 1.28+
 - Helm 3.x
-- PostgreSQL 16 (managed: RDS, Cloud SQL, or in-cluster)
-- Redis 7 (managed: ElastiCache, Memorystore, or in-cluster)
-- S3-compatible storage
+- PostgreSQL 16 (managed: Cloud SQL or in-cluster)
+- Redis 7 (managed: Memorystore or in-cluster)
+- Google Cloud Storage (or S3-compatible storage for dev)
 
 ### Install
 
 ```bash
+# Create GKE cluster (if not already provisioned)
+gcloud container clusters create agentflow-prod \
+  --region asia-south1 \
+  --num-nodes 3 \
+  --machine-type e2-standard-4 \
+  --workload-pool=YOUR_PROJECT.svc.id.goog
+
 # Create namespace
 kubectl create namespace agentflow-prod
 
-# Create secrets
+# Store secrets in Google Secret Manager and sync to K8s
+gcloud secrets create agentflow-anthropic-key --replication-policy="user-managed" \
+  --locations="asia-south1" --data-file=- <<< "sk-ant-..."
+gcloud secrets create agentflow-grantex-secret --replication-policy="user-managed" \
+  --locations="asia-south1" --data-file=- <<< "..."
+
+# Create K8s secret (or use External Secrets Operator to sync from Secret Manager)
 kubectl create secret generic agentflow-secrets \
   --namespace agentflow-prod \
   --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
@@ -44,9 +57,16 @@ kubectl create secret generic agentflow-secrets \
   --from-literal=AGENTFLOW_DB_URL=postgresql+asyncpg://... \
   --from-literal=AGENTFLOW_SECRET_KEY=$(openssl rand -hex 32)
 
-# Install via Helm
+# Push image to Artifact Registry
+gcloud artifacts repositories create agentflow --repository-format=docker \
+  --location=asia-south1
+docker tag agentflow-os:v2.1.0 asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os:v2.1.0
+docker push asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os:v2.1.0
+
+# Install via Helm on GKE
 helm upgrade --install agentflow-os ./helm \
   --namespace agentflow-prod \
+  --set image.repository=asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os \
   --set image.tag=v2.1.0 \
   --set replicaCount=3 \
   --set autoscaling.enabled=true \
@@ -61,7 +81,7 @@ helm upgrade --install agentflow-os ./helm \
 # helm/values.yaml
 replicaCount: 3
 image:
-  repository: your-registry/agentflow-os
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os
   tag: "v2.1.0"
 
 autoscaling:
@@ -84,16 +104,16 @@ agentScaling:
 
 ## Production Infrastructure (100K tasks/day)
 
-| Component | Spec | HA Config | Est. AWS Cost/Month |
+| Component | Spec | HA Config | Est. GCP Cost/Month |
 |-----------|------|-----------|-------------------|
-| Orchestrator (NEXUS) | 3x 4vCPU/8GB, HPA 3-10 | Active-active, stateless | ~$800 |
-| Agent Workers | 6x 2vCPU/4GB, HPA 6-20 | Per-domain node pools | ~$600 |
-| API Server | 3x 2vCPU/4GB | Load balanced | ~$300 |
-| PostgreSQL | db.r6g.2xlarge + 2 replicas | Multi-AZ, auto-failover | ~$1,200 |
-| Redis | cache.r6g.large + replica | Sentinel mode | ~$300 |
-| S3 | Standard + intelligent tiering | Cross-region optional | ~$50 |
-| ALB + WAF | Application Load Balancer | Multi-AZ | ~$200 |
-| Observability | CloudWatch + LangSmith + Prometheus | Managed | ~$300 |
+| Orchestrator (NEXUS) | 3x e2-standard-4, HPA 3-10 | Active-active, stateless | ~$800 |
+| Agent Workers | 6x e2-standard-2, HPA 6-20 | Per-domain node pools | ~$600 |
+| API Server | 3x e2-standard-2 | Load balanced | ~$300 |
+| PostgreSQL | Cloud SQL db-custom-8-32768 + 2 read replicas | Regional HA, auto-failover | ~$1,200 |
+| Redis | Memorystore Basic M1 + replica | Standard tier HA | ~$300 |
+| Cloud Storage | Standard + Nearline lifecycle | Multi-region optional | ~$50 |
+| Cloud Load Balancing + Cloud Armor | Global HTTP(S) LB | Multi-region | ~$200 |
+| Observability | Cloud Monitoring + LangSmith + Prometheus | Managed | ~$300 |
 
 ## Database Migrations
 

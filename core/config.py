@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # S3
-    s3_bucket: str = "agentflow-docs-dev"
-    s3_region: str = "ap-south-1"
-    s3_endpoint: str | None = None
+    # Object Storage (GCS / S3-compatible)
+    storage_bucket: str = "agentflow-docs-dev"
+    storage_region: str = "asia-south1"
+    storage_endpoint: str | None = None  # Set for MinIO/S3-compatible; leave empty for GCS
 
     # LLM
     llm_primary: str = "claude-3-5-sonnet-20241022"
