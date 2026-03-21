@@ -12,13 +12,13 @@ replicaCount:
   workers: 1
 
 image:
-  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/api
-  tag: staging
+  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg
+  tag: latest
   pullPolicy: Always
 
 imageUI:
-  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/ui
-  tag: staging
+  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg-ui
+  tag: latest
 
 # ── Resources ─────────────────────────────────────────────────────────────────
 resources:
