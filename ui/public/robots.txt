@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /agents
+Disallow: /workflows
+Disallow: /approvals
+Disallow: /connectors
+Disallow: /schemas
+Disallow: /audit
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://agenticorg.ai/sitemap.xml

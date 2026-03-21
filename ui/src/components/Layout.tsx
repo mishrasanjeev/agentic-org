@@ -2,10 +2,10 @@ import { Link, useLocation } from "react-router-dom";
 import HITLBadge from "./HITLBadge";
 
 const NAV = [
-  { path: "/", label: "Dashboard" }, { path: "/agents", label: "Agents" },
-  { path: "/workflows", label: "Workflows" }, { path: "/approvals", label: "Approvals" },
-  { path: "/connectors", label: "Connectors" }, { path: "/schemas", label: "Schemas" },
-  { path: "/audit", label: "Audit" }, { path: "/settings", label: "Settings" },
+  { path: "/dashboard", label: "Dashboard" }, { path: "/dashboard/agents", label: "Agents" },
+  { path: "/dashboard/workflows", label: "Workflows" }, { path: "/dashboard/approvals", label: "Approvals" },
+  { path: "/dashboard/connectors", label: "Connectors" }, { path: "/dashboard/schemas", label: "Schemas" },
+  { path: "/dashboard/audit", label: "Audit" }, { path: "/dashboard/settings", label: "Settings" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

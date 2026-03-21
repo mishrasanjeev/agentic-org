@@ -1,0 +1,139 @@
+# =============================================================================
+# AgentFlow OS — Production Helm Values
+# =============================================================================
+# Full production deployment: HA replicas, HPA, full fleet limits, PII masking.
+# Deploy with: helm install agentflow ./helm -f helm/values-production.yaml
+# =============================================================================
+
+# ── Replicas ──────────────────────────────────────────────────────────────────
+replicaCount:
+  api: 3
+  orchestrator: 3
+  workers: 6
+
+image:
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imageUI:
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/ui
+  tag: latest
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+resources:
+  api:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  orchestrator:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  workers:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  ui:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── Autoscaling (HPA enabled) ────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilization: 70
+
+# ── Agent scaling ─────────────────────────────────────────────────────────────
+agentScaling:
+  ap_processor:
+    minReplicas: 2
+    maxReplicas: 20
+    metrics:
+      - type: queue_depth
+        target: 30
+  recon_agent:
+    minReplicas: 1
+    maxReplicas: 5
+    metrics:
+      - type: schedule
+        schedules:
+          - cron: "0 22 25-31 * *"
+            replicas: 4
+  _default:
+    minReplicas: 1
+    maxReplicas: 5
+    metrics:
+      - type: cpu
+        targetAverageUtilization: 70
+
+# ── Fleet limits (full production) ────────────────────────────────────────────
+fleetLimits:
+  maxActiveAgents: 50
+  maxAgentsPerDomain: 20
+  maxShadowAgents: 10
+  maxReplicasGlobalCeiling: 20
+
+# ── Database ──────────────────────────────────────────────────────────────────
+postgresql:
+  enabled: false  # Use external Cloud SQL production instance
+
+redis:
+  enabled: false  # Use Memorystore
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+secretName: agentflow-secrets
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8000
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "gce"
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: app.agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: agentflow-production-tls
+      hosts:
+        - app.agenticorg.ai
+
+# ── Pod disruption budget ─────────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# ── Environment ───────────────────────────────────────────────────────────────
+env:
+  AGENTFLOW_ENV: production
+  AGENTFLOW_LOG_LEVEL: INFO
+  AGENTFLOW_PII_MASKING: "true"
+  AGENTFLOW_DATA_REGION: IN
+  AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 500
+  AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.88"
+  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash
+  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite

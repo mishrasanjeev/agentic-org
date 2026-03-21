@@ -1,0 +1,115 @@
+# =============================================================================
+# AgentFlow OS — Staging Helm Values
+# =============================================================================
+# Staging environment: moderate resources, reduced fleet limits.
+# Deploy with: helm install agentflow ./helm -f helm/values-staging.yaml
+# =============================================================================
+
+# ── Replicas ──────────────────────────────────────────────────────────────────
+replicaCount:
+  api: 2
+  orchestrator: 1
+  workers: 1
+
+image:
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/api
+  tag: staging
+  pullPolicy: Always
+
+imageUI:
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/ui
+  tag: staging
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+resources:
+  api:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  orchestrator:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  workers:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  ui:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── Autoscaling (disabled for staging) ────────────────────────────────────────
+autoscaling:
+  enabled: false
+
+# ── Agent scaling ─────────────────────────────────────────────────────────────
+agentScaling:
+  _default:
+    minReplicas: 1
+    maxReplicas: 3
+    metrics:
+      - type: cpu
+        targetAverageUtilization: 75
+
+# ── Fleet limits (reduced for staging) ────────────────────────────────────────
+fleetLimits:
+  maxActiveAgents: 20
+  maxAgentsPerDomain: 5
+  maxShadowAgents: 5
+  maxReplicasGlobalCeiling: 10
+
+# ── Database ──────────────────────────────────────────────────────────────────
+postgresql:
+  enabled: false  # Use external Cloud SQL staging instance
+
+redis:
+  enabled: false  # Use Memorystore or in-cluster Redis
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+secretName: agentflow-secrets-staging
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8000
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "gce"
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: staging.agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: agentflow-staging-tls
+      hosts:
+        - staging.agenticorg.ai
+
+# ── Environment ───────────────────────────────────────────────────────────────
+env:
+  AGENTFLOW_ENV: staging
+  AGENTFLOW_LOG_LEVEL: DEBUG
+  AGENTFLOW_PII_MASKING: "true"
+  AGENTFLOW_DATA_REGION: IN
+  AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 100
+  AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.85"
+  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash
+  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite

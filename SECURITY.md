@@ -4,7 +4,7 @@
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Email **security@agentflow.dev** with:
+Email **mishra.sanjeev@gmail.com** with:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact assessment
