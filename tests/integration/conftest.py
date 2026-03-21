@@ -182,8 +182,26 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Yield an ``httpx.AsyncClient`` wired to the FastAPI app."""
+    """Yield an ``httpx.AsyncClient`` wired to the FastAPI app.
+
+    We replace the module-level engine in core.database with a NullPool engine
+    so that asyncpg connections are never reused across event-loop boundaries
+    (the root cause of "Future attached to a different loop" errors when
+    BaseHTTPMiddleware spawns internal tasks).
+    """
+    from sqlalchemy.pool import NullPool
+
+    import core.database as db_mod
     from api.main import app
+
+    # Replace the app's engine with one that creates fresh connections each time
+    test_engine = create_async_engine(DB_URL, echo=False, poolclass=NullPool)
+    original_engine = db_mod.engine
+    original_factory = db_mod.async_session_factory
+    db_mod.engine = test_engine
+    db_mod.async_session_factory = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -191,6 +209,11 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         base_url="http://testserver",
     ) as ac:
         yield ac
+
+    # Restore originals and dispose test engine
+    await test_engine.dispose()
+    db_mod.engine = original_engine
+    db_mod.async_session_factory = original_factory
 
 
 @pytest.fixture
