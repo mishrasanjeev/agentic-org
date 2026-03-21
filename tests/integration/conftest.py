@@ -207,10 +207,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     async with test_engine.begin() as conn:
         await conn.execute(sa_text(
-            "INSERT INTO tenants (id, name, slug, plan) "
-            "VALUES (:id, :name, :slug, :plan) "
+            "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
+            "VALUES (:id, :name, :slug, :plan, :region, :settings) "
             "ON CONFLICT (id) DO NOTHING"
-        ), {"id": TEST_TENANT_ID, "name": "test-tenant", "slug": "test-tenant", "plan": "enterprise"})
+        ), {
+            "id": TEST_TENANT_ID, "name": "test-tenant",
+            "slug": "test-tenant", "plan": "enterprise",
+            "region": "asia-south1", "settings": "{}",
+        })
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
