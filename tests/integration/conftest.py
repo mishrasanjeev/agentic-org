@@ -13,7 +13,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -117,21 +116,12 @@ def db_engine() -> AsyncEngine:
 
 @pytest_asyncio.fixture(scope="session")
 async def _setup_schema(db_engine: AsyncEngine) -> None:
-    """Create the schema once per test session.
+    """Create the schema once per test session."""
+    import core.models  # noqa: F401 — registers all ORM models
+    from core.models.base import BaseModel as ORMBase
 
-    We import Base from the application so that the same ORM metadata is used.
-    If the application models rely on ``CREATE TABLE``, we run
-    ``metadata.create_all``. As a fallback we at least verify connectivity.
-    """
-    try:
-        from core.database import Base
-
-        async with db_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    except Exception:
-        # If models aren't complete enough for DDL, just verify connectivity
-        async with db_engine.begin() as conn:
-            await conn.execute(text("SELECT 1"))
+    async with db_engine.begin() as conn:
+        await conn.run_sync(ORMBase.metadata.create_all)
 
 
 @pytest_asyncio.fixture
@@ -203,14 +193,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
 
-    # Create tables on the test engine (the app will use this engine)
-    try:
-        from core.database import Base
+    # Create tables on the test engine (the app will use this engine).
+    # Import all model modules so they register with BaseModel.metadata,
+    # then run create_all on the correct declarative base.
+    import core.models  # noqa: F401 — registers all ORM models
+    from core.models.base import BaseModel as ORMBase
 
-        async with test_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    except Exception:  # noqa: S110
-        pass  # Tables may already exist or models incomplete
+    async with test_engine.begin() as conn:
+        await conn.run_sync(ORMBase.metadata.create_all)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
