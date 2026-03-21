@@ -213,7 +213,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         ), {
             "id": TEST_TENANT_ID, "name": "test-tenant",
             "slug": "test-tenant", "plan": "enterprise",
-            "region": "asia-south1", "settings": "{}",
+            "region": "IN", "settings": "{}",
         })
 
     transport = ASGITransport(app=app)
