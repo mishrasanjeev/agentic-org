@@ -1,13 +1,28 @@
 """FastAPI application — AgentFlow OS."""
 from __future__ import annotations
+
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.v1 import agents, workflows, approvals, audit, schemas, connectors, compliance, config, health, agent_teams
-from api.websocket.feed import router as ws_feed_router
+
 from api.error_handlers import register_error_handlers
+from api.v1 import (
+    agent_teams,
+    agents,
+    approvals,
+    audit,
+    compliance,
+    config,
+    connectors,
+    health,
+    schemas,
+    workflows,
+)
+from api.websocket.feed import router as ws_feed_router
 from auth.middleware import AuthMiddleware
 from core.config import settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

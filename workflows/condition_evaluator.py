@@ -1,7 +1,7 @@
 """Safe condition evaluator — NO eval()."""
 from __future__ import annotations
+
 import operator
-import re
 from typing import Any
 
 OPS = {

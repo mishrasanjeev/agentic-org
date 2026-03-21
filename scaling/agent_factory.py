@@ -1,9 +1,13 @@
 """Agent Factory — create, clone, manage agents."""
 from __future__ import annotations
+
 import uuid
 from typing import Any
-from auth.scopes import validate_clone_scopes
+
 import structlog
+
+from auth.scopes import validate_clone_scopes
+
 logger = structlog.get_logger()
 
 class AgentFactory:

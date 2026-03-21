@@ -2,21 +2,20 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from api.deps import get_current_tenant, require_scope
+from api.deps import get_current_tenant
 from core.database import get_tenant_session
-from core.models.agent import Agent, AgentVersion, AgentLifecycleEvent
+from core.models.agent import Agent, AgentLifecycleEvent, AgentVersion
 from core.schemas.api import (
+    AgentCloneRequest,
     AgentCreate,
     AgentUpdate,
-    AgentResponse,
-    AgentCloneRequest,
     PaginatedResponse,
 )
 
@@ -120,7 +119,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             hitl_policy=body.hitl_policy.model_dump(),
             llm_config=body.llm.model_dump(),
             confidence_floor=agent.confidence_floor,
-            deployed_at=datetime.now(timezone.utc),
+            deployed_at=datetime.now(UTC),
         )
         session.add(version_row)
 
@@ -269,10 +268,12 @@ async def update_agent(
 @router.post("/agents/{agent_id}/run")
 async def run_agent(
     agent_id: UUID,
-    payload: dict = {},
+    payload: dict = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
     # Keep as-is: queues a task, not a direct DB operation
+    if payload is None:
+        payload = {}
     return {"task_id": str(_uuid.uuid4()), "agent_id": str(agent_id), "status": "queued"}
 
 
@@ -516,7 +517,7 @@ async def clone_agent(
             hitl_policy={"condition": clone.hitl_condition},
             llm_config=clone.llm_config,
             confidence_floor=clone.confidence_floor,
-            deployed_at=datetime.now(timezone.utc),
+            deployed_at=datetime.now(UTC),
         )
         session.add(version_row)
 

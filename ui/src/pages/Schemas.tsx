@@ -72,7 +72,7 @@ export default function Schemas() {
         <p className="text-muted-foreground">Loading schemas...</p>
       ) : (
         <div className="grid grid-cols-3 gap-4">
-          {(schemas.length > 0 ? schemas : DEFAULT_SCHEMAS.map((name, i) => ({ name, version: "1", is_default: true, field_count: 0, description: "" }))).map((schema) => (
+          {(schemas.length > 0 ? schemas : DEFAULT_SCHEMAS.map((name) => ({ name, version: "1", is_default: true, field_count: 0, description: "" }))).map((schema) => (
             <Card
               key={schema.name}
               className="cursor-pointer hover:shadow-md transition-shadow"

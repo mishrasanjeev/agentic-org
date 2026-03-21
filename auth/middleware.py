@@ -3,14 +3,11 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from typing import Any
-from uuid import UUID
 
 from fastapi import HTTPException, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from auth.jwt import validate_token, extract_tenant_id, extract_scopes
-from core.schemas.errors import ErrorCode
+from auth.jwt import extract_scopes, extract_tenant_id, validate_token
 
 # Rate limiting: track failed attempts per IP
 _failed_attempts: dict[str, list[float]] = defaultdict(list)
@@ -50,7 +47,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             claims = await validate_token(token)
         except ValueError as e:
             self._record_failure(client_ip)
-            raise HTTPException(status_code=401, detail=str(e))
+            raise HTTPException(status_code=401, detail=str(e)) from None
 
         # Set request state
         tenant_id = extract_tenant_id(claims)

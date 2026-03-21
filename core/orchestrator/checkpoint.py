@@ -1,9 +1,13 @@
 """Checkpoint manager — save/restore workflow state."""
 from __future__ import annotations
+
 import json
 from typing import Any
+
 import redis.asyncio as aioredis
+
 from core.config import settings
+
 
 class CheckpointManager:
     def __init__(self):

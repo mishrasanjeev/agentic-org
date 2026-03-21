@@ -1,7 +1,9 @@
 """Real-time agent activity feed via WebSocket."""
 from __future__ import annotations
+
 import asyncio
 import json
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter()

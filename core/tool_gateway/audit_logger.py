@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -59,7 +59,7 @@ class AuditLogger:
             "outcome": outcome,
             "details": mask_pii(details or {}),
             "trace_id": trace_id or "",
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
         entry["signature"] = self._sign(entry)
 

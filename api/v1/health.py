@@ -1,10 +1,12 @@
 """Health check endpoint — verifies DB and Redis connectivity."""
 from __future__ import annotations
+
+import redis.asyncio as aioredis
 from fastapi import APIRouter
 from sqlalchemy import text
+
 from core.config import settings
 from core.database import async_session_factory
-import redis.asyncio as aioredis
 
 router = APIRouter()
 

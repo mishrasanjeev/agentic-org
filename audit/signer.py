@@ -1,8 +1,13 @@
 """HMAC-SHA256 signer for audit log tamper detection."""
 from __future__ import annotations
-import hashlib, hmac, json
+
+import hashlib
+import hmac
+import json
 from typing import Any
+
 from core.config import settings
+
 
 def sign(data: dict[str, Any]) -> str:
     payload = json.dumps(data, sort_keys=True, default=str)

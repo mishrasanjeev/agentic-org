@@ -1,16 +1,14 @@
 """NEXUS — central orchestrator for AgentFlow OS."""
 from __future__ import annotations
 
-import uuid
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 
-from core.agents.registry import AgentRegistry
 from core.orchestrator.checkpoint import CheckpointManager
 from core.orchestrator.conflict_resolver import ConflictResolver
 from core.orchestrator.task_router import TaskRouter
-from core.schemas.messages import HITLRequest, TaskAssignment, TaskResult
+from core.schemas.messages import HITLRequest, TaskResult
 
 logger = structlog.get_logger()
 
@@ -75,7 +73,7 @@ class NexusOrchestrator:
 
         return {"action": "unknown", "status": result.status}
 
-    def evaluate_hitl(self, result: TaskResult) -> Optional[HITLRequest]:
+    def evaluate_hitl(self, result: TaskResult) -> HITLRequest | None:
         """Evaluate HITL at orchestrator level — agents cannot bypass this."""
         if result.confidence < 0.88:
             return result.hitl_request

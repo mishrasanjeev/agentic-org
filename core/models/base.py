@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -22,7 +21,7 @@ class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), onupdate=func.now(), nullable=True
     )
 

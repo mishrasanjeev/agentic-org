@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import uuid as _uuid
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
 from core.models.schema_registry import SchemaRegistry
-from core.schemas.api import SchemaCreate, PaginatedResponse
+from core.schemas.api import PaginatedResponse, SchemaCreate
 
 router = APIRouter()
 

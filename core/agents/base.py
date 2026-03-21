@@ -6,14 +6,21 @@ import json
 import os
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 
 from core.llm.router import LLMResponse, llm_router
 from core.schemas.messages import (
-    HITLAssignee, HITLContext, HITLRequest, DecisionRequired, DecisionOption,
-    PerformanceMetrics, TaskAssignment, TaskResult, ToolCallRecord,
+    DecisionOption,
+    DecisionRequired,
+    HITLAssignee,
+    HITLContext,
+    HITLRequest,
+    PerformanceMetrics,
+    TaskAssignment,
+    TaskResult,
+    ToolCallRecord,
 )
 
 logger = structlog.get_logger()
@@ -52,7 +59,7 @@ class BaseAgent(abc.ABC):
     def system_prompt(self) -> str:
         if self._system_prompt is None:
             path = os.path.join(PROMPTS_DIR, self.prompt_file)
-            with open(path, "r") as f:
+            with open(path) as f:
                 template = f.read()
             for key, val in self.prompt_variables.items():
                 template = template.replace("{{" + key + "}}", val)

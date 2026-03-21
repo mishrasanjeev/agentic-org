@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
@@ -57,7 +57,7 @@ async def dsar_access(
         "type": "access",
         "status": "processing",
         "subject_email": body.subject_email,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -69,7 +69,7 @@ async def dsar_erase(
 ):
     tid = _uuid.UUID(tenant_id)
     request_id = _uuid.uuid4()
-    deadline = datetime.now(timezone.utc) + timedelta(days=30)
+    deadline = datetime.now(UTC) + timedelta(days=30)
     async with get_tenant_session(tid) as session:
         await _create_dsar_audit_entry(session, tid, "erase", body.subject_email, request_id)
 
@@ -80,7 +80,7 @@ async def dsar_erase(
         "subject_email": body.subject_email,
         "deadline": deadline.isoformat(),
         "deadline_days": 30,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -93,7 +93,7 @@ async def dsar_export(
     tid = _uuid.UUID(tenant_id)
     request_id = _uuid.uuid4()
     async with get_tenant_session(tid) as session:
-        audit_entry = await _create_dsar_audit_entry(
+        await _create_dsar_audit_entry(
             session, tid, "export", body.subject_email, request_id
         )
 
@@ -114,7 +114,7 @@ async def dsar_export(
         "format": "json",
         "estimated_records": record_count,
         "estimated_size_mb": estimated_size_mb,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -122,7 +122,7 @@ async def dsar_export(
 @router.get("/compliance/evidence-package")
 async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     package_id = str(_uuid.uuid4())
 
     async with get_tenant_session(tid) as session:

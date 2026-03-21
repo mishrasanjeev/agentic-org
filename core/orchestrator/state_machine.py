@@ -1,6 +1,8 @@
 """Workflow state machine."""
 from __future__ import annotations
+
 from enum import Enum
+
 
 class WorkflowState(str, Enum):
     PENDING = "pending"

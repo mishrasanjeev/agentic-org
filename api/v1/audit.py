@@ -4,8 +4,8 @@ from __future__ import annotations
 import uuid as _uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session

@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
@@ -99,12 +99,12 @@ async def decide(
             raise HTTPException(409, f"HITL item already resolved with status '{item.status}'")
 
         # Check expiry
-        if item.expires_at and datetime.now(timezone.utc) > item.expires_at:
+        if item.expires_at and datetime.now(UTC) > item.expires_at:
             raise HTTPException(410, "HITL item has expired")
 
         item.decision = body.decision
         item.decision_notes = body.notes if body.notes else None
-        item.decision_at = datetime.now(timezone.utc)
+        item.decision_at = datetime.now(UTC)
         item.status = "decided"
 
     return {

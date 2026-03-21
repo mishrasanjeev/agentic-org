@@ -8,9 +8,8 @@ the ``langsmith_api_key`` is not configured (it becomes a no-op).
 """
 from __future__ import annotations
 
-import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -38,7 +37,7 @@ def _is_configured() -> bool:
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ---------------------------------------------------------------------------

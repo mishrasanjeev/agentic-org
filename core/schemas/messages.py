@@ -1,8 +1,11 @@
 """Message protocol v2 — Agent <-> Orchestrator."""
 from __future__ import annotations
+
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 class TargetAgent(BaseModel):
     agent_id: str

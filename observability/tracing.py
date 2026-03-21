@@ -13,9 +13,9 @@ Span catalogue
 from __future__ import annotations
 
 from opentelemetry import trace
-from opentelemetry.trace import SpanKind, StatusCode
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import SpanKind, StatusCode
 
 _tracer: trace.Tracer | None = None
 

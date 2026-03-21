@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Lightweight cron expression matcher
@@ -73,7 +72,7 @@ def cron_matches(expression: str, dt: datetime | None = None) -> bool:
     Fields: minute  hour  day-of-month  month  day-of-week
     """
     if dt is None:
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
 
     fields = expression.strip().split()
     if len(fields) != 5:
@@ -88,7 +87,7 @@ def cron_matches(expression: str, dt: datetime | None = None) -> bool:
     dow_f = _replace_names(dow_f, _DOW_NAMES)
 
     # day-of-week: normalise 7 -> 0 (both represent Sunday).
-    dow_value = dt.weekday()  # Python: Monday=0 .. Sunday=6
+    dt.weekday()  # Python: Monday=0 .. Sunday=6
     # Cron convention: Sunday=0, Monday=1 .. Saturday=6
     cron_dow = (dt.isoweekday() % 7)  # isoweekday: Mon=1..Sun=7 -> Sun=0
 
@@ -166,11 +165,11 @@ class WorkflowTrigger:
             try:
                 check_time = datetime.fromisoformat(check_time_raw)
                 if check_time.tzinfo is None:
-                    check_time = check_time.replace(tzinfo=timezone.utc)
+                    check_time = check_time.replace(tzinfo=UTC)
             except (ValueError, TypeError):
-                check_time = datetime.now(timezone.utc)
+                check_time = datetime.now(UTC)
         else:
-            check_time = datetime.now(timezone.utc)
+            check_time = datetime.now(UTC)
 
         try:
             return cron_matches(cron_expr, check_time)

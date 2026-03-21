@@ -1,7 +1,7 @@
 """Agent registry — register, discover, instantiate agents."""
 from __future__ import annotations
 
-from typing import Any, Type
+from typing import Any
 
 from core.agents.base import BaseAgent
 
@@ -9,20 +9,20 @@ from core.agents.base import BaseAgent
 class AgentRegistry:
     """Central registry for all agent types."""
 
-    _registry: dict[str, Type[BaseAgent]] = {}
+    _registry: dict[str, type[BaseAgent]] = {}
 
     @classmethod
-    def register(cls, agent_cls: Type[BaseAgent]) -> Type[BaseAgent]:
+    def register(cls, agent_cls: type[BaseAgent]) -> type[BaseAgent]:
         """Register an agent class by its agent_type."""
         cls._registry[agent_cls.agent_type] = agent_cls
         return agent_cls
 
     @classmethod
-    def get_by_type(cls, agent_type: str) -> Type[BaseAgent] | None:
+    def get_by_type(cls, agent_type: str) -> type[BaseAgent] | None:
         return cls._registry.get(agent_type)
 
     @classmethod
-    def get_by_domain(cls, domain: str) -> list[Type[BaseAgent]]:
+    def get_by_domain(cls, domain: str) -> list[type[BaseAgent]]:
         return [a for a in cls._registry.values() if a.domain == domain]
 
     @classmethod

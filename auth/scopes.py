@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -13,7 +12,7 @@ class ParsedScope:
     connector: str       # oracle_fusion, etc.
     permission: str      # read | write | admin
     resource: str        # purchase_order, journal_entry, etc.
-    cap: Optional[int] = None  # Capped amount for write scopes
+    cap: int | None = None  # Capped amount for write scopes
 
 # Pattern: tool:{connector}:{perm}:{resource}[:capped:{N}]
 SCOPE_PATTERN = re.compile(

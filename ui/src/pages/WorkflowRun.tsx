@@ -26,7 +26,7 @@ interface RunDetail {
 }
 
 export default function WorkflowRun() {
-  const { id, runId } = useParams();
+  const { runId } = useParams();
   const [run, setRun] = useState<RunDetail | null>(null);
   const [loading, setLoading] = useState(true);
 

@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from core.config import settings, external_keys
+from core.config import external_keys, settings
 
 logger = structlog.get_logger()
 

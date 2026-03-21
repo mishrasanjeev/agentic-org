@@ -6,10 +6,8 @@ from typing import Any
 
 import httpx
 from jose import JWTError, jwt
-from jose.backends import RSAKey
 
-from core.config import settings, external_keys
-from core.schemas.errors import ErrorCode, make_error
+from core.config import settings
 
 _jwks_cache: dict[str, Any] = {}
 _jwks_cache_time: float = 0

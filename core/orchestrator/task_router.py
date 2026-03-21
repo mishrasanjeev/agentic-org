@@ -1,8 +1,8 @@
 """Route tasks to the most capable agent."""
 from __future__ import annotations
+
 import uuid
-from typing import Any
-from core.agents.registry import AgentRegistry
+
 
 class TaskRouter:
     async def route(self, workflow_run_id, step_id, step_index, total_steps, task, context):

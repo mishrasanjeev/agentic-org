@@ -4,16 +4,14 @@ from __future__ import annotations
 import hashlib
 import time
 from typing import Any
-from uuid import UUID
 
 import structlog
 
 from auth.scopes import check_scope
-from core.schemas.errors import ErrorCode
-from core.tool_gateway.rate_limiter import RateLimiter
+from core.tool_gateway.audit_logger import AuditLogger
 from core.tool_gateway.idempotency import IdempotencyStore
 from core.tool_gateway.pii_masker import mask_pii
-from core.tool_gateway.audit_logger import AuditLogger
+from core.tool_gateway.rate_limiter import RateLimiter
 
 logger = structlog.get_logger()
 

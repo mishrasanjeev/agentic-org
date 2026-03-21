@@ -1,10 +1,13 @@
 """FastAPI dependencies."""
 from __future__ import annotations
-from typing import AsyncGenerator
-from uuid import UUID
+
+from collections.abc import AsyncGenerator
+
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.database import get_session
+
 
 async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
     async for session in get_session():

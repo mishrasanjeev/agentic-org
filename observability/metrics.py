@@ -1,5 +1,5 @@
 """Prometheus metrics — all 13 from PRD."""
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram
 
 tasks_total = Counter("agentflow_tasks_total", "Total tasks", ["tenant", "domain", "agent_type", "status"])
 task_latency = Histogram("agentflow_task_latency_seconds", "Task latency", ["tenant", "domain", "agent_type"])

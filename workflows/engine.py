@@ -4,12 +4,11 @@ from __future__ import annotations
 import re
 import uuid
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
-from workflows.condition_evaluator import evaluate_condition
 from workflows.parser import WorkflowParser
 from workflows.retry import retry_with_backoff
 from workflows.state_store import WorkflowStateStore
@@ -47,7 +46,7 @@ class WorkflowEngine:
             "steps_total": len(parsed.get("steps", [])),
             "steps_completed": 0,
             "step_results": {},
-            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_at": datetime.now(UTC).isoformat(),
         }
         await self.state_store.save(state)
         logger.info("workflow_run_started", run_id=run_id)
@@ -151,7 +150,7 @@ class WorkflowEngine:
 
         # All steps done.
         state["status"] = "completed"
-        state["completed_at"] = datetime.now(timezone.utc).isoformat()
+        state["completed_at"] = datetime.now(UTC).isoformat()
         await self.state_store.save(state)
         logger.info("workflow_completed", run_id=run_id)
         return {"status": "completed", "step_results": state["step_results"]}
@@ -237,7 +236,7 @@ class WorkflowEngine:
 
         # All steps executed.
         state["status"] = "completed"
-        state["completed_at"] = datetime.now(timezone.utc).isoformat()
+        state["completed_at"] = datetime.now(UTC).isoformat()
         await self.state_store.save(state)
         return {"status": "completed", "step_results": state["step_results"]}
 
@@ -277,7 +276,7 @@ class WorkflowEngine:
         state = await self.state_store.load(run_id)
         if state:
             state["status"] = "cancelled"
-            state["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+            state["cancelled_at"] = datetime.now(UTC).isoformat()
             await self.state_store.save(state)
             logger.info("workflow_cancelled", run_id=run_id)
 
@@ -336,7 +335,7 @@ class WorkflowEngine:
     def _check_timeout(state: dict, timeout_hours: float) -> None:
         """Raise ``WorkflowTimeoutError`` if the run has exceeded *timeout_hours*."""
         started_at = datetime.fromisoformat(state["started_at"])
-        elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+        elapsed = (datetime.now(UTC) - started_at).total_seconds()
         if elapsed > timeout_hours * 3600:
             raise WorkflowTimeoutError(
                 f"Workflow exceeded timeout of {timeout_hours}h "

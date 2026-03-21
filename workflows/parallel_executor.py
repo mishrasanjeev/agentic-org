@@ -1,7 +1,10 @@
 """Parallel step executor with wait_for policies."""
 from __future__ import annotations
+
 import asyncio
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 
 async def execute_parallel(
     tasks: list[Callable[[], Coroutine]], wait_for: str = "all", n: int = 1,

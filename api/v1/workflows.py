@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
-from core.models.workflow import WorkflowDefinition, WorkflowRun, StepExecution
-from core.schemas.api import WorkflowCreate, WorkflowRunTrigger, PaginatedResponse
+from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
+from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
 
 router = APIRouter()
 
@@ -167,7 +167,7 @@ async def run_workflow(
             trigger_payload=body.payload,
             context={},
             steps_total=steps_total,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         session.add(run)
         await session.flush()

@@ -15,10 +15,9 @@ Budget enforcement
 """
 from __future__ import annotations
 
-import asyncio
 import time
-from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -105,7 +104,7 @@ class CostLedger:
         Writes immediately to Redis (or in-memory fallback) and buffers
         for async DB persistence.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today = now.strftime("%Y-%m-%d")
         month = now.strftime("%Y-%m")
         cost = Decimal(str(cost_usd))
@@ -212,7 +211,7 @@ class CostLedger:
             daily_pct_used: float   (of daily budget)
             warnings: list[str]
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today = now.strftime("%Y-%m-%d")
         month = now.strftime("%Y-%m")
 
@@ -263,7 +262,7 @@ class CostLedger:
         Checks both daily and monthly caps.  Emits an event and logs when
         a pause is recommended.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today = now.strftime("%Y-%m-%d")
         month = now.strftime("%Y-%m")
 
@@ -312,7 +311,7 @@ class CostLedger:
         day:
             Date string ``YYYY-MM-DD``.  Defaults to today (UTC).
         """
-        day = day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = day or datetime.now(UTC).strftime("%Y-%m-%d")
 
         cost = await self._get_cost(agent_id, day, scope="daily")
         tokens = await self._get_tokens(agent_id, day, scope="daily")
@@ -342,13 +341,13 @@ class CostLedger:
         month:
             Month string ``YYYY-MM``.  Defaults to current month (UTC).
         """
-        month = month or datetime.now(timezone.utc).strftime("%Y-%m")
+        month = month or datetime.now(UTC).strftime("%Y-%m")
 
         cost = await self._get_cost(agent_id, month, scope="monthly")
         tokens = await self._get_tokens(agent_id, month, scope="monthly")
 
         # Compute daily average
-        today = datetime.now(timezone.utc)
+        today = datetime.now(UTC)
         day_of_month = today.day if month == today.strftime("%Y-%m") else 30
         avg_daily_cost = float(cost) / max(day_of_month, 1)
 
@@ -439,7 +438,7 @@ class CostLedger:
                             "model": rec.model,
                             "tenant_id": rec.tenant_id,
                             "recorded_at": datetime.fromtimestamp(
-                                rec.timestamp, tz=timezone.utc
+                                rec.timestamp, tz=UTC
                             ),
                         },
                     )

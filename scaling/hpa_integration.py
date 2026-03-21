@@ -11,7 +11,7 @@ replica count, clamped to [min_replicas, max_replicas].
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -52,7 +52,7 @@ class ScheduleRule:
         self.min_replicas = min_replicas
 
     def is_active(self, now: datetime | None = None) -> bool:
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         if now.isoweekday() not in self.days:
             return False
         if self.start_hour <= self.end_hour:
@@ -134,7 +134,7 @@ class HPAIntegration:
 
     def _schedule_replicas(self, now: datetime | None = None) -> int:
         """Return the highest min_replicas from active schedule rules."""
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         active_mins = [
             rule.min_replicas
             for rule in self._schedule_rules

@@ -1,7 +1,7 @@
 """Grantex/OAuth2 client for platform and agent token management."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -21,7 +21,7 @@ class GrantexClient:
 
     async def get_platform_token(self) -> str:
         """Obtain platform-level token via client_credentials grant."""
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(UTC).timestamp()
         if self._platform_token and now < self._platform_token_exp - 60:
             return self._platform_token
 

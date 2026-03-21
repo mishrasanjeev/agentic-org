@@ -1,9 +1,13 @@
 """Persist workflow state to Redis (and PostgreSQL)."""
 from __future__ import annotations
+
 import json
 from typing import Any
+
 import redis.asyncio as aioredis
+
 from core.config import settings
+
 
 class WorkflowStateStore:
     def __init__(self):

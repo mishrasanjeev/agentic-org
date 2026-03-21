@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-import structlog
 import redis.asyncio as aioredis
+import structlog
 
-from core.config import settings
 from auth.grantex import grantex_client
+from core.config import settings
 
 logger = structlog.get_logger()
 
