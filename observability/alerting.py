@@ -3,11 +3,12 @@
 Monitors all 13 Prometheus metrics against PRD-defined thresholds and
 dispatches notifications via Slack webhook, email stub, and structured logging.
 """
+
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -19,7 +20,7 @@ from core.config import external_keys
 logger = structlog.get_logger()
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     WARNING = "warning"
     CRITICAL = "critical"
 
@@ -27,9 +28,10 @@ class Severity(str, Enum):
 @dataclass(frozen=True)
 class ThresholdRule:
     """Defines a single alerting rule."""
+
     name: str
     metric_name: str
-    operator: str            # "gt", "lt", "gte", "lte", "eq"
+    operator: str  # "gt", "lt", "gte", "lte", "eq"
     threshold: float
     severity: Severity
     description: str
@@ -117,7 +119,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
         name="replicas_at_max",
         metric_name="agenticorg_agent_replicas",
         operator="gte",
-        threshold=5.0,        # max ceiling; overridable per-agent
+        threshold=5.0,  # max ceiling; overridable per-agent
         severity=Severity.WARNING,
         description="Agent replicas at max ceiling",
     ),
@@ -170,6 +172,7 @@ def _labels_match(sample_labels: dict[str, str], filters: dict[str, str]) -> boo
 # ---------------------------------------------------------------------------
 # Alert firing record (for dedup / cooldown)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _FiredAlert:
@@ -407,6 +410,7 @@ class AlertManager:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _label_hash(labels: dict[str, str]) -> str:
     """Deterministic string key for a set of labels."""

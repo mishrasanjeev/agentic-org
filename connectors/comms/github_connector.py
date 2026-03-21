@@ -1,7 +1,9 @@
 """Github connector — comms."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class GithubConnector(BaseConnector):
     name = "github"
@@ -25,23 +27,18 @@ class GithubConnector(BaseConnector):
         """Execute create_pull_request on github."""
         return await self._post("/create/pull/request", params)
 
-
     async def list_repository_issues(self, **params):
         """Execute list_repository_issues on github."""
         return await self._post("/list/repository/issues", params)
-
 
     async def trigger_github_action_workflow(self, **params):
         """Execute trigger_github_action_workflow on github."""
         return await self._post("/trigger/github/action/workflow", params)
 
-
     async def get_repository_statistics(self, **params):
         """Execute get_repository_statistics on github."""
         return await self._post("/get/repository/statistics", params)
 
-
     async def create_release(self, **params):
         """Execute create_release on github."""
         return await self._post("/create/release", params)
-

@@ -1,8 +1,11 @@
 """Quickbooks connector — finance."""
+
 from __future__ import annotations
-from typing import Any
+
 import httpx
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class QuickbooksConnector(BaseConnector):
     name = "quickbooks"
@@ -24,11 +27,14 @@ class QuickbooksConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
-            resp = await client.post(token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            })
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+            )
             resp.raise_for_status()
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
@@ -37,28 +43,22 @@ class QuickbooksConnector(BaseConnector):
         """Execute create_invoice on quickbooks."""
         return await self._post("/create/invoice", params)
 
-
     async def record_payment(self, **params):
         """Execute record_payment on quickbooks."""
         return await self._post("/record/payment", params)
-
 
     async def run_payroll_summary(self, **params):
         """Execute run_payroll_summary on quickbooks."""
         return await self._post("/run/payroll/summary", params)
 
-
     async def generate_financial_report(self, **params):
         """Execute generate_financial_report on quickbooks."""
         return await self._post("/generate/financial/report", params)
-
 
     async def sync_bank_transactions(self, **params):
         """Execute sync_bank_transactions on quickbooks."""
         return await self._post("/sync/bank/transactions", params)
 
-
     async def get_pl_report(self, **params):
         """Execute get_pl_report on quickbooks."""
         return await self._post("/get/pl/report", params)
-

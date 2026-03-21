@@ -3,11 +3,14 @@ import Layout from "./components/Layout";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
+import AgentCreate from "./pages/AgentCreate";
 import AgentDetail from "./pages/AgentDetail";
 import Workflows from "./pages/Workflows";
+import WorkflowCreate from "./pages/WorkflowCreate";
 import WorkflowRun from "./pages/WorkflowRun";
 import Approvals from "./pages/Approvals";
 import Connectors from "./pages/Connectors";
+import ConnectorCreate from "./pages/ConnectorCreate";
 import Schemas from "./pages/Schemas";
 import Audit from "./pages/Audit";
 import Settings from "./pages/Settings";
@@ -37,6 +40,14 @@ export default function App() {
         }
       />
       <Route
+        path="/dashboard/agents/new"
+        element={
+          <Layout>
+            <AgentCreate />
+          </Layout>
+        }
+      />
+      <Route
         path="/dashboard/agents/:id"
         element={
           <Layout>
@@ -49,6 +60,14 @@ export default function App() {
         element={
           <Layout>
             <Workflows />
+          </Layout>
+        }
+      />
+      <Route
+        path="/dashboard/workflows/new"
+        element={
+          <Layout>
+            <WorkflowCreate />
           </Layout>
         }
       />
@@ -73,6 +92,14 @@ export default function App() {
         element={
           <Layout>
             <Connectors />
+          </Layout>
+        }
+      />
+      <Route
+        path="/dashboard/connectors/new"
+        element={
+          <Layout>
+            <ConnectorCreate />
           </Layout>
         }
       />

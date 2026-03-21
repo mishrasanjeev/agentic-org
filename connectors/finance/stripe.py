@@ -1,7 +1,9 @@
 """Stripe connector — finance."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class StripeConnector(BaseConnector):
     name = "stripe"
@@ -26,28 +28,22 @@ class StripeConnector(BaseConnector):
         """Execute create_charge on stripe."""
         return await self._post("/create/charge", params)
 
-
     async def manage_subscription_lifecycle(self, **params):
         """Execute manage_subscription_lifecycle on stripe."""
         return await self._post("/manage/subscription/lifecycle", params)
-
 
     async def create_payout(self, **params):
         """Execute create_payout on stripe."""
         return await self._post("/create/payout", params)
 
-
     async def get_account_balance(self, **params):
         """Execute get_account_balance on stripe."""
         return await self._post("/get/account/balance", params)
-
 
     async def manage_dispute(self, **params):
         """Execute manage_dispute on stripe."""
         return await self._post("/manage/dispute", params)
 
-
     async def generate_financial_report(self, **params):
         """Execute generate_financial_report on stripe."""
         return await self._post("/generate/financial/report", params)
-

@@ -12,6 +12,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class BaseModel(DeclarativeBase):
     """Declarative base for all ORM models."""
+
     pass
 
 
@@ -29,6 +30,4 @@ class TimestampMixin:
 class TenantMixin:
     """Mixin adding tenant_id for RLS."""
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
-    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)

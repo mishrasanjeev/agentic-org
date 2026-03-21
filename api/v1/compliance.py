@@ -1,4 +1,5 @@
 """DSAR and compliance endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -93,9 +94,7 @@ async def dsar_export(
     tid = _uuid.UUID(tenant_id)
     request_id = _uuid.uuid4()
     async with get_tenant_session(tid) as session:
-        await _create_dsar_audit_entry(
-            session, tid, "export", body.subject_email, request_id
-        )
+        await _create_dsar_audit_entry(session, tid, "export", body.subject_email, request_id)
 
         # Estimate data size: count audit entries for this subject
         count_result = await session.execute(
@@ -139,9 +138,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
 
         # Audit log stats
         audit_result = await session.execute(
-            select(func.count())
-            .select_from(AuditLog)
-            .where(AuditLog.tenant_id == tid)
+            select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tid)
         )
         audit_total = audit_result.scalar() or 0
 

@@ -1,6 +1,7 @@
 """Auth tests — JWT, scopes, tenant isolation."""
-import pytest
+
 from auth.scopes import parse_scope
+
 
 class TestScopeParsing:
     def test_read_scope(self):

@@ -1,8 +1,11 @@
 """Meta Ads connector — marketing."""
+
 from __future__ import annotations
-from typing import Any
+
 import httpx
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class MetaAdsConnector(BaseConnector):
     name = "meta_ads"
@@ -23,11 +26,14 @@ class MetaAdsConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
-            resp = await client.post(token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            })
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+            )
             resp.raise_for_status()
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
@@ -36,23 +42,18 @@ class MetaAdsConnector(BaseConnector):
         """Execute get_campaign_performance on meta_ads."""
         return await self._post("/get/campaign/performance", params)
 
-
     async def reallocate_ad_budget(self, **params):
         """Execute reallocate_ad_budget on meta_ads."""
         return await self._post("/reallocate/ad/budget", params)
-
 
     async def create_lookalike_audience(self, **params):
         """Execute create_lookalike_audience on meta_ads."""
         return await self._post("/create/lookalike/audience", params)
 
-
     async def pause_ad_set(self, **params):
         """Execute pause_ad_set on meta_ads."""
         return await self._post("/pause/ad/set", params)
 
-
     async def get_reach_and_frequency_data(self, **params):
         """Execute get_reach_and_frequency_data on meta_ads."""
         return await self._post("/get/reach/and/frequency/data", params)
-

@@ -1,4 +1,5 @@
 """Workflow ORM models."""
+
 from __future__ import annotations
 
 import uuid
@@ -29,7 +30,9 @@ class WorkflowDefinition(BaseModel):
     __table_args__ = (UniqueConstraint("tenant_id", "name", "version"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -38,10 +41,15 @@ class WorkflowDefinition(BaseModel):
     trigger_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     trigger_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
     runs = relationship("WorkflowRun", back_populates="workflow_def")
+
 
 class WorkflowRun(BaseModel):
     __tablename__ = "workflow_runs"
@@ -51,8 +59,12 @@ class WorkflowRun(BaseModel):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    workflow_def_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workflow_definitions.id"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    workflow_def_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_definitions.id"), nullable=False
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     trigger_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     context: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
@@ -63,21 +75,28 @@ class WorkflowRun(BaseModel):
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     timeout_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
     workflow_def = relationship("WorkflowDefinition", back_populates="runs")
     steps = relationship("StepExecution", back_populates="workflow_run")
+
 
 class StepExecution(BaseModel):
     __tablename__ = "step_executions"
     __table_args__ = (Index("idx_step_exec_run", "workflow_run_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
     workflow_run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     step_id: Mapped[str] = mapped_column(String(100), nullable=False)
     step_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     input: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     output: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -89,4 +108,6 @@ class StepExecution(BaseModel):
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
-    workflow_run = relationship("WorkflowRun", back_populates="steps", foreign_keys=[workflow_run_id])
+    workflow_run = relationship(
+        "WorkflowRun", back_populates="steps", foreign_keys=[workflow_run_id]
+    )

@@ -1,4 +1,5 @@
 """All 9 workflow step type implementations."""
+
 from __future__ import annotations
 
 import asyncio
@@ -74,7 +75,7 @@ async def _execute_parallel(step, state):
 async def _execute_loop(step, state):
     items = step.get("items", [])
     results = []
-    for item in items:
+    for _item in items:
         r = await execute_step({"id": f"{step['id']}_item", "type": "agent"}, state)
         results.append(r)
     return {"step_id": step["id"], "type": "loop", "results": results}
@@ -136,6 +137,7 @@ async def _execute_sub_workflow(step: dict, state: dict) -> dict[str, Any]:
     state_store = state.get("_state_store")
     if state_store is None:
         from workflows.state_store import WorkflowStateStore
+
         state_store = WorkflowStateStore()
 
     sub_engine = WorkflowEngine(state_store=state_store)

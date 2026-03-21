@@ -1,4 +1,5 @@
 """Persist workflow state to Redis (and PostgreSQL)."""
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,9 @@ class WorkflowStateStore:
 
     async def save(self, state: dict[str, Any]) -> None:
         if self.redis:
-            await self.redis.set(f"wfstate:{state['id']}", json.dumps(state, default=str), ex=172800)
+            await self.redis.set(
+                f"wfstate:{state['id']}", json.dumps(state, default=str), ex=172800
+            )
 
     async def load(self, run_id: str) -> dict[str, Any] | None:
         if not self.redis:

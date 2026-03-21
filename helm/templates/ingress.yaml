@@ -5,6 +5,12 @@ metadata:
   name: {{ .Release.Name }}-ingress
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.className | default "gce" | quote }}
+    {{- if .Values.ingress.managedCertificate }}
+    networking.gke.io/managed-certificates: {{ .Release.Name }}-managed-cert
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if .Values.ingress.tls }}
   tls:
@@ -26,9 +32,9 @@ spec:
             pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ $.Release.Name }}-api
+                name: {{ printf "%s-%s" $.Release.Name (.backend | default "api") }}
                 port:
-                  number: {{ $.Values.service.port | default 8000 }}
+                  number: {{ .backendPort | default ($.Values.service.port | default 8000) }}
           {{- end }}
     {{- end }}
 {{- end }}

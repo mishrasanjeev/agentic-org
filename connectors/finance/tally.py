@@ -1,7 +1,9 @@
 """Tally connector — finance."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class TallyConnector(BaseConnector):
     name = "tally"
@@ -26,28 +28,22 @@ class TallyConnector(BaseConnector):
         """Execute post_voucher on tally."""
         return await self._post("/post/voucher", params)
 
-
     async def get_ledger_balance(self, **params):
         """Execute get_ledger_balance on tally."""
         return await self._post("/get/ledger/balance", params)
-
 
     async def generate_gst_report(self, **params):
         """Execute generate_gst_report on tally."""
         return await self._post("/generate/gst/report", params)
 
-
     async def export_tally_xml_data(self, **params):
         """Execute export_tally_xml_data on tally."""
         return await self._post("/export/tally/xml/data", params)
-
 
     async def get_trial_balance(self, **params):
         """Execute get_trial_balance on tally."""
         return await self._post("/get/trial/balance", params)
 
-
     async def get_stock_summary(self, **params):
         """Execute get_stock_summary on tally."""
         return await self._post("/get/stock/summary", params)
-

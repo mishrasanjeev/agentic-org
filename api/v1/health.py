@@ -1,4 +1,5 @@
 """Health check endpoint — verifies DB and Redis connectivity."""
+
 from __future__ import annotations
 
 import redis.asyncio as aioredis

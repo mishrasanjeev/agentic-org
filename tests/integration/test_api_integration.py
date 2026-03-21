@@ -4,12 +4,12 @@ These tests exercise the FastAPI app through ``httpx.AsyncClient`` with
 real service-container backends (Postgres via pgvector, Redis 7) as provided
 by the CI workflow's ``services`` block.
 """
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
@@ -64,17 +64,13 @@ class TestAgentCRUDLifecycle:
     async def test_create_agent(
         self, client: AsyncClient, auth_headers: dict, agent_payload: dict
     ) -> None:
-        resp = await client.post(
-            "/api/v1/agents", json=agent_payload, headers=auth_headers
-        )
+        resp = await client.post("/api/v1/agents", json=agent_payload, headers=auth_headers)
         assert resp.status_code == 201
         body = resp.json()
         assert "agent_id" in body
         assert body["status"] == "shadow"
 
-    async def test_list_agents(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_agents(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/v1/agents", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
@@ -92,20 +88,14 @@ class TestAgentCRUDLifecycle:
         body = resp.json()
         assert "items" in body
 
-    async def test_get_agent_by_id(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_get_agent_by_id(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
-        resp = await client.get(
-            f"/api/v1/agents/{agent_id}", headers=auth_headers
-        )
+        resp = await client.get(f"/api/v1/agents/{agent_id}", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
         assert body["id"] == agent_id
 
-    async def test_update_agent_patch(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_update_agent_patch(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
         resp = await client.patch(
             f"/api/v1/agents/{agent_id}",
@@ -129,51 +119,33 @@ class TestAgentCRUDLifecycle:
         body = resp.json()
         assert body["replaced"] is True
 
-    async def test_pause_agent(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_pause_agent(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
-        resp = await client.post(
-            f"/api/v1/agents/{agent_id}/pause", headers=auth_headers
-        )
+        resp = await client.post(f"/api/v1/agents/{agent_id}/pause", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "paused"
         assert body["token_revoked"] is True
 
-    async def test_resume_agent(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_resume_agent(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
-        resp = await client.post(
-            f"/api/v1/agents/{agent_id}/resume", headers=auth_headers
-        )
+        resp = await client.post(f"/api/v1/agents/{agent_id}/resume", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["status"] == "active"
 
-    async def test_promote_agent(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_promote_agent(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
-        resp = await client.post(
-            f"/api/v1/agents/{agent_id}/promote", headers=auth_headers
-        )
+        resp = await client.post(f"/api/v1/agents/{agent_id}/promote", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["promoted"] is True
 
-    async def test_rollback_agent(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_rollback_agent(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
-        resp = await client.post(
-            f"/api/v1/agents/{agent_id}/rollback", headers=auth_headers
-        )
+        resp = await client.post(f"/api/v1/agents/{agent_id}/rollback", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["rolled_back"] is True
 
-    async def test_clone_agent(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_clone_agent(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/agents/{agent_id}/clone",
@@ -190,9 +162,7 @@ class TestAgentCRUDLifecycle:
         assert body["status"] == "shadow"
         assert body["parent_id"] == agent_id
 
-    async def test_run_agent(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_run_agent(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/agents/{agent_id}/run",
@@ -261,26 +231,20 @@ class TestWorkflowLifecycle:
     async def test_create_workflow(
         self, client: AsyncClient, auth_headers: dict, workflow_payload: dict
     ) -> None:
-        resp = await client.post(
-            "/api/v1/workflows", json=workflow_payload, headers=auth_headers
-        )
+        resp = await client.post("/api/v1/workflows", json=workflow_payload, headers=auth_headers)
         assert resp.status_code == 201
         body = resp.json()
         assert "workflow_id" in body
         assert body["version"] == "1.0"
 
-    async def test_list_workflows(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_workflows(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/v1/workflows", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
         assert "items" in body
         assert isinstance(body["items"], list)
 
-    async def test_trigger_workflow_run(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_trigger_workflow_run(self, client: AsyncClient, auth_headers: dict) -> None:
         wf_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/workflows/{wf_id}/run",
@@ -292,13 +256,9 @@ class TestWorkflowLifecycle:
         assert body["status"] == "running"
         assert "run_id" in body
 
-    async def test_get_workflow_run(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_get_workflow_run(self, client: AsyncClient, auth_headers: dict) -> None:
         run_id = str(uuid.uuid4())
-        resp = await client.get(
-            f"/api/v1/workflows/runs/{run_id}", headers=auth_headers
-        )
+        resp = await client.get(f"/api/v1/workflows/runs/{run_id}", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
         assert body["run_id"] == run_id
@@ -314,9 +274,7 @@ class TestWorkflowLifecycle:
 class TestHITLApprovalFlow:
     """List pending approvals -> approve -> reject -> defer."""
 
-    async def test_list_approvals(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_list_approvals(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/v1/approvals", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
@@ -334,9 +292,7 @@ class TestHITLApprovalFlow:
         assert resp.status_code == 200
         assert "items" in resp.json()
 
-    async def test_approve_decision(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_approve_decision(self, client: AsyncClient, auth_headers: dict) -> None:
         hitl_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/approvals/{hitl_id}/decide",
@@ -349,9 +305,7 @@ class TestHITLApprovalFlow:
         assert body["status"] == "decided"
         assert body["hitl_id"] == hitl_id
 
-    async def test_reject_decision(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_reject_decision(self, client: AsyncClient, auth_headers: dict) -> None:
         hitl_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/approvals/{hitl_id}/decide",
@@ -363,9 +317,7 @@ class TestHITLApprovalFlow:
         assert body["decision"] == "reject"
         assert body["status"] == "decided"
 
-    async def test_defer_decision(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_defer_decision(self, client: AsyncClient, auth_headers: dict) -> None:
         hitl_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/approvals/{hitl_id}/decide",
@@ -429,22 +381,16 @@ class TestConnectorRegistration:
     async def test_register_connector(
         self, client: AsyncClient, auth_headers: dict, connector_payload: dict
     ) -> None:
-        resp = await client.post(
-            "/api/v1/connectors", json=connector_payload, headers=auth_headers
-        )
+        resp = await client.post("/api/v1/connectors", json=connector_payload, headers=auth_headers)
         assert resp.status_code == 201
         body = resp.json()
         assert "connector_id" in body
         assert body["name"] == connector_payload["name"]
         assert body["status"] == "active"
 
-    async def test_connector_health(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_connector_health(self, client: AsyncClient, auth_headers: dict) -> None:
         conn_id = str(uuid.uuid4())
-        resp = await client.get(
-            f"/api/v1/connectors/{conn_id}/health", headers=auth_headers
-        )
+        resp = await client.get(f"/api/v1/connectors/{conn_id}/health", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
         assert body["connector_id"] == conn_id
@@ -487,9 +433,7 @@ class TestConnectorRegistration:
 class TestAuditLogQueries:
     """Query the audit log with various filter combinations."""
 
-    async def test_query_audit_unfiltered(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_query_audit_unfiltered(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get("/api/v1/audit", headers=auth_headers)
         assert resp.status_code == 200
         body = resp.json()
@@ -498,9 +442,7 @@ class TestAuditLogQueries:
         assert "page" in body
         assert "per_page" in body
 
-    async def test_query_audit_by_event_type(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_query_audit_by_event_type(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get(
             "/api/v1/audit",
             params={"event_type": "agent.created"},
@@ -510,9 +452,7 @@ class TestAuditLogQueries:
         body = resp.json()
         assert isinstance(body["items"], list)
 
-    async def test_query_audit_by_agent_id(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_query_audit_by_agent_id(self, client: AsyncClient, auth_headers: dict) -> None:
         agent_id = str(uuid.uuid4())
         resp = await client.get(
             "/api/v1/audit",
@@ -522,9 +462,7 @@ class TestAuditLogQueries:
         assert resp.status_code == 200
         assert "items" in resp.json()
 
-    async def test_query_audit_by_date_range(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_query_audit_by_date_range(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get(
             "/api/v1/audit",
             params={
@@ -537,9 +475,7 @@ class TestAuditLogQueries:
         body = resp.json()
         assert isinstance(body["items"], list)
 
-    async def test_query_audit_pagination(
-        self, client: AsyncClient, auth_headers: dict
-    ) -> None:
+    async def test_query_audit_pagination(self, client: AsyncClient, auth_headers: dict) -> None:
         resp = await client.get(
             "/api/v1/audit",
             params={"page": 2, "per_page": 10},
@@ -578,24 +514,18 @@ class TestAuditLogQueries:
 class TestAuthEdgeCases:
     """Verify auth middleware behavior for integration scenarios."""
 
-    async def test_missing_auth_header_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_missing_auth_header_returns_401(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/agents")
         assert resp.status_code == 401
 
-    async def test_malformed_bearer_token_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_malformed_bearer_token_returns_401(self, client: AsyncClient) -> None:
         resp = await client.get(
             "/api/v1/agents",
             headers={"Authorization": "Bearer not-a-valid-jwt"},
         )
         assert resp.status_code == 401
 
-    async def test_missing_bearer_prefix_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_missing_bearer_prefix_returns_401(self, client: AsyncClient) -> None:
         resp = await client.get(
             "/api/v1/agents",
             headers={"Authorization": "Token abc123"},
@@ -618,9 +548,7 @@ class TestAuthEdgeCases:
         assert resp_a.status_code == 200
         assert resp_b.status_code == 200
 
-    async def test_health_does_not_require_auth(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_health_does_not_require_auth(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/health")
         assert resp.status_code == 200
 
@@ -713,23 +641,17 @@ class TestFullPipeline:
         agent_id = create_resp.json()["agent_id"]
 
         # Pause
-        pause_resp = await client.post(
-            f"/api/v1/agents/{agent_id}/pause", headers=auth_headers
-        )
+        pause_resp = await client.post(f"/api/v1/agents/{agent_id}/pause", headers=auth_headers)
         assert pause_resp.status_code == 200
         assert pause_resp.json()["status"] == "paused"
 
         # Resume
-        resume_resp = await client.post(
-            f"/api/v1/agents/{agent_id}/resume", headers=auth_headers
-        )
+        resume_resp = await client.post(f"/api/v1/agents/{agent_id}/resume", headers=auth_headers)
         assert resume_resp.status_code == 200
         assert resume_resp.json()["status"] == "active"
 
         # Promote
-        promote_resp = await client.post(
-            f"/api/v1/agents/{agent_id}/promote", headers=auth_headers
-        )
+        promote_resp = await client.post(f"/api/v1/agents/{agent_id}/promote", headers=auth_headers)
         assert promote_resp.status_code == 200
         assert promote_resp.json()["promoted"] is True
 
@@ -753,9 +675,7 @@ class TestFullPipeline:
         assert reg_resp.status_code == 201
         conn_id = reg_resp.json()["connector_id"]
 
-        health_resp = await client.get(
-            f"/api/v1/connectors/{conn_id}/health", headers=auth_headers
-        )
+        health_resp = await client.get(f"/api/v1/connectors/{conn_id}/health", headers=auth_headers)
         assert health_resp.status_code == 200
         assert health_resp.json()["status"] == "healthy"
 
@@ -773,9 +693,7 @@ class TestFullPipeline:
         assert run_resp.status_code == 200
 
         # List pending approvals
-        approvals_resp = await client.get(
-            "/api/v1/approvals", headers=auth_headers
-        )
+        approvals_resp = await client.get("/api/v1/approvals", headers=auth_headers)
         assert approvals_resp.status_code == 200
 
         # Decide on an approval

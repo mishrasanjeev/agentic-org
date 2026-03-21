@@ -1,15 +1,16 @@
 """Circuit breaker pattern — Redis-backed, per-connector."""
+
 from __future__ import annotations
 
 import time
-from enum import Enum
+from enum import StrEnum
 
 import redis.asyncio as aioredis
 
 from core.config import settings
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"

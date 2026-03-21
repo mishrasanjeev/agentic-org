@@ -10,6 +10,7 @@ Span catalogue
 6. agenticorg.auth.validate  — INTERNAL — JWT / auth validation
 7. agenticorg.shadow.compare — INTERNAL — shadow-mode quality comparison
 """
+
 from __future__ import annotations
 
 from opentelemetry import trace
@@ -306,6 +307,7 @@ def start_shadow_span(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def record_span_error(span: trace.Span, error: Exception) -> None:
     """Mark a span as errored with the exception details."""

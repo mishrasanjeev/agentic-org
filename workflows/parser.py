@@ -1,4 +1,5 @@
 """Parse and validate workflow definitions (YAML/JSON)."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,7 +8,17 @@ import yaml
 
 
 class WorkflowParser:
-    VALID_STEP_TYPES = {"agent", "condition", "human_in_loop", "parallel", "loop", "transform", "notify", "sub_workflow", "wait"}
+    VALID_STEP_TYPES = {
+        "agent",
+        "condition",
+        "human_in_loop",
+        "parallel",
+        "loop",
+        "transform",
+        "notify",
+        "sub_workflow",
+        "wait",
+    }
 
     def parse(self, definition: dict[str, Any] | str) -> dict[str, Any]:
         if isinstance(definition, str):

@@ -1,4 +1,5 @@
 """Grantex/OAuth2 client for platform and agent token management."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

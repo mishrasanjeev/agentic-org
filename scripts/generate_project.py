@@ -27,8 +27,11 @@ def touch(rel_path: str) -> None:
 
 # ─────────────────────── MODELS ───────────────────────
 
+
 def gen_models():
-    w("core/models/__init__.py", '''
+    w(
+        "core/models/__init__.py",
+        '''
     """ORM models for AgenticOrg."""
     from core.models.base import BaseModel, TimestampMixin, TenantMixin
     from core.models.tenant import Tenant
@@ -44,9 +47,12 @@ def gen_models():
     from core.models.audit import AuditLog
     from core.models.document import Document
     from core.models.schema_registry import SchemaRegistry
-    ''')
+    ''',
+    )
 
-    w("core/models/workflow.py", '''
+    w(
+        "core/models/workflow.py",
+        '''
     """Workflow ORM models."""
     from __future__ import annotations
     import uuid
@@ -127,9 +133,12 @@ def gen_models():
         completed_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
         workflow_run = relationship("WorkflowRun", back_populates="steps", foreign_keys=[workflow_run_id])
-    ''')
+    ''',
+    )
 
-    w("core/models/tool_call.py", '''
+    w(
+        "core/models/tool_call.py",
+        '''
     """ToolCall ORM model."""
     from __future__ import annotations
     import uuid
@@ -158,9 +167,12 @@ def gen_models():
         latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
         llm_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
         called_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    ''')
+    ''',
+    )
 
-    w("core/models/hitl.py", '''
+    w(
+        "core/models/hitl.py",
+        '''
     """HITL Queue ORM model."""
     from __future__ import annotations
     import uuid
@@ -191,9 +203,12 @@ def gen_models():
         decision_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
         expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
         created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    ''')
+    ''',
+    )
 
-    w("core/models/connector.py", '''
+    w(
+        "core/models/connector.py",
+        '''
     """Connector ORM model."""
     from __future__ import annotations
     import uuid
@@ -224,9 +239,12 @@ def gen_models():
         status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
         health_check_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
         created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    ''')
+    ''',
+    )
 
-    w("core/models/audit.py", '''
+    w(
+        "core/models/audit.py",
+        '''
     """Audit log ORM model — append-only with HMAC signature."""
     from __future__ import annotations
     import uuid
@@ -255,9 +273,12 @@ def gen_models():
         signature: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
         trace_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
         created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    ''')
+    ''',
+    )
 
-    w("core/models/document.py", '''
+    w(
+        "core/models/document.py",
+        '''
     """Document ORM model with pgvector embedding."""
     from __future__ import annotations
     import uuid
@@ -281,9 +302,12 @@ def gen_models():
         metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
         retention_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
         created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    ''')
+    ''',
+    )
 
-    w("core/models/schema_registry.py", '''
+    w(
+        "core/models/schema_registry.py",
+        '''
     """Schema registry ORM model."""
     from __future__ import annotations
     import uuid
@@ -307,23 +331,30 @@ def gen_models():
         is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
         created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
         created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
-    ''')
+    ''',
+    )
 
     print("[OK] Models")
 
 
 # ─────────────────────── PYDANTIC SCHEMAS ───────────────────────
 
+
 def gen_pydantic_schemas():
-    w("core/schemas/__init__.py", '''
+    w(
+        "core/schemas/__init__.py",
+        '''
     """Pydantic schemas for AgenticOrg."""
     from core.schemas.messages import TaskAssignment, TaskResult, HITLRequest
     from core.schemas.errors import ErrorCode, ErrorEnvelope
     from core.schemas.api import *
     from core.schemas.events import PlatformEvent
-    ''')
+    ''',
+    )
 
-    w("core/schemas/messages.py", '''
+    w(
+        "core/schemas/messages.py",
+        '''
     """Message protocol v2 — Agent <-> Orchestrator."""
     from __future__ import annotations
     from datetime import datetime
@@ -438,9 +469,12 @@ def gen_pydantic_schemas():
         error: dict[str, Any] | None = None
         performance: PerformanceMetrics = Field(default_factory=PerformanceMetrics)
         completed_at: datetime = Field(default_factory=datetime.utcnow)
-    ''')
+    ''',
+    )
 
-    w("core/schemas/errors.py", '''
+    w(
+        "core/schemas/errors.py",
+        '''
     """E-series error taxonomy — all 50 error codes."""
     from __future__ import annotations
     from datetime import datetime
@@ -579,9 +613,12 @@ def gen_pydantic_schemas():
             escalate=meta.get("escalate_after_retries", False),
             **kwargs,
         ))
-    ''')
+    ''',
+    )
 
-    w("core/schemas/events.py", '''
+    w(
+        "core/schemas/events.py",
+        '''
     """Platform event envelope and catalogue."""
     from __future__ import annotations
     from datetime import datetime
@@ -631,9 +668,12 @@ def gen_pydantic_schemas():
     TICKET_CREATED = "connector.zendesk.ticket_created"
     FORM_SUBMITTED = "connector.hubspot.form_submitted"
     ALERT_TRIGGERED = "connector.pagerduty.alert_triggered"
-    ''')
+    ''',
+    )
 
-    w("core/schemas/api.py", '''
+    w(
+        "core/schemas/api.py",
+        '''
     """API request/response Pydantic schemas."""
     from __future__ import annotations
     from datetime import datetime
@@ -801,12 +841,14 @@ def gen_pydantic_schemas():
         max_agents_per_domain: dict[str, int] = {}
         max_shadow_agents: int = 10
         max_replicas_global_ceiling: int = 20
-    ''')
+    ''',
+    )
 
     print("[OK] Pydantic schemas")
 
 
 # ─────────────────────── JSON SCHEMAS ───────────────────────
+
 
 def gen_json_schemas():
     schemas = {
@@ -814,7 +856,15 @@ def gen_json_schemas():
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "Employee",
             "type": "object",
-            "required": ["employee_id", "full_name", "email", "department", "designation", "date_of_joining", "status"],
+            "required": [
+                "employee_id",
+                "full_name",
+                "email",
+                "department",
+                "designation",
+                "date_of_joining",
+                "status",
+            ],
             "properties": {
                 "employee_id": {"type": "string"},
                 "full_name": {"type": "string"},
@@ -822,26 +872,43 @@ def gen_json_schemas():
                 "phone": {"type": "string"},
                 "department": {"type": "string"},
                 "designation": {"type": "string"},
-                "level": {"type": "string", "enum": ["L1","L2","L3","L4","L5","L6","L7","L8","L9","L10"]},
-                "employment_type": {"type": "string", "enum": ["full_time","contract","intern","advisor"]},
+                "level": {
+                    "type": "string",
+                    "enum": ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "L10"],
+                },
+                "employment_type": {
+                    "type": "string",
+                    "enum": ["full_time", "contract", "intern", "advisor"],
+                },
                 "date_of_joining": {"type": "string", "format": "date"},
-                "date_of_leaving": {"type": ["string","null"], "format": "date"},
+                "date_of_leaving": {"type": ["string", "null"], "format": "date"},
                 "ctc": {"type": "number"},
                 "variable_pct": {"type": "number", "minimum": 0, "maximum": 100},
                 "esop_units": {"type": "integer"},
-                "manager_id": {"type": ["string","null"]},
+                "manager_id": {"type": ["string", "null"]},
                 "location": {"type": "string"},
-                "work_mode": {"type": "string", "enum": ["office","remote","hybrid"]},
-                "probation_end_date": {"type": ["string","null"], "format": "date"},
-                "status": {"type": "string", "enum": ["active","probation","on_leave","notice_period","terminated"]},
-                "custom_fields": {"type": "object", "additionalProperties": True}
-            }
+                "work_mode": {"type": "string", "enum": ["office", "remote", "hybrid"]},
+                "probation_end_date": {"type": ["string", "null"], "format": "date"},
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "probation", "on_leave", "notice_period", "terminated"],
+                },
+                "custom_fields": {"type": "object", "additionalProperties": True},
+            },
         },
         "invoice": {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "Invoice",
             "type": "object",
-            "required": ["invoice_id","vendor_id","invoice_date","due_date","line_items","total","status"],
+            "required": [
+                "invoice_id",
+                "vendor_id",
+                "invoice_date",
+                "due_date",
+                "line_items",
+                "total",
+                "status",
+            ],
             "properties": {
                 "invoice_id": {"type": "string"},
                 "vendor_id": {"type": "string"},
@@ -850,242 +917,466 @@ def gen_json_schemas():
                 "pan": {"type": "string", "minLength": 10, "maxLength": 10},
                 "invoice_date": {"type": "string", "format": "date"},
                 "due_date": {"type": "string", "format": "date"},
-                "line_items": {"type": "array", "items": {
-                    "type": "object",
-                    "properties": {
-                        "description": {"type": "string"},
-                        "hsn_sac": {"type": "string"},
-                        "quantity": {"type": "number"},
-                        "unit_price": {"type": "number"},
-                        "gst_rate": {"type": "number", "enum": [0,5,12,18,28]},
-                        "igst": {"type": "number"},
-                        "cgst": {"type": "number"},
-                        "sgst": {"type": "number"},
-                        "amount": {"type": "number"}
-                    }
-                }},
+                "line_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "description": {"type": "string"},
+                            "hsn_sac": {"type": "string"},
+                            "quantity": {"type": "number"},
+                            "unit_price": {"type": "number"},
+                            "gst_rate": {"type": "number", "enum": [0, 5, 12, 18, 28]},
+                            "igst": {"type": "number"},
+                            "cgst": {"type": "number"},
+                            "sgst": {"type": "number"},
+                            "amount": {"type": "number"},
+                        },
+                    },
+                },
                 "subtotal": {"type": "number"},
                 "gst_amount": {"type": "number"},
                 "tds_amount": {"type": "number"},
                 "total": {"type": "number"},
                 "currency": {"type": "string"},
-                "po_reference": {"type": ["string","null"]},
-                "grn_reference": {"type": ["string","null"]},
-                "bank_details": {"type": "object", "properties": {"account_no": {"type": "string"}, "ifsc": {"type": "string"}, "bank_name": {"type": "string"}}},
-                "status": {"type": "string", "enum": ["pending","matched","mismatch","approved","paid","disputed"]},
+                "po_reference": {"type": ["string", "null"]},
+                "grn_reference": {"type": ["string", "null"]},
+                "bank_details": {
+                    "type": "object",
+                    "properties": {
+                        "account_no": {"type": "string"},
+                        "ifsc": {"type": "string"},
+                        "bank_name": {"type": "string"},
+                    },
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "matched", "mismatch", "approved", "paid", "disputed"],
+                },
                 "agent_confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                "custom_fields": {"type": "object", "additionalProperties": True}
-            }
+                "custom_fields": {"type": "object", "additionalProperties": True},
+            },
         },
         "contract": {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "Contract",
             "type": "object",
-            "required": ["contract_id","title","counterparty","contract_type","start_date","end_date","status"],
+            "required": [
+                "contract_id",
+                "title",
+                "counterparty",
+                "contract_type",
+                "start_date",
+                "end_date",
+                "status",
+            ],
             "properties": {
-                "contract_id": {"type": "string"}, "title": {"type": "string"}, "counterparty": {"type": "string"},
-                "contract_type": {"type": "string", "enum": ["MSA","NDA","SLA","SOW","lease","employment","purchase"]},
-                "value": {"type": "number"}, "currency": {"type": "string"},
-                "start_date": {"type": "string", "format": "date"}, "end_date": {"type": "string", "format": "date"},
-                "auto_renewal": {"type": "boolean"}, "notice_period_days": {"type": "number"},
+                "contract_id": {"type": "string"},
+                "title": {"type": "string"},
+                "counterparty": {"type": "string"},
+                "contract_type": {
+                    "type": "string",
+                    "enum": ["MSA", "NDA", "SLA", "SOW", "lease", "employment", "purchase"],
+                },
+                "value": {"type": "number"},
+                "currency": {"type": "string"},
+                "start_date": {"type": "string", "format": "date"},
+                "end_date": {"type": "string", "format": "date"},
+                "auto_renewal": {"type": "boolean"},
+                "notice_period_days": {"type": "number"},
                 "key_obligations": {"type": "array", "items": {"type": "string"}},
-                "sla_terms": {"type": "object"}, "penalty_clauses": {"type": "array", "items": {"type": "string"}},
-                "governing_law": {"type": "string"}, "non_standard_clauses": {"type": "array", "items": {"type": "string"}},
-                "status": {"type": "string", "enum": ["draft","active","expiring","expired","terminated"]},
-                "custom_fields": {"type": "object", "additionalProperties": True}
-            }
+                "sla_terms": {"type": "object"},
+                "penalty_clauses": {"type": "array", "items": {"type": "string"}},
+                "governing_law": {"type": "string"},
+                "non_standard_clauses": {"type": "array", "items": {"type": "string"}},
+                "status": {
+                    "type": "string",
+                    "enum": ["draft", "active", "expiring", "expired", "terminated"],
+                },
+                "custom_fields": {"type": "object", "additionalProperties": True},
+            },
         },
         "job_requisition": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Job Requisition", "type": "object",
-            "required": ["job_id","title","department","hiring_manager_id","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Job Requisition",
+            "type": "object",
+            "required": ["job_id", "title", "department", "hiring_manager_id", "status"],
             "properties": {
-                "job_id": {"type": "string"}, "title": {"type": "string"}, "department": {"type": "string"},
-                "hiring_manager_id": {"type": "string"}, "level": {"type": "string"},
+                "job_id": {"type": "string"},
+                "title": {"type": "string"},
+                "department": {"type": "string"},
+                "hiring_manager_id": {"type": "string"},
+                "level": {"type": "string"},
                 "location": {"type": "array", "items": {"type": "string"}},
-                "employment_type": {"type": "string", "enum": ["full_time","contract","intern"]},
-                "ctc_band": {"type": "object", "properties": {"min": {"type": "number"}, "max": {"type": "number"}, "currency": {"type": "string"}}},
+                "employment_type": {"type": "string", "enum": ["full_time", "contract", "intern"]},
+                "ctc_band": {
+                    "type": "object",
+                    "properties": {
+                        "min": {"type": "number"},
+                        "max": {"type": "number"},
+                        "currency": {"type": "string"},
+                    },
+                },
                 "must_have": {"type": "array", "items": {"type": "string"}},
                 "nice_to_have": {"type": "array", "items": {"type": "string"}},
                 "jd_text": {"type": "string"},
-                "open_date": {"type": "string", "format": "date"}, "target_close_date": {"type": "string", "format": "date"},
-                "status": {"type": "string", "enum": ["draft","active","on_hold","filled","cancelled"]}
-            }
+                "open_date": {"type": "string", "format": "date"},
+                "target_close_date": {"type": "string", "format": "date"},
+                "status": {
+                    "type": "string",
+                    "enum": ["draft", "active", "on_hold", "filled", "cancelled"],
+                },
+            },
         },
         "campaign": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Campaign", "type": "object",
-            "required": ["campaign_id","name","channel","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Campaign",
+            "type": "object",
+            "required": ["campaign_id", "name", "channel", "status"],
             "properties": {
-                "campaign_id": {"type": "string"}, "name": {"type": "string"},
-                "channel": {"type": "string", "enum": ["google","meta","linkedin","email","organic"]},
-                "objective": {"type": "string", "enum": ["awareness","consideration","conversion","retention"]},
-                "budget_total": {"type": "number"}, "budget_spent": {"type": "number"},
-                "start_date": {"type": "string", "format": "date"}, "end_date": {"type": "string", "format": "date"},
-                "target_audience": {"type": "object", "properties": {"industries": {"type": "array", "items": {"type": "string"}}, "company_size": {"type": "string"}, "seniority": {"type": "array", "items": {"type": "string"}}}},
-                "metrics": {"type": "object", "properties": {"impressions": {"type": "number"}, "clicks": {"type": "number"}, "conversions": {"type": "number"}, "roas": {"type": "number"}}},
-                "status": {"type": "string", "enum": ["draft","active","paused","completed"]},
-                "custom_fields": {"type": "object", "additionalProperties": True}
-            }
+                "campaign_id": {"type": "string"},
+                "name": {"type": "string"},
+                "channel": {
+                    "type": "string",
+                    "enum": ["google", "meta", "linkedin", "email", "organic"],
+                },
+                "objective": {
+                    "type": "string",
+                    "enum": ["awareness", "consideration", "conversion", "retention"],
+                },
+                "budget_total": {"type": "number"},
+                "budget_spent": {"type": "number"},
+                "start_date": {"type": "string", "format": "date"},
+                "end_date": {"type": "string", "format": "date"},
+                "target_audience": {
+                    "type": "object",
+                    "properties": {
+                        "industries": {"type": "array", "items": {"type": "string"}},
+                        "company_size": {"type": "string"},
+                        "seniority": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+                "metrics": {
+                    "type": "object",
+                    "properties": {
+                        "impressions": {"type": "number"},
+                        "clicks": {"type": "number"},
+                        "conversions": {"type": "number"},
+                        "roas": {"type": "number"},
+                    },
+                },
+                "status": {"type": "string", "enum": ["draft", "active", "paused", "completed"]},
+                "custom_fields": {"type": "object", "additionalProperties": True},
+            },
         },
         "vendor": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Vendor", "type": "object",
-            "required": ["vendor_id","name","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Vendor",
+            "type": "object",
+            "required": ["vendor_id", "name", "status"],
             "properties": {
-                "vendor_id": {"type": "string"}, "name": {"type": "string"}, "gstin": {"type": "string"}, "pan": {"type": "string"},
-                "bank": {"type": "object", "properties": {"account": {"type": "string"}, "ifsc": {"type": "string"}}},
+                "vendor_id": {"type": "string"},
+                "name": {"type": "string"},
+                "gstin": {"type": "string"},
+                "pan": {"type": "string"},
+                "bank": {
+                    "type": "object",
+                    "properties": {"account": {"type": "string"}, "ifsc": {"type": "string"}},
+                },
                 "risk_score": {"type": "number", "minimum": 0, "maximum": 10},
-                "sanctions_clear": {"type": "boolean"}, "sanctions_checked_at": {"type": "string", "format": "date-time"},
-                "category": {"type": "string"}, "approved_spend_limit": {"type": "number"},
-                "status": {"type": "string", "enum": ["pending","approved","blacklisted","suspended"]}
-            }
+                "sanctions_clear": {"type": "boolean"},
+                "sanctions_checked_at": {"type": "string", "format": "date-time"},
+                "category": {"type": "string"},
+                "approved_spend_limit": {"type": "number"},
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "approved", "blacklisted", "suspended"],
+                },
+            },
         },
         "lead": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Lead", "type": "object",
-            "required": ["lead_id","email","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Lead",
+            "type": "object",
+            "required": ["lead_id", "email", "status"],
             "properties": {
-                "lead_id": {"type": "string"}, "email": {"type": "string", "format": "email"}, "name": {"type": "string"},
-                "company": {"type": "string"}, "title": {"type": "string"}, "industry": {"type": "string"},
-                "company_size": {"type": "string"}, "source": {"type": "string"},
+                "lead_id": {"type": "string"},
+                "email": {"type": "string", "format": "email"},
+                "name": {"type": "string"},
+                "company": {"type": "string"},
+                "title": {"type": "string"},
+                "industry": {"type": "string"},
+                "company_size": {"type": "string"},
+                "source": {"type": "string"},
                 "lead_score": {"type": "number", "minimum": 0, "maximum": 100},
-                "lifecycle_stage": {"type": "string"}, "intent_signals": {"type": "array", "items": {"type": "string"}},
+                "lifecycle_stage": {"type": "string"},
+                "intent_signals": {"type": "array", "items": {"type": "string"}},
                 "assigned_to": {"type": "string"},
-                "status": {"type": "string", "enum": ["new","contacted","qualified","mql","sql","won","lost"]}
-            }
+                "status": {
+                    "type": "string",
+                    "enum": ["new", "contacted", "qualified", "mql", "sql", "won", "lost"],
+                },
+            },
         },
         "ticket": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Support Ticket", "type": "object",
-            "required": ["ticket_id","channel","priority","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Support Ticket",
+            "type": "object",
+            "required": ["ticket_id", "channel", "priority", "status"],
             "properties": {
                 "ticket_id": {"type": "string"},
-                "channel": {"type": "string", "enum": ["email","chat","phone","portal","social"]},
-                "priority": {"type": "string", "enum": ["critical","high","medium","low"]},
-                "category": {"type": "string"}, "customer_id": {"type": "string"}, "customer_tier": {"type": "string"},
+                "channel": {
+                    "type": "string",
+                    "enum": ["email", "chat", "phone", "portal", "social"],
+                },
+                "priority": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+                "category": {"type": "string"},
+                "customer_id": {"type": "string"},
+                "customer_tier": {"type": "string"},
                 "sentiment_score": {"type": "number", "minimum": -1, "maximum": 1},
-                "classification": {"type": "string", "enum": ["L1","L2","L3"]},
-                "assigned_to": {"type": ["string","null"]},
-                "status": {"type": "string", "enum": ["open","pending","escalated","resolved","closed"]},
-                "csat_score": {"type": ["number","null"]}
-            }
+                "classification": {"type": "string", "enum": ["L1", "L2", "L3"]},
+                "assigned_to": {"type": ["string", "null"]},
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "pending", "escalated", "resolved", "closed"],
+                },
+                "csat_score": {"type": ["number", "null"]},
+            },
         },
         "incident": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "IT Incident", "type": "object",
-            "required": ["incident_id","severity","service","title","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "IT Incident",
+            "type": "object",
+            "required": ["incident_id", "severity", "service", "title", "status"],
             "properties": {
                 "incident_id": {"type": "string"},
-                "severity": {"type": "string", "enum": ["P1","P2","P3","P4"]},
-                "service": {"type": "string"}, "title": {"type": "string"}, "description": {"type": "string"},
-                "runbook_ref": {"type": ["string","null"]}, "assigned_team": {"type": "string"},
-                "status": {"type": "string", "enum": ["triggered","acknowledged","resolved","postmortem"]},
+                "severity": {"type": "string", "enum": ["P1", "P2", "P3", "P4"]},
+                "service": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "runbook_ref": {"type": ["string", "null"]},
+                "assigned_team": {"type": "string"},
+                "status": {
+                    "type": "string",
+                    "enum": ["triggered", "acknowledged", "resolved", "postmortem"],
+                },
                 "triggered_at": {"type": "string", "format": "date-time"},
-                "resolved_at": {"type": ["string","null"], "format": "date-time"},
-                "rca": {"type": ["string","null"]}
-            }
+                "resolved_at": {"type": ["string", "null"], "format": "date-time"},
+                "rca": {"type": ["string", "null"]},
+            },
         },
         "payment": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Payment", "type": "object",
-            "required": ["payment_id","amount","currency","method","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Payment",
+            "type": "object",
+            "required": ["payment_id", "amount", "currency", "method", "status"],
             "properties": {
-                "payment_id": {"type": "string"}, "amount": {"type": "number"}, "currency": {"type": "string"},
-                "method": {"type": "string", "enum": ["neft","rtgs","imps","upi","card","wallet"]},
-                "beneficiary": {"type": "object", "properties": {"account": {"type": "string"}, "ifsc": {"type": "string"}, "name": {"type": "string"}}},
-                "reference_number": {"type": "string"}, "idempotency_key": {"type": "string"},
-                "status": {"type": "string", "enum": ["queued","processing","completed","failed","reversed"]},
-                "executed_at": {"type": ["string","null"], "format": "date-time"},
-                "error_code": {"type": ["string","null"]}
-            }
+                "payment_id": {"type": "string"},
+                "amount": {"type": "number"},
+                "currency": {"type": "string"},
+                "method": {
+                    "type": "string",
+                    "enum": ["neft", "rtgs", "imps", "upi", "card", "wallet"],
+                },
+                "beneficiary": {
+                    "type": "object",
+                    "properties": {
+                        "account": {"type": "string"},
+                        "ifsc": {"type": "string"},
+                        "name": {"type": "string"},
+                    },
+                },
+                "reference_number": {"type": "string"},
+                "idempotency_key": {"type": "string"},
+                "status": {
+                    "type": "string",
+                    "enum": ["queued", "processing", "completed", "failed", "reversed"],
+                },
+                "executed_at": {"type": ["string", "null"], "format": "date-time"},
+                "error_code": {"type": ["string", "null"]},
+            },
         },
         "journal_entry": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "GL Journal Entry", "type": "object",
-            "required": ["entry_id","period","posting_date","debit_account","credit_account","amount","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "GL Journal Entry",
+            "type": "object",
+            "required": [
+                "entry_id",
+                "period",
+                "posting_date",
+                "debit_account",
+                "credit_account",
+                "amount",
+                "status",
+            ],
             "properties": {
-                "entry_id": {"type": "string"}, "period": {"type": "string"}, "posting_date": {"type": "string", "format": "date"},
-                "debit_account": {"type": "string"}, "credit_account": {"type": "string"}, "amount": {"type": "number"},
-                "cost_center": {"type": "string"}, "narration": {"type": "string"}, "reference_doc": {"type": "string"},
+                "entry_id": {"type": "string"},
+                "period": {"type": "string"},
+                "posting_date": {"type": "string", "format": "date"},
+                "debit_account": {"type": "string"},
+                "credit_account": {"type": "string"},
+                "amount": {"type": "number"},
+                "cost_center": {"type": "string"},
+                "narration": {"type": "string"},
+                "reference_doc": {"type": "string"},
                 "posted_by": {"type": "string"},
-                "status": {"type": "string", "enum": ["draft","posted","reversed"]},
-                "idempotency_key": {"type": "string"}
-            }
+                "status": {"type": "string", "enum": ["draft", "posted", "reversed"]},
+                "idempotency_key": {"type": "string"},
+            },
         },
         "asset": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Fixed Asset", "type": "object",
-            "required": ["asset_id","name","category","purchase_date","cost","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Fixed Asset",
+            "type": "object",
+            "required": ["asset_id", "name", "category", "purchase_date", "cost", "status"],
             "properties": {
-                "asset_id": {"type": "string"}, "name": {"type": "string"}, "category": {"type": "string"},
-                "location": {"type": "string"}, "purchase_date": {"type": "string", "format": "date"},
-                "cost": {"type": "number"}, "useful_life_years": {"type": "number"},
-                "depreciation_method": {"type": "string", "enum": ["slm","wdv"]},
-                "book_value": {"type": "number"}, "accumulated_depreciation": {"type": "number"},
-                "disposal_date": {"type": ["string","null"], "format": "date"},
-                "status": {"type": "string", "enum": ["active","disposed","fully_depreciated"]}
-            }
+                "asset_id": {"type": "string"},
+                "name": {"type": "string"},
+                "category": {"type": "string"},
+                "location": {"type": "string"},
+                "purchase_date": {"type": "string", "format": "date"},
+                "cost": {"type": "number"},
+                "useful_life_years": {"type": "number"},
+                "depreciation_method": {"type": "string", "enum": ["slm", "wdv"]},
+                "book_value": {"type": "number"},
+                "accumulated_depreciation": {"type": "number"},
+                "disposal_date": {"type": ["string", "null"], "format": "date"},
+                "status": {"type": "string", "enum": ["active", "disposed", "fully_depreciated"]},
+            },
         },
         "payroll_run": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Payroll Run", "type": "object",
-            "required": ["run_id","period","run_date","employee_count","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Payroll Run",
+            "type": "object",
+            "required": ["run_id", "period", "run_date", "employee_count", "status"],
             "properties": {
-                "run_id": {"type": "string"}, "period": {"type": "string"}, "run_date": {"type": "string", "format": "date"},
-                "employee_count": {"type": "integer"}, "total_gross": {"type": "number"}, "total_deductions": {"type": "number"},
-                "total_net": {"type": "number"}, "pf_total": {"type": "number"}, "esi_total": {"type": "number"},
+                "run_id": {"type": "string"},
+                "period": {"type": "string"},
+                "run_date": {"type": "string", "format": "date"},
+                "employee_count": {"type": "integer"},
+                "total_gross": {"type": "number"},
+                "total_deductions": {"type": "number"},
+                "total_net": {"type": "number"},
+                "pf_total": {"type": "number"},
+                "esi_total": {"type": "number"},
                 "tds_total": {"type": "number"},
-                "status": {"type": "string", "enum": ["draft","computed","approved","disbursed"]},
-                "approved_by": {"type": ["string","null"]}, "disbursed_at": {"type": ["string","null"], "format": "date-time"}
-            }
+                "status": {
+                    "type": "string",
+                    "enum": ["draft", "computed", "approved", "disbursed"],
+                },
+                "approved_by": {"type": ["string", "null"]},
+                "disbursed_at": {"type": ["string", "null"], "format": "date-time"},
+            },
         },
         "training_record": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Training Record", "type": "object",
-            "required": ["record_id","employee_id","course_name","completion_status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Training Record",
+            "type": "object",
+            "required": ["record_id", "employee_id", "course_name", "completion_status"],
             "properties": {
-                "record_id": {"type": "string"}, "employee_id": {"type": "string"}, "course_name": {"type": "string"},
+                "record_id": {"type": "string"},
+                "employee_id": {"type": "string"},
+                "course_name": {"type": "string"},
                 "provider": {"type": "string"},
-                "course_type": {"type": "string", "enum": ["mandatory","optional","certification"]},
-                "start_date": {"type": "string", "format": "date"}, "end_date": {"type": "string", "format": "date"},
-                "completion_status": {"type": "string", "enum": ["enrolled","in_progress","completed","expired","failed"]},
-                "score": {"type": ["number","null"]}, "certificate_url": {"type": ["string","null"]}, "cost": {"type": "number"}
-            }
+                "course_type": {
+                    "type": "string",
+                    "enum": ["mandatory", "optional", "certification"],
+                },
+                "start_date": {"type": "string", "format": "date"},
+                "end_date": {"type": "string", "format": "date"},
+                "completion_status": {
+                    "type": "string",
+                    "enum": ["enrolled", "in_progress", "completed", "expired", "failed"],
+                },
+                "score": {"type": ["number", "null"]},
+                "certificate_url": {"type": ["string", "null"]},
+                "cost": {"type": "number"},
+            },
         },
         "compliance_filing": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Compliance Filing", "type": "object",
-            "required": ["filing_id","regulation","filing_type","period","due_date","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Compliance Filing",
+            "type": "object",
+            "required": ["filing_id", "regulation", "filing_type", "period", "due_date", "status"],
             "properties": {
                 "filing_id": {"type": "string"},
-                "regulation": {"type": "string", "enum": ["GST","TDS","MCA","EPFO","SEBI","RBI","Labour"]},
-                "filing_type": {"type": "string"}, "period": {"type": "string"},
+                "regulation": {
+                    "type": "string",
+                    "enum": ["GST", "TDS", "MCA", "EPFO", "SEBI", "RBI", "Labour"],
+                },
+                "filing_type": {"type": "string"},
+                "period": {"type": "string"},
                 "due_date": {"type": "string", "format": "date"},
-                "filed_date": {"type": ["string","null"], "format": "date"},
-                "filed_by": {"type": ["string","null"]}, "acknowledgement_number": {"type": ["string","null"]},
+                "filed_date": {"type": ["string", "null"], "format": "date"},
+                "filed_by": {"type": ["string", "null"]},
+                "acknowledgement_number": {"type": ["string", "null"]},
                 "late_fee": {"type": "number"},
-                "status": {"type": "string", "enum": ["pending","draft_ready","filed","late","notice_received"]},
-                "attachment_s3_key": {"type": ["string","null"]}
-            }
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "draft_ready", "filed", "late", "notice_received"],
+                },
+                "attachment_s3_key": {"type": ["string", "null"]},
+            },
         },
         "order": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Sales Order", "type": "object",
-            "required": ["order_id","type","customer_id","line_items","total"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Sales Order",
+            "type": "object",
+            "required": ["order_id", "type", "customer_id", "line_items", "total"],
             "properties": {
-                "order_id": {"type": "string"}, "type": {"type": "string", "enum": ["sales","purchase"]},
+                "order_id": {"type": "string"},
+                "type": {"type": "string", "enum": ["sales", "purchase"]},
                 "customer_id": {"type": "string"},
-                "line_items": {"type": "array", "items": {"type": "object", "properties": {"product_id": {"type": "string"}, "quantity": {"type": "number"}, "unit_price": {"type": "number"}, "amount": {"type": "number"}}}},
-                "subtotal": {"type": "number"}, "tax": {"type": "number"}, "total": {"type": "number"},
-                "payment_status": {"type": "string", "enum": ["unpaid","partial","paid","refunded"]},
-                "fulfilment_status": {"type": "string", "enum": ["pending","processing","shipped","delivered","cancelled"]}
-            }
+                "line_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {"type": "string"},
+                            "quantity": {"type": "number"},
+                            "unit_price": {"type": "number"},
+                            "amount": {"type": "number"},
+                        },
+                    },
+                },
+                "subtotal": {"type": "number"},
+                "tax": {"type": "number"},
+                "total": {"type": "number"},
+                "payment_status": {
+                    "type": "string",
+                    "enum": ["unpaid", "partial", "paid", "refunded"],
+                },
+                "fulfilment_status": {
+                    "type": "string",
+                    "enum": ["pending", "processing", "shipped", "delivered", "cancelled"],
+                },
+            },
         },
         "product": {
-            "$schema": "http://json-schema.org/draft-07/schema#", "title": "Product Catalogue", "type": "object",
-            "required": ["product_id","name","sku","price","status"],
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Product Catalogue",
+            "type": "object",
+            "required": ["product_id", "name", "sku", "price", "status"],
             "properties": {
-                "product_id": {"type": "string"}, "name": {"type": "string"}, "sku": {"type": "string"},
-                "category": {"type": "string"}, "price": {"type": "number"}, "tax_rate": {"type": "number"},
-                "inventory_qty": {"type": "integer"}, "unit": {"type": "string"}, "hsn_sac_code": {"type": "string"},
-                "status": {"type": "string", "enum": ["active","discontinued","draft"]},
-                "attributes": {"type": "object", "additionalProperties": True}
-            }
+                "product_id": {"type": "string"},
+                "name": {"type": "string"},
+                "sku": {"type": "string"},
+                "category": {"type": "string"},
+                "price": {"type": "number"},
+                "tax_rate": {"type": "number"},
+                "inventory_qty": {"type": "integer"},
+                "unit": {"type": "string"},
+                "hsn_sac_code": {"type": "string"},
+                "status": {"type": "string", "enum": ["active", "discontinued", "draft"]},
+                "attributes": {"type": "object", "additionalProperties": True},
+            },
         },
         "custom_fields_extension": {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "Custom Fields Extension",
             "description": "Append to any schema for org-specific fields without breaking the base schema version.",
             "type": "object",
-            "additionalProperties": True
+            "additionalProperties": True,
         },
     }
     for name, schema in schemas.items():

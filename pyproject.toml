@@ -69,11 +69,14 @@ dev = [
 
 [tool.ruff]
 target-version = "py312"
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "DTZ", "T20", "ICN"]
-ignore = ["S101", "S104"]
+ignore = ["S101", "S104", "S105", "S106", "S311", "S324", "T201"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

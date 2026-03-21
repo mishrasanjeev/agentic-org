@@ -1,4 +1,5 @@
 """NEXUS — central orchestrator for AgenticOrg."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -37,7 +38,9 @@ class NexusOrchestrator:
                 context=context,
             )
             assignments.append(assignment)
-        await self.checkpoint.save(workflow_run_id, {"assignments": [a for a in assignments], "step": 0})
+        await self.checkpoint.save(
+            workflow_run_id, {"assignments": list(assignments), "step": 0}
+        )
         return assignments
 
     def decompose(self, intent: dict[str, Any]) -> list[dict[str, Any]]:
@@ -49,9 +52,7 @@ class NexusOrchestrator:
         # Fallback: single-step
         return [{"id": "main", "action": intent.get("action", "process"), "inputs": intent}]
 
-    async def handle_result(
-        self, workflow_run_id: str, result: TaskResult
-    ) -> dict[str, Any]:
+    async def handle_result(self, workflow_run_id: str, result: TaskResult) -> dict[str, Any]:
         """Process a TaskResult from an agent."""
         trace_msg = f"Received result for step {result.step_id}: status={result.status}"
         logger.info(trace_msg, workflow_run_id=workflow_run_id)

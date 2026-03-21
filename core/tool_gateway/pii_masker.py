@@ -1,4 +1,5 @@
 """PII masking — default ON. Masks email, phone, Aadhaar, PAN, bank accounts, IFSC."""
+
 from __future__ import annotations
 
 import re
@@ -9,7 +10,10 @@ from core.config import settings
 # Patterns for Indian and international PII
 PATTERNS = [
     # Email
-    (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), lambda m: m.group()[:2] + "***@***"),
+    (
+        re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
+        lambda m: m.group()[:2] + "***@***",
+    ),
     # Indian phone (+91 or 10 digits)
     (re.compile(r"(?:\+91[\-\s]?)?[6-9]\d{9}"), lambda m: m.group()[:4] + "******"),
     # Aadhaar (12 digits, may have spaces)
@@ -17,7 +21,10 @@ PATTERNS = [
     # PAN (ABCDE1234F)
     (re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b"), lambda m: "XXXXX" + m.group()[-5:]),
     # Bank account (8-18 digits)
-    (re.compile(r"\b\d{8,18}\b"), lambda m: "****" + m.group()[-4:] if len(m.group()) > 6 else m.group()),
+    (
+        re.compile(r"\b\d{8,18}\b"),
+        lambda m: "****" + m.group()[-4:] if len(m.group()) > 6 else m.group(),
+    ),
     # IFSC
     (re.compile(r"\b[A-Z]{4}0[A-Z0-9]{6}\b"), lambda m: m.group()[:4] + "0******"),
 ]

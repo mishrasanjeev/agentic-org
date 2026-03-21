@@ -1,7 +1,9 @@
 """Sanctions Api connector — ops."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class SanctionsApiConnector(BaseConnector):
     name = "sanctions_api"
@@ -25,23 +27,18 @@ class SanctionsApiConnector(BaseConnector):
         """Execute screen_entity_name on sanctions_api."""
         return await self._post("/screen/entity/name", params)
 
-
     async def screen_transaction_parties(self, **params):
         """Execute screen_transaction_parties on sanctions_api."""
         return await self._post("/screen/transaction/parties", params)
-
 
     async def get_screening_alert(self, **params):
         """Execute get_screening_alert on sanctions_api."""
         return await self._post("/get/screening/alert", params)
 
-
     async def run_batch_screen(self, **params):
         """Execute run_batch_screen on sanctions_api."""
         return await self._post("/run/batch/screen", params)
 
-
     async def generate_screening_report(self, **params):
         """Execute generate_screening_report on sanctions_api."""
         return await self._post("/generate/screening/report", params)
-

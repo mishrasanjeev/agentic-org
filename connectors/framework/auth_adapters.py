@@ -1,4 +1,5 @@
 """Authentication adapters for various connector auth types."""
+
 from __future__ import annotations
 
 import httpx
@@ -21,12 +22,15 @@ class OAuth2Adapter:
 
     async def refresh(self) -> None:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(self.token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-                "scope": self.scope,
-            })
+            resp = await client.post(
+                self.token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "scope": self.scope,
+                },
+            )
             resp.raise_for_status()
             self._token = resp.json()["access_token"]
 

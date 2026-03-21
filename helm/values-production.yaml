@@ -108,19 +108,34 @@ ingress:
   enabled: true
   className: "gce"
   annotations:
-    kubernetes.io/tls-acme: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/rate-limit: "100"
-    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    kubernetes.io/ingress.global-static-ip-name: "agenticorg-ingress-ip"
+  managedCertificate:
+    domains:
+      - agenticorg.ai
+      - www.agenticorg.ai
+      - app.agenticorg.ai
   hosts:
+    # Apex domain — landing page
+    - host: agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: ui
+          backendPort: 80
+    # WWW redirect target
+    - host: www.agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: ui
+          backendPort: 80
+    # App subdomain — full application
     - host: app.agenticorg.ai
       paths:
         - path: /
           pathType: Prefix
-  tls:
-    - secretName: agenticorg-production-tls
-      hosts:
-        - app.agenticorg.ai
+          backend: ui
+          backendPort: 80
 
 # ── Pod disruption budget ─────────────────────────────────────────────────────
 podDisruptionBudget:

@@ -1,8 +1,11 @@
 """Pinelabs Plural connector — finance."""
+
 from __future__ import annotations
+
 import base64
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class PinelabsPluralConnector(BaseConnector):
     name = "pinelabs_plural"
@@ -29,28 +32,22 @@ class PinelabsPluralConnector(BaseConnector):
         """Execute create_payout on pinelabs_plural."""
         return await self._post("/create/payout", params)
 
-
     async def create_payment_link(self, **params):
         """Execute create_payment_link on pinelabs_plural."""
         return await self._post("/create/payment/link", params)
-
 
     async def initiate_refund(self, **params):
         """Execute initiate_refund on pinelabs_plural."""
         return await self._post("/initiate/refund", params)
 
-
     async def get_settlement_report(self, **params):
         """Execute get_settlement_report on pinelabs_plural."""
         return await self._post("/get/settlement/report", params)
-
 
     async def manage_subscription(self, **params):
         """Execute manage_subscription on pinelabs_plural."""
         return await self._post("/manage/subscription", params)
 
-
     async def get_payout_analytics(self, **params):
         """Execute get_payout_analytics on pinelabs_plural."""
         return await self._post("/get/payout/analytics", params)
-

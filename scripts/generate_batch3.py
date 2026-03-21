@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Generate batch 3: Agents, Orchestrator, Workflow Engine."""
-import os, textwrap
+
+import os
+import textwrap
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def w(p, c):
     full = os.path.join(BASE, p)
@@ -10,6 +13,7 @@ def w(p, c):
     with open(full, "w", encoding="utf-8") as f:
         f.write(textwrap.dedent(c).lstrip("\n"))
     print(f"  {p}")
+
 
 # ── Agent Base ──
 w("core/agents/__init__.py", '"""Agent layer."""\n')
@@ -19,7 +23,9 @@ w("core/agents/ops/__init__.py", '"""Operations agents."""\n')
 w("core/agents/marketing/__init__.py", '"""Marketing agents."""\n')
 w("core/agents/backoffice/__init__.py", '"""Back office agents."""\n')
 
-w("core/agents/base.py", '''
+w(
+    "core/agents/base.py",
+    '''
 """Base agent class — all 24 agents extend this."""
 from __future__ import annotations
 
@@ -222,9 +228,12 @@ class BaseAgent(abc.ABC):
             error=error,
             performance=PerformanceMetrics(total_latency_ms=latency),
         )
-''')
+''',
+)
 
-w("core/agents/registry.py", '''
+w(
+    "core/agents/registry.py",
+    '''
 """Agent registry — register, discover, instantiate agents."""
 from __future__ import annotations
 
@@ -270,7 +279,8 @@ class AgentRegistry:
             hitl_condition=config.get("hitl_condition", ""),
             output_schema=config.get("output_schema"),
         )
-''')
+''',
+)
 
 # ── System Prompts ──
 PROMPTS = {
@@ -363,30 +373,222 @@ NEVER mark status=matched if erp_get_po() returned error or empty result.
 
 # Generate remaining agent prompts from table data
 AGENT_PROMPTS_TABLE = [
-    ("ar_collections", "Finance", 85, "AR Collections", "Monitor aging; send tiered comms (email>WhatsApp>call); generate payment links; log all touches.", "3rd attempt failed OR dispute raised", "Never send payment link without verifying customer_id exists in CRM."),
-    ("recon_agent", "Finance", 95, "Reconciliation", "Match every bank transaction to GL entry at T+0; surface all unmatched items with ranked GL suggestions.", "Break > 50000 OR > 0.01% of daily volume", "Never auto-post without confirmed GL account from erp_get_account(). No estimated matches."),
-    ("tax_compliance", "Finance", 92, "Tax Compliance", "Prepare GST/TDS returns from ERP data; reconcile with GSTN portal; never file without approval.", "On every filing; mismatch > 5% of return value", "Never compute tax on estimated figures. All inputs must come from verified ERP transactions."),
-    ("close_agent", "Finance", 80, "Month-End Close", "Execute month-end close checklist; draft P&L/BS/CF with AI variance commentary.", "CFO sign-off gate on every close package", "If any sub-ledger balance unavailable halt and escalate. Never estimate a balance."),
-    ("fpa_agent", "Finance", 78, "FP&A", "Build rolling forecasts; identify variance drivers; produce scenario models for board.", "Reforecast deviation > 15%; budget reallocation > 10L", "Label all outputs MODEL_OUTPUT not ACTUALS. Always show confidence interval."),
-    ("talent_acquisition", "HR", 88, "Talent Acquisition", "JD generation > multi-board posting > bias-free screening > panel scheduling > offer prep.", "Offer letter; adverse BGV finding; L7+ senior hire", "Strip PII before scoring. Never shortlist without completed structured rubric score."),
-    ("onboarding_agent", "HR", 95, "Onboarding", "Day-0 provisioning of all systems; 30/60/90 plan; buddy assignment; training enrollment.", "Production infrastructure access request", "Never provision a system not in approved_systems[] for the employee role level."),
-    ("payroll_engine", "HR", 99, "Payroll Engine", "Gross-to-net for all employees; all statutory deductions; payslips; EPFO/ESIC/TDS filings.", "Always — every payroll run requires HR Head approval", "Missing attendance data = error, not assumption. Never extrapolate or default to prior month."),
-    ("performance_coach", "HR", 80, "Performance Coach", "OKR tracking; 360 feedback aggregation; attrition risk scoring; coaching recommendations.", "PIP initiation; promotion decision; termination", "Label all risk scores AGENT_ASSESSMENT. Never present as HR decision."),
-    ("ld_coordinator", "HR", 82, "L&D Coordinator", "Skill gap mapping; learning path recommendation; training scheduling; completion tracking.", "External certification or budget > 50K", "Never enrol employee in paid course without confirmed budget approval."),
-    ("offboarding_agent", "HR", 95, "Offboarding", "Full checklist: access revoke > F&F settlement > experience letter > data archive.", "Final settlement computation; experience letter", "Never revoke access before separation_date confirmed in Darwinbox as accepted."),
-    ("content_factory", "Marketing", 88, "Content Factory", "Create SEO-optimised content per brand guidelines; all output is DRAFT until human approves.", "Before any content is published to any channel", "Never auto-publish. All content output_status=DRAFT. Human approval is mandatory."),
-    ("campaign_pilot", "Marketing", 85, "Campaign Pilot", "Campaign performance monitoring; A/B test orchestration; spend optimisation within cap.", "Budget shift > 50K; new campaign > 2L", "Never exceed approved_budget_cap. Reallocation only within existing approved total."),
-    ("seo_strategist", "Marketing", 90, "SEO Strategist", "Keyword rankings; content gap analysis; technical SEO recommendations; internal linking.", "Site restructure; noindex decisions; disavow", "Never make structural site changes directly. All recommendations via Jira tickets only."),
-    ("crm_intelligence", "Marketing", 88, "CRM Intelligence", "Lead scoring; nurture sequence management; MQL handoff; churn risk monitoring.", "Enterprise account touch; churn probability > 80%", "Lead score is advisory. Sales team makes final MQL qualification decision."),
-    ("brand_monitor", "Marketing", 85, "Brand Monitor", "Brand mention monitoring across 50+ channels; sentiment; crisis detection; SOV tracking.", "Any crisis signal (viral negative or media pickup)", "Never post public responses. Escalate all response decisions to PR team immediately."),
-    ("vendor_manager", "Ops", 88, "Vendor Manager", "Full vendor lifecycle: onboard > PO > SLA monitoring > performance scorecard.", "New vendor risk score > 7; PO value > 5L", "Never create vendor in ERP without completed sanctions screen result on record."),
-    ("contract_intelligence", "Ops", 82, "Contract Intelligence", "Parse contracts; extract metadata; monitor renewals; flag non-standard clauses.", "Non-standard clause detected; contract value > 25L", "Never interpret contract terms. Extract verbatim; flag for legal review."),
-    ("support_triage", "Ops", 85, "Support Triage", "Classify tickets; resolve L1 autonomously; enrich + route L2+ with full context.", "Sentiment score < -0.6; VIP customer; unresolved after 2 turns", "Never access customer payment instruments beyond read-only transaction status."),
-    ("compliance_guard", "Ops", 95, "Compliance Guard", "Regulatory calendar; filing prep; circular monitoring; compliance reporting.", "All regulatory filings require Compliance Officer sign-off", "Never interpret ambiguous regulatory text. Flag for qualified legal/compliance review."),
-    ("it_operations", "Ops", 88, "IT Operations", "Ticket triage; access provisioning; incident runbooks; change management.", "Security incident; admin access request; data breach", "Never grant production access without explicit approval. Never delete data during incident."),
-    ("legal_ops", "Back Office", 90, "Legal Ops", "NDA routing; standard contract review; IP tracking; board resolution drafting.", "All external legal communications", "Never render legal opinions. Surface issues for qualified attorney review only."),
-    ("risk_sentinel", "Back Office", 95, "Risk Sentinel", "Transaction monitoring for fraud patterns; sanctions screening; SAR draft preparation.", "Any sanctions list hit; detected fraud pattern; SAR trigger", "Never dismiss a sanctions hit without human review. Always err on the side of caution."),
-    ("facilities_agent", "Back Office", 80, "Facilities", "Office procurement; asset tracking; maintenance scheduling; utility optimisation.", "Capex > 1L; vendor change; new lease signing", "Never commit to vendor contract without procurement team approval on record."),
+    (
+        "ar_collections",
+        "Finance",
+        85,
+        "AR Collections",
+        "Monitor aging; send tiered comms (email>WhatsApp>call); generate payment links; log all touches.",
+        "3rd attempt failed OR dispute raised",
+        "Never send payment link without verifying customer_id exists in CRM.",
+    ),
+    (
+        "recon_agent",
+        "Finance",
+        95,
+        "Reconciliation",
+        "Match every bank transaction to GL entry at T+0; surface all unmatched items with ranked GL suggestions.",
+        "Break > 50000 OR > 0.01% of daily volume",
+        "Never auto-post without confirmed GL account from erp_get_account(). No estimated matches.",
+    ),
+    (
+        "tax_compliance",
+        "Finance",
+        92,
+        "Tax Compliance",
+        "Prepare GST/TDS returns from ERP data; reconcile with GSTN portal; never file without approval.",
+        "On every filing; mismatch > 5% of return value",
+        "Never compute tax on estimated figures. All inputs must come from verified ERP transactions.",
+    ),
+    (
+        "close_agent",
+        "Finance",
+        80,
+        "Month-End Close",
+        "Execute month-end close checklist; draft P&L/BS/CF with AI variance commentary.",
+        "CFO sign-off gate on every close package",
+        "If any sub-ledger balance unavailable halt and escalate. Never estimate a balance.",
+    ),
+    (
+        "fpa_agent",
+        "Finance",
+        78,
+        "FP&A",
+        "Build rolling forecasts; identify variance drivers; produce scenario models for board.",
+        "Reforecast deviation > 15%; budget reallocation > 10L",
+        "Label all outputs MODEL_OUTPUT not ACTUALS. Always show confidence interval.",
+    ),
+    (
+        "talent_acquisition",
+        "HR",
+        88,
+        "Talent Acquisition",
+        "JD generation > multi-board posting > bias-free screening > panel scheduling > offer prep.",
+        "Offer letter; adverse BGV finding; L7+ senior hire",
+        "Strip PII before scoring. Never shortlist without completed structured rubric score.",
+    ),
+    (
+        "onboarding_agent",
+        "HR",
+        95,
+        "Onboarding",
+        "Day-0 provisioning of all systems; 30/60/90 plan; buddy assignment; training enrollment.",
+        "Production infrastructure access request",
+        "Never provision a system not in approved_systems[] for the employee role level.",
+    ),
+    (
+        "payroll_engine",
+        "HR",
+        99,
+        "Payroll Engine",
+        "Gross-to-net for all employees; all statutory deductions; payslips; EPFO/ESIC/TDS filings.",
+        "Always — every payroll run requires HR Head approval",
+        "Missing attendance data = error, not assumption. Never extrapolate or default to prior month.",
+    ),
+    (
+        "performance_coach",
+        "HR",
+        80,
+        "Performance Coach",
+        "OKR tracking; 360 feedback aggregation; attrition risk scoring; coaching recommendations.",
+        "PIP initiation; promotion decision; termination",
+        "Label all risk scores AGENT_ASSESSMENT. Never present as HR decision.",
+    ),
+    (
+        "ld_coordinator",
+        "HR",
+        82,
+        "L&D Coordinator",
+        "Skill gap mapping; learning path recommendation; training scheduling; completion tracking.",
+        "External certification or budget > 50K",
+        "Never enrol employee in paid course without confirmed budget approval.",
+    ),
+    (
+        "offboarding_agent",
+        "HR",
+        95,
+        "Offboarding",
+        "Full checklist: access revoke > F&F settlement > experience letter > data archive.",
+        "Final settlement computation; experience letter",
+        "Never revoke access before separation_date confirmed in Darwinbox as accepted.",
+    ),
+    (
+        "content_factory",
+        "Marketing",
+        88,
+        "Content Factory",
+        "Create SEO-optimised content per brand guidelines; all output is DRAFT until human approves.",
+        "Before any content is published to any channel",
+        "Never auto-publish. All content output_status=DRAFT. Human approval is mandatory.",
+    ),
+    (
+        "campaign_pilot",
+        "Marketing",
+        85,
+        "Campaign Pilot",
+        "Campaign performance monitoring; A/B test orchestration; spend optimisation within cap.",
+        "Budget shift > 50K; new campaign > 2L",
+        "Never exceed approved_budget_cap. Reallocation only within existing approved total.",
+    ),
+    (
+        "seo_strategist",
+        "Marketing",
+        90,
+        "SEO Strategist",
+        "Keyword rankings; content gap analysis; technical SEO recommendations; internal linking.",
+        "Site restructure; noindex decisions; disavow",
+        "Never make structural site changes directly. All recommendations via Jira tickets only.",
+    ),
+    (
+        "crm_intelligence",
+        "Marketing",
+        88,
+        "CRM Intelligence",
+        "Lead scoring; nurture sequence management; MQL handoff; churn risk monitoring.",
+        "Enterprise account touch; churn probability > 80%",
+        "Lead score is advisory. Sales team makes final MQL qualification decision.",
+    ),
+    (
+        "brand_monitor",
+        "Marketing",
+        85,
+        "Brand Monitor",
+        "Brand mention monitoring across 50+ channels; sentiment; crisis detection; SOV tracking.",
+        "Any crisis signal (viral negative or media pickup)",
+        "Never post public responses. Escalate all response decisions to PR team immediately.",
+    ),
+    (
+        "vendor_manager",
+        "Ops",
+        88,
+        "Vendor Manager",
+        "Full vendor lifecycle: onboard > PO > SLA monitoring > performance scorecard.",
+        "New vendor risk score > 7; PO value > 5L",
+        "Never create vendor in ERP without completed sanctions screen result on record.",
+    ),
+    (
+        "contract_intelligence",
+        "Ops",
+        82,
+        "Contract Intelligence",
+        "Parse contracts; extract metadata; monitor renewals; flag non-standard clauses.",
+        "Non-standard clause detected; contract value > 25L",
+        "Never interpret contract terms. Extract verbatim; flag for legal review.",
+    ),
+    (
+        "support_triage",
+        "Ops",
+        85,
+        "Support Triage",
+        "Classify tickets; resolve L1 autonomously; enrich + route L2+ with full context.",
+        "Sentiment score < -0.6; VIP customer; unresolved after 2 turns",
+        "Never access customer payment instruments beyond read-only transaction status.",
+    ),
+    (
+        "compliance_guard",
+        "Ops",
+        95,
+        "Compliance Guard",
+        "Regulatory calendar; filing prep; circular monitoring; compliance reporting.",
+        "All regulatory filings require Compliance Officer sign-off",
+        "Never interpret ambiguous regulatory text. Flag for qualified legal/compliance review.",
+    ),
+    (
+        "it_operations",
+        "Ops",
+        88,
+        "IT Operations",
+        "Ticket triage; access provisioning; incident runbooks; change management.",
+        "Security incident; admin access request; data breach",
+        "Never grant production access without explicit approval. Never delete data during incident.",
+    ),
+    (
+        "legal_ops",
+        "Back Office",
+        90,
+        "Legal Ops",
+        "NDA routing; standard contract review; IP tracking; board resolution drafting.",
+        "All external legal communications",
+        "Never render legal opinions. Surface issues for qualified attorney review only.",
+    ),
+    (
+        "risk_sentinel",
+        "Back Office",
+        95,
+        "Risk Sentinel",
+        "Transaction monitoring for fraud patterns; sanctions screening; SAR draft preparation.",
+        "Any sanctions list hit; detected fraud pattern; SAR trigger",
+        "Never dismiss a sanctions hit without human review. Always err on the side of caution.",
+    ),
+    (
+        "facilities_agent",
+        "Back Office",
+        80,
+        "Facilities",
+        "Office procurement; asset tracking; maintenance scheduling; utility optimisation.",
+        "Capex > 1L; vendor change; new lease signing",
+        "Never commit to vendor contract without procurement team approval on record.",
+    ),
 ]
 
 for name, domain, conf, title, directive, hitl_cond, anti_hall in AGENT_PROMPTS_TABLE:
@@ -401,7 +603,7 @@ Domain: {domain} | Confidence floor: {conf}% | Max retries: 3
 <escalation_rules>
 Trigger HITL (never auto-proceed) if ANY condition is true:
   {hitl_cond}
-  confidence < {conf/100:.2f} for any step
+  confidence < {conf / 100:.2f} for any step
 Include in HITL context: full trace, all computed values, trigger condition, recommendation.
 </escalation_rules>
 
@@ -419,10 +621,13 @@ NEVER proceed with stale data after a tool error — retry per policy, then esca
 for fname, content in PROMPTS.items():
     w(f"core/agents/prompts/{fname}", content)
 
+
 # ── Agent Implementations ──
 def gen_agent(path, agent_type, domain, conf, prompt_file, title):
     cls_name = "".join(w.capitalize() for w in agent_type.split("_")) + "Agent"
-    w(path, f'''
+    w(
+        path,
+        f'''
     """{title} agent implementation."""
     from __future__ import annotations
     from typing import Any
@@ -439,34 +644,211 @@ def gen_agent(path, agent_type, domain, conf, prompt_file, title):
         async def execute(self, task):
             """Execute {title.lower()} task with domain-specific logic."""
             return await super().execute(task)
-    ''')
+    ''',
+    )
+
 
 AGENTS = [
-    ("core/agents/finance/ap_processor.py", "ap_processor", "finance", 0.88, "ap_processor.prompt.txt", "AP Processor"),
-    ("core/agents/finance/ar_collections.py", "ar_collections", "finance", 0.85, "ar_collections.prompt.txt", "AR Collections"),
-    ("core/agents/finance/recon_agent.py", "recon_agent", "finance", 0.95, "recon_agent.prompt.txt", "Reconciliation"),
-    ("core/agents/finance/tax_compliance.py", "tax_compliance", "finance", 0.92, "tax_compliance.prompt.txt", "Tax Compliance"),
-    ("core/agents/finance/close_agent.py", "close_agent", "finance", 0.80, "close_agent.prompt.txt", "Month-End Close"),
-    ("core/agents/finance/fpa_agent.py", "fpa_agent", "finance", 0.78, "fpa_agent.prompt.txt", "FP&A"),
-    ("core/agents/hr/talent_acquisition.py", "talent_acquisition", "hr", 0.88, "talent_acquisition.prompt.txt", "Talent Acquisition"),
-    ("core/agents/hr/onboarding.py", "onboarding_agent", "hr", 0.95, "onboarding_agent.prompt.txt", "Onboarding"),
-    ("core/agents/hr/payroll_engine.py", "payroll_engine", "hr", 0.99, "payroll_engine.prompt.txt", "Payroll Engine"),
-    ("core/agents/hr/performance_coach.py", "performance_coach", "hr", 0.80, "performance_coach.prompt.txt", "Performance Coach"),
-    ("core/agents/hr/ld_coordinator.py", "ld_coordinator", "hr", 0.82, "ld_coordinator.prompt.txt", "L&D Coordinator"),
-    ("core/agents/hr/offboarding.py", "offboarding_agent", "hr", 0.95, "offboarding_agent.prompt.txt", "Offboarding"),
-    ("core/agents/marketing/content_factory.py", "content_factory", "marketing", 0.88, "content_factory.prompt.txt", "Content Factory"),
-    ("core/agents/marketing/campaign_pilot.py", "campaign_pilot", "marketing", 0.85, "campaign_pilot.prompt.txt", "Campaign Pilot"),
-    ("core/agents/marketing/seo_strategist.py", "seo_strategist", "marketing", 0.90, "seo_strategist.prompt.txt", "SEO Strategist"),
-    ("core/agents/marketing/crm_intelligence.py", "crm_intelligence", "marketing", 0.88, "crm_intelligence.prompt.txt", "CRM Intelligence"),
-    ("core/agents/marketing/brand_monitor.py", "brand_monitor", "marketing", 0.85, "brand_monitor.prompt.txt", "Brand Monitor"),
-    ("core/agents/ops/vendor_manager.py", "vendor_manager", "ops", 0.88, "vendor_manager.prompt.txt", "Vendor Manager"),
-    ("core/agents/ops/contract_intelligence.py", "contract_intelligence", "ops", 0.82, "contract_intelligence.prompt.txt", "Contract Intelligence"),
-    ("core/agents/ops/support_triage.py", "support_triage", "ops", 0.85, "support_triage.prompt.txt", "Support Triage"),
-    ("core/agents/ops/compliance_guard.py", "compliance_guard", "ops", 0.95, "compliance_guard.prompt.txt", "Compliance Guard"),
-    ("core/agents/ops/it_operations.py", "it_operations", "ops", 0.88, "it_operations.prompt.txt", "IT Operations"),
-    ("core/agents/backoffice/legal_ops.py", "legal_ops", "backoffice", 0.90, "legal_ops.prompt.txt", "Legal Ops"),
-    ("core/agents/backoffice/risk_sentinel.py", "risk_sentinel", "backoffice", 0.95, "risk_sentinel.prompt.txt", "Risk Sentinel"),
-    ("core/agents/backoffice/facilities_agent.py", "facilities_agent", "backoffice", 0.80, "facilities_agent.prompt.txt", "Facilities"),
+    (
+        "core/agents/finance/ap_processor.py",
+        "ap_processor",
+        "finance",
+        0.88,
+        "ap_processor.prompt.txt",
+        "AP Processor",
+    ),
+    (
+        "core/agents/finance/ar_collections.py",
+        "ar_collections",
+        "finance",
+        0.85,
+        "ar_collections.prompt.txt",
+        "AR Collections",
+    ),
+    (
+        "core/agents/finance/recon_agent.py",
+        "recon_agent",
+        "finance",
+        0.95,
+        "recon_agent.prompt.txt",
+        "Reconciliation",
+    ),
+    (
+        "core/agents/finance/tax_compliance.py",
+        "tax_compliance",
+        "finance",
+        0.92,
+        "tax_compliance.prompt.txt",
+        "Tax Compliance",
+    ),
+    (
+        "core/agents/finance/close_agent.py",
+        "close_agent",
+        "finance",
+        0.80,
+        "close_agent.prompt.txt",
+        "Month-End Close",
+    ),
+    (
+        "core/agents/finance/fpa_agent.py",
+        "fpa_agent",
+        "finance",
+        0.78,
+        "fpa_agent.prompt.txt",
+        "FP&A",
+    ),
+    (
+        "core/agents/hr/talent_acquisition.py",
+        "talent_acquisition",
+        "hr",
+        0.88,
+        "talent_acquisition.prompt.txt",
+        "Talent Acquisition",
+    ),
+    (
+        "core/agents/hr/onboarding.py",
+        "onboarding_agent",
+        "hr",
+        0.95,
+        "onboarding_agent.prompt.txt",
+        "Onboarding",
+    ),
+    (
+        "core/agents/hr/payroll_engine.py",
+        "payroll_engine",
+        "hr",
+        0.99,
+        "payroll_engine.prompt.txt",
+        "Payroll Engine",
+    ),
+    (
+        "core/agents/hr/performance_coach.py",
+        "performance_coach",
+        "hr",
+        0.80,
+        "performance_coach.prompt.txt",
+        "Performance Coach",
+    ),
+    (
+        "core/agents/hr/ld_coordinator.py",
+        "ld_coordinator",
+        "hr",
+        0.82,
+        "ld_coordinator.prompt.txt",
+        "L&D Coordinator",
+    ),
+    (
+        "core/agents/hr/offboarding.py",
+        "offboarding_agent",
+        "hr",
+        0.95,
+        "offboarding_agent.prompt.txt",
+        "Offboarding",
+    ),
+    (
+        "core/agents/marketing/content_factory.py",
+        "content_factory",
+        "marketing",
+        0.88,
+        "content_factory.prompt.txt",
+        "Content Factory",
+    ),
+    (
+        "core/agents/marketing/campaign_pilot.py",
+        "campaign_pilot",
+        "marketing",
+        0.85,
+        "campaign_pilot.prompt.txt",
+        "Campaign Pilot",
+    ),
+    (
+        "core/agents/marketing/seo_strategist.py",
+        "seo_strategist",
+        "marketing",
+        0.90,
+        "seo_strategist.prompt.txt",
+        "SEO Strategist",
+    ),
+    (
+        "core/agents/marketing/crm_intelligence.py",
+        "crm_intelligence",
+        "marketing",
+        0.88,
+        "crm_intelligence.prompt.txt",
+        "CRM Intelligence",
+    ),
+    (
+        "core/agents/marketing/brand_monitor.py",
+        "brand_monitor",
+        "marketing",
+        0.85,
+        "brand_monitor.prompt.txt",
+        "Brand Monitor",
+    ),
+    (
+        "core/agents/ops/vendor_manager.py",
+        "vendor_manager",
+        "ops",
+        0.88,
+        "vendor_manager.prompt.txt",
+        "Vendor Manager",
+    ),
+    (
+        "core/agents/ops/contract_intelligence.py",
+        "contract_intelligence",
+        "ops",
+        0.82,
+        "contract_intelligence.prompt.txt",
+        "Contract Intelligence",
+    ),
+    (
+        "core/agents/ops/support_triage.py",
+        "support_triage",
+        "ops",
+        0.85,
+        "support_triage.prompt.txt",
+        "Support Triage",
+    ),
+    (
+        "core/agents/ops/compliance_guard.py",
+        "compliance_guard",
+        "ops",
+        0.95,
+        "compliance_guard.prompt.txt",
+        "Compliance Guard",
+    ),
+    (
+        "core/agents/ops/it_operations.py",
+        "it_operations",
+        "ops",
+        0.88,
+        "it_operations.prompt.txt",
+        "IT Operations",
+    ),
+    (
+        "core/agents/backoffice/legal_ops.py",
+        "legal_ops",
+        "backoffice",
+        0.90,
+        "legal_ops.prompt.txt",
+        "Legal Ops",
+    ),
+    (
+        "core/agents/backoffice/risk_sentinel.py",
+        "risk_sentinel",
+        "backoffice",
+        0.95,
+        "risk_sentinel.prompt.txt",
+        "Risk Sentinel",
+    ),
+    (
+        "core/agents/backoffice/facilities_agent.py",
+        "facilities_agent",
+        "backoffice",
+        0.80,
+        "facilities_agent.prompt.txt",
+        "Facilities",
+    ),
 ]
 
 for path, at, dom, conf, pf, title in AGENTS:
@@ -475,7 +857,9 @@ for path, at, dom, conf, pf, title in AGENTS:
 # ── NEXUS Orchestrator ──
 w("core/orchestrator/__init__.py", '"""NEXUS Orchestrator."""\n')
 
-w("core/orchestrator/nexus.py", '''
+w(
+    "core/orchestrator/nexus.py",
+    '''
 """NEXUS — central orchestrator for AgenticOrg."""
 from __future__ import annotations
 
@@ -561,9 +945,12 @@ class NexusOrchestrator:
 
     async def resolve_conflict(self, results: list[TaskResult]) -> dict[str, Any]:
         return self.conflict_resolver.resolve(results)
-''')
+''',
+)
 
-w("core/orchestrator/state_machine.py", '''
+w(
+    "core/orchestrator/state_machine.py",
+    '''
 """Workflow state machine."""
 from __future__ import annotations
 from enum import Enum
@@ -592,9 +979,12 @@ def transition(current: WorkflowState, target: WorkflowState) -> WorkflowState:
     if not can_transition(current, target):
         raise ValueError(f"Invalid transition: {current} -> {target}")
     return target
-''')
+''',
+)
 
-w("core/orchestrator/task_router.py", '''
+w(
+    "core/orchestrator/task_router.py",
+    '''
 """Route tasks to the most capable agent."""
 from __future__ import annotations
 import uuid
@@ -614,9 +1004,12 @@ class TaskRouter:
             "task": task,
             "context": context,
         }
-''')
+''',
+)
 
-w("core/orchestrator/conflict_resolver.py", '''
+w(
+    "core/orchestrator/conflict_resolver.py",
+    '''
 """Resolve conflicts between agent outputs."""
 from __future__ import annotations
 from typing import Any
@@ -635,9 +1028,12 @@ class ConflictResolver:
             "outputs": outputs,
             "recommendation": "conservative",
         }
-''')
+''',
+)
 
-w("core/orchestrator/checkpoint.py", '''
+w(
+    "core/orchestrator/checkpoint.py",
+    '''
 """Checkpoint manager — save/restore workflow state."""
 from __future__ import annotations
 import json
@@ -669,12 +1065,15 @@ class CheckpointManager:
     async def close(self):
         if self.redis:
             await self.redis.close()
-''')
+''',
+)
 
 # ── Workflow Engine ──
 w("workflows/__init__.py", '"""Workflow engine."""\n')
 
-w("workflows/engine.py", '''
+w(
+    "workflows/engine.py",
+    '''
 """Workflow engine — load, execute, manage workflow runs."""
 from __future__ import annotations
 import uuid
@@ -727,9 +1126,12 @@ class WorkflowEngine:
         if state:
             state["status"] = "cancelled"
             await self.state_store.save(state)
-''')
+''',
+)
 
-w("workflows/parser.py", '''
+w(
+    "workflows/parser.py",
+    '''
 """Parse and validate workflow definitions (YAML/JSON)."""
 from __future__ import annotations
 import yaml
@@ -782,9 +1184,12 @@ class WorkflowParser:
                 return True
         in_stack.discard(node)
         return False
-''')
+''',
+)
 
-w("workflows/step_types.py", '''
+w(
+    "workflows/step_types.py",
+    '''
 """All 9 workflow step type implementations."""
 from __future__ import annotations
 import asyncio
@@ -852,9 +1257,12 @@ async def _execute_sub_workflow(step, state):
 
 async def _execute_wait(step, state):
     return {"step_id": step["id"], "type": "wait", "status": "completed"}
-''')
+''',
+)
 
-w("workflows/condition_evaluator.py", '''
+w(
+    "workflows/condition_evaluator.py",
+    '''
 """Safe condition evaluator — NO eval()."""
 from __future__ import annotations
 import operator
@@ -899,9 +1307,12 @@ def _resolve(token: str, context: dict) -> Any:
         else:
             return token
     return val
-''')
+''',
+)
 
-w("workflows/parallel_executor.py", '''
+w(
+    "workflows/parallel_executor.py",
+    '''
 """Parallel step executor with wait_for policies."""
 from __future__ import annotations
 import asyncio
@@ -931,9 +1342,12 @@ async def execute_parallel(
                     c.cancel()
                 break
         return results
-''')
+''',
+)
 
-w("workflows/retry.py", '''
+w(
+    "workflows/retry.py",
+    '''
 """Exponential backoff with jitter."""
 from __future__ import annotations
 import asyncio
@@ -950,9 +1364,12 @@ async def retry_with_backoff(
                 raise
             delay = min(initial_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
             await asyncio.sleep(delay)
-''')
+''',
+)
 
-w("workflows/state_store.py", '''
+w(
+    "workflows/state_store.py",
+    '''
 """Persist workflow state to Redis (and PostgreSQL)."""
 from __future__ import annotations
 import json
@@ -980,9 +1397,12 @@ class WorkflowStateStore:
     async def close(self):
         if self.redis:
             await self.redis.close()
-''')
+''',
+)
 
-w("workflows/trigger.py", '''
+w(
+    "workflows/trigger.py",
+    '''
 """Workflow trigger types."""
 from __future__ import annotations
 from typing import Any
@@ -1004,10 +1424,13 @@ class WorkflowTrigger:
         if self.trigger_type == "api_event":
             return event.get("event_type") == self.config.get("event_type")
         return False
-''')
+''',
+)
 
 # Workflow examples
-w("workflows/examples/invoice_processing_v2.yaml", '''
+w(
+    "workflows/examples/invoice_processing_v2.yaml",
+    """
 name: invoice-processing-v2
 version: "2.0"
 trigger:
@@ -1057,9 +1480,12 @@ steps:
     type: notify
     connector: email
     template: remittance_advice
-''')
+""",
+)
 
-w("workflows/examples/employee_onboarding.yaml", '''
+w(
+    "workflows/examples/employee_onboarding.yaml",
+    """
 name: employee-onboarding
 version: "1.0"
 trigger:
@@ -1095,9 +1521,12 @@ steps:
     connector: slack
     template: new_hire_welcome
     depends_on: [provision_accounts]
-''')
+""",
+)
 
-w("workflows/examples/support_triage.yaml", '''
+w(
+    "workflows/examples/support_triage.yaml",
+    """
 name: support-triage
 version: "1.0"
 trigger:
@@ -1131,7 +1560,8 @@ steps:
     connector: slack
     template: ticket_assigned
     depends_on: [enrich_and_route]
-''')
+""",
+)
 
 print("[OK] Batch 3 complete")
 

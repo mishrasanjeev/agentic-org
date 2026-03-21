@@ -1,4 +1,5 @@
 """Workflow engine — dependency-aware execution with retry, timeout, HITL, and checkpointing."""
+
 from __future__ import annotations
 
 import re
@@ -32,9 +33,7 @@ class WorkflowEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    async def start_run(
-        self, definition: dict, trigger_payload: dict | None = None
-    ) -> str:
+    async def start_run(self, definition: dict, trigger_payload: dict | None = None) -> str:
         """Parse a workflow definition, persist initial state, and return the run_id."""
         run_id = f"wfr_{uuid.uuid4().hex[:12]}"
         parsed = self.parser.parse(definition)
@@ -338,8 +337,7 @@ class WorkflowEngine:
         elapsed = (datetime.now(UTC) - started_at).total_seconds()
         if elapsed > timeout_hours * 3600:
             raise WorkflowTimeoutError(
-                f"Workflow exceeded timeout of {timeout_hours}h "
-                f"(elapsed {elapsed / 3600:.2f}h)"
+                f"Workflow exceeded timeout of {timeout_hours}h (elapsed {elapsed / 3600:.2f}h)"
             )
 
     # ------------------------------------------------------------------
@@ -380,9 +378,7 @@ class WorkflowEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _resolve_condition_branch(
-        step: dict, result: dict, context: dict
-    ) -> str | None:
+    def _resolve_condition_branch(step: dict, result: dict, context: dict) -> str | None:
         """Given a condition step's execution result, return the branch target step_id."""
         condition_result = result.get("result", False)
         if condition_result:
@@ -393,9 +389,7 @@ class WorkflowEngine:
     # Step execution with retry
     # ------------------------------------------------------------------
 
-    async def _execute_with_retry(
-        self, step: dict, state: dict, context: dict
-    ) -> dict[str, Any]:
+    async def _execute_with_retry(self, step: dict, state: dict, context: dict) -> dict[str, Any]:
         """Execute a step, optionally wrapping in retry_with_backoff.
 
         The step may declare ``on_failure: "retry(N)"`` where *N* is the max

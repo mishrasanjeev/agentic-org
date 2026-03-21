@@ -1,8 +1,11 @@
 """Brandwatch connector — marketing."""
+
 from __future__ import annotations
-from typing import Any
+
 import httpx
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class BrandwatchConnector(BaseConnector):
     name = "brandwatch"
@@ -23,11 +26,14 @@ class BrandwatchConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
-            resp = await client.post(token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            })
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+            )
             resp.raise_for_status()
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
@@ -36,23 +42,18 @@ class BrandwatchConnector(BaseConnector):
         """Execute get_brand_mentions on brandwatch."""
         return await self._post("/get/brand/mentions", params)
 
-
     async def analyze_mention_sentiment(self, **params):
         """Execute analyze_mention_sentiment on brandwatch."""
         return await self._post("/analyze/mention/sentiment", params)
-
 
     async def get_share_of_voice(self, **params):
         """Execute get_share_of_voice on brandwatch."""
         return await self._post("/get/share/of/voice", params)
 
-
     async def set_volume_spike_alert(self, **params):
         """Execute set_volume_spike_alert on brandwatch."""
         return await self._post("/set/volume/spike/alert", params)
 
-
     async def export_mention_report(self, **params):
         """Execute export_mention_report on brandwatch."""
         return await self._post("/export/mention/report", params)
-

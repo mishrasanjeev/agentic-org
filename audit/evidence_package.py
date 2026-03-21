@@ -1,4 +1,5 @@
 """SOC2/ISO27001 evidence package generator."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

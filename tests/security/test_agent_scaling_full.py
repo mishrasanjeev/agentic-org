@@ -4,26 +4,23 @@ Covers agent creation, cloning, shadow quality gates, promotion/rollback,
 kill switch, HPA auto-scaling, cost caps, traffic splitting, bulk creation,
 team routing, temporary agent TTL, and shadow-mode skip prevention.
 """
+
 import asyncio
-import copy
 import time
 import uuid
-from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from auth.scopes import check_scope, validate_clone_scopes
+from auth.scopes import validate_clone_scopes
 from scaling.agent_factory import AgentFactory
 from scaling.cost_ledger import CostLedger
 from scaling.hpa_integration import HPAIntegration
 from scaling.lifecycle import VALID_TRANSITIONS, LifecycleManager
-from scaling.shadow_comparator import ShadowComparator
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _agent_config(overrides: dict | None = None) -> dict:
     """Default agent configuration for tests."""
@@ -45,6 +42,7 @@ def _agent_config(overrides: dict | None = None) -> dict:
 # ===================================================================
 # FT-SCALE-001: Create new agent via API (201, status=shadow, token issued)
 # ===================================================================
+
 
 class TestFTSCALE001:
     """Creating a new agent must return 201 with status=shadow and an issued token."""
@@ -74,6 +72,7 @@ class TestFTSCALE001:
 # FT-SCALE-002: Clone agent with scope overrides (inherits parent, logs elevation)
 # ===================================================================
 
+
 class TestFTSCALE002:
     """Cloning an agent must inherit parent scopes and log any elevation attempts."""
 
@@ -99,9 +98,11 @@ class TestFTSCALE002:
         log the violation.
         """
         factory = AgentFactory()
-        parent_config = _agent_config({
-            "authorized_tools": ["tool:banking_api:write:queue_payment:capped:500000"],
-        })
+        parent_config = _agent_config(
+            {
+                "authorized_tools": ["tool:banking_api:write:queue_payment:capped:500000"],
+            }
+        )
 
         result = await factory.clone_agent(
             parent_id="parent-002",
@@ -115,12 +116,16 @@ class TestFTSCALE002:
 
         assert "error" in result
         assert result["error"]["code"] == "E4003"
-        assert "ceiling" in result["error"]["message"].lower() or "violation" in result["error"]["message"].lower()
+        assert (
+            "ceiling" in result["error"]["message"].lower()
+            or "violation" in result["error"]["message"].lower()
+        )
 
 
 # ===================================================================
 # FT-SCALE-003: Shadow accuracy gate -- pass (96% vs 95% floor -> review_ready)
 # ===================================================================
+
 
 class TestFTSCALE003:
     """Shadow agent with 96% accuracy (above 95% floor) must transition to review_ready."""
@@ -150,6 +155,7 @@ class TestFTSCALE003:
 # FT-SCALE-004: Shadow accuracy gate -- fail (88% vs 95% -> shadow_failing)
 # ===================================================================
 
+
 class TestFTSCALE004:
     """Shadow agent with 88% accuracy (below 95% floor) must be marked shadow_failing."""
 
@@ -177,6 +183,7 @@ class TestFTSCALE004:
 # ===================================================================
 # FT-SCALE-005: Promote shadow -> staging (write scopes, 10% traffic)
 # ===================================================================
+
 
 class TestFTSCALE005:
     """Promoting from shadow to staging must go through review_ready first."""
@@ -217,6 +224,7 @@ class TestFTSCALE005:
 # FT-SCALE-006: Kill switch response time (<30 seconds, token revoked)
 # ===================================================================
 
+
 class TestFTSCALE006:
     """Kill switch must deactivate an agent in under 30 seconds."""
 
@@ -252,6 +260,7 @@ class TestFTSCALE006:
 # ===================================================================
 # FT-SCALE-007: Rollback to prior version (within 60 seconds)
 # ===================================================================
+
 
 class TestFTSCALE007:
     """Rollback to a prior agent version must complete within 60 seconds."""
@@ -295,6 +304,7 @@ class TestFTSCALE007:
 # ===================================================================
 # FT-SCALE-008: Auto-scale on queue depth >30 (HPA scales up, audit trail)
 # ===================================================================
+
 
 class TestFTSCALE008:
     """When queue depth exceeds 30, HPA must recommend scale-up with an audit trail."""
@@ -352,6 +362,7 @@ class TestFTSCALE008:
 # FT-SCALE-009: Cost cap enforcement (monthly cap -> auto-pause)
 # ===================================================================
 
+
 class TestFTSCALE009:
     """Monthly cost cap exceeded must trigger auto-pause recommendation."""
 
@@ -363,7 +374,7 @@ class TestFTSCALE009:
         ledger = CostLedger()
 
         # Record costs that exceed the monthly cap
-        for i in range(10):
+        for _i in range(10):
             await ledger.record(
                 agent_id="agent-009",
                 tokens=5000,
@@ -405,6 +416,7 @@ class TestFTSCALE009:
 # FT-SCALE-010: Clone scope ceiling (uncapped payment scope -> E4003)
 # ===================================================================
 
+
 class TestFTSCALE010:
     """Cloning with an elevated (uncapped) payment scope must return E4003."""
 
@@ -431,9 +443,11 @@ class TestFTSCALE010:
         exceed the parent ceiling, returning E4003.
         """
         factory = AgentFactory()
-        parent_config = _agent_config({
-            "authorized_tools": ["tool:banking_api:write:queue_payment:capped:500000"],
-        })
+        parent_config = _agent_config(
+            {
+                "authorized_tools": ["tool:banking_api:write:queue_payment:capped:500000"],
+            }
+        )
 
         result = await factory.clone_agent(
             parent_id="parent-010",
@@ -452,6 +466,7 @@ class TestFTSCALE010:
 # ===================================================================
 # FT-SCALE-011: A/B variant traffic split (20% to variant B)
 # ===================================================================
+
 
 class TestFTSCALE011:
     """A/B traffic splitting must route approximately 20% to variant B."""
@@ -476,14 +491,13 @@ class TestFTSCALE011:
 
         actual_pct = variant_b_count / total * 100
         # Allow 2% tolerance
-        assert 18 <= actual_pct <= 22, (
-            f"Variant B got {actual_pct:.1f}%, expected ~20%"
-        )
+        assert 18 <= actual_pct <= 22, f"Variant B got {actual_pct:.1f}%, expected ~20%"
 
 
 # ===================================================================
 # FT-SCALE-012: Bulk agent creation from template set
 # ===================================================================
+
 
 class TestFTSCALE012:
     """Bulk agent creation from a template set must create all agents successfully."""
@@ -494,14 +508,9 @@ class TestFTSCALE012:
         with unique IDs and status=shadow.
         """
         factory = AgentFactory()
-        templates = [
-            _agent_config({"agent_type": f"agent_type_{i}"})
-            for i in range(10)
-        ]
+        templates = [_agent_config({"agent_type": f"agent_type_{i}"}) for i in range(10)]
 
-        results = await asyncio.gather(*[
-            factory.create_agent(tpl) for tpl in templates
-        ])
+        results = await asyncio.gather(*[factory.create_agent(tpl) for tpl in templates])
 
         assert len(results) == 10
         agent_ids = [r["agent_id"] for r in results]
@@ -515,6 +524,7 @@ class TestFTSCALE012:
 # ===================================================================
 # FT-SCALE-013: Agent team routing (tasks routed per routing_rules)
 # ===================================================================
+
 
 class TestFTSCALE013:
     """Tasks must be routed to agents according to their team routing rules."""
@@ -532,14 +542,20 @@ class TestFTSCALE013:
         hr_task = {"agent_type": "onboarding_agent", "data": {"employee_id": "EMP-001"}}
 
         finance_result = await router.route(
-            workflow_run_id="wfr_001", step_id="s1",
-            step_index=0, total_steps=1,
-            task=finance_task, context={},
+            workflow_run_id="wfr_001",
+            step_id="s1",
+            step_index=0,
+            total_steps=1,
+            task=finance_task,
+            context={},
         )
         hr_result = await router.route(
-            workflow_run_id="wfr_002", step_id="s1",
-            step_index=0, total_steps=1,
-            task=hr_task, context={},
+            workflow_run_id="wfr_002",
+            step_id="s1",
+            step_index=0,
+            total_steps=1,
+            task=hr_task,
+            context={},
         )
 
         assert finance_result["target_agent_type"] == "ap_processor"
@@ -550,6 +566,7 @@ class TestFTSCALE013:
 # ===================================================================
 # FT-SCALE-014: Temporary agent auto-expiry (ttl_hours=48 -> deprecated)
 # ===================================================================
+
 
 class TestFTSCALE014:
     """Temporary agents with ttl_hours=48 must auto-expire to deprecated status."""
@@ -594,6 +611,7 @@ class TestFTSCALE014:
 # ===================================================================
 # FT-SCALE-015: Skip shadow mode attempt (403, only on rollback to verified_good)
 # ===================================================================
+
 
 class TestFTSCALE015:
     """Attempting to skip shadow mode must be denied (403)."""

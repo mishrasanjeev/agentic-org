@@ -1,4 +1,5 @@
 """Document ORM model with pgvector embedding."""
+
 from __future__ import annotations
 
 import uuid
@@ -15,7 +16,9 @@ class Document(BaseModel):
     __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     doc_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     s3_bucket: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -23,4 +26,6 @@ class Document(BaseModel):
     # embedding column handled via raw SQL / pgvector extension
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     retention_until: Mapped[date | None] = mapped_column(Date, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )

@@ -1,4 +1,5 @@
 """Token bucket rate limiter backed by Redis."""
+
 from __future__ import annotations
 
 import time
@@ -108,7 +109,7 @@ class RateLimiter:
         try:
             result = await self.redis.evalsha(
                 self._script_sha,
-                1,   # number of keys
+                1,  # number of keys
                 key,
                 str(capacity),
                 str(refill_rate),

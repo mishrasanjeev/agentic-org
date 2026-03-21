@@ -1,4 +1,5 @@
 """Redis-backed token pool for agent tokens."""
+
 from __future__ import annotations
 
 import asyncio
@@ -79,9 +80,7 @@ class TokenPool:
     def _schedule_refresh(self, agent_id: str, delay: int) -> None:
         if agent_id in self._refresh_tasks:
             self._refresh_tasks[agent_id].cancel()
-        self._refresh_tasks[agent_id] = asyncio.create_task(
-            self._refresh_after(agent_id, delay)
-        )
+        self._refresh_tasks[agent_id] = asyncio.create_task(self._refresh_after(agent_id, delay))
 
     async def _refresh_after(self, agent_id: str, delay: int) -> None:
         """Wait for *delay* seconds, then proactively refresh the agent token.

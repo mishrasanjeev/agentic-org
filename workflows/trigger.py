@@ -1,4 +1,5 @@
 """Workflow trigger types including schedule (cron) support."""
+
 from __future__ import annotations
 
 import re
@@ -14,13 +15,28 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _DOW_NAMES = {
-    "sun": 0, "mon": 1, "tue": 2, "wed": 3,
-    "thu": 4, "fri": 5, "sat": 6,
+    "sun": 0,
+    "mon": 1,
+    "tue": 2,
+    "wed": 3,
+    "thu": 4,
+    "fri": 5,
+    "sat": 6,
 }
 
 _MONTH_NAMES = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
 }
 
 
@@ -89,7 +105,7 @@ def cron_matches(expression: str, dt: datetime | None = None) -> bool:
     # day-of-week: normalise 7 -> 0 (both represent Sunday).
     dt.weekday()  # Python: Monday=0 .. Sunday=6
     # Cron convention: Sunday=0, Monday=1 .. Saturday=6
-    cron_dow = (dt.isoweekday() % 7)  # isoweekday: Mon=1..Sun=7 -> Sun=0
+    cron_dow = dt.isoweekday() % 7  # isoweekday: Mon=1..Sun=7 -> Sun=0
 
     return (
         _field_matches(minute_f, dt.minute, 0, 59)
@@ -103,6 +119,7 @@ def cron_matches(expression: str, dt: datetime | None = None) -> bool:
 # ---------------------------------------------------------------------------
 # Trigger class
 # ---------------------------------------------------------------------------
+
 
 class WorkflowTrigger:
     """Determine whether an incoming event should start a workflow.

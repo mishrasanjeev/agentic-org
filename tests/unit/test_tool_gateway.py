@@ -1,7 +1,8 @@
 """Tool gateway tests — scope, rate limit, idempotency, PII masking."""
-import pytest
-from auth.scopes import check_scope, parse_scope, validate_clone_scopes
+
+from auth.scopes import check_scope, validate_clone_scopes
 from core.tool_gateway.pii_masker import mask_string
+
 
 class TestScopeEnforcement:
     def test_read_scope_allowed(self):
@@ -21,7 +22,9 @@ class TestScopeEnforcement:
 
     def test_capped_scope_exceeds(self):
         scopes = ["tool:banking_api:write:queue_payment:capped:500000"]
-        allowed, reason = check_scope(scopes, "banking_api", "write", "queue_payment", amount=600000)
+        allowed, reason = check_scope(
+            scopes, "banking_api", "write", "queue_payment", amount=600000
+        )
         assert not allowed
         assert "cap_exceeded" in reason
 
@@ -29,6 +32,7 @@ class TestScopeEnforcement:
         scopes = ["tool:okta:admin"]
         allowed, _ = check_scope(scopes, "okta", "write", "provision_user")
         assert allowed
+
 
 class TestCloneScopeCeiling:
     def test_valid_clone(self):
@@ -41,6 +45,7 @@ class TestCloneScopeCeiling:
         child = ["tool:banking_api:write:queue_payment:capped:1000000"]
         violations = validate_clone_scopes(parent, child)
         assert len(violations) > 0
+
 
 class TestPIIMasking:
     def test_mask_email(self):

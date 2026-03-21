@@ -38,8 +38,9 @@ export default function WorkflowRun() {
     setLoading(true);
     try {
       const resp = await fetch(`/api/v1/workflows/runs/${runId}`);
+      if (!resp.ok) { setRun(null); return; }
       const data = await resp.json();
-      setRun(data);
+      setRun(data?.id ? data : null);
     } catch {
       setRun(null);
     } finally {

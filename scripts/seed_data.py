@@ -9,6 +9,7 @@ Usage:
     # or
     python scripts/seed_data.py
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -119,9 +120,7 @@ def _humanise(agent_type: str) -> str:
 
 async def _ensure_tenant(conn: asyncpg.Connection) -> str:
     """Insert default tenant if missing.  Returns tenant id."""
-    row = await conn.fetchrow(
-        "SELECT id FROM tenants WHERE slug = $1", DEFAULT_TENANT["slug"]
-    )
+    row = await conn.fetchrow("SELECT id FROM tenants WHERE slug = $1", DEFAULT_TENANT["slug"])
     if row:
         print(f"  Tenant '{DEFAULT_TENANT['slug']}' already exists: {row['id']}")
         return str(row["id"])
@@ -258,7 +257,9 @@ async def _seed_agents(conn: asyncpg.Connection, tenant_id: str) -> None:
             agent["confidence_floor"],
             f"confidence < {agent['confidence_floor']}",
         )
-        print(f"  Inserted agent '{agent_type}' ({agent['domain']}, floor={agent['confidence_floor']})")
+        print(
+            f"  Inserted agent '{agent_type}' ({agent['domain']}, floor={agent['confidence_floor']})"
+        )
 
     print(f"  Processed {len(SYSTEM_AGENTS)} agents")
 
@@ -270,7 +271,7 @@ async def _seed_agents(conn: asyncpg.Connection, tenant_id: str) -> None:
 
 async def main() -> None:
     dsn = _load_db_url()
-    print(f"Connecting to database ...")
+    print("Connecting to database ...")
     conn = await asyncpg.connect(dsn)
     try:
         print("\n[1/4] Ensuring default tenant")

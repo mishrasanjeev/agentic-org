@@ -1,4 +1,5 @@
 """Abstract base connector class."""
+
 from __future__ import annotations
 
 import abc

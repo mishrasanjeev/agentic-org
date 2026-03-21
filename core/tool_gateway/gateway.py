@@ -1,4 +1,5 @@
 """Main Tool Gateway — validates and executes every agent tool call."""
+
 from __future__ import annotations
 
 import hashlib
@@ -50,22 +51,35 @@ class ToolGateway:
         # 1. Validate scope
         resource = tool_name.split("_", 1)[-1] if "_" in tool_name else tool_name
         # Determine permission from tool name convention
-        permission = "write" if any(
-            w in tool_name for w in ("create", "post", "update", "delete", "send", "file", "initiate", "queue")
-        ) else "read"
+        permission = (
+            "write"
+            if any(
+                w in tool_name
+                for w in ("create", "post", "update", "delete", "send", "file", "initiate", "queue")
+            )
+            else "read"
+        )
 
         allowed, reason = check_scope(agent_scopes, connector_name, permission, resource, amount)
         if not allowed:
             if "cap_exceeded" in reason:
                 await self.audit.log(
-                    tenant_id=tenant_id, agent_id=agent_id, tool_name=tool_name,
-                    action="cap_exceeded", outcome="blocked", details={"reason": reason}
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    tool_name=tool_name,
+                    action="cap_exceeded",
+                    outcome="blocked",
+                    details={"reason": reason},
                 )
                 return {"error": {"code": "E1008", "message": f"Cap exceeded: {reason}"}}
 
             await self.audit.log(
-                tenant_id=tenant_id, agent_id=agent_id, tool_name=tool_name,
-                action="scope_denied", outcome="blocked", details={"reason": reason}
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                tool_name=tool_name,
+                action="scope_denied",
+                outcome="blocked",
+                details={"reason": reason},
             )
             logger.warning("scope_denied", agent_id=agent_id, tool=tool_name, reason=reason)
             return {"error": {"code": "E1007", "message": f"Scope denied: {reason}"}}
@@ -110,9 +124,16 @@ class ToolGateway:
             input_hash = hashlib.sha256(str(masked_params).encode()).hexdigest()[:16]
             output_hash = hashlib.sha256(str(masked_result).encode()).hexdigest()[:16]
             await self.audit.log(
-                tenant_id=tenant_id, agent_id=agent_id, tool_name=tool_name,
-                action="execute", outcome="success",
-                details={"latency_ms": latency_ms, "input_hash": input_hash, "output_hash": output_hash}
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                tool_name=tool_name,
+                action="execute",
+                outcome="success",
+                details={
+                    "latency_ms": latency_ms,
+                    "input_hash": input_hash,
+                    "output_hash": output_hash,
+                },
             )
 
             return result
@@ -120,8 +141,11 @@ class ToolGateway:
         except Exception as e:
             latency_ms = int((time.monotonic() - start_time) * 1000)
             await self.audit.log(
-                tenant_id=tenant_id, agent_id=agent_id, tool_name=tool_name,
-                action="execute", outcome="error",
-                details={"error": str(e), "latency_ms": latency_ms}
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                tool_name=tool_name,
+                action="execute",
+                outcome="error",
+                details={"error": str(e), "latency_ms": latency_ms},
             )
             return {"error": {"code": "E1001", "message": str(e)}}

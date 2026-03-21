@@ -1,4 +1,5 @@
 """JWT validation using RS256 with JWKS support."""
+
 from __future__ import annotations
 
 import time

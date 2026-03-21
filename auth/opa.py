@@ -1,4 +1,5 @@
 """OPA (Open Policy Agent) client for authorization decisions."""
+
 from __future__ import annotations
 
 from typing import Any

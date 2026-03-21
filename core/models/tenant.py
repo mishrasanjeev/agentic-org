@@ -21,7 +21,9 @@ class Tenant(BaseModel):
     plan: Mapped[str] = mapped_column(String(50), nullable=False, default="enterprise")
     data_region: Mapped[str] = mapped_column(String(10), nullable=False, default="IN")
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     users = relationship("User", back_populates="tenant")

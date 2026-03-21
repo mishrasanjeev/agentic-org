@@ -1,8 +1,11 @@
 """Confluence connector — ops."""
+
 from __future__ import annotations
+
 import base64
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class ConfluenceConnector(BaseConnector):
     name = "confluence"
@@ -29,28 +32,22 @@ class ConfluenceConnector(BaseConnector):
         """Execute create_page on confluence."""
         return await self._post("/create/page", params)
 
-
     async def update_page_content(self, **params):
         """Execute update_page_content on confluence."""
         return await self._post("/update/page/content", params)
-
 
     async def search_content_fulltext(self, **params):
         """Execute search_content_fulltext on confluence."""
         return await self._post("/search/content/fulltext", params)
 
-
     async def publish_from_template(self, **params):
         """Execute publish_from_template on confluence."""
         return await self._post("/publish/from/template", params)
-
 
     async def manage_space_permissions(self, **params):
         """Execute manage_space_permissions on confluence."""
         return await self._post("/manage/space/permissions", params)
 
-
     async def get_page_tree(self, **params):
         """Execute get_page_tree on confluence."""
         return await self._post("/get/page/tree", params)
-

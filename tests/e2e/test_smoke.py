@@ -1,7 +1,9 @@
 """E2E smoke tests — run against a deployed staging/production environment."""
+
 import os
-import pytest
+
 import httpx
+import pytest
 
 BASE_URL = os.getenv("AGENTICORG_E2E_BASE_URL", "http://localhost:8000")
 TOKEN = os.getenv("AGENTICORG_E2E_TOKEN", "")

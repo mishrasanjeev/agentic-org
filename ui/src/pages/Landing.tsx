@@ -99,7 +99,7 @@ const INDIA_CONNECTORS = [
   { name: "GSTN", desc: "GST filing & reconciliation" },
   { name: "EPFO", desc: "Provident fund compliance" },
   { name: "Darwinbox", desc: "HR management platform" },
-  { name: "Razorpay", desc: "Payment processing" },
+  { name: "Pine Labs Plural", desc: "Payment processing" },
   { name: "Tally", desc: "Accounting integration" },
   { name: "DigiLocker", desc: "Document verification" },
 ];

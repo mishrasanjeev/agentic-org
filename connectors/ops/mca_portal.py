@@ -1,7 +1,9 @@
 """Mca Portal connector — ops."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class McaPortalConnector(BaseConnector):
     name = "mca_portal"
@@ -25,18 +27,14 @@ class McaPortalConnector(BaseConnector):
         """Execute file_annual_return on mca_portal."""
         return await self._post("/file/annual/return", params)
 
-
     async def complete_director_kyc(self, **params):
         """Execute complete_director_kyc on mca_portal."""
         return await self._post("/complete/director/kyc", params)
-
 
     async def fetch_company_master_data(self, **params):
         """Execute fetch_company_master_data on mca_portal."""
         return await self._post("/fetch/company/master/data", params)
 
-
     async def file_charge_satisfaction(self, **params):
         """Execute file_charge_satisfaction on mca_portal."""
         return await self._post("/file/charge/satisfaction", params)
-

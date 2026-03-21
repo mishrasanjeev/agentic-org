@@ -1,8 +1,11 @@
 """Servicenow connector — ops."""
+
 from __future__ import annotations
-from typing import Any
+
 import httpx
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class ServicenowConnector(BaseConnector):
     name = "servicenow"
@@ -24,11 +27,14 @@ class ServicenowConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
-            resp = await client.post(token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            })
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+            )
             resp.raise_for_status()
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
@@ -37,28 +43,22 @@ class ServicenowConnector(BaseConnector):
         """Execute create_incident on servicenow."""
         return await self._post("/create/incident", params)
 
-
     async def submit_change_request(self, **params):
         """Execute submit_change_request on servicenow."""
         return await self._post("/submit/change/request", params)
-
 
     async def update_cmdb_ci(self, **params):
         """Execute update_cmdb_ci on servicenow."""
         return await self._post("/update/cmdb/ci", params)
 
-
     async def check_sla_status(self, **params):
         """Execute check_sla_status on servicenow."""
         return await self._post("/check/sla/status", params)
-
 
     async def fulfil_service_catalog_request(self, **params):
         """Execute fulfil_service_catalog_request on servicenow."""
         return await self._post("/fulfil/service/catalog/request", params)
 
-
     async def get_kb_article(self, **params):
         """Execute get_kb_article on servicenow."""
         return await self._post("/get/kb/article", params)
-

@@ -1,4 +1,5 @@
 """FastAPI auth middleware — JWT validation, tenant context, rate limiting."""
+
 from __future__ import annotations
 
 import time
@@ -61,8 +62,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path_tenant = request.path_params.get("tenant_id")
         if path_tenant and path_tenant != tenant_id:
             raise HTTPException(
-                status_code=403,
-                detail={"error": {"code": "E4004", "message": "Tenant mismatch"}}
+                status_code=403, detail={"error": {"code": "E4004", "message": "Tenant mismatch"}}
             )
 
         return await call_next(request)

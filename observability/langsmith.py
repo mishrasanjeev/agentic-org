@@ -6,6 +6,7 @@ tool call, and workflow execution is visible in the LangSmith dashboard.
 The implementation uses ``httpx`` for async HTTP and is safe to call even when
 the ``langsmith_api_key`` is not configured (it becomes a no-op).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -43,6 +44,7 @@ def _utcnow_iso() -> str:
 # ---------------------------------------------------------------------------
 # Single-run trace
 # ---------------------------------------------------------------------------
+
 
 async def log_trace(
     agent_id: str,
@@ -141,6 +143,7 @@ async def log_trace(
 # Update an existing run (e.g. add outputs after completion)
 # ---------------------------------------------------------------------------
 
+
 async def update_run(
     run_id: str,
     *,
@@ -187,6 +190,7 @@ async def update_run(
 # ---------------------------------------------------------------------------
 # Batch trace upload
 # ---------------------------------------------------------------------------
+
 
 async def log_batch(
     traces: list[dict[str, Any]],
@@ -256,6 +260,7 @@ async def log_batch(
 # ---------------------------------------------------------------------------
 # Workflow-level convenience helpers
 # ---------------------------------------------------------------------------
+
 
 async def log_workflow_run(
     run_id: str,

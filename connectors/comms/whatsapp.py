@@ -1,7 +1,9 @@
 """Whatsapp connector — comms."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class WhatsappConnector(BaseConnector):
     name = "whatsapp"
@@ -25,23 +27,18 @@ class WhatsappConnector(BaseConnector):
         """Execute send_approved_template_message on whatsapp."""
         return await self._post("/send/approved/template/message", params)
 
-
     async def send_interactive_message(self, **params):
         """Execute send_interactive_message on whatsapp."""
         return await self._post("/send/interactive/message", params)
-
 
     async def send_media_message(self, **params):
         """Execute send_media_message on whatsapp."""
         return await self._post("/send/media/message", params)
 
-
     async def get_delivery_status(self, **params):
         """Execute get_delivery_status on whatsapp."""
         return await self._post("/get/delivery/status", params)
 
-
     async def manage_opt_out(self, **params):
         """Execute manage_opt_out on whatsapp."""
         return await self._post("/manage/opt/out", params)
-

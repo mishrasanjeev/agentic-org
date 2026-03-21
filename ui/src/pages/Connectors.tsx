@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ConnectorCard from "@/components/ConnectorCard";
@@ -7,6 +8,7 @@ import type { Connector } from "@/types";
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
 
 export default function Connectors() {
+  const navigate = useNavigate();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -19,8 +21,10 @@ export default function Connectors() {
     setLoading(true);
     try {
       const resp = await fetch("/api/v1/connectors");
+      if (!resp.ok) { setConnectors([]); return; }
       const data = await resp.json();
-      setConnectors(data.items || data || []);
+      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setConnectors(items);
     } catch {
       setConnectors([]);
     } finally {
@@ -52,7 +56,7 @@ export default function Connectors() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Connectors</h2>
-        <Button onClick={() => window.location.href = "/connectors/new"}>Register Connector</Button>
+        <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

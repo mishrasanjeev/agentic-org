@@ -1,4 +1,5 @@
 """LLM Router — Gemini (free), Claude, GPT-4o with automatic failover."""
+
 from __future__ import annotations
 
 import time
@@ -15,6 +16,7 @@ logger = structlog.get_logger()
 @dataclass
 class LLMResponse:
     """Standardized LLM response."""
+
     content: str
     model: str
     tokens_used: int = 0
@@ -58,9 +60,7 @@ class LLMRouter:
             logger.warning("llm_primary_failed", model=model, error=str(e))
             if model != self.fallback_model:
                 logger.info("llm_falling_back", fallback=self.fallback_model)
-                return await self._call_model(
-                    self.fallback_model, messages, temp, max_tokens
-                )
+                return await self._call_model(self.fallback_model, messages, temp, max_tokens)
             raise
 
     async def _call_model(
@@ -137,6 +137,7 @@ class LLMRouter:
     async def _call_claude(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
         """Call Anthropic Claude API."""
         import anthropic
+
         client = anthropic.AsyncAnthropic(api_key=external_keys.anthropic_api_key)
 
         system_msg = ""
@@ -159,25 +160,34 @@ class LLMRouter:
         cost = (response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1_000_000
         return LLMResponse(
             content=response.content[0].text,
-            model=model, tokens_used=tokens, cost_usd=cost,
-            latency_ms=latency, raw=response.model_dump(),
+            model=model,
+            tokens_used=tokens,
+            cost_usd=cost,
+            latency_ms=latency,
+            raw=response.model_dump(),
         )
 
     async def _call_openai(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
         """Call OpenAI API."""
         import openai
+
         client = openai.AsyncOpenAI(api_key=external_keys.openai_api_key)
         response = await client.chat.completions.create(
-            model=model, messages=messages,
-            temperature=temperature, max_tokens=max_tokens,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         latency = int((time.monotonic() - start) * 1000)
         tokens = response.usage.total_tokens if response.usage else 0
         cost = tokens * 10 / 1_000_000
         return LLMResponse(
             content=response.choices[0].message.content or "",
-            model=model, tokens_used=tokens, cost_usd=cost,
-            latency_ms=latency, raw=response.model_dump(),
+            model=model,
+            tokens_used=tokens,
+            cost_usd=cost,
+            latency_ms=latency,
+            raw=response.model_dump(),
         )
 
 

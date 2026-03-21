@@ -1,7 +1,8 @@
 """Scaling tests FT-SCALE-001 to FT-SCALE-015."""
-import pytest
+
 from auth.scopes import validate_clone_scopes
 from scaling.lifecycle import LifecycleManager
+
 
 class TestAgentLifecycle:
     def test_ft_scale_003_shadow_pass(self):

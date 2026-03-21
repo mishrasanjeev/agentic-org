@@ -1,7 +1,9 @@
 """Connector registry — register and discover connectors."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class ConnectorRegistry:
     _connectors: dict[str, type[BaseConnector]] = {}

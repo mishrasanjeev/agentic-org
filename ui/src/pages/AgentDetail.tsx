@@ -20,8 +20,9 @@ export default function AgentDetail() {
     setLoading(true);
     try {
       const resp = await fetch(`/api/v1/agents/${id}`);
+      if (!resp.ok) { setAgent(null); return; }
       const data = await resp.json();
-      setAgent(data);
+      setAgent(data?.id ? data : null);
     } catch {
       setAgent(null);
     } finally {
@@ -47,12 +48,15 @@ export default function AgentDetail() {
     staging: "secondary", deprecated: "outline",
   };
 
+  const confidenceFloor = agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A";
+  const shadowAccuracy = agent.shadow_accuracy_current != null ? `${(agent.shadow_accuracy_current * 100).toFixed(1)}%` : "N/A";
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">{agent.name || `Agent ${id}`}</h2>
-          <p className="text-sm text-muted-foreground">{agent.agent_type} | {agent.domain}</p>
+          <p className="text-sm text-muted-foreground">{agent.agent_type || "Unknown type"} | {agent.domain || "Unknown domain"}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handlePromote}>Promote</Button>
@@ -63,15 +67,15 @@ export default function AgentDetail() {
 
       <div className="grid grid-cols-5 gap-4">
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Status</CardTitle></CardHeader>
-          <CardContent><Badge variant={(statusColor[agent.status] || "default") as any}>{agent.status}</Badge></CardContent></Card>
+          <CardContent><Badge variant={(statusColor[agent.status] || "default") as any}>{agent.status || "unknown"}</Badge></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Version</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold">{agent.version}</p></CardContent></Card>
+          <CardContent><p className="text-xl font-bold">{agent.version || "—"}</p></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Confidence Floor</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold">{(agent.confidence_floor * 100).toFixed(0)}%</p></CardContent></Card>
+          <CardContent><p className="text-xl font-bold">{confidenceFloor}</p></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Shadow Samples</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold">{agent.shadow_sample_count}</p></CardContent></Card>
+          <CardContent><p className="text-xl font-bold">{agent.shadow_sample_count ?? 0}</p></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Shadow Accuracy</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold">{agent.shadow_accuracy_current ? `${(agent.shadow_accuracy_current * 100).toFixed(1)}%` : "N/A"}</p></CardContent></Card>
+          <CardContent><p className="text-xl font-bold">{shadowAccuracy}</p></CardContent></Card>
       </div>
 
       <div className="flex gap-4 border-b pb-2">

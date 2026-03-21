@@ -1,4 +1,5 @@
 """Parallel step executor with wait_for policies."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +8,9 @@ from typing import Any
 
 
 async def execute_parallel(
-    tasks: list[Callable[[], Coroutine]], wait_for: str = "all", n: int = 1,
+    tasks: list[Callable[[], Coroutine]],
+    wait_for: str = "all",
+    n: int = 1,
 ) -> list[Any]:
     if wait_for == "all":
         return await asyncio.gather(*[t() for t in tasks], return_exceptions=True)

@@ -1,7 +1,9 @@
 """Sendgrid connector — comms."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class SendgridConnector(BaseConnector):
     name = "sendgrid"
@@ -25,23 +27,18 @@ class SendgridConnector(BaseConnector):
         """Execute send_transactional_email on sendgrid."""
         return await self._post("/send/transactional/email", params)
 
-
     async def create_email_template(self, **params):
         """Execute create_email_template on sendgrid."""
         return await self._post("/create/email/template", params)
-
 
     async def get_delivery_statistics(self, **params):
         """Execute get_delivery_statistics on sendgrid."""
         return await self._post("/get/delivery/statistics", params)
 
-
     async def manage_suppression_list(self, **params):
         """Execute manage_suppression_list on sendgrid."""
         return await self._post("/manage/suppression/list", params)
 
-
     async def validate_email_address(self, **params):
         """Execute validate_email_address on sendgrid."""
         return await self._post("/validate/email/address", params)
-

@@ -1,4 +1,5 @@
 """Scope parsing and enforcement per PRD naming convention."""
+
 from __future__ import annotations
 
 import re
@@ -8,16 +9,16 @@ from dataclasses import dataclass
 @dataclass
 class ParsedScope:
     """Parsed scope components."""
-    category: str        # tool | agenticorg
-    connector: str       # oracle_fusion, etc.
-    permission: str      # read | write | admin
-    resource: str        # purchase_order, journal_entry, etc.
+
+    category: str  # tool | agenticorg
+    connector: str  # oracle_fusion, etc.
+    permission: str  # read | write | admin
+    resource: str  # purchase_order, journal_entry, etc.
     cap: int | None = None  # Capped amount for write scopes
 
+
 # Pattern: tool:{connector}:{perm}:{resource}[:capped:{N}]
-SCOPE_PATTERN = re.compile(
-    r"^(tool|agenticorg):([\w]+):([\w]+)(?::([\w]+))?(?::capped:(\d+))?$"
-)
+SCOPE_PATTERN = re.compile(r"^(tool|agenticorg):([\w]+):([\w]+)(?::([\w]+))?(?::capped:(\d+))?$")
 
 
 def parse_scope(scope_str: str) -> ParsedScope | None:
@@ -102,7 +103,10 @@ def validate_clone_scopes(parent_scopes: list[str], child_scopes: list[str]) -> 
                 break
 
             # Admin covers all
-            if parent_parsed.connector == child_parsed.connector and parent_parsed.permission == "admin":
+            if (
+                parent_parsed.connector == child_parsed.connector
+                and parent_parsed.permission == "admin"
+            ):
                 found_parent = True
                 break
 

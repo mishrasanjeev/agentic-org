@@ -1,17 +1,19 @@
 """Finance functional tests — FT-FIN-001 through FT-FIN-015."""
+
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+
+from core.schemas.errors import ERROR_META, ErrorCode
+from workflows.condition_evaluator import evaluate_condition
 from workflows.engine import WorkflowEngine
 from workflows.state_store import WorkflowStateStore
 from workflows.step_types import execute_step
-from workflows.condition_evaluator import evaluate_condition
-from core.tool_gateway.pii_masker import mask_pii, mask_string
-from core.schemas.errors import ErrorCode, ERROR_META
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_state_store():
@@ -46,6 +48,7 @@ def base_state():
 # Helper: build a workflow definition dict accepted by WorkflowParser
 # ---------------------------------------------------------------------------
 
+
 def _make_definition(steps, timeout_hours=None):
     defn = {"name": "test_workflow", "steps": steps}
     if timeout_hours is not None:
@@ -56,6 +59,7 @@ def _make_definition(steps, timeout_hours=None):
 # ===========================================================================
 # Test class
 # ===========================================================================
+
 
 class TestFinanceFunctional:
     """FT-FIN-001 through FT-FIN-015: Finance domain functional tests."""
@@ -95,19 +99,45 @@ class TestFinanceFunctional:
     # Expected: status=matched, payment queued, GL posted, remittance sent.
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_002_three_way_match_success(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_002_three_way_match_success(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-002: 3-way match succeeds — matched, payment queued, GL posted, remittance sent."""
         steps = [
-            {"id": "three_way_match", "type": "agent", "agent": "ap_processor", "action": "three_way_match"},
-            {"id": "check_match", "type": "condition", "condition": "match_status == matched",
-             "true_path": "queue_payment", "false_path": None,
-             "depends_on": ["three_way_match"]},
-            {"id": "queue_payment", "type": "agent", "agent": "ap_processor", "action": "queue_payment",
-             "depends_on": ["check_match"]},
-            {"id": "post_gl", "type": "agent", "agent": "ap_processor", "action": "post_gl",
-             "depends_on": ["queue_payment"]},
-            {"id": "send_remittance", "type": "notify", "connector": "email",
-             "depends_on": ["post_gl"]},
+            {
+                "id": "three_way_match",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "three_way_match",
+            },
+            {
+                "id": "check_match",
+                "type": "condition",
+                "condition": "match_status == matched",
+                "true_path": "queue_payment",
+                "false_path": None,
+                "depends_on": ["three_way_match"],
+            },
+            {
+                "id": "queue_payment",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "queue_payment",
+                "depends_on": ["check_match"],
+            },
+            {
+                "id": "post_gl",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "post_gl",
+                "depends_on": ["queue_payment"],
+            },
+            {
+                "id": "send_remittance",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["post_gl"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -136,19 +166,39 @@ class TestFinanceFunctional:
     # Expected: HITL created, CFO notified, workflow paused.
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_003_three_way_match_mismatch_hitl(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_003_three_way_match_mismatch_hitl(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-003: 3-way match mismatch routes to HITL gate for CFO review."""
         steps = [
-            {"id": "three_way_match", "type": "agent", "agent": "ap_processor", "action": "three_way_match"},
-            {"id": "check_match", "type": "condition",
-             "condition": "match_status == mismatch",
-             "true_path": "escalate_mismatch", "false_path": "queue_payment",
-             "depends_on": ["three_way_match"]},
-            {"id": "escalate_mismatch", "type": "human_in_loop",
-             "assignee_role": "cfo", "timeout_hours": 4,
-             "depends_on": ["check_match"]},
-            {"id": "queue_payment", "type": "agent", "agent": "ap_processor", "action": "queue_payment",
-             "depends_on": ["check_match"]},
+            {
+                "id": "three_way_match",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "three_way_match",
+            },
+            {
+                "id": "check_match",
+                "type": "condition",
+                "condition": "match_status == mismatch",
+                "true_path": "escalate_mismatch",
+                "false_path": "queue_payment",
+                "depends_on": ["three_way_match"],
+            },
+            {
+                "id": "escalate_mismatch",
+                "type": "human_in_loop",
+                "assignee_role": "cfo",
+                "timeout_hours": 4,
+                "depends_on": ["check_match"],
+            },
+            {
+                "id": "queue_payment",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "queue_payment",
+                "depends_on": ["check_match"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -182,15 +232,11 @@ class TestFinanceFunctional:
 
         # Simulate condition that flags duplicate
         context = {"invoice_hash": "abc123", "existing_hash": "abc123"}
-        is_duplicate = evaluate_condition(
-            "invoice_hash == existing_hash", context
-        )
+        is_duplicate = evaluate_condition("invoice_hash == existing_hash", context)
         assert is_duplicate is True
 
         # Verify the condition evaluator blocks further processing
-        proceed_condition = evaluate_condition(
-            "invoice_hash != existing_hash", context
-        )
+        proceed_condition = evaluate_condition("invoice_hash != existing_hash", context)
         assert proceed_condition is False
 
     # -----------------------------------------------------------------------
@@ -222,17 +268,32 @@ class TestFinanceFunctional:
     # Expected: ₹6L vs ₹5L threshold triggers HITL gate.
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_006_payment_threshold_hitl(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_006_payment_threshold_hitl(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-006: Payment of ₹6,00,000 exceeds ₹5,00,000 threshold — HITL gate."""
         steps = [
-            {"id": "validate_amount", "type": "condition",
-             "condition": "total > 500000",
-             "true_path": "hitl_approval", "false_path": "auto_pay"},
-            {"id": "hitl_approval", "type": "human_in_loop",
-             "assignee_role": "cfo", "timeout_hours": 4,
-             "depends_on": ["validate_amount"]},
-            {"id": "auto_pay", "type": "agent", "agent": "ap_processor", "action": "auto_pay",
-             "depends_on": ["validate_amount"]},
+            {
+                "id": "validate_amount",
+                "type": "condition",
+                "condition": "total > 500000",
+                "true_path": "hitl_approval",
+                "false_path": "auto_pay",
+            },
+            {
+                "id": "hitl_approval",
+                "type": "human_in_loop",
+                "assignee_role": "cfo",
+                "timeout_hours": 4,
+                "depends_on": ["validate_amount"],
+            },
+            {
+                "id": "auto_pay",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "auto_pay",
+                "depends_on": ["validate_amount"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -247,22 +308,35 @@ class TestFinanceFunctional:
         assert "hitl_approval" in step_results
         assert step_results["hitl_approval"]["output"]["assignee_role"] == "cfo"
         # auto_pay should NOT have executed
-        assert "auto_pay" not in step_results or step_results.get("auto_pay", {}).get("status") == "skipped"
+        assert (
+            "auto_pay" not in step_results
+            or step_results.get("auto_pay", {}).get("status") == "skipped"
+        )
 
     # -----------------------------------------------------------------------
     # FT-FIN-007: Early payment discount
     # Expected: payment scheduled day 9 of 30 for discount.
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_007_early_payment_discount(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_007_early_payment_discount(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-007: Early-payment discount — schedule on day 9 of net-30 terms."""
         steps = [
-            {"id": "check_discount", "type": "condition",
-             "condition": "days_since_invoice < 10",
-             "true_path": "schedule_early_pay", "false_path": None},
-            {"id": "schedule_early_pay", "type": "agent", "agent": "ap_processor",
-             "action": "schedule_payment_day_9",
-             "depends_on": ["check_discount"]},
+            {
+                "id": "check_discount",
+                "type": "condition",
+                "condition": "days_since_invoice < 10",
+                "true_path": "schedule_early_pay",
+                "false_path": None,
+            },
+            {
+                "id": "schedule_early_pay",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "schedule_payment_day_9",
+                "depends_on": ["check_discount"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -321,12 +395,18 @@ class TestFinanceFunctional:
     # Expected: 3x exponential backoff, then escalate.
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_009_ap_retry_on_erp_outage(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_009_ap_retry_on_erp_outage(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-009: AP agent retries 3x with exponential backoff on ERP outage, then escalates."""
         steps = [
-            {"id": "post_to_erp", "type": "agent", "agent": "ap_processor",
-             "action": "post_invoice_to_oracle",
-             "on_failure": "retry(3)"},
+            {
+                "id": "post_to_erp",
+                "type": "agent",
+                "agent": "ap_processor",
+                "action": "post_invoice_to_oracle",
+                "on_failure": "retry(3)",
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -341,8 +421,10 @@ class TestFinanceFunctional:
             call_count += 1
             raise ConnectionError("Oracle Fusion unavailable")
 
-        with patch("workflows.engine.execute_step", side_effect=_failing_step), \
-             patch("workflows.retry.asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("workflows.engine.execute_step", side_effect=_failing_step),
+            patch("workflows.retry.asyncio.sleep", new_callable=AsyncMock),
+        ):
             result = await workflow_engine.execute(base_state["id"])
 
         # After 3 retries + 1 original attempt = 4 calls total, then failure
@@ -378,18 +460,33 @@ class TestFinanceFunctional:
     # FT-FIN-011: Bank recon — 3 unmatched breaks
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_011_bank_recon_unmatched_breaks(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_011_bank_recon_unmatched_breaks(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-011: Bank recon with 3 unmatched breaks triggers review."""
         steps = [
             {"id": "run_recon", "type": "agent", "agent": "recon_agent", "action": "reconcile"},
-            {"id": "check_breaks", "type": "condition",
-             "condition": "unmatched_count > 0",
-             "true_path": "flag_breaks", "false_path": "close_recon",
-             "depends_on": ["run_recon"]},
-            {"id": "flag_breaks", "type": "notify", "connector": "slack",
-             "depends_on": ["check_breaks"]},
-            {"id": "close_recon", "type": "agent", "agent": "recon_agent", "action": "close",
-             "depends_on": ["check_breaks"]},
+            {
+                "id": "check_breaks",
+                "type": "condition",
+                "condition": "unmatched_count > 0",
+                "true_path": "flag_breaks",
+                "false_path": "close_recon",
+                "depends_on": ["run_recon"],
+            },
+            {
+                "id": "flag_breaks",
+                "type": "notify",
+                "connector": "slack",
+                "depends_on": ["check_breaks"],
+            },
+            {
+                "id": "close_recon",
+                "type": "agent",
+                "agent": "recon_agent",
+                "action": "close",
+                "depends_on": ["check_breaks"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -408,17 +505,32 @@ class TestFinanceFunctional:
     # FT-FIN-012: Break threshold escalation (₹75K > ₹50K)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_012_break_threshold_escalation(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_012_break_threshold_escalation(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-012: Break amount ₹75K exceeds ₹50K threshold — escalation to CFO."""
         steps = [
-            {"id": "evaluate_break", "type": "condition",
-             "condition": "break_amount > 50000",
-             "true_path": "escalate_to_cfo", "false_path": "auto_resolve"},
-            {"id": "escalate_to_cfo", "type": "human_in_loop",
-             "assignee_role": "cfo", "timeout_hours": 2,
-             "depends_on": ["evaluate_break"]},
-            {"id": "auto_resolve", "type": "agent", "agent": "recon_agent", "action": "auto_resolve",
-             "depends_on": ["evaluate_break"]},
+            {
+                "id": "evaluate_break",
+                "type": "condition",
+                "condition": "break_amount > 50000",
+                "true_path": "escalate_to_cfo",
+                "false_path": "auto_resolve",
+            },
+            {
+                "id": "escalate_to_cfo",
+                "type": "human_in_loop",
+                "assignee_role": "cfo",
+                "timeout_hours": 2,
+                "depends_on": ["evaluate_break"],
+            },
+            {
+                "id": "auto_resolve",
+                "type": "agent",
+                "agent": "recon_agent",
+                "action": "auto_resolve",
+                "depends_on": ["evaluate_break"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -439,21 +551,51 @@ class TestFinanceFunctional:
     # FT-FIN-013: GSTR-3B preparation
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_013_gstr3b_preparation(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_013_gstr3b_preparation(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-013: GSTR-3B return prepared from AP/AR ledgers."""
         steps = [
-            {"id": "gather_ap_data", "type": "agent", "agent": "tax_compliance", "action": "extract_ap_ledger"},
-            {"id": "gather_ar_data", "type": "agent", "agent": "tax_compliance", "action": "extract_ar_ledger"},
-            {"id": "compute_gstr3b", "type": "agent", "agent": "tax_compliance", "action": "compute_gstr3b",
-             "depends_on": ["gather_ap_data", "gather_ar_data"]},
-            {"id": "validate_totals", "type": "condition",
-             "condition": "gstr3b_status == ready",
-             "true_path": "submit_draft", "false_path": "flag_discrepancy",
-             "depends_on": ["compute_gstr3b"]},
-            {"id": "submit_draft", "type": "agent", "agent": "tax_compliance", "action": "submit_gstr3b_draft",
-             "depends_on": ["validate_totals"]},
-            {"id": "flag_discrepancy", "type": "notify", "connector": "email",
-             "depends_on": ["validate_totals"]},
+            {
+                "id": "gather_ap_data",
+                "type": "agent",
+                "agent": "tax_compliance",
+                "action": "extract_ap_ledger",
+            },
+            {
+                "id": "gather_ar_data",
+                "type": "agent",
+                "agent": "tax_compliance",
+                "action": "extract_ar_ledger",
+            },
+            {
+                "id": "compute_gstr3b",
+                "type": "agent",
+                "agent": "tax_compliance",
+                "action": "compute_gstr3b",
+                "depends_on": ["gather_ap_data", "gather_ar_data"],
+            },
+            {
+                "id": "validate_totals",
+                "type": "condition",
+                "condition": "gstr3b_status == ready",
+                "true_path": "submit_draft",
+                "false_path": "flag_discrepancy",
+                "depends_on": ["compute_gstr3b"],
+            },
+            {
+                "id": "submit_draft",
+                "type": "agent",
+                "agent": "tax_compliance",
+                "action": "submit_gstr3b_draft",
+                "depends_on": ["validate_totals"],
+            },
+            {
+                "id": "flag_discrepancy",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["validate_totals"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -478,22 +620,52 @@ class TestFinanceFunctional:
     # FT-FIN-014: Month-end close D+2
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_014_month_end_close_d2(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_fin_014_month_end_close_d2(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-FIN-014: Month-end close completed within D+2 deadline."""
         steps = [
-            {"id": "freeze_subledgers", "type": "agent", "agent": "close_agent", "action": "freeze_subledgers"},
-            {"id": "run_accruals", "type": "agent", "agent": "close_agent", "action": "run_accruals",
-             "depends_on": ["freeze_subledgers"]},
-            {"id": "post_adjustments", "type": "agent", "agent": "close_agent", "action": "post_adjustments",
-             "depends_on": ["run_accruals"]},
-            {"id": "generate_tb", "type": "agent", "agent": "close_agent", "action": "generate_trial_balance",
-             "depends_on": ["post_adjustments"]},
-            {"id": "validate_close", "type": "condition",
-             "condition": "tb_balanced == true",
-             "true_path": "notify_stakeholders", "false_path": None,
-             "depends_on": ["generate_tb"]},
-            {"id": "notify_stakeholders", "type": "notify", "connector": "email",
-             "depends_on": ["validate_close"]},
+            {
+                "id": "freeze_subledgers",
+                "type": "agent",
+                "agent": "close_agent",
+                "action": "freeze_subledgers",
+            },
+            {
+                "id": "run_accruals",
+                "type": "agent",
+                "agent": "close_agent",
+                "action": "run_accruals",
+                "depends_on": ["freeze_subledgers"],
+            },
+            {
+                "id": "post_adjustments",
+                "type": "agent",
+                "agent": "close_agent",
+                "action": "post_adjustments",
+                "depends_on": ["run_accruals"],
+            },
+            {
+                "id": "generate_tb",
+                "type": "agent",
+                "agent": "close_agent",
+                "action": "generate_trial_balance",
+                "depends_on": ["post_adjustments"],
+            },
+            {
+                "id": "validate_close",
+                "type": "condition",
+                "condition": "tb_balanced == true",
+                "true_path": "notify_stakeholders",
+                "false_path": None,
+                "depends_on": ["generate_tb"],
+            },
+            {
+                "id": "notify_stakeholders",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["validate_close"],
+            },
         ]
         definition = _make_definition(steps, timeout_hours=48)
         base_state["definition"] = workflow_engine.parser.parse(definition)

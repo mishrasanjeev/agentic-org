@@ -1,4 +1,5 @@
 """Month-End Close agent implementation."""
+
 from __future__ import annotations
 
 from core.agents.base import BaseAgent

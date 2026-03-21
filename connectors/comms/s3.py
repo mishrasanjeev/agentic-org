@@ -1,6 +1,9 @@
 """Object Storage connector — GCS-native with S3-compatible fallback."""
+
 from __future__ import annotations
+
 from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
 
 
@@ -15,7 +18,9 @@ class ObjectStorageConnector(BaseConnector):
         self._tool_registry["upload_document"] = self.upload_document
         self._tool_registry["download_document"] = self.download_document
         self._tool_registry["list_bucket_objects"] = self.list_bucket_objects
-        self._tool_registry["generate_presigned_download_url"] = self.generate_presigned_download_url
+        self._tool_registry["generate_presigned_download_url"] = (
+            self.generate_presigned_download_url
+        )
         self._tool_registry["delete_object"] = self.delete_object
         self._tool_registry["copy_object"] = self.copy_object
 
@@ -27,7 +32,7 @@ class ObjectStorageConnector(BaseConnector):
             # S3-compatible mode (e.g., MinIO in local dev)
             access_key = self._get_secret("access_key")
             secret_key = self._get_secret("secret_key")
-            self._auth_headers = {"X-Access-Key": access_key}
+            self._auth_headers = {"X-Access-Key": access_key, "X-Secret-Key": secret_key}
             self.base_url = endpoint
         else:
             # GCS mode — use google-cloud-storage client credentials.

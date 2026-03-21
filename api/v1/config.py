@@ -1,4 +1,5 @@
 """Fleet configuration endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -21,9 +22,7 @@ _FLEET_LIMITS_KEY = "fleet_limits"
 async def get_fleet_limits(tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Tenant).where(Tenant.id == tid)
-        )
+        result = await session.execute(select(Tenant).where(Tenant.id == tid))
         tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(404, "Tenant not found")
@@ -44,9 +43,7 @@ async def update_fleet_limits(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Tenant).where(Tenant.id == tid)
-        )
+        result = await session.execute(select(Tenant).where(Tenant.id == tid))
         tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(404, "Tenant not found")

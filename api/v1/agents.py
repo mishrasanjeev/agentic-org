@@ -1,4 +1,5 @@
 """Agent CRUD + lifecycle endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -57,11 +58,15 @@ def _agent_to_dict(agent: Agent) -> dict:
         "authorized_tools": agent.authorized_tools,
         "output_schema": agent.output_schema,
         "parent_agent_id": str(agent.parent_agent_id) if agent.parent_agent_id else None,
-        "shadow_comparison_agent_id": str(agent.shadow_comparison_agent_id) if agent.shadow_comparison_agent_id else None,
+        "shadow_comparison_agent_id": str(agent.shadow_comparison_agent_id)
+        if agent.shadow_comparison_agent_id
+        else None,
         "shadow_min_samples": agent.shadow_min_samples,
         "shadow_accuracy_floor": float(agent.shadow_accuracy_floor),
         "shadow_sample_count": agent.shadow_sample_count,
-        "shadow_accuracy_current": float(agent.shadow_accuracy_current) if agent.shadow_accuracy_current is not None else None,
+        "shadow_accuracy_current": float(agent.shadow_accuracy_current)
+        if agent.shadow_accuracy_current is not None
+        else None,
         "cost_controls": agent.cost_controls,
         "scaling": agent.scaling,
         "tags": agent.tags,
@@ -96,9 +101,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             status=body.initial_status or "shadow",
             version="1.0.0",
             shadow_comparison_agent_id=(
-                _uuid.UUID(body.shadow_comparison_agent)
-                if body.shadow_comparison_agent
-                else None
+                _uuid.UUID(body.shadow_comparison_agent) if body.shadow_comparison_agent else None
             ),
             shadow_min_samples=body.shadow_min_samples,
             shadow_accuracy_floor=Decimal(str(body.shadow_accuracy_floor)),
@@ -219,9 +222,7 @@ async def replace_agent(
         agent.scaling = body.scaling.model_dump()
         agent.ttl_hours = body.ttl_hours
         agent.shadow_comparison_agent_id = (
-            _uuid.UUID(body.shadow_comparison_agent)
-            if body.shadow_comparison_agent
-            else None
+            _uuid.UUID(body.shadow_comparison_agent) if body.shadow_comparison_agent else None
         )
 
     return {"id": str(agent_id), "replaced": True}
@@ -306,7 +307,12 @@ async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenan
         )
         session.add(event)
 
-    return {"id": str(agent_id), "status": "paused", "previous_status": old_status, "token_revoked": True}
+    return {
+        "id": str(agent_id),
+        "status": "paused",
+        "previous_status": old_status,
+        "token_revoked": True,
+    }
 
 
 # ── POST /agents/{id}/resume ─────────────────────────────────────────────────
@@ -321,7 +327,9 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
         if not agent:
             raise HTTPException(404, "Agent not found")
         if agent.status != "paused":
-            raise HTTPException(409, f"Cannot resume agent in '{agent.status}' status; must be paused")
+            raise HTTPException(
+                409, f"Cannot resume agent in '{agent.status}' status; must be paused"
+            )
 
         agent.status = "active"
 
@@ -366,7 +374,10 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                     f"Shadow agent has {agent.shadow_sample_count}/{agent.shadow_min_samples} samples; "
                     f"cannot promote until minimum is met",
                 )
-            if agent.shadow_accuracy_current is not None and agent.shadow_accuracy_current < agent.shadow_accuracy_floor:
+            if (
+                agent.shadow_accuracy_current is not None
+                and agent.shadow_accuracy_current < agent.shadow_accuracy_floor
+            ):
                 raise HTTPException(
                     409,
                     f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {agent.shadow_accuracy_floor}",
@@ -485,7 +496,9 @@ async def clone_agent(
             llm_model=parent.llm_model,
             llm_fallback=parent.llm_fallback,
             llm_config=parent.llm_config,
-            confidence_floor=Decimal(str(body.overrides.get("confidence_floor", parent.confidence_floor))),
+            confidence_floor=Decimal(
+                str(body.overrides.get("confidence_floor", parent.confidence_floor))
+            ),
             hitl_condition=parent.hitl_condition,
             max_retries=parent.max_retries,
             authorized_tools=body.overrides.get("authorized_tools", parent.authorized_tools),

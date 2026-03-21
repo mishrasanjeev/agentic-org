@@ -1,8 +1,11 @@
 """Jira connector — ops."""
+
 from __future__ import annotations
+
 import base64
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class JiraConnector(BaseConnector):
     name = "jira"
@@ -30,33 +33,26 @@ class JiraConnector(BaseConnector):
         """Execute create_issue on jira."""
         return await self._post("/create/issue", params)
 
-
     async def update_issue(self, **params):
         """Execute update_issue on jira."""
         return await self._post("/update/issue", params)
-
 
     async def transition_issue(self, **params):
         """Execute transition_issue on jira."""
         return await self._post("/transition/issue", params)
 
-
     async def get_sprint_data(self, **params):
         """Execute get_sprint_data on jira."""
         return await self._post("/get/sprint/data", params)
-
 
     async def bulk_update(self, **params):
         """Execute bulk_update on jira."""
         return await self._post("/bulk/update", params)
 
-
     async def get_project_metrics(self, **params):
         """Execute get_project_metrics on jira."""
         return await self._post("/get/project/metrics", params)
 
-
     async def create_dashboard_widget(self, **params):
         """Execute create_dashboard_widget on jira."""
         return await self._post("/create/dashboard/widget", params)
-

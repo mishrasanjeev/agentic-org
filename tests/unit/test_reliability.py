@@ -4,11 +4,10 @@ These tests validate fault-tolerance, failover, chaos resilience, and backup
 recovery requirements from the PRD.  Infrastructure dependencies (PostgreSQL,
 Redis, Kubernetes) are mocked so the tests run deterministically in CI.
 """
-import asyncio
+
 import copy
 import json
 import time
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,6 +25,7 @@ _EXECUTE_STEP_PATCH = "workflows.engine.execute_step"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _in_memory_state_store() -> WorkflowStateStore:
     """WorkflowStateStore backed by a plain dict."""
@@ -59,6 +59,7 @@ def _multi_step_definition() -> dict:
 # ---------------------------------------------------------------------------
 # NFT-REL-001: Kill one agent pod -- zero data loss (tasks resume from checkpoint)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTREL001:
     """Killing an agent pod mid-execution must result in zero data loss."""
@@ -118,6 +119,7 @@ class TestNFTREL001:
 # NFT-REL-002: PostgreSQL primary failure (auto-failover, no committed data lost)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTREL002:
     """PostgreSQL primary failure must trigger auto-failover with no committed data lost."""
 
@@ -128,12 +130,14 @@ class TestNFTREL002:
         committed data is still accessible.
         """
         committed_data = {
-            "checkpoint:wfr_abc": json.dumps({
-                "id": "wfr_abc",
-                "status": "running",
-                "steps_completed": 2,
-                "step_results": {"s1": {"status": "completed"}, "s2": {"status": "completed"}},
-            })
+            "checkpoint:wfr_abc": json.dumps(
+                {
+                    "id": "wfr_abc",
+                    "status": "running",
+                    "steps_completed": 2,
+                    "step_results": {"s1": {"status": "completed"}, "s2": {"status": "completed"}},
+                }
+            )
         }
 
         primary_available = True
@@ -173,6 +177,7 @@ class TestNFTREL002:
 # ---------------------------------------------------------------------------
 # NFT-REL-003: Redis primary failure (sentinel promotes replica, no duplicates)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTREL003:
     """Redis primary failure must result in sentinel-promoted replica with no duplicates."""
@@ -220,6 +225,7 @@ class TestNFTREL003:
 # ---------------------------------------------------------------------------
 # NFT-REL-004: Oracle Fusion 503 for 10 min (retry -> circuit breaker -> escalation)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTREL004:
     """Oracle Fusion returning 503 for 10 min triggers retry -> circuit breaker -> escalation."""
@@ -283,6 +289,7 @@ class TestNFTREL004:
 # NFT-REL-005: Chaos -- random pod kill every 5 min for 1 hour (SLA maintained)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTREL005:
     """Simulated chaos: random pod kills should not break SLA."""
 
@@ -342,6 +349,7 @@ class TestNFTREL005:
 # NFT-REL-006: Zero-downtime rolling deploy (workflows continue)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTREL006:
     """Rolling deploy must not interrupt in-flight workflows."""
 
@@ -398,6 +406,7 @@ class TestNFTREL006:
 # NFT-REL-007: Restore from 24h backup (all data recovered)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTREL007:
     """24-hour backup restore must recover all committed data."""
 
@@ -430,12 +439,8 @@ class TestNFTREL007:
         assert len(backup) == 50
 
         # Verify backup contains correct statuses
-        completed_in_backup = sum(
-            1 for s in backup.values() if s["status"] == "completed"
-        )
-        running_in_backup = sum(
-            1 for s in backup.values() if s["status"] == "running"
-        )
+        completed_in_backup = sum(1 for s in backup.values() if s["status"] == "completed")
+        running_in_backup = sum(1 for s in backup.values() if s["status"] == "running")
         assert completed_in_backup == 25
         assert running_in_backup == 25
 

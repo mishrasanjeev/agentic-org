@@ -6,6 +6,7 @@ import textwrap
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
 def w(rel_path, content):
     full = os.path.join(BASE, rel_path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -17,7 +18,9 @@ def w(rel_path, content):
 def gen_auth():
     w("auth/__init__.py", '"""Authentication layer for AgenticOrg."""\n')
 
-    w("auth/jwt.py", '''
+    w(
+        "auth/jwt.py",
+        '''
     """JWT validation using RS256 with JWKS support."""
     from __future__ import annotations
 
@@ -89,9 +92,12 @@ def gen_auth():
 
     def extract_agent_id(claims: dict[str, Any]) -> str:
         return claims.get("agenticorg:agent_id", "")
-    ''')
+    ''',
+    )
 
-    w("auth/grantex.py", '''
+    w(
+        "auth/grantex.py",
+        '''
     """Grantex/OAuth2 client for platform and agent token management."""
     from __future__ import annotations
 
@@ -165,9 +171,12 @@ def gen_auth():
 
 
     grantex_client = GrantexClient()
-    ''')
+    ''',
+    )
 
-    w("auth/token_pool.py", '''
+    w(
+        "auth/token_pool.py",
+        '''
     """Redis-backed token pool for agent tokens."""
     from __future__ import annotations
 
@@ -256,9 +265,12 @@ def gen_auth():
 
 
     token_pool = TokenPool()
-    ''')
+    ''',
+    )
 
-    w("auth/scopes.py", '''
+    w(
+        "auth/scopes.py",
+        '''
     """Scope parsing and enforcement per PRD naming convention."""
     from __future__ import annotations
 
@@ -372,9 +384,12 @@ def gen_auth():
                 violations.append(f"Scope not in parent: {child_scope}")
 
         return violations
-    ''')
+    ''',
+    )
 
-    w("auth/opa.py", '''
+    w(
+        "auth/opa.py",
+        '''
     """OPA (Open Policy Agent) client for authorization decisions."""
     from __future__ import annotations
 
@@ -408,9 +423,12 @@ def gen_auth():
 
 
     opa_client = OPAClient()
-    ''')
+    ''',
+    )
 
-    w("auth/middleware.py", '''
+    w(
+        "auth/middleware.py",
+        '''
     """FastAPI auth middleware — JWT validation, tenant context, rate limiting."""
     from __future__ import annotations
 
@@ -491,15 +509,21 @@ def gen_auth():
             _failed_attempts[ip].append(now)
             if len(_failed_attempts[ip]) >= MAX_FAILURES:
                 _blocked_ips[ip] = now + BLOCK_DURATION
-    ''')
+    ''',
+    )
 
     print("[OK] Auth")
 
 
 def gen_tool_gateway():
-    w("core/tool_gateway/__init__.py", '"""Tool Gateway — auth, rate limit, idempotency, PII mask, audit."""\n')
+    w(
+        "core/tool_gateway/__init__.py",
+        '"""Tool Gateway — auth, rate limit, idempotency, PII mask, audit."""\n',
+    )
 
-    w("core/tool_gateway/gateway.py", '''
+    w(
+        "core/tool_gateway/gateway.py",
+        '''
     """Main Tool Gateway — validates and executes every agent tool call."""
     from __future__ import annotations
 
@@ -623,9 +647,12 @@ def gen_tool_gateway():
                     details={"error": str(e), "latency_ms": latency_ms}
                 )
                 return {"error": {"code": "E1001", "message": str(e)}}
-    ''')
+    ''',
+    )
 
-    w("core/tool_gateway/rate_limiter.py", '''
+    w(
+        "core/tool_gateway/rate_limiter.py",
+        '''
     """Token bucket rate limiter backed by Redis."""
     from __future__ import annotations
 
@@ -665,9 +692,12 @@ def gen_tool_gateway():
         async def close(self):
             if self.redis:
                 await self.redis.close()
-    ''')
+    ''',
+    )
 
-    w("core/tool_gateway/idempotency.py", '''
+    w(
+        "core/tool_gateway/idempotency.py",
+        '''
     """Idempotency enforcement via Redis."""
     from __future__ import annotations
 
@@ -710,9 +740,12 @@ def gen_tool_gateway():
         async def close(self):
             if self.redis:
                 await self.redis.close()
-    ''')
+    ''',
+    )
 
-    w("core/tool_gateway/pii_masker.py", '''
+    w(
+        "core/tool_gateway/pii_masker.py",
+        '''
     """PII masking — default ON. Masks email, phone, Aadhaar, PAN, bank accounts, IFSC."""
     from __future__ import annotations
 
@@ -758,9 +791,12 @@ def gen_tool_gateway():
         if isinstance(data, list):
             return [mask_pii(item) for item in data]
         return data
-    ''')
+    ''',
+    )
 
-    w("core/tool_gateway/audit_logger.py", '''
+    w(
+        "core/tool_gateway/audit_logger.py",
+        '''
     """Audit log writer — append-only with HMAC-SHA256 signature."""
     from __future__ import annotations
 
@@ -841,7 +877,8 @@ def gen_tool_gateway():
                         await session.commit()
                 except Exception as e:
                     logger.error("audit_log_db_error", error=str(e))
-    ''')
+    ''',
+    )
 
     print("[OK] Tool Gateway")
 
@@ -849,7 +886,9 @@ def gen_tool_gateway():
 def gen_llm():
     w("core/llm/__init__.py", '"""LLM router and adapters."""\n')
 
-    w("core/llm/router.py", '''
+    w(
+        "core/llm/router.py",
+        '''
     """LLM Router — primary Claude, fallback GPT-4o, optional Gemini."""
     from __future__ import annotations
 
@@ -964,7 +1003,8 @@ def gen_llm():
 
 
     llm_router = LLMRouter()
-    ''')
+    ''',
+    )
 
     print("[OK] LLM")
 
@@ -973,7 +1013,9 @@ def gen_connector_framework():
     w("connectors/__init__.py", '"""Connector layer — 42 typed adapters."""\n')
     w("connectors/framework/__init__.py", '"""Connector framework."""\n')
 
-    w("connectors/framework/base_connector.py", '''
+    w(
+        "connectors/framework/base_connector.py",
+        '''
     """Abstract base connector class."""
     from __future__ import annotations
 
@@ -1068,9 +1110,12 @@ def gen_connector_framework():
             resp = await self._client.delete(path)
             resp.raise_for_status()
             return resp.json()
-    ''')
+    ''',
+    )
 
-    w("connectors/framework/auth_adapters.py", '''
+    w(
+        "connectors/framework/auth_adapters.py",
+        '''
     """Authentication adapters for various connector auth types."""
     from __future__ import annotations
 
@@ -1145,9 +1190,12 @@ def gen_connector_framework():
                 "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/scim+json",
             }
-    ''')
+    ''',
+    )
 
-    w("connectors/framework/circuit_breaker.py", '''
+    w(
+        "connectors/framework/circuit_breaker.py",
+        '''
     """Circuit breaker pattern — Redis-backed, per-connector."""
     from __future__ import annotations
 
@@ -1226,7 +1274,8 @@ def gen_connector_framework():
         async def close(self):
             if self.redis:
                 await self.redis.close()
-    ''')
+    ''',
+    )
 
     print("[OK] Connector Framework")
 

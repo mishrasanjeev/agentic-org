@@ -1,7 +1,9 @@
 """Darwinbox connector — hr."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class DarwinboxConnector(BaseConnector):
     name = "darwinbox"
@@ -30,48 +32,38 @@ class DarwinboxConnector(BaseConnector):
         """Execute get_employee on darwinbox."""
         return await self._post("/get/employee", params)
 
-
     async def create_employee(self, **params):
         """Execute create_employee on darwinbox."""
         return await self._post("/create/employee", params)
-
 
     async def run_payroll(self, **params):
         """Execute run_payroll on darwinbox."""
         return await self._post("/run/payroll", params)
 
-
     async def get_attendance(self, **params):
         """Execute get_attendance on darwinbox."""
         return await self._post("/get/attendance", params)
-
 
     async def post_leave(self, **params):
         """Execute post_leave on darwinbox."""
         return await self._post("/post/leave", params)
 
-
     async def get_org_chart(self, **params):
         """Execute get_org_chart on darwinbox."""
         return await self._post("/get/org/chart", params)
-
 
     async def update_performance(self, **params):
         """Execute update_performance on darwinbox."""
         return await self._post("/update/performance", params)
 
-
     async def terminate_employee(self, **params):
         """Execute terminate_employee on darwinbox."""
         return await self._post("/terminate/employee", params)
-
 
     async def transfer_employee(self, **params):
         """Execute transfer_employee on darwinbox."""
         return await self._post("/transfer/employee", params)
 
-
     async def get_payslip(self, **params):
         """Execute get_payslip on darwinbox."""
         return await self._post("/get/payslip", params)
-

@@ -19,8 +19,10 @@ export default function Approvals() {
     setLoading(true);
     try {
       const resp = await fetch("/api/v1/approvals");
+      if (!resp.ok) { setItems([]); return; }
       const data = await resp.json();
-      setItems(data.items || []);
+      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setItems(items);
     } catch {
       setItems([]);
     } finally {

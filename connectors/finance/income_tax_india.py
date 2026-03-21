@@ -1,7 +1,9 @@
 """Income Tax India connector — finance."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class IncomeTaxIndiaConnector(BaseConnector):
     name = "income_tax_india"
@@ -28,33 +30,26 @@ class IncomeTaxIndiaConnector(BaseConnector):
         """Execute file_26q_return on income_tax_india."""
         return await self._post("/file/26q/return", params)
 
-
     async def file_24q_return(self, **params):
         """Execute file_24q_return on income_tax_india."""
         return await self._post("/file/24q/return", params)
-
 
     async def check_tds_credit_in_26as(self, **params):
         """Execute check_tds_credit_in_26as on income_tax_india."""
         return await self._post("/check/tds/credit/in/26as", params)
 
-
     async def download_form_16a(self, **params):
         """Execute download_form_16a on income_tax_india."""
         return await self._post("/download/form/16a", params)
-
 
     async def file_itr(self, **params):
         """Execute file_itr on income_tax_india."""
         return await self._post("/file/itr", params)
 
-
     async def get_compliance_notice(self, **params):
         """Execute get_compliance_notice on income_tax_india."""
         return await self._post("/get/compliance/notice", params)
 
-
     async def pay_tax_challan(self, **params):
         """Execute pay_tax_challan on income_tax_india."""
         return await self._post("/pay/tax/challan", params)
-

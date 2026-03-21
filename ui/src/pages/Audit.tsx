@@ -20,8 +20,10 @@ export default function Audit() {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
       if (eventTypeFilter) params.set("event_type", eventTypeFilter);
       const resp = await fetch(`/api/v1/audit?${params}`);
+      if (!resp.ok) { setEntries([]); return; }
       const data = await resp.json();
-      setEntries(data.items || []);
+      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setEntries(items);
     } catch {
       setEntries([]);
     } finally {

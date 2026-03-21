@@ -1,4 +1,5 @@
 """Schema registry endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -37,9 +38,7 @@ async def list_schemas(
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         count_q = (
-            select(func.count())
-            .select_from(SchemaRegistry)
-            .where(SchemaRegistry.tenant_id == tid)
+            select(func.count()).select_from(SchemaRegistry).where(SchemaRegistry.tenant_id == tid)
         )
         total = (await session.execute(count_q)).scalar() or 0
 

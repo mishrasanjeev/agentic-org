@@ -1,4 +1,5 @@
 """Base agent class — all 24 agents extend this."""
+
 from __future__ import annotations
 
 import abc
@@ -66,6 +67,7 @@ class BaseAgent(abc.ABC):
             self._system_prompt = template
         return self._system_prompt
 
+    @abc.abstractmethod
     async def execute(self, task: TaskAssignment) -> TaskResult:
         """Main execution pipeline."""
         start = time.monotonic()
@@ -86,7 +88,13 @@ class BaseAgent(abc.ABC):
             if not self._validate_output(output):
                 trace.append("Output validation failed")
                 return self._make_result(
-                    task, msg_id, "failed", {}, 0.0, trace, tool_calls,
+                    task,
+                    msg_id,
+                    "failed",
+                    {},
+                    0.0,
+                    trace,
+                    tool_calls,
                     error={"code": "E2001", "message": "Schema validation failed"},
                     start=start,
                 )
@@ -100,21 +108,41 @@ class BaseAgent(abc.ABC):
             if hitl:
                 trace.append(f"HITL triggered: {hitl.trigger_condition}")
                 return self._make_result(
-                    task, msg_id, "hitl_triggered", output, confidence,
-                    trace, tool_calls, hitl_request=hitl, start=start,
+                    task,
+                    msg_id,
+                    "hitl_triggered",
+                    output,
+                    confidence,
+                    trace,
+                    tool_calls,
+                    hitl_request=hitl,
+                    start=start,
                 )
 
             return self._make_result(
-                task, msg_id, "completed", output, confidence,
-                trace, tool_calls, start=start,
+                task,
+                msg_id,
+                "completed",
+                output,
+                confidence,
+                trace,
+                tool_calls,
+                start=start,
             )
 
         except Exception as e:
             logger.error("agent_execute_error", agent=self.agent_id, error=str(e))
             trace.append(f"Error: {e}")
             return self._make_result(
-                task, msg_id, "failed", {}, 0.0, trace, tool_calls,
-                error={"code": "E5001", "message": str(e)}, start=start,
+                task,
+                msg_id,
+                "failed",
+                {},
+                0.0,
+                trace,
+                tool_calls,
+                error={"code": "E5001", "message": str(e)},
+                start=start,
             )
 
     async def _reason(self, context: dict, trace: list[str]) -> dict[str, Any]:
@@ -188,8 +216,17 @@ class BaseAgent(abc.ABC):
         )
 
     def _make_result(
-        self, task, msg_id, status, output, confidence, trace, tool_calls,
-        error=None, hitl_request=None, start=0,
+        self,
+        task,
+        msg_id,
+        status,
+        output,
+        confidence,
+        trace,
+        tool_calls,
+        error=None,
+        hitl_request=None,
+        start=0,
     ) -> TaskResult:
         latency = int((time.monotonic() - start) * 1000) if start else 0
         return TaskResult(

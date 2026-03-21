@@ -1,8 +1,11 @@
 """Zoho Books connector — finance."""
+
 from __future__ import annotations
-from typing import Any
+
 import httpx
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class ZohoBooksConnector(BaseConnector):
     name = "zoho_books"
@@ -24,11 +27,14 @@ class ZohoBooksConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
-            resp = await client.post(token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            })
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+            )
             resp.raise_for_status()
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
@@ -37,28 +43,22 @@ class ZohoBooksConnector(BaseConnector):
         """Execute create_invoice on zoho_books."""
         return await self._post("/create/invoice", params)
 
-
     async def record_expense(self, **params):
         """Execute record_expense on zoho_books."""
         return await self._post("/record/expense", params)
-
 
     async def reconcile_bank_statement(self, **params):
         """Execute reconcile_bank_statement on zoho_books."""
         return await self._post("/reconcile/bank/statement", params)
 
-
     async def generate_financial_report(self, **params):
         """Execute generate_financial_report on zoho_books."""
         return await self._post("/generate/financial/report", params)
-
 
     async def get_balance_sheet(self, **params):
         """Execute get_balance_sheet on zoho_books."""
         return await self._post("/get/balance/sheet", params)
 
-
     async def manage_chart_of_accounts(self, **params):
         """Execute manage_chart_of_accounts on zoho_books."""
         return await self._post("/manage/chart/of/accounts", params)
-

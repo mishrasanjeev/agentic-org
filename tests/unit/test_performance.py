@@ -3,26 +3,25 @@
 These tests validate throughput, latency, memory, and scalability requirements
 from the PRD using mocked infrastructure so they run deterministically in CI.
 """
+
 import asyncio
 import math
-import sys
 import time
 import uuid
-from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from core.tool_gateway.gateway import ToolGateway
-from core.tool_gateway.rate_limiter import RateLimitResult, RateLimiter
+from core.tool_gateway.rate_limiter import RateLimiter, RateLimitResult
 from scaling.hpa_integration import HPAIntegration
 from workflows.engine import WorkflowEngine
 from workflows.state_store import WorkflowStateStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_state_store() -> WorkflowStateStore:
     """Return a WorkflowStateStore backed by an in-memory dict (no Redis)."""
@@ -30,11 +29,13 @@ def _make_state_store() -> WorkflowStateStore:
     _data: dict[str, dict] = {}
 
     async def _save(state):
-        import json, copy
+        import copy
+
         _data[state["id"]] = copy.deepcopy(state)
 
     async def _load(run_id):
         import copy
+
         s = _data.get(run_id)
         return copy.deepcopy(s) if s else None
 
@@ -54,6 +55,7 @@ def _simple_workflow_definition(name: str = "perf-wf") -> dict:
 # ---------------------------------------------------------------------------
 # NFT-PERF-001: 500 concurrent workflow starts (<2 s, no failures)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTPERF001:
     """500 concurrent workflow starts must all succeed within 2 seconds."""
@@ -87,6 +89,7 @@ class TestNFTPERF001:
 # NFT-PERF-002: Agent reasoning latency P95 < 3 s (mock 1000 calls)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTPERF002:
     """Agent reasoning latency P95 must be under 3 seconds."""
 
@@ -98,6 +101,7 @@ class TestNFTPERF002:
         distribution (mean ~800 ms, tail up to ~2.5 s).
         """
         import random
+
         random.seed(42)
 
         latencies_ms: list[float] = []
@@ -124,6 +128,7 @@ class TestNFTPERF002:
 # ---------------------------------------------------------------------------
 # NFT-PERF-003: 1000 concurrent invoices (no data loss, no duplicates)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTPERF003:
     """1000 concurrent invoices processed with no data loss or duplicates."""
@@ -168,6 +173,7 @@ class TestNFTPERF003:
 # NFT-PERF-004: Recon 100K transactions (<15 min, accuracy >= 99.7%)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTPERF004:
     """Reconciliation of 100K transactions under 15 minutes, accuracy >= 99.7%."""
 
@@ -179,6 +185,7 @@ class TestNFTPERF004:
         algorithm achieves >= 99.7% accuracy within the time budget.
         """
         import random
+
         random.seed(99)
 
         total = 100_000
@@ -214,6 +221,7 @@ class TestNFTPERF004:
 # ---------------------------------------------------------------------------
 # NFT-PERF-005: Tool Gateway overhead < 50 ms P99 (10K calls)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTPERF005:
     """Tool Gateway pipeline overhead must be < 50 ms at P99 over 10K calls."""
@@ -275,6 +283,7 @@ class TestNFTPERF005:
 # NFT-PERF-006: Horizontal scale-out (5 new pods < 90 s)
 # ---------------------------------------------------------------------------
 
+
 class TestNFTPERF006:
     """HPA must recommend scaling to 5 new pods within 90 seconds."""
 
@@ -313,6 +322,7 @@ class TestNFTPERF006:
 # NFT-PERF-007: Complex report generation < 5 s under peak
 # ---------------------------------------------------------------------------
 
+
 class TestNFTPERF007:
     """Complex report generation must complete in < 5 s under peak load."""
 
@@ -330,8 +340,18 @@ class TestNFTPERF007:
             "name": "monthly-report",
             "steps": [
                 {"id": "fetch_data", "type": "agent", "agent": "report_fetcher"},
-                {"id": "aggregate", "type": "agent", "agent": "aggregator", "depends_on": ["fetch_data"]},
-                {"id": "format", "type": "agent", "agent": "formatter", "depends_on": ["aggregate"]},
+                {
+                    "id": "aggregate",
+                    "type": "agent",
+                    "agent": "aggregator",
+                    "depends_on": ["fetch_data"],
+                },
+                {
+                    "id": "format",
+                    "type": "agent",
+                    "agent": "formatter",
+                    "depends_on": ["aggregate"],
+                },
             ],
         }
 
@@ -341,7 +361,11 @@ class TestNFTPERF007:
 
         # Now run the report workflow and time it
         with patch("workflows.engine.execute_step", new_callable=AsyncMock) as mock_step:
-            mock_step.return_value = {"output": {"data": "report"}, "status": "completed", "confidence": 0.95}
+            mock_step.return_value = {
+                "output": {"data": "report"},
+                "status": "completed",
+                "confidence": 0.95,
+            }
 
             start = time.monotonic()
             run_id = await engine.start_run(report_definition)
@@ -355,6 +379,7 @@ class TestNFTPERF007:
 # ---------------------------------------------------------------------------
 # NFT-PERF-008: Memory soak test (no leak after sustained load)
 # ---------------------------------------------------------------------------
+
 
 class TestNFTPERF008:
     """Memory must not grow unboundedly after sustained load."""
@@ -378,7 +403,7 @@ class TestNFTPERF008:
         definition = _simple_workflow_definition()
 
         # Sustained load: 2000 workflow starts
-        for batch in range(20):
+        for _batch in range(20):
             tasks = [engine.start_run(definition) for _ in range(100)]
             await asyncio.gather(*tasks)
 
@@ -397,6 +422,7 @@ class TestNFTPERF008:
 # ---------------------------------------------------------------------------
 # NFT-PERF-009: HITL queue 10K pending items — dashboard load < 500 ms
 # ---------------------------------------------------------------------------
+
 
 class TestNFTPERF009:
     """Dashboard with 10K pending HITL items must load in < 500 ms."""
@@ -449,6 +475,4 @@ class TestNFTPERF009:
         assert dashboard["total_pending"] == 10_000
         assert dashboard["high_priority"] == 1_000
         assert len(dashboard["page_items"]) == 50
-        assert elapsed_ms < 500.0, (
-            f"Dashboard load took {elapsed_ms:.1f} ms, exceeds 500 ms limit"
-        )
+        assert elapsed_ms < 500.0, f"Dashboard load took {elapsed_ms:.1f} ms, exceeds 500 ms limit"

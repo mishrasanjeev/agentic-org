@@ -1,6 +1,7 @@
 """Security tests SEC-AUTH-001 to SEC-AUTH-008."""
-import pytest
+
 from auth.scopes import check_scope
+
 
 class TestScopeEnforcementSecurity:
     def test_sec_auth_002_cross_domain_denied(self):

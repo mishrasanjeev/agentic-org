@@ -20,6 +20,7 @@ from core.config import settings
 
 class Base(DeclarativeBase, MappedAsDataclass):
     """Declarative base for all ORM models."""
+
     pass
 
 
@@ -32,9 +33,7 @@ engine: AsyncEngine = create_async_engine(
     pool_recycle=300,
 )
 
-async_session_factory = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
+async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @asynccontextmanager

@@ -9,6 +9,7 @@ Quality gates
 5. tool_error_rate        -- Shadow tool error rate < 2 %
 6. latency_comparison     -- Shadow P95 latency <= reference P95 x 1.3
 """
+
 from __future__ import annotations
 
 import math
@@ -29,6 +30,7 @@ logger = structlog.get_logger()
 @dataclass
 class GateResult:
     """Result of a single quality gate evaluation."""
+
     gate: str
     passed: bool
     score: float
@@ -47,8 +49,8 @@ class ShadowComparator:
     # Default thresholds (overridable at construction time)
     DEFAULT_ACCURACY_THRESHOLD: float = 0.90
     DEFAULT_CONFIDENCE_R_THRESHOLD: float = 0.70
-    DEFAULT_HITL_RATE_TOLERANCE_PP: float = 5.0    # percentage points
-    DEFAULT_HALLUCINATION_TOLERANCE: float = 0.0    # zero tolerance
+    DEFAULT_HITL_RATE_TOLERANCE_PP: float = 5.0  # percentage points
+    DEFAULT_HALLUCINATION_TOLERANCE: float = 0.0  # zero tolerance
     DEFAULT_TOOL_ERROR_RATE_THRESHOLD: float = 0.02  # 2 %
     DEFAULT_LATENCY_MULTIPLIER: float = 1.3
 
@@ -66,10 +68,13 @@ class ShadowComparator:
         self.confidence_r_threshold = confidence_r_threshold or self.DEFAULT_CONFIDENCE_R_THRESHOLD
         self.hitl_rate_tolerance_pp = hitl_rate_tolerance_pp or self.DEFAULT_HITL_RATE_TOLERANCE_PP
         self.hallucination_tolerance = (
-            hallucination_tolerance if hallucination_tolerance is not None
+            hallucination_tolerance
+            if hallucination_tolerance is not None
             else self.DEFAULT_HALLUCINATION_TOLERANCE
         )
-        self.tool_error_rate_threshold = tool_error_rate_threshold or self.DEFAULT_TOOL_ERROR_RATE_THRESHOLD
+        self.tool_error_rate_threshold = (
+            tool_error_rate_threshold or self.DEFAULT_TOOL_ERROR_RATE_THRESHOLD
+        )
         self.latency_multiplier = latency_multiplier or self.DEFAULT_LATENCY_MULTIPLIER
 
     # ------------------------------------------------------------------
@@ -191,7 +196,7 @@ class ShadowComparator:
         mean_x = sum(x) / n
         mean_y = sum(y) / n
 
-        cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+        cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y, strict=True))
         std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x))
         std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y))
 
@@ -428,9 +433,7 @@ class ShadowComparator:
         )
 
         # 3. HITL rate
-        results.append(
-            await self.hitl_rate_comparison(shadow_hitl_rate, reference_hitl_rate)
-        )
+        results.append(await self.hitl_rate_comparison(shadow_hitl_rate, reference_hitl_rate))
 
         # 4. Hallucination detection
         results.append(
@@ -441,9 +444,7 @@ class ShadowComparator:
         )
 
         # 5. Tool error rate
-        results.append(
-            await self.tool_error_rate(shadow_tool_total, shadow_tool_errors)
-        )
+        results.append(await self.tool_error_rate(shadow_tool_total, shadow_tool_errors))
 
         # 6. Latency comparison
         results.append(
@@ -461,7 +462,7 @@ class ShadowComparator:
             f"Shadow quality check: {gates_passed}/6 gates passed."
             if all_passed
             else f"Shadow quality check FAILED: {gates_passed}/6 gates passed. "
-                 f"Failed: {', '.join(failed_names)}"
+            f"Failed: {', '.join(failed_names)}"
         )
 
         logger.info(

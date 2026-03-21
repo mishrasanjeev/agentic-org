@@ -1,7 +1,9 @@
 """Slack connector — comms."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class SlackConnector(BaseConnector):
     name = "slack"
@@ -26,28 +28,22 @@ class SlackConnector(BaseConnector):
         """Execute send_message on slack."""
         return await self._post("/send/message", params)
 
-
     async def create_channel(self, **params):
         """Execute create_channel on slack."""
         return await self._post("/create/channel", params)
-
 
     async def post_formatted_alert(self, **params):
         """Execute post_formatted_alert on slack."""
         return await self._post("/post/formatted/alert", params)
 
-
     async def upload_file(self, **params):
         """Execute upload_file on slack."""
         return await self._post("/upload/file", params)
-
 
     async def set_channel_reminder(self, **params):
         """Execute set_channel_reminder on slack."""
         return await self._post("/set/channel/reminder", params)
 
-
     async def search_message_history(self, **params):
         """Execute search_message_history on slack."""
         return await self._post("/search/message/history", params)
-

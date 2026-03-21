@@ -1,17 +1,20 @@
 """HR functional tests — FT-HR-001 through FT-HR-012."""
+
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch, MagicMock
+
+from core.tool_gateway.pii_masker import mask_pii
+from workflows.condition_evaluator import evaluate_condition
 from workflows.engine import WorkflowEngine
 from workflows.state_store import WorkflowStateStore
 from workflows.step_types import execute_step
-from workflows.condition_evaluator import evaluate_condition
-from core.tool_gateway.pii_masker import mask_pii
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_state_store():
@@ -35,7 +38,7 @@ def base_state():
         "steps_total": 0,
         "steps_completed": 0,
         "step_results": {},
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -49,6 +52,7 @@ def _make_definition(steps, timeout_hours=None):
 # ===========================================================================
 # Test class
 # ===========================================================================
+
 
 class TestHRFunctional:
     """FT-HR-001 through FT-HR-012: HR domain functional tests."""
@@ -132,18 +136,27 @@ class TestHRFunctional:
     # FT-HR-003: Interview scheduling (5 panel, common slot)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_003_interview_scheduling(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_003_interview_scheduling(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-003: Schedule interview across 5 panelists — find common slot."""
         panelists = ["panel_1", "panel_2", "panel_3", "panel_4", "panel_5"]
 
         steps = [
-            {"id": "fetch_calendars", "type": "parallel",
-             "steps": panelists, "wait_for": "all"},
-            {"id": "find_common_slot", "type": "agent",
-             "agent": "talent_acquisition", "action": "find_common_slot",
-             "depends_on": ["fetch_calendars"]},
-            {"id": "send_invites", "type": "notify", "connector": "email",
-             "depends_on": ["find_common_slot"]},
+            {"id": "fetch_calendars", "type": "parallel", "steps": panelists, "wait_for": "all"},
+            {
+                "id": "find_common_slot",
+                "type": "agent",
+                "agent": "talent_acquisition",
+                "action": "find_common_slot",
+                "depends_on": ["fetch_calendars"],
+            },
+            {
+                "id": "send_invites",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["find_common_slot"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -168,19 +181,37 @@ class TestHRFunctional:
     # FT-HR-004: Rescheduling automation
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_004_rescheduling_automation(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_004_rescheduling_automation(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-004: Auto-reschedule when panelist cancels — new slot found."""
         steps = [
-            {"id": "detect_cancellation", "type": "agent",
-             "agent": "talent_acquisition", "action": "detect_cancellation"},
-            {"id": "find_new_slot", "type": "agent",
-             "agent": "talent_acquisition", "action": "find_alternative_slot",
-             "depends_on": ["detect_cancellation"]},
-            {"id": "update_calendar", "type": "agent",
-             "agent": "talent_acquisition", "action": "update_calendar_events",
-             "depends_on": ["find_new_slot"]},
-            {"id": "notify_all", "type": "notify", "connector": "email",
-             "depends_on": ["update_calendar"]},
+            {
+                "id": "detect_cancellation",
+                "type": "agent",
+                "agent": "talent_acquisition",
+                "action": "detect_cancellation",
+            },
+            {
+                "id": "find_new_slot",
+                "type": "agent",
+                "agent": "talent_acquisition",
+                "action": "find_alternative_slot",
+                "depends_on": ["detect_cancellation"],
+            },
+            {
+                "id": "update_calendar",
+                "type": "agent",
+                "agent": "talent_acquisition",
+                "action": "update_calendar_events",
+                "depends_on": ["find_new_slot"],
+            },
+            {
+                "id": "notify_all",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["update_calendar"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -204,16 +235,30 @@ class TestHRFunctional:
     # FT-HR-005: Offer letter generation (DocuSign to HR Head)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_005_offer_letter_generation(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_005_offer_letter_generation(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-005: Offer letter generated and routed via DocuSign to HR Head."""
         steps = [
-            {"id": "generate_offer", "type": "agent",
-             "agent": "talent_acquisition", "action": "generate_offer_letter"},
-            {"id": "send_docusign", "type": "agent",
-             "agent": "talent_acquisition", "action": "send_to_docusign",
-             "depends_on": ["generate_offer"]},
-            {"id": "notify_hr_head", "type": "notify", "connector": "email",
-             "depends_on": ["send_docusign"]},
+            {
+                "id": "generate_offer",
+                "type": "agent",
+                "agent": "talent_acquisition",
+                "action": "generate_offer_letter",
+            },
+            {
+                "id": "send_docusign",
+                "type": "agent",
+                "agent": "talent_acquisition",
+                "action": "send_to_docusign",
+                "depends_on": ["generate_offer"],
+            },
+            {
+                "id": "notify_hr_head",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["send_docusign"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -241,16 +286,32 @@ class TestHRFunctional:
     async def test_ft_hr_006_day0_provisioning(self, workflow_engine, mock_state_store, base_state):
         """FT-HR-006: Day-0 onboarding provisions all systems in parallel within timeout."""
         provisioning_systems = [
-            "active_directory", "google_workspace", "slack", "jira", "github",
+            "active_directory",
+            "google_workspace",
+            "slack",
+            "jira",
+            "github",
         ]
         steps = [
-            {"id": "provision_all", "type": "parallel",
-             "steps": provisioning_systems, "wait_for": "all"},
-            {"id": "verify_provision", "type": "agent",
-             "agent": "onboarding_agent", "action": "verify_all_provisioned",
-             "depends_on": ["provision_all"]},
-            {"id": "welcome_notification", "type": "notify", "connector": "slack",
-             "depends_on": ["verify_provision"]},
+            {
+                "id": "provision_all",
+                "type": "parallel",
+                "steps": provisioning_systems,
+                "wait_for": "all",
+            },
+            {
+                "id": "verify_provision",
+                "type": "agent",
+                "agent": "onboarding_agent",
+                "action": "verify_all_provisioned",
+                "depends_on": ["provision_all"],
+            },
+            {
+                "id": "welcome_notification",
+                "type": "notify",
+                "connector": "slack",
+                "depends_on": ["verify_provision"],
+            },
         ]
         definition = _make_definition(steps, timeout_hours=0.167)  # 10 min
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -280,11 +341,17 @@ class TestHRFunctional:
     # FT-HR-007: Provisioning idempotency (trigger twice, no duplicates)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_007_provisioning_idempotency(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_007_provisioning_idempotency(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-007: Provisioning triggered twice with same idempotency key yields no duplicate accounts."""
         steps = [
-            {"id": "provision_ad", "type": "agent",
-             "agent": "onboarding_agent", "action": "provision_active_directory"},
+            {
+                "id": "provision_ad",
+                "type": "agent",
+                "agent": "onboarding_agent",
+                "action": "provision_active_directory",
+            },
         ]
         definition = _make_definition(steps)
         parsed = workflow_engine.parser.parse(definition)
@@ -312,7 +379,10 @@ class TestHRFunctional:
         # Both completed — but the key principle is the idempotency store prevents
         # the connector from creating a duplicate account.  We verify the workflow
         # framework reaches the same "completed" terminal state for both runs.
-        assert result_1["step_results"]["provision_ad"]["status"] == result_2["step_results"]["provision_ad"]["status"]
+        assert (
+            result_1["step_results"]["provision_ad"]["status"]
+            == result_2["step_results"]["provision_ad"]["status"]
+        )
 
     # -----------------------------------------------------------------------
     # FT-HR-008: Payroll computation accuracy (all deductions within ±₹1)
@@ -327,9 +397,9 @@ class TestHRFunctional:
         gross = basic + hra + special_allowance  # 90,000
 
         # Deductions
-        pf_employee = basic * 0.12       # 6,000
-        pt = 200                           # Professional tax (Karnataka)
-        tds_monthly = 5000                 # Estimated TDS
+        pf_employee = basic * 0.12  # 6,000
+        pt = 200  # Professional tax (Karnataka)
+        tds_monthly = 5000  # Estimated TDS
         total_deductions = pf_employee + pt + tds_monthly
         net_payable = gross - total_deductions
 
@@ -406,20 +476,38 @@ class TestHRFunctional:
     # FT-HR-010: EPFO ECR generation (correct format, UAN validated)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_010_epfo_ecr_generation(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_010_epfo_ecr_generation(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-010: EPFO ECR file generated in correct format with validated UANs."""
         steps = [
-            {"id": "validate_uans", "type": "agent",
-             "agent": "payroll_engine", "action": "validate_uans"},
-            {"id": "check_uan_validity", "type": "condition",
-             "condition": "invalid_uan_count == 0",
-             "true_path": "generate_ecr", "false_path": "flag_invalid_uans",
-             "depends_on": ["validate_uans"]},
-            {"id": "generate_ecr", "type": "agent",
-             "agent": "payroll_engine", "action": "generate_ecr_file",
-             "depends_on": ["check_uan_validity"]},
-            {"id": "flag_invalid_uans", "type": "notify", "connector": "email",
-             "depends_on": ["check_uan_validity"]},
+            {
+                "id": "validate_uans",
+                "type": "agent",
+                "agent": "payroll_engine",
+                "action": "validate_uans",
+            },
+            {
+                "id": "check_uan_validity",
+                "type": "condition",
+                "condition": "invalid_uan_count == 0",
+                "true_path": "generate_ecr",
+                "false_path": "flag_invalid_uans",
+                "depends_on": ["validate_uans"],
+            },
+            {
+                "id": "generate_ecr",
+                "type": "agent",
+                "agent": "payroll_engine",
+                "action": "generate_ecr_file",
+                "depends_on": ["check_uan_validity"],
+            },
+            {
+                "id": "flag_invalid_uans",
+                "type": "notify",
+                "connector": "email",
+                "depends_on": ["check_uan_validity"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -444,20 +532,39 @@ class TestHRFunctional:
     # FT-HR-011: Access revocation on offboard (all systems within 30 min)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_011_access_revocation_offboard(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_011_access_revocation_offboard(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-011: Offboarding revokes all system access in parallel within 30 min."""
         revocation_systems = [
-            "active_directory", "google_workspace", "slack", "jira",
-            "github", "vpn", "badge_access",
+            "active_directory",
+            "google_workspace",
+            "slack",
+            "jira",
+            "github",
+            "vpn",
+            "badge_access",
         ]
         steps = [
-            {"id": "disable_accounts", "type": "parallel",
-             "steps": revocation_systems, "wait_for": "all"},
-            {"id": "verify_revocation", "type": "agent",
-             "agent": "offboarding_agent", "action": "verify_all_revoked",
-             "depends_on": ["disable_accounts"]},
-            {"id": "notify_it_security", "type": "notify", "connector": "slack",
-             "depends_on": ["verify_revocation"]},
+            {
+                "id": "disable_accounts",
+                "type": "parallel",
+                "steps": revocation_systems,
+                "wait_for": "all",
+            },
+            {
+                "id": "verify_revocation",
+                "type": "agent",
+                "agent": "offboarding_agent",
+                "action": "verify_all_revoked",
+                "depends_on": ["disable_accounts"],
+            },
+            {
+                "id": "notify_it_security",
+                "type": "notify",
+                "connector": "slack",
+                "depends_on": ["verify_revocation"],
+            },
         ]
         definition = _make_definition(steps, timeout_hours=0.5)  # 30 min
         base_state["definition"] = workflow_engine.parser.parse(definition)
@@ -489,20 +596,38 @@ class TestHRFunctional:
     # FT-HR-012: Attrition risk detection (3 signals, HRBP notified)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_012_attrition_risk_detection(self, workflow_engine, mock_state_store, base_state):
+    async def test_ft_hr_012_attrition_risk_detection(
+        self, workflow_engine, mock_state_store, base_state
+    ):
         """FT-HR-012: Attrition risk detected from 3+ signals — HRBP notified."""
         steps = [
-            {"id": "analyze_signals", "type": "agent",
-             "agent": "performance_coach", "action": "analyze_attrition_signals"},
-            {"id": "check_risk_threshold", "type": "condition",
-             "condition": "risk_signal_count >= 3",
-             "true_path": "notify_hrbp", "false_path": "log_and_close",
-             "depends_on": ["analyze_signals"]},
-            {"id": "notify_hrbp", "type": "notify", "connector": "slack",
-             "depends_on": ["check_risk_threshold"]},
-            {"id": "log_and_close", "type": "agent",
-             "agent": "performance_coach", "action": "log_low_risk",
-             "depends_on": ["check_risk_threshold"]},
+            {
+                "id": "analyze_signals",
+                "type": "agent",
+                "agent": "performance_coach",
+                "action": "analyze_attrition_signals",
+            },
+            {
+                "id": "check_risk_threshold",
+                "type": "condition",
+                "condition": "risk_signal_count >= 3",
+                "true_path": "notify_hrbp",
+                "false_path": "log_and_close",
+                "depends_on": ["analyze_signals"],
+            },
+            {
+                "id": "notify_hrbp",
+                "type": "notify",
+                "connector": "slack",
+                "depends_on": ["check_risk_threshold"],
+            },
+            {
+                "id": "log_and_close",
+                "type": "agent",
+                "agent": "performance_coach",
+                "action": "log_low_risk",
+                "depends_on": ["check_risk_threshold"],
+            },
         ]
         definition = _make_definition(steps)
         base_state["definition"] = workflow_engine.parser.parse(definition)

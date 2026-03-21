@@ -98,6 +98,8 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
+          backend: ui
+          backendPort: 80
   tls:
     - secretName: agenticorg-staging-tls
       hosts:

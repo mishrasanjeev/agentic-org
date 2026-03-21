@@ -1,7 +1,9 @@
 """Mixpanel connector — marketing."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class MixpanelConnector(BaseConnector):
     name = "mixpanel"
@@ -25,23 +27,18 @@ class MixpanelConnector(BaseConnector):
         """Execute get_funnel_conversion_data on mixpanel."""
         return await self._post("/get/funnel/conversion/data", params)
 
-
     async def get_retention_cohort(self, **params):
         """Execute get_retention_cohort on mixpanel."""
         return await self._post("/get/retention/cohort", params)
-
 
     async def query_event_data(self, **params):
         """Execute query_event_data on mixpanel."""
         return await self._post("/query/event/data", params)
 
-
     async def create_user_cohort(self, **params):
         """Execute create_user_cohort on mixpanel."""
         return await self._post("/create/user/cohort", params)
 
-
     async def export_raw_event_data(self, **params):
         """Execute export_raw_event_data on mixpanel."""
         return await self._post("/export/raw/event/data", params)
-

@@ -1,8 +1,11 @@
 """Zendesk connector — ops."""
+
 from __future__ import annotations
+
 import base64
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class ZendeskConnector(BaseConnector):
     name = "zendesk"
@@ -31,38 +34,30 @@ class ZendeskConnector(BaseConnector):
         """Execute create_ticket on zendesk."""
         return await self._post("/create/ticket", params)
 
-
     async def update_ticket(self, **params):
         """Execute update_ticket on zendesk."""
         return await self._post("/update/ticket", params)
-
 
     async def apply_macro(self, **params):
         """Execute apply_macro on zendesk."""
         return await self._post("/apply/macro", params)
 
-
     async def get_csat_score(self, **params):
         """Execute get_csat_score on zendesk."""
         return await self._post("/get/csat/score", params)
-
 
     async def escalate_to_group(self, **params):
         """Execute escalate_to_group on zendesk."""
         return await self._post("/escalate/to/group", params)
 
-
     async def merge_tickets(self, **params):
         """Execute merge_tickets on zendesk."""
         return await self._post("/merge/tickets", params)
-
 
     async def get_sla_breach_status(self, **params):
         """Execute get_sla_breach_status on zendesk."""
         return await self._post("/get/sla/breach/status", params)
 
-
     async def get_ticket_history(self, **params):
         """Execute get_ticket_history on zendesk."""
         return await self._post("/get/ticket/history", params)
-

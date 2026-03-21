@@ -1,4 +1,5 @@
 """Audit log writer — append-only with HMAC-SHA256 signature."""
+
 from __future__ import annotations
 
 import hashlib
@@ -69,11 +70,15 @@ class AuditLogger:
         if self._db:
             try:
                 from core.models.audit import AuditLog
+
                 async with self._db() as session:
-                    log_entry = AuditLog(**{
-                        k: v for k, v in entry.items()
-                        if k not in ("id",)  # Let DB generate ID
-                    })
+                    log_entry = AuditLog(
+                        **{
+                            k: v
+                            for k, v in entry.items()
+                            if k not in ("id",)  # Let DB generate ID
+                        }
+                    )
                     session.add(log_entry)
                     await session.commit()
             except Exception as e:

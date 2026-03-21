@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Generate batch 4: FastAPI, Observability, Audit, Scaling."""
-import os, textwrap
+
+import os
+import textwrap
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def w(p, c):
     full = os.path.join(BASE, p)
     os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -9,10 +14,13 @@ def w(p, c):
         f.write(textwrap.dedent(c).lstrip("\n"))
     print(f"  {p}")
 
+
 # ── FastAPI ──
 w("api/__init__.py", '"""AgenticOrg REST API."""\n')
 
-w("api/main.py", '''
+w(
+    "api/main.py",
+    '''
 """FastAPI application — AgenticOrg."""
 from __future__ import annotations
 from contextlib import asynccontextmanager
@@ -52,9 +60,12 @@ app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
-''')
+''',
+)
 
-w("api/deps.py", '''
+w(
+    "api/deps.py",
+    '''
 """FastAPI dependencies."""
 from __future__ import annotations
 from typing import AsyncGenerator
@@ -85,9 +96,12 @@ def require_scope(scope: str):
         if scope not in scopes and not any(s.startswith("agenticorg:admin") for s in scopes):
             raise HTTPException(403, f"Missing scope: {scope}")
     return Depends(checker)
-''')
+''',
+)
 
-w("api/error_handlers.py", '''
+w(
+    "api/error_handlers.py",
+    '''
 """Global error handlers mapping to E-series error envelope."""
 from __future__ import annotations
 from datetime import datetime, timezone
@@ -115,11 +129,14 @@ def register_error_handlers(app: FastAPI):
             "code": "E1001", "name": "INTERNAL_ERROR", "message": "Internal server error",
             "severity": "error", "retryable": True, "timestamp": datetime.now(timezone.utc).isoformat(),
         }})
-''')
+''',
+)
 
 w("api/v1/__init__.py", '"""API v1 endpoints."""\n')
 
-w("api/v1/health.py", '''
+w(
+    "api/v1/health.py",
+    '''
 """Health check endpoint."""
 from fastapi import APIRouter
 from core.config import settings
@@ -129,9 +146,12 @@ router = APIRouter()
 @router.get("/health")
 async def health_check():
     return {"status": "healthy", "version": "2.0.0", "env": settings.env}
-''')
+''',
+)
 
-w("api/v1/agents.py", '''
+w(
+    "api/v1/agents.py",
+    '''
 """Agent CRUD + lifecycle endpoints."""
 from __future__ import annotations
 from uuid import UUID
@@ -180,9 +200,12 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
 @router.post("/agents/{agent_id}/clone")
 async def clone_agent(agent_id: UUID, body: AgentCloneRequest, tenant_id: str = Depends(get_current_tenant)):
     return {"clone_id": "clone-id", "status": "shadow", "parent_id": str(agent_id)}
-''')
+''',
+)
 
-w("api/v1/agent_teams.py", '''
+w(
+    "api/v1/agent_teams.py",
+    '''
 """Agent team endpoints."""
 from fastapi import APIRouter, Depends
 from api.deps import get_current_tenant
@@ -192,9 +215,12 @@ router = APIRouter()
 @router.post("/agent-teams", status_code=201)
 async def create_team(body: dict, tenant_id: str = Depends(get_current_tenant)):
     return {"team_id": "team-id", "status": "active"}
-''')
+''',
+)
 
-w("api/v1/workflows.py", '''
+w(
+    "api/v1/workflows.py",
+    '''
 """Workflow endpoints."""
 from uuid import UUID
 from fastapi import APIRouter, Depends
@@ -214,9 +240,12 @@ async def create_workflow(body: WorkflowCreate, tenant_id: str = Depends(get_cur
 @router.post("/workflows/{wf_id}/run")
 async def run_workflow(wf_id: UUID, body: WorkflowRunTrigger = WorkflowRunTrigger(), tenant_id: str = Depends(get_current_tenant)):
     return {"run_id": "wfr-id", "status": "running"}
-''')
+''',
+)
 
-w("api/v1/approvals.py", '''
+w(
+    "api/v1/approvals.py",
+    '''
 """HITL approval endpoints."""
 from uuid import UUID
 from fastapi import APIRouter, Depends
@@ -232,9 +261,12 @@ async def list_approvals(domain: str | None = None, priority: str | None = None,
 @router.post("/approvals/{hitl_id}/decide")
 async def decide(hitl_id: UUID, body: HITLDecision, tenant_id: str = Depends(get_current_tenant)):
     return {"hitl_id": str(hitl_id), "decision": body.decision, "status": "decided"}
-''')
+''',
+)
 
-w("api/v1/audit.py", '''
+w(
+    "api/v1/audit.py",
+    '''
 """Audit log endpoint."""
 from fastapi import APIRouter, Depends, Query
 from core.schemas.api import PaginatedResponse
@@ -245,9 +277,12 @@ router = APIRouter()
 @router.get("/audit", response_model=PaginatedResponse)
 async def query_audit(event_type: str | None = None, agent_id: str | None = None, date_from: str | None = None, date_to: str | None = None, page: int = 1, per_page: int = 50, tenant_id: str = Depends(get_current_tenant)):
     return PaginatedResponse(items=[], total=0, page=page, per_page=per_page)
-''')
+''',
+)
 
-w("api/v1/schemas.py", '''
+w(
+    "api/v1/schemas.py",
+    '''
 """Schema registry endpoints."""
 from fastapi import APIRouter, Depends
 from core.schemas.api import SchemaCreate, PaginatedResponse
@@ -262,9 +297,12 @@ async def list_schemas(tenant_id: str = Depends(get_current_tenant)):
 @router.put("/schemas/{name}")
 async def upsert_schema(name: str, body: SchemaCreate, tenant_id: str = Depends(get_current_tenant)):
     return {"name": name, "version": body.version, "updated": True}
-''')
+''',
+)
 
-w("api/v1/connectors.py", '''
+w(
+    "api/v1/connectors.py",
+    '''
 """Connector endpoints."""
 from uuid import UUID
 from fastapi import APIRouter, Depends
@@ -280,9 +318,12 @@ async def register_connector(body: ConnectorCreate, tenant_id: str = Depends(get
 @router.get("/connectors/{conn_id}/health")
 async def connector_health(conn_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     return {"connector_id": str(conn_id), "status": "healthy"}
-''')
+''',
+)
 
-w("api/v1/compliance.py", '''
+w(
+    "api/v1/compliance.py",
+    '''
 """DSAR and compliance endpoints."""
 from fastapi import APIRouter, Depends
 from core.schemas.api import DSARRequest
@@ -301,9 +342,12 @@ async def dsar_erase(body: DSARRequest, tenant_id: str = Depends(get_current_ten
 @router.get("/compliance/evidence-package")
 async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
     return {"package_id": "pkg-id", "generated_at": "2026-03-21T00:00:00Z", "sections": ["access_controls", "audit_logs", "deployment_records", "incident_history"]}
-''')
+''',
+)
 
-w("api/v1/config.py", '''
+w(
+    "api/v1/config.py",
+    '''
 """Fleet configuration endpoints."""
 from fastapi import APIRouter, Depends
 from core.schemas.api import FleetLimits
@@ -318,11 +362,14 @@ async def get_fleet_limits(tenant_id: str = Depends(get_current_tenant)):
 @router.put("/config/fleet_limits")
 async def update_fleet_limits(body: FleetLimits, tenant_id: str = Depends(get_current_tenant)):
     return body.model_dump()
-''')
+''',
+)
 
 w("api/websocket/__init__.py", '"""WebSocket feeds."""\n')
 
-w("api/websocket/feed.py", '''
+w(
+    "api/websocket/feed.py",
+    '''
 """Real-time agent activity feed via WebSocket."""
 from __future__ import annotations
 import asyncio
@@ -341,12 +388,15 @@ async def live_feed(websocket: WebSocket, tenant_id: str):
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         pass
-''')
+''',
+)
 
 # ── Observability ──
 w("observability/__init__.py", '"""Observability — tracing, metrics, alerting."""\n')
 
-w("observability/tracing.py", '''
+w(
+    "observability/tracing.py",
+    '''
 """OpenTelemetry tracing setup with all 7 span types."""
 from __future__ import annotations
 from opentelemetry import trace
@@ -377,9 +427,12 @@ def start_agent_span(agent_id, agent_type, domain, model):
 
 def start_tool_span(tool_name, connector_id, category):
     return get_tracer().start_span("agenticorg.tool.call", attributes={"tool.name": tool_name, "connector.id": connector_id, "connector.category": category})
-''')
+''',
+)
 
-w("observability/metrics.py", '''
+w(
+    "observability/metrics.py",
+    '''
 """Prometheus metrics — all 13 from PRD."""
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 
@@ -396,9 +449,12 @@ circuit_breaker_state = Gauge("agenticorg_circuit_breaker_state", "Circuit break
 shadow_accuracy = Gauge("agenticorg_shadow_accuracy", "Shadow accuracy", ["tenant", "shadow_agent_id", "reference_agent_id"])
 agent_replicas = Gauge("agenticorg_agent_replicas", "Agent replicas", ["tenant", "agent_type"])
 agent_budget_pct = Gauge("agenticorg_agent_budget_pct", "Agent budget %", ["tenant", "agent_id"])
-''')
+''',
+)
 
-w("observability/langsmith.py", '''
+w(
+    "observability/langsmith.py",
+    '''
 """LangSmith integration for agent trace logging."""
 from __future__ import annotations
 from typing import Any
@@ -409,9 +465,12 @@ async def log_trace(agent_id: str, run_data: dict[str, Any]) -> None:
         return
     # In production, use langsmith SDK to log traces
     pass
-''')
+''',
+)
 
-w("observability/alerting.py", '''
+w(
+    "observability/alerting.py",
+    '''
 """Alert manager — check thresholds and notify."""
 from __future__ import annotations
 import structlog
@@ -423,19 +482,25 @@ class AlertManager:
 
     async def send_alert(self, channel: str, message: str):
         logger.warning("alert", channel=channel, message=message)
-''')
+''',
+)
 
 # ── Audit ──
 w("audit/__init__.py", '"""Audit — append-only, tamper-evident."""\n')
 
-w("audit/writer.py", '''
+w(
+    "audit/writer.py",
+    '''
 """Append-only audit log writer."""
 from core.tool_gateway.audit_logger import AuditLogger
 # Re-export the main audit logger
 __all__ = ["AuditLogger"]
-''')
+''',
+)
 
-w("audit/signer.py", '''
+w(
+    "audit/signer.py",
+    '''
 """HMAC-SHA256 signer for audit log tamper detection."""
 from __future__ import annotations
 import hashlib, hmac, json
@@ -448,9 +513,12 @@ def sign(data: dict[str, Any]) -> str:
 
 def verify(data: dict[str, Any], signature: str) -> bool:
     return hmac.compare_digest(sign(data), signature)
-''')
+''',
+)
 
-w("audit/dsar.py", '''
+w(
+    "audit/dsar.py",
+    '''
 """DSAR tools — GDPR/DPDP data subject requests."""
 from __future__ import annotations
 from typing import Any
@@ -469,9 +537,12 @@ class DSARHandler:
     async def export_request(self, subject_email: str) -> dict[str, Any]:
         logger.info("dsar_export", email=subject_email)
         return {"type": "export", "subject": subject_email, "format": "json", "status": "processing"}
-''')
+''',
+)
 
-w("audit/evidence_package.py", '''
+w(
+    "audit/evidence_package.py",
+    '''
 """SOC2/ISO27001 evidence package generator."""
 from __future__ import annotations
 from datetime import datetime, timezone
@@ -492,12 +563,15 @@ class EvidencePackageGenerator:
                 "load_test_results": {"status": "collected", "items": 0},
             },
         }
-''')
+''',
+)
 
 # ── Scaling ──
 w("scaling/__init__.py", '"""Agent scaling — factory, lifecycle, shadow, HPA, cost."""\n')
 
-w("scaling/agent_factory.py", '''
+w(
+    "scaling/agent_factory.py",
+    '''
 """Agent Factory — create, clone, manage agents."""
 from __future__ import annotations
 import uuid
@@ -523,9 +597,12 @@ class AgentFactory:
 
     async def delete_agent(self, agent_id: str) -> dict[str, Any]:
         return {"agent_id": agent_id, "status": "deprecated", "retention_days": 30}
-''')
+''',
+)
 
-w("scaling/lifecycle.py", '''
+w(
+    "scaling/lifecycle.py",
+    '''
 """Agent lifecycle state machine."""
 from __future__ import annotations
 from typing import Optional
@@ -560,9 +637,12 @@ class LifecycleManager:
         if accuracy >= accuracy_floor:
             return "review_ready"
         return "shadow_failing"
-''')
+''',
+)
 
-w("scaling/shadow_comparator.py", '''
+w(
+    "scaling/shadow_comparator.py",
+    '''
 """Shadow mode comparator."""
 from __future__ import annotations
 from typing import Any
@@ -581,9 +661,12 @@ class ShadowComparator:
             return 0.0
         matches = sum(1 for k in common_keys if a[k] == b[k])
         return matches / max(len(a), len(b))
-''')
+''',
+)
 
-w("scaling/hpa_integration.py", '''
+w(
+    "scaling/hpa_integration.py",
+    '''
 """HPA integration for auto-scaling."""
 from __future__ import annotations
 import structlog
@@ -599,9 +682,12 @@ class HPAIntegration:
             logger.info("scale_up", agent_type=agent_type, from_r=current, to_r=new_count)
             return {"action": "scale_up", "replicas": new_count}
         return {"action": "no_change", "replicas": current}
-''')
+''',
+)
 
-w("scaling/cost_ledger.py", '''
+w(
+    "scaling/cost_ledger.py",
+    '''
 """Cost ledger — track per-agent costs and enforce budgets."""
 from __future__ import annotations
 from decimal import Decimal
@@ -617,7 +703,8 @@ class CostLedger:
 
     async def should_pause(self, agent_id: str, monthly_cap: float, current_cost: float) -> bool:
         return current_cost >= monthly_cap
-''')
+''',
+)
 
 print("[OK] Batch 4 complete")
 

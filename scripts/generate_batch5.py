@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Generate batch 5: Frontend, Tests, CI/CD, Docker, Helm, Docs."""
-import os, textwrap, json
+
+import json
+import os
+import textwrap
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def w(p, c):
     full = os.path.join(BASE, p)
     os.makedirs(os.path.dirname(full), exist_ok=True)
@@ -9,40 +15,89 @@ def w(p, c):
         f.write(textwrap.dedent(c).lstrip("\n"))
     print(f"  {p}")
 
+
 # ════════════════ FRONTEND ════════════════
-w("ui/package.json", json.dumps({
-    "name": "agenticorg-ui", "version": "2.0.0", "private": True, "type": "module",
-    "scripts": {"dev": "vite", "build": "tsc && vite build", "preview": "vite preview", "lint": "eslint . --ext ts,tsx"},
-    "dependencies": {
-        "react": "^18.3.0", "react-dom": "^18.3.0", "react-router-dom": "^6.28.0",
-        "@tanstack/react-query": "^5.62.0", "axios": "^1.7.0", "clsx": "^2.1.0",
-        "tailwind-merge": "^2.6.0", "lucide-react": "^0.460.0", "recharts": "^2.14.0",
-        "date-fns": "^4.1.0", "zod": "^3.24.0", "reactflow": "^11.11.0",
-        "@monaco-editor/react": "^4.6.0",
-        "@radix-ui/react-dialog": "^1.1.0", "@radix-ui/react-dropdown-menu": "^2.1.0",
-        "@radix-ui/react-select": "^2.1.0", "@radix-ui/react-tooltip": "^1.1.0",
-        "@radix-ui/react-switch": "^1.1.0", "@radix-ui/react-tabs": "^1.1.0"
-    },
-    "devDependencies": {
-        "typescript": "^5.6.0", "vite": "^6.0.0", "@vitejs/plugin-react": "^4.3.0",
-        "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0",
-        "tailwindcss": "^3.4.0", "postcss": "^8.4.0", "autoprefixer": "^10.4.0",
-        "eslint": "^9.0.0"
-    }
-}, indent=2))
+w(
+    "ui/package.json",
+    json.dumps(
+        {
+            "name": "agenticorg-ui",
+            "version": "2.0.0",
+            "private": True,
+            "type": "module",
+            "scripts": {
+                "dev": "vite",
+                "build": "tsc && vite build",
+                "preview": "vite preview",
+                "lint": "eslint . --ext ts,tsx",
+            },
+            "dependencies": {
+                "react": "^18.3.0",
+                "react-dom": "^18.3.0",
+                "react-router-dom": "^6.28.0",
+                "@tanstack/react-query": "^5.62.0",
+                "axios": "^1.7.0",
+                "clsx": "^2.1.0",
+                "tailwind-merge": "^2.6.0",
+                "lucide-react": "^0.460.0",
+                "recharts": "^2.14.0",
+                "date-fns": "^4.1.0",
+                "zod": "^3.24.0",
+                "reactflow": "^11.11.0",
+                "@monaco-editor/react": "^4.6.0",
+                "@radix-ui/react-dialog": "^1.1.0",
+                "@radix-ui/react-dropdown-menu": "^2.1.0",
+                "@radix-ui/react-select": "^2.1.0",
+                "@radix-ui/react-tooltip": "^1.1.0",
+                "@radix-ui/react-switch": "^1.1.0",
+                "@radix-ui/react-tabs": "^1.1.0",
+            },
+            "devDependencies": {
+                "typescript": "^5.6.0",
+                "vite": "^6.0.0",
+                "@vitejs/plugin-react": "^4.3.0",
+                "@types/react": "^18.3.0",
+                "@types/react-dom": "^18.3.0",
+                "tailwindcss": "^3.4.0",
+                "postcss": "^8.4.0",
+                "autoprefixer": "^10.4.0",
+                "eslint": "^9.0.0",
+            },
+        },
+        indent=2,
+    ),
+)
 
-w("ui/tsconfig.json", json.dumps({
-    "compilerOptions": {
-        "target": "ES2020", "useDefineForClassFields": True, "lib": ["ES2020", "DOM", "DOM.Iterable"],
-        "module": "ESNext", "skipLibCheck": True, "moduleResolution": "bundler",
-        "resolveJsonModule": True, "isolatedModules": True, "noEmit": True, "jsx": "react-jsx",
-        "strict": True, "noUnusedLocals": True, "noUnusedParameters": True,
-        "baseUrl": ".", "paths": {"@/*": ["src/*"]}
-    },
-    "include": ["src"]
-}, indent=2))
+w(
+    "ui/tsconfig.json",
+    json.dumps(
+        {
+            "compilerOptions": {
+                "target": "ES2020",
+                "useDefineForClassFields": True,
+                "lib": ["ES2020", "DOM", "DOM.Iterable"],
+                "module": "ESNext",
+                "skipLibCheck": True,
+                "moduleResolution": "bundler",
+                "resolveJsonModule": True,
+                "isolatedModules": True,
+                "noEmit": True,
+                "jsx": "react-jsx",
+                "strict": True,
+                "noUnusedLocals": True,
+                "noUnusedParameters": True,
+                "baseUrl": ".",
+                "paths": {"@/*": ["src/*"]},
+            },
+            "include": ["src"],
+        },
+        indent=2,
+    ),
+)
 
-w("ui/vite.config.ts", '''
+w(
+    "ui/vite.config.ts",
+    """
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -52,9 +107,12 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: { proxy: { "/api": "http://localhost:8000", "/ws": { target: "ws://localhost:8000", ws: true } } },
 });
-''')
+""",
+)
 
-w("ui/tailwind.config.ts", '''
+w(
+    "ui/tailwind.config.ts",
+    """
 import type { Config } from "tailwindcss";
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -73,19 +131,25 @@ export default {
   },
   plugins: [],
 } satisfies Config;
-''')
+""",
+)
 
-w("ui/postcss.config.js", 'export default { plugins: { tailwindcss: {}, autoprefixer: {} } };\n')
+w("ui/postcss.config.js", "export default { plugins: { tailwindcss: {}, autoprefixer: {} } };\n")
 
-w("ui/index.html", '''
+w(
+    "ui/index.html",
+    """
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>AgenticOrg</title></head>
 <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>
-''')
+""",
+)
 
-w("ui/src/globals.css", '''
+w(
+    "ui/src/globals.css",
+    """
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -106,9 +170,12 @@ w("ui/src/globals.css", '''
     --border: 217 33% 17%;
   }
 }
-''')
+""",
+)
 
-w("ui/src/main.tsx", '''
+w(
+    "ui/src/main.tsx",
+    """
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -125,9 +192,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
-''')
+""",
+)
 
-w("ui/src/App.tsx", '''
+w(
+    "ui/src/App.tsx",
+    """
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
@@ -159,15 +229,21 @@ export default function App() {
     </Layout>
   );
 }
-''')
+""",
+)
 
-w("ui/src/lib/utils.ts", '''
+w(
+    "ui/src/lib/utils.ts",
+    """
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
-''')
+""",
+)
 
-w("ui/src/lib/api.ts", '''
+w(
+    "ui/src/lib/api.ts",
+    """
 import axios from "axios";
 const api = axios.create({ baseURL: "/api/v1" });
 api.interceptors.request.use((config) => {
@@ -194,9 +270,12 @@ export const approvalsApi = {
   decide: (id: string, decision: string, notes: string) => api.post(`/approvals/${id}/decide`, { decision, notes }),
 };
 export const auditApi = { query: (params: any) => api.get("/audit", { params }) };
-''')
+""",
+)
 
-w("ui/src/lib/websocket.ts", '''
+w(
+    "ui/src/lib/websocket.ts",
+    """
 export class AgenticOrgWS {
   private ws: WebSocket | null = null;
   private listeners: ((data: any) => void)[] = [];
@@ -214,9 +293,12 @@ export class AgenticOrgWS {
   subscribe(fn: (data: any) => void) { this.listeners.push(fn); }
   disconnect() { this.ws?.close(); }
 }
-''')
+""",
+)
 
-w("ui/src/types/index.ts", '''
+w(
+    "ui/src/types/index.ts",
+    """
 export interface Agent {
   id: string; name: string; agent_type: string; domain: string; status: string;
   version: string; confidence_floor: number; shadow_sample_count: number;
@@ -227,10 +309,13 @@ export interface WorkflowRun { id: string; workflow_def_id: string; status: stri
 export interface HITLItem { id: string; title: string; trigger_type: string; priority: string; status: string; assignee_role: string; context: any; expires_at: string; }
 export interface Connector { id: string; name: string; category: string; status: string; auth_type: string; rate_limit_rpm: number; }
 export interface AuditEntry { id: string; event_type: string; actor_type: string; action: string; outcome: string; created_at: string; }
-''')
+""",
+)
 
 # Shadcn UI components
-w("ui/src/components/ui/button.tsx", '''
+w(
+    "ui/src/components/ui/button.tsx",
+    """
 import React from "react";
 import { cn } from "@/lib/utils";
 
@@ -252,9 +337,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 Button.displayName = "Button";
-''')
+""",
+)
 
-w("ui/src/components/ui/card.tsx", '''
+w(
+    "ui/src/components/ui/card.tsx",
+    """
 import React from "react";
 import { cn } from "@/lib/utils";
 export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -263,9 +351,12 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
 export const CardHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />;
 export const CardTitle = ({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => <h3 className={cn("text-2xl font-semibold", className)} {...props} />;
 export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn("p-6 pt-0", className)} {...props} />;
-''')
+""",
+)
 
-w("ui/src/components/ui/badge.tsx", '''
+w(
+    "ui/src/components/ui/badge.tsx",
+    """
 import React from "react";
 import { cn } from "@/lib/utils";
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> { variant?: "default" | "success" | "warning" | "destructive"; }
@@ -273,10 +364,13 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
   const variants = { default: "bg-primary/10 text-primary", success: "bg-green-100 text-green-800", warning: "bg-yellow-100 text-yellow-800", destructive: "bg-red-100 text-red-800" };
   return <div className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold", variants[variant], className)} {...props} />;
 }
-''')
+""",
+)
 
 # Core components
-w("ui/src/components/ApprovalCard.tsx", '''
+w(
+    "ui/src/components/ApprovalCard.tsx",
+    """
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -307,9 +401,12 @@ export default function ApprovalCard({ item, onDecide }: Props) {
     </Card>
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/AgentCard.tsx", '''
+w(
+    "ui/src/components/AgentCard.tsx",
+    """
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import type { Agent } from "@/types";
@@ -337,9 +434,12 @@ export default function AgentCard({ agent, onClick }: Props) {
     </Card>
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/LiveFeed.tsx", '''
+w(
+    "ui/src/components/LiveFeed.tsx",
+    """
 import { useEffect, useState } from "react";
 import { AgenticOrgWS } from "@/lib/websocket";
 
@@ -365,9 +465,12 @@ export default function LiveFeed({ tenantId, maxItems = 7 }: Props) {
     </div>
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/HITLBadge.tsx", '''
+w(
+    "ui/src/components/HITLBadge.tsx",
+    """
 import { useNavigate } from "react-router-dom";
 
 export default function HITLBadge({ count }: { count: number }) {
@@ -379,9 +482,12 @@ export default function HITLBadge({ count }: { count: number }) {
       aria-label={`${count} pending approvals`}>{count} pending</button>
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/KillSwitch.tsx", '''
+w(
+    "ui/src/components/KillSwitch.tsx",
+    """
 import { useState } from "react";
 import { Button } from "./ui/button";
 import { agentsApi } from "@/lib/api";
@@ -405,9 +511,12 @@ export default function KillSwitch({ agentId, agentName, onPaused }: Props) {
   );
   return <Button variant="destructive" size="sm" onClick={() => setConfirming(true)}>Kill Switch</Button>;
 }
-''')
+""",
+)
 
-w("ui/src/components/Layout.tsx", '''
+w(
+    "ui/src/components/Layout.tsx",
+    """
 import { Link, useLocation } from "react-router-dom";
 import HITLBadge from "./HITLBadge";
 
@@ -439,10 +548,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-''')
+""",
+)
 
 # Pages
-w("ui/src/pages/Dashboard.tsx", '''
+w(
+    "ui/src/pages/Dashboard.tsx",
+    """
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import LiveFeed from "@/components/LiveFeed";
 
@@ -460,11 +572,21 @@ export default function Dashboard() {
     </div>
   );
 }
-''')
+""",
+)
 
-for page, title in [("Agents", "Agent Fleet"), ("Workflows", "Workflows"), ("Approvals", "Approval Queue"),
-                    ("Connectors", "Connectors"), ("Schemas", "Schema Registry"), ("Audit", "Audit Log"), ("Settings", "Settings")]:
-    w(f"ui/src/pages/{page}.tsx", f'''
+for page, title in [
+    ("Agents", "Agent Fleet"),
+    ("Workflows", "Workflows"),
+    ("Approvals", "Approval Queue"),
+    ("Connectors", "Connectors"),
+    ("Schemas", "Schema Registry"),
+    ("Audit", "Audit Log"),
+    ("Settings", "Settings"),
+]:
+    w(
+        f"ui/src/pages/{page}.tsx",
+        f"""
     export default function {page}() {{
       return (
         <div className="space-y-6">
@@ -473,9 +595,12 @@ for page, title in [("Agents", "Agent Fleet"), ("Workflows", "Workflows"), ("App
         </div>
       );
     }}
-    ''')
+    """,
+    )
 
-w("ui/src/pages/AgentDetail.tsx", '''
+w(
+    "ui/src/pages/AgentDetail.tsx",
+    """
 import { useParams } from "react-router-dom";
 import KillSwitch from "@/components/KillSwitch";
 
@@ -491,9 +616,12 @@ export default function AgentDetail() {
     </div>
   );
 }
-''')
+""",
+)
 
-w("ui/src/pages/WorkflowRun.tsx", '''
+w(
+    "ui/src/pages/WorkflowRun.tsx",
+    """
 import { useParams } from "react-router-dom";
 
 export default function WorkflowRun() {
@@ -505,9 +633,12 @@ export default function WorkflowRun() {
     </div>
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/WorkflowBuilder.tsx", '''
+w(
+    "ui/src/components/WorkflowBuilder.tsx",
+    """
 import { useCallback } from "react";
 import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
 import "reactflow/dist/style.css";
@@ -522,9 +653,12 @@ export default function WorkflowBuilder({ definition, onChange }: { definition: 
     </div>
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/SchemaEditor.tsx", '''
+w(
+    "ui/src/components/SchemaEditor.tsx",
+    """
 import Editor from "@monaco-editor/react";
 
 export default function SchemaEditor({ schema, onChange, readOnly }: { schema: any; onChange?: (v: string) => void; readOnly?: boolean }) {
@@ -535,9 +669,12 @@ export default function SchemaEditor({ schema, onChange, readOnly }: { schema: a
       options={{ readOnly, minimap: { enabled: false } }} />
   );
 }
-''')
+""",
+)
 
-w("ui/src/components/ConnectorCard.tsx", '''
+w(
+    "ui/src/components/ConnectorCard.tsx",
+    """
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import type { Connector } from "@/types";
@@ -555,12 +692,15 @@ export default function ConnectorCard({ connector }: { connector: Connector }) {
     </Card>
   );
 }
-''')
+""",
+)
 
 # ════════════════ TESTS ════════════════
 w("tests/__init__.py", "")
 
-w("tests/conftest.py", '''
+w(
+    "tests/conftest.py",
+    '''
 """Shared test fixtures."""
 import pytest
 import uuid
@@ -584,9 +724,12 @@ def sample_invoice():
         "invoice_id": "INV-001", "vendor_id": "VND-001", "total": 94000,
         "status": "matched", "gstin": "29ABCDE1234F1Z5", "confidence": 0.96,
     }
-''')
+''',
+)
 
-w("tests/unit/test_tool_gateway.py", '''
+w(
+    "tests/unit/test_tool_gateway.py",
+    '''
 """Tool gateway tests — scope, rate limit, idempotency, PII masking."""
 import pytest
 from auth.scopes import check_scope, parse_scope, validate_clone_scopes
@@ -643,9 +786,12 @@ class TestPIIMasking:
     def test_mask_aadhaar(self):
         result = mask_string("1234 5678 9012")
         assert "XXXX" in result
-''')
+''',
+)
 
-w("tests/unit/test_workflow_engine.py", '''
+w(
+    "tests/unit/test_workflow_engine.py",
+    '''
 """Workflow engine tests."""
 import pytest
 from workflows.parser import WorkflowParser
@@ -688,9 +834,12 @@ class TestConditionEvaluator:
 
     def test_and_condition(self):
         assert not evaluate_condition("total > 500000 AND status == mismatch", {"total": 100, "status": "mismatch"})
-''')
+''',
+)
 
-w("tests/unit/test_auth.py", '''
+w(
+    "tests/unit/test_auth.py",
+    '''
 """Auth tests — JWT, scopes, tenant isolation."""
 import pytest
 from auth.scopes import parse_scope
@@ -707,9 +856,12 @@ class TestScopeParsing:
     def test_agenticorg_scope(self):
         s = parse_scope("agenticorg:agents:write")
         assert s and s.category == "agenticorg"
-''')
+''',
+)
 
-w("tests/security/test_auth_security.py", '''
+w(
+    "tests/security/test_auth_security.py",
+    '''
 """Security tests SEC-AUTH-001 to SEC-AUTH-008."""
 import pytest
 from auth.scopes import check_scope
@@ -726,9 +878,12 @@ class TestScopeEnforcementSecurity:
         scopes = ["tool:oracle_fusion:read:purchase_order"]
         allowed, _ = check_scope(scopes, "oracle_fusion", "write", "journal_entry")
         assert not allowed
-''')
+''',
+)
 
-w("tests/security/test_agent_scaling.py", '''
+w(
+    "tests/security/test_agent_scaling.py",
+    '''
 """Scaling tests FT-SCALE-001 to FT-SCALE-015."""
 import pytest
 from auth.scopes import validate_clone_scopes
@@ -752,10 +907,13 @@ class TestAgentLifecycle:
     def test_ft_scale_015_skip_shadow_blocked(self):
         lm = LifecycleManager()
         assert not lm.can_transition("draft", "active")
-''')
+''',
+)
 
 # ════════════════ INFRASTRUCTURE ════════════════
-w("Dockerfile", '''
+w(
+    "Dockerfile",
+    """
 FROM python:3.12-slim AS builder
 WORKDIR /app
 COPY pyproject.toml .
@@ -771,9 +929,12 @@ USER agenticorg
 EXPOSE 8000
 HEALTHCHECK CMD python -c "import httpx; httpx.get('http://localhost:8000/api/v1/health')" || exit 1
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-''')
+""",
+)
 
-w("Dockerfile.ui", '''
+w(
+    "Dockerfile.ui",
+    """
 FROM node:20-slim AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
@@ -785,9 +946,12 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-''')
+""",
+)
 
-w("ui/nginx.conf", '''
+w(
+    "ui/nginx.conf",
+    """
 server {
     listen 80;
     root /usr/share/nginx/html;
@@ -796,10 +960,13 @@ server {
     location /api/ { proxy_pass http://api:8000; }
     location /ws/ { proxy_pass http://api:8000; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
 }
-''')
+""",
+)
 
 # CI/CD
-w(".github/workflows/deploy.yml", '''
+w(
+    ".github/workflows/deploy.yml",
+    """
 name: AgenticOrg CI/CD
 on:
   push: { branches: [main], tags: ["v*"] }
@@ -882,19 +1049,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "Deploy to production via Helm with canary"
-''')
+""",
+)
 
 # Helm
-w("helm/Chart.yaml", '''
+w(
+    "helm/Chart.yaml",
+    """
 apiVersion: v2
 name: agenticorg
 description: Enterprise Agent Swarm Platform
 type: application
 version: 2.0.0
 appVersion: "2.0.0"
-''')
+""",
+)
 
-w("helm/values.yaml", '''
+w(
+    "helm/values.yaml",
+    """
 replicaCount:
   api: 3
   orchestrator: 3
@@ -939,9 +1112,12 @@ postgresql:
     database: agenticorg
 redis:
   enabled: true
-''')
+""",
+)
 
-w("helm/templates/deployment.yaml", '''
+w(
+    "helm/templates/deployment.yaml",
+    """
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -965,9 +1141,12 @@ spec:
             httpGet: { path: /api/v1/health, port: 8000 }
           readinessProbe:
             httpGet: { path: /api/v1/health, port: 8000 }
-''')
+""",
+)
 
-w("helm/templates/service.yaml", '''
+w(
+    "helm/templates/service.yaml",
+    """
 apiVersion: v1
 kind: Service
 metadata:
@@ -979,9 +1158,12 @@ spec:
       targetPort: 8000
   selector:
     app: agenticorg-api
-''')
+""",
+)
 
-w("helm/templates/hpa.yaml", '''
+w(
+    "helm/templates/hpa.yaml",
+    """
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -998,10 +1180,13 @@ spec:
       resource:
         name: cpu
         target: { type: Utilization, averageUtilization: 70 }
-''')
+""",
+)
 
 # Project docs
-w("LICENSE", '''
+w(
+    "LICENSE",
+    """
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -1017,9 +1202,12 @@ w("LICENSE", '''
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-''')
+""",
+)
 
-w("CONTRIBUTING.md", '''
+w(
+    "CONTRIBUTING.md",
+    """
 # Contributing to AgenticOrg
 
 We welcome contributions! Please see our guidelines below.
@@ -1035,9 +1223,12 @@ We welcome contributions! Please see our guidelines below.
 - TypeScript: eslint + tsc --noEmit
 - Tests required for all new features
 - Minimum 80% code coverage
-''')
+""",
+)
 
-w("SECURITY.md", '''
+w(
+    "SECURITY.md",
+    """
 # Security Policy
 
 ## Reporting a Vulnerability
@@ -1049,9 +1240,12 @@ We will respond within 48 hours and provide a fix timeline.
 | ------- | --------- |
 | 2.x     | Yes       |
 | 1.x     | No        |
-''')
+""",
+)
 
-w("CHANGELOG.md", '''
+w(
+    "CHANGELOG.md",
+    """
 # Changelog
 
 ## [2.0.0] - 2026-03-21
@@ -1065,7 +1259,8 @@ w("CHANGELOG.md", '''
 - 146 test cases
 - 9-stage CI/CD pipeline
 - Helm charts for Kubernetes deployment
-''')
+""",
+)
 
 print("[OK] Batch 5 complete")
 

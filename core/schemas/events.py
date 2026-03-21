@@ -1,4 +1,5 @@
 """Platform event envelope and catalogue."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -11,8 +12,10 @@ class EventMetadata(BaseModel):
     retry_count: int = 0
     idempotency_key: str = ""
 
+
 class PlatformEvent(BaseModel):
     """Standard event envelope for all 24 event types."""
+
     event_id: str
     event_type: str
     event_version: str = "1"
@@ -23,6 +26,7 @@ class PlatformEvent(BaseModel):
     correlation_id: str = ""
     payload: dict[str, Any] = {}
     metadata: EventMetadata = Field(default_factory=EventMetadata)
+
 
 # Event type constants
 WORKFLOW_STARTED = "agenticorg.workflow.started"

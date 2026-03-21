@@ -1,8 +1,11 @@
 """Oracle Fusion connector — finance."""
+
 from __future__ import annotations
+
 import base64
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class OracleFusionConnector(BaseConnector):
     name = "oracle_fusion"
@@ -33,48 +36,38 @@ class OracleFusionConnector(BaseConnector):
         """Execute post_journal_entry on oracle_fusion."""
         return await self._post("/post/journal/entry", params)
 
-
     async def get_gl_balance(self, **params):
         """Execute get_gl_balance on oracle_fusion."""
         return await self._post("/get/gl/balance", params)
-
 
     async def create_ap_invoice(self, **params):
         """Execute create_ap_invoice on oracle_fusion."""
         return await self._post("/create/ap/invoice", params)
 
-
     async def approve_payment(self, **params):
         """Execute approve_payment on oracle_fusion."""
         return await self._post("/approve/payment", params)
-
 
     async def get_budget(self, **params):
         """Execute get_budget on oracle_fusion."""
         return await self._post("/get/budget", params)
 
-
     async def run_reconciliation(self, **params):
         """Execute run_reconciliation on oracle_fusion."""
         return await self._post("/run/reconciliation", params)
-
 
     async def create_po(self, **params):
         """Execute create_po on oracle_fusion."""
         return await self._post("/create/po", params)
 
-
     async def get_cash_flow(self, **params):
         """Execute get_cash_flow on oracle_fusion."""
         return await self._post("/get/cash/flow", params)
-
 
     async def run_period_close(self, **params):
         """Execute run_period_close on oracle_fusion."""
         return await self._post("/run/period/close", params)
 
-
     async def get_trial_balance(self, **params):
         """Execute get_trial_balance on oracle_fusion."""
         return await self._post("/get/trial/balance", params)
-

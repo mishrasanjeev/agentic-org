@@ -8,6 +8,7 @@ Supports three scaling signals:
 The decision engine merges all signals and picks the highest recommended
 replica count, clamped to [min_replicas, max_replicas].
 """
+
 from __future__ import annotations
 
 import math
@@ -135,11 +136,7 @@ class HPAIntegration:
     def _schedule_replicas(self, now: datetime | None = None) -> int:
         """Return the highest min_replicas from active schedule rules."""
         now = now or datetime.now(UTC)
-        active_mins = [
-            rule.min_replicas
-            for rule in self._schedule_rules
-            if rule.is_active(now)
-        ]
+        active_mins = [rule.min_replicas for rule in self._schedule_rules if rule.is_active(now)]
         return max(active_mins) if active_mins else 0
 
     # ------------------------------------------------------------------
@@ -251,6 +248,7 @@ class HPAIntegration:
 
         if action != "no_change":
             import time
+
             self._last_scale_action[agent_type] = time.monotonic()
             logger.info(
                 action,
@@ -275,6 +273,7 @@ class HPAIntegration:
     def _check_cooldown(self, agent_type: str) -> bool:
         """Return True if enough time has passed since the last scale action."""
         import time
+
         last = self._last_scale_action.get(agent_type)
         if last is None:
             return True

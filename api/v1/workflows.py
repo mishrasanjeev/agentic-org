@@ -1,4 +1,5 @@
 """Workflow endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -138,9 +139,11 @@ async def create_workflow(
 @router.post("/workflows/{wf_id}/run")
 async def run_workflow(
     wf_id: UUID,
-    body: WorkflowRunTrigger = WorkflowRunTrigger(),
+    body: WorkflowRunTrigger | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    if body is None:
+        body = WorkflowRunTrigger()
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         # Verify the workflow definition exists

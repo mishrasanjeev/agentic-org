@@ -1,4 +1,5 @@
 """HITL approval endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -66,7 +67,9 @@ async def list_approvals(
 
         total = (await session.execute(count_base)).scalar() or 0
 
-        query = base.order_by(HITLQueue.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
+        query = (
+            base.order_by(HITLQueue.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
+        )
         result = await session.execute(query)
         items = result.scalars().all()
 

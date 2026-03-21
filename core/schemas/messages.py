@@ -1,4 +1,5 @@
 """Message protocol v2 — Agent <-> Orchestrator."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -12,10 +13,12 @@ class TargetAgent(BaseModel):
     agent_type: str
     agent_token: str
 
+
 class TaskInput(BaseModel):
     action: str
     inputs: dict[str, Any] = {}
     context: dict[str, Any] = {}
+
 
 class ExecutionPolicy(BaseModel):
     timeout_seconds: int = 120
@@ -25,6 +28,7 @@ class ExecutionPolicy(BaseModel):
     on_timeout: str = "escalate"
     on_failure: str = "retry"
 
+
 class HITLPolicy(BaseModel):
     enabled: bool = True
     threshold_expression: str = ""
@@ -32,14 +36,17 @@ class HITLPolicy(BaseModel):
     timeout_hours: int = 4
     on_hitl_timeout: str = "escalate"
 
+
 class TaskMetadata(BaseModel):
     priority: str = "normal"
     idempotency_key: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)
     schema_version: str = "2"
 
+
 class TaskAssignment(BaseModel):
     """Orchestrator -> Agent message."""
+
     message_id: str
     correlation_id: str
     workflow_run_id: str
@@ -53,6 +60,7 @@ class TaskAssignment(BaseModel):
     hitl_policy: HITLPolicy = Field(default_factory=HITLPolicy)
     metadata: TaskMetadata = Field(default_factory=TaskMetadata)
 
+
 class ToolCallRecord(BaseModel):
     tool_name: str
     input_hash: str = ""
@@ -62,21 +70,25 @@ class ToolCallRecord(BaseModel):
     latency_ms: int = 0
     idempotency_key: str = ""
 
+
 class PerformanceMetrics(BaseModel):
     total_latency_ms: int = 0
     llm_tokens_used: int = 0
     llm_cost_usd: float = 0.0
+
 
 class DecisionOption(BaseModel):
     id: str
     label: str
     action: str
 
+
 class DecisionRequired(BaseModel):
     question: str
     options: list[DecisionOption]
     default_on_timeout: str = "defer"
     timeout_hours: int = 4
+
 
 class HITLContext(BaseModel):
     summary: str = ""
@@ -85,13 +97,16 @@ class HITLContext(BaseModel):
     supporting_data: dict[str, Any] = {}
     agent_confidence: float = 0.0
 
+
 class HITLAssignee(BaseModel):
     role: str
     notify_channels: list[str] = []
     escalation_chain: list[str] = []
 
+
 class HITLRequest(BaseModel):
     """Embedded in TaskResult when status=hitl_triggered."""
+
     hitl_id: str
     trigger_condition: str
     trigger_type: str
@@ -99,8 +114,10 @@ class HITLRequest(BaseModel):
     context: HITLContext = Field(default_factory=HITLContext)
     assignee: HITLAssignee = Field(default_factory=HITLAssignee)
 
+
 class TaskResult(BaseModel):
     """Agent -> Orchestrator message."""
+
     message_id: str
     correlation_id: str
     workflow_run_id: str

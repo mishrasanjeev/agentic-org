@@ -1,8 +1,11 @@
 """Banking Aa connector — finance."""
+
 from __future__ import annotations
-from typing import Any
+
 import httpx
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class BankingAaConnector(BaseConnector):
     name = "banking_aa"
@@ -25,11 +28,14 @@ class BankingAaConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
-            resp = await client.post(token_url, data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            })
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+            )
             resp.raise_for_status()
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
@@ -38,33 +44,26 @@ class BankingAaConnector(BaseConnector):
         """Execute fetch_bank_statement on banking_aa."""
         return await self._post("/fetch/bank/statement", params)
 
-
     async def initiate_neft(self, **params):
         """Execute initiate_neft on banking_aa."""
         return await self._post("/initiate/neft", params)
-
 
     async def initiate_rtgs(self, **params):
         """Execute initiate_rtgs on banking_aa."""
         return await self._post("/initiate/rtgs", params)
 
-
     async def check_account_balance(self, **params):
         """Execute check_account_balance on banking_aa."""
         return await self._post("/check/account/balance", params)
-
 
     async def add_beneficiary(self, **params):
         """Execute add_beneficiary on banking_aa."""
         return await self._post("/add/beneficiary", params)
 
-
     async def get_transaction_list(self, **params):
         """Execute get_transaction_list on banking_aa."""
         return await self._post("/get/transaction/list", params)
 
-
     async def cancel_payment(self, **params):
         """Execute cancel_payment on banking_aa."""
         return await self._post("/cancel/payment", params)
-

@@ -1,13 +1,19 @@
 """Safe condition evaluator — NO eval()."""
+
 from __future__ import annotations
 
 import operator
 from typing import Any
 
 OPS = {
-    ">": operator.gt, "<": operator.lt, ">=": operator.ge, "<=": operator.le,
-    "==": operator.eq, "!=": operator.ne,
+    ">": operator.gt,
+    "<": operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+    "==": operator.eq,
+    "!=": operator.ne,
 }
+
 
 def evaluate_condition(expression: str, context: dict[str, Any]) -> bool:
     """Evaluate a condition like 'total > 500000 OR status == mismatch'."""
@@ -31,6 +37,7 @@ def evaluate_condition(expression: str, context: dict[str, Any]) -> bool:
             except (ValueError, TypeError):
                 return op_func(str(left_val), str(right_val))
     return bool(_resolve(expression, context))
+
 
 def _resolve(token: str, context: dict) -> Any:
     token = token.strip().strip("'").strip('"')

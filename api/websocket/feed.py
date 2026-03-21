@@ -1,4 +1,5 @@
 """Real-time agent activity feed via WebSocket."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +8,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter()
+
 
 @router.websocket("/ws/feed/{tenant_id}")
 async def live_feed(websocket: WebSocket, tenant_id: str):

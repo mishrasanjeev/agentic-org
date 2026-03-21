@@ -11,7 +11,7 @@ export default function NotFound() {
           </div>
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
-              AF
+              AO
             </div>
           </div>
         </div>

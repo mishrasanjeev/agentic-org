@@ -4,26 +4,22 @@ Covers PII masking in audit logs, encryption at rest, TLS enforcement,
 data residency, credential storage, tenant isolation (RLS), DPDP erasure,
 container vulnerability scanning, and audit log immutability.
 """
+
 import hashlib
-import hmac
-import json
-import re
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from audit.dsar import DSARHandler
 from auth.scopes import check_scope
 from core.config import Settings
-from core.schemas.errors import ERROR_META
 from core.tool_gateway.audit_logger import AuditLogger
-from core.tool_gateway.pii_masker import PATTERNS, mask_pii, mask_string
-
+from core.tool_gateway.pii_masker import mask_pii, mask_string
 
 # ---------------------------------------------------------------------------
 # SEC-DATA-001: PII in audit logs (all PII auto-masked)
 # ---------------------------------------------------------------------------
+
 
 class TestSECDATA001:
     """All PII in audit log entries must be auto-masked before persistence."""
@@ -89,6 +85,7 @@ class TestSECDATA001:
 # SEC-DATA-002: Encryption at rest (AES-256 on sensitive fields)
 # ---------------------------------------------------------------------------
 
+
 class TestSECDATA002:
     """Sensitive fields must be encrypted at rest with AES-256."""
 
@@ -98,6 +95,7 @@ class TestSECDATA002:
         """
         # Settings enforces min_length=16 on secret_key
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             Settings(secret_key="short")
 
@@ -128,6 +126,7 @@ class TestSECDATA002:
 # SEC-DATA-003: TLS enforcement (TLS 1.3, reject 1.0/1.1)
 # ---------------------------------------------------------------------------
 
+
 class TestSECDATA003:
     """TLS 1.3 must be enforced; TLS 1.0/1.1 must be rejected."""
 
@@ -141,9 +140,7 @@ class TestSECDATA003:
         rejected_versions = {"1.0", "1.1"}
 
         for version in rejected_versions:
-            assert version not in allowed_versions, (
-                f"TLS {version} must be rejected"
-            )
+            assert version not in allowed_versions, f"TLS {version} must be rejected"
 
         assert "1.3" in allowed_versions
 
@@ -166,12 +163,13 @@ class TestSECDATA003:
 # SEC-DATA-004: Data residency India (all data in asia-south1)
 # ---------------------------------------------------------------------------
 
+
 class TestSECDATA004:
     """All data must reside in asia-south1 (India) per regulatory requirements."""
 
     def test_storage_region_is_asia_south1(self):
         """SEC-DATA-004: The default storage region must be asia-south1."""
-        with patch("core.config.Settings") as MockSettings:
+        with patch("core.config.Settings") as _mock_settings:
             s = Settings(secret_key="test-secret-key-16chars")
             assert s.storage_region == "asia-south1"
 
@@ -193,6 +191,7 @@ class TestSECDATA004:
 # ---------------------------------------------------------------------------
 # SEC-DATA-005: Connector credentials not in DB (all in Google Secret Manager)
 # ---------------------------------------------------------------------------
+
 
 class TestSECDATA005:
     """Connector credentials must be loaded from environment/Google Secret Manager, not DB."""
@@ -221,6 +220,7 @@ class TestSECDATA005:
         assert "postgresql" in s.db_url
         # External keys are separate from the DB connection
         from core.config import ExternalKeys
+
         ek = ExternalKeys()
         # These default to empty -- filled from env/Google Secret Manager at runtime
         assert isinstance(ek.anthropic_api_key, str)
@@ -230,6 +230,7 @@ class TestSECDATA005:
 # ---------------------------------------------------------------------------
 # SEC-DATA-006: Tenant isolation (RLS returns 0 rows for wrong tenant)
 # ---------------------------------------------------------------------------
+
 
 class TestSECDATA006:
     """Row-Level Security must ensure zero rows returned for wrong tenant."""
@@ -242,9 +243,7 @@ class TestSECDATA006:
         tenant_a_scopes = ["tool:oracle_fusion:read:purchase_order"]
         # Scope check is connector-level, but in a multi-tenant deployment,
         # the connector applies RLS filtering by tenant_id.
-        allowed, reason = check_scope(
-            tenant_a_scopes, "oracle_fusion", "read", "purchase_order"
-        )
+        allowed, reason = check_scope(tenant_a_scopes, "oracle_fusion", "read", "purchase_order")
         assert allowed  # Scope matches, but RLS would filter by tenant_id
 
     @pytest.mark.asyncio
@@ -279,6 +278,7 @@ class TestSECDATA006:
 # ---------------------------------------------------------------------------
 # SEC-DATA-007: DPDP erasure request (PII removed, audit pseudonymised)
 # ---------------------------------------------------------------------------
+
 
 class TestSECDATA007:
     """DPDP erasure request must remove PII and pseudonymise audit records."""
@@ -322,6 +322,7 @@ class TestSECDATA007:
 # SEC-INFRA-001: Container image vulnerability scan (zero critical CVEs)
 # ---------------------------------------------------------------------------
 
+
 class TestSECINFRA001:
     """Container images must have zero critical CVEs."""
 
@@ -342,12 +343,11 @@ class TestSECINFRA001:
             "packages_scanned": 245,
         }
 
-        assert scan_result["vulnerabilities"]["critical"] == 0, (
-            "Build must fail with critical CVEs"
-        )
+        assert scan_result["vulnerabilities"]["critical"] == 0, "Build must fail with critical CVEs"
 
     def test_scan_policy_blocks_critical(self):
         """SEC-INFRA-001: The scan policy must block images with critical CVEs."""
+
         def evaluate_scan_policy(scan_result: dict) -> bool:
             """Return True if image passes the security policy."""
             return scan_result.get("vulnerabilities", {}).get("critical", 0) == 0
@@ -362,6 +362,7 @@ class TestSECINFRA001:
 # ---------------------------------------------------------------------------
 # SEC-INFRA-002: Audit log UPDATE/DELETE attempt (RLS blocks, WORM verified)
 # ---------------------------------------------------------------------------
+
 
 class TestSECINFRA002:
     """Audit logs must be append-only (WORM). UPDATE/DELETE must be blocked."""
@@ -414,8 +415,10 @@ class TestSECINFRA002:
         """SEC-INFRA-002: Simulate a WORM (Write Once Read Many) policy check.
         Any attempt to UPDATE or DELETE audit records must be rejected.
         """
+
         class WORMPolicy:
             """Simulates a WORM policy for audit tables."""
+
             PROTECTED_TABLES = {"audit_logs", "audit_events"}
 
             @classmethod

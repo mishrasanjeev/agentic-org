@@ -1,4 +1,5 @@
 """FastAPI application — AgenticOrg."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -27,10 +28,13 @@ from core.config import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from core.database import init_db
+
     await init_db()
     yield
     from core.database import close_db
+
     await close_db()
+
 
 app = FastAPI(
     title="AgenticOrg",
@@ -41,12 +45,19 @@ app = FastAPI(
 
 # CORS: open in dev, restricted in production
 _cors_origins = (
-    ["*"] if settings.env == "development"
+    ["*"]
+    if settings.env == "development"
     else [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
     if settings.cors_allowed_origins
     else ["*"]
 )
-app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(AuthMiddleware)
 
 register_error_handlers(app)

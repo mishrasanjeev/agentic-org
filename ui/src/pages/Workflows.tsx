@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Workflow } from "@/types";
 
 export default function Workflows() {
+  const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,8 +18,10 @@ export default function Workflows() {
     setLoading(true);
     try {
       const resp = await fetch("/api/v1/workflows");
+      if (!resp.ok) { setWorkflows([]); return; }
       const data = await resp.json();
-      setWorkflows(data.items || []);
+      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setWorkflows(items);
     } catch {
       setWorkflows([]);
     } finally {
@@ -30,7 +34,7 @@ export default function Workflows() {
       const resp = await fetch(`/api/v1/workflows/${wfId}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
       const data = await resp.json();
       if (data.run_id) {
-        window.location.href = `/workflows/runs/${data.run_id}`;
+        navigate(`/dashboard/workflows/${data.run_id}/runs/${data.run_id}`);
       }
     } catch (e) {
       console.error("Failed to trigger workflow run", e);
@@ -41,7 +45,7 @@ export default function Workflows() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Workflows</h2>
-        <Button onClick={() => window.location.href = "/workflows/new"}>Create Workflow</Button>
+        <Button onClick={() => navigate("/dashboard/workflows/new")}>Create Workflow</Button>
       </div>
 
       {loading ? (
@@ -68,7 +72,7 @@ export default function Workflows() {
                     {" | "}Created: <span className="font-medium">{new Date(wf.created_at).toLocaleDateString()}</span>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => window.location.href = `/workflows/${wf.id}`}>View</Button>
+                    <Button variant="outline" size="sm" onClick={() => navigate(`/dashboard/workflows/${wf.id}`)}>View</Button>
                     <Button size="sm" onClick={() => triggerRun(wf.id)}>Run Now</Button>
                   </div>
                 </div>

@@ -551,7 +551,7 @@ graph LR
         IT[Income Tax]
         MCA[MCA Portal]
         Pine[PineLabs]
-        Razr[Razorpay]
+        Razr[Pine Labs Plural]
         Tally[Tally]
     end
 

@@ -1,4 +1,5 @@
 """Connector endpoints."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -80,6 +81,8 @@ async def connector_health(
         "connector_id": str(connector.id),
         "name": connector.name,
         "status": connector.status,
-        "health_check_at": connector.health_check_at.isoformat() if connector.health_check_at else None,
+        "health_check_at": connector.health_check_at.isoformat()
+        if connector.health_check_at
+        else None,
         "healthy": connector.status == "active",
     }

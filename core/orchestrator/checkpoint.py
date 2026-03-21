@@ -1,4 +1,5 @@
 """Checkpoint manager — save/restore workflow state."""
+
 from __future__ import annotations
 
 import json

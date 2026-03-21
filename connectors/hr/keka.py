@@ -1,7 +1,9 @@
 """Keka connector — hr."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class KekaConnector(BaseConnector):
     name = "keka"
@@ -26,28 +28,22 @@ class KekaConnector(BaseConnector):
         """Execute get_employee on keka."""
         return await self._post("/get/employee", params)
 
-
     async def run_payroll(self, **params):
         """Execute run_payroll on keka."""
         return await self._post("/run/payroll", params)
-
 
     async def get_leave_balance(self, **params):
         """Execute get_leave_balance on keka."""
         return await self._post("/get/leave/balance", params)
 
-
     async def post_reimbursement(self, **params):
         """Execute post_reimbursement on keka."""
         return await self._post("/post/reimbursement", params)
-
 
     async def get_tds_workings(self, **params):
         """Execute get_tds_workings on keka."""
         return await self._post("/get/tds/workings", params)
 
-
     async def get_attendance_summary(self, **params):
         """Execute get_attendance_summary on keka."""
         return await self._post("/get/attendance/summary", params)
-

@@ -1,8 +1,11 @@
 """Twilio connector — comms."""
+
 from __future__ import annotations
+
 import base64
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class TwilioConnector(BaseConnector):
     name = "twilio"
@@ -28,23 +31,18 @@ class TwilioConnector(BaseConnector):
         """Execute make_outbound_call on twilio."""
         return await self._post("/make/outbound/call", params)
 
-
     async def send_sms(self, **params):
         """Execute send_sms on twilio."""
         return await self._post("/send/sms", params)
-
 
     async def send_whatsapp_message(self, **params):
         """Execute send_whatsapp_message on twilio."""
         return await self._post("/send/whatsapp/message", params)
 
-
     async def get_call_recording_url(self, **params):
         """Execute get_call_recording_url on twilio."""
         return await self._post("/get/call/recording/url", params)
 
-
     async def trigger_tts_call_with_script(self, **params):
         """Execute trigger_tts_call_with_script on twilio."""
         return await self._post("/trigger/tts/call/with/script", params)
-

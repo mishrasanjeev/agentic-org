@@ -1,17 +1,18 @@
 """Integration test fixtures — async test client, database setup, JWT tokens."""
+
 from __future__ import annotations
 
 import os
 import time
 import uuid
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -138,9 +139,7 @@ async def db_session(
     db_engine: AsyncEngine, _setup_schema: None
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a per-test database session that rolls back after each test."""
-    session_factory = async_sessionmaker(
-        db_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         async with session.begin():
             yield session
@@ -163,15 +162,19 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(auth_jwt_module, "_fetch_jwks", _fake_fetch_jwks)
     # Also override issuer validation so the test issuer is accepted
-    monkeypatch.setattr(auth_jwt_module, "settings", type(auth_jwt_module.settings)(
-        **{
+    monkeypatch.setattr(
+        auth_jwt_module,
+        "settings",
+        type(auth_jwt_module.settings)(
             **{
-                field: getattr(auth_jwt_module.settings, field)
-                for field in auth_jwt_module.settings.model_fields
-            },
-            "jwt_issuer": "agenticorg-test-issuer",
-        }
-    ))
+                **{
+                    field: getattr(auth_jwt_module.settings, field)
+                    for field in auth_jwt_module.settings.model_fields
+                },
+                "jwt_issuer": "agenticorg-test-issuer",
+            }
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

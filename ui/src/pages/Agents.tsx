@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
@@ -9,6 +10,7 @@ const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice"];
 const STATUSES = ["all", "active", "shadow", "paused", "staging", "deprecated"];
 
 export default function Agents() {
+  const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [domainFilter, setDomainFilter] = useState("all");
@@ -26,8 +28,10 @@ export default function Agents() {
       if (domainFilter !== "all") params.set("domain", domainFilter);
       if (statusFilter !== "all") params.set("status", statusFilter);
       const resp = await fetch(`/api/v1/agents?${params}`);
+      if (!resp.ok) { setAgents([]); return; }
       const data = await resp.json();
-      setAgents(data.items || []);
+      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setAgents(items);
     } catch {
       setAgents([]);
     } finally {
@@ -50,7 +54,7 @@ export default function Agents() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Agent Fleet</h2>
-        <Button onClick={() => window.location.href = "/agents/new"}>Create Agent</Button>
+        <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -86,7 +90,7 @@ export default function Agents() {
         <div className="grid grid-cols-3 gap-4">
           {filtered.map((agent) => (
             <div key={agent.id} className="relative">
-              <AgentCard agent={agent} onClick={() => window.location.href = `/agents/${agent.id}`} />
+              <AgentCard agent={agent} onClick={() => navigate(`/dashboard/agents/${agent.id}`)} />
               {agent.status === "active" && (
                 <div className="absolute top-2 right-2">
                   <KillSwitch agentId={agent.id} agentName={agent.name} onPaused={fetchAgents} />

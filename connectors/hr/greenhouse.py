@@ -1,7 +1,9 @@
 """Greenhouse connector — hr."""
+
 from __future__ import annotations
-from typing import Any
+
 from connectors.framework.base_connector import BaseConnector
+
 
 class GreenhouseConnector(BaseConnector):
     name = "greenhouse"
@@ -28,38 +30,30 @@ class GreenhouseConnector(BaseConnector):
         """Execute post_job on greenhouse."""
         return await self._post("/post/job", params)
 
-
     async def get_applications(self, **params):
         """Execute get_applications on greenhouse."""
         return await self._post("/get/applications", params)
-
 
     async def move_stage(self, **params):
         """Execute move_stage on greenhouse."""
         return await self._post("/move/stage", params)
 
-
     async def schedule_interview(self, **params):
         """Execute schedule_interview on greenhouse."""
         return await self._post("/schedule/interview", params)
-
 
     async def send_offer(self, **params):
         """Execute send_offer on greenhouse."""
         return await self._post("/send/offer", params)
 
-
     async def reject_candidate(self, **params):
         """Execute reject_candidate on greenhouse."""
         return await self._post("/reject/candidate", params)
-
 
     async def get_scorecard(self, **params):
         """Execute get_scorecard on greenhouse."""
         return await self._post("/get/scorecard", params)
 
-
     async def bulk_import_candidates(self, **params):
         """Execute bulk_import_candidates on greenhouse."""
         return await self._post("/bulk/import/candidates", params)
-

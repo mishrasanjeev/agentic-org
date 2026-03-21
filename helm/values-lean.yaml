@@ -83,21 +83,39 @@ service:
   type: ClusterIP
   port: 8000
 
-# ── Ingress (optional — enable when ready for public access) ──
+# ── Ingress ──
 ingress:
-  enabled: false
-  # When ready:
-  # enabled: true
-  # className: "gce"
-  # hosts:
-  #   - host: api.agenticorg.yourdomain.com
-  #     paths:
-  #       - path: /
-  #         pathType: Prefix
-  # tls:
-  #   - secretName: agenticorg-tls
-  #     hosts:
-  #       - api.agenticorg.yourdomain.com
+  enabled: true
+  className: "gce"
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "agenticorg-ingress-ip"
+  managedCertificate:
+    domains:
+      - agenticorg.ai
+      - www.agenticorg.ai
+      - app.agenticorg.ai
+  hosts:
+    # Apex domain — landing page
+    - host: agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: ui
+          backendPort: 80
+    # WWW
+    - host: www.agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: ui
+          backendPort: 80
+    # App subdomain
+    - host: app.agenticorg.ai
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: ui
+          backendPort: 80
 
 # ── Environment ──
 env:

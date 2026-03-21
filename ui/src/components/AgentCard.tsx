@@ -16,10 +16,10 @@ export default function AgentCard({ agent, onClick }: Props) {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>Domain: <span className="font-medium">{agent.domain}</span></div>
-          <div>Version: <span className="font-medium">{agent.version}</span></div>
-          <div>Confidence: <span className="font-medium">{(agent.confidence_floor * 100).toFixed(0)}%</span></div>
-          <div>Shadow: <span className="font-medium">{agent.shadow_sample_count} samples</span></div>
+          <div>Domain: <span className="font-medium">{agent.domain || "—"}</span></div>
+          <div>Version: <span className="font-medium">{agent.version || "—"}</span></div>
+          <div>Confidence: <span className="font-medium">{agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A"}</span></div>
+          <div>Shadow: <span className="font-medium">{agent.shadow_sample_count ?? 0} samples</span></div>
         </div>
       </CardContent>
     </Card>

@@ -1,4 +1,5 @@
 """Audit log endpoint."""
+
 from __future__ import annotations
 
 import uuid as _uuid
@@ -71,9 +72,7 @@ async def query_audit(
         total = (await session.execute(count_base)).scalar() or 0
 
         query = (
-            base.order_by(AuditLog.created_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
+            base.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
         )
         result = await session.execute(query)
         entries = result.scalars().all()

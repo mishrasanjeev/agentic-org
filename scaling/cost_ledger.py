@@ -13,6 +13,7 @@ Budget enforcement
 - ``should_pause()`` returns ``True`` when either daily or monthly cap is
   exceeded, and emits an ``AGENT_COST_CAP_EXCEEDED`` event.
 """
+
 from __future__ import annotations
 
 import time
@@ -76,7 +77,7 @@ class CostLedger:
         self._event_emitter = event_emitter
 
         # In-memory fallback stores (used when Redis is unavailable)
-        self._mem_daily_cost: dict[str, Decimal] = {}   # key: agent_id:date
+        self._mem_daily_cost: dict[str, Decimal] = {}  # key: agent_id:date
         self._mem_daily_tokens: dict[str, int] = {}
         self._mem_monthly_cost: dict[str, Decimal] = {}
         self._mem_monthly_tokens: dict[str, int] = {}
@@ -184,8 +185,12 @@ class CostLedger:
         self._mem_daily_cost[daily_key] = self._mem_daily_cost.get(daily_key, Decimal("0")) + cost
         self._mem_daily_tokens[daily_key] = self._mem_daily_tokens.get(daily_key, 0) + tokens
         self._mem_daily_tasks[daily_key] = self._mem_daily_tasks.get(daily_key, 0) + 1
-        self._mem_monthly_cost[monthly_key] = self._mem_monthly_cost.get(monthly_key, Decimal("0")) + cost
-        self._mem_monthly_tokens[monthly_key] = self._mem_monthly_tokens.get(monthly_key, 0) + tokens
+        self._mem_monthly_cost[monthly_key] = (
+            self._mem_monthly_cost.get(monthly_key, Decimal("0")) + cost
+        )
+        self._mem_monthly_tokens[monthly_key] = (
+            self._mem_monthly_tokens.get(monthly_key, 0) + tokens
+        )
 
     # ------------------------------------------------------------------
     # check_budget()
@@ -228,13 +233,17 @@ class CostLedger:
             warnings.append(f"Daily budget exceeded: ${daily_cost:.2f} >= ${daily_budget:.2f}")
             within_budget = False
         elif daily_budget > 0 and daily_pct >= 80:
-            warnings.append(f"Daily budget at {daily_pct:.1f}%: ${daily_cost:.2f} / ${daily_budget:.2f}")
+            warnings.append(
+                f"Daily budget at {daily_pct:.1f}%: ${daily_cost:.2f} / ${daily_budget:.2f}"
+            )
 
         if monthly_cap > 0 and float(monthly_cost) >= monthly_cap:
             warnings.append(f"Monthly cap exceeded: ${monthly_cost:.2f} >= ${monthly_cap:.2f}")
             within_budget = False
         elif monthly_cap > 0 and monthly_pct >= 80:
-            warnings.append(f"Monthly budget at {monthly_pct:.1f}%: ${monthly_cost:.2f} / ${monthly_cap:.2f}")
+            warnings.append(
+                f"Monthly budget at {monthly_pct:.1f}%: ${monthly_cost:.2f} / ${monthly_cap:.2f}"
+            )
 
         return {
             "within_budget": within_budget,
@@ -437,9 +446,7 @@ class CostLedger:
                             "cost_usd": float(rec.cost_usd),
                             "model": rec.model,
                             "tenant_id": rec.tenant_id,
-                            "recorded_at": datetime.fromtimestamp(
-                                rec.timestamp, tz=UTC
-                            ),
+                            "recorded_at": datetime.fromtimestamp(rec.timestamp, tz=UTC),
                         },
                     )
                 await session.commit()
