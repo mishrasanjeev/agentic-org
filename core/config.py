@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTFLOW_JWT_ISSUER)
     token_ttl_minutes: int = 60
 
+    # CORS
+    cors_allowed_origins: str = ""  # Comma-separated origins; empty = allow all in dev
+
     # Platform behaviour
     pii_masking: bool = True
     data_region: str = "IN"

@@ -7,6 +7,7 @@ from api.v1 import agents, workflows, approvals, audit, schemas, connectors, com
 from api.websocket.feed import router as ws_feed_router
 from api.error_handlers import register_error_handlers
 from auth.middleware import AuthMiddleware
+from core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,11 +20,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AgentFlow OS",
     description="Enterprise Agent Swarm Platform — 24 agents, 42 connectors",
-    version="2.0.0",
+    version="2.1.0",
     lifespan=lifespan,
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# CORS: open in dev, restricted in production
+_cors_origins = (
+    ["*"] if settings.env == "development"
+    else [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    if settings.cors_allowed_origins
+    else ["*"]
+)
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(AuthMiddleware)
 
 register_error_handlers(app)

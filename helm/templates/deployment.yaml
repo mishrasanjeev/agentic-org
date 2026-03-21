@@ -29,17 +29,18 @@ spec:
             {{- toYaml (.Values.resources.api | default dict) | nindent 12 }}
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/health/liveness
               port: 8000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 10
             periodSeconds: 30
-            timeoutSeconds: 5
+            timeoutSeconds: 3
           readinessProbe:
             httpGet:
               path: /api/v1/health
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
 ---
 apiVersion: apps/v1
 kind: Deployment
