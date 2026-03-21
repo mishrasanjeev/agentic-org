@@ -12,11 +12,11 @@ class GoogleCalendarConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def _register_tools(self):
-    self._tool_registry["create_calendar_event"] = self.create_calendar_event
-    self._tool_registry["check_participant_availability"] = self.check_participant_availability
-    self._tool_registry["book_meeting_room"] = self.book_meeting_room
-    self._tool_registry["cancel_event"] = self.cancel_event
-    self._tool_registry["find_optimal_meeting_slot"] = self.find_optimal_meeting_slot
+        self._tool_registry["create_calendar_event"] = self.create_calendar_event
+        self._tool_registry["check_participant_availability"] = self.check_participant_availability
+        self._tool_registry["book_meeting_room"] = self.book_meeting_room
+        self._tool_registry["cancel_event"] = self.cancel_event
+        self._tool_registry["find_optimal_meeting_slot"] = self.find_optimal_meeting_slot
 
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
@@ -32,27 +32,27 @@ class GoogleCalendarConnector(BaseConnector):
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
 
-async def create_calendar_event(self, **params):
-    """Execute create_calendar_event on google_calendar."""
-    return await self._post("/create/calendar/event", params)
+    async def create_calendar_event(self, **params):
+        """Execute create_calendar_event on google_calendar."""
+        return await self._post("/create/calendar/event", params)
 
 
-async def check_participant_availability(self, **params):
-    """Execute check_participant_availability on google_calendar."""
-    return await self._post("/check/participant/availability", params)
+    async def check_participant_availability(self, **params):
+        """Execute check_participant_availability on google_calendar."""
+        return await self._post("/check/participant/availability", params)
 
 
-async def book_meeting_room(self, **params):
-    """Execute book_meeting_room on google_calendar."""
-    return await self._post("/book/meeting/room", params)
+    async def book_meeting_room(self, **params):
+        """Execute book_meeting_room on google_calendar."""
+        return await self._post("/book/meeting/room", params)
 
 
-async def cancel_event(self, **params):
-    """Execute cancel_event on google_calendar."""
-    return await self._post("/cancel/event", params)
+    async def cancel_event(self, **params):
+        """Execute cancel_event on google_calendar."""
+        return await self._post("/cancel/event", params)
 
 
-async def find_optimal_meeting_slot(self, **params):
-    """Execute find_optimal_meeting_slot on google_calendar."""
-    return await self._post("/find/optimal/meeting/slot", params)
+    async def find_optimal_meeting_slot(self, **params):
+        """Execute find_optimal_meeting_slot on google_calendar."""
+        return await self._post("/find/optimal/meeting/slot", params)
 

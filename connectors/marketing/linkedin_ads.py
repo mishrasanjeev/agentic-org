@@ -12,10 +12,10 @@ class LinkedinAdsConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def _register_tools(self):
-    self._tool_registry["create_sponsored_content_campaign"] = self.create_sponsored_content_campaign
-    self._tool_registry["get_campaign_impressions"] = self.get_campaign_impressions
-    self._tool_registry["create_lead_gen_form"] = self.create_lead_gen_form
-    self._tool_registry["define_account_audience_targeting"] = self.define_account_audience_targeting
+        self._tool_registry["create_sponsored_content_campaign"] = self.create_sponsored_content_campaign
+        self._tool_registry["get_campaign_impressions"] = self.get_campaign_impressions
+        self._tool_registry["create_lead_gen_form"] = self.create_lead_gen_form
+        self._tool_registry["define_account_audience_targeting"] = self.define_account_audience_targeting
 
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
@@ -31,22 +31,22 @@ class LinkedinAdsConnector(BaseConnector):
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
 
-async def create_sponsored_content_campaign(self, **params):
-    """Execute create_sponsored_content_campaign on linkedin_ads."""
-    return await self._post("/create/sponsored/content/campaign", params)
+    async def create_sponsored_content_campaign(self, **params):
+        """Execute create_sponsored_content_campaign on linkedin_ads."""
+        return await self._post("/create/sponsored/content/campaign", params)
 
 
-async def get_campaign_impressions(self, **params):
-    """Execute get_campaign_impressions on linkedin_ads."""
-    return await self._post("/get/campaign/impressions", params)
+    async def get_campaign_impressions(self, **params):
+        """Execute get_campaign_impressions on linkedin_ads."""
+        return await self._post("/get/campaign/impressions", params)
 
 
-async def create_lead_gen_form(self, **params):
-    """Execute create_lead_gen_form on linkedin_ads."""
-    return await self._post("/create/lead/gen/form", params)
+    async def create_lead_gen_form(self, **params):
+        """Execute create_lead_gen_form on linkedin_ads."""
+        return await self._post("/create/lead/gen/form", params)
 
 
-async def define_account_audience_targeting(self, **params):
-    """Execute define_account_audience_targeting on linkedin_ads."""
-    return await self._post("/define/account/audience/targeting", params)
+    async def define_account_audience_targeting(self, **params):
+        """Execute define_account_audience_targeting on linkedin_ads."""
+        return await self._post("/define/account/audience/targeting", params)
 

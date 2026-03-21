@@ -11,37 +11,37 @@ class MixpanelConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def _register_tools(self):
-    self._tool_registry["get_funnel_conversion_data"] = self.get_funnel_conversion_data
-    self._tool_registry["get_retention_cohort"] = self.get_retention_cohort
-    self._tool_registry["query_event_data"] = self.query_event_data
-    self._tool_registry["create_user_cohort"] = self.create_user_cohort
-    self._tool_registry["export_raw_event_data"] = self.export_raw_event_data
+        self._tool_registry["get_funnel_conversion_data"] = self.get_funnel_conversion_data
+        self._tool_registry["get_retention_cohort"] = self.get_retention_cohort
+        self._tool_registry["query_event_data"] = self.query_event_data
+        self._tool_registry["create_user_cohort"] = self.create_user_cohort
+        self._tool_registry["export_raw_event_data"] = self.export_raw_event_data
 
     async def _authenticate(self):
         api_key = self._get_secret("api_key")
         self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
-async def get_funnel_conversion_data(self, **params):
-    """Execute get_funnel_conversion_data on mixpanel."""
-    return await self._post("/get/funnel/conversion/data", params)
+    async def get_funnel_conversion_data(self, **params):
+        """Execute get_funnel_conversion_data on mixpanel."""
+        return await self._post("/get/funnel/conversion/data", params)
 
 
-async def get_retention_cohort(self, **params):
-    """Execute get_retention_cohort on mixpanel."""
-    return await self._post("/get/retention/cohort", params)
+    async def get_retention_cohort(self, **params):
+        """Execute get_retention_cohort on mixpanel."""
+        return await self._post("/get/retention/cohort", params)
 
 
-async def query_event_data(self, **params):
-    """Execute query_event_data on mixpanel."""
-    return await self._post("/query/event/data", params)
+    async def query_event_data(self, **params):
+        """Execute query_event_data on mixpanel."""
+        return await self._post("/query/event/data", params)
 
 
-async def create_user_cohort(self, **params):
-    """Execute create_user_cohort on mixpanel."""
-    return await self._post("/create/user/cohort", params)
+    async def create_user_cohort(self, **params):
+        """Execute create_user_cohort on mixpanel."""
+        return await self._post("/create/user/cohort", params)
 
 
-async def export_raw_event_data(self, **params):
-    """Execute export_raw_event_data on mixpanel."""
-    return await self._post("/export/raw/event/data", params)
+    async def export_raw_event_data(self, **params):
+        """Execute export_raw_event_data on mixpanel."""
+        return await self._post("/export/raw/event/data", params)
 

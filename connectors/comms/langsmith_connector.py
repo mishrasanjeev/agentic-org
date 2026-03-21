@@ -11,37 +11,37 @@ class LangsmithConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def _register_tools(self):
-    self._tool_registry["log_agent_trace"] = self.log_agent_trace
-    self._tool_registry["get_run_performance_stats"] = self.get_run_performance_stats
-    self._tool_registry["evaluate_output_quality"] = self.evaluate_output_quality
-    self._tool_registry["compare_prompt_versions"] = self.compare_prompt_versions
-    self._tool_registry["export_evaluation_dataset"] = self.export_evaluation_dataset
+        self._tool_registry["log_agent_trace"] = self.log_agent_trace
+        self._tool_registry["get_run_performance_stats"] = self.get_run_performance_stats
+        self._tool_registry["evaluate_output_quality"] = self.evaluate_output_quality
+        self._tool_registry["compare_prompt_versions"] = self.compare_prompt_versions
+        self._tool_registry["export_evaluation_dataset"] = self.export_evaluation_dataset
 
     async def _authenticate(self):
         api_key = self._get_secret("api_key")
         self._auth_headers = {"Authorization": f"Bearer {api_key}"}
 
-async def log_agent_trace(self, **params):
-    """Execute log_agent_trace on langsmith."""
-    return await self._post("/log/agent/trace", params)
+    async def log_agent_trace(self, **params):
+        """Execute log_agent_trace on langsmith."""
+        return await self._post("/log/agent/trace", params)
 
 
-async def get_run_performance_stats(self, **params):
-    """Execute get_run_performance_stats on langsmith."""
-    return await self._post("/get/run/performance/stats", params)
+    async def get_run_performance_stats(self, **params):
+        """Execute get_run_performance_stats on langsmith."""
+        return await self._post("/get/run/performance/stats", params)
 
 
-async def evaluate_output_quality(self, **params):
-    """Execute evaluate_output_quality on langsmith."""
-    return await self._post("/evaluate/output/quality", params)
+    async def evaluate_output_quality(self, **params):
+        """Execute evaluate_output_quality on langsmith."""
+        return await self._post("/evaluate/output/quality", params)
 
 
-async def compare_prompt_versions(self, **params):
-    """Execute compare_prompt_versions on langsmith."""
-    return await self._post("/compare/prompt/versions", params)
+    async def compare_prompt_versions(self, **params):
+        """Execute compare_prompt_versions on langsmith."""
+        return await self._post("/compare/prompt/versions", params)
 
 
-async def export_evaluation_dataset(self, **params):
-    """Execute export_evaluation_dataset on langsmith."""
-    return await self._post("/export/evaluation/dataset", params)
+    async def export_evaluation_dataset(self, **params):
+        """Execute export_evaluation_dataset on langsmith."""
+        return await self._post("/export/evaluation/dataset", params)
 

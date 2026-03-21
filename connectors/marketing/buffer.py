@@ -12,10 +12,10 @@ class BufferConnector(BaseConnector):
     rate_limit_rpm = 60
 
     def _register_tools(self):
-    self._tool_registry["schedule_social_post"] = self.schedule_social_post
-    self._tool_registry["get_post_analytics"] = self.get_post_analytics
-    self._tool_registry["manage_publishing_queue"] = self.manage_publishing_queue
-    self._tool_registry["approve_draft_post"] = self.approve_draft_post
+        self._tool_registry["schedule_social_post"] = self.schedule_social_post
+        self._tool_registry["get_post_analytics"] = self.get_post_analytics
+        self._tool_registry["manage_publishing_queue"] = self.manage_publishing_queue
+        self._tool_registry["approve_draft_post"] = self.approve_draft_post
 
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
@@ -31,22 +31,22 @@ class BufferConnector(BaseConnector):
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
 
-async def schedule_social_post(self, **params):
-    """Execute schedule_social_post on buffer."""
-    return await self._post("/schedule/social/post", params)
+    async def schedule_social_post(self, **params):
+        """Execute schedule_social_post on buffer."""
+        return await self._post("/schedule/social/post", params)
 
 
-async def get_post_analytics(self, **params):
-    """Execute get_post_analytics on buffer."""
-    return await self._post("/get/post/analytics", params)
+    async def get_post_analytics(self, **params):
+        """Execute get_post_analytics on buffer."""
+        return await self._post("/get/post/analytics", params)
 
 
-async def manage_publishing_queue(self, **params):
-    """Execute manage_publishing_queue on buffer."""
-    return await self._post("/manage/publishing/queue", params)
+    async def manage_publishing_queue(self, **params):
+        """Execute manage_publishing_queue on buffer."""
+        return await self._post("/manage/publishing/queue", params)
 
 
-async def approve_draft_post(self, **params):
-    """Execute approve_draft_post on buffer."""
-    return await self._post("/approve/draft/post", params)
+    async def approve_draft_post(self, **params):
+        """Execute approve_draft_post on buffer."""
+        return await self._post("/approve/draft/post", params)
 

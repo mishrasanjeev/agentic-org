@@ -12,11 +12,11 @@ class BrandwatchConnector(BaseConnector):
     rate_limit_rpm = 60
 
     def _register_tools(self):
-    self._tool_registry["get_brand_mentions"] = self.get_brand_mentions
-    self._tool_registry["analyze_mention_sentiment"] = self.analyze_mention_sentiment
-    self._tool_registry["get_share_of_voice"] = self.get_share_of_voice
-    self._tool_registry["set_volume_spike_alert"] = self.set_volume_spike_alert
-    self._tool_registry["export_mention_report"] = self.export_mention_report
+        self._tool_registry["get_brand_mentions"] = self.get_brand_mentions
+        self._tool_registry["analyze_mention_sentiment"] = self.analyze_mention_sentiment
+        self._tool_registry["get_share_of_voice"] = self.get_share_of_voice
+        self._tool_registry["set_volume_spike_alert"] = self.set_volume_spike_alert
+        self._tool_registry["export_mention_report"] = self.export_mention_report
 
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
@@ -32,27 +32,27 @@ class BrandwatchConnector(BaseConnector):
             token = resp.json()["access_token"]
         self._auth_headers = {"Authorization": f"Bearer {token}"}
 
-async def get_brand_mentions(self, **params):
-    """Execute get_brand_mentions on brandwatch."""
-    return await self._post("/get/brand/mentions", params)
+    async def get_brand_mentions(self, **params):
+        """Execute get_brand_mentions on brandwatch."""
+        return await self._post("/get/brand/mentions", params)
 
 
-async def analyze_mention_sentiment(self, **params):
-    """Execute analyze_mention_sentiment on brandwatch."""
-    return await self._post("/analyze/mention/sentiment", params)
+    async def analyze_mention_sentiment(self, **params):
+        """Execute analyze_mention_sentiment on brandwatch."""
+        return await self._post("/analyze/mention/sentiment", params)
 
 
-async def get_share_of_voice(self, **params):
-    """Execute get_share_of_voice on brandwatch."""
-    return await self._post("/get/share/of/voice", params)
+    async def get_share_of_voice(self, **params):
+        """Execute get_share_of_voice on brandwatch."""
+        return await self._post("/get/share/of/voice", params)
 
 
-async def set_volume_spike_alert(self, **params):
-    """Execute set_volume_spike_alert on brandwatch."""
-    return await self._post("/set/volume/spike/alert", params)
+    async def set_volume_spike_alert(self, **params):
+        """Execute set_volume_spike_alert on brandwatch."""
+        return await self._post("/set/volume/spike/alert", params)
 
 
-async def export_mention_report(self, **params):
-    """Execute export_mention_report on brandwatch."""
-    return await self._post("/export/mention/report", params)
+    async def export_mention_report(self, **params):
+        """Execute export_mention_report on brandwatch."""
+        return await self._post("/export/mention/report", params)
 

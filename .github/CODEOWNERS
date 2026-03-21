@@ -1,0 +1,13 @@
+# AgentFlow OS — Code Owners
+# Each line is a file pattern followed by one or more owners.
+# Order matters: later patterns take precedence.
+
+# Default owners
+* @mishrasanjeev
+
+# Domain-specific
+core/agents/finance/ @mishrasanjeev
+core/agents/hr/ @mishrasanjeev
+connectors/ @mishrasanjeev
+auth/ @mishrasanjeev
+workflows/ @mishrasanjeev
