@@ -203,6 +203,15 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
 
+    # Create tables on the test engine (the app will use this engine)
+    try:
+        from core.database import Base
+
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception:  # noqa: S110
+        pass  # Tables may already exist or models incomplete
+
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
