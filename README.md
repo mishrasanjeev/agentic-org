@@ -438,6 +438,16 @@ AgentFlow OS includes first-class support for Indian enterprise systems:
 
 ---
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Architecture](docs/architecture.md) | 8-layer system design, ER diagram, auth flow |
+| [API Reference](docs/api-reference.md) | All 32 endpoints with examples |
+| [Agent Guide](docs/agents.md) | 24 agents, prompt structure, confidence model |
+| [Agent Workflows](docs/agent-workflows.md) | Visual step-by-step flows for key agents from every department |
+| [Deployment](docs/deployment.md) | Docker, GKE lean ($50/mo), GKE production |
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Key points:
