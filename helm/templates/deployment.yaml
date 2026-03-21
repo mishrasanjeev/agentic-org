@@ -47,7 +47,7 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}-orchestrator
 spec:
-  replicas: {{ .Values.replicaCount.orchestrator | default 1 }}
+  replicas: {{ if kindIs "invalid" .Values.replicaCount.orchestrator }}1{{ else }}{{ .Values.replicaCount.orchestrator }}{{ end }}
   selector:
     matchLabels:
       app: agenticorg-orchestrator
@@ -76,7 +76,7 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}-workers
 spec:
-  replicas: {{ .Values.replicaCount.workers | default 1 }}
+  replicas: {{ if kindIs "invalid" .Values.replicaCount.workers }}1{{ else }}{{ .Values.replicaCount.workers }}{{ end }}
   selector:
     matchLabels:
       app: agenticorg-workers
