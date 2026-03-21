@@ -202,6 +202,15 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with test_engine.begin() as conn:
         await conn.run_sync(ORMBase.metadata.create_all)
 
+    # Seed the test tenant so FK constraints are satisfied
+    from core.models.tenant import Tenant
+    async with async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)() as seed_session:
+        async with seed_session.begin():
+            seed_session.add(Tenant(
+                id=uuid.UUID(TEST_TENANT_ID),
+                name="test-tenant", slug="test-tenant", plan="enterprise",
+            ))
+
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
