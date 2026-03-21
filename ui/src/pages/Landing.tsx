@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import ROICalculator from "../components/ROICalculator";
 
@@ -45,8 +46,8 @@ const DOMAINS = [
   {
     emoji: "\u{1F465}",
     name: "HR",
-    count: 5,
-    capabilities: ["Resume Screening", "Onboarding", "Payroll (EPFO)", "Leave Management"],
+    count: 6,
+    capabilities: ["Talent Acquisition", "Onboarding", "Payroll (EPFO)", "Performance", "L&D", "Offboarding"],
     color: "from-blue-500 to-indigo-600",
   },
   {
@@ -59,15 +60,15 @@ const DOMAINS = [
   {
     emoji: "\u2699\uFE0F",
     name: "Operations",
-    count: 4,
-    capabilities: ["Inventory Tracking", "Vendor Management", "Quality Assurance", "Logistics"],
+    count: 5,
+    capabilities: ["Support Triage", "Vendor Management", "Contract Intelligence", "Compliance Guard", "IT Ops"],
     color: "from-orange-500 to-red-600",
   },
   {
     emoji: "\u{1F4CB}",
     name: "Back Office",
-    count: 4,
-    capabilities: ["Document Processing", "Compliance Checks", "Data Entry", "Report Generation"],
+    count: 3,
+    capabilities: ["Legal Ops", "Risk Sentinel", "Facilities Management"],
     color: "from-cyan-500 to-blue-600",
   },
 ];
@@ -104,6 +105,8 @@ const INDIA_CONNECTORS = [
 ];
 
 export default function Landing() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased">
       {/* NAV BAR */}
@@ -111,7 +114,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-              AF
+              AO
             </div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </div>
@@ -120,18 +123,41 @@ export default function Landing() {
             <a href="#agents" className="text-slate-300 hover:text-white text-sm transition-colors">Agents</a>
             <a href="#architecture" className="text-slate-300 hover:text-white text-sm transition-colors">Architecture</a>
             <a href="#features" className="text-slate-300 hover:text-white text-sm transition-colors">Features</a>
-            <a href="#roi-calculator" className="text-slate-300 hover:text-white text-sm transition-colors">ROI Calculator</a>
+            <a href="#roi-calculator" className="text-slate-300 hover:text-white text-sm transition-colors">ROI</a>
             <Link to="/dashboard" className="text-slate-300 hover:text-white text-sm transition-colors">Dashboard</Link>
           </div>
-          <a
-            href="https://github.com/agentic-org/agenticorg"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors"
-          >
-            GitHub
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              href="https://github.com/mishrasanjeev/agentic-org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors"
+            >
+              GitHub
+            </a>
+            {/* Mobile hamburger */}
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white p-2" aria-label="Menu">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {mobileMenuOpen
+                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                }
+              </svg>
+            </button>
+          </div>
         </div>
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3">
+            <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">How it Works</a>
+            <a href="#agents" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">Agents</a>
+            <a href="#architecture" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">Architecture</a>
+            <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">Features</a>
+            <a href="#roi-calculator" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">ROI Calculator</a>
+            <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">Dashboard</Link>
+            <a href="https://github.com/mishrasanjeev/agentic-org" target="_blank" rel="noopener noreferrer" className="block text-slate-300 hover:text-white text-sm">GitHub</a>
+          </div>
+        )}
       </nav>
 
       {/* HERO */}
@@ -188,7 +214,7 @@ export default function Landing() {
           {/* CTAs */}
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://github.com/agentic-org/agenticorg"
+              href="https://github.com/mishrasanjeev/agentic-org"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-100 transition-all shadow-lg shadow-white/10 hover:shadow-white/20"
@@ -199,7 +225,7 @@ export default function Landing() {
               View on GitHub
             </a>
             <a
-              href="https://github.com/agentic-org/agenticorg#readme"
+              href="https://github.com/mishrasanjeev/agentic-org#readme"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
@@ -429,7 +455,7 @@ export default function Landing() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://github.com/agentic-org/agenticorg"
+              href="https://github.com/mishrasanjeev/agentic-org"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-100 transition-all shadow-lg"
@@ -440,7 +466,7 @@ export default function Landing() {
               Star on GitHub
             </a>
             <a
-              href="https://github.com/agentic-org/agenticorg/blob/main/CONTRIBUTING.md"
+              href="https://github.com/mishrasanjeev/agentic-org/blob/main/CONTRIBUTING.md"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
@@ -459,7 +485,7 @@ export default function Landing() {
             <div className="sm:col-span-2 lg:col-span-1">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-                  AF
+                  AO
                 </div>
                 <span className="text-white font-semibold">AgenticOrg</span>
               </div>
@@ -479,7 +505,7 @@ export default function Landing() {
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg#readme"
+                    href="https://github.com/mishrasanjeev/agentic-org#readme"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -489,7 +515,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/architecture.md"
+                    href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/architecture.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -499,7 +525,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/api-reference.md"
+                    href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -509,7 +535,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/agents-guide.md"
+                    href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/agents-guide.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -519,7 +545,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/why-agenticorg.md"
+                    href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/why-agenticorg.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -538,7 +564,7 @@ export default function Landing() {
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg"
+                    href="https://github.com/mishrasanjeev/agentic-org"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -548,7 +574,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg/blob/main/CONTRIBUTING.md"
+                    href="https://github.com/mishrasanjeev/agentic-org/blob/main/CONTRIBUTING.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -558,7 +584,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agenticorg/blob/main/LICENSE"
+                    href="https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
