@@ -8,7 +8,7 @@ from dataclasses import dataclass
 @dataclass
 class ParsedScope:
     """Parsed scope components."""
-    category: str        # tool | agentflow
+    category: str        # tool | agenticorg
     connector: str       # oracle_fusion, etc.
     permission: str      # read | write | admin
     resource: str        # purchase_order, journal_entry, etc.
@@ -16,7 +16,7 @@ class ParsedScope:
 
 # Pattern: tool:{connector}:{perm}:{resource}[:capped:{N}]
 SCOPE_PATTERN = re.compile(
-    r"^(tool|agentflow):([\w]+):([\w]+)(?::([\w]+))?(?::capped:(\d+))?$"
+    r"^(tool|agenticorg):([\w]+):([\w]+)(?::([\w]+))?(?::capped:(\d+))?$"
 )
 
 

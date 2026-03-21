@@ -55,11 +55,11 @@ class CostLedger:
     """
 
     # Redis key templates
-    _DAILY_COST_KEY = "agentflow:cost:daily:{agent_id}:{date}"
-    _DAILY_TOKENS_KEY = "agentflow:cost:daily_tokens:{agent_id}:{date}"
-    _MONTHLY_COST_KEY = "agentflow:cost:monthly:{agent_id}:{month}"
-    _MONTHLY_TOKENS_KEY = "agentflow:cost:monthly_tokens:{agent_id}:{month}"
-    _DAILY_TASKS_KEY = "agentflow:cost:daily_tasks:{agent_id}:{date}"
+    _DAILY_COST_KEY = "agenticorg:cost:daily:{agent_id}:{date}"
+    _DAILY_TOKENS_KEY = "agenticorg:cost:daily_tokens:{agent_id}:{date}"
+    _MONTHLY_COST_KEY = "agenticorg:cost:monthly:{agent_id}:{month}"
+    _MONTHLY_TOKENS_KEY = "agenticorg:cost:monthly_tokens:{agent_id}:{month}"
+    _DAILY_TASKS_KEY = "agenticorg:cost:daily_tasks:{agent_id}:{date}"
 
     # Flush settings
     _FLUSH_BUFFER_SIZE = 50
@@ -469,7 +469,7 @@ class CostLedger:
 
         try:
             await self._event_emitter(
-                event_type="agentflow.agent.cost_cap_exceeded",
+                event_type="agenticorg.agent.cost_cap_exceeded",
                 payload={
                     "agent_id": agent_id,
                     "reason": reason,

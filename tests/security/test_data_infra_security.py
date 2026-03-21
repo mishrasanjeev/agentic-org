@@ -331,7 +331,7 @@ class TestSECINFRA001:
         """
         # Simulated scan results (as would come from Trivy/Snyk)
         scan_result = {
-            "image": "agentflow-core:v2.0.0",
+            "image": "agenticorg-core:v2.0.0",
             "scan_date": "2026-03-21",
             "vulnerabilities": {
                 "critical": 0,

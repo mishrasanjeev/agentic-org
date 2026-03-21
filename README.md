@@ -1,4 +1,4 @@
-# AgentFlow OS
+# AgenticOrg
 
 **Enterprise Agent Swarm Platform** -- 24 specialist AI agents orchestrated by NEXUS, connected to 42 enterprise systems, with full governance, compliance, and unlimited scaling.
 
@@ -9,9 +9,9 @@
 
 ---
 
-## What is AgentFlow OS?
+## What is AgenticOrg?
 
-AgentFlow OS deploys **24 specialist AI agents** across Finance, HR, Marketing, Operations, and Back Office -- coordinated by the **NEXUS orchestrator** -- to automate enterprise workflows end-to-end. Each agent has scoped tool access, confidence-based HITL escalation, and full audit trails.
+AgenticOrg deploys **24 specialist AI agents** across Finance, HR, Marketing, Operations, and Back Office -- coordinated by the **NEXUS orchestrator** -- to automate enterprise workflows end-to-end. Each agent has scoped tool access, confidence-based HITL escalation, and full audit trails.
 
 ### Key Numbers
 
@@ -107,8 +107,8 @@ graph TB
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-org/agentflow-os.git
-cd agentflow-os
+git clone https://github.com/your-org/agenticorg.git
+cd agenticorg
 cp .env.example .env
 # Edit .env with your API keys (ANTHROPIC_API_KEY is required)
 ```
@@ -124,12 +124,12 @@ docker compose up -d postgres redis minio
 ```bash
 # Migrations auto-run via Docker volume mount to initdb.d
 # Or manually:
-psql -h localhost -U agentflow -d agentflow -f migrations/001_extensions.sql
-psql -h localhost -U agentflow -d agentflow -f migrations/002_core.sql
-psql -h localhost -U agentflow -d agentflow -f migrations/003_operational.sql
-psql -h localhost -U agentflow -d agentflow -f migrations/004_scaling.sql
-psql -h localhost -U agentflow -d agentflow -f migrations/005_rls.sql
-psql -h localhost -U agentflow -d agentflow -f migrations/006_partitions.sql
+psql -h localhost -U agenticorg -d agenticorg -f migrations/001_extensions.sql
+psql -h localhost -U agenticorg -d agenticorg -f migrations/002_core.sql
+psql -h localhost -U agenticorg -d agenticorg -f migrations/003_operational.sql
+psql -h localhost -U agenticorg -d agenticorg -f migrations/004_scaling.sql
+psql -h localhost -U agenticorg -d agenticorg -f migrations/005_rls.sql
+psql -h localhost -U agenticorg -d agenticorg -f migrations/006_partitions.sql
 ```
 
 ### 4. Start the API
@@ -161,7 +161,7 @@ docker compose up -d
 ## Project Structure
 
 ```
-agentflow-os/
+agenticorg/
 ├── api/                    # FastAPI REST API (32 endpoints + WebSocket)
 │   ├── v1/                 # Versioned route modules
 │   └── websocket/          # Real-time agent activity feed
@@ -373,8 +373,8 @@ docker compose up -d
 ### Kubernetes (Production)
 
 ```bash
-helm upgrade --install agentflow-os ./helm \
-  --namespace agentflow-prod \
+helm upgrade --install agenticorg ./helm \
+  --namespace agenticorg-prod \
   --set image.tag=latest \
   --set postgresql.enabled=true \
   --set redis.enabled=true \
@@ -414,18 +414,18 @@ See [`.env.example`](.env.example) for the complete configuration reference. Key
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | Claude API key for agent reasoning |
-| `AGENTFLOW_DB_URL` | Yes | PostgreSQL connection string |
-| `AGENTFLOW_REDIS_URL` | Yes | Redis connection string |
+| `AGENTICORG_DB_URL` | Yes | PostgreSQL connection string |
+| `AGENTICORG_REDIS_URL` | Yes | Redis connection string |
 | `GRANTEX_TOKEN_SERVER` | Yes | OAuth2 authorization server |
-| `AGENTFLOW_PII_MASKING` | No | Default: `true`. Never disable in production. |
-| `AGENTFLOW_DATA_REGION` | No | Default: `IN`. Options: IN, EU, US |
-| `AGENTFLOW_DEFAULT_HITL_THRESHOLD_INR` | No | Default: `500000` (5L INR) |
+| `AGENTICORG_PII_MASKING` | No | Default: `true`. Never disable in production. |
+| `AGENTICORG_DATA_REGION` | No | Default: `IN`. Options: IN, EU, US |
+| `AGENTICORG_DEFAULT_HITL_THRESHOLD_INR` | No | Default: `500000` (5L INR) |
 
 ---
 
 ## India-Specific Features
 
-AgentFlow OS includes first-class support for Indian enterprise systems:
+AgenticOrg includes first-class support for Indian enterprise systems:
 
 - **GSTN Portal** -- e-Invoice IRN generation, GSTR-1/2A/3B/9 filing
 - **EPFO Portal** -- ECR filing, UAN verification, passbook download
@@ -447,6 +447,7 @@ AgentFlow OS includes first-class support for Indian enterprise systems:
 | [Agent Guide](docs/agents.md) | 24 agents, prompt structure, confidence model |
 | [Agent Workflows](docs/agent-workflows.md) | Visual step-by-step flows for key agents from every department |
 | [Deployment](docs/deployment.md) | Docker, GKE lean ($50/mo), GKE production |
+| [Why AgenticOrg?](docs/why-agenticorg.md) | Comparison vs manual ops, custom builds, and competitors |
 
 ## Contributing
 

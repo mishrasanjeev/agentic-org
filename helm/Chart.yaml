@@ -1,5 +1,5 @@
 apiVersion: v2
-name: agentflow-os
+name: agenticorg
 description: Enterprise Agent Swarm Platform
 type: application
 version: 2.1.0

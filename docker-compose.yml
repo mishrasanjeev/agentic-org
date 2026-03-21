@@ -4,16 +4,16 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_DB: agentflow
-      POSTGRES_USER: agentflow
-      POSTGRES_PASSWORD: agentflow_dev
+      POSTGRES_DB: agenticorg
+      POSTGRES_USER: agenticorg
+      POSTGRES_PASSWORD: agenticorg_dev
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentflow"]
+      test: ["CMD-SHELL", "pg_isready -U agenticorg"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -34,8 +34,8 @@ services:
   minio:
     image: minio/minio:latest
     environment:
-      MINIO_ROOT_USER: agentflow
-      MINIO_ROOT_PASSWORD: agentflow_dev
+      MINIO_ROOT_USER: agenticorg
+      MINIO_ROOT_PASSWORD: agenticorg_dev
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -55,14 +55,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      AGENTFLOW_ENV: development
-      AGENTFLOW_DB_URL: postgresql+asyncpg://agentflow:agentflow_dev@postgres:5432/agentflow
-      AGENTFLOW_REDIS_URL: redis://redis:6379/0
-      AGENTFLOW_STORAGE_BUCKET: agentflow-docs-dev
-      AGENTFLOW_STORAGE_ENDPOINT: http://minio:9000
-      AGENTFLOW_SECRET_KEY: dev-secret-key-change-in-production-32chars
-      AGENTFLOW_PII_MASKING: "true"
-      AGENTFLOW_LOG_LEVEL: DEBUG
+      AGENTICORG_ENV: development
+      AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+      AGENTICORG_REDIS_URL: redis://redis:6379/0
+      AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
+      AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
+      AGENTICORG_SECRET_KEY: dev-secret-key-change-in-production-32chars
+      AGENTICORG_PII_MASKING: "true"
+      AGENTICORG_LOG_LEVEL: DEBUG
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,13 +79,13 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      AGENTFLOW_ENV: development
-      AGENTFLOW_DB_URL: postgresql+asyncpg://agentflow:agentflow_dev@postgres:5432/agentflow
-      AGENTFLOW_REDIS_URL: redis://redis:6379/0
-      AGENTFLOW_STORAGE_BUCKET: agentflow-docs-dev
-      AGENTFLOW_STORAGE_ENDPOINT: http://minio:9000
-      AGENTFLOW_SECRET_KEY: dev-secret-key-change-in-production-32chars
-      AGENTFLOW_PII_MASKING: "true"
+      AGENTICORG_ENV: development
+      AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+      AGENTICORG_REDIS_URL: redis://redis:6379/0
+      AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
+      AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
+      AGENTICORG_SECRET_KEY: dev-secret-key-change-in-production-32chars
+      AGENTICORG_PII_MASKING: "true"
     depends_on:
       postgres:
         condition: service_healthy

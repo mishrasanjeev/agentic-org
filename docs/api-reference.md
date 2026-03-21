@@ -60,7 +60,7 @@ sequenceDiagram
 sequenceDiagram
     participant Client
     participant Grantex as Grantex Auth Server
-    participant API as AgentFlow API
+    participant API as AgenticOrg API
 
     Client->>Grantex: POST /oauth2/token<br/>(client_credentials grant)
     Note right of Client: client_id + client_secret<br/>+ requested scopes
@@ -77,7 +77,7 @@ curl -X POST https://auth.yourorg.com/oauth2/token \
   -d "grant_type=client_credentials" \
   -d "client_id=$GRANTEX_CLIENT_ID" \
   -d "client_secret=$GRANTEX_CLIENT_SECRET" \
-  -d "scope=agentflow:orchestrate agentflow:agents:read"
+  -d "scope=agenticorg:orchestrate agenticorg:agents:read"
 
 # Use token in requests
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/agents
@@ -87,23 +87,23 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/agents
 
 ```mermaid
 graph TD
-    Root["agentflow:*<br/><i>superadmin</i>"]
-    Root --> Orchestrate["agentflow:orchestrate<br/><i>run workflows</i>"]
-    Root --> AgentsAll["agentflow:agents:*"]
-    Root --> WorkflowsAll["agentflow:workflows:*"]
-    Root --> ComplianceAll["agentflow:compliance:*"]
+    Root["agenticorg:*<br/><i>superadmin</i>"]
+    Root --> Orchestrate["agenticorg:orchestrate<br/><i>run workflows</i>"]
+    Root --> AgentsAll["agenticorg:agents:*"]
+    Root --> WorkflowsAll["agenticorg:workflows:*"]
+    Root --> ComplianceAll["agenticorg:compliance:*"]
 
-    AgentsAll --> AgentsRead["agentflow:agents:read"]
-    AgentsAll --> AgentsWrite["agentflow:agents:write"]
-    AgentsAll --> AgentsAdmin["agentflow:agents:admin<br/><i>promote, pause, delete</i>"]
+    AgentsAll --> AgentsRead["agenticorg:agents:read"]
+    AgentsAll --> AgentsWrite["agenticorg:agents:write"]
+    AgentsAll --> AgentsAdmin["agenticorg:agents:admin<br/><i>promote, pause, delete</i>"]
 
-    WorkflowsAll --> WfRead["agentflow:workflows:read"]
-    WorkflowsAll --> WfWrite["agentflow:workflows:write"]
-    WorkflowsAll --> WfRun["agentflow:workflows:run"]
+    WorkflowsAll --> WfRead["agenticorg:workflows:read"]
+    WorkflowsAll --> WfWrite["agenticorg:workflows:write"]
+    WorkflowsAll --> WfRun["agenticorg:workflows:run"]
 
-    ComplianceAll --> DSAR["agentflow:compliance:dsar"]
-    ComplianceAll --> Evidence["agentflow:compliance:evidence"]
-    ComplianceAll --> AuditRead["agentflow:compliance:audit:read"]
+    ComplianceAll --> DSAR["agenticorg:compliance:dsar"]
+    ComplianceAll --> Evidence["agenticorg:compliance:evidence"]
+    ComplianceAll --> AuditRead["agenticorg:compliance:audit:read"]
 
     style Root fill:#fce4ec,stroke:#c62828,stroke-width:2px
     style AgentsAll fill:#fff3e0,stroke:#e65100
@@ -119,7 +119,7 @@ graph TD
 ```
 POST /api/v1/agents
 ```
-Creates a new agent in `shadow` status. Requires `agentflow:agents:write` scope.
+Creates a new agent in `shadow` status. Requires `agenticorg:agents:write` scope.
 
 **Request Body:**
 ```json

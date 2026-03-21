@@ -1,1 +1,1 @@
-"""AgentFlow OS REST API."""
+"""AgenticOrg REST API."""

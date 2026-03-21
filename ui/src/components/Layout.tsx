@@ -13,7 +13,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen">
       <aside className="w-56 border-r bg-muted/30 p-4 flex flex-col gap-1">
-        <h1 className="text-lg font-bold mb-4">AgentFlow OS</h1>
+        <h1 className="text-lg font-bold mb-4">AgenticOrg</h1>
         {NAV.map(({ path, label }) => (
           <Link key={path} to={path}
             className={`px-3 py-2 rounded text-sm ${location.pathname === path ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{label}</Link>

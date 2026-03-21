@@ -28,6 +28,6 @@ def get_current_user(request: Request) -> dict:
 def require_scope(scope: str):
     def checker(request: Request):
         scopes = getattr(request.state, "scopes", [])
-        if scope not in scopes and not any(s.startswith("agentflow:admin") for s in scopes):
+        if scope not in scopes and not any(s.startswith("agenticorg:admin") for s in scopes):
             raise HTTPException(403, f"Missing scope: {scope}")
     return Depends(checker)

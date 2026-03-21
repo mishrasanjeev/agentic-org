@@ -1,4 +1,4 @@
-"""NEXUS — central orchestrator for AgentFlow OS."""
+"""NEXUS — central orchestrator for AgenticOrg."""
 from __future__ import annotations
 
 from typing import Any

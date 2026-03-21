@@ -1,1 +1,1 @@
-"""AgentFlow OS — Enterprise Agent Swarm Platform."""
+"""AgenticOrg — Enterprise Agent Swarm Platform."""

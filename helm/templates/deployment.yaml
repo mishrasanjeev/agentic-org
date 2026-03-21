@@ -6,11 +6,11 @@ spec:
   replicas: {{ .Values.replicaCount.api }}
   selector:
     matchLabels:
-      app: agentflow-api
+      app: agenticorg-api
   template:
     metadata:
       labels:
-        app: agentflow-api
+        app: agenticorg-api
     spec:
       containers:
         - name: api
@@ -19,7 +19,7 @@ spec:
             - containerPort: 8000
           envFrom:
             - secretRef:
-                name: {{ .Values.secretName | default "agentflow-secrets" }}
+                name: {{ .Values.secretName | default "agenticorg-secrets" }}
           env:
             {{- range $key, $val := .Values.env }}
             - name: {{ $key }}
@@ -50,11 +50,11 @@ spec:
   replicas: {{ .Values.replicaCount.orchestrator | default 1 }}
   selector:
     matchLabels:
-      app: agentflow-orchestrator
+      app: agenticorg-orchestrator
   template:
     metadata:
       labels:
-        app: agentflow-orchestrator
+        app: agenticorg-orchestrator
     spec:
       containers:
         - name: orchestrator
@@ -62,7 +62,7 @@ spec:
           command: ["python", "-m", "core.orchestrator.nexus"]
           envFrom:
             - secretRef:
-                name: {{ .Values.secretName | default "agentflow-secrets" }}
+                name: {{ .Values.secretName | default "agenticorg-secrets" }}
           env:
             {{- range $key, $val := .Values.env }}
             - name: {{ $key }}
@@ -79,11 +79,11 @@ spec:
   replicas: {{ .Values.replicaCount.workers | default 1 }}
   selector:
     matchLabels:
-      app: agentflow-workers
+      app: agenticorg-workers
   template:
     metadata:
       labels:
-        app: agentflow-workers
+        app: agenticorg-workers
     spec:
       containers:
         - name: worker
@@ -91,7 +91,7 @@ spec:
           command: ["celery", "-A", "core.worker", "worker", "--loglevel=info", "--concurrency=2"]
           envFrom:
             - secretRef:
-                name: {{ .Values.secretName | default "agentflow-secrets" }}
+                name: {{ .Values.secretName | default "agenticorg-secrets" }}
           env:
             {{- range $key, $val := .Values.env }}
             - name: {{ $key }}
@@ -109,11 +109,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: agentflow-ui
+      app: agenticorg-ui
   template:
     metadata:
       labels:
-        app: agentflow-ui
+        app: agenticorg-ui
     spec:
       containers:
         - name: ui

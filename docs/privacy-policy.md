@@ -1,10 +1,10 @@
 # Privacy Policy
 
-**AgentFlow OS by Agentic Org**
+**AgenticOrg by Agentic Org**
 **Effective Date:** March 21, 2026
 **Last Updated:** March 21, 2026
 
-This Privacy Policy describes how Agentic Org ("we", "us", "our") collects, uses, and protects personal data when you use the AgentFlow OS platform at agenticorg.ai (the "Service").
+This Privacy Policy describes how Agentic Org ("we", "us", "our") collects, uses, and protects personal data when you use the AgenticOrg platform at agenticorg.ai (the "Service").
 
 ---
 
@@ -35,7 +35,7 @@ This Privacy Policy describes how Agentic Org ("we", "us", "our") collects, uses
 
 We process personal data for the following purposes:
 
-- **Service delivery:** Operating and maintaining the AgentFlow OS platform.
+- **Service delivery:** Operating and maintaining the AgenticOrg platform.
 - **Security and fraud prevention:** Detecting unauthorized access and enforcing security policies.
 - **Audit and compliance:** Maintaining tamper-proof audit logs for regulatory compliance.
 - **Product improvement:** Analyzing aggregated, anonymized usage patterns to improve the platform.
@@ -45,7 +45,7 @@ We process personal data for the following purposes:
 
 ## 3. PII Masking
 
-AgentFlow OS enforces **PII masking by default** across all agent operations. When enabled:
+AgenticOrg enforces **PII masking by default** across all agent operations. When enabled:
 
 - Personally identifiable information (names, email addresses, phone numbers, government IDs, financial account numbers) is automatically detected and masked in agent logs, decision records, and workflow outputs.
 - Raw PII is accessible only to authorized users with explicit "PII Viewer" permissions.
@@ -122,7 +122,7 @@ Response time: Within 30 days of receiving your request.
 To exercise any of your rights under GDPR, the DPDP Act, or other applicable laws:
 
 1. **Email:** Send a request to mishra.sanjeev@gmail.com with the subject line "Data Subject Request".
-2. **In-platform:** Navigate to Settings > Privacy > Data Requests in the AgentFlow OS dashboard.
+2. **In-platform:** Navigate to Settings > Privacy > Data Requests in the AgenticOrg dashboard.
 3. **Verification:** We will verify your identity before processing any request.
 4. **Response time:** We aim to respond within 30 days. For complex requests, we may extend this by an additional 60 days with prior notice.
 

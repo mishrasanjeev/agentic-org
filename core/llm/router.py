@@ -28,7 +28,7 @@ class LLMRouter:
 
     Default config uses Gemini Flash (free tier) as primary with
     Gemini Pro as fallback. Switch to Claude/GPT-4o when you have
-    paying customers by changing AGENTFLOW_LLM_PRIMARY.
+    paying customers by changing AGENTICORG_LLM_PRIMARY.
 
     Supported model patterns:
       - "gemini-*"  → Google Generative AI API (free tier available)

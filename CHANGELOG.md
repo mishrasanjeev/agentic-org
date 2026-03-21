@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AgentFlow OS are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
+All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2.1.0] - 2026-03-21
 

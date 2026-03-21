@@ -72,7 +72,7 @@ class BaseConnector(abc.ABC):
         if env_key in self.config:
             return self.config[env_key]
         # In production, this would call Google Secret Manager / Vault / K8s secrets
-        # using secret_ref as the path: e.g., "agentflow/prod/connectors/darwinbox/credentials"
+        # using secret_ref as the path: e.g., "agenticorg/prod/connectors/darwinbox/credentials"
         if secret_ref:
             logger.debug("secret_lookup", ref=secret_ref, key=key)
         return self.config.get("api_key", "") or self.config.get("access_token", "")

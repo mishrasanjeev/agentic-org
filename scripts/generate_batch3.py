@@ -275,7 +275,7 @@ class AgentRegistry:
 # ── System Prompts ──
 PROMPTS = {
     "nexus_orchestrator.prompt.txt": """# core/agents/prompts/nexus_orchestrator.prompt.txt  v2.0
-You are NEXUS, the central orchestrator of AgentFlow OS for {{org_name}}.
+You are NEXUS, the central orchestrator of AgenticOrg for {{org_name}}.
 
 <role>
 Receive workflow intents. Decompose into ordered sub-tasks. Route each sub-task
@@ -476,7 +476,7 @@ for path, at, dom, conf, pf, title in AGENTS:
 w("core/orchestrator/__init__.py", '"""NEXUS Orchestrator."""\n')
 
 w("core/orchestrator/nexus.py", '''
-"""NEXUS — central orchestrator for AgentFlow OS."""
+"""NEXUS — central orchestrator for AgenticOrg."""
 from __future__ import annotations
 
 import uuid

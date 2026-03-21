@@ -15,7 +15,7 @@ def w(rel_path, content):
 
 
 def gen_auth():
-    w("auth/__init__.py", '"""Authentication layer for AgentFlow OS."""\n')
+    w("auth/__init__.py", '"""Authentication layer for AgenticOrg."""\n')
 
     w("auth/jwt.py", '''
     """JWT validation using RS256 with JWKS support."""
@@ -72,7 +72,7 @@ def gen_auth():
                 token,
                 rsa_key,
                 algorithms=["RS256"],
-                audience="agentflow-tool-gateway",
+                audience="agenticorg-tool-gateway",
             )
             return payload
         except JWTError as e:
@@ -84,11 +84,11 @@ def gen_auth():
 
 
     def extract_tenant_id(claims: dict[str, Any]) -> str:
-        return claims.get("agentflow:tenant_id", "")
+        return claims.get("agenticorg:tenant_id", "")
 
 
     def extract_agent_id(claims: dict[str, Any]) -> str:
-        return claims.get("agentflow:agent_id", "")
+        return claims.get("agenticorg:agent_id", "")
     ''')
 
     w("auth/grantex.py", '''
@@ -126,7 +126,7 @@ def gen_auth():
                         "grant_type": "client_credentials",
                         "client_id": self.client_id,
                         "client_secret": self.client_secret,
-                        "scope": "agentflow:orchestrate agentflow:agents:read",
+                        "scope": "agenticorg:orchestrate agenticorg:agents:read",
                     },
                 )
                 resp.raise_for_status()
@@ -192,7 +192,7 @@ def gen_auth():
             self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
             # Subscribe to revocation channel
             pubsub = self.redis.pubsub()
-            await pubsub.subscribe("agentflow:token:revoke")
+            await pubsub.subscribe("agenticorg:token:revoke")
             asyncio.create_task(self._listen_revocations(pubsub))
 
         async def get_token(self, agent_id: str) -> str | None:
@@ -223,7 +223,7 @@ def gen_auth():
             if not self.redis:
                 return
             await self.redis.delete(f"agent:{agent_id}:token")
-            await self.redis.publish("agentflow:token:revoke", agent_id)
+            await self.redis.publish("agenticorg:token:revoke", agent_id)
             if agent_id in self._refresh_tasks:
                 self._refresh_tasks[agent_id].cancel()
                 del self._refresh_tasks[agent_id]
@@ -270,7 +270,7 @@ def gen_auth():
     @dataclass
     class ParsedScope:
         """Parsed scope components."""
-        category: str        # tool | agentflow
+        category: str        # tool | agenticorg
         connector: str       # oracle_fusion, etc.
         permission: str      # read | write | admin
         resource: str        # purchase_order, journal_entry, etc.
@@ -278,7 +278,7 @@ def gen_auth():
 
     # Pattern: tool:{connector}:{perm}:{resource}[:capped:{N}]
     SCOPE_PATTERN = re.compile(
-        r"^(tool|agentflow):([\\w]+):([\\w]+)(?::([\\w]+))?(?::capped:(\\d+))?$"
+        r"^(tool|agenticorg):([\\w]+):([\\w]+)(?::([\\w]+))?(?::capped:(\\d+))?$"
     )
 
 
@@ -470,7 +470,7 @@ def gen_auth():
             request.state.claims = claims
             request.state.tenant_id = tenant_id
             request.state.scopes = extract_scopes(claims)
-            request.state.agent_id = claims.get("agentflow:agent_id")
+            request.state.agent_id = claims.get("agenticorg:agent_id")
             request.state.user_sub = claims.get("sub", "")
 
             # Tenant mismatch check (E4004)

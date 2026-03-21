@@ -2,7 +2,7 @@
 
 ## System Overview
 
-AgentFlow OS is an 8-layer enterprise platform that orchestrates AI agents to automate business workflows.
+AgenticOrg is an 8-layer enterprise platform that orchestrates AI agents to automate business workflows.
 
 ```mermaid
 graph TB
@@ -467,7 +467,7 @@ sequenceDiagram
 
     Note over Platform,Grantex: Platform Authentication
     Platform->>Grantex: POST /oauth2/token<br/>(client_credentials)
-    Grantex-->>Platform: Platform JWT<br/>(agentflow:orchestrate scope)
+    Grantex-->>Platform: Platform JWT<br/>(agenticorg:orchestrate scope)
 
     Note over Platform,API: Agent Creation
     Platform->>API: POST /agents (Bearer JWT)

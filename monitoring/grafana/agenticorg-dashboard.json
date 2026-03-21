@@ -70,7 +70,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(agentflow_tasks_total{tenant=~\"$tenant\"})",
+          "expr": "sum(agenticorg_tasks_total{tenant=~\"$tenant\"})",
           "legendFormat": "Total Tasks",
           "refId": "A"
         }
@@ -126,7 +126,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_stp_rate{tenant=~\"$tenant\", domain=~\"$domain\"}",
+          "expr": "agenticorg_stp_rate{tenant=~\"$tenant\", domain=~\"$domain\"}",
           "legendFormat": "{{domain}}",
           "refId": "A"
         }
@@ -182,7 +182,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_hitl_rate{tenant=~\"$tenant\", domain=~\"$domain\"}",
+          "expr": "agenticorg_hitl_rate{tenant=~\"$tenant\", domain=~\"$domain\"}",
           "legendFormat": "{{domain}} / {{agent_type}}",
           "refId": "A"
         }
@@ -232,7 +232,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(agentflow_agent_replicas{tenant=~\"$tenant\"}) by (agent_type)",
+          "expr": "sum(agenticorg_agent_replicas{tenant=~\"$tenant\"}) by (agent_type)",
           "legendFormat": "{{agent_type}}",
           "refId": "A"
         }
@@ -304,7 +304,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(agentflow_task_latency_seconds_bucket{tenant=~\"$tenant\", domain=~\"$domain\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.50, sum(rate(agenticorg_task_latency_seconds_bucket{tenant=~\"$tenant\", domain=~\"$domain\"}[5m])) by (le, domain))",
           "legendFormat": "p50 — {{domain}}",
           "refId": "A"
         },
@@ -314,7 +314,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum(rate(agentflow_task_latency_seconds_bucket{tenant=~\"$tenant\", domain=~\"$domain\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.90, sum(rate(agenticorg_task_latency_seconds_bucket{tenant=~\"$tenant\", domain=~\"$domain\"}[5m])) by (le, domain))",
           "legendFormat": "p90 — {{domain}}",
           "refId": "B"
         },
@@ -324,7 +324,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(agentflow_task_latency_seconds_bucket{tenant=~\"$tenant\", domain=~\"$domain\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.99, sum(rate(agenticorg_task_latency_seconds_bucket{tenant=~\"$tenant\", domain=~\"$domain\"}[5m])) by (le, domain))",
           "legendFormat": "p99 — {{domain}}",
           "refId": "C"
         }
@@ -389,7 +389,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_tool_error_rate{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_tool_error_rate{tenant=~\"$tenant\"}",
           "legendFormat": "{{tool_name}} ({{error_code}})",
           "refId": "A"
         }
@@ -459,7 +459,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(agentflow_llm_tokens_total{tenant=~\"$tenant\"}[5m])) by (agent_type, model)",
+          "expr": "sum(rate(agenticorg_llm_tokens_total{tenant=~\"$tenant\"}[5m])) by (agent_type, model)",
           "legendFormat": "{{agent_type}} / {{model}}",
           "refId": "A"
         }
@@ -523,7 +523,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(agentflow_llm_cost_usd_total{tenant=~\"$tenant\"}) by (agent_type, model)",
+          "expr": "sum(agenticorg_llm_cost_usd_total{tenant=~\"$tenant\"}) by (agent_type, model)",
           "legendFormat": "{{agent_type}} / {{model}}",
           "refId": "A"
         }
@@ -580,7 +580,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_agent_confidence_avg{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_agent_confidence_avg{tenant=~\"$tenant\"}",
           "legendFormat": "{{agent_type}}",
           "refId": "A"
         }
@@ -650,7 +650,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_agent_replicas{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_agent_replicas{tenant=~\"$tenant\"}",
           "legendFormat": "{{agent_type}}",
           "refId": "A"
         }
@@ -707,7 +707,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_agent_budget_pct{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_agent_budget_pct{tenant=~\"$tenant\"}",
           "legendFormat": "{{agent_id}}",
           "refId": "A"
         }
@@ -765,7 +765,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_circuit_breaker_state{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_circuit_breaker_state{tenant=~\"$tenant\"}",
           "legendFormat": "{{connector_name}}",
           "refId": "A"
         }
@@ -822,7 +822,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_shadow_accuracy{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_shadow_accuracy{tenant=~\"$tenant\"}",
           "legendFormat": "shadow:{{shadow_agent_id}} vs ref:{{reference_agent_id}}",
           "refId": "A"
         }
@@ -897,7 +897,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "agentflow_hitl_overdue_count{tenant=~\"$tenant\"}",
+          "expr": "agenticorg_hitl_overdue_count{tenant=~\"$tenant\"}",
           "legendFormat": "{{assignee_role}} ({{priority}})",
           "refId": "A"
         }
@@ -952,7 +952,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(agentflow_hitl_overdue_count{tenant=~\"$tenant\"})",
+          "expr": "sum(agenticorg_hitl_overdue_count{tenant=~\"$tenant\"})",
           "legendFormat": "Total Overdue",
           "refId": "A"
         }
@@ -963,7 +963,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["agentflow", "agents", "enterprise", "observability"],
+  "tags": ["agenticorg", "agents", "enterprise", "observability"],
   "templating": {
     "list": [
       {
@@ -995,7 +995,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(agentflow_tasks_total, tenant)",
+        "definition": "label_values(agenticorg_tasks_total, tenant)",
         "hide": 0,
         "includeAll": true,
         "label": "Tenant",
@@ -1004,7 +1004,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(agentflow_tasks_total, tenant)",
+          "query": "label_values(agenticorg_tasks_total, tenant)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -1023,7 +1023,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(agentflow_tasks_total, domain)",
+        "definition": "label_values(agenticorg_tasks_total, domain)",
         "hide": 0,
         "includeAll": true,
         "label": "Domain",
@@ -1032,7 +1032,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(agentflow_tasks_total, domain)",
+          "query": "label_values(agenticorg_tasks_total, domain)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -1049,8 +1049,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "AgentFlow OS — Operations Dashboard",
-  "uid": "agentflow-ops-main",
+  "title": "AgenticOrg — Operations Dashboard",
+  "uid": "agenticorg-ops-main",
   "version": 1,
   "weekStart": ""
 }

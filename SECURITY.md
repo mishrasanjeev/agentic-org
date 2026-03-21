@@ -21,7 +21,7 @@ We will acknowledge receipt within **48 hours** and provide a fix timeline withi
 
 ## Security Architecture
 
-AgentFlow OS implements defense-in-depth across all layers:
+AgenticOrg implements defense-in-depth across all layers:
 
 ### Authentication & Authorization
 - **OAuth2/Grantex** with RS256 JWT tokens (60-minute TTL)

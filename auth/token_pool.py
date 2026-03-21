@@ -40,7 +40,7 @@ class TokenPool:
         self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         # Subscribe to revocation channel
         pubsub = self.redis.pubsub()
-        await pubsub.subscribe("agentflow:token:revoke")
+        await pubsub.subscribe("agenticorg:token:revoke")
         asyncio.create_task(self._listen_revocations(pubsub))
 
     async def get_token(self, agent_id: str) -> str | None:
@@ -71,7 +71,7 @@ class TokenPool:
         if not self.redis:
             return
         await self.redis.delete(f"agent:{agent_id}:token")
-        await self.redis.publish("agentflow:token:revoke", agent_id)
+        await self.redis.publish("agenticorg:token:revoke", agent_id)
         if agent_id in self._refresh_tasks:
             self._refresh_tasks[agent_id].cancel()
             del self._refresh_tasks[agent_id]

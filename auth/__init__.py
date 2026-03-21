@@ -1,1 +1,1 @@
-"""Authentication layer for AgentFlow OS."""
+"""Authentication layer for AgenticOrg."""

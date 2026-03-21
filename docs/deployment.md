@@ -36,20 +36,20 @@ chmod +x infra/gcp-setup-lean.sh
 # Build and push images
 REGION=asia-south1
 gcloud auth configure-docker ${REGION}-docker.pkg.dev
-docker build -t ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/api:latest .
-docker build -t ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/ui:latest -f Dockerfile.ui .
-docker push ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/api:latest
-docker push ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/ui:latest
+docker build -t ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg/api:latest .
+docker build -t ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg/ui:latest -f Dockerfile.ui .
+docker push ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg/api:latest
+docker push ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg/ui:latest
 
 # Deploy with lean config
-helm upgrade --install agentflow-os ./helm \
-  --namespace agentflow \
+helm upgrade --install agenticorg ./helm \
+  --namespace agenticorg \
   -f helm/values-lean.yaml \
-  --set image.repository=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/api \
-  --set imageUI.repository=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/ui
+  --set image.repository=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg/api \
+  --set imageUI.repository=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg/ui
 
 # Access the API (port-forward for now, enable Ingress when ready)
-kubectl port-forward svc/agentflow-os-api 8000:8000 -n agentflow
+kubectl port-forward svc/agenticorg-api 8000:8000 -n agenticorg
 ```
 
 ### Lean Cost Breakdown
@@ -68,11 +68,11 @@ kubectl port-forward svc/agentflow-os-api 8000:8000 -n agentflow
 
 ```bash
 # Switch to production values
-helm upgrade agentflow-os ./helm -n agentflow -f helm/values.yaml \
+helm upgrade agenticorg ./helm -n agenticorg -f helm/values.yaml \
   --set image.repository=... --set image.tag=v2.1.0
 
 # Or scale individual components
-kubectl scale deployment agentflow-os-api --replicas=3 -n agentflow
+kubectl scale deployment agenticorg-api --replicas=3 -n agenticorg
 ```
 
 ---
@@ -90,39 +90,39 @@ kubectl scale deployment agentflow-os-api --replicas=3 -n agentflow
 
 ```bash
 # Create GKE cluster (if not already provisioned)
-gcloud container clusters create agentflow-prod \
+gcloud container clusters create agenticorg-prod \
   --region asia-south1 \
   --num-nodes 3 \
   --machine-type e2-standard-4 \
   --workload-pool=YOUR_PROJECT.svc.id.goog
 
 # Create namespace
-kubectl create namespace agentflow-prod
+kubectl create namespace agenticorg-prod
 
 # Store secrets in Google Secret Manager and sync to K8s
-gcloud secrets create agentflow-anthropic-key --replication-policy="user-managed" \
+gcloud secrets create agenticorg-anthropic-key --replication-policy="user-managed" \
   --locations="asia-south1" --data-file=- <<< "sk-ant-..."
-gcloud secrets create agentflow-grantex-secret --replication-policy="user-managed" \
+gcloud secrets create agenticorg-grantex-secret --replication-policy="user-managed" \
   --locations="asia-south1" --data-file=- <<< "..."
 
 # Create K8s secret (or use External Secrets Operator to sync from Secret Manager)
-kubectl create secret generic agentflow-secrets \
-  --namespace agentflow-prod \
+kubectl create secret generic agenticorg-secrets \
+  --namespace agenticorg-prod \
   --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
   --from-literal=GRANTEX_CLIENT_SECRET=... \
-  --from-literal=AGENTFLOW_DB_URL=postgresql+asyncpg://... \
-  --from-literal=AGENTFLOW_SECRET_KEY=$(openssl rand -hex 32)
+  --from-literal=AGENTICORG_DB_URL=postgresql+asyncpg://... \
+  --from-literal=AGENTICORG_SECRET_KEY=$(openssl rand -hex 32)
 
 # Push image to Artifact Registry
-gcloud artifacts repositories create agentflow --repository-format=docker \
+gcloud artifacts repositories create agenticorg --repository-format=docker \
   --location=asia-south1
-docker tag agentflow-os:v2.1.0 asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os:v2.1.0
-docker push asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os:v2.1.0
+docker tag agenticorg:v2.1.0 asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg:v2.1.0
+docker push asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg:v2.1.0
 
 # Install via Helm on GKE
-helm upgrade --install agentflow-os ./helm \
-  --namespace agentflow-prod \
-  --set image.repository=asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os \
+helm upgrade --install agenticorg ./helm \
+  --namespace agenticorg-prod \
+  --set image.repository=asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg \
   --set image.tag=v2.1.0 \
   --set replicaCount=3 \
   --set autoscaling.enabled=true \
@@ -137,7 +137,7 @@ helm upgrade --install agentflow-os ./helm \
 # helm/values.yaml
 replicaCount: 3
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/agentflow-os
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg
   tag: "v2.1.0"
 
 autoscaling:
@@ -176,7 +176,7 @@ agentScaling:
 Run migrations in order:
 
 ```bash
-psql -h $DB_HOST -U agentflow -d agentflow \
+psql -h $DB_HOST -U agenticorg -d agenticorg \
   -f migrations/001_extensions.sql \
   -f migrations/002_core.sql \
   -f migrations/003_operational.sql \
@@ -191,15 +191,15 @@ See [`.env.example`](../.env.example) for the complete reference.
 
 **Required for production:**
 - `ANTHROPIC_API_KEY` — Claude API key
-- `AGENTFLOW_DB_URL` — PostgreSQL connection string
-- `AGENTFLOW_REDIS_URL` — Redis connection string
-- `AGENTFLOW_SECRET_KEY` — 32+ char random string for HMAC signing
+- `AGENTICORG_DB_URL` — PostgreSQL connection string
+- `AGENTICORG_REDIS_URL` — Redis connection string
+- `AGENTICORG_SECRET_KEY` — 32+ char random string for HMAC signing
 - `GRANTEX_CLIENT_ID` / `GRANTEX_CLIENT_SECRET` — OAuth2 credentials
-- `AGENTFLOW_JWT_PUBLIC_KEY_URL` — JWKS endpoint for token validation
+- `AGENTICORG_JWT_PUBLIC_KEY_URL` — JWKS endpoint for token validation
 
 **Never disable in production:**
-- `AGENTFLOW_PII_MASKING=true`
-- `AGENTFLOW_AUDIT_RETENTION_YEARS=7`
+- `AGENTICORG_PII_MASKING=true`
+- `AGENTICORG_AUDIT_RETENTION_YEARS=7`
 
 ## CI/CD Pipeline
 

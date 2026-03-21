@@ -1,4 +1,4 @@
-name: AgentFlow OS CI/CD
+name: AgenticOrg CI/CD
 on:
   push: { branches: [main], tags: ["v*"] }
   pull_request: { branches: [main] }
@@ -6,8 +6,8 @@ on:
 env:
   GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/agentflow
-  HELM_RELEASE: agentflow-os
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/agenticorg
+  HELM_RELEASE: agenticorg
   HELM_CHART_PATH: ./helm
 
 jobs:
@@ -45,9 +45,9 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest tests/integration/
         env:
-          AGENTFLOW_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
-          AGENTFLOW_REDIS_URL: redis://localhost:6379/0
-          AGENTFLOW_SECRET_KEY: ci-test-secret-key-minimum-16
+          AGENTICORG_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
+          AGENTICORG_REDIS_URL: redis://localhost:6379/0
+          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
 
   security-scan:
     needs: lint
@@ -83,20 +83,20 @@ jobs:
       - name: Build and push API image
         run: |
           docker build \
-            -t ${{ env.GAR_REGISTRY }}/agentflow-os:${{ github.sha }} \
-            -t ${{ env.GAR_REGISTRY }}/agentflow-os:latest \
+            -t ${{ env.GAR_REGISTRY }}/agenticorg:${{ github.sha }} \
+            -t ${{ env.GAR_REGISTRY }}/agenticorg:latest \
             .
-          docker push ${{ env.GAR_REGISTRY }}/agentflow-os:${{ github.sha }}
-          docker push ${{ env.GAR_REGISTRY }}/agentflow-os:latest
+          docker push ${{ env.GAR_REGISTRY }}/agenticorg:${{ github.sha }}
+          docker push ${{ env.GAR_REGISTRY }}/agenticorg:latest
 
       - name: Build and push UI image
         run: |
           docker build \
-            -t ${{ env.GAR_REGISTRY }}/agentflow-os-ui:${{ github.sha }} \
-            -t ${{ env.GAR_REGISTRY }}/agentflow-os-ui:latest \
+            -t ${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }} \
+            -t ${{ env.GAR_REGISTRY }}/agenticorg-ui:latest \
             -f Dockerfile.ui .
-          docker push ${{ env.GAR_REGISTRY }}/agentflow-os-ui:${{ github.sha }}
-          docker push ${{ env.GAR_REGISTRY }}/agentflow-os-ui:latest
+          docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }}
+          docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui:latest
 
   deploy-staging:
     needs: build
@@ -130,9 +130,9 @@ jobs:
       - name: Deploy to staging via Helm
         run: |
           helm upgrade --install ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
-            --namespace agentflow-staging \
+            --namespace agenticorg-staging \
             --create-namespace \
-            --set image.repository=${{ env.GAR_REGISTRY }}/agentflow-os \
+            --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
             --set image.tag=${{ github.sha }} \
             --set postgresql.auth.password=${{ secrets.STAGING_DB_PASSWORD }} \
             --set redis.auth.password=${{ secrets.STAGING_REDIS_PASSWORD }} \
@@ -143,10 +143,10 @@ jobs:
       - name: Verify staging deployment health
         run: |
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-api \
-            --namespace agentflow-staging \
+            --namespace agenticorg-staging \
             --timeout=300s
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-orchestrator \
-            --namespace agentflow-staging \
+            --namespace agenticorg-staging \
             --timeout=300s
 
       - name: Smoke-test staging health endpoint
@@ -188,8 +188,8 @@ jobs:
             --junitxml=e2e-results.xml \
             -v
         env:
-          AGENTFLOW_E2E_BASE_URL: ${{ secrets.STAGING_API_URL }}
-          AGENTFLOW_E2E_TOKEN: ${{ secrets.STAGING_E2E_TOKEN }}
+          AGENTICORG_E2E_BASE_URL: ${{ secrets.STAGING_API_URL }}
+          AGENTICORG_E2E_TOKEN: ${{ secrets.STAGING_E2E_TOKEN }}
 
       - name: Run Playwright UI e2e tests
         run: |
@@ -198,8 +198,8 @@ jobs:
             --reporter=junit \
             --output=playwright-results
         env:
-          AGENTFLOW_E2E_BASE_URL: ${{ secrets.STAGING_UI_URL }}
-          AGENTFLOW_E2E_TOKEN: ${{ secrets.STAGING_E2E_TOKEN }}
+          AGENTICORG_E2E_BASE_URL: ${{ secrets.STAGING_UI_URL }}
+          AGENTICORG_E2E_TOKEN: ${{ secrets.STAGING_E2E_TOKEN }}
 
       - name: Upload e2e test results
         if: always()
@@ -252,8 +252,8 @@ jobs:
       - name: Deploy canary (10% traffic)
         run: |
           helm upgrade --install ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
-            --namespace agentflow-prod \
-            --set image.repository=${{ env.GAR_REGISTRY }}/agentflow-os \
+            --namespace agenticorg-prod \
+            --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
             --set image.tag=${{ github.sha }} \
             --set canary.enabled=true \
             --set canary.weight=10 \
@@ -280,7 +280,7 @@ jobs:
 
           if [ "$FAIL_COUNT" -gt 2 ]; then
             echo "Canary health check failed ($FAIL_COUNT/10 failures) — initiating rollback"
-            helm rollback ${{ env.HELM_RELEASE }} --namespace agentflow-prod --wait --timeout 300s
+            helm rollback ${{ env.HELM_RELEASE }} --namespace agenticorg-prod --wait --timeout 300s
             exit 1
           fi
           echo "Canary health check passed ($FAIL_COUNT/10 failures)"
@@ -288,8 +288,8 @@ jobs:
       - name: Promote canary to full production (100% traffic)
         run: |
           helm upgrade ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
-            --namespace agentflow-prod \
-            --set image.repository=${{ env.GAR_REGISTRY }}/agentflow-os \
+            --namespace agenticorg-prod \
+            --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
             --set image.tag=${{ github.sha }} \
             --set canary.enabled=false \
             --set postgresql.auth.password=${{ secrets.PROD_DB_PASSWORD }} \
@@ -301,10 +301,10 @@ jobs:
       - name: Verify full production rollout
         run: |
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-api \
-            --namespace agentflow-prod \
+            --namespace agenticorg-prod \
             --timeout=300s
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-orchestrator \
-            --namespace agentflow-prod \
+            --namespace agenticorg-prod \
             --timeout=300s
 
       - name: Post-deploy production health check

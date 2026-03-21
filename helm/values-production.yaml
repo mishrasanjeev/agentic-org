@@ -1,8 +1,8 @@
 # =============================================================================
-# AgentFlow OS — Production Helm Values
+# AgenticOrg — Production Helm Values
 # =============================================================================
 # Full production deployment: HA replicas, HPA, full fleet limits, PII masking.
-# Deploy with: helm install agentflow ./helm -f helm/values-production.yaml
+# Deploy with: helm install agenticorg ./helm -f helm/values-production.yaml
 # =============================================================================
 
 # ── Replicas ──────────────────────────────────────────────────────────────────
@@ -12,12 +12,12 @@ replicaCount:
   workers: 6
 
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/api
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/api
   tag: latest
   pullPolicy: IfNotPresent
 
 imageUI:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/ui
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/ui
   tag: latest
 
 # ── Resources ─────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ redis:
   enabled: false  # Use Memorystore
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
-secretName: agentflow-secrets
+secretName: agenticorg-secrets
 
 # ── Service ───────────────────────────────────────────────────────────────────
 service:
@@ -118,7 +118,7 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: agentflow-production-tls
+    - secretName: agenticorg-production-tls
       hosts:
         - app.agenticorg.ai
 
@@ -129,11 +129,11 @@ podDisruptionBudget:
 
 # ── Environment ───────────────────────────────────────────────────────────────
 env:
-  AGENTFLOW_ENV: production
-  AGENTFLOW_LOG_LEVEL: INFO
-  AGENTFLOW_PII_MASKING: "true"
-  AGENTFLOW_DATA_REGION: IN
-  AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 500
-  AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.88"
-  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash
-  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite
+  AGENTICORG_ENV: production
+  AGENTICORG_LOG_LEVEL: INFO
+  AGENTICORG_PII_MASKING: "true"
+  AGENTICORG_DATA_REGION: IN
+  AGENTICORG_MAX_CONCURRENT_WORKFLOWS: 500
+  AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.88"
+  AGENTICORG_LLM_PRIMARY: gemini-2.0-flash
+  AGENTICORG_LLM_FALLBACK: gemini-2.0-flash-lite

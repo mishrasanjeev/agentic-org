@@ -1,4 +1,4 @@
-"""Pydantic schemas for AgentFlow OS."""
+"""Pydantic schemas for AgenticOrg."""
 
 from core.schemas.errors import ErrorCode as ErrorCode
 from core.schemas.errors import ErrorEnvelope as ErrorEnvelope

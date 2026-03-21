@@ -1,4 +1,4 @@
-"""FastAPI application — AgentFlow OS."""
+"""FastAPI application — AgenticOrg."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 app = FastAPI(
-    title="AgentFlow OS",
+    title="AgenticOrg",
     description="Enterprise Agent Swarm Platform — 24 agents, 42 connectors",
     version="2.1.0",
     lifespan=lifespan,

@@ -11,6 +11,6 @@ class TestScopeParsing:
         s = parse_scope("tool:banking_api:write:queue_payment:capped:500000")
         assert s and s.cap == 500000
 
-    def test_agentflow_scope(self):
-        s = parse_scope("agentflow:agents:write")
-        assert s and s.category == "agentflow"
+    def test_agenticorg_scope(self):
+        s = parse_scope("agenticorg:agents:write")
+        assert s and s.category == "agenticorg"

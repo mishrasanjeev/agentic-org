@@ -6,13 +6,13 @@ build-backend = "hatchling.build"
 packages = ["core", "api", "auth", "connectors", "workflows", "scaling", "observability", "audit", "schemas"]
 
 [project]
-name = "agentflow-os"
+name = "agenticorg"
 version = "2.1.0"
 description = "Enterprise Agent Swarm Platform — 24 agents, 42 connectors, unlimited scaling"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
-authors = [{ name = "AgentFlow OS Contributors" }]
+authors = [{ name = "AgenticOrg Contributors" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: FastAPI",

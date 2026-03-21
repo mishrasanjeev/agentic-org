@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AgentFlow OS — Lean GCP Setup (~$80-120/month)
+# AgenticOrg — Lean GCP Setup (~$80-120/month)
 # =============================================================================
 # This provisions the cheapest viable GCP infrastructure for pre-customer stage.
 # Scale up individual components as you onboard real customers.
@@ -26,14 +26,14 @@ set -euo pipefail
 PROJECT_ID="${GCP_PROJECT_ID:?Set GCP_PROJECT_ID environment variable}"
 REGION="${GCP_REGION:-asia-south1}"
 ZONE="${REGION}-a"
-CLUSTER_NAME="agentflow-lean"
-DB_INSTANCE="agentflow-db"
-DB_PASSWORD="${AGENTFLOW_DB_PASSWORD:-$(openssl rand -hex 16)}"
-BUCKET_NAME="${PROJECT_ID}-agentflow-docs"
-NAMESPACE="agentflow"
-REPO_NAME="agentflow"
+CLUSTER_NAME="agenticorg-lean"
+DB_INSTANCE="agenticorg-db"
+DB_PASSWORD="${AGENTICORG_DB_PASSWORD:-$(openssl rand -hex 16)}"
+BUCKET_NAME="${PROJECT_ID}-agenticorg-docs"
+NAMESPACE="agenticorg"
+REPO_NAME="agenticorg"
 
-echo "=== AgentFlow OS — Lean GCP Setup ==="
+echo "=== AgenticOrg — Lean GCP Setup ==="
 echo "Project:  ${PROJECT_ID}"
 echo "Region:   ${REGION}"
 echo "Cluster:  ${CLUSTER_NAME}"
@@ -84,7 +84,7 @@ gcloud sql instances create "${DB_INSTANCE}" \
   --quiet 2>/dev/null || echo "  (already exists)"
 
 # Create database and user
-gcloud sql databases create agentflow \
+gcloud sql databases create agenticorg \
   --instance="${DB_INSTANCE}" \
   --project="${PROJECT_ID}" \
   --quiet 2>/dev/null || echo "  (already exists)"
@@ -110,7 +110,7 @@ gcloud storage buckets create "gs://${BUCKET_NAME}" \
 
 # ── 6. Store secrets in Google Secret Manager ──
 echo "[6/8] Creating secrets in Secret Manager..."
-echo -n "${DB_PASSWORD}" | gcloud secrets create agentflow-db-password \
+echo -n "${DB_PASSWORD}" | gcloud secrets create agenticorg-db-password \
   --data-file=- \
   --replication-policy="user-managed" \
   --locations="${REGION}" \
@@ -130,15 +130,15 @@ cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Secret
 metadata:
-  name: agentflow-secrets
+  name: agenticorg-secrets
   namespace: ${NAMESPACE}
 type: Opaque
 stringData:
-  AGENTFLOW_DB_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@${DB_IP}:5432/agentflow"
-  AGENTFLOW_REDIS_URL: "redis://agentflow-redis:6379/0"
-  AGENTFLOW_SECRET_KEY: "$(openssl rand -hex 32)"
-  AGENTFLOW_STORAGE_BUCKET: "${BUCKET_NAME}"
-  AGENTFLOW_STORAGE_REGION: "${REGION}"
+  AGENTICORG_DB_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@${DB_IP}:5432/agenticorg"
+  AGENTICORG_REDIS_URL: "redis://agenticorg-redis:6379/0"
+  AGENTICORG_SECRET_KEY: "$(openssl rand -hex 32)"
+  AGENTICORG_STORAGE_BUCKET: "${BUCKET_NAME}"
+  AGENTICORG_STORAGE_REGION: "${REGION}"
   GOOGLE_GEMINI_API_KEY: "${GOOGLE_GEMINI_API_KEY:-set-me}"
   ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
 EOF
@@ -149,17 +149,17 @@ cat <<EOF | kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: agentflow-redis
+  name: agenticorg-redis
   namespace: ${NAMESPACE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: agentflow-redis
+      app: agenticorg-redis
   template:
     metadata:
       labels:
-        app: agentflow-redis
+        app: agenticorg-redis
     spec:
       containers:
         - name: redis
@@ -178,11 +178,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: agentflow-redis
+  name: agenticorg-redis
   namespace: ${NAMESPACE}
 spec:
   selector:
-    app: agentflow-redis
+    app: agenticorg-redis
   ports:
     - port: 6379
       targetPort: 6379
@@ -199,7 +199,7 @@ echo "K8s Namespace:   ${NAMESPACE}"
 echo ""
 echo "Next steps:"
 echo "  1. Get free Gemini API key at https://aistudio.google.com/apikey"
-echo "     Then set it: kubectl -n ${NAMESPACE} patch secret agentflow-secrets -p '{\"stringData\":{\"GOOGLE_GEMINI_API_KEY\":\"YOUR_KEY\"}}'"
+echo "     Then set it: kubectl -n ${NAMESPACE} patch secret agenticorg-secrets -p '{\"stringData\":{\"GOOGLE_GEMINI_API_KEY\":\"YOUR_KEY\"}}'"
 echo "  2. Build and push images:"
 echo "     gcloud auth configure-docker ${REGION}-docker.pkg.dev"
 echo "     docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/api:latest ."
@@ -207,7 +207,7 @@ echo "     docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/u
 echo "     docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/api:latest"
 echo "     docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/ui:latest"
 echo "  3. Deploy with Helm:"
-echo "     helm upgrade --install agentflow-os ./helm -n ${NAMESPACE} -f helm/values-lean.yaml \\"
+echo "     helm upgrade --install agenticorg ./helm -n ${NAMESPACE} -f helm/values-lean.yaml \\"
 echo "       --set image.repository=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/api"
 echo "  4. Run migrations against Cloud SQL"
 echo "  5. Enable pgvector extension on Cloud SQL"

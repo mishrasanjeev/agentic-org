@@ -1,5 +1,5 @@
 # =============================================================================
-# AgentFlow OS — Production Helm Values (scale-up when you have customers)
+# AgenticOrg — Production Helm Values (scale-up when you have customers)
 # =============================================================================
 # For pre-customer lean deployment, use: helm install -f values-lean.yaml
 # =============================================================================
@@ -10,12 +10,12 @@ replicaCount:
   workers: 6
 
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/api
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/api
   tag: latest
   pullPolicy: IfNotPresent
 
 imageUI:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/ui
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/ui
   tag: latest
 
 resources:
@@ -86,7 +86,7 @@ postgresql:
 redis:
   enabled: false  # Use Memorystore or in-cluster
 
-secretName: agentflow-secrets
+secretName: agenticorg-secrets
 
 service:
   type: ClusterIP
@@ -96,11 +96,11 @@ ingress:
   enabled: false
 
 env:
-  AGENTFLOW_ENV: production
-  AGENTFLOW_LOG_LEVEL: INFO
-  AGENTFLOW_PII_MASKING: "true"
-  AGENTFLOW_DATA_REGION: IN
-  AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 500
-  AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.88"
-  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash           # Switch to claude-sonnet-4-20250514 when needed
-  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite     # Switch to gpt-4o-2024-11-20 when needed
+  AGENTICORG_ENV: production
+  AGENTICORG_LOG_LEVEL: INFO
+  AGENTICORG_PII_MASKING: "true"
+  AGENTICORG_DATA_REGION: IN
+  AGENTICORG_MAX_CONCURRENT_WORKFLOWS: 500
+  AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.88"
+  AGENTICORG_LLM_PRIMARY: gemini-2.0-flash           # Switch to claude-sonnet-4-20250514 when needed
+  AGENTICORG_LLM_FALLBACK: gemini-2.0-flash-lite     # Switch to gpt-4o-2024-11-20 when needed

@@ -1,6 +1,6 @@
 {
-  "name": "AgentFlow OS",
-  "short_name": "AgentFlow",
+  "name": "AgenticOrg",
+  "short_name": "AgenticOrg",
   "description": "Enterprise AI Agent Platform",
   "start_url": "/dashboard",
   "display": "standalone",

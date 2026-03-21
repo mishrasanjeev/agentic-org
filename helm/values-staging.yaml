@@ -1,8 +1,8 @@
 # =============================================================================
-# AgentFlow OS — Staging Helm Values
+# AgenticOrg — Staging Helm Values
 # =============================================================================
 # Staging environment: moderate resources, reduced fleet limits.
-# Deploy with: helm install agentflow ./helm -f helm/values-staging.yaml
+# Deploy with: helm install agenticorg ./helm -f helm/values-staging.yaml
 # =============================================================================
 
 # ── Replicas ──────────────────────────────────────────────────────────────────
@@ -12,12 +12,12 @@ replicaCount:
   workers: 1
 
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/api
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/api
   tag: staging
   pullPolicy: Always
 
 imageUI:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/ui
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/ui
   tag: staging
 
 # ── Resources ─────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ redis:
   enabled: false  # Use Memorystore or in-cluster Redis
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
-secretName: agentflow-secrets-staging
+secretName: agenticorg-secrets-staging
 
 # ── Service ───────────────────────────────────────────────────────────────────
 service:
@@ -99,17 +99,17 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: agentflow-staging-tls
+    - secretName: agenticorg-staging-tls
       hosts:
         - staging.agenticorg.ai
 
 # ── Environment ───────────────────────────────────────────────────────────────
 env:
-  AGENTFLOW_ENV: staging
-  AGENTFLOW_LOG_LEVEL: DEBUG
-  AGENTFLOW_PII_MASKING: "true"
-  AGENTFLOW_DATA_REGION: IN
-  AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 100
-  AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.85"
-  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash
-  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite
+  AGENTICORG_ENV: staging
+  AGENTICORG_LOG_LEVEL: DEBUG
+  AGENTICORG_PII_MASKING: "true"
+  AGENTICORG_DATA_REGION: IN
+  AGENTICORG_MAX_CONCURRENT_WORKFLOWS: 100
+  AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.85"
+  AGENTICORG_LLM_PRIMARY: gemini-2.0-flash
+  AGENTICORG_LLM_FALLBACK: gemini-2.0-flash-lite

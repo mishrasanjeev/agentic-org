@@ -93,7 +93,7 @@ async def log_trace(
         "extra": {
             "metadata": {
                 "agent_id": agent_id,
-                "platform": "agentflow-os",
+                "platform": "agenticorg-os",
                 **(extra_metadata or {}),
             },
         },
@@ -220,7 +220,7 @@ async def log_batch(
             "extra": {
                 "metadata": {
                     "agent_id": agent_id,
-                    "platform": "agentflow-os",
+                    "platform": "agenticorg-os",
                     **t.get("extra_metadata", {}),
                 },
             },

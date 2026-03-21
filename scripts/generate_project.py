@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate all AgentFlow OS project files.
+"""Generate all AgenticOrg project files.
 
 Run from repo root: python scripts/generate_project.py
 """
@@ -29,7 +29,7 @@ def touch(rel_path: str) -> None:
 
 def gen_models():
     w("core/models/__init__.py", '''
-    """ORM models for AgentFlow OS."""
+    """ORM models for AgenticOrg."""
     from core.models.base import BaseModel, TimestampMixin, TenantMixin
     from core.models.tenant import Tenant
     from core.models.user import User
@@ -316,7 +316,7 @@ def gen_models():
 
 def gen_pydantic_schemas():
     w("core/schemas/__init__.py", '''
-    """Pydantic schemas for AgentFlow OS."""
+    """Pydantic schemas for AgenticOrg."""
     from core.schemas.messages import TaskAssignment, TaskResult, HITLRequest
     from core.schemas.errors import ErrorCode, ErrorEnvelope
     from core.schemas.api import *
@@ -606,24 +606,24 @@ def gen_pydantic_schemas():
         metadata: EventMetadata = Field(default_factory=EventMetadata)
 
     # Event type constants
-    WORKFLOW_STARTED = "agentflow.workflow.started"
-    WORKFLOW_COMPLETED = "agentflow.workflow.completed"
-    WORKFLOW_FAILED = "agentflow.workflow.failed"
-    HITL_CREATED = "agentflow.hitl.created"
-    HITL_DECIDED = "agentflow.hitl.decided"
-    HITL_EXPIRED = "agentflow.hitl.expired"
-    AGENT_PAUSED = "agentflow.agent.paused"
-    AGENT_RESUMED = "agentflow.agent.resumed"
-    AGENT_PROMOTED = "agentflow.agent.promoted"
-    AGENT_SCALED = "agentflow.agent.scaled"
-    AGENT_BUDGET_WARNING = "agentflow.agent.budget_warning"
-    AGENT_COST_CAP_EXCEEDED = "agentflow.agent.cost_cap_exceeded"
-    TOOL_CALLED = "agentflow.tool.called"
-    TOOL_CAP_EXCEEDED = "agentflow.tool.cap_exceeded"
-    SECURITY_VIOLATION = "agentflow.security.violation"
-    SCHEMA_UPDATED = "agentflow.schema.updated"
-    TENANT_PROVISIONED = "agentflow.tenant.provisioned"
-    DSAR_COMPLETED = "agentflow.dsar.completed"
+    WORKFLOW_STARTED = "agenticorg.workflow.started"
+    WORKFLOW_COMPLETED = "agenticorg.workflow.completed"
+    WORKFLOW_FAILED = "agenticorg.workflow.failed"
+    HITL_CREATED = "agenticorg.hitl.created"
+    HITL_DECIDED = "agenticorg.hitl.decided"
+    HITL_EXPIRED = "agenticorg.hitl.expired"
+    AGENT_PAUSED = "agenticorg.agent.paused"
+    AGENT_RESUMED = "agenticorg.agent.resumed"
+    AGENT_PROMOTED = "agenticorg.agent.promoted"
+    AGENT_SCALED = "agenticorg.agent.scaled"
+    AGENT_BUDGET_WARNING = "agenticorg.agent.budget_warning"
+    AGENT_COST_CAP_EXCEEDED = "agenticorg.agent.cost_cap_exceeded"
+    TOOL_CALLED = "agenticorg.tool.called"
+    TOOL_CAP_EXCEEDED = "agenticorg.tool.cap_exceeded"
+    SECURITY_VIOLATION = "agenticorg.security.violation"
+    SCHEMA_UPDATED = "agenticorg.schema.updated"
+    TENANT_PROVISIONED = "agenticorg.tenant.provisioned"
+    DSAR_COMPLETED = "agenticorg.dsar.completed"
     # Inbound connector events
     INVOICE_RECEIVED = "connector.oracle_fusion.invoice_received"
     EMPLOYEE_JOINED = "connector.darwinbox.employee_joined"
@@ -1099,7 +1099,7 @@ def gen_json_schemas():
 # ─────────────────────── RUN ALL ───────────────────────
 
 if __name__ == "__main__":
-    print("Generating AgentFlow OS project files...")
+    print("Generating AgenticOrg project files...")
     gen_models()
     gen_pydantic_schemas()
     gen_json_schemas()

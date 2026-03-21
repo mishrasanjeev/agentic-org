@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature or enhancement for AgentFlow OS
+about: Suggest a new feature or enhancement for AgenticOrg
 title: "[FEATURE] "
 labels: enhancement
 assignees: ''

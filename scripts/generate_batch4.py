@@ -10,10 +10,10 @@ def w(p, c):
     print(f"  {p}")
 
 # ── FastAPI ──
-w("api/__init__.py", '"""AgentFlow OS REST API."""\n')
+w("api/__init__.py", '"""AgenticOrg REST API."""\n')
 
 w("api/main.py", '''
-"""FastAPI application — AgentFlow OS."""
+"""FastAPI application — AgenticOrg."""
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 app = FastAPI(
-    title="AgentFlow OS",
+    title="AgenticOrg",
     description="Enterprise Agent Swarm Platform — 24 agents, 42 connectors",
     version="2.0.0",
     lifespan=lifespan,
@@ -82,7 +82,7 @@ def get_current_user(request: Request) -> dict:
 def require_scope(scope: str):
     def checker(request: Request):
         scopes = getattr(request.state, "scopes", [])
-        if scope not in scopes and not any(s.startswith("agentflow:admin") for s in scopes):
+        if scope not in scopes and not any(s.startswith("agenticorg:admin") for s in scopes):
             raise HTTPException(403, f"Missing scope: {scope}")
     return Depends(checker)
 ''')
@@ -355,7 +355,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 _tracer: trace.Tracer | None = None
 
-def init_tracing(service_name: str = "agentflow-core"):
+def init_tracing(service_name: str = "agenticorg-core"):
     global _tracer
     provider = TracerProvider()
     trace.set_tracer_provider(provider)
@@ -367,35 +367,35 @@ def get_tracer() -> trace.Tracer:
     return _tracer  # type: ignore
 
 def start_workflow_span(run_id, name, tenant_id, trigger_type="manual"):
-    return get_tracer().start_span("agentflow.workflow.run", attributes={"workflow.run.id": run_id, "workflow.name": name, "tenant.id": tenant_id, "trigger.type": trigger_type})
+    return get_tracer().start_span("agenticorg.workflow.run", attributes={"workflow.run.id": run_id, "workflow.name": name, "tenant.id": tenant_id, "trigger.type": trigger_type})
 
 def start_step_span(step_id, step_type, run_id, agent_id):
-    return get_tracer().start_span("agentflow.step.execute", attributes={"step.id": step_id, "step.type": step_type, "workflow.run.id": run_id, "agent.id": agent_id})
+    return get_tracer().start_span("agenticorg.step.execute", attributes={"step.id": step_id, "step.type": step_type, "workflow.run.id": run_id, "agent.id": agent_id})
 
 def start_agent_span(agent_id, agent_type, domain, model):
-    return get_tracer().start_span("agentflow.agent.reason", attributes={"agent.id": agent_id, "agent.type": agent_type, "domain": domain, "llm.model": model})
+    return get_tracer().start_span("agenticorg.agent.reason", attributes={"agent.id": agent_id, "agent.type": agent_type, "domain": domain, "llm.model": model})
 
 def start_tool_span(tool_name, connector_id, category):
-    return get_tracer().start_span("agentflow.tool.call", attributes={"tool.name": tool_name, "connector.id": connector_id, "connector.category": category})
+    return get_tracer().start_span("agenticorg.tool.call", attributes={"tool.name": tool_name, "connector.id": connector_id, "connector.category": category})
 ''')
 
 w("observability/metrics.py", '''
 """Prometheus metrics — all 13 from PRD."""
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 
-tasks_total = Counter("agentflow_tasks_total", "Total tasks", ["tenant", "domain", "agent_type", "status"])
-task_latency = Histogram("agentflow_task_latency_seconds", "Task latency", ["tenant", "domain", "agent_type"])
-hitl_rate = Gauge("agentflow_hitl_rate", "HITL rate", ["tenant", "domain", "agent_type"])
-confidence_avg = Gauge("agentflow_agent_confidence_avg", "Avg confidence", ["tenant", "agent_type"])
-tool_error_rate = Gauge("agentflow_tool_error_rate", "Tool error rate", ["tenant", "tool_name", "error_code"])
-stp_rate = Gauge("agentflow_stp_rate", "STP rate", ["tenant", "domain"])
-llm_tokens_total = Counter("agentflow_llm_tokens_total", "Total LLM tokens", ["tenant", "agent_type", "model"])
-llm_cost_total = Counter("agentflow_llm_cost_usd_total", "Total LLM cost USD", ["tenant", "agent_type", "model"])
-hitl_overdue = Gauge("agentflow_hitl_overdue_count", "Overdue HITL items", ["tenant", "assignee_role", "priority"])
-circuit_breaker_state = Gauge("agentflow_circuit_breaker_state", "Circuit breaker state", ["tenant", "connector_name"])
-shadow_accuracy = Gauge("agentflow_shadow_accuracy", "Shadow accuracy", ["tenant", "shadow_agent_id", "reference_agent_id"])
-agent_replicas = Gauge("agentflow_agent_replicas", "Agent replicas", ["tenant", "agent_type"])
-agent_budget_pct = Gauge("agentflow_agent_budget_pct", "Agent budget %", ["tenant", "agent_id"])
+tasks_total = Counter("agenticorg_tasks_total", "Total tasks", ["tenant", "domain", "agent_type", "status"])
+task_latency = Histogram("agenticorg_task_latency_seconds", "Task latency", ["tenant", "domain", "agent_type"])
+hitl_rate = Gauge("agenticorg_hitl_rate", "HITL rate", ["tenant", "domain", "agent_type"])
+confidence_avg = Gauge("agenticorg_agent_confidence_avg", "Avg confidence", ["tenant", "agent_type"])
+tool_error_rate = Gauge("agenticorg_tool_error_rate", "Tool error rate", ["tenant", "tool_name", "error_code"])
+stp_rate = Gauge("agenticorg_stp_rate", "STP rate", ["tenant", "domain"])
+llm_tokens_total = Counter("agenticorg_llm_tokens_total", "Total LLM tokens", ["tenant", "agent_type", "model"])
+llm_cost_total = Counter("agenticorg_llm_cost_usd_total", "Total LLM cost USD", ["tenant", "agent_type", "model"])
+hitl_overdue = Gauge("agenticorg_hitl_overdue_count", "Overdue HITL items", ["tenant", "assignee_role", "priority"])
+circuit_breaker_state = Gauge("agenticorg_circuit_breaker_state", "Circuit breaker state", ["tenant", "connector_name"])
+shadow_accuracy = Gauge("agenticorg_shadow_accuracy", "Shadow accuracy", ["tenant", "shadow_agent_id", "reference_agent_id"])
+agent_replicas = Gauge("agenticorg_agent_replicas", "Agent replicas", ["tenant", "agent_type"])
+agent_budget_pct = Gauge("agenticorg_agent_budget_pct", "Agent budget %", ["tenant", "agent_id"])
 ''')
 
 w("observability/langsmith.py", '''

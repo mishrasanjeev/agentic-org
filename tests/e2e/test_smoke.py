@@ -3,8 +3,8 @@ import os
 import pytest
 import httpx
 
-BASE_URL = os.getenv("AGENTFLOW_E2E_BASE_URL", "http://localhost:8000")
-TOKEN = os.getenv("AGENTFLOW_E2E_TOKEN", "")
+BASE_URL = os.getenv("AGENTICORG_E2E_BASE_URL", "http://localhost:8000")
+TOKEN = os.getenv("AGENTICORG_E2E_TOKEN", "")
 
 
 @pytest.fixture

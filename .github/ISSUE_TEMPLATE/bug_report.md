@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in AgentFlow OS
+about: Report a bug in AgenticOrg
 title: "[BUG] "
 labels: bug
 assignees: ''
@@ -29,7 +29,7 @@ A clear description of what actually happened. Include any error messages or sta
 - **OS:** (e.g., Ubuntu 22.04, macOS 14, Windows 11)
 - **Python Version:** (e.g., 3.11.9)
 - **Deployment Type:** (Docker Compose / Kubernetes / Local dev)
-- **AgentFlow OS Version/Commit:** (e.g., v2.0.0 or commit SHA)
+- **AgenticOrg Version/Commit:** (e.g., v2.0.0 or commit SHA)
 
 ## Agent / Connector Involved
 

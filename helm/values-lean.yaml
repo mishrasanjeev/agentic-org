@@ -1,5 +1,5 @@
 # =============================================================================
-# AgentFlow OS — Lean Helm Values (~$50-70/month on GKE Autopilot)
+# AgenticOrg — Lean Helm Values (~$50-70/month on GKE Autopilot)
 # =============================================================================
 # Single-replica everything. No HPA. Minimal resource requests.
 # Scale up when you have paying customers.
@@ -12,12 +12,12 @@ replicaCount:
   workers: 1
 
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/api
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/api
   tag: latest
   pullPolicy: IfNotPresent
 
 imageUI:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agentflow/ui
+  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/ui
   tag: latest
 
 # ── Lean resource requests (Autopilot bills on requests, not limits) ──
@@ -76,7 +76,7 @@ redis:
   enabled: false  # Using in-cluster Redis pod
 
 # ── Secrets reference ──
-secretName: agentflow-secrets
+secretName: agenticorg-secrets
 
 # ── Service: ClusterIP (use Ingress or port-forward for access) ──
 service:
@@ -90,22 +90,22 @@ ingress:
   # enabled: true
   # className: "gce"
   # hosts:
-  #   - host: api.agentflow.yourdomain.com
+  #   - host: api.agenticorg.yourdomain.com
   #     paths:
   #       - path: /
   #         pathType: Prefix
   # tls:
-  #   - secretName: agentflow-tls
+  #   - secretName: agenticorg-tls
   #     hosts:
-  #       - api.agentflow.yourdomain.com
+  #       - api.agenticorg.yourdomain.com
 
 # ── Environment ──
 env:
-  AGENTFLOW_ENV: production
-  AGENTFLOW_LOG_LEVEL: INFO
-  AGENTFLOW_PII_MASKING: "true"
-  AGENTFLOW_DATA_REGION: IN
-  AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 50
-  AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.88"
-  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash
-  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite
+  AGENTICORG_ENV: production
+  AGENTICORG_LOG_LEVEL: INFO
+  AGENTICORG_PII_MASKING: "true"
+  AGENTICORG_DATA_REGION: IN
+  AGENTICORG_MAX_CONCURRENT_WORKFLOWS: 50
+  AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.88"
+  AGENTICORG_LLM_PRIMARY: gemini-2.0-flash
+  AGENTICORG_LLM_FALLBACK: gemini-2.0-flash-lite

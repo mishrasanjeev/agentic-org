@@ -11,7 +11,7 @@ def w(p, c):
 
 # ════════════════ FRONTEND ════════════════
 w("ui/package.json", json.dumps({
-    "name": "agentflow-os-ui", "version": "2.0.0", "private": True, "type": "module",
+    "name": "agenticorg-ui", "version": "2.0.0", "private": True, "type": "module",
     "scripts": {"dev": "vite", "build": "tsc && vite build", "preview": "vite preview", "lint": "eslint . --ext ts,tsx"},
     "dependencies": {
         "react": "^18.3.0", "react-dom": "^18.3.0", "react-router-dom": "^6.28.0",
@@ -80,7 +80,7 @@ w("ui/postcss.config.js", 'export default { plugins: { tailwindcss: {}, autopref
 w("ui/index.html", '''
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>AgentFlow OS</title></head>
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>AgenticOrg</title></head>
 <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>
 ''')
@@ -197,7 +197,7 @@ export const auditApi = { query: (params: any) => api.get("/audit", { params }) 
 ''')
 
 w("ui/src/lib/websocket.ts", '''
-export class AgentFlowWS {
+export class AgenticOrgWS {
   private ws: WebSocket | null = null;
   private listeners: ((data: any) => void)[] = [];
 
@@ -341,14 +341,14 @@ export default function AgentCard({ agent, onClick }: Props) {
 
 w("ui/src/components/LiveFeed.tsx", '''
 import { useEffect, useState } from "react";
-import { AgentFlowWS } from "@/lib/websocket";
+import { AgenticOrgWS } from "@/lib/websocket";
 
 interface Props { tenantId: string; maxItems?: number; }
 
 export default function LiveFeed({ tenantId, maxItems = 7 }: Props) {
   const [events, setEvents] = useState<any[]>([]);
   useEffect(() => {
-    const ws = new AgentFlowWS();
+    const ws = new AgenticOrgWS();
     ws.connect(tenantId);
     ws.subscribe((data) => setEvents((prev) => [data, ...prev].slice(0, maxItems)));
     return () => ws.disconnect();
@@ -423,7 +423,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen">
       <aside className="w-56 border-r bg-muted/30 p-4 flex flex-col gap-1">
-        <h1 className="text-lg font-bold mb-4">AgentFlow OS</h1>
+        <h1 className="text-lg font-bold mb-4">AgenticOrg</h1>
         {NAV.map(({ path, label }) => (
           <Link key={path} to={path}
             className={`px-3 py-2 rounded text-sm ${location.pathname === path ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{label}</Link>
@@ -704,9 +704,9 @@ class TestScopeParsing:
         s = parse_scope("tool:banking_api:write:queue_payment:capped:500000")
         assert s and s.cap == 500000
 
-    def test_agentflow_scope(self):
-        s = parse_scope("agentflow:agents:write")
-        assert s and s.category == "agentflow"
+    def test_agenticorg_scope(self):
+        s = parse_scope("agenticorg:agents:write")
+        assert s and s.category == "agenticorg"
 ''')
 
 w("tests/security/test_auth_security.py", '''
@@ -762,12 +762,12 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
 FROM python:3.12-slim
-RUN useradd -m agentflow
+RUN useradd -m agenticorg
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
-USER agentflow
+USER agenticorg
 EXPOSE 8000
 HEALTHCHECK CMD python -c "import httpx; httpx.get('http://localhost:8000/api/v1/health')" || exit 1
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -800,7 +800,7 @@ server {
 
 # CI/CD
 w(".github/workflows/deploy.yml", '''
-name: AgentFlow OS CI/CD
+name: AgenticOrg CI/CD
 on:
   push: { branches: [main], tags: ["v*"] }
   pull_request: { branches: [main] }
@@ -855,8 +855,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t agentflow-os:${{ github.sha }} .
-      - run: docker build -t agentflow-os-ui:${{ github.sha }} -f Dockerfile.ui .
+      - run: docker build -t agenticorg:${{ github.sha }} .
+      - run: docker build -t agenticorg-ui:${{ github.sha }} -f Dockerfile.ui .
 
   deploy-staging:
     needs: build
@@ -887,7 +887,7 @@ jobs:
 # Helm
 w("helm/Chart.yaml", '''
 apiVersion: v2
-name: agentflow-os
+name: agenticorg
 description: Enterprise Agent Swarm Platform
 type: application
 version: 2.0.0
@@ -901,7 +901,7 @@ replicaCount:
   workers: 6
 
 image:
-  repository: agentflow-os
+  repository: agenticorg
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -936,7 +936,7 @@ fleetLimits:
 postgresql:
   enabled: true
   auth:
-    database: agentflow
+    database: agenticorg
 redis:
   enabled: true
 ''')
@@ -950,11 +950,11 @@ spec:
   replicas: {{ .Values.replicaCount.api }}
   selector:
     matchLabels:
-      app: agentflow-api
+      app: agenticorg-api
   template:
     metadata:
       labels:
-        app: agentflow-api
+        app: agenticorg-api
     spec:
       containers:
         - name: api
@@ -978,7 +978,7 @@ spec:
     - port: 8000
       targetPort: 8000
   selector:
-    app: agentflow-api
+    app: agenticorg-api
 ''')
 
 w("helm/templates/hpa.yaml", '''
@@ -1020,7 +1020,7 @@ w("LICENSE", '''
 ''')
 
 w("CONTRIBUTING.md", '''
-# Contributing to AgentFlow OS
+# Contributing to AgenticOrg
 
 We welcome contributions! Please see our guidelines below.
 
@@ -1041,7 +1041,7 @@ w("SECURITY.md", '''
 # Security Policy
 
 ## Reporting a Vulnerability
-Email security@agentflow.dev with details. Do NOT open a public issue.
+Email security@agenticorg.dev with details. Do NOT open a public issue.
 We will respond within 48 hours and provide a fix timeline.
 
 ## Supported Versions

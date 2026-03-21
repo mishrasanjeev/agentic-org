@@ -42,7 +42,7 @@ class ThresholdRule:
 PRD_THRESHOLDS: list[ThresholdRule] = [
     ThresholdRule(
         name="p95_latency_high",
-        metric_name="agentflow_task_latency_seconds",
+        metric_name="agenticorg_task_latency_seconds",
         operator="gt",
         threshold=5.0,
         severity=Severity.WARNING,
@@ -50,7 +50,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="hitl_rate_high",
-        metric_name="agentflow_hitl_rate",
+        metric_name="agenticorg_hitl_rate",
         operator="gt",
         threshold=0.05,
         severity=Severity.WARNING,
@@ -58,7 +58,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="confidence_low",
-        metric_name="agentflow_agent_confidence_avg",
+        metric_name="agenticorg_agent_confidence_avg",
         operator="lt",
         threshold=0.80,
         severity=Severity.WARNING,
@@ -66,7 +66,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="tool_error_rate_high",
-        metric_name="agentflow_tool_error_rate",
+        metric_name="agenticorg_tool_error_rate",
         operator="gt",
         threshold=0.01,
         severity=Severity.CRITICAL,
@@ -74,7 +74,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="stp_rate_low",
-        metric_name="agentflow_stp_rate",
+        metric_name="agenticorg_stp_rate",
         operator="lt",
         threshold=0.90,
         severity=Severity.WARNING,
@@ -82,7 +82,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="daily_llm_cost_high",
-        metric_name="agentflow_llm_cost_usd_total",
+        metric_name="agenticorg_llm_cost_usd_total",
         operator="gt",
         threshold=100.0,
         severity=Severity.CRITICAL,
@@ -90,7 +90,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="hitl_overdue_critical",
-        metric_name="agentflow_hitl_overdue_count",
+        metric_name="agenticorg_hitl_overdue_count",
         operator="gt",
         threshold=0.0,
         severity=Severity.CRITICAL,
@@ -99,7 +99,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="circuit_breaker_open",
-        metric_name="agentflow_circuit_breaker_state",
+        metric_name="agenticorg_circuit_breaker_state",
         operator="eq",
         threshold=1.0,
         severity=Severity.CRITICAL,
@@ -107,7 +107,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="shadow_accuracy_low",
-        metric_name="agentflow_shadow_accuracy",
+        metric_name="agenticorg_shadow_accuracy",
         operator="lt",
         threshold=0.90,
         severity=Severity.WARNING,
@@ -115,7 +115,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="replicas_at_max",
-        metric_name="agentflow_agent_replicas",
+        metric_name="agenticorg_agent_replicas",
         operator="gte",
         threshold=5.0,        # max ceiling; overridable per-agent
         severity=Severity.WARNING,
@@ -123,7 +123,7 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
     ),
     ThresholdRule(
         name="budget_pct_high",
-        metric_name="agentflow_agent_budget_pct",
+        metric_name="agenticorg_agent_budget_pct",
         operator="gt",
         threshold=80.0,
         severity=Severity.WARNING,
@@ -321,7 +321,7 @@ class AlertManager:
 
         icon = ":rotating_light:" if severity == Severity.CRITICAL else ":warning:"
         payload = {
-            "text": f"{icon} *AgentFlow Alert*\n```{message}```",
+            "text": f"{icon} *AgenticOrg Alert*\n```{message}```",
         }
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
@@ -338,7 +338,7 @@ class AlertManager:
         icon = ":rotating_light:" if severity == Severity.CRITICAL else ":warning:"
         payload = {
             "channel": external_keys.slack_hitl_channel,
-            "text": f"{icon} *AgentFlow Alert*\n```{message}```",
+            "text": f"{icon} *AgenticOrg Alert*\n```{message}```",
         }
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
@@ -375,12 +375,12 @@ class AlertManager:
             logger.debug("email_not_configured_sendgrid_key_missing")
             return False
 
-        subject = f"[AgentFlow {severity.value.upper()}] Alert"
+        subject = f"[AgenticOrg {severity.value.upper()}] Alert"
         payload = {
             "personalizations": [
                 {"to": [{"email": self._alert_email}]},
             ],
-            "from": {"email": "alerts@agentflow.io", "name": "AgentFlow Alerts"},
+            "from": {"email": "alerts@agenticorg.ai", "name": "AgenticOrg Alerts"},
             "subject": subject,
             "content": [
                 {"type": "text/plain", "value": message},

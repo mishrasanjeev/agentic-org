@@ -1,4 +1,4 @@
-"""ORM models for AgentFlow OS."""
+"""ORM models for AgenticOrg."""
 
 from core.models.base import BaseModel as BaseModel
 from core.models.base import TenantMixin as TenantMixin

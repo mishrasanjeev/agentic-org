@@ -42,7 +42,7 @@ async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, No
     """Yield a session with RLS tenant context set."""
     async with async_session_factory() as session:
         await session.execute(
-            text("SET LOCAL agentflow.tenant_id = :tid"),
+            text("SET LOCAL agenticorg.tenant_id = :tid"),
             {"tid": str(tenant_id)},
         )
         try:

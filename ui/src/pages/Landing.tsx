@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import ROICalculator from "../components/ROICalculator";
 
 /* ------------------------------------------------------------------ */
 /*  Landing page for agenticorg.ai                                    */
@@ -112,17 +113,18 @@ export default function Landing() {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
               AF
             </div>
-            <span className="text-white font-semibold text-lg">AgentFlow OS</span>
+            <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#how-it-works" className="text-slate-300 hover:text-white text-sm transition-colors">How it Works</a>
             <a href="#agents" className="text-slate-300 hover:text-white text-sm transition-colors">Agents</a>
             <a href="#architecture" className="text-slate-300 hover:text-white text-sm transition-colors">Architecture</a>
             <a href="#features" className="text-slate-300 hover:text-white text-sm transition-colors">Features</a>
+            <a href="#roi-calculator" className="text-slate-300 hover:text-white text-sm transition-colors">ROI Calculator</a>
             <Link to="/dashboard" className="text-slate-300 hover:text-white text-sm transition-colors">Dashboard</Link>
           </div>
           <a
-            href="https://github.com/agentic-org/agentflow-os"
+            href="https://github.com/agentic-org/agenticorg"
             target="_blank"
             rel="noopener noreferrer"
             className="bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors"
@@ -186,7 +188,7 @@ export default function Landing() {
           {/* CTAs */}
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://github.com/agentic-org/agentflow-os"
+              href="https://github.com/agentic-org/agenticorg"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-100 transition-all shadow-lg shadow-white/10 hover:shadow-white/20"
@@ -197,7 +199,7 @@ export default function Landing() {
               View on GitHub
             </a>
             <a
-              href="https://github.com/agentic-org/agentflow-os#readme"
+              href="https://github.com/agentic-org/agenticorg#readme"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
@@ -400,6 +402,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ROI CALCULATOR */}
+      <ROICalculator />
+
       {/* OPEN SOURCE */}
       <section className="py-24 bg-slate-900 scroll-mt-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -418,13 +423,13 @@ export default function Landing() {
 
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">100% Open Source</h2>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            AgentFlow OS is free and open source forever. Contribute agents, connectors, or
+            AgenticOrg is free and open source forever. Contribute agents, connectors, or
             improvements. Join a growing community building the future of enterprise AI automation.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://github.com/agentic-org/agentflow-os"
+              href="https://github.com/agentic-org/agenticorg"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-100 transition-all shadow-lg"
@@ -435,7 +440,7 @@ export default function Landing() {
               Star on GitHub
             </a>
             <a
-              href="https://github.com/agentic-org/agentflow-os/blob/main/CONTRIBUTING.md"
+              href="https://github.com/agentic-org/agenticorg/blob/main/CONTRIBUTING.md"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
@@ -456,7 +461,7 @@ export default function Landing() {
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
                   AF
                 </div>
-                <span className="text-white font-semibold">AgentFlow OS</span>
+                <span className="text-white font-semibold">AgenticOrg</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">
                 Enterprise AI Agent Platform.
@@ -474,7 +479,7 @@ export default function Landing() {
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os#readme"
+                    href="https://github.com/agentic-org/agenticorg#readme"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -484,7 +489,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os/blob/main/docs/architecture.md"
+                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/architecture.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -494,7 +499,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os/blob/main/docs/api-reference.md"
+                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/api-reference.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -504,12 +509,22 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os/blob/main/docs/agents-guide.md"
+                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/agents-guide.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
                   >
                     Agents Guide
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/agentic-org/agenticorg/blob/main/docs/why-agenticorg.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-400 hover:text-white text-sm transition-colors"
+                  >
+                    Why AgenticOrg?
                   </a>
                 </li>
               </ul>
@@ -523,7 +538,7 @@ export default function Landing() {
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os"
+                    href="https://github.com/agentic-org/agenticorg"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -533,7 +548,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os/blob/main/CONTRIBUTING.md"
+                    href="https://github.com/agentic-org/agenticorg/blob/main/CONTRIBUTING.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -543,7 +558,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com/agentic-org/agentflow-os/blob/main/LICENSE"
+                    href="https://github.com/agentic-org/agenticorg/blob/main/LICENSE"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
@@ -586,7 +601,7 @@ export default function Landing() {
 
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
-              &copy; 2026 AgentFlow OS Contributors. Apache 2.0 License.
+              &copy; 2026 AgenticOrg Contributors. Apache 2.0 License.
             </p>
             <p className="text-sm text-slate-600">agenticorg.ai</p>
           </div>

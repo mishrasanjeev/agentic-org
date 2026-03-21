@@ -32,7 +32,7 @@ class GrantexClient:
                     "grant_type": "client_credentials",
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
-                    "scope": "agentflow:orchestrate agentflow:agents:read",
+                    "scope": "agenticorg:orchestrate agenticorg:agents:read",
                 },
             )
             resp.raise_for_status()

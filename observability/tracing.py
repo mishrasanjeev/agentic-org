@@ -2,13 +2,13 @@
 
 Span catalogue
 --------------
-1. agentflow.workflow.run   — SERVER  — top-level workflow execution
-2. agentflow.step.execute   — INTERNAL — individual step within a workflow
-3. agentflow.agent.reason   — INTERNAL — LLM reasoning cycle
-4. agentflow.tool.call      — CLIENT  — outbound connector / tool invocation
-5. agentflow.hitl.create    — INTERNAL — human-in-the-loop review creation
-6. agentflow.auth.validate  — INTERNAL — JWT / auth validation
-7. agentflow.shadow.compare — INTERNAL — shadow-mode quality comparison
+1. agenticorg.workflow.run   — SERVER  — top-level workflow execution
+2. agenticorg.step.execute   — INTERNAL — individual step within a workflow
+3. agenticorg.agent.reason   — INTERNAL — LLM reasoning cycle
+4. agenticorg.tool.call      — CLIENT  — outbound connector / tool invocation
+5. agenticorg.hitl.create    — INTERNAL — human-in-the-loop review creation
+6. agenticorg.auth.validate  — INTERNAL — JWT / auth validation
+7. agenticorg.shadow.compare — INTERNAL — shadow-mode quality comparison
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ _tracer: trace.Tracer | None = None
 
 
 def init_tracing(
-    service_name: str = "agentflow-core",
+    service_name: str = "agenticorg-core",
     exporter=None,
 ) -> trace.Tracer:
     """Initialise the global tracer with an optional exporter.
@@ -57,7 +57,7 @@ def get_tracer() -> trace.Tracer:
 
 
 # ---------------------------------------------------------------------------
-# 1. agentflow.workflow.run — SERVER
+# 1. agenticorg.workflow.run — SERVER
 # ---------------------------------------------------------------------------
 def start_workflow_span(
     run_id: str,
@@ -73,7 +73,7 @@ def start_workflow_span(
 ):
     """Create the top-level span for a workflow execution."""
     return get_tracer().start_span(
-        "agentflow.workflow.run",
+        "agenticorg.workflow.run",
         kind=SpanKind.SERVER,
         attributes={
             "workflow.run.id": run_id,
@@ -90,7 +90,7 @@ def start_workflow_span(
 
 
 # ---------------------------------------------------------------------------
-# 2. agentflow.step.execute — INTERNAL
+# 2. agenticorg.step.execute — INTERNAL
 # ---------------------------------------------------------------------------
 def start_step_span(
     step_id: str,
@@ -106,7 +106,7 @@ def start_step_span(
 ):
     """Create a span for an individual workflow step."""
     return get_tracer().start_span(
-        "agentflow.step.execute",
+        "agenticorg.step.execute",
         kind=SpanKind.INTERNAL,
         attributes={
             "step.id": step_id,
@@ -123,7 +123,7 @@ def start_step_span(
 
 
 # ---------------------------------------------------------------------------
-# 3. agentflow.agent.reason — INTERNAL
+# 3. agenticorg.agent.reason — INTERNAL
 # ---------------------------------------------------------------------------
 def start_agent_span(
     agent_id: str,
@@ -141,7 +141,7 @@ def start_agent_span(
 ):
     """Create a span for an agent reasoning cycle."""
     return get_tracer().start_span(
-        "agentflow.agent.reason",
+        "agenticorg.agent.reason",
         kind=SpanKind.INTERNAL,
         attributes={
             "agent.id": agent_id,
@@ -160,7 +160,7 @@ def start_agent_span(
 
 
 # ---------------------------------------------------------------------------
-# 4. agentflow.tool.call — CLIENT
+# 4. agenticorg.tool.call — CLIENT
 # ---------------------------------------------------------------------------
 def start_tool_span(
     tool_name: str,
@@ -178,7 +178,7 @@ def start_tool_span(
 ):
     """Create a span for an outbound tool / connector call."""
     return get_tracer().start_span(
-        "agentflow.tool.call",
+        "agenticorg.tool.call",
         kind=SpanKind.CLIENT,
         attributes={
             "tool.name": tool_name,
@@ -197,7 +197,7 @@ def start_tool_span(
 
 
 # ---------------------------------------------------------------------------
-# 5. agentflow.hitl.create — INTERNAL
+# 5. agenticorg.hitl.create — INTERNAL
 # ---------------------------------------------------------------------------
 def start_hitl_span(
     hitl_id: str,
@@ -215,7 +215,7 @@ def start_hitl_span(
 ):
     """Create a span for a HITL review item creation."""
     return get_tracer().start_span(
-        "agentflow.hitl.create",
+        "agenticorg.hitl.create",
         kind=SpanKind.INTERNAL,
         attributes={
             "hitl.id": hitl_id,
@@ -234,7 +234,7 @@ def start_hitl_span(
 
 
 # ---------------------------------------------------------------------------
-# 6. agentflow.auth.validate — INTERNAL
+# 6. agenticorg.auth.validate — INTERNAL
 # ---------------------------------------------------------------------------
 def start_auth_span(
     user_id: str,
@@ -251,7 +251,7 @@ def start_auth_span(
 ):
     """Create a span for an authentication / authorisation validation."""
     return get_tracer().start_span(
-        "agentflow.auth.validate",
+        "agenticorg.auth.validate",
         kind=SpanKind.INTERNAL,
         attributes={
             "auth.user_id": user_id,
@@ -269,7 +269,7 @@ def start_auth_span(
 
 
 # ---------------------------------------------------------------------------
-# 7. agentflow.shadow.compare — INTERNAL
+# 7. agenticorg.shadow.compare — INTERNAL
 # ---------------------------------------------------------------------------
 def start_shadow_span(
     shadow_agent_id: str,
@@ -286,7 +286,7 @@ def start_shadow_span(
 ):
     """Create a span for a shadow-mode quality comparison."""
     return get_tracer().start_span(
-        "agentflow.shadow.compare",
+        "agenticorg.shadow.compare",
         kind=SpanKind.INTERNAL,
         attributes={
             "shadow.agent_id": shadow_agent_id,

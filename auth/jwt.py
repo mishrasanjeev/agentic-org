@@ -50,7 +50,7 @@ async def validate_token(token: str) -> dict[str, Any]:
             token,
             rsa_key,
             algorithms=["RS256"],
-            audience="agentflow-tool-gateway",
+            audience="agenticorg-tool-gateway",
             issuer=settings.jwt_issuer,
             options={"verify_iss": True},
         )
@@ -64,8 +64,8 @@ def extract_scopes(claims: dict[str, Any]) -> list[str]:
 
 
 def extract_tenant_id(claims: dict[str, Any]) -> str:
-    return claims.get("agentflow:tenant_id", "")
+    return claims.get("agenticorg:tenant_id", "")
 
 
 def extract_agent_id(claims: dict[str, Any]) -> str:
-    return claims.get("agentflow:agent_id", "")
+    return claims.get("agenticorg:agent_id", "")

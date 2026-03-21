@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { AgentFlowWS } from "@/lib/websocket";
+import { AgenticOrgWS } from "@/lib/websocket";
 
 interface Props { tenantId: string; maxItems?: number; }
 
 export default function LiveFeed({ tenantId, maxItems = 7 }: Props) {
   const [events, setEvents] = useState<any[]>([]);
   useEffect(() => {
-    const ws = new AgentFlowWS();
+    const ws = new AgenticOrgWS();
     ws.connect(tenantId);
     ws.subscribe((data) => setEvents((prev) => [data, ...prev].slice(0, maxItems)));
     return () => ws.disconnect();

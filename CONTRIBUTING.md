@@ -1,4 +1,4 @@
-# Contributing to AgentFlow OS
+# Contributing to AgenticOrg
 
 We welcome contributions from the community. This guide covers everything you need to get started.
 
@@ -15,8 +15,8 @@ We welcome contributions from the community. This guide covers everything you ne
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/agentflow-os.git
-cd agentflow-os
+git clone https://github.com/your-org/agenticorg.git
+cd agenticorg
 
 # Set up Python environment
 python -m venv .venv

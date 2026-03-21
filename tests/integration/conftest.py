@@ -24,19 +24,19 @@ from sqlalchemy.ext.asyncio import (
 # Environment defaults (CI service containers or local dev)
 # ---------------------------------------------------------------------------
 DB_URL = os.getenv(
-    "AGENTFLOW_DB_URL",
+    "AGENTICORG_DB_URL",
     "postgresql+asyncpg://test:test@localhost:5432/test",
 )
 REDIS_URL = os.getenv(
-    "AGENTFLOW_REDIS_URL",
+    "AGENTICORG_REDIS_URL",
     "redis://localhost:6379/0",
 )
 
 # Ensure the application picks up the test DB/Redis URLs and a valid secret key
-os.environ.setdefault("AGENTFLOW_DB_URL", DB_URL)
-os.environ.setdefault("AGENTFLOW_REDIS_URL", REDIS_URL)
-os.environ.setdefault("AGENTFLOW_SECRET_KEY", "integration-test-secret-key-32chars")
-os.environ.setdefault("AGENTFLOW_ENV", "test")
+os.environ.setdefault("AGENTICORG_DB_URL", DB_URL)
+os.environ.setdefault("AGENTICORG_REDIS_URL", REDIS_URL)
+os.environ.setdefault("AGENTICORG_SECRET_KEY", "integration-test-secret-key-32chars")
+os.environ.setdefault("AGENTICORG_ENV", "test")
 
 # ---------------------------------------------------------------------------
 # RSA key pair for test JWT signing
@@ -95,13 +95,13 @@ def _make_jwt(
     now = int(time.time())
     claims = {
         "sub": sub,
-        "iss": "agentflow-test-issuer",
-        "aud": "agentflow-tool-gateway",
+        "iss": "agenticorg-test-issuer",
+        "aud": "agenticorg-tool-gateway",
         "iat": now,
         "exp": now + expires_in,
-        "agentflow:tenant_id": tenant_id,
-        "agentflow:agent_id": agent_id,
-        "grantex:scopes": scopes or ["agentflow:admin"],
+        "agenticorg:tenant_id": tenant_id,
+        "agenticorg:agent_id": agent_id,
+        "grantex:scopes": scopes or ["agenticorg:admin"],
     }
     return jwt.encode(claims, _private_pem, algorithm="RS256", headers={"kid": TEST_KID})
 
@@ -169,7 +169,7 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
                 field: getattr(auth_jwt_module.settings, field)
                 for field in auth_jwt_module.settings.model_fields
             },
-            "jwt_issuer": "agentflow-test-issuer",
+            "jwt_issuer": "agenticorg-test-issuer",
         }
     ))
 

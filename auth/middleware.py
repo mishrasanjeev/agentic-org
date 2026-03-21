@@ -54,7 +54,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.claims = claims
         request.state.tenant_id = tenant_id
         request.state.scopes = extract_scopes(claims)
-        request.state.agent_id = claims.get("agentflow:agent_id")
+        request.state.agent_id = claims.get("agenticorg:agent_id")
         request.state.user_sub = claims.get("sub", "")
 
         # Tenant mismatch check (E4004)

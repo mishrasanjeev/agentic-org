@@ -7,9 +7,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Central configuration for AgentFlow OS."""
+    """Central configuration for AgenticOrg."""
 
-    model_config = {"env_prefix": "AGENTFLOW_", "env_file": ".env", "extra": "ignore"}
+    model_config = {"env_prefix": "AGENTICORG_", "env_file": ".env", "extra": "ignore"}
 
     # Environment
     env: str = "development"
@@ -17,13 +17,13 @@ class Settings(BaseSettings):
     secret_key: str = Field(min_length=16)
 
     # Database
-    db_url: str = "postgresql+asyncpg://agentflow:agentflow_dev@localhost:5432/agentflow"
+    db_url: str = "postgresql+asyncpg://agenticorg:agenticorg_dev@localhost:5432/agenticorg"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
     # Object Storage (GCS / S3-compatible)
-    storage_bucket: str = "agentflow-docs-dev"
+    storage_bucket: str = "agenticorg-docs-dev"
     storage_region: str = "asia-south1"
     storage_endpoint: str | None = None  # Set for MinIO/S3-compatible; leave empty for GCS
 
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # Auth
     auth_provider: str = "grantex"
     jwt_public_key_url: str = ""
-    jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTFLOW_JWT_ISSUER)
+    jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60
 
     # CORS
@@ -63,9 +63,9 @@ class ExternalKeys(BaseSettings):
     grantex_client_secret: str = ""
     grantex_token_server: str = ""
     langsmith_api_key: str = ""
-    langsmith_project: str = "agentflow-production"
+    langsmith_project: str = "agenticorg-production"
     otel_exporter_otlp_endpoint: str = ""
-    otel_service_name: str = "agentflow-core"
+    otel_service_name: str = "agenticorg-core"
     slack_bot_token: str = ""
     slack_hitl_channel: str = "#hitl-approvals"
     sendgrid_api_key: str = ""

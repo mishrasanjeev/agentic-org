@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Seed default tenant, admin user, schemas, and agents into AgentFlow OS.
+"""Seed default tenant, admin user, schemas, and agents into AgenticOrg.
 
-Idempotent — safe to run multiple times.  Reads AGENTFLOW_DB_URL from the
+Idempotent — safe to run multiple times.  Reads AGENTICORG_DB_URL from the
 environment or from a .env file in the project root.
 
 Usage:
@@ -36,7 +36,7 @@ DEFAULT_TENANT = {
 }
 
 DEFAULT_ADMIN = {
-    "email": "admin@agentflow.local",
+    "email": "admin@agenticorg.local",
     "role": "admin",
     "domain": "all",
     "name": "System Admin",
@@ -84,7 +84,7 @@ SYSTEM_AGENTS: list[dict[str, Any]] = [
 
 def _load_db_url() -> str:
     """Return an asyncpg-compatible DSN from env or .env file."""
-    url = os.environ.get("AGENTFLOW_DB_URL", "")
+    url = os.environ.get("AGENTICORG_DB_URL", "")
 
     if not url:
         env_path = PROJECT_ROOT / ".env"
@@ -94,12 +94,12 @@ def _load_db_url() -> str:
                 if line.startswith("#") or "=" not in line:
                     continue
                 key, _, val = line.partition("=")
-                if key.strip() == "AGENTFLOW_DB_URL":
+                if key.strip() == "AGENTICORG_DB_URL":
                     url = val.strip().strip("\"'")
                     break
 
     if not url:
-        print("ERROR: AGENTFLOW_DB_URL is not set.  Export it or add to .env")
+        print("ERROR: AGENTICORG_DB_URL is not set.  Export it or add to .env")
         sys.exit(1)
 
     # asyncpg needs postgresql:// (not postgresql+asyncpg://)

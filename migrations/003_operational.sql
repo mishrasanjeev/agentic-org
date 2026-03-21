@@ -120,7 +120,7 @@ CREATE TABLE audit_log (
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 CREATE POLICY audit_insert_only ON audit_log FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY audit_select ON audit_log FOR SELECT
-  USING (tenant_id = current_setting('agentflow.tenant_id')::UUID);
+  USING (tenant_id = current_setting('agenticorg.tenant_id')::UUID);
 CREATE INDEX idx_audit_tenant_time ON audit_log(tenant_id, created_at DESC);
 
 CREATE TABLE connectors (

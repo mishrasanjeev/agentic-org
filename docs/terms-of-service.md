@@ -1,16 +1,16 @@
 # Terms of Service
 
-**AgentFlow OS by Agentic Org**
+**AgenticOrg by Agentic Org**
 **Effective Date:** March 21, 2026
 **Last Updated:** March 21, 2026
 
-These Terms of Service ("Terms") govern your access to and use of the AgentFlow OS platform at agenticorg.ai (the "Service") provided by Agentic Org ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
+These Terms of Service ("Terms") govern your access to and use of the AgenticOrg platform at agenticorg.ai (the "Service") provided by Agentic Org ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
 
 ---
 
 ## 1. Software License
 
-AgentFlow OS is open-source software licensed under the **Apache License, Version 2.0** (the "License"). You may obtain a copy of the License at:
+AgenticOrg is open-source software licensed under the **Apache License, Version 2.0** (the "License"). You may obtain a copy of the License at:
 
 https://www.apache.org/licenses/LICENSE-2.0
 
@@ -92,10 +92,10 @@ Upon account termination, we will delete Your Data within 90 days, except for au
 ## 6. Intellectual Property
 
 ### 6.1 Open-Source Software
-The AgentFlow OS software is licensed under Apache 2.0. Your rights to the software are governed by that license.
+The AgenticOrg software is licensed under Apache 2.0. Your rights to the software are governed by that license.
 
 ### 6.2 Service Trademarks
-"AgentFlow OS", "Agentic Org", and associated logos are trademarks of Agentic Org. You may not use these trademarks without our prior written consent.
+"AgenticOrg", "Agentic Org", and associated logos are trademarks of Agentic Org. You may not use these trademarks without our prior written consent.
 
 ### 6.3 Feedback
 If you provide feedback or suggestions about the Service, we may use them without restriction or obligation to you.
