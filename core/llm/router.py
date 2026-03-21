@@ -78,40 +78,42 @@ class LLMRouter:
             raise ValueError(f"Unsupported model: {model}")
 
     async def _call_gemini(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
-        """Call Google Gemini via the google-generativeai SDK.
+        """Call Google Gemini via the google.genai SDK.
 
-        Free tier: 15 RPM, 1M tokens/day for Flash, 2 RPM for Pro.
+        Free tier: 15 RPM, 1M tokens/day for Flash.
         Cost beyond free tier: Flash $0.075/1M input, $0.30/1M output.
         """
-        import google.generativeai as genai
+        from google import genai
 
-        genai.configure(api_key=external_keys.google_gemini_api_key)
+        client = genai.Client(api_key=external_keys.google_gemini_api_key)
 
-        # Convert messages to Gemini format
+        # Separate system instruction from conversation
         system_instruction = None
-        gemini_contents = []
+        contents = []
         for m in messages:
             if m["role"] == "system":
                 system_instruction = m["content"]
             elif m["role"] == "user":
-                gemini_contents.append({"role": "user", "parts": [m["content"]]})
+                contents.append({"role": "user", "parts": [{"text": m["content"]}]})
             elif m["role"] == "assistant":
-                gemini_contents.append({"role": "model", "parts": [m["content"]]})
+                contents.append({"role": "model", "parts": [{"text": m["content"]}]})
 
-        gen_model = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=system_instruction,
-            generation_config=genai.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-            ),
+        config = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        }
+        if system_instruction:
+            config["system_instruction"] = system_instruction
+
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
         )
-
-        response = await gen_model.generate_content_async(gemini_contents)
 
         latency = int((time.monotonic() - start) * 1000)
 
-        # Extract token counts from usage metadata
+        # Extract token counts
         usage = getattr(response, "usage_metadata", None)
         input_tokens = getattr(usage, "prompt_token_count", 0) or 0
         output_tokens = getattr(usage, "candidates_token_count", 0) or 0
