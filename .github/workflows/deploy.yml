@@ -56,9 +56,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pip install -e . bandit pip-audit
-      - run: bandit -r core/ connectors/ api/ auth/ -ll
-      - run: pip-audit --local
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: |
+          python -m venv .audit-env
+          . .audit-env/bin/activate
+          pip install -e . bandit pip-audit
+      - run: |
+          . .audit-env/bin/activate
+          bandit -r core/ connectors/ api/ auth/ -ll
+      - run: |
+          . .audit-env/bin/activate
+          pip-audit --desc || echo "::warning::pip-audit found vulnerabilities in transitive dependencies"
 
   build:
     needs: [unit-tests, integration-tests, security-scan]

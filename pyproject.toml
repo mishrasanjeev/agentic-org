@@ -80,6 +80,7 @@ ignore = ["S101", "S104", "S105", "S106", "S311", "S324", "T201"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
 addopts = "--cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-report=xml --cov-report=term-missing"
 

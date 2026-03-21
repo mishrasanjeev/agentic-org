@@ -40,10 +40,10 @@ async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_o
 async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session with RLS tenant context set."""
     async with async_session_factory() as session:
-        await session.execute(
-            text("SET LOCAL agenticorg.tenant_id = :tid"),
-            {"tid": str(tenant_id)},
-        )
+        # asyncpg does not support bound parameters in SET statements,
+        # so we sanitise the UUID and interpolate directly.
+        safe_tid = str(tenant_id).replace("'", "")
+        await session.execute(text(f"SET LOCAL agenticorg.tenant_id = '{safe_tid}'"))
         try:
             yield session
             await session.commit()
