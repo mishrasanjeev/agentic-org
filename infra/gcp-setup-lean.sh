@@ -15,7 +15,7 @@
 #   Total:               ~$47-67/month (+ LLM API costs)
 #
 # Usage:
-#   export GCP_PROJECT_ID=your-project-id
+#   export GCP_PROJECT_ID=perfect-period-305406
 #   chmod +x infra/gcp-setup-lean.sh
 #   ./infra/gcp-setup-lean.sh
 # =============================================================================

@@ -12,12 +12,12 @@ replicaCount:
   workers: 1
 
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/api
+  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/api
   tag: latest
   pullPolicy: IfNotPresent
 
 imageUI:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/ui
+  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/ui
   tag: latest
 
 # ── Lean resource requests (Autopilot bills on requests, not limits) ──

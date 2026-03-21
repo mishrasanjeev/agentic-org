@@ -28,7 +28,7 @@ The cheapest viable GCP deployment. Single replica of everything, in-cluster Red
 
 ```bash
 # One-command setup
-export GCP_PROJECT_ID=your-project-id
+export GCP_PROJECT_ID=perfect-period-305406
 export ANTHROPIC_API_KEY=sk-ant-...
 chmod +x infra/gcp-setup-lean.sh
 ./infra/gcp-setup-lean.sh
@@ -94,7 +94,7 @@ gcloud container clusters create agenticorg-prod \
   --region asia-south1 \
   --num-nodes 3 \
   --machine-type e2-standard-4 \
-  --workload-pool=YOUR_PROJECT.svc.id.goog
+  --workload-pool=perfect-period-305406.svc.id.goog
 
 # Create namespace
 kubectl create namespace agenticorg-prod
@@ -116,13 +116,13 @@ kubectl create secret generic agenticorg-secrets \
 # Push image to Artifact Registry
 gcloud artifacts repositories create agenticorg --repository-format=docker \
   --location=asia-south1
-docker tag agenticorg:v2.1.0 asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg:v2.1.0
-docker push asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg:v2.1.0
+docker tag agenticorg:v2.1.0 asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg:v2.1.0
+docker push asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg:v2.1.0
 
 # Install via Helm on GKE
 helm upgrade --install agenticorg ./helm \
   --namespace agenticorg-prod \
-  --set image.repository=asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg \
+  --set image.repository=asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg \
   --set image.tag=v2.1.0 \
   --set replicaCount=3 \
   --set autoscaling.enabled=true \
@@ -137,7 +137,7 @@ helm upgrade --install agenticorg ./helm \
 # helm/values.yaml
 replicaCount: 3
 image:
-  repository: asia-south1-docker.pkg.dev/YOUR_PROJECT/agenticorg/agenticorg
+  repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg
   tag: "v2.1.0"
 
 autoscaling:
