@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <polygon points="50,3 93,28 93,72 50,97 7,72 7,28" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
-  <text x="50" y="62" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="48" font-weight="700" fill="#ffffff" letter-spacing="-1">A</text>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+  </defs>
+  <polygon points="50,3 93,28 93,72 50,97 7,72 7,28" fill="url(#g)"/>
+  <text x="50" y="64" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="40" font-weight="800" fill="#ffffff">AO</text>
 </svg>
