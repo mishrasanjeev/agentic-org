@@ -139,7 +139,8 @@ stringData:
   AGENTFLOW_SECRET_KEY: "$(openssl rand -hex 32)"
   AGENTFLOW_STORAGE_BUCKET: "${BUCKET_NAME}"
   AGENTFLOW_STORAGE_REGION: "${REGION}"
-  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-set-me}"
+  GOOGLE_GEMINI_API_KEY: "${GOOGLE_GEMINI_API_KEY:-set-me}"
+  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
 EOF
 
 # ── 8. Deploy in-cluster Redis (skip Memorystore to save ~$36/month) ──
@@ -197,7 +198,8 @@ echo "AR Registry:     ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
 echo "K8s Namespace:   ${NAMESPACE}"
 echo ""
 echo "Next steps:"
-echo "  1. Set ANTHROPIC_API_KEY in K8s secret"
+echo "  1. Get free Gemini API key at https://aistudio.google.com/apikey"
+echo "     Then set it: kubectl -n ${NAMESPACE} patch secret agentflow-secrets -p '{\"stringData\":{\"GOOGLE_GEMINI_API_KEY\":\"YOUR_KEY\"}}'"
 echo "  2. Build and push images:"
 echo "     gcloud auth configure-docker ${REGION}-docker.pkg.dev"
 echo "     docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/api:latest ."

@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     storage_region: str = "asia-south1"
     storage_endpoint: str | None = None  # Set for MinIO/S3-compatible; leave empty for GCS
 
-    # LLM
-    llm_primary: str = "claude-3-5-sonnet-20241022"
-    llm_fallback: str = "gpt-4o-2024-11-20"
+    # LLM — Gemini Flash (free tier) as default; switch to Claude for production
+    llm_primary: str = "gemini-2.0-flash"
+    llm_fallback: str = "gemini-2.0-flash-lite"
     llm_temperature: float = 0.2
 
     # Auth
@@ -56,6 +56,7 @@ class ExternalKeys(BaseSettings):
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
+    google_gemini_api_key: str = ""  # Free at aistudio.google.com
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     grantex_client_id: str = ""

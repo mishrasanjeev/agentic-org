@@ -1,4 +1,4 @@
-"""LLM Router — primary Claude, fallback GPT-4o, optional Gemini."""
+"""LLM Router — Gemini (free), Claude, GPT-4o with automatic failover."""
 from __future__ import annotations
 
 import time
@@ -24,7 +24,17 @@ class LLMResponse:
 
 
 class LLMRouter:
-    """Route LLM calls to primary/fallback models."""
+    """Route LLM calls to primary/fallback models.
+
+    Default config uses Gemini Flash (free tier) as primary with
+    Gemini Pro as fallback. Switch to Claude/GPT-4o when you have
+    paying customers by changing AGENTFLOW_LLM_PRIMARY.
+
+    Supported model patterns:
+      - "gemini-*"  → Google Generative AI API (free tier available)
+      - "claude-*"  → Anthropic API
+      - "gpt-*"     → OpenAI API
+    """
 
     def __init__(self):
         self.primary_model = settings.llm_primary
@@ -58,17 +68,75 @@ class LLMRouter:
     ) -> LLMResponse:
         start = time.monotonic()
 
-        if "claude" in model:
+        if "gemini" in model:
+            return await self._call_gemini(model, messages, temperature, max_tokens, start)
+        elif "claude" in model:
             return await self._call_claude(model, messages, temperature, max_tokens, start)
         elif "gpt" in model:
             return await self._call_openai(model, messages, temperature, max_tokens, start)
         else:
             raise ValueError(f"Unsupported model: {model}")
 
+    async def _call_gemini(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
+        """Call Google Gemini via the google-generativeai SDK.
+
+        Free tier: 15 RPM, 1M tokens/day for Flash, 2 RPM for Pro.
+        Cost beyond free tier: Flash $0.075/1M input, $0.30/1M output.
+        """
+        import google.generativeai as genai
+
+        genai.configure(api_key=external_keys.google_gemini_api_key)
+
+        # Convert messages to Gemini format
+        system_instruction = None
+        gemini_contents = []
+        for m in messages:
+            if m["role"] == "system":
+                system_instruction = m["content"]
+            elif m["role"] == "user":
+                gemini_contents.append({"role": "user", "parts": [m["content"]]})
+            elif m["role"] == "assistant":
+                gemini_contents.append({"role": "model", "parts": [m["content"]]})
+
+        gen_model = genai.GenerativeModel(
+            model_name=model,
+            system_instruction=system_instruction,
+            generation_config=genai.GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            ),
+        )
+
+        response = await gen_model.generate_content_async(gemini_contents)
+
+        latency = int((time.monotonic() - start) * 1000)
+
+        # Extract token counts from usage metadata
+        usage = getattr(response, "usage_metadata", None)
+        input_tokens = getattr(usage, "prompt_token_count", 0) or 0
+        output_tokens = getattr(usage, "candidates_token_count", 0) or 0
+        total_tokens = input_tokens + output_tokens
+
+        # Cost (Gemini Flash pricing — free tier covers most pre-customer usage)
+        if "flash" in model:
+            cost = (input_tokens * 0.075 + output_tokens * 0.30) / 1_000_000
+        else:
+            cost = (input_tokens * 1.25 + output_tokens * 5.0) / 1_000_000
+
+        return LLMResponse(
+            content=response.text,
+            model=model,
+            tokens_used=total_tokens,
+            cost_usd=cost,
+            latency_ms=latency,
+            raw={"candidates": str(response.candidates)},
+        )
+
     async def _call_claude(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
+        """Call Anthropic Claude API."""
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=external_keys.anthropic_api_key)
-        # Separate system message
+
         system_msg = ""
         user_msgs = []
         for m in messages:
@@ -86,7 +154,6 @@ class LLMRouter:
         )
         latency = int((time.monotonic() - start) * 1000)
         tokens = response.usage.input_tokens + response.usage.output_tokens
-        # Approximate cost (Claude 3.5 Sonnet pricing)
         cost = (response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1_000_000
         return LLMResponse(
             content=response.content[0].text,
@@ -95,6 +162,7 @@ class LLMRouter:
         )
 
     async def _call_openai(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
+        """Call OpenAI API."""
         import openai
         client = openai.AsyncOpenAI(api_key=external_keys.openai_api_key)
         response = await client.chat.completions.create(
@@ -103,7 +171,7 @@ class LLMRouter:
         )
         latency = int((time.monotonic() - start) * 1000)
         tokens = response.usage.total_tokens if response.usage else 0
-        cost = tokens * 10 / 1_000_000  # Approximate
+        cost = tokens * 10 / 1_000_000
         return LLMResponse(
             content=response.choices[0].message.content or "",
             model=model, tokens_used=tokens, cost_usd=cost,

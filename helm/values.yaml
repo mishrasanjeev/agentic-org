@@ -102,5 +102,5 @@ env:
   AGENTFLOW_DATA_REGION: IN
   AGENTFLOW_MAX_CONCURRENT_WORKFLOWS: 500
   AGENTFLOW_DEFAULT_CONFIDENCE_FLOOR: "0.88"
-  AGENTFLOW_LLM_PRIMARY: claude-sonnet-4-20250514
-  AGENTFLOW_LLM_FALLBACK: gpt-4o-2024-11-20
+  AGENTFLOW_LLM_PRIMARY: gemini-2.0-flash           # Switch to claude-sonnet-4-20250514 when needed
+  AGENTFLOW_LLM_FALLBACK: gemini-2.0-flash-lite     # Switch to gpt-4o-2024-11-20 when needed
