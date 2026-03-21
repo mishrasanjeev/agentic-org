@@ -145,18 +145,16 @@ jobs:
             --create-namespace \
             --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
             --set image.tag=${{ github.sha }} \
+            --set imageUI.tag=${{ github.sha }} \
             --set postgresql.auth.password=${{ secrets.STAGING_DB_PASSWORD }} \
             --set redis.auth.password=${{ secrets.STAGING_REDIS_PASSWORD }} \
             --values ${{ env.HELM_CHART_PATH }}/values-staging.yaml \
             --wait \
-            --timeout 600s
+            --timeout 300s
 
       - name: Verify staging deployment health
         run: |
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-api \
-            --namespace agenticorg-staging \
-            --timeout=300s
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-orchestrator \
             --namespace agenticorg-staging \
             --timeout=300s
 

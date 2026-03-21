@@ -7,9 +7,9 @@
 
 # ── Replicas ──────────────────────────────────────────────────────────────────
 replicaCount:
-  api: 2
-  orchestrator: 1
-  workers: 1
+  api: 1
+  orchestrator: 0
+  workers: 0
 
 image:
   repository: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg
