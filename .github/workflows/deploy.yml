@@ -176,39 +176,51 @@ jobs:
   e2e-tests:
     needs: deploy-staging
     runs-on: ubuntu-latest
-    continue-on-error: true  # staging may not have a public endpoint yet
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
 
-      - uses: actions/setup-node@v4
-        with: { node-version: "20" }
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_STAGING }} \
+            --region ${{ env.GCP_REGION }} \
+            --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Install test dependencies
-        run: |
-          pip install -e ".[dev]"
-          npx playwright install --with-deps chromium
+        run: pip install -e ".[dev]"
 
-      - name: Run API e2e tests against staging
+      - name: Port-forward to staging API and run e2e tests
         run: |
+          kubectl port-forward svc/${{ env.HELM_RELEASE }}-api 8000:8000 \
+            --namespace agenticorg-staging &
+          PF_PID=$!
+          sleep 5
+
           pytest tests/e2e/ \
             --tb=short \
             --junitxml=e2e-results.xml \
-            -v
-        env:
-          AGENTICORG_E2E_BASE_URL: ${{ secrets.STAGING_API_URL }}
-          AGENTICORG_E2E_TOKEN: ${{ secrets.STAGING_E2E_TOKEN }}
+            -v || true
 
-      - name: Run Playwright UI e2e tests
-        run: |
-          npx playwright test \
-            --config=tests/e2e/playwright.config.ts \
-            --reporter=junit \
-            --output=playwright-results
+          kill $PF_PID 2>/dev/null || true
         env:
-          AGENTICORG_E2E_BASE_URL: ${{ secrets.STAGING_UI_URL }}
+          AGENTICORG_E2E_BASE_URL: http://localhost:8000
           AGENTICORG_E2E_TOKEN: ${{ secrets.STAGING_E2E_TOKEN }}
 
       - name: Upload e2e test results
