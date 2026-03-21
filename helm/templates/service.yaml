@@ -3,9 +3,37 @@ kind: Service
 metadata:
   name: {{ .Release.Name }}-api
 spec:
-  type: ClusterIP
+  type: {{ .Values.service.type | default "ClusterIP" }}
   ports:
-    - port: 8000
+    - port: {{ .Values.service.port | default 8000 }}
       targetPort: 8000
+      name: http
   selector:
     app: agentflow-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8001
+      targetPort: 8001
+  selector:
+    app: agentflow-orchestrator
+{{- if .Values.imageUI }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ui
+spec:
+  type: {{ .Values.service.type | default "ClusterIP" }}
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  selector:
+    app: agentflow-ui
+{{- end }}

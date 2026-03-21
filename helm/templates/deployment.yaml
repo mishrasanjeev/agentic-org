@@ -17,7 +17,113 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           ports:
             - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName | default "agentflow-secrets" }}
+          env:
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml (.Values.resources.api | default dict) | nindent 12 }}
           livenessProbe:
-            httpGet: { path: /api/v1/health, port: 8000 }
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
           readinessProbe:
-            httpGet: { path: /api/v1/health, port: 8000 }
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-orchestrator
+spec:
+  replicas: {{ .Values.replicaCount.orchestrator | default 1 }}
+  selector:
+    matchLabels:
+      app: agentflow-orchestrator
+  template:
+    metadata:
+      labels:
+        app: agentflow-orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["python", "-m", "core.orchestrator.nexus"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName | default "agentflow-secrets" }}
+          env:
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml (.Values.resources.orchestrator | default dict) | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-workers
+spec:
+  replicas: {{ .Values.replicaCount.workers | default 1 }}
+  selector:
+    matchLabels:
+      app: agentflow-workers
+  template:
+    metadata:
+      labels:
+        app: agentflow-workers
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["celery", "-A", "core.worker", "worker", "--loglevel=info", "--concurrency=2"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName | default "agentflow-secrets" }}
+          env:
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml (.Values.resources.workers | default dict) | nindent 12 }}
+{{- if .Values.imageUI }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentflow-ui
+  template:
+    metadata:
+      labels:
+        app: agentflow-ui
+    spec:
+      containers:
+        - name: ui
+          image: "{{ .Values.imageUI.repository }}:{{ .Values.imageUI.tag }}"
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml (.Values.resources.ui | default dict) | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 30
+{{- end }}

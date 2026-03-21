@@ -2,11 +2,12 @@
 
 ## Deployment Options
 
-| Option | Best For | Setup Time |
-|--------|----------|------------|
-| Docker Compose | Dev, POC, SMB | <1 hour |
-| Kubernetes (Helm) | Enterprise production | 2-4 hours |
-| Air-gapped | Defence, regulated banking | 1-2 days |
+| Option | Best For | Est. Cost/Month | Setup Time |
+|--------|----------|----------------|------------|
+| Docker Compose | Dev, POC | $0 (local) | <1 hour |
+| **GKE Autopilot Lean** | **Pre-customer, demo** | **~$50-70** | **1-2 hours** |
+| GKE Production | Enterprise with customers | ~$800-3,800 | 2-4 hours |
+| Air-gapped | Defence, regulated banking | Varies | 1-2 days |
 
 ## Docker Compose (Development)
 
@@ -20,6 +21,61 @@ docker compose up -d
 # - Redis:       localhost:6379
 # - MinIO (S3-compat): http://localhost:9000 (console: :9001)
 ```
+
+## GKE Autopilot Lean (~$50-70/month)
+
+The cheapest viable GCP deployment. Single replica of everything, in-cluster Redis (skip Memorystore), db-f1-micro Cloud SQL. Scale up when you have customers.
+
+```bash
+# One-command setup
+export GCP_PROJECT_ID=your-project-id
+export ANTHROPIC_API_KEY=sk-ant-...
+chmod +x infra/gcp-setup-lean.sh
+./infra/gcp-setup-lean.sh
+
+# Build and push images
+REGION=asia-south1
+gcloud auth configure-docker ${REGION}-docker.pkg.dev
+docker build -t ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/api:latest .
+docker build -t ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/ui:latest -f Dockerfile.ui .
+docker push ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/api:latest
+docker push ${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/ui:latest
+
+# Deploy with lean config
+helm upgrade --install agentflow-os ./helm \
+  --namespace agentflow \
+  -f helm/values-lean.yaml \
+  --set image.repository=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/api \
+  --set imageUI.repository=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agentflow/ui
+
+# Access the API (port-forward for now, enable Ingress when ready)
+kubectl port-forward svc/agentflow-os-api 8000:8000 -n agentflow
+```
+
+### Lean Cost Breakdown
+
+| Component | Spec | Cost/Month |
+|-----------|------|-----------|
+| GKE Autopilot | ~1 vCPU, ~2GB (pay per pod) | ~$30-50 |
+| Cloud SQL | db-f1-micro (shared, 0.6GB RAM, 10GB SSD) | ~$10 |
+| Redis | In-cluster pod (128MB) | $0 |
+| Cloud Storage | Minimal | ~$1 |
+| Artifact Registry | <1GB | ~$1 |
+| Cloud NAT | Outbound traffic | ~$5 |
+| **Total** | | **~$47-67** |
+
+### Scaling Up (When You Get Customers)
+
+```bash
+# Switch to production values
+helm upgrade agentflow-os ./helm -n agentflow -f helm/values.yaml \
+  --set image.repository=... --set image.tag=v2.1.0
+
+# Or scale individual components
+kubectl scale deployment agentflow-os-api --replicas=3 -n agentflow
+```
+
+---
 
 ## Kubernetes (Production)
 
