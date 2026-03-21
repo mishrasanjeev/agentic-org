@@ -30,6 +30,8 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install -e ".[dev]"
       - run: pytest tests/unit/ --cov=. --cov-report=xml
+        env:
+          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
       - uses: codecov/codecov-action@v4
 
   integration-tests:
@@ -54,9 +56,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pip install bandit pip-audit
+      - run: pip install -e . bandit pip-audit
       - run: bandit -r core/ connectors/ api/ auth/ -ll
-      - run: pip-audit
+      - run: pip-audit --local
 
   build:
     needs: [unit-tests, integration-tests, security-scan]
