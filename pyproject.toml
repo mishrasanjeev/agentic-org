@@ -2,9 +2,12 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["core", "api", "auth", "connectors", "workflows", "scaling", "observability", "audit", "schemas"]
+
 [project]
 name = "agentflow-os"
-version = "2.0.0"
+version = "2.1.0"
 description = "Enterprise Agent Swarm Platform — 24 agents, 42 connectors, unlimited scaling"
 readme = "README.md"
 license = "Apache-2.0"
@@ -75,7 +78,7 @@ ignore = ["S101", "S104"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=agentflow --cov-report=xml --cov-report=term-missing"
+addopts = "--cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-report=xml --cov-report=term-missing"
 
 [tool.mypy]
 python_version = "3.12"

@@ -1,5 +1,6 @@
 """HR functional tests — FT-HR-001 through FT-HR-012."""
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
 from workflows.engine import WorkflowEngine
 from workflows.state_store import WorkflowStateStore
@@ -34,7 +35,7 @@ def base_state():
         "steps_total": 0,
         "steps_completed": 0,
         "step_results": {},
-        "started_at": "2026-03-21T00:00:00+00:00",
+        "started_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
