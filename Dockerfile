@@ -1,6 +1,16 @@
 FROM python:3.12-slim AS builder
 WORKDIR /app
-COPY pyproject.toml .
+COPY pyproject.toml README.md ./
+COPY core/ core/
+COPY api/ api/
+COPY auth/ auth/
+COPY connectors/ connectors/
+COPY workflows/ workflows/
+COPY scaling/ scaling/
+COPY observability/ observability/
+COPY audit/ audit/
+COPY schemas/ schemas/
+COPY migrations/ migrations/
 RUN pip install --no-cache-dir .
 
 FROM python:3.12-slim
