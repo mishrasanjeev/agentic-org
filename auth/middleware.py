@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
@@ -33,7 +34,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Check if IP is blocked
         if client_ip in _blocked_ips:
             if time.time() < _blocked_ips[client_ip]:
-                raise HTTPException(status_code=429, detail="Too many failed attempts")
+                return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
             else:
                 del _blocked_ips[client_ip]
 
@@ -41,14 +42,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             self._record_failure(client_ip)
-            raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+            return JSONResponse(
+                status_code=401, content={"detail": "Missing or invalid Authorization header"}
+            )
 
         token = auth_header[7:]
         try:
             claims = await validate_token(token)
         except ValueError as e:
             self._record_failure(client_ip)
-            raise HTTPException(status_code=401, detail=str(e)) from None
+            return JSONResponse(
+                status_code=401, content={"detail": f"Token validation failed: {e}"}
+            )
 
         # Set request state
         tenant_id = extract_tenant_id(claims)
@@ -61,8 +66,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Tenant mismatch check (E4004)
         path_tenant = request.path_params.get("tenant_id")
         if path_tenant and path_tenant != tenant_id:
-            raise HTTPException(
-                status_code=403, detail={"error": {"code": "E4004", "message": "Tenant mismatch"}}
+            return JSONResponse(
+                status_code=403,
+                content={"error": {"code": "E4004", "message": "Tenant mismatch"}},
             )
 
         return await call_next(request)

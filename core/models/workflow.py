@@ -91,7 +91,9 @@ class StepExecution(BaseModel):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
     )
-    workflow_run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    workflow_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_runs.id"), nullable=False
+    )
     step_id: Mapped[str] = mapped_column(String(100), nullable=False)
     step_type: Mapped[str] = mapped_column(String(50), nullable=False)
     agent_id: Mapped[uuid.UUID | None] = mapped_column(
