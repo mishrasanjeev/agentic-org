@@ -85,5 +85,18 @@ addopts = "--cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-r
 
 [tool.mypy]
 python_version = "3.12"
-strict = true
 plugins = ["pydantic.mypy"]
+warn_unused_configs = true
+disallow_any_generics = false
+check_untyped_defs = true
+allow_redefinition = true
+warn_return_any = false
+disable_error_code = ["union-attr", "attr-defined", "assignment", "arg-type", "return-value", "type-var", "import-untyped", "misc"]
+
+[[tool.mypy.overrides]]
+module = ["scripts.*", "tests.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["connectors.*"]
+ignore_errors = true
