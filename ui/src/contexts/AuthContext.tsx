@@ -4,6 +4,7 @@ interface AuthUser {
   email: string;
   name: string | null;
   role: string;
+  domain: string;
   tenant_id: string;
 }
 

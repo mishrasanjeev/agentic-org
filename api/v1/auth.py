@@ -15,6 +15,7 @@ from auth.jwt import create_access_token
 from core.config import settings
 from core.database import async_session_factory
 from core.models.user import User
+from core.rbac import get_allowed_domains, get_scopes_for_role
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -45,11 +46,11 @@ async def login(body: LoginRequest):
         data={
             "sub": user.email,
             "agenticorg:tenant_id": str(user.tenant_id),
-            "grantex:scopes": ["agenticorg:admin"]
-            if user.role == "admin"
-            else ["agenticorg:read"],
+            "grantex:scopes": get_scopes_for_role(user.role),
             "name": user.name,
             "role": user.role,
+            "domain": user.domain,
+            "agenticorg:domains": get_allowed_domains(user.role),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -59,6 +60,7 @@ async def login(body: LoginRequest):
             "email": user.email,
             "name": user.name,
             "role": user.role,
+            "domain": user.domain,
             "tenant_id": str(user.tenant_id),
         },
     )
@@ -119,9 +121,11 @@ async def google_login(body: GoogleLoginRequest):
         data={
             "sub": user.email,
             "agenticorg:tenant_id": str(user.tenant_id),
-            "grantex:scopes": ["agenticorg:admin"] if user.role == "admin" else ["agenticorg:read"],
+            "grantex:scopes": get_scopes_for_role(user.role),
             "name": user.name,
             "role": user.role,
+            "domain": user.domain,
+            "agenticorg:domains": get_allowed_domains(user.role),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -131,6 +135,7 @@ async def google_login(body: GoogleLoginRequest):
             "email": user.email,
             "name": user.name,
             "role": user.role,
+            "domain": user.domain,
             "tenant_id": str(user.tenant_id),
         },
     )

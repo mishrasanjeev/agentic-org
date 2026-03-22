@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from core.database import get_tenant_session
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
@@ -76,6 +76,7 @@ async def list_workflows(
     page: int = 1,
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -84,12 +85,18 @@ async def list_workflows(
             .select_from(WorkflowDefinition)
             .where(WorkflowDefinition.tenant_id == tid)
         )
+
+        query = select(WorkflowDefinition).where(WorkflowDefinition.tenant_id == tid)
+
+        # RBAC domain filtering
+        if user_domains is not None:
+            query = query.where(WorkflowDefinition.domain.in_(user_domains))
+            count_q = count_q.where(WorkflowDefinition.domain.in_(user_domains))
+
         total = (await session.execute(count_q)).scalar() or 0
 
         query = (
-            select(WorkflowDefinition)
-            .where(WorkflowDefinition.tenant_id == tid)
-            .order_by(WorkflowDefinition.created_at.desc())
+            query.order_by(WorkflowDefinition.created_at.desc())
             .offset((page - 1) * per_page)
             .limit(per_page)
         )

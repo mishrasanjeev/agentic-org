@@ -29,7 +29,7 @@ export default function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <Dashboard />
             </Layout>
@@ -39,7 +39,7 @@ export default function App() {
       <Route
         path="/dashboard/agents"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <Agents />
             </Layout>
@@ -49,7 +49,7 @@ export default function App() {
       <Route
         path="/dashboard/agents/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <AgentCreate />
             </Layout>
@@ -59,7 +59,7 @@ export default function App() {
       <Route
         path="/dashboard/agents/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <AgentDetail />
             </Layout>
@@ -69,7 +69,7 @@ export default function App() {
       <Route
         path="/dashboard/workflows"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <Workflows />
             </Layout>
@@ -79,7 +79,7 @@ export default function App() {
       <Route
         path="/dashboard/workflows/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <WorkflowCreate />
             </Layout>
@@ -89,7 +89,7 @@ export default function App() {
       <Route
         path="/dashboard/workflows/:id/runs/:runId"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <WorkflowRun />
             </Layout>
@@ -99,7 +99,7 @@ export default function App() {
       <Route
         path="/dashboard/approvals"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <Approvals />
             </Layout>
@@ -109,7 +109,7 @@ export default function App() {
       <Route
         path="/dashboard/connectors"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <Connectors />
             </Layout>
@@ -119,7 +119,7 @@ export default function App() {
       <Route
         path="/dashboard/connectors/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <ConnectorCreate />
             </Layout>
@@ -129,7 +129,7 @@ export default function App() {
       <Route
         path="/dashboard/schemas"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <Schemas />
             </Layout>
@@ -139,7 +139,7 @@ export default function App() {
       <Route
         path="/dashboard/audit"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <Audit />
             </Layout>
@@ -149,7 +149,7 @@ export default function App() {
       <Route
         path="/dashboard/settings"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <Settings />
             </Layout>

@@ -36,3 +36,13 @@ def require_scope(scope: str):
             raise HTTPException(403, f"Missing scope: {scope}")
 
     return Depends(checker)
+
+
+def get_user_domains(request: Request) -> list[str] | None:
+    claims = getattr(request.state, "claims", {})
+    return claims.get("agenticorg:domains")
+
+
+def get_user_role(request: Request) -> str:
+    claims = getattr(request.state, "claims", {})
+    return claims.get("role", "")

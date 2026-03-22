@@ -8,8 +8,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains, get_user_role
 from core.database import get_tenant_session
+from core.models.agent import Agent
 from core.models.audit import AuditLog
 from core.schemas.api import PaginatedResponse
 
@@ -44,11 +45,21 @@ async def query_audit(
     page: int = 1,
     per_page: int = 50,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user_role: str = Depends(get_user_role),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         base = select(AuditLog).where(AuditLog.tenant_id == tid)
         count_base = select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tid)
+
+        # RBAC domain filtering — auditors see everything; domain roles see only their agents
+        if user_domains is not None and user_role != "auditor":
+            domain_agent_ids = (
+                select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
+            )
+            base = base.where(AuditLog.agent_id.in_(domain_agent_ids))
+            count_base = count_base.where(AuditLog.agent_id.in_(domain_agent_ids))
 
         if event_type:
             base = base.where(AuditLog.event_type == event_type)

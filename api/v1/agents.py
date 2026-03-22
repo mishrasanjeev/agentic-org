@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentLifecycleEvent, AgentVersion
 from core.schemas.api import (
@@ -142,11 +142,17 @@ async def list_agents(
     page: int = 1,
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         query = select(Agent).where(Agent.tenant_id == tid)
         count_query = select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
+
+        # RBAC domain filtering
+        if user_domains is not None:
+            query = query.where(Agent.domain.in_(user_domains))
+            count_query = count_query.where(Agent.domain.in_(user_domains))
 
         if domain:
             query = query.where(Agent.domain == domain)

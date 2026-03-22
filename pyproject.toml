@@ -75,6 +75,9 @@ line-length = 120
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "DTZ", "T20", "ICN"]
 ignore = ["S101", "S104", "S105", "S106", "S311", "S324", "T201"]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "Depends"]
+
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E501"]
 

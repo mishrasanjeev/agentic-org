@@ -9,8 +9,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from core.database import get_tenant_session
+from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.schemas.api import HITLDecision, PaginatedResponse
 
@@ -47,11 +48,20 @@ async def list_approvals(
     page: int = 1,
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         base = select(HITLQueue).where(HITLQueue.tenant_id == tid)
         count_base = select(func.count()).select_from(HITLQueue).where(HITLQueue.tenant_id == tid)
+
+        # RBAC domain filtering via Agent subquery
+        if user_domains is not None:
+            domain_agent_ids = (
+                select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
+            )
+            base = base.where(HITLQueue.agent_id.in_(domain_agent_ids))
+            count_base = count_base.where(HITLQueue.agent_id.in_(domain_agent_ids))
 
         if priority:
             base = base.where(HITLQueue.priority == priority)
