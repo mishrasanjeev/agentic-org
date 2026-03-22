@@ -9,6 +9,7 @@ import AgentCreate from "./pages/AgentCreate";
 import AgentDetail from "./pages/AgentDetail";
 import Workflows from "./pages/Workflows";
 import WorkflowCreate from "./pages/WorkflowCreate";
+import WorkflowDetail from "./pages/WorkflowDetail";
 import WorkflowRun from "./pages/WorkflowRun";
 import Approvals from "./pages/Approvals";
 import Connectors from "./pages/Connectors";
@@ -82,6 +83,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <WorkflowCreate />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/workflows/:id"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+            <Layout>
+              <WorkflowDetail />
             </Layout>
           </ProtectedRoute>
         }

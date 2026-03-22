@@ -34,6 +34,35 @@ def _connector_to_dict(conn: Connector) -> dict:
     }
 
 
+# ── GET /connectors ─────────────────────────────────────────────────────────
+@router.get("/connectors")
+async def list_connectors(
+    category: str | None = None,
+    page: int = 1,
+    per_page: int = 50,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    from sqlalchemy import func
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(Connector).where(Connector.tenant_id == tid)
+        count_query = select(func.count()).select_from(Connector).where(Connector.tenant_id == tid)
+        if category:
+            query = query.where(Connector.category == category)
+            count_query = count_query.where(Connector.category == category)
+        total = (await session.execute(count_query)).scalar() or 0
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await session.execute(query)
+        connectors = result.scalars().all()
+    return {
+        "items": [_connector_to_dict(c) for c in connectors],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
 # ── POST /connectors ────────────────────────────────────────────────────────
 @router.post("/connectors", status_code=201)
 async def register_connector(

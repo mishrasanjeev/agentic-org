@@ -113,6 +113,25 @@ async def list_workflows(
     )
 
 
+# ── GET /workflows/{wf_id} ──────────────────────────────────────────────────
+@router.get("/workflows/{wf_id}")
+async def get_workflow(
+    wf_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(WorkflowDefinition).where(
+                WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid
+            )
+        )
+        wf = result.scalar_one_or_none()
+    if not wf:
+        raise HTTPException(404, "Workflow not found")
+    return _wf_to_dict(wf)
+
+
 # ── POST /workflows ─────────────────────────────────────────────────────────
 @router.post("/workflows", status_code=201)
 async def create_workflow(
