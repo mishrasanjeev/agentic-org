@@ -20,6 +20,9 @@ from api.v1 import (
     schemas,
     workflows,
 )
+from api.v1 import (
+    auth as v1_auth,
+)
 from api.websocket.feed import router as ws_feed_router
 from auth.middleware import AuthMiddleware
 from core.config import settings
@@ -63,6 +66,7 @@ app.add_middleware(AuthMiddleware)
 register_error_handlers(app)
 
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
+app.include_router(v1_auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 app.include_router(agent_teams.router, prefix="/api/v1", tags=["Agent Teams"])
 app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])

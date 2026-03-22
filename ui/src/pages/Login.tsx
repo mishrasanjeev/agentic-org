@@ -1,0 +1,168 @@
+import { useState, useEffect, FormEvent } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
+import { useAuth } from "../contexts/AuthContext";
+
+export default function Login() {
+  const { login, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+
+  // Fetch Google Client ID from backend config
+  useEffect(() => {
+    fetch("/api/v1/auth/config")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.google_client_id) setGoogleClientId(data.google_client_id);
+      })
+      .catch(() => {}); // silently ignore — Google login just won't show
+  }, []);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    setError(null);
+    setLoading(true);
+    try {
+      await loginWithGoogle(credentialResponse.credential);
+      navigate("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Google login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loginForm = (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="bg-card border border-border rounded-xl shadow-lg p-8">
+          {/* Branding */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold tracking-tight">
+              <span className="bg-gradient-to-r from-blue-400 to-violet-500 bg-clip-text text-transparent">
+                AgenticOrg
+              </span>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enterprise Agent Swarm Platform
+            </p>
+          </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {/* Google Sign-In */}
+          {googleClientId && (
+            <>
+              <div className="flex justify-center mb-4">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError("Google sign-in failed")}
+                  size="large"
+                  width={350}
+                  text="signin_with"
+                  shape="rectangular"
+                  theme="outline"
+                />
+              </div>
+              <div className="relative mb-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-card px-2 text-muted-foreground">or sign in with email</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Login form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? "Signing in..." : "Sign in with email"}
+            </button>
+          </form>
+
+          {/* Demo credentials hint */}
+          <div className="mt-6 rounded-lg bg-muted/50 border border-border px-4 py-3 text-center">
+            <p className="text-xs text-muted-foreground">
+              Demo: <span className="font-mono text-foreground">admin@agenticorg.local</span>{" "}
+              / <span className="font-mono text-foreground">admin123!</span>
+            </p>
+          </div>
+
+          {/* Back link */}
+          <div className="mt-6 text-center">
+            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              &larr; Back to home
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Wrap in GoogleOAuthProvider only if client ID is available
+  if (googleClientId) {
+    return (
+      <GoogleOAuthProvider clientId={googleClientId}>
+        {loginForm}
+      </GoogleOAuthProvider>
+    );
+  }
+
+  return loginForm;
+}

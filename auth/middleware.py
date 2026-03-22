@@ -22,7 +22,10 @@ FAILURE_WINDOW = 60  # 1 minute
 class AuthMiddleware(BaseHTTPMiddleware):
     """Validate JWT, set tenant context, enforce rate limits."""
 
-    EXEMPT_PATHS = {"/api/v1/health", "/docs", "/openapi.json", "/redoc"}
+    EXEMPT_PATHS = {
+        "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google",
+        "/api/v1/auth/config", "/docs", "/openapi.json", "/redoc",
+    }
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Skip auth for health and docs

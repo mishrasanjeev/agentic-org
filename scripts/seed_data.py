@@ -145,7 +145,15 @@ async def _ensure_admin(conn: asyncpg.Connection, tenant_id: str) -> str:
     """Insert default admin user if missing.  Returns user id."""
     import uuid as _uuid
 
+    from passlib.hash import bcrypt as bcrypt_hash
+
     tid = _uuid.UUID(tenant_id)
+
+    # Ensure password_hash column exists (idempotent DDL)
+    await conn.execute(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)"
+    )
+
     row = await conn.fetchrow(
         "SELECT id FROM users WHERE tenant_id = $1 AND email = $2",
         tid,
@@ -153,22 +161,31 @@ async def _ensure_admin(conn: asyncpg.Connection, tenant_id: str) -> str:
     )
     if row:
         print(f"  Admin '{DEFAULT_ADMIN['email']}' already exists: {row['id']}")
-        return str(row["id"])
+        uid = str(row["id"])
+    else:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO users (tenant_id, email, name, role, domain)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            tid,
+            DEFAULT_ADMIN["email"],
+            DEFAULT_ADMIN["name"],
+            DEFAULT_ADMIN["role"],
+            DEFAULT_ADMIN["domain"],
+        )
+        uid = str(row["id"])
+        print(f"  Created admin '{DEFAULT_ADMIN['email']}': {uid}")
 
-    row = await conn.fetchrow(
-        """
-        INSERT INTO users (tenant_id, email, name, role, domain)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-        """,
-        tid,
-        DEFAULT_ADMIN["email"],
-        DEFAULT_ADMIN["name"],
-        DEFAULT_ADMIN["role"],
-        DEFAULT_ADMIN["domain"],
+    # Always set/update the password hash for the admin user
+    hashed = bcrypt_hash.hash("admin123!")
+    await conn.execute(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        hashed,
+        _uuid.UUID(uid),
     )
-    uid = str(row["id"])
-    print(f"  Created admin '{DEFAULT_ADMIN['email']}': {uid}")
+    print(f"  Set password_hash for admin '{DEFAULT_ADMIN['email']}'")
     return uid
 
 

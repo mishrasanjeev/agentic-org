@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60
 
+    # Google OAuth
+    google_oauth_client_id: str = ""  # Google Cloud Console OAuth 2.0 Client ID
+
     # CORS
     cors_allowed_origins: str = ""  # Comma-separated origins; empty = allow all in dev
 

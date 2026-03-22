@@ -1,6 +1,8 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
 import AgentCreate from "./pages/AgentCreate";
@@ -19,112 +21,139 @@ import NotFound from "./pages/NotFound";
 export default function App() {
   return (
     <Routes>
-      {/* Public landing page — no Layout wrapper */}
+      {/* Public routes */}
       <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
 
-      {/* Dashboard and all app routes — wrapped in Layout */}
+      {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
       <Route
         path="/dashboard"
         element={
-          <Layout>
-            <Dashboard />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/agents"
         element={
-          <Layout>
-            <Agents />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Agents />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/agents/new"
         element={
-          <Layout>
-            <AgentCreate />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <AgentCreate />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/agents/:id"
         element={
-          <Layout>
-            <AgentDetail />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <AgentDetail />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/workflows"
         element={
-          <Layout>
-            <Workflows />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Workflows />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/workflows/new"
         element={
-          <Layout>
-            <WorkflowCreate />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <WorkflowCreate />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/workflows/:id/runs/:runId"
         element={
-          <Layout>
-            <WorkflowRun />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <WorkflowRun />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/approvals"
         element={
-          <Layout>
-            <Approvals />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Approvals />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/connectors"
         element={
-          <Layout>
-            <Connectors />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Connectors />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/connectors/new"
         element={
-          <Layout>
-            <ConnectorCreate />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <ConnectorCreate />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/schemas"
         element={
-          <Layout>
-            <Schemas />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Schemas />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/audit"
         element={
-          <Layout>
-            <Audit />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Audit />
+            </Layout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/settings"
         element={
-          <Layout>
-            <Settings />
-          </Layout>
+          <ProtectedRoute>
+            <Layout>
+              <Settings />
+            </Layout>
+          </ProtectedRoute>
         }
       />
 
