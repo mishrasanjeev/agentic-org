@@ -2,6 +2,10 @@ export interface Agent {
   id: string; name: string; agent_type: string; domain: string; status: string;
   version: string; confidence_floor: number; shadow_sample_count: number;
   shadow_accuracy_current: number | null; created_at: string;
+  description?: string; hitl_condition?: string; authorized_tools?: string[];
+  llm_model?: string; max_retries?: number; retry_backoff?: string;
+  shadow_min_samples?: number; shadow_accuracy_floor?: number;
+  cost_controls?: { monthly_cap_usd?: number; cost_current_usd?: number };
 }
 export interface Workflow { id: string; name: string; version: string; is_active: boolean; trigger_type: string | null; created_at: string; }
 export interface WorkflowRun { id: string; workflow_def_id: string; status: string; steps_total: number; steps_completed: number; started_at: string; }
