@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 const ALL_NAV = [
   { path: "/dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/agents", label: "Agents", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },

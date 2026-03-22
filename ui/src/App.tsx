@@ -16,6 +16,7 @@ import Connectors from "./pages/Connectors";
 import ConnectorCreate from "./pages/ConnectorCreate";
 import Schemas from "./pages/Schemas";
 import Audit from "./pages/Audit";
+import Observatory from "./pages/Observatory";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -33,6 +34,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/observatory"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+            <Layout>
+              <Observatory />
             </Layout>
           </ProtectedRoute>
         }
