@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 
+import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from passlib.hash import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -40,7 +40,7 @@ async def login(body: LoginRequest):
         user = result.scalar_one_or_none()
     if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if not bcrypt.verify(body.password, user.password_hash):
+    if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token(
         data={

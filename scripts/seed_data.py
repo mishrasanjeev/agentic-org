@@ -145,7 +145,7 @@ async def _ensure_admin(conn: asyncpg.Connection, tenant_id: str) -> str:
     """Insert default admin user if missing.  Returns user id."""
     import uuid as _uuid
 
-    from passlib.hash import bcrypt as bcrypt_hash
+    import bcrypt as _bcrypt_mod
 
     tid = _uuid.UUID(tenant_id)
 
@@ -179,7 +179,7 @@ async def _ensure_admin(conn: asyncpg.Connection, tenant_id: str) -> str:
         print(f"  Created admin '{DEFAULT_ADMIN['email']}': {uid}")
 
     # Always set/update the password hash for the admin user
-    hashed = bcrypt_hash.hash("admin123!")
+    hashed = _bcrypt_mod.hashpw(b"admin123!", _bcrypt_mod.gensalt()).decode()
     await conn.execute(
         "UPDATE users SET password_hash = $1 WHERE id = $2",
         hashed,
