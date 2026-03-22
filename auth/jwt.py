@@ -99,17 +99,20 @@ async def _validate_jwks_token(token: str) -> dict[str, Any]:
 async def validate_token(token: str) -> dict[str, Any]:
     """Validate a JWT and return its claims. Raises on failure.
 
-    If no JWKS URL is configured, use local HS256 validation directly.
-    Otherwise try JWKS first, falling back to local HS256.
+    Tries local HS256 first (for self-issued tokens), then falls back
+    to JWKS RS256 validation (for external auth or test-patched JWKS).
     """
-    if not settings.jwt_public_key_url:
+    # Try local HS256 first
+    try:
         return validate_local_token(token)
+    except ValueError:
+        pass
 
+    # Fall back to JWKS RS256
     try:
         return await _validate_jwks_token(token)
-    except (ValueError, JWTError):
-        # Fall back to local HS256 token
-        return validate_local_token(token)
+    except Exception as e:
+        raise ValueError(f"Token validation failed: {e}") from e
 
 
 def extract_scopes(claims: dict[str, Any]) -> list[str]:
