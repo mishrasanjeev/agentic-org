@@ -151,6 +151,11 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
         return TEST_JWKS
 
     monkeypatch.setattr(auth_jwt_module, "_fetch_jwks", _fake_fetch_jwks)
+    # Clear rate limiter state between tests
+    import auth.middleware as mw
+
+    mw._failed_attempts.clear()
+    mw._blocked_ips.clear()
     # Also override issuer validation so the test issuer is accepted
     monkeypatch.setattr(
         auth_jwt_module,
