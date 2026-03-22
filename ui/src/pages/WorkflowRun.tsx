@@ -39,7 +39,7 @@ export default function WorkflowRun() {
     setLoading(true);
     try {
       const { data } = await api.get(`/workflows/runs/${runId}`);
-      setRun(data?.id ? data : null);
+      setRun(data?.run_id ? { ...data, id: data.run_id } : data?.id ? data : null);
     } catch {
       setRun(null);
     } finally {
