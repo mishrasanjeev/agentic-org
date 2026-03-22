@@ -127,6 +127,12 @@ export default function Landing() {
             <Link to="/dashboard" className="text-slate-300 hover:text-white text-sm transition-colors">Dashboard</Link>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              to="/login"
+              className="hidden sm:inline-flex bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+            >
+              Sign In
+            </Link>
             <a
               href="https://github.com/mishrasanjeev/agentic-org"
               target="_blank"
@@ -155,6 +161,7 @@ export default function Landing() {
             <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">Features</a>
             <a href="#roi-calculator" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">ROI Calculator</a>
             <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white text-sm">Dashboard</Link>
+            <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
             <a href="https://github.com/mishrasanjeev/agentic-org" target="_blank" rel="noopener noreferrer" className="block text-slate-300 hover:text-white text-sm">GitHub</a>
           </div>
         )}
