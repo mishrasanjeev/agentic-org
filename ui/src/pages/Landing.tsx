@@ -192,7 +192,7 @@ export default function Landing() {
               Sign In
             </Link>
             <a
-              href="mailto:hello@agenticorg.ai?subject=Book a Demo"
+              href="mailto:mishra.sanjeev@gmail.com?subject=AgenticOrg Demo Request&body=Hi Sanjeev,%0A%0AI'd like to book a demo of AgenticOrg.%0A%0AName:%0ACompany:%0ARole:%0APhone:%0A%0AThanks"
               className="hidden sm:inline-flex bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
             >
               Book a Demo
@@ -215,7 +215,7 @@ export default function Landing() {
             <a href="#roi-calculator" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</a>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
-            <a href="mailto:hello@agenticorg.ai?subject=Book a Demo" onClick={closeMobile} className="block bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</a>
+            <a href="mailto:mishra.sanjeev@gmail.com?subject=AgenticOrg Demo Request&body=Hi Sanjeev,%0A%0AI'd like to book a demo of AgenticOrg.%0A%0AName:%0ACompany:%0ARole:%0APhone:%0A%0AThanks" onClick={closeMobile} className="block bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</a>
           </div>
         )}
       </nav>
@@ -678,7 +678,7 @@ export default function Landing() {
                 Start Free
               </Link>
               <a
-                href="mailto:hello@agenticorg.ai?subject=Book a Demo"
+                href="mailto:mishra.sanjeev@gmail.com?subject=AgenticOrg Demo Request&body=Hi Sanjeev,%0A%0AI'd like to book a demo of AgenticOrg.%0A%0AName:%0ACompany:%0ARole:%0APhone:%0A%0AThanks"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
               >
                 Book a Demo
