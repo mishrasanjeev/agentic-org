@@ -32,7 +32,7 @@ export default function Workflows() {
     try {
       const { data } = await api.post(`/workflows/${wfId}/run`, {});
       if (data.run_id) {
-        navigate(`/dashboard/workflows/${data.run_id}/runs/${data.run_id}`);
+        navigate(`/dashboard/workflows/${wfId}/runs/${data.run_id}`);
       }
     } catch (e) {
       console.error("Failed to trigger workflow run", e);
