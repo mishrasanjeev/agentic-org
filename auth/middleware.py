@@ -23,8 +23,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Validate JWT, set tenant context, enforce rate limits."""
 
     EXEMPT_PATHS = {
-        "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google",
-        "/api/v1/auth/config", "/docs", "/openapi.json", "/redoc",
+        "/api/v1/health", "/api/v1/health/liveness", "/api/v1/auth/login",
+        "/api/v1/auth/google", "/api/v1/auth/config",
+        "/docs", "/openapi.json", "/redoc",
     }
 
     async def dispatch(self, request: Request, call_next) -> Response:
