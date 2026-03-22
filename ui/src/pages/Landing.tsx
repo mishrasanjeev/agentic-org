@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import ROICalculator from "../components/ROICalculator";
 
@@ -152,10 +152,169 @@ function CheckIcon({ className = "w-4 h-4 text-emerald-500" }: { className?: str
 }
 
 /* ------------------------------------------------------------------ */
+/*  DemoModal — Book-a-Demo form overlay                               */
+/* ------------------------------------------------------------------ */
+function DemoModal({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState({ name: "", email: "", company: "", role: "", phone: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/v1/demo-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error("Request failed");
+      setDone(true);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fieldClass =
+    "w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all";
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-8 animate-in fade-in zoom-in">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+          aria-label="Close"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        {done ? (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
+            <p className="text-slate-600">We'll contact you within 24 hours.</p>
+            <button
+              onClick={onClose}
+              className="mt-6 inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <h3 className="text-xl font-bold text-slate-900 mb-1">Book a Demo</h3>
+            <p className="text-sm text-slate-500 mb-6">See AgenticOrg in action. Fill out the form and we'll schedule a call.</p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Your full name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Work Email <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  type="email"
+                  placeholder="you@company.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Company</label>
+                <input
+                  type="text"
+                  placeholder="Company name"
+                  value={form.company}
+                  onChange={(e) => setForm({ ...form, company: e.target.value })}
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  className={fieldClass}
+                >
+                  <option value="">Select your role</option>
+                  <option value="CEO">CEO</option>
+                  <option value="CFO">CFO</option>
+                  <option value="CHRO">CHRO</option>
+                  <option value="CMO">CMO</option>
+                  <option value="COO">COO</option>
+                  <option value="CTO">CTO</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  placeholder="+91 98765 43210"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className={fieldClass}
+                />
+              </div>
+
+              {error && <p className="text-sm text-red-600">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Submitting..." : "Request Demo"}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Landing Page                                                       */
 /* ------------------------------------------------------------------ */
 export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
 
   const closeMobile = useCallback(() => setMobileMenuOpen(false), []);
 
@@ -191,12 +350,12 @@ export default function Landing() {
             >
               Sign In
             </Link>
-            <a
-              href="mailto:mishra.sanjeev@gmail.com?subject=AgenticOrg Demo Request&body=Hi Sanjeev,%0A%0AI'd like to book a demo of AgenticOrg.%0A%0AName:%0ACompany:%0ARole:%0APhone:%0A%0AThanks"
+            <button
+              onClick={() => setShowDemo(true)}
               className="hidden sm:inline-flex bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
             >
               Book a Demo
-            </a>
+            </button>
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white p-2" aria-label="Menu">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {mobileMenuOpen
@@ -215,7 +374,7 @@ export default function Landing() {
             <a href="#roi-calculator" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</a>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
-            <a href="mailto:mishra.sanjeev@gmail.com?subject=AgenticOrg Demo Request&body=Hi Sanjeev,%0A%0AI'd like to book a demo of AgenticOrg.%0A%0AName:%0ACompany:%0ARole:%0APhone:%0A%0AThanks" onClick={closeMobile} className="block bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</a>
+            <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
           </div>
         )}
       </nav>
@@ -677,12 +836,12 @@ export default function Landing() {
               >
                 Start Free
               </Link>
-              <a
-                href="mailto:mishra.sanjeev@gmail.com?subject=AgenticOrg Demo Request&body=Hi Sanjeev,%0A%0AI'd like to book a demo of AgenticOrg.%0A%0AName:%0ACompany:%0ARole:%0APhone:%0A%0AThanks"
+              <button
+                onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
               >
                 Book a Demo
-              </a>
+              </button>
             </div>
           </FadeIn>
         </div>
@@ -770,6 +929,9 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+
+      {/* Demo modal */}
+      {showDemo && <DemoModal onClose={() => setShowDemo(false)} />}
     </div>
   );
 }
