@@ -64,16 +64,13 @@ function BrowserFrame({ src, title, className = "" }: {
           </div>
         </div>
       </div>
-      {/* Content */}
-      <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-        <iframe
-          src={src}
-          title={title}
-          className="absolute inset-0 w-full h-full border-0"
-          loading="lazy"
-          sandbox="allow-scripts allow-same-origin"
-        />
-      </div>
+      {/* Content — static screenshot */}
+      <img
+        src={src}
+        alt={title}
+        className="w-full h-auto block"
+        loading="lazy"
+      />
     </div>
   );
 }
@@ -291,7 +288,7 @@ export default function Landing() {
           {/* Right — Product screenshot */}
           <div className="hidden lg:block">
             <BrowserFrame
-              src="https://app.agenticorg.ai/dashboard"
+              src="/screenshots/dashboard.png"
               title="app.agenticorg.ai/dashboard"
             />
           </div>
@@ -373,7 +370,7 @@ export default function Landing() {
             <FadeIn delay={0}>
               <div className="space-y-4">
                 <BrowserFrame
-                  src="https://app.agenticorg.ai/dashboard/agents"
+                  src="/screenshots/agents.png"
                   title="app.agenticorg.ai/dashboard/agents"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
@@ -387,7 +384,7 @@ export default function Landing() {
             <FadeIn delay={150}>
               <div className="space-y-4">
                 <BrowserFrame
-                  src="https://app.agenticorg.ai/dashboard/observatory"
+                  src="/screenshots/observatory.png"
                   title="app.agenticorg.ai/dashboard/observatory"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Live Observatory</h3>
@@ -401,7 +398,7 @@ export default function Landing() {
             <FadeIn delay={300}>
               <div className="space-y-4">
                 <BrowserFrame
-                  src="https://app.agenticorg.ai/dashboard/approvals"
+                  src="/screenshots/approvals.png"
                   title="app.agenticorg.ai/dashboard/approvals"
                 />
                 <h3 className="text-xl font-bold text-slate-900">HITL Approvals</h3>
@@ -528,7 +525,7 @@ export default function Landing() {
 
           <FadeIn>
             <BrowserFrame
-              src="https://app.agenticorg.ai/dashboard/observatory"
+              src="/screenshots/observatory.png"
               title="app.agenticorg.ai/dashboard/observatory"
             />
           </FadeIn>
