@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import api from "@/lib/api";
 import type { Workflow } from "@/types";
 
 export default function Workflows() {
@@ -17,9 +18,7 @@ export default function Workflows() {
   async function fetchWorkflows() {
     setLoading(true);
     try {
-      const resp = await fetch("/api/v1/workflows");
-      if (!resp.ok) { setWorkflows([]); return; }
-      const data = await resp.json();
+      const { data } = await api.get("/workflows");
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setWorkflows(items);
     } catch {
@@ -31,8 +30,7 @@ export default function Workflows() {
 
   async function triggerRun(wfId: string) {
     try {
-      const resp = await fetch(`/api/v1/workflows/${wfId}/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-      const data = await resp.json();
+      const { data } = await api.post(`/workflows/${wfId}/run`, {});
       if (data.run_id) {
         navigate(`/dashboard/workflows/${data.run_id}/runs/${data.run_id}`);
       }

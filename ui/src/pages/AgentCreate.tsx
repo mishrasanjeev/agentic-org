@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
 const AGENT_TYPES: Record<string, string[]> = {
@@ -27,13 +28,7 @@ export default function AgentCreate() {
     setSubmitting(true);
     setError("");
     try {
-      const resp = await fetch("/api/v1/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), agent_type: agentType, domain, confidence_floor: confidenceFloor, status: "shadow" }),
-      });
-      if (!resp.ok) { setError(`Failed to create agent (${resp.status})`); return; }
-      const data = await resp.json();
+      const { data } = await api.post("/agents", { name: name.trim(), agent_type: agentType, domain, confidence_floor: confidenceFloor, status: "shadow" });
       navigate(`/dashboard/agents/${data.id || ""}`);
     } catch {
       setError("Failed to create agent. Please try again.");

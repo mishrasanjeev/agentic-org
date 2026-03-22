@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import api from "@/lib/api";
 import type { AuditEntry } from "@/types";
 
 export default function Audit() {
@@ -17,11 +18,9 @@ export default function Audit() {
   async function fetchAudit() {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
-      if (eventTypeFilter) params.set("event_type", eventTypeFilter);
-      const resp = await fetch(`/api/v1/audit?${params}`);
-      if (!resp.ok) { setEntries([]); return; }
-      const data = await resp.json();
+      const params: Record<string, string> = { page: String(page), per_page: String(perPage) };
+      if (eventTypeFilter) params.event_type = eventTypeFilter;
+      const { data } = await api.get("/audit", { params });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setEntries(items);
     } catch {
@@ -33,8 +32,7 @@ export default function Audit() {
 
   async function exportAudit() {
     try {
-      const resp = await fetch("/api/v1/compliance/evidence-package");
-      const data = await resp.json();
+      const { data } = await api.get("/compliance/evidence-package");
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

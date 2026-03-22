@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ConnectorCard from "@/components/ConnectorCard";
+import api from "@/lib/api";
 import type { Connector } from "@/types";
 
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
@@ -20,9 +21,7 @@ export default function Connectors() {
   async function fetchConnectors() {
     setLoading(true);
     try {
-      const resp = await fetch("/api/v1/connectors");
-      if (!resp.ok) { setConnectors([]); return; }
-      const data = await resp.json();
+      const { data } = await api.get("/connectors");
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setConnectors(items);
     } catch {
@@ -34,8 +33,7 @@ export default function Connectors() {
 
   async function healthCheck(id: string) {
     try {
-      const resp = await fetch(`/api/v1/connectors/${id}/health`);
-      const data = await resp.json();
+      const { data } = await api.get(`/connectors/${id}/health`);
       alert(`Health: ${data.status || "unknown"}`);
     } catch {
       alert("Health check failed");

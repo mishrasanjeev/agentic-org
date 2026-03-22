@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import api from "@/lib/api";
 
 interface StepExecution {
   step_id: string;
@@ -37,9 +38,7 @@ export default function WorkflowRun() {
   async function fetchRun() {
     setLoading(true);
     try {
-      const resp = await fetch(`/api/v1/workflows/runs/${runId}`);
-      if (!resp.ok) { setRun(null); return; }
-      const data = await resp.json();
+      const { data } = await api.get(`/workflows/runs/${runId}`);
       setRun(data?.id ? data : null);
     } catch {
       setRun(null);
@@ -49,7 +48,7 @@ export default function WorkflowRun() {
   }
 
   async function cancelRun() {
-    await fetch(`/api/v1/workflows/runs/${runId}/cancel`, { method: "POST" });
+    await api.post(`/workflows/runs/${runId}/cancel`);
     fetchRun();
   }
 

@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
 import KillSwitch from "@/components/KillSwitch";
+import api from "@/lib/api";
 import type { Agent } from "@/types";
 
 const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice"];
@@ -24,12 +25,10 @@ export default function Agents() {
   async function fetchAgents() {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (domainFilter !== "all") params.set("domain", domainFilter);
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      const resp = await fetch(`/api/v1/agents?${params}`);
-      if (!resp.ok) { setAgents([]); return; }
-      const data = await resp.json();
+      const params: Record<string, string> = {};
+      if (domainFilter !== "all") params.domain = domainFilter;
+      if (statusFilter !== "all") params.status = statusFilter;
+      const { data } = await api.get("/agents", { params });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setAgents(items);
     } catch {

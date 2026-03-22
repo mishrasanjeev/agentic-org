@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 const CATEGORIES = ["finance", "hr", "marketing", "ops", "comms"];
 const AUTH_TYPES = ["oauth2", "api_key", "basic", "certificate", "none"];
@@ -21,12 +22,7 @@ export default function ConnectorCreate() {
     setSubmitting(true);
     setError("");
     try {
-      const resp = await fetch("/api/v1/connectors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), category, auth_type: authType, rate_limit_rpm: rateLimitRpm }),
-      });
-      if (!resp.ok) { setError(`Failed to register connector (${resp.status})`); return; }
+      await api.post("/connectors", { name: name.trim(), category, auth_type: authType, rate_limit_rpm: rateLimitRpm });
       navigate("/dashboard/connectors");
     } catch {
       setError("Failed to register connector. Please try again.");

@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import SchemaEditor from "@/components/SchemaEditor";
+import api from "@/lib/api";
 
 interface SchemaEntry {
   name: string;
@@ -232,9 +233,7 @@ export default function Schemas() {
   async function fetchSchemas() {
     setLoading(true);
     try {
-      const resp = await fetch("/api/v1/schemas");
-      if (!resp.ok) { setSchemas([]); return; }
-      const data = await resp.json();
+      const { data } = await api.get("/schemas");
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setSchemas(items);
     } catch {

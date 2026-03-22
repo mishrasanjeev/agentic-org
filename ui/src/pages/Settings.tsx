@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 interface FleetLimits {
   max_active_agents: number;
@@ -30,8 +31,7 @@ export default function Settings() {
 
   async function fetchSettings() {
     try {
-      const resp = await fetch("/api/v1/config/fleet_limits");
-      const data = await resp.json();
+      const { data } = await api.get("/config/fleet_limits");
       if (data.max_active_agents) setLimits(data);
     } catch {
       // Use defaults
@@ -42,11 +42,7 @@ export default function Settings() {
     setSaving(true);
     setSaved(false);
     try {
-      await fetch("/api/v1/config/fleet_limits", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(limits),
-      });
+      await api.put("/config/fleet_limits", limits);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {

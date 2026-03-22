@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 const TRIGGER_TYPES = ["manual", "schedule", "webhook", "event"];
 
@@ -18,13 +19,7 @@ export default function WorkflowCreate() {
     setSubmitting(true);
     setError("");
     try {
-      const resp = await fetch("/api/v1/workflows", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), trigger_type: triggerType, steps: [] }),
-      });
-      if (!resp.ok) { setError(`Failed to create workflow (${resp.status})`); return; }
-      const data = await resp.json();
+      const { data } = await api.post("/workflows", { name: name.trim(), trigger_type: triggerType, steps: [] });
       navigate(`/dashboard/workflows/${data.id || ""}`);
     } catch {
       setError("Failed to create workflow. Please try again.");
