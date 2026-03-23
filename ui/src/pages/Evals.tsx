@@ -91,14 +91,16 @@ function scoreColor(v: number): string {
 }
 
 function metricCardColor(v: number): string {
-  if (v >= 90) return "border-emerald-400 bg-emerald-50";
-  if (v >= 80) return "border-yellow-400 bg-yellow-50";
+  const pct = v > 1 ? v : v * 100;
+  if (pct >= 90) return "border-emerald-400 bg-emerald-50";
+  if (pct >= 80) return "border-yellow-400 bg-yellow-50";
   return "border-red-400 bg-red-50";
 }
 
 function metricTextColor(v: number): string {
-  if (v >= 90) return "text-emerald-700";
-  if (v >= 80) return "text-yellow-700";
+  const pct = v > 1 ? v : v * 100;
+  if (pct >= 90) return "text-emerald-700";
+  if (pct >= 80) return "text-yellow-700";
   return "text-red-700";
 }
 
@@ -303,7 +305,7 @@ export default function Evals() {
               >
                 <p className="text-sm font-medium text-slate-600 mb-1">{m.label}</p>
                 <p className={`text-3xl font-bold ${metricTextColor(m.value)}`}>
-                  {m.value}%
+                  {m.value > 1 ? `${m.value}%` : `${(m.value * 100).toFixed(m.value >= 0.99 ? 1 : 0)}%`}
                 </p>
               </div>
             ))}
