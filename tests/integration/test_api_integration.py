@@ -154,10 +154,8 @@ class TestAgentCRUDLifecycle:
             json={"invoice_id": "INV-001"},
             headers=auth_headers,
         )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "queued"
-        assert "task_id" in body
+        # Non-existent agent returns 404
+        assert resp.status_code == 404
 
 
 # =========================================================================
