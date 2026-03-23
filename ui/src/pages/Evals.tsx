@@ -225,7 +225,7 @@ export default function Evals() {
     if (!data) return [];
     return [...data.agents]
       .sort((a, b) => b.composite - a.composite)
-      .map((a) => ({ name: a.agent, composite: a.composite, domain: a.domain }));
+      .map((a) => ({ name: a.agent, composite: a.composite > 1 ? a.composite : Math.round(a.composite * 100), domain: a.domain }));
   }, [data]);
 
   /* ---- Loading / Error states ---- */
