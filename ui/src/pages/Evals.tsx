@@ -142,14 +142,35 @@ export default function Evals() {
       .then((raw: any) => {
         // Transform API shape to UI shape
         const pm = raw.platform_metrics || {};
+        // Build agent→domain map from domain_aggregates and case_results
+        const agentDomainMap: Record<string, string> = {};
+        for (const [domName] of Object.entries(raw.domain_aggregates || {})) {
+          // Find agents belonging to this domain from case_results
+          for (const c of (raw.case_results || [])) {
+            if (c.domain === domName || !c.domain) {
+              // If case has no domain, match by checking if agent is in this domain's cases
+            }
+            if (c.domain) agentDomainMap[c.agent_type] = c.domain;
+          }
+        }
+        // Fallback: derive domain from agent_type naming convention
+        const AGENT_DOMAINS: Record<string, string> = {
+          ap_processor: "finance", ar_collections: "finance", recon_agent: "finance",
+          tax_compliance: "finance", close_agent: "finance", fpa_agent: "finance",
+          onboarding: "hr", payroll_engine: "hr", talent_acquisition: "hr",
+          performance_coach: "hr", offboarding: "hr", ld_coordinator: "hr",
+          campaign_pilot: "marketing", content_factory: "marketing", seo_strategist: "marketing",
+          crm_intelligence: "marketing", brand_monitor: "marketing",
+          support_triage: "ops", it_operations: "ops", compliance_guard: "ops",
+          contract_intelligence: "ops", vendor_manager: "ops",
+        };
+
         const agents: AgentScore[] = Object.entries(raw.agent_aggregates || {}).map(
           ([name, a]: [string, any]) => {
             const s = a.avg_scores || {};
-            // Find domain from case_results
-            const caseForAgent = (raw.case_results || []).find((c: any) => c.agent_type === name);
             return {
               agent: name,
-              domain: caseForAgent?.domain || "",
+              domain: agentDomainMap[name] || AGENT_DOMAINS[name] || "",
               quality: s.quality || 0,
               safety: s.safety || 0,
               performance: s.performance || 0,

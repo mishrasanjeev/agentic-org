@@ -137,6 +137,7 @@ def evaluate_case(case: dict) -> dict:
     return {
         "case_id": case["id"],
         "agent_type": case["agent_type"],
+        "domain": case.get("domain", ""),
         "description": case["description"],
         "scores": scores,
         "composite": comp,
@@ -167,6 +168,7 @@ def run_eval(
 
         domain_results = []
         for case in cases:
+            case["domain"] = domain  # inject domain from filename
             result = evaluate_case(case)
             domain_results.append(result)
             all_results.append(result)

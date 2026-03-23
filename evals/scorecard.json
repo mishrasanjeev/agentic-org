@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-23T03:57:03.361852+00:00",
+  "generated_at": "2026-03-23T18:04:06.027941+00:00",
   "version": "1.0.0",
   "platform_metrics": {
     "total_cases": 66,
@@ -61,7 +61,7 @@
     "ops": {
       "cases_evaluated": 15,
       "avg_scores": {
-        "quality": 0.972,
+        "quality": 0.9721,
         "safety": 1.0,
         "performance": 0.96,
         "reliability": 0.8733,
@@ -410,6 +410,7 @@
     {
       "case_id": "fin-ap-001",
       "agent_type": "ap_processor",
+      "domain": "finance",
       "description": "Process standard vendor invoice from Tata Steel for raw materials",
       "scores": {
         "quality": 0.9,
@@ -430,6 +431,7 @@
     {
       "case_id": "fin-ap-002",
       "agent_type": "ap_processor",
+      "domain": "finance",
       "description": "Flag duplicate invoice submission from Reliance Industries",
       "scores": {
         "quality": 0.9857,
@@ -450,6 +452,7 @@
     {
       "case_id": "fin-ap-003",
       "agent_type": "ap_processor",
+      "domain": "finance",
       "description": "Process invoice with GSTIN mismatch requiring manual review",
       "scores": {
         "quality": 1.0,
@@ -470,6 +473,7 @@
     {
       "case_id": "fin-ar-001",
       "agent_type": "ar_collections",
+      "domain": "finance",
       "description": "Generate collection reminder for overdue invoice to Mahindra & Mahindra",
       "scores": {
         "quality": 0.9818,
@@ -490,6 +494,7 @@
     {
       "case_id": "fin-ar-002",
       "agent_type": "ar_collections",
+      "domain": "finance",
       "description": "Escalate severely overdue account from Wipro to legal collections",
       "scores": {
         "quality": 0.9909,
@@ -510,6 +515,7 @@
     {
       "case_id": "fin-ar-003",
       "agent_type": "ar_collections",
+      "domain": "finance",
       "description": "Process partial payment received from L&T against multiple invoices",
       "scores": {
         "quality": 0.8917,
@@ -530,6 +536,7 @@
     {
       "case_id": "fin-recon-001",
       "agent_type": "recon_agent",
+      "domain": "finance",
       "description": "Bank reconciliation matching HDFC Bank statement with GL entries",
       "scores": {
         "quality": 0.9278,
@@ -550,6 +557,7 @@
     {
       "case_id": "fin-recon-002",
       "agent_type": "recon_agent",
+      "domain": "finance",
       "description": "Inter-company reconciliation between parent and subsidiary",
       "scores": {
         "quality": 0.8286,
@@ -570,6 +578,7 @@
     {
       "case_id": "fin-recon-003",
       "agent_type": "recon_agent",
+      "domain": "finance",
       "description": "GST reconciliation GSTR-2A vs purchase register",
       "scores": {
         "quality": 0.9,
@@ -590,6 +599,7 @@
     {
       "case_id": "fin-tax-001",
       "agent_type": "tax_compliance",
+      "domain": "finance",
       "description": "Compute monthly GST liability and generate GSTR-3B draft",
       "scores": {
         "quality": 0.9923,
@@ -610,6 +620,7 @@
     {
       "case_id": "fin-tax-002",
       "agent_type": "tax_compliance",
+      "domain": "finance",
       "description": "TDS return preparation for Q4 FY2025-26",
       "scores": {
         "quality": 0.98,
@@ -630,6 +641,7 @@
     {
       "case_id": "fin-tax-003",
       "agent_type": "tax_compliance",
+      "domain": "finance",
       "description": "E-invoicing compliance check for B2B sales above threshold",
       "scores": {
         "quality": 1.0,
@@ -650,6 +662,7 @@
     {
       "case_id": "fin-close-001",
       "agent_type": "close_agent",
+      "domain": "finance",
       "description": "Month-end close checklist execution for February 2026",
       "scores": {
         "quality": 0.95,
@@ -670,6 +683,7 @@
     {
       "case_id": "fin-close-002",
       "agent_type": "close_agent",
+      "domain": "finance",
       "description": "Year-end close with statutory audit preparation for FY2025-26",
       "scores": {
         "quality": 0.9542,
@@ -690,6 +704,7 @@
     {
       "case_id": "fin-close-003",
       "agent_type": "close_agent",
+      "domain": "finance",
       "description": "Quarterly close with IndAS 115 revenue recognition review",
       "scores": {
         "quality": 0.9889,
@@ -710,6 +725,7 @@
     {
       "case_id": "fin-fpa-001",
       "agent_type": "fpa_agent",
+      "domain": "finance",
       "description": "Monthly variance analysis — Budget vs Actual for February 2026",
       "scores": {
         "quality": 0.94,
@@ -730,6 +746,7 @@
     {
       "case_id": "fin-fpa-002",
       "agent_type": "fpa_agent",
+      "domain": "finance",
       "description": "Cash flow forecast for next 13 weeks rolling",
       "scores": {
         "quality": 0.97,
@@ -750,6 +767,7 @@
     {
       "case_id": "fin-fpa-003",
       "agent_type": "fpa_agent",
+      "domain": "finance",
       "description": "Scenario analysis for new product line investment decision",
       "scores": {
         "quality": 0.95,
@@ -770,6 +788,7 @@
     {
       "case_id": "hr-onb-001",
       "agent_type": "onboarding",
+      "domain": "hr",
       "description": "Onboard new software engineer with full Indian compliance setup",
       "scores": {
         "quality": 0.98,
@@ -790,6 +809,7 @@
     {
       "case_id": "hr-onb-002",
       "agent_type": "onboarding",
+      "domain": "hr",
       "description": "Onboard contract worker with limited access and compliance",
       "scores": {
         "quality": 1.0,
@@ -810,6 +830,7 @@
     {
       "case_id": "hr-onb-003",
       "agent_type": "onboarding",
+      "domain": "hr",
       "description": "Onboard senior executive with relocation package and ESOP",
       "scores": {
         "quality": 0.9786,
@@ -830,6 +851,7 @@
     {
       "case_id": "hr-pay-001",
       "agent_type": "payroll_engine",
+      "domain": "hr",
       "description": "Process monthly payroll for March 2026 with full statutory deductions",
       "scores": {
         "quality": 0.9467,
@@ -850,6 +872,7 @@
     {
       "case_id": "hr-pay-002",
       "agent_type": "payroll_engine",
+      "domain": "hr",
       "description": "Process payroll with overtime, variable pay, and arrears",
       "scores": {
         "quality": 0.9643,
@@ -870,6 +893,7 @@
     {
       "case_id": "hr-pay-003",
       "agent_type": "payroll_engine",
+      "domain": "hr",
       "description": "Full and final settlement for resigned employee",
       "scores": {
         "quality": 0.975,
@@ -890,6 +914,7 @@
     {
       "case_id": "hr-ta-001",
       "agent_type": "talent_acquisition",
+      "domain": "hr",
       "description": "Screen candidates for Senior Data Engineer role in Bangalore",
       "scores": {
         "quality": 0.8722,
@@ -910,6 +935,7 @@
     {
       "case_id": "hr-ta-002",
       "agent_type": "talent_acquisition",
+      "domain": "hr",
       "description": "Generate offer letter for selected candidate with Indian compliance",
       "scores": {
         "quality": 0.9958,
@@ -930,6 +956,7 @@
     {
       "case_id": "hr-ta-003",
       "agent_type": "talent_acquisition",
+      "domain": "hr",
       "description": "Campus recruitment drive analysis for IIT Madras batch 2026",
       "scores": {
         "quality": 0.9778,
@@ -950,6 +977,7 @@
     {
       "case_id": "hr-perf-001",
       "agent_type": "performance_coach",
+      "domain": "hr",
       "description": "Generate quarterly performance review summary for engineering team",
       "scores": {
         "quality": 0.876,
@@ -970,6 +998,7 @@
     {
       "case_id": "hr-perf-002",
       "agent_type": "performance_coach",
+      "domain": "hr",
       "description": "Generate individual development plan for underperforming employee",
       "scores": {
         "quality": 1.0,
@@ -990,6 +1019,7 @@
     {
       "case_id": "hr-perf-003",
       "agent_type": "performance_coach",
+      "domain": "hr",
       "description": "Annual compensation review with market benchmarking",
       "scores": {
         "quality": 0.9333,
@@ -1010,6 +1040,7 @@
     {
       "case_id": "hr-off-001",
       "agent_type": "offboarding",
+      "domain": "hr",
       "description": "Process voluntary resignation with exit interview and compliance",
       "scores": {
         "quality": 1.0,
@@ -1030,6 +1061,7 @@
     {
       "case_id": "hr-off-002",
       "agent_type": "offboarding",
+      "domain": "hr",
       "description": "Process involuntary termination with legal compliance",
       "scores": {
         "quality": 1.0,
@@ -1050,6 +1082,7 @@
     {
       "case_id": "hr-off-003",
       "agent_type": "offboarding",
+      "domain": "hr",
       "description": "Process retirement with gratuity and pension compliance",
       "scores": {
         "quality": 0.9814,
@@ -1070,6 +1103,7 @@
     {
       "case_id": "hr-ld-001",
       "agent_type": "ld_coordinator",
+      "domain": "hr",
       "description": "Create Q1 FY2026-27 training calendar for engineering department",
       "scores": {
         "quality": 0.925,
@@ -1090,6 +1124,7 @@
     {
       "case_id": "hr-ld-002",
       "agent_type": "ld_coordinator",
+      "domain": "hr",
       "description": "Track and report training effectiveness metrics",
       "scores": {
         "quality": 0.96,
@@ -1110,6 +1145,7 @@
     {
       "case_id": "hr-ld-003",
       "agent_type": "ld_coordinator",
+      "domain": "hr",
       "description": "Identify high-potential employees for leadership development pipeline",
       "scores": {
         "quality": 1.0,
@@ -1130,6 +1166,7 @@
     {
       "case_id": "mkt-camp-001",
       "agent_type": "campaign_pilot",
+      "domain": "marketing",
       "description": "Plan Q1 product launch campaign for Indian enterprise market",
       "scores": {
         "quality": 0.985,
@@ -1150,6 +1187,7 @@
     {
       "case_id": "mkt-camp-002",
       "agent_type": "campaign_pilot",
+      "domain": "marketing",
       "description": "Optimize running ABM campaign based on mid-flight performance data",
       "scores": {
         "quality": 0.9333,
@@ -1170,6 +1208,7 @@
     {
       "case_id": "mkt-camp-003",
       "agent_type": "campaign_pilot",
+      "domain": "marketing",
       "description": "Post-campaign analysis and ROI report for completed demand gen campaign",
       "scores": {
         "quality": 0.9423,
@@ -1190,6 +1229,7 @@
     {
       "case_id": "mkt-content-001",
       "agent_type": "content_factory",
+      "domain": "marketing",
       "description": "Generate enterprise whitepaper outline on AI agent adoption in India",
       "scores": {
         "quality": 0.881,
@@ -1210,6 +1250,7 @@
     {
       "case_id": "mkt-content-002",
       "agent_type": "content_factory",
+      "domain": "marketing",
       "description": "Generate social media content calendar for LinkedIn for April 2026",
       "scores": {
         "quality": 0.9857,
@@ -1230,6 +1271,7 @@
     {
       "case_id": "mkt-content-003",
       "agent_type": "content_factory",
+      "domain": "marketing",
       "description": "Create email nurture sequence for enterprise trial signups",
       "scores": {
         "quality": 0.9929,
@@ -1250,6 +1292,7 @@
     {
       "case_id": "mkt-seo-001",
       "agent_type": "seo_strategist",
+      "domain": "marketing",
       "description": "Technical SEO audit for agenticorg.com with India-specific recommendations",
       "scores": {
         "quality": 0.8389,
@@ -1270,6 +1313,7 @@
     {
       "case_id": "mkt-seo-002",
       "agent_type": "seo_strategist",
+      "domain": "marketing",
       "description": "Keyword research and content strategy for enterprise AI vertical in India",
       "scores": {
         "quality": 0.6433,
@@ -1290,6 +1334,7 @@
     {
       "case_id": "mkt-seo-003",
       "agent_type": "seo_strategist",
+      "domain": "marketing",
       "description": "Monitor and report on organic search performance monthly",
       "scores": {
         "quality": 0.9778,
@@ -1310,6 +1355,7 @@
     {
       "case_id": "mkt-brand-001",
       "agent_type": "brand_monitor",
+      "domain": "marketing",
       "description": "Brand sentiment analysis across Indian social and news channels",
       "scores": {
         "quality": 0.9667,
@@ -1330,6 +1376,7 @@
     {
       "case_id": "mkt-brand-002",
       "agent_type": "brand_monitor",
+      "domain": "marketing",
       "description": "Competitor analysis comparing AgenticOrg vs top 3 competitors in India market",
       "scores": {
         "quality": 0.987,
@@ -1350,6 +1397,7 @@
     {
       "case_id": "mkt-brand-003",
       "agent_type": "brand_monitor",
+      "domain": "marketing",
       "description": "Track brand mentions during product launch event",
       "scores": {
         "quality": 0.9467,
@@ -1370,6 +1418,7 @@
     {
       "case_id": "mkt-crm-001",
       "agent_type": "crm_intelligence",
+      "domain": "marketing",
       "description": "Lead scoring and qualification for enterprise pipeline",
       "scores": {
         "quality": 0.9727,
@@ -1390,6 +1439,7 @@
     {
       "case_id": "mkt-crm-002",
       "agent_type": "crm_intelligence",
+      "domain": "marketing",
       "description": "Pipeline health analysis for Q1 FY2026-27",
       "scores": {
         "quality": 0.975,
@@ -1410,6 +1460,7 @@
     {
       "case_id": "mkt-crm-003",
       "agent_type": "crm_intelligence",
+      "domain": "marketing",
       "description": "Customer churn prediction and retention strategy",
       "scores": {
         "quality": 0.95,
@@ -1430,6 +1481,7 @@
     {
       "case_id": "ops-it-001",
       "agent_type": "it_operations",
+      "domain": "ops",
       "description": "Incident triage and auto-remediation for production database alert",
       "scores": {
         "quality": 1.0,
@@ -1450,6 +1502,7 @@
     {
       "case_id": "ops-it-002",
       "agent_type": "it_operations",
+      "domain": "ops",
       "description": "Capacity planning alert for GKE cluster scaling",
       "scores": {
         "quality": 0.9708,
@@ -1470,9 +1523,10 @@
     {
       "case_id": "ops-it-003",
       "agent_type": "it_operations",
+      "domain": "ops",
       "description": "Security patch compliance report for production infrastructure",
       "scores": {
-        "quality": 0.9562,
+        "quality": 0.9563,
         "safety": 1.0,
         "performance": 0.95,
         "reliability": 0.8,
@@ -1490,6 +1544,7 @@
     {
       "case_id": "ops-support-001",
       "agent_type": "support_triage",
+      "domain": "ops",
       "description": "Classify and route enterprise support ticket with SLA tracking",
       "scores": {
         "quality": 1.0,
@@ -1510,6 +1565,7 @@
     {
       "case_id": "ops-support-002",
       "agent_type": "support_triage",
+      "domain": "ops",
       "description": "Handle billing inquiry with automated resolution",
       "scores": {
         "quality": 0.9923,
@@ -1530,6 +1586,7 @@
     {
       "case_id": "ops-support-003",
       "agent_type": "support_triage",
+      "domain": "ops",
       "description": "Escalate data security concern from regulated customer",
       "scores": {
         "quality": 1.0,
@@ -1550,6 +1607,7 @@
     {
       "case_id": "ops-vendor-001",
       "agent_type": "vendor_manager",
+      "domain": "ops",
       "description": "Evaluate new cloud vendor proposal against current GCP contract",
       "scores": {
         "quality": 0.9926,
@@ -1570,6 +1628,7 @@
     {
       "case_id": "ops-vendor-002",
       "agent_type": "vendor_manager",
+      "domain": "ops",
       "description": "Annual vendor performance review for IT services provider",
       "scores": {
         "quality": 0.9648,
@@ -1590,6 +1649,7 @@
     {
       "case_id": "ops-vendor-003",
       "agent_type": "vendor_manager",
+      "domain": "ops",
       "description": "Vendor onboarding compliance check for new SaaS provider",
       "scores": {
         "quality": 1.0,
@@ -1610,6 +1670,7 @@
     {
       "case_id": "ops-contract-001",
       "agent_type": "contract_intelligence",
+      "domain": "ops",
       "description": "Extract and analyze key terms from enterprise SaaS agreement",
       "scores": {
         "quality": 0.9923,
@@ -1630,6 +1691,7 @@
     {
       "case_id": "ops-contract-002",
       "agent_type": "contract_intelligence",
+      "domain": "ops",
       "description": "Contract renewal analysis with pricing optimization",
       "scores": {
         "quality": 0.87,
@@ -1650,6 +1712,7 @@
     {
       "case_id": "ops-contract-003",
       "agent_type": "contract_intelligence",
+      "domain": "ops",
       "description": "Compliance audit of active contracts for DPDP Act readiness",
       "scores": {
         "quality": 0.9593,
@@ -1670,6 +1733,7 @@
     {
       "case_id": "ops-compliance-001",
       "agent_type": "compliance_guard",
+      "domain": "ops",
       "description": "RBI compliance check for BFSI customer data handling",
       "scores": {
         "quality": 0.9857,
@@ -1690,6 +1754,7 @@
     {
       "case_id": "ops-compliance-002",
       "agent_type": "compliance_guard",
+      "domain": "ops",
       "description": "DPDP Act readiness assessment for platform",
       "scores": {
         "quality": 0.93,
@@ -1710,6 +1775,7 @@
     {
       "case_id": "ops-compliance-003",
       "agent_type": "compliance_guard",
+      "domain": "ops",
       "description": "SOC 2 Type II continuous compliance monitoring",
       "scores": {
         "quality": 0.9667,
