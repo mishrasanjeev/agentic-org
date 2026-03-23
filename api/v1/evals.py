@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 router = APIRouter()
 
-_SCORECARD_PATH = Path("scorecard.json")
+_SCORECARD_PATH = Path(__file__).resolve().parent.parent.parent / "evals" / "scorecard.json"
 
 
 def _load_scorecard() -> dict:
