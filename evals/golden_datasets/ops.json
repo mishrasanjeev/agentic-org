@@ -1,0 +1,548 @@
+[
+  {
+    "id": "ops-it-001",
+    "agent_type": "it_operations",
+    "description": "Incident triage and auto-remediation for production database alert",
+    "input": {
+      "alert_id": "ALT-2026-03-23-0042",
+      "severity": "P1",
+      "source": "prometheus",
+      "alert_name": "PostgreSQL_ReplicationLag_High",
+      "current_value": 45.2,
+      "threshold": 10.0,
+      "unit": "seconds",
+      "affected_service": "core-api",
+      "environment": "production",
+      "region": "asia-south1",
+      "started_at": "2026-03-23T14:30:00+05:30"
+    },
+    "expected_output": {
+      "incident_id": "INC-2026-0342",
+      "classification": "database_replication_lag",
+      "impact": "high",
+      "affected_users_estimated": 5000,
+      "auto_remediation_attempted": true,
+      "remediation_steps": [
+        {"step": "check_replication_slot_status", "result": "slot_inactive"},
+        {"step": "restart_replication_slot", "result": "success"},
+        {"step": "verify_lag_reduction", "result": "lag_reducing"}
+      ],
+      "current_status": "mitigating",
+      "mttr_estimated_minutes": 15,
+      "escalation_needed": false,
+      "notification_sent": true,
+      "notification_channels": ["slack_ops", "pagerduty"],
+      "recommended_action": "monitor_lag_for_30min_then_close_if_stable"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "ops-it-002",
+    "agent_type": "it_operations",
+    "description": "Capacity planning alert for GKE cluster scaling",
+    "input": {
+      "cluster_name": "agenticorg-prod-asia-south1",
+      "current_nodes": 12,
+      "max_nodes": 20,
+      "cpu_utilization_avg": 78.5,
+      "memory_utilization_avg": 82.3,
+      "pod_count": 156,
+      "pending_pods": 8,
+      "hpa_events_24h": 15,
+      "node_pool": "e2-standard-8",
+      "cost_per_node_monthly_inr": 45000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "capacity_status": "warning",
+      "scaling_recommendation": "add_nodes",
+      "recommended_node_count": 16,
+      "additional_nodes": 4,
+      "additional_monthly_cost": 180000.00,
+      "alternative_recommendation": "upgrade_to_e2-standard-16",
+      "alternative_nodes_needed": 8,
+      "alternative_monthly_cost": 360000.00,
+      "cost_optimal_choice": "add_4_e2-standard-8",
+      "pending_pods_resolution": "immediate",
+      "projected_headroom_weeks": 8,
+      "recommended_action": "scale_to_16_nodes_and_review_hpa_thresholds"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "ops-it-003",
+    "agent_type": "it_operations",
+    "description": "Security patch compliance report for production infrastructure",
+    "input": {
+      "scan_date": "2026-03-22",
+      "total_vms": 24,
+      "total_containers": 156,
+      "critical_cves": 3,
+      "high_cves": 12,
+      "medium_cves": 28,
+      "patch_sla_critical_hours": 24,
+      "patch_sla_high_hours": 72,
+      "overdue_patches": 2,
+      "affected_services": ["core-api", "auth-service"]
+    },
+    "expected_output": {
+      "compliance_score": 0.87,
+      "critical_patched_pct": 66.7,
+      "high_patched_pct": 83.3,
+      "overdue_details": [
+        {"cve": "CVE-2026-1234", "severity": "critical", "service": "core-api", "overdue_hours": 6},
+        {"cve": "CVE-2026-1235", "severity": "high", "service": "auth-service", "overdue_hours": 12}
+      ],
+      "patch_window_next": "2026-03-23T02:00:00+05:30",
+      "rollback_plan_ready": true,
+      "change_request_id": "CR-2026-0089",
+      "recommended_action": "emergency_patch_critical_cve_in_next_maintenance_window"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "ops-support-001",
+    "agent_type": "support_triage",
+    "description": "Classify and route enterprise support ticket with SLA tracking",
+    "input": {
+      "ticket_id": "TKT-2026-08921",
+      "customer": "HDFC Bank",
+      "plan": "enterprise",
+      "subject": "Agent workflow failing intermittently for reconciliation process",
+      "description": "Our recon_agent workflow has been failing 3 out of 10 runs since yesterday. Error: timeout after 120s. Affecting daily bank reconciliation for 15 branches.",
+      "priority_claimed": "urgent",
+      "submitted_at": "2026-03-23T10:15:00+05:30",
+      "sla_response_minutes": 30,
+      "sla_resolution_hours": 4
+    },
+    "expected_output": {
+      "category": "agent_reliability",
+      "subcategory": "intermittent_failure",
+      "priority_assigned": "P1",
+      "severity": "high",
+      "impact_scope": "15_branches",
+      "routed_to": "platform_engineering",
+      "assigned_engineer": "auto_assign_on_call",
+      "initial_diagnosis": "possible_timeout_misconfiguration_or_upstream_dependency",
+      "sla_response_deadline": "2026-03-23T10:45:00+05:30",
+      "sla_resolution_deadline": "2026-03-23T14:15:00+05:30",
+      "auto_response_sent": true,
+      "knowledge_base_articles": ["KB-0042-timeout-tuning", "KB-0089-recon-agent-troubleshooting"],
+      "recommended_action": "investigate_timeout_and_upstream_latency"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "ops-support-002",
+    "agent_type": "support_triage",
+    "description": "Handle billing inquiry with automated resolution",
+    "input": {
+      "ticket_id": "TKT-2026-08935",
+      "customer": "Zoho Corporation",
+      "plan": "professional",
+      "subject": "Incorrect charges on March invoice",
+      "description": "We were charged for 50 agent seats but our agreement is for 35 seats. Invoice INV-2026-03-ZOHO shows INR 875000 but should be INR 612500 based on our contract.",
+      "priority_claimed": "normal",
+      "submitted_at": "2026-03-23T11:30:00+05:30",
+      "contract_seats": 35,
+      "billed_seats": 50,
+      "per_seat_price": 17500.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "category": "billing",
+      "subcategory": "overcharge",
+      "priority_assigned": "P3",
+      "severity": "medium",
+      "billing_discrepancy_confirmed": true,
+      "overcharge_amount": 262500.00,
+      "root_cause": "auto_scaling_seats_not_capped_to_contract",
+      "resolution": "credit_note_issued",
+      "credit_note_amount": 262500.00,
+      "routed_to": "billing_team",
+      "auto_response_sent": true,
+      "contract_update_needed": true,
+      "recommended_action": "issue_credit_note_and_cap_seat_auto_scaling"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "ops-support-003",
+    "agent_type": "support_triage",
+    "description": "Escalate data security concern from regulated customer",
+    "input": {
+      "ticket_id": "TKT-2026-08942",
+      "customer": "State Bank of India",
+      "plan": "enterprise",
+      "subject": "Data residency compliance concern - agent logs",
+      "description": "Our CISO team has flagged that some agent execution logs may be stored outside India. As per RBI guidelines, all banking data must reside within India. We need immediate confirmation of data residency for all our tenant data.",
+      "priority_claimed": "critical",
+      "submitted_at": "2026-03-23T09:00:00+05:30",
+      "regulatory_reference": "RBI-DPSS-CO-OD-2164",
+      "sla_response_minutes": 15,
+      "sla_resolution_hours": 2
+    },
+    "expected_output": {
+      "category": "security_compliance",
+      "subcategory": "data_residency",
+      "priority_assigned": "P0",
+      "severity": "critical",
+      "regulatory_flag": true,
+      "regulatory_body": "RBI",
+      "routed_to": "security_team",
+      "escalated_to": "vp_engineering",
+      "auto_response_sent": true,
+      "immediate_actions": [
+        {"action": "confirm_data_residency_asia_south1", "status": "in_progress"},
+        {"action": "generate_data_residency_certificate", "status": "pending"},
+        {"action": "audit_log_storage_locations", "status": "pending"}
+      ],
+      "sla_response_deadline": "2026-03-23T09:15:00+05:30",
+      "sla_resolution_deadline": "2026-03-23T11:00:00+05:30",
+      "recommended_action": "immediate_data_residency_audit_and_certificate_generation"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.90, 0.98]
+  },
+  {
+    "id": "ops-vendor-001",
+    "agent_type": "vendor_manager",
+    "description": "Evaluate new cloud vendor proposal against current GCP contract",
+    "input": {
+      "vendor_name": "Amazon Web Services",
+      "proposal_id": "AWS-PROP-2026-0042",
+      "service_type": "cloud_infrastructure",
+      "proposed_monthly_cost": 850000.00,
+      "current_vendor": "Google Cloud Platform",
+      "current_monthly_cost": 920000.00,
+      "contract_term_months": 36,
+      "migration_cost_estimated": 5000000.00,
+      "sla_proposed": 99.95,
+      "current_sla": 99.99,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "recommendation": "stay_with_current_vendor",
+      "cost_saving_monthly": 70000.00,
+      "cost_saving_annual": 840000.00,
+      "migration_payback_months": 71.4,
+      "migration_payback_exceeds_contract": true,
+      "sla_comparison": {"proposed": 99.95, "current": 99.99, "downgrade": true},
+      "risk_factors": [
+        {"factor": "migration_complexity", "risk": "high"},
+        {"factor": "sla_downgrade", "risk": "medium"},
+        {"factor": "team_retraining", "risk": "medium"},
+        {"factor": "data_transfer_cost", "risk": "high"}
+      ],
+      "total_cost_of_ownership_3yr": {
+        "current": 33120000.00,
+        "proposed": 35600000.00
+      },
+      "recommended_action": "negotiate_better_gcp_pricing_instead_of_migration"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "ops-vendor-002",
+    "agent_type": "vendor_manager",
+    "description": "Annual vendor performance review for IT services provider",
+    "input": {
+      "vendor_name": "TCS (Tata Consultancy Services)",
+      "contract_id": "TCS-MSA-2024-001",
+      "service_type": "managed_it_services",
+      "contract_value_annual": 24000000.00,
+      "review_period": "2025-26",
+      "sla_targets": {"uptime": 99.9, "response_time_p95_ms": 200, "incident_resolution_hours": 4},
+      "sla_actual": {"uptime": 99.85, "response_time_p95_ms": 245, "incident_resolution_hours": 5.2},
+      "incidents_total": 45,
+      "incidents_sla_met": 34,
+      "csat_score": 3.8,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "overall_score": 72,
+      "grade": "C+",
+      "sla_compliance": {
+        "uptime": {"target": 99.9, "actual": 99.85, "met": false, "penalty_applicable": true},
+        "response_time": {"target": 200, "actual": 245, "met": false, "penalty_applicable": true},
+        "resolution_time": {"target": 4, "actual": 5.2, "met": false, "penalty_applicable": true}
+      },
+      "sla_penalty_amount": 1200000.00,
+      "incident_sla_compliance_pct": 75.6,
+      "improvement_areas": ["incident_response_time", "proactive_monitoring", "resource_quality"],
+      "contract_action": "issue_cure_notice",
+      "cure_period_days": 30,
+      "recommended_action": "issue_cure_notice_with_30day_remediation_plan"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "ops-vendor-003",
+    "agent_type": "vendor_manager",
+    "description": "Vendor onboarding compliance check for new SaaS provider",
+    "input": {
+      "vendor_name": "Razorpay Software Pvt Ltd",
+      "service_type": "payment_gateway",
+      "contract_value_annual": 3600000.00,
+      "vendor_gstin": "29AABCR1234E1ZK",
+      "data_processing": true,
+      "data_residency_required": true,
+      "iso_27001_certified": true,
+      "soc2_certified": true,
+      "gdpr_compliant": true,
+      "dpdp_act_compliant": true,
+      "pci_dss_compliant": true,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "compliance_status": "approved",
+      "compliance_score": 0.95,
+      "checks_passed": [
+        {"check": "gstin_verification", "status": "passed"},
+        {"check": "iso_27001", "status": "passed"},
+        {"check": "soc2_type2", "status": "passed"},
+        {"check": "pci_dss_level1", "status": "passed"},
+        {"check": "data_residency_india", "status": "passed"},
+        {"check": "dpdp_act_compliance", "status": "passed"},
+        {"check": "financial_stability", "status": "passed"}
+      ],
+      "checks_pending": [
+        {"check": "penetration_test_report", "status": "awaiting_document"}
+      ],
+      "risk_rating": "low",
+      "approval_level": "department_head",
+      "recommended_action": "approve_pending_pentest_report_submission"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "ops-contract-001",
+    "agent_type": "contract_intelligence",
+    "description": "Extract and analyze key terms from enterprise SaaS agreement",
+    "input": {
+      "contract_id": "ENT-2026-BAJAJ-001",
+      "customer": "Bajaj Finance Limited",
+      "contract_type": "enterprise_saas",
+      "contract_value": 25000000.00,
+      "term_years": 3,
+      "document_pages": 42,
+      "key_sections": ["payment_terms", "sla", "data_protection", "termination", "liability_cap", "indemnity"],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "extracted_terms": {
+        "payment_terms": "net_30_quarterly_advance",
+        "auto_renewal": true,
+        "renewal_notice_days": 90,
+        "sla_uptime": 99.95,
+        "sla_credits_max_pct": 30,
+        "data_residency": "india_only",
+        "data_retention_months": 84,
+        "termination_for_convenience_notice_days": 180,
+        "liability_cap_multiplier": 1.0,
+        "liability_cap_amount": 25000000.00,
+        "indemnity_carveouts": ["ip_infringement", "data_breach", "willful_misconduct"],
+        "governing_law": "India",
+        "dispute_resolution": "Mumbai_arbitration"
+      },
+      "risk_items": [
+        {"clause": "unlimited_liability_for_data_breach", "risk": "high", "recommendation": "negotiate_cap"},
+        {"clause": "180_day_termination_notice", "risk": "medium", "recommendation": "reduce_to_90_days"}
+      ],
+      "favorable_terms": ["quarterly_advance_payment", "india_data_residency", "strong_sla"],
+      "overall_risk_score": 0.35,
+      "recommended_action": "negotiate_data_breach_liability_cap_before_signing"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "ops-contract-002",
+    "agent_type": "contract_intelligence",
+    "description": "Contract renewal analysis with pricing optimization",
+    "input": {
+      "contract_id": "ENT-2024-ICICI-001",
+      "customer": "ICICI Prudential Life Insurance",
+      "original_value_annual": 8000000.00,
+      "current_usage_pct": 85,
+      "renewal_date": "2026-06-30",
+      "price_increase_proposed_pct": 15,
+      "market_rate_increase_pct": 10,
+      "customer_nps": 6,
+      "churn_risk": "high",
+      "competitor_threat": true,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "renewal_recommendation": "renew_with_concessions",
+      "proposed_increase_pct": 5,
+      "proposed_annual_value": 8400000.00,
+      "discount_from_standard": 8.7,
+      "justification": "churn_risk_mitigation_with_high_value_account",
+      "value_adds_proposed": [
+        {"item": "additional_5_agent_seats", "value": 437500.00},
+        {"item": "premium_support_upgrade", "value": 600000.00},
+        {"item": "custom_onboarding_session", "value": 200000.00}
+      ],
+      "total_value_with_adds": 9637500.00,
+      "effective_increase_to_customer": 5.0,
+      "revenue_retention_probability": 0.75,
+      "recommended_action": "present_renewal_package_with_value_adds"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.78, 0.90]
+  },
+  {
+    "id": "ops-contract-003",
+    "agent_type": "contract_intelligence",
+    "description": "Compliance audit of active contracts for DPDP Act readiness",
+    "input": {
+      "audit_scope": "all_active_customer_contracts",
+      "total_contracts": 85,
+      "regulation": "Digital Personal Data Protection Act 2023",
+      "required_clauses": [
+        "data_processing_purpose_limitation",
+        "data_principal_rights",
+        "data_breach_notification_72h",
+        "cross_border_transfer_restrictions",
+        "consent_management",
+        "data_retention_limitation"
+      ],
+      "audit_date": "2026-03-22"
+    },
+    "expected_output": {
+      "contracts_compliant": 52,
+      "contracts_partially_compliant": 25,
+      "contracts_non_compliant": 8,
+      "compliance_rate": 0.612,
+      "clause_coverage": {
+        "data_processing_purpose_limitation": {"present_in": 72, "pct": 84.7},
+        "data_principal_rights": {"present_in": 58, "pct": 68.2},
+        "data_breach_notification_72h": {"present_in": 65, "pct": 76.5},
+        "cross_border_transfer_restrictions": {"present_in": 70, "pct": 82.4},
+        "consent_management": {"present_in": 55, "pct": 64.7},
+        "data_retention_limitation": {"present_in": 60, "pct": 70.6}
+      },
+      "priority_amendments_needed": 33,
+      "estimated_legal_effort_hours": 165,
+      "deadline_for_compliance": "2026-06-30",
+      "recommended_action": "prioritize_8_non_compliant_contracts_for_immediate_amendment"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "ops-compliance-001",
+    "agent_type": "compliance_guard",
+    "description": "RBI compliance check for BFSI customer data handling",
+    "input": {
+      "regulation": "RBI_IT_Framework_2023",
+      "customer_segment": "BFSI",
+      "data_categories": ["account_numbers", "transaction_data", "kyc_documents", "credit_scores"],
+      "storage_location": "asia-south1",
+      "encryption_at_rest": true,
+      "encryption_in_transit": true,
+      "access_controls": "rbac_with_mfa",
+      "audit_logging": true,
+      "data_masking": true,
+      "retention_policy_months": 96
+    },
+    "expected_output": {
+      "compliance_status": "compliant",
+      "score": 0.94,
+      "checks": [
+        {"requirement": "data_localization_india", "status": "passed"},
+        {"requirement": "encryption_aes256_at_rest", "status": "passed"},
+        {"requirement": "tls_1_3_in_transit", "status": "passed"},
+        {"requirement": "access_control_mfa", "status": "passed"},
+        {"requirement": "audit_trail_7_years", "status": "passed"},
+        {"requirement": "data_masking_pii", "status": "passed"},
+        {"requirement": "incident_response_plan", "status": "passed"},
+        {"requirement": "board_approved_it_policy", "status": "needs_verification"}
+      ],
+      "gaps_found": 1,
+      "gap_details": [{"requirement": "board_approved_it_policy", "remediation": "upload_board_resolution_document"}],
+      "next_audit_date": "2026-06-22",
+      "recommended_action": "upload_board_it_policy_resolution_to_complete_compliance"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.90, 0.97]
+  },
+  {
+    "id": "ops-compliance-002",
+    "agent_type": "compliance_guard",
+    "description": "DPDP Act readiness assessment for platform",
+    "input": {
+      "regulation": "DPDP_Act_2023",
+      "assessment_date": "2026-03-22",
+      "data_principals_count": 125000,
+      "consent_mechanism": "opt_in_granular",
+      "data_categories_processed": ["name", "email", "phone", "aadhaar_masked", "pan_masked", "bank_account_masked"],
+      "cross_border_transfers": false,
+      "dpo_appointed": true,
+      "breach_notification_sla_hours": 72,
+      "data_deletion_mechanism": true,
+      "privacy_policy_updated": true
+    },
+    "expected_output": {
+      "readiness_score": 0.91,
+      "readiness_level": "substantially_compliant",
+      "requirements_met": 14,
+      "requirements_total": 16,
+      "gaps": [
+        {"requirement": "grievance_redressal_mechanism", "status": "partial", "remediation": "implement_dedicated_grievance_portal"},
+        {"requirement": "significant_data_fiduciary_registration", "status": "pending", "remediation": "register_with_data_protection_board"}
+      ],
+      "aadhaar_handling_compliant": true,
+      "consent_audit_trail": true,
+      "data_principal_rights_dashboard": true,
+      "estimated_remediation_days": 21,
+      "recommended_action": "implement_grievance_portal_and_register_with_dpb"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "ops-compliance-003",
+    "agent_type": "compliance_guard",
+    "description": "SOC 2 Type II continuous compliance monitoring",
+    "input": {
+      "framework": "SOC2_Type_II",
+      "trust_services_criteria": ["security", "availability", "confidentiality", "processing_integrity"],
+      "monitoring_period": "2026-03",
+      "controls_total": 85,
+      "controls_automated": 72,
+      "controls_manual": 13,
+      "alerts_triggered": 8,
+      "alerts_resolved": 7,
+      "evidence_collection_automated_pct": 85
+    },
+    "expected_output": {
+      "compliance_score": 0.93,
+      "controls_effective": 80,
+      "controls_partially_effective": 4,
+      "controls_ineffective": 1,
+      "open_findings": [
+        {"control": "CC6.3_logical_access_review", "status": "partially_effective", "remediation": "complete_quarterly_access_review"},
+        {"control": "CC7.2_vulnerability_management", "status": "partially_effective", "remediation": "patch_2_overdue_critical_cves"},
+        {"control": "CC8.1_change_management", "status": "partially_effective", "remediation": "update_change_approval_workflow"},
+        {"control": "A1.2_backup_testing", "status": "partially_effective", "remediation": "complete_dr_test"},
+        {"control": "CC6.8_privileged_access", "status": "ineffective", "remediation": "implement_pam_solution"}
+      ],
+      "audit_readiness": 0.88,
+      "next_audit_date": "2026-06-15",
+      "evidence_gaps": 3,
+      "recommended_action": "prioritize_pam_implementation_and_complete_access_review"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.85, 0.94]
+  }
+]

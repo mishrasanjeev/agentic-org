@@ -1,0 +1,517 @@
+[
+  {
+    "id": "mkt-camp-001",
+    "agent_type": "campaign_pilot",
+    "description": "Plan Q1 product launch campaign for Indian enterprise market",
+    "input": {
+      "campaign_name": "AgenticOrg Enterprise Plus Launch",
+      "target_market": "India Enterprise",
+      "budget": 5000000.00,
+      "currency": "INR",
+      "start_date": "2026-04-01",
+      "end_date": "2026-06-30",
+      "target_personas": ["CTO", "VP Engineering", "Head of Digital Transformation"],
+      "channels": ["linkedin", "google_ads", "webinar", "email", "industry_events"],
+      "kpi_targets": {"mqls": 500, "sqls": 100, "pipeline_value": 50000000.00}
+    },
+    "expected_output": {
+      "campaign_plan": {
+        "phases": [
+          {"name": "awareness", "duration_weeks": 4, "budget_pct": 40},
+          {"name": "consideration", "duration_weeks": 4, "budget_pct": 35},
+          {"name": "conversion", "duration_weeks": 4, "budget_pct": 25}
+        ],
+        "channel_allocation": {
+          "linkedin": 1500000.00,
+          "google_ads": 1200000.00,
+          "webinar": 800000.00,
+          "email": 300000.00,
+          "industry_events": 1200000.00
+        }
+      },
+      "projected_mqls": 550,
+      "projected_sqls": 110,
+      "projected_pipeline": 55000000.00,
+      "cpl_estimated": 9090.91,
+      "roi_projected": 10.0,
+      "status": "plan_ready",
+      "recommended_action": "get_cmo_approval_and_brief_creative_team"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.78, 0.90]
+  },
+  {
+    "id": "mkt-camp-002",
+    "agent_type": "campaign_pilot",
+    "description": "Optimize running ABM campaign based on mid-flight performance data",
+    "input": {
+      "campaign_id": "ABM-2026-Q1-BFSI",
+      "campaign_name": "BFSI Digital Transformation ABM",
+      "target_accounts": 50,
+      "budget_total": 3000000.00,
+      "budget_spent": 1800000.00,
+      "days_elapsed": 45,
+      "days_remaining": 45,
+      "mqls_generated": 85,
+      "sqls_generated": 12,
+      "pipeline_created": 18000000.00,
+      "target_accounts_engaged": 28,
+      "top_performing_channel": "linkedin",
+      "underperforming_channel": "display_ads",
+      "currency": "INR"
+    },
+    "expected_output": {
+      "performance_status": "on_track",
+      "engagement_rate": 0.56,
+      "mql_to_sql_rate": 0.141,
+      "cost_per_engaged_account": 64285.71,
+      "reallocations": [
+        {"from": "display_ads", "to": "linkedin", "amount": 300000.00},
+        {"from": "display_ads", "to": "personalized_email", "amount": 200000.00}
+      ],
+      "projected_final_mqls": 170,
+      "projected_final_sqls": 24,
+      "projected_final_pipeline": 36000000.00,
+      "recommended_action": "reallocate_budget_from_display_to_linkedin_and_email"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "mkt-camp-003",
+    "agent_type": "campaign_pilot",
+    "description": "Post-campaign analysis and ROI report for completed demand gen campaign",
+    "input": {
+      "campaign_id": "DG-2025-Q4-ENTERPRISE",
+      "campaign_name": "Q4 Enterprise Demand Gen",
+      "budget_total": 4000000.00,
+      "budget_spent": 3850000.00,
+      "duration_days": 90,
+      "impressions": 2500000,
+      "clicks": 35000,
+      "mqls": 420,
+      "sqls": 84,
+      "opportunities_created": 32,
+      "deals_closed": 8,
+      "revenue_attributed": 24000000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "ctr": 1.4,
+      "cpl": 9166.67,
+      "cpa": 481250.00,
+      "mql_to_sql_rate": 0.20,
+      "sql_to_opportunity_rate": 0.381,
+      "opportunity_to_close_rate": 0.25,
+      "total_funnel_conversion": 0.019,
+      "roi": 5.23,
+      "roas": 6.23,
+      "customer_acquisition_cost": 481250.00,
+      "ltv_cac_ratio": 12.5,
+      "status": "completed",
+      "recommended_action": "scale_linkedin_and_webinar_channels_for_next_quarter"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "mkt-content-001",
+    "agent_type": "content_factory",
+    "description": "Generate enterprise whitepaper outline on AI agent adoption in India",
+    "input": {
+      "content_type": "whitepaper",
+      "title": "Enterprise AI Agent Adoption: An Indian Perspective",
+      "target_audience": "C-suite decision makers in Indian enterprises",
+      "word_count_target": 5000,
+      "topics": ["agent_orchestration", "compliance_automation", "roi_framework", "indian_regulatory_landscape"],
+      "tone": "authoritative_professional",
+      "cta": "book_demo"
+    },
+    "expected_output": {
+      "outline_sections": [
+        {"title": "Executive Summary", "word_count": 500},
+        {"title": "The State of Enterprise AI in India", "word_count": 800},
+        {"title": "Agent Orchestration Architecture", "word_count": 1000},
+        {"title": "Compliance Automation for Indian Regulations", "word_count": 1000},
+        {"title": "ROI Framework and Case Studies", "word_count": 1000},
+        {"title": "Implementation Roadmap", "word_count": 500},
+        {"title": "Conclusion and Next Steps", "word_count": 200}
+      ],
+      "seo_keywords": ["enterprise ai agents india", "ai compliance automation", "agent orchestration platform"],
+      "estimated_production_days": 10,
+      "design_assets_needed": 8,
+      "status": "outline_approved",
+      "recommended_action": "assign_to_content_writer_and_schedule_review"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "mkt-content-002",
+    "agent_type": "content_factory",
+    "description": "Generate social media content calendar for LinkedIn for April 2026",
+    "input": {
+      "platform": "linkedin",
+      "month": "2026-04",
+      "posts_per_week": 5,
+      "content_pillars": ["product_updates", "thought_leadership", "customer_stories", "engineering_culture"],
+      "brand_voice": "professional_innovative",
+      "hashtags_primary": ["#AgenticOrg", "#EnterpriseAI", "#AIAgents"]
+    },
+    "expected_output": {
+      "total_posts": 20,
+      "content_mix": {
+        "product_updates": 5,
+        "thought_leadership": 6,
+        "customer_stories": 4,
+        "engineering_culture": 3,
+        "company_news": 2
+      },
+      "format_mix": {
+        "text_with_image": 8,
+        "carousel": 5,
+        "video_short": 3,
+        "poll": 2,
+        "article": 2
+      },
+      "estimated_reach": 150000,
+      "estimated_engagement_rate": 3.5,
+      "status": "calendar_ready",
+      "recommended_action": "review_calendar_and_prepare_creative_assets"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "mkt-content-003",
+    "agent_type": "content_factory",
+    "description": "Create email nurture sequence for enterprise trial signups",
+    "input": {
+      "sequence_name": "Enterprise Trial Nurture",
+      "trigger": "trial_signup",
+      "target_persona": "IT Decision Maker",
+      "sequence_length": 7,
+      "duration_days": 21,
+      "goal": "convert_trial_to_paid"
+    },
+    "expected_output": {
+      "emails": [
+        {"day": 0, "subject": "Welcome to AgenticOrg", "type": "welcome", "cta": "complete_setup"},
+        {"day": 1, "subject": "Quick Start: Deploy Your First Agent", "type": "tutorial", "cta": "launch_agent"},
+        {"day": 3, "subject": "How HDFC Bank Automated 80% of Reconciliation", "type": "case_study", "cta": "read_more"},
+        {"day": 7, "subject": "Your Trial Progress Report", "type": "personalized", "cta": "explore_features"},
+        {"day": 10, "subject": "5 Agents Every Finance Team Needs", "type": "educational", "cta": "view_agents"},
+        {"day": 14, "subject": "Exclusive: Talk to Our Solutions Architect", "type": "offer", "cta": "book_call"},
+        {"day": 21, "subject": "Your Trial Ends Soon - Special Enterprise Pricing", "type": "urgency", "cta": "upgrade_now"}
+      ],
+      "expected_open_rate": 0.35,
+      "expected_click_rate": 0.08,
+      "expected_conversion_rate": 0.12,
+      "status": "sequence_ready",
+      "recommended_action": "set_up_in_marketing_automation_tool"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.83, 0.94]
+  },
+  {
+    "id": "mkt-seo-001",
+    "agent_type": "seo_strategist",
+    "description": "Technical SEO audit for agenticorg.com with India-specific recommendations",
+    "input": {
+      "domain": "agenticorg.com",
+      "pages_crawled": 245,
+      "avg_page_load_time_ms": 3200,
+      "mobile_score": 72,
+      "core_web_vitals": {"lcp": 3.8, "fid": 120, "cls": 0.15},
+      "indexed_pages": 198,
+      "broken_links": 12,
+      "missing_alt_tags": 34,
+      "hreflang_configured": false,
+      "target_market": "India"
+    },
+    "expected_output": {
+      "overall_seo_score": 62,
+      "critical_issues": [
+        {"issue": "lcp_above_2_5s", "impact": "high", "fix": "optimize_images_and_enable_cdn"},
+        {"issue": "missing_hreflang_for_india", "impact": "high", "fix": "add_hreflang_en_in"},
+        {"issue": "broken_links", "count": 12, "impact": "medium", "fix": "redirect_or_remove"}
+      ],
+      "opportunities": [
+        {"area": "structured_data", "potential_traffic_increase_pct": 15},
+        {"area": "content_gap_analysis", "keywords_missing": 45},
+        {"area": "internal_linking", "improvement_potential": "high"}
+      ],
+      "projected_traffic_increase_pct": 35,
+      "implementation_priority": ["core_web_vitals", "hreflang", "broken_links", "structured_data"],
+      "recommended_action": "fix_cwv_and_hreflang_as_priority_1"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "mkt-seo-002",
+    "agent_type": "seo_strategist",
+    "description": "Keyword research and content strategy for enterprise AI vertical in India",
+    "input": {
+      "seed_keywords": ["enterprise ai platform", "ai agents for business", "workflow automation india"],
+      "target_market": "India",
+      "competitor_domains": ["automationanywhere.com", "uipath.com", "freshworks.com"],
+      "content_gap_analysis": true,
+      "monthly_budget_content": 500000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "keyword_clusters": [
+        {"cluster": "enterprise_ai_platform", "keywords": 25, "total_volume": 45000, "avg_difficulty": 65},
+        {"cluster": "ai_agent_automation", "keywords": 18, "total_volume": 28000, "avg_difficulty": 52},
+        {"cluster": "compliance_automation_india", "keywords": 12, "total_volume": 8500, "avg_difficulty": 35},
+        {"cluster": "workflow_orchestration", "keywords": 15, "total_volume": 12000, "avg_difficulty": 48}
+      ],
+      "top_opportunities": [
+        {"keyword": "ai compliance automation india", "volume": 2400, "difficulty": 28, "intent": "commercial"},
+        {"keyword": "enterprise agent platform", "volume": 3600, "difficulty": 42, "intent": "informational"},
+        {"keyword": "gst automation ai", "volume": 1800, "difficulty": 22, "intent": "commercial"}
+      ],
+      "content_plan_pieces": 12,
+      "estimated_organic_traffic_6m": 15000,
+      "recommended_action": "start_with_low_difficulty_commercial_intent_keywords"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.78, 0.90]
+  },
+  {
+    "id": "mkt-seo-003",
+    "agent_type": "seo_strategist",
+    "description": "Monitor and report on organic search performance monthly",
+    "input": {
+      "domain": "agenticorg.com",
+      "period": "2026-02",
+      "organic_sessions": 12500,
+      "organic_sessions_prev": 10800,
+      "keywords_top10": 145,
+      "keywords_top10_prev": 128,
+      "avg_position": 18.5,
+      "avg_position_prev": 21.2,
+      "top_landing_pages": [
+        {"url": "/platform", "sessions": 3200, "conversions": 45},
+        {"url": "/agents/finance", "sessions": 2100, "conversions": 32},
+        {"url": "/blog/ai-compliance-india", "sessions": 1800, "conversions": 18}
+      ]
+    },
+    "expected_output": {
+      "sessions_growth_pct": 15.7,
+      "keyword_growth_pct": 13.3,
+      "position_improvement": 2.7,
+      "conversion_rate_organic": 0.76,
+      "top_gaining_keywords": [
+        {"keyword": "ai agent platform india", "position_change": -8, "current_position": 5},
+        {"keyword": "enterprise workflow automation", "position_change": -5, "current_position": 12}
+      ],
+      "declining_keywords": [
+        {"keyword": "ai chatbot enterprise", "position_change": 3, "current_position": 25}
+      ],
+      "projected_sessions_next_month": 14375,
+      "status": "improving",
+      "recommended_action": "double_down_on_gaining_keywords_and_investigate_declining"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "mkt-brand-001",
+    "agent_type": "brand_monitor",
+    "description": "Brand sentiment analysis across Indian social and news channels",
+    "input": {
+      "brand": "AgenticOrg",
+      "period": "2026-03-01_to_2026-03-22",
+      "sources": ["twitter", "linkedin", "reddit", "economic_times", "yourstory", "inc42"],
+      "total_mentions": 342,
+      "competitor_mentions": {"AutomationAnywhere": 890, "UiPath": 1200, "Freshworks": 560}
+    },
+    "expected_output": {
+      "sentiment_breakdown": {"positive": 0.62, "neutral": 0.28, "negative": 0.10},
+      "sentiment_score": 0.76,
+      "share_of_voice": 0.114,
+      "top_positive_themes": ["innovative_platform", "indian_enterprise_focus", "compliance_automation"],
+      "top_negative_themes": ["pricing_concerns", "documentation_gaps"],
+      "influencer_mentions": 5,
+      "media_coverage_articles": 3,
+      "brand_health_score": 72,
+      "nps_estimated": 45,
+      "crisis_alerts": 0,
+      "recommended_action": "address_documentation_gaps_and_amplify_positive_coverage"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.75, 0.88]
+  },
+  {
+    "id": "mkt-brand-002",
+    "agent_type": "brand_monitor",
+    "description": "Competitor analysis comparing AgenticOrg vs top 3 competitors in India market",
+    "input": {
+      "brand": "AgenticOrg",
+      "competitors": ["AutomationAnywhere", "UiPath", "Freshworks"],
+      "dimensions": ["product_features", "pricing", "market_presence", "customer_reviews", "media_coverage"],
+      "market": "India Enterprise AI"
+    },
+    "expected_output": {
+      "competitive_matrix": {
+        "AgenticOrg": {"features": 0.85, "pricing": 0.90, "presence": 0.45, "reviews": 0.78, "media": 0.55},
+        "AutomationAnywhere": {"features": 0.82, "pricing": 0.60, "presence": 0.88, "reviews": 0.72, "media": 0.85},
+        "UiPath": {"features": 0.88, "pricing": 0.55, "presence": 0.92, "reviews": 0.80, "media": 0.90},
+        "Freshworks": {"features": 0.70, "pricing": 0.85, "presence": 0.75, "reviews": 0.82, "media": 0.78}
+      },
+      "agenticorg_strengths": ["pricing_competitiveness", "indian_compliance_native", "agent_orchestration"],
+      "agenticorg_weaknesses": ["market_presence", "brand_awareness", "enterprise_references"],
+      "market_gap_opportunity": "mid_market_indian_enterprises_underserved",
+      "recommended_action": "invest_in_brand_awareness_and_build_reference_customers"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.72, 0.85]
+  },
+  {
+    "id": "mkt-brand-003",
+    "agent_type": "brand_monitor",
+    "description": "Track brand mentions during product launch event",
+    "input": {
+      "event": "AgenticOrg Enterprise Plus Launch",
+      "date": "2026-04-01",
+      "monitoring_window_hours": 48,
+      "channels": ["twitter", "linkedin", "news"],
+      "hashtags": ["#AgenticOrg", "#EnterpriseAI", "#AgenticOrgLaunch"],
+      "pre_event_mentions": 45
+    },
+    "expected_output": {
+      "total_mentions_48h": 580,
+      "mention_increase_pct": 1188.9,
+      "peak_hour": "2026-04-01T14:00+05:30",
+      "peak_mentions_per_hour": 85,
+      "sentiment": {"positive": 0.72, "neutral": 0.22, "negative": 0.06},
+      "top_amplifiers": [
+        {"handle": "@nassaborgin", "reach": 450000},
+        {"handle": "@ETTechNews", "reach": 380000}
+      ],
+      "hashtag_impressions": 2500000,
+      "media_pickups": 8,
+      "status": "successful_launch",
+      "recommended_action": "engage_top_amplifiers_and_share_post_event_content"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "mkt-crm-001",
+    "agent_type": "crm_intelligence",
+    "description": "Lead scoring and qualification for enterprise pipeline",
+    "input": {
+      "lead_id": "LEAD-2026-04521",
+      "company": "Bajaj Finance Limited",
+      "industry": "BFSI",
+      "employee_count": 35000,
+      "annual_revenue_inr": 450000000000.00,
+      "contact_name": "Rajiv Mehta",
+      "contact_title": "CTO",
+      "engagement_history": [
+        {"type": "webinar_attended", "date": "2026-02-15", "topic": "AI in BFSI"},
+        {"type": "whitepaper_downloaded", "date": "2026-02-20", "topic": "Enterprise AI Agents"},
+        {"type": "pricing_page_visited", "date": "2026-03-05", "visits": 3},
+        {"type": "demo_requested", "date": "2026-03-10"}
+      ],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "lead_score": 92,
+      "qualification_status": "sql",
+      "fit_score": 95,
+      "engagement_score": 89,
+      "intent_signals": ["pricing_research", "demo_request", "multiple_touchpoints"],
+      "estimated_deal_size": 25000000.00,
+      "estimated_close_probability": 0.35,
+      "recommended_owner": "enterprise_sales_team",
+      "next_best_action": "schedule_discovery_call_within_24h",
+      "competitors_likely": ["UiPath", "AutomationAnywhere"],
+      "recommended_action": "assign_to_enterprise_ae_and_schedule_discovery"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "mkt-crm-002",
+    "agent_type": "crm_intelligence",
+    "description": "Pipeline health analysis for Q1 FY2026-27",
+    "input": {
+      "quarter": "Q1-FY2027",
+      "pipeline_value": 180000000.00,
+      "target": 120000000.00,
+      "deals_count": 45,
+      "avg_deal_size": 4000000.00,
+      "avg_sales_cycle_days": 75,
+      "stage_distribution": {
+        "discovery": {"count": 15, "value": 60000000.00},
+        "evaluation": {"count": 12, "value": 48000000.00},
+        "proposal": {"count": 10, "value": 40000000.00},
+        "negotiation": {"count": 5, "value": 20000000.00},
+        "closed_won": {"count": 3, "value": 12000000.00}
+      },
+      "currency": "INR"
+    },
+    "expected_output": {
+      "pipeline_coverage": 1.50,
+      "pipeline_health": "healthy",
+      "weighted_pipeline": 72000000.00,
+      "forecast_accuracy_historical": 0.82,
+      "projected_close_value": 59040000.00,
+      "gap_to_target": 60960000.00,
+      "at_risk_deals": 4,
+      "at_risk_value": 16000000.00,
+      "aging_deals": 3,
+      "conversion_rates": {
+        "discovery_to_evaluation": 0.45,
+        "evaluation_to_proposal": 0.55,
+        "proposal_to_negotiation": 0.40,
+        "negotiation_to_close": 0.60
+      },
+      "recommended_action": "accelerate_negotiation_stage_deals_and_add_pipeline"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "mkt-crm-003",
+    "agent_type": "crm_intelligence",
+    "description": "Customer churn prediction and retention strategy",
+    "input": {
+      "account": "ICICI Prudential Life Insurance",
+      "contract_renewal_date": "2026-06-30",
+      "current_arr": 8000000.00,
+      "usage_trend_3m": "declining",
+      "nps_score": 6,
+      "support_tickets_90d": 14,
+      "escalations_90d": 3,
+      "champion_left": true,
+      "product_adoption_pct": 45,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "churn_probability": 0.65,
+      "churn_risk": "high",
+      "risk_factors": [
+        {"factor": "champion_departure", "weight": 0.30},
+        {"factor": "declining_usage", "weight": 0.25},
+        {"factor": "low_nps", "weight": 0.20},
+        {"factor": "high_escalations", "weight": 0.15},
+        {"factor": "low_adoption", "weight": 0.10}
+      ],
+      "revenue_at_risk": 8000000.00,
+      "retention_playbook": [
+        {"action": "executive_sponsor_meeting", "owner": "cs_director", "deadline": "2026-04-05"},
+        {"action": "product_adoption_workshop", "owner": "solutions_engineer", "deadline": "2026-04-15"},
+        {"action": "custom_success_plan", "owner": "csm", "deadline": "2026-04-10"},
+        {"action": "pricing_review", "owner": "sales_director", "deadline": "2026-04-20"}
+      ],
+      "recommended_action": "initiate_executive_save_campaign_immediately"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.78, 0.90]
+  }
+]

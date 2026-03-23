@@ -1,0 +1,596 @@
+[
+  {
+    "id": "fin-ap-001",
+    "agent_type": "ap_processor",
+    "description": "Process standard vendor invoice from Tata Steel for raw materials",
+    "input": {
+      "invoice_number": "TS-2026-INV-88421",
+      "vendor_name": "Tata Steel Limited",
+      "vendor_gstin": "27AAACT2727Q1ZW",
+      "invoice_date": "2026-03-10",
+      "due_date": "2026-04-09",
+      "line_items": [
+        {"description": "HR Coil 2.5mm IS2062", "hsn_code": "7208", "quantity": 500, "unit": "MT", "unit_price": 52000.00, "igst_rate": 18}
+      ],
+      "total_before_tax": 26000000.00,
+      "igst_amount": 4680000.00,
+      "total_amount": 30680000.00,
+      "currency": "INR",
+      "bank_account": "SBI-50100012345678"
+    },
+    "expected_output": {
+      "status": "approved",
+      "matched_po": "PO-2026-3344",
+      "three_way_match": true,
+      "gstin_verified": true,
+      "payment_scheduled": "2026-04-09",
+      "payment_amount": 30680000.00,
+      "tds_applicable": true,
+      "tds_section": "194Q",
+      "tds_rate": 0.1,
+      "tds_amount": 26000.00,
+      "net_payable": 30654000.00,
+      "gl_entries": [
+        {"account": "Raw Materials Inventory", "debit": 26000000.00},
+        {"account": "IGST Input Credit", "debit": 4680000.00},
+        {"account": "TDS Payable 194Q", "credit": 26000.00},
+        {"account": "Accounts Payable - Tata Steel", "credit": 30654000.00}
+      ]
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.92, 0.98]
+  },
+  {
+    "id": "fin-ap-002",
+    "agent_type": "ap_processor",
+    "description": "Flag duplicate invoice submission from Reliance Industries",
+    "input": {
+      "invoice_number": "RIL-FY26-77210",
+      "vendor_name": "Reliance Industries Limited",
+      "vendor_gstin": "27AABCR5765E1ZK",
+      "invoice_date": "2026-02-28",
+      "due_date": "2026-03-30",
+      "line_items": [
+        {"description": "Polypropylene Granules", "hsn_code": "3902", "quantity": 200, "unit": "MT", "unit_price": 98000.00, "igst_rate": 18}
+      ],
+      "total_before_tax": 19600000.00,
+      "igst_amount": 3528000.00,
+      "total_amount": 23128000.00,
+      "currency": "INR",
+      "duplicate_check_hash": "a3f8c1b2e9d04567"
+    },
+    "expected_output": {
+      "status": "rejected",
+      "rejection_reason": "duplicate_invoice",
+      "original_invoice_ref": "RIL-FY26-77210",
+      "original_payment_date": "2026-03-15",
+      "original_payment_amount": 23128000.00,
+      "gstin_verified": true,
+      "risk_flag": "high"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.95, 0.99]
+  },
+  {
+    "id": "fin-ap-003",
+    "agent_type": "ap_processor",
+    "description": "Process invoice with GSTIN mismatch requiring manual review",
+    "input": {
+      "invoice_number": "INF-SER-2026-5501",
+      "vendor_name": "Infosys Limited",
+      "vendor_gstin": "29AABCI1234Z1ZX",
+      "invoice_date": "2026-03-18",
+      "due_date": "2026-04-17",
+      "line_items": [
+        {"description": "SAP S/4HANA Implementation Services", "hsn_code": "998314", "quantity": 1, "unit": "LOT", "unit_price": 8500000.00, "igst_rate": 18}
+      ],
+      "total_before_tax": 8500000.00,
+      "igst_amount": 1530000.00,
+      "total_amount": 10030000.00,
+      "currency": "INR",
+      "registered_gstin_on_file": "29AABCI5678A1ZY"
+    },
+    "expected_output": {
+      "status": "pending_review",
+      "hold_reason": "gstin_mismatch",
+      "invoice_gstin": "29AABCI1234Z1ZX",
+      "registered_gstin": "29AABCI5678A1ZY",
+      "gstin_verified": false,
+      "recommendation": "escalate_to_finance_controller",
+      "risk_flag": "medium"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.70, 0.85]
+  },
+  {
+    "id": "fin-ar-001",
+    "agent_type": "ar_collections",
+    "description": "Generate collection reminder for overdue invoice to Mahindra & Mahindra",
+    "input": {
+      "customer_name": "Mahindra & Mahindra Limited",
+      "customer_gstin": "27AABCM7895E1ZP",
+      "invoice_number": "INV-2026-00891",
+      "invoice_date": "2026-01-15",
+      "due_date": "2026-02-14",
+      "amount_due": 4750000.00,
+      "currency": "INR",
+      "days_overdue": 37,
+      "aging_bucket": "31-60",
+      "previous_reminders": 1,
+      "customer_credit_score": 780,
+      "payment_history": {"on_time_pct": 82, "avg_delay_days": 8}
+    },
+    "expected_output": {
+      "action": "send_reminder",
+      "reminder_level": 2,
+      "channel": "email",
+      "tone": "firm_professional",
+      "escalation_needed": false,
+      "suggested_followup_date": "2026-03-30",
+      "interest_applicable": true,
+      "interest_rate": 12.0,
+      "interest_amount": 48082.19,
+      "collection_probability": 0.88,
+      "recommended_action": "schedule_call_with_ap_team"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "fin-ar-002",
+    "agent_type": "ar_collections",
+    "description": "Escalate severely overdue account from Wipro to legal collections",
+    "input": {
+      "customer_name": "Wipro Limited",
+      "customer_gstin": "29AABCW1234E1ZQ",
+      "invoice_number": "INV-2025-07721",
+      "invoice_date": "2025-08-20",
+      "due_date": "2025-09-19",
+      "amount_due": 12300000.00,
+      "currency": "INR",
+      "days_overdue": 185,
+      "aging_bucket": "180+",
+      "previous_reminders": 5,
+      "customer_credit_score": 520,
+      "payment_history": {"on_time_pct": 45, "avg_delay_days": 42},
+      "disputed": false
+    },
+    "expected_output": {
+      "action": "escalate_legal",
+      "reminder_level": 6,
+      "channel": "legal_notice",
+      "tone": "formal_legal",
+      "escalation_needed": true,
+      "provision_for_doubtful_debt": true,
+      "provision_amount": 12300000.00,
+      "provision_pct": 100,
+      "collection_probability": 0.25,
+      "recommended_action": "initiate_legal_recovery_proceedings",
+      "write_off_candidate": true
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "fin-ar-003",
+    "agent_type": "ar_collections",
+    "description": "Process partial payment received from L&T against multiple invoices",
+    "input": {
+      "customer_name": "Larsen & Toubro Limited",
+      "customer_gstin": "27AABCL1234E1ZR",
+      "payment_amount": 5000000.00,
+      "payment_date": "2026-03-20",
+      "payment_ref": "NEFT-LTFIN-20260320-001",
+      "outstanding_invoices": [
+        {"invoice_number": "INV-2026-00450", "amount_due": 3200000.00, "due_date": "2026-03-01"},
+        {"invoice_number": "INV-2026-00560", "amount_due": 2800000.00, "due_date": "2026-03-15"},
+        {"invoice_number": "INV-2026-00670", "amount_due": 1500000.00, "due_date": "2026-04-01"}
+      ],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "action": "apply_payment",
+      "allocation": [
+        {"invoice_number": "INV-2026-00450", "applied": 3200000.00, "remaining": 0.00, "status": "fully_paid"},
+        {"invoice_number": "INV-2026-00560", "applied": 1800000.00, "remaining": 1000000.00, "status": "partially_paid"}
+      ],
+      "total_applied": 5000000.00,
+      "unapplied_balance": 0.00,
+      "invoices_cleared": 1,
+      "recommended_action": "send_receipt_and_statement"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.90, 0.97]
+  },
+  {
+    "id": "fin-recon-001",
+    "agent_type": "recon_agent",
+    "description": "Bank reconciliation matching HDFC Bank statement with GL entries",
+    "input": {
+      "bank_name": "HDFC Bank",
+      "account_number": "50100XXXXX4321",
+      "statement_period": {"from": "2026-03-01", "to": "2026-03-15"},
+      "bank_balance": 42567891.45,
+      "gl_balance": 41987654.32,
+      "bank_transactions": 234,
+      "gl_transactions": 228,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "status": "completed_with_exceptions",
+      "matched_transactions": 222,
+      "unmatched_bank": 12,
+      "unmatched_gl": 6,
+      "balance_difference": 580237.13,
+      "reconciliation_items": [
+        {"type": "outstanding_cheques", "count": 4, "amount": 345000.00},
+        {"type": "deposits_in_transit", "count": 3, "amount": 890000.00},
+        {"type": "bank_charges_unrecorded", "count": 5, "amount": 24762.87}
+      ],
+      "adjusted_bank_balance": 41987654.32,
+      "auto_resolved": 8,
+      "requires_manual_review": 10
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.82, 0.92]
+  },
+  {
+    "id": "fin-recon-002",
+    "agent_type": "recon_agent",
+    "description": "Inter-company reconciliation between parent and subsidiary",
+    "input": {
+      "parent_entity": "AgenticOrg India Pvt Ltd",
+      "subsidiary_entity": "AgenticOrg Solutions GmbH",
+      "period": "2026-Q1",
+      "parent_ic_receivable": 85000000.00,
+      "subsidiary_ic_payable": 82500000.00,
+      "currency_pair": "INR/EUR",
+      "exchange_rate_parent": 89.50,
+      "exchange_rate_subsidiary": 89.22
+    },
+    "expected_output": {
+      "status": "variance_detected",
+      "variance_amount": 2500000.00,
+      "variance_pct": 2.94,
+      "root_causes": [
+        {"type": "fx_translation_difference", "amount": 1875000.00},
+        {"type": "timing_difference_unrecorded_cn", "amount": 625000.00}
+      ],
+      "adjustment_entries_proposed": 2,
+      "requires_elimination_entry": true,
+      "recommended_action": "post_fx_adjustment_and_confirm_credit_note"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.75, 0.88]
+  },
+  {
+    "id": "fin-recon-003",
+    "agent_type": "recon_agent",
+    "description": "GST reconciliation GSTR-2A vs purchase register",
+    "input": {
+      "gstin": "27AABCE1234F1ZP",
+      "period": "2026-02",
+      "gstr2a_total_itc": 18750000.00,
+      "purchase_register_itc": 19200000.00,
+      "gstr2a_invoices": 412,
+      "purchase_register_invoices": 425,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "status": "mismatch_found",
+      "itc_difference": 450000.00,
+      "invoices_only_in_pr": 18,
+      "invoices_only_in_2a": 5,
+      "matched_invoices": 407,
+      "itc_at_risk": 450000.00,
+      "action_items": [
+        {"type": "follow_up_vendors_for_gstr1_filing", "count": 18, "amount": 675000.00},
+        {"type": "investigate_unknown_2a_entries", "count": 5, "amount": 225000.00}
+      ],
+      "eligible_itc": 18750000.00,
+      "recommended_action": "restrict_itc_claim_to_2a_matched_amount"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.95]
+  },
+  {
+    "id": "fin-tax-001",
+    "agent_type": "tax_compliance",
+    "description": "Compute monthly GST liability and generate GSTR-3B draft",
+    "input": {
+      "gstin": "27AABCE1234F1ZP",
+      "period": "2026-02",
+      "outward_taxable_supplies": 125000000.00,
+      "zero_rated_exports": 15000000.00,
+      "exempt_supplies": 2000000.00,
+      "inward_supplies_reverse_charge": 3500000.00,
+      "itc_igst": 12500000.00,
+      "itc_cgst": 3750000.00,
+      "itc_sgst": 3750000.00,
+      "itc_cess": 0.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "gstr3b_draft": {
+        "table_3_1_a": 125000000.00,
+        "table_3_1_b": 15000000.00,
+        "table_3_1_c": 0.00,
+        "table_3_1_d": 2000000.00,
+        "table_3_1_e": 0.00,
+        "table_3_2_rcm": 3500000.00,
+        "output_igst": 11250000.00,
+        "output_cgst": 5625000.00,
+        "output_sgst": 5625000.00,
+        "net_igst_payable": 0.00,
+        "net_cgst_payable": 1875000.00,
+        "net_sgst_payable": 1875000.00,
+        "total_liability": 3750000.00
+      },
+      "filing_deadline": "2026-03-20",
+      "status": "draft_ready",
+      "recommended_action": "review_and_file_on_gst_portal"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.90, 0.97]
+  },
+  {
+    "id": "fin-tax-002",
+    "agent_type": "tax_compliance",
+    "description": "TDS return preparation for Q4 FY2025-26",
+    "input": {
+      "tan": "MUMX12345E",
+      "quarter": "Q4",
+      "financial_year": "2025-26",
+      "deductions": [
+        {"section": "194A", "payee_count": 45, "total_payment": 8500000.00, "tds_deducted": 850000.00},
+        {"section": "194C", "payee_count": 120, "total_payment": 35000000.00, "tds_deducted": 700000.00},
+        {"section": "194J", "payee_count": 30, "total_payment": 12000000.00, "tds_deducted": 1200000.00},
+        {"section": "194H", "payee_count": 15, "total_payment": 5000000.00, "tds_deducted": 250000.00}
+      ],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "form": "26Q",
+      "total_deductees": 210,
+      "total_payment": 60500000.00,
+      "total_tds": 3000000.00,
+      "challan_count": 4,
+      "filing_deadline": "2026-05-31",
+      "validation_errors": 0,
+      "pan_verification_pending": 3,
+      "status": "ready_to_file",
+      "recommended_action": "verify_3_pending_pans_then_file"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.92, 0.98]
+  },
+  {
+    "id": "fin-tax-003",
+    "agent_type": "tax_compliance",
+    "description": "E-invoicing compliance check for B2B sales above threshold",
+    "input": {
+      "gstin": "27AABCE1234F1ZP",
+      "invoice_number": "EI-2026-03-00142",
+      "buyer_gstin": "29AABCT1234E1ZK",
+      "buyer_name": "Tech Mahindra Limited",
+      "invoice_value": 750000.00,
+      "taxable_value": 635593.22,
+      "igst": 114406.78,
+      "hsn_code": "998314",
+      "supply_type": "B2B",
+      "currency": "INR"
+    },
+    "expected_output": {
+      "e_invoice_required": true,
+      "irn_generated": true,
+      "irn": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "ack_number": "142026000012345",
+      "ack_date": "2026-03-18",
+      "qr_code_generated": true,
+      "signed_invoice_json_valid": true,
+      "ewb_applicable": false,
+      "status": "compliant",
+      "recommended_action": "none"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.94, 0.99]
+  },
+  {
+    "id": "fin-close-001",
+    "agent_type": "close_agent",
+    "description": "Month-end close checklist execution for February 2026",
+    "input": {
+      "entity": "AgenticOrg India Pvt Ltd",
+      "period": "2026-02",
+      "close_type": "month_end",
+      "pending_tasks": [
+        "revenue_recognition",
+        "accrual_reversal",
+        "depreciation_posting",
+        "prepaid_amortization",
+        "intercompany_elimination",
+        "fx_revaluation"
+      ],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "status": "in_progress",
+      "tasks_completed": 4,
+      "tasks_pending": 2,
+      "task_status": [
+        {"task": "revenue_recognition", "status": "completed", "amount": 45000000.00},
+        {"task": "accrual_reversal", "status": "completed", "amount": 2300000.00},
+        {"task": "depreciation_posting", "status": "completed", "amount": 1850000.00},
+        {"task": "prepaid_amortization", "status": "completed", "amount": 420000.00},
+        {"task": "intercompany_elimination", "status": "pending_approval", "amount": 12500000.00},
+        {"task": "fx_revaluation", "status": "blocked", "blocker": "awaiting_rbi_reference_rate"}
+      ],
+      "journal_entries_posted": 28,
+      "close_deadline": "2026-03-05",
+      "recommended_action": "approve_ic_elimination_and_wait_for_rbi_rate"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "fin-close-002",
+    "agent_type": "close_agent",
+    "description": "Year-end close with statutory audit preparation for FY2025-26",
+    "input": {
+      "entity": "AgenticOrg India Pvt Ltd",
+      "period": "2025-26",
+      "close_type": "year_end",
+      "total_revenue_fy": 580000000.00,
+      "total_expenses_fy": 495000000.00,
+      "deferred_tax_assets": 8500000.00,
+      "contingent_liabilities": 15000000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "status": "year_end_draft",
+      "net_profit_before_tax": 85000000.00,
+      "corporate_tax_estimated": 22100000.00,
+      "effective_tax_rate": 26.0,
+      "mat_applicable": false,
+      "audit_schedules_prepared": 16,
+      "schedules_pending": 2,
+      "pending_schedules": ["related_party_transactions", "segment_reporting"],
+      "sch3_balance_sheet_ready": true,
+      "sch3_pnl_ready": true,
+      "caro_report_items": 5,
+      "recommended_action": "complete_rpt_and_segment_schedules_for_auditor"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.75, 0.88]
+  },
+  {
+    "id": "fin-close-003",
+    "agent_type": "close_agent",
+    "description": "Quarterly close with IndAS 115 revenue recognition review",
+    "input": {
+      "entity": "AgenticOrg India Pvt Ltd",
+      "period": "2025-26-Q3",
+      "close_type": "quarter_end",
+      "contracts_reviewed": 45,
+      "performance_obligations_identified": 78,
+      "variable_consideration_items": 12,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "status": "completed",
+      "revenue_adjustments": 3,
+      "total_adjustment_amount": 4200000.00,
+      "contract_assets": 8900000.00,
+      "contract_liabilities": 3100000.00,
+      "unbilled_revenue": 5800000.00,
+      "disclosure_notes_drafted": 4,
+      "ind_as_115_compliant": true,
+      "recommended_action": "submit_for_cfo_review"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.94]
+  },
+  {
+    "id": "fin-fpa-001",
+    "agent_type": "fpa_agent",
+    "description": "Monthly variance analysis — Budget vs Actual for February 2026",
+    "input": {
+      "entity": "AgenticOrg India Pvt Ltd",
+      "period": "2026-02",
+      "budget_revenue": 50000000.00,
+      "actual_revenue": 47500000.00,
+      "budget_cogs": 25000000.00,
+      "actual_cogs": 24200000.00,
+      "budget_opex": 18000000.00,
+      "actual_opex": 19800000.00,
+      "budget_headcount": 245,
+      "actual_headcount": 252,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "revenue_variance": -2500000.00,
+      "revenue_variance_pct": -5.0,
+      "gross_margin_budget": 50.0,
+      "gross_margin_actual": 49.05,
+      "opex_variance": 1800000.00,
+      "opex_variance_pct": 10.0,
+      "ebitda_budget": 7000000.00,
+      "ebitda_actual": 3500000.00,
+      "ebitda_variance_pct": -50.0,
+      "headcount_variance": 7,
+      "cost_per_employee_budget": 73469.39,
+      "cost_per_employee_actual": 78571.43,
+      "top_variance_drivers": [
+        {"category": "opex", "subcategory": "cloud_infrastructure", "variance": 1200000.00},
+        {"category": "revenue", "subcategory": "professional_services", "variance": -1800000.00}
+      ],
+      "risk_flag": "high",
+      "recommended_action": "cfo_review_opex_overrun_and_revenue_shortfall"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.85, 0.95]
+  },
+  {
+    "id": "fin-fpa-002",
+    "agent_type": "fpa_agent",
+    "description": "Cash flow forecast for next 13 weeks rolling",
+    "input": {
+      "entity": "AgenticOrg India Pvt Ltd",
+      "forecast_start": "2026-03-23",
+      "forecast_weeks": 13,
+      "opening_cash": 125000000.00,
+      "expected_collections_monthly": 48000000.00,
+      "expected_disbursements_monthly": 42000000.00,
+      "capex_planned": 15000000.00,
+      "debt_repayment": 5000000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "closing_cash_week_13": 103000000.00,
+      "minimum_cash_balance": 95000000.00,
+      "minimum_cash_week": 8,
+      "average_weekly_inflow": 12000000.00,
+      "average_weekly_outflow": 10500000.00,
+      "net_burn_rate_weekly": 1500000.00,
+      "runway_weeks": 83,
+      "cash_conversion_cycle_days": 45,
+      "liquidity_risk": "low",
+      "recommended_action": "maintain_current_cash_management_strategy"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "fin-fpa-003",
+    "agent_type": "fpa_agent",
+    "description": "Scenario analysis for new product line investment decision",
+    "input": {
+      "project_name": "AgenticOrg Enterprise Plus",
+      "investment_amount": 50000000.00,
+      "scenarios": [
+        {"name": "optimistic", "revenue_year1": 30000000.00, "growth_rate": 0.40},
+        {"name": "base", "revenue_year1": 20000000.00, "growth_rate": 0.25},
+        {"name": "pessimistic", "revenue_year1": 10000000.00, "growth_rate": 0.10}
+      ],
+      "cost_of_capital": 0.14,
+      "projection_years": 5,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "npv_optimistic": 42500000.00,
+      "npv_base": 12000000.00,
+      "npv_pessimistic": -18500000.00,
+      "irr_optimistic": 0.38,
+      "irr_base": 0.21,
+      "irr_pessimistic": 0.04,
+      "payback_optimistic_years": 2.1,
+      "payback_base_years": 3.4,
+      "payback_pessimistic_years": 5.8,
+      "weighted_npv": 12166666.67,
+      "go_no_go": "conditional_go",
+      "recommended_action": "proceed_with_milestone_based_funding_gates"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.78, 0.90]
+  }
+]

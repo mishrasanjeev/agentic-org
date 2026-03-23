@@ -29,9 +29,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/docs", "/openapi.json", "/redoc",
     }
 
+    EXEMPT_PREFIXES = (
+        "/api/v1/evals",
+    )
+
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Skip auth for health and docs
-        if request.url.path in self.EXEMPT_PATHS:
+        # Skip auth for health, docs, and public eval endpoints
+        if request.url.path in self.EXEMPT_PATHS or request.url.path.startswith(self.EXEMPT_PREFIXES):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"

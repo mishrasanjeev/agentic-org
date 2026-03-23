@@ -16,6 +16,7 @@ from api.v1 import (
     compliance,
     config,
     connectors,
+    evals,
     health,
     schemas,
     workflows,
@@ -78,4 +79,5 @@ app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
 app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
+app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])

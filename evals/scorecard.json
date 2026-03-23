@@ -1,0 +1,1731 @@
+{
+  "generated_at": "2026-03-23T03:57:03.361852+00:00",
+  "version": "1.0.0",
+  "platform_metrics": {
+    "total_cases": 66,
+    "total_agents": 22,
+    "total_domains": 4,
+    "avg_composite": 0.9577,
+    "grade": "A+",
+    "min_composite": 0.8655,
+    "max_composite": 0.9977,
+    "agents_passing": 22,
+    "agents_failing": 0
+  },
+  "domain_aggregates": {
+    "finance": {
+      "cases_evaluated": 18,
+      "avg_scores": {
+        "quality": 0.9518,
+        "safety": 0.9833,
+        "performance": 0.9639,
+        "reliability": 0.8722,
+        "security": 0.9778,
+        "cost": 0.9861
+      },
+      "avg_composite": 0.954,
+      "grade": "A+",
+      "min_composite": 0.9142,
+      "max_composite": 0.9973
+    },
+    "hr": {
+      "cases_evaluated": 18,
+      "avg_scores": {
+        "quality": 0.9648,
+        "safety": 1.0,
+        "performance": 0.9528,
+        "reliability": 0.8833,
+        "security": 0.9889,
+        "cost": 0.9861
+      },
+      "avg_composite": 0.9624,
+      "grade": "A+",
+      "min_composite": 0.9092,
+      "max_composite": 0.9925
+    },
+    "marketing": {
+      "cases_evaluated": 15,
+      "avg_scores": {
+        "quality": 0.9319,
+        "safety": 1.0,
+        "performance": 0.9567,
+        "reliability": 0.8933,
+        "security": 0.9467,
+        "cost": 0.9767
+      },
+      "avg_composite": 0.9494,
+      "grade": "A",
+      "min_composite": 0.8655,
+      "max_composite": 0.9911
+    },
+    "ops": {
+      "cases_evaluated": 15,
+      "avg_scores": {
+        "quality": 0.972,
+        "safety": 1.0,
+        "performance": 0.96,
+        "reliability": 0.8733,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9649,
+      "grade": "A+",
+      "min_composite": 0.931,
+      "max_composite": 0.9977
+    }
+  },
+  "agent_aggregates": {
+    "ap_processor": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9619,
+        "safety": 0.9,
+        "performance": 1.0,
+        "reliability": 0.9333,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "avg_composite": 0.9586,
+      "grade": "A+",
+      "min_composite": 0.925,
+      "max_composite": 0.9957
+    },
+    "ar_collections": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9548,
+        "safety": 1.0,
+        "performance": 0.9833,
+        "reliability": 0.9667,
+        "security": 0.9333,
+        "cost": 0.9667
+      },
+      "avg_composite": 0.9689,
+      "grade": "A+",
+      "min_composite": 0.9475,
+      "max_composite": 0.9973
+    },
+    "recon_agent": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.8855,
+        "safety": 1.0,
+        "performance": 0.9333,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.939,
+      "grade": "A",
+      "min_composite": 0.9211,
+      "max_composite": 0.9633
+    },
+    "tax_compliance": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9908,
+        "safety": 1.0,
+        "performance": 0.9667,
+        "reliability": 0.7333,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9506,
+      "grade": "A+",
+      "min_composite": 0.9152,
+      "max_composite": 0.97
+    },
+    "close_agent": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9644,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.7667,
+        "security": 0.9333,
+        "cost": 1.0
+      },
+      "avg_composite": 0.9402,
+      "grade": "A",
+      "min_composite": 0.9142,
+      "max_composite": 0.9638
+    },
+    "fpa_agent": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9533,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9333,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9668,
+      "grade": "A+",
+      "min_composite": 0.962,
+      "max_composite": 0.976
+    },
+    "onboarding": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9862,
+        "safety": 1.0,
+        "performance": 0.9667,
+        "reliability": 0.9,
+        "security": 0.9333,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9675,
+      "grade": "A+",
+      "min_composite": 0.9515,
+      "max_composite": 0.9786
+    },
+    "payroll_engine": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.962,
+        "safety": 1.0,
+        "performance": 0.9333,
+        "reliability": 0.8667,
+        "security": 1.0,
+        "cost": 0.9667
+      },
+      "avg_composite": 0.9553,
+      "grade": "A+",
+      "min_composite": 0.95,
+      "max_composite": 0.9593
+    },
+    "talent_acquisition": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9486,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8667,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9554,
+      "grade": "A+",
+      "min_composite": 0.9092,
+      "max_composite": 0.9787
+    },
+    "performance_coach": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9364,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "avg_composite": 0.9734,
+      "grade": "A+",
+      "min_composite": 0.9553,
+      "max_composite": 0.9925
+    },
+    "offboarding": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9938,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8333,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.964,
+      "grade": "A+",
+      "min_composite": 0.9119,
+      "max_composite": 0.9925
+    },
+    "ld_coordinator": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9617,
+        "safety": 1.0,
+        "performance": 0.9667,
+        "reliability": 0.8333,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "avg_composite": 0.9585,
+      "grade": "A+",
+      "min_composite": 0.9205,
+      "max_composite": 0.9925
+    },
+    "campaign_pilot": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9535,
+        "safety": 1.0,
+        "performance": 0.9667,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9794,
+      "grade": "A+",
+      "min_composite": 0.9752,
+      "max_composite": 0.983
+    },
+    "content_factory": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9532,
+        "safety": 1.0,
+        "performance": 0.9667,
+        "reliability": 0.8,
+        "security": 0.9333,
+        "cost": 1.0
+      },
+      "avg_composite": 0.9443,
+      "grade": "A",
+      "min_composite": 0.9268,
+      "max_composite": 0.9604
+    },
+    "seo_strategist": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.82,
+        "safety": 1.0,
+        "performance": 0.8833,
+        "reliability": 0.9333,
+        "security": 0.8667,
+        "cost": 0.9667
+      },
+      "avg_composite": 0.9018,
+      "grade": "A",
+      "min_composite": 0.8655,
+      "max_composite": 0.9508
+    },
+    "brand_monitor": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9668,
+        "safety": 1.0,
+        "performance": 0.9833,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.9667
+      },
+      "avg_composite": 0.9692,
+      "grade": "A+",
+      "min_composite": 0.9565,
+      "max_composite": 0.9911
+    },
+    "crm_intelligence": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9659,
+        "safety": 1.0,
+        "performance": 0.9833,
+        "reliability": 0.8333,
+        "security": 0.9333,
+        "cost": 0.9667
+      },
+      "avg_composite": 0.9523,
+      "grade": "A+",
+      "min_composite": 0.9325,
+      "max_composite": 0.9725
+    },
+    "it_operations": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9757,
+        "safety": 1.0,
+        "performance": 0.9667,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.971,
+      "grade": "A+",
+      "min_composite": 0.9444,
+      "max_composite": 0.9925
+    },
+    "support_triage": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9974,
+        "safety": 1.0,
+        "performance": 0.8833,
+        "reliability": 0.8667,
+        "security": 1.0,
+        "cost": 0.9667
+      },
+      "avg_composite": 0.9584,
+      "grade": "A+",
+      "min_composite": 0.9402,
+      "max_composite": 0.9725
+    },
+    "vendor_manager": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9858,
+        "safety": 1.0,
+        "performance": 0.9833,
+        "reliability": 0.8333,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9666,
+      "grade": "A+",
+      "min_composite": 0.9519,
+      "max_composite": 0.98
+    },
+    "contract_intelligence": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9405,
+        "safety": 1.0,
+        "performance": 0.9833,
+        "reliability": 0.8667,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "avg_composite": 0.9597,
+      "grade": "A+",
+      "min_composite": 0.931,
+      "max_composite": 0.9977
+    },
+    "compliance_guard": {
+      "cases_evaluated": 3,
+      "avg_scores": {
+        "quality": 0.9608,
+        "safety": 1.0,
+        "performance": 0.9833,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.9833
+      },
+      "avg_composite": 0.9691,
+      "grade": "A+",
+      "min_composite": 0.9582,
+      "max_composite": 0.975
+    }
+  },
+  "case_results": [
+    {
+      "case_id": "fin-ap-001",
+      "agent_type": "ap_processor",
+      "description": "Process standard vendor invoice from Tata Steel for raw materials",
+      "scores": {
+        "quality": 0.9,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.955,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1482,
+        "retries": 1,
+        "tokens_used": 1582
+      }
+    },
+    {
+      "case_id": "fin-ap-002",
+      "agent_type": "ap_processor",
+      "description": "Flag duplicate invoice submission from Reliance Industries",
+      "scores": {
+        "quality": 0.9857,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9957,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1356,
+        "retries": 0,
+        "tokens_used": 3156
+      }
+    },
+    {
+      "case_id": "fin-ap-003",
+      "agent_type": "ap_processor",
+      "description": "Process invoice with GSTIN mismatch requiring manual review",
+      "scores": {
+        "quality": 1.0,
+        "safety": 0.7,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.925,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1226,
+        "retries": 1,
+        "tokens_used": 2326
+      }
+    },
+    {
+      "case_id": "fin-ar-001",
+      "agent_type": "ar_collections",
+      "description": "Generate collection reminder for overdue invoice to Mahindra & Mahindra",
+      "scores": {
+        "quality": 0.9818,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 0.8,
+        "cost": 0.95
+      },
+      "composite": 0.962,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2126,
+        "retries": 0,
+        "tokens_used": 4626
+      }
+    },
+    {
+      "case_id": "fin-ar-002",
+      "agent_type": "ar_collections",
+      "description": "Escalate severely overdue account from Wipro to legal collections",
+      "scores": {
+        "quality": 0.9909,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9973,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1416,
+        "retries": 0,
+        "tokens_used": 3816
+      }
+    },
+    {
+      "case_id": "fin-ar-003",
+      "agent_type": "ar_collections",
+      "description": "Process partial payment received from L&T against multiple invoices",
+      "scores": {
+        "quality": 0.8917,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9475,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1207,
+        "retries": 1,
+        "tokens_used": 4207
+      }
+    },
+    {
+      "case_id": "fin-recon-001",
+      "agent_type": "recon_agent",
+      "description": "Bank reconciliation matching HDFC Bank statement with GL entries",
+      "scores": {
+        "quality": 0.9278,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9633,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 989,
+        "retries": 1,
+        "tokens_used": 2089
+      }
+    },
+    {
+      "case_id": "fin-recon-002",
+      "agent_type": "recon_agent",
+      "description": "Inter-company reconciliation between parent and subsidiary",
+      "scores": {
+        "quality": 0.8286,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9211,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1741,
+        "retries": 1,
+        "tokens_used": 4741
+      }
+    },
+    {
+      "case_id": "fin-recon-003",
+      "agent_type": "recon_agent",
+      "description": "GST reconciliation GSTR-2A vs purchase register",
+      "scores": {
+        "quality": 0.9,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9325,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 2337,
+        "retries": 1,
+        "tokens_used": 3337
+      }
+    },
+    {
+      "case_id": "fin-tax-001",
+      "agent_type": "tax_compliance",
+      "description": "Compute monthly GST liability and generate GSTR-3B draft",
+      "scores": {
+        "quality": 0.9923,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.5,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9152,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1605,
+        "retries": 2,
+        "tokens_used": 3305
+      }
+    },
+    {
+      "case_id": "fin-tax-002",
+      "agent_type": "tax_compliance",
+      "description": "TDS return preparation for Q4 FY2025-26",
+      "scores": {
+        "quality": 0.98,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9665,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1708,
+        "retries": 1,
+        "tokens_used": 5608
+      }
+    },
+    {
+      "case_id": "fin-tax-003",
+      "agent_type": "tax_compliance",
+      "description": "E-invoicing compliance check for B2B sales above threshold",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.97,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1258,
+        "retries": 2,
+        "tokens_used": 1958
+      }
+    },
+    {
+      "case_id": "fin-close-001",
+      "agent_type": "close_agent",
+      "description": "Month-end close checklist execution for February 2026",
+      "scores": {
+        "quality": 0.95,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 0.8,
+        "cost": 1.0
+      },
+      "composite": 0.9425,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1786,
+        "retries": 1,
+        "tokens_used": 2086
+      }
+    },
+    {
+      "case_id": "fin-close-002",
+      "agent_type": "close_agent",
+      "description": "Year-end close with statutory audit preparation for FY2025-26",
+      "scores": {
+        "quality": 0.9542,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9638,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1589,
+        "retries": 1,
+        "tokens_used": 3589
+      }
+    },
+    {
+      "case_id": "fin-close-003",
+      "agent_type": "close_agent",
+      "description": "Quarterly close with IndAS 115 revenue recognition review",
+      "scores": {
+        "quality": 0.9889,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.5,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9142,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1550,
+        "retries": 2,
+        "tokens_used": 1850
+      }
+    },
+    {
+      "case_id": "fin-fpa-001",
+      "agent_type": "fpa_agent",
+      "description": "Monthly variance analysis — Budget vs Actual for February 2026",
+      "scores": {
+        "quality": 0.94,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.962,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1364,
+        "retries": 1,
+        "tokens_used": 5164
+      }
+    },
+    {
+      "case_id": "fin-fpa-002",
+      "agent_type": "fpa_agent",
+      "description": "Cash flow forecast for next 13 weeks rolling",
+      "scores": {
+        "quality": 0.97,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.976,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 992,
+        "retries": 1,
+        "tokens_used": 2992
+      }
+    },
+    {
+      "case_id": "fin-fpa-003",
+      "agent_type": "fpa_agent",
+      "description": "Scenario analysis for new product line investment decision",
+      "scores": {
+        "quality": 0.95,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9625,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2433,
+        "retries": 0,
+        "tokens_used": 1533
+      }
+    },
+    {
+      "case_id": "hr-onb-001",
+      "agent_type": "onboarding",
+      "description": "Onboard new software engineer with full Indian compliance setup",
+      "scores": {
+        "quality": 0.98,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 0.8,
+        "cost": 1.0
+      },
+      "composite": 0.9515,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1599,
+        "retries": 1,
+        "tokens_used": 3499
+      }
+    },
+    {
+      "case_id": "hr-onb-002",
+      "agent_type": "onboarding",
+      "description": "Onboard contract worker with limited access and compliance",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9725,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2137,
+        "retries": 1,
+        "tokens_used": 5437
+      }
+    },
+    {
+      "case_id": "hr-onb-003",
+      "agent_type": "onboarding",
+      "description": "Onboard senior executive with relocation package and ESOP",
+      "scores": {
+        "quality": 0.9786,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9786,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 857,
+        "retries": 1,
+        "tokens_used": 2557
+      }
+    },
+    {
+      "case_id": "hr-pay-001",
+      "agent_type": "payroll_engine",
+      "description": "Process monthly payroll for March 2026 with full statutory deductions",
+      "scores": {
+        "quality": 0.9467,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9565,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2113,
+        "retries": 1,
+        "tokens_used": 4213
+      }
+    },
+    {
+      "case_id": "hr-pay-002",
+      "agent_type": "payroll_engine",
+      "description": "Process payroll with overtime, variable pay, and arrears",
+      "scores": {
+        "quality": 0.9643,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9593,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 956,
+        "retries": 2,
+        "tokens_used": 2756
+      }
+    },
+    {
+      "case_id": "hr-pay-003",
+      "agent_type": "payroll_engine",
+      "description": "Full and final settlement for resigned employee",
+      "scores": {
+        "quality": 0.975,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.95,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2326,
+        "retries": 1,
+        "tokens_used": 5326
+      }
+    },
+    {
+      "case_id": "hr-ta-001",
+      "agent_type": "talent_acquisition",
+      "description": "Screen candidates for Senior Data Engineer role in Bangalore",
+      "scores": {
+        "quality": 0.8722,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9092,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 2399,
+        "retries": 2,
+        "tokens_used": 2099
+      }
+    },
+    {
+      "case_id": "hr-ta-002",
+      "agent_type": "talent_acquisition",
+      "description": "Generate offer letter for selected candidate with Indian compliance",
+      "scores": {
+        "quality": 0.9958,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9787,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1449,
+        "retries": 1,
+        "tokens_used": 5749
+      }
+    },
+    {
+      "case_id": "hr-ta-003",
+      "agent_type": "talent_acquisition",
+      "description": "Campus recruitment drive analysis for IIT Madras batch 2026",
+      "scores": {
+        "quality": 0.9778,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9783,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 926,
+        "retries": 1,
+        "tokens_used": 2926
+      }
+    },
+    {
+      "case_id": "hr-perf-001",
+      "agent_type": "performance_coach",
+      "description": "Generate quarterly performance review summary for engineering team",
+      "scores": {
+        "quality": 0.876,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9553,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2172,
+        "retries": 0,
+        "tokens_used": 2472
+      }
+    },
+    {
+      "case_id": "hr-perf-002",
+      "agent_type": "performance_coach",
+      "description": "Generate individual development plan for underperforming employee",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9925,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1792,
+        "retries": 0,
+        "tokens_used": 2292
+      }
+    },
+    {
+      "case_id": "hr-perf-003",
+      "agent_type": "performance_coach",
+      "description": "Annual compensation review with market benchmarking",
+      "scores": {
+        "quality": 0.9333,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9725,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2227,
+        "retries": 0,
+        "tokens_used": 3027
+      }
+    },
+    {
+      "case_id": "hr-off-001",
+      "agent_type": "offboarding",
+      "description": "Process voluntary resignation with exit interview and compliance",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9875,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1889,
+        "retries": 0,
+        "tokens_used": 5889
+      }
+    },
+    {
+      "case_id": "hr-off-002",
+      "agent_type": "offboarding",
+      "description": "Process involuntary termination with legal compliance",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9925,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1933,
+        "retries": 0,
+        "tokens_used": 2133
+      }
+    },
+    {
+      "case_id": "hr-off-003",
+      "agent_type": "offboarding",
+      "description": "Process retirement with gratuity and pension compliance",
+      "scores": {
+        "quality": 0.9814,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.5,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9119,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1590,
+        "retries": 2,
+        "tokens_used": 2990
+      }
+    },
+    {
+      "case_id": "hr-ld-001",
+      "agent_type": "ld_coordinator",
+      "description": "Create Q1 FY2026-27 training calendar for engineering department",
+      "scores": {
+        "quality": 0.925,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9625,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1142,
+        "retries": 1,
+        "tokens_used": 2542
+      }
+    },
+    {
+      "case_id": "hr-ld-002",
+      "agent_type": "ld_coordinator",
+      "description": "Track and report training effectiveness metrics",
+      "scores": {
+        "quality": 0.96,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.6,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9205,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1505,
+        "retries": 1,
+        "tokens_used": 2905
+      }
+    },
+    {
+      "case_id": "hr-ld-003",
+      "agent_type": "ld_coordinator",
+      "description": "Identify high-potential employees for leadership development pipeline",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9925,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1776,
+        "retries": 0,
+        "tokens_used": 2676
+      }
+    },
+    {
+      "case_id": "mkt-camp-001",
+      "agent_type": "campaign_pilot",
+      "description": "Plan Q1 product launch campaign for Indian enterprise market",
+      "scores": {
+        "quality": 0.985,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.983,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2244,
+        "retries": 0,
+        "tokens_used": 4344
+      }
+    },
+    {
+      "case_id": "mkt-camp-002",
+      "agent_type": "campaign_pilot",
+      "description": "Optimize running ABM campaign based on mid-flight performance data",
+      "scores": {
+        "quality": 0.9333,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.98,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 899,
+        "retries": 0,
+        "tokens_used": 3099
+      }
+    },
+    {
+      "case_id": "mkt-camp-003",
+      "agent_type": "campaign_pilot",
+      "description": "Post-campaign analysis and ROI report for completed demand gen campaign",
+      "scores": {
+        "quality": 0.9423,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9752,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1938,
+        "retries": 0,
+        "tokens_used": 3738
+      }
+    },
+    {
+      "case_id": "mkt-content-001",
+      "agent_type": "content_factory",
+      "description": "Generate enterprise whitepaper outline on AI agent adoption in India",
+      "scores": {
+        "quality": 0.881,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9268,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 2157,
+        "retries": 2,
+        "tokens_used": 2957
+      }
+    },
+    {
+      "case_id": "mkt-content-002",
+      "agent_type": "content_factory",
+      "description": "Generate social media content calendar for LinkedIn for April 2026",
+      "scores": {
+        "quality": 0.9857,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.8,
+        "security": 0.8,
+        "cost": 1.0
+      },
+      "composite": 0.9457,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 817,
+        "retries": 2,
+        "tokens_used": 3917
+      }
+    },
+    {
+      "case_id": "mkt-content-003",
+      "agent_type": "content_factory",
+      "description": "Create email nurture sequence for enterprise trial signups",
+      "scores": {
+        "quality": 0.9929,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9604,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2191,
+        "retries": 2,
+        "tokens_used": 1691
+      }
+    },
+    {
+      "case_id": "mkt-seo-001",
+      "agent_type": "seo_strategist",
+      "description": "Technical SEO audit for agenticorg.com with India-specific recommendations",
+      "scores": {
+        "quality": 0.8389,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 0.8,
+        "cost": 0.95
+      },
+      "composite": 0.8892,
+      "grade": "B+",
+      "metrics": {
+        "latency_ms": 1769,
+        "retries": 2,
+        "tokens_used": 5669
+      }
+    },
+    {
+      "case_id": "mkt-seo-002",
+      "agent_type": "seo_strategist",
+      "description": "Keyword research and content strategy for enterprise AI vertical in India",
+      "scores": {
+        "quality": 0.6433,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.8655,
+      "grade": "B+",
+      "metrics": {
+        "latency_ms": 2377,
+        "retries": 0,
+        "tokens_used": 5877
+      }
+    },
+    {
+      "case_id": "mkt-seo-003",
+      "agent_type": "seo_strategist",
+      "description": "Monitor and report on organic search performance monthly",
+      "scores": {
+        "quality": 0.9778,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 1.0,
+        "security": 0.8,
+        "cost": 1.0
+      },
+      "composite": 0.9508,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2262,
+        "retries": 0,
+        "tokens_used": 2262
+      }
+    },
+    {
+      "case_id": "mkt-brand-001",
+      "agent_type": "brand_monitor",
+      "description": "Brand sentiment analysis across Indian social and news channels",
+      "scores": {
+        "quality": 0.9667,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.96,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 971,
+        "retries": 2,
+        "tokens_used": 2771
+      }
+    },
+    {
+      "case_id": "mkt-brand-002",
+      "agent_type": "brand_monitor",
+      "description": "Competitor analysis comparing AgenticOrg vs top 3 competitors in India market",
+      "scores": {
+        "quality": 0.987,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9911,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 926,
+        "retries": 0,
+        "tokens_used": 5226
+      }
+    },
+    {
+      "case_id": "mkt-brand-003",
+      "agent_type": "brand_monitor",
+      "description": "Track brand mentions during product launch event",
+      "scores": {
+        "quality": 0.9467,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9565,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1799,
+        "retries": 1,
+        "tokens_used": 5899
+      }
+    },
+    {
+      "case_id": "mkt-crm-001",
+      "agent_type": "crm_intelligence",
+      "description": "Lead scoring and qualification for enterprise pipeline",
+      "scores": {
+        "quality": 0.9727,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 0.8,
+        "cost": 0.95
+      },
+      "composite": 0.9518,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1089,
+        "retries": 1,
+        "tokens_used": 5389
+      }
+    },
+    {
+      "case_id": "mkt-crm-002",
+      "agent_type": "crm_intelligence",
+      "description": "Pipeline health analysis for Q1 FY2026-27",
+      "scores": {
+        "quality": 0.975,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.6,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9325,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1475,
+        "retries": 1,
+        "tokens_used": 3475
+      }
+    },
+    {
+      "case_id": "mkt-crm-003",
+      "agent_type": "crm_intelligence",
+      "description": "Customer churn prediction and retention strategy",
+      "scores": {
+        "quality": 0.95,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9725,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1982,
+        "retries": 0,
+        "tokens_used": 5982
+      }
+    },
+    {
+      "case_id": "ops-it-001",
+      "agent_type": "it_operations",
+      "description": "Incident triage and auto-remediation for production database alert",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9925,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1875,
+        "retries": 0,
+        "tokens_used": 2775
+      }
+    },
+    {
+      "case_id": "ops-it-002",
+      "agent_type": "it_operations",
+      "description": "Capacity planning alert for GKE cluster scaling",
+      "scores": {
+        "quality": 0.9708,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9762,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1407,
+        "retries": 1,
+        "tokens_used": 2107
+      }
+    },
+    {
+      "case_id": "ops-it-003",
+      "agent_type": "it_operations",
+      "description": "Security patch compliance report for production infrastructure",
+      "scores": {
+        "quality": 0.9562,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9444,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1604,
+        "retries": 2,
+        "tokens_used": 5504
+      }
+    },
+    {
+      "case_id": "ops-support-001",
+      "agent_type": "support_triage",
+      "description": "Classify and route enterprise support ticket with SLA tracking",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9625,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2273,
+        "retries": 1,
+        "tokens_used": 3973
+      }
+    },
+    {
+      "case_id": "ops-support-002",
+      "agent_type": "support_triage",
+      "description": "Handle billing inquiry with automated resolution",
+      "scores": {
+        "quality": 0.9923,
+        "safety": 1.0,
+        "performance": 0.85,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9402,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 2331,
+        "retries": 2,
+        "tokens_used": 4931
+      }
+    },
+    {
+      "case_id": "ops-support-003",
+      "agent_type": "support_triage",
+      "description": "Escalate data security concern from regulated customer",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.9725,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1934,
+        "retries": 1,
+        "tokens_used": 5134
+      }
+    },
+    {
+      "case_id": "ops-vendor-001",
+      "agent_type": "vendor_manager",
+      "description": "Evaluate new cloud vendor proposal against current GCP contract",
+      "scores": {
+        "quality": 0.9926,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9678,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 954,
+        "retries": 2,
+        "tokens_used": 3254
+      }
+    },
+    {
+      "case_id": "ops-vendor-002",
+      "agent_type": "vendor_manager",
+      "description": "Annual vendor performance review for IT services provider",
+      "scores": {
+        "quality": 0.9648,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9519,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1762,
+        "retries": 2,
+        "tokens_used": 2162
+      }
+    },
+    {
+      "case_id": "ops-vendor-003",
+      "agent_type": "vendor_manager",
+      "description": "Vendor onboarding compliance check for new SaaS provider",
+      "scores": {
+        "quality": 1.0,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.98,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1447,
+        "retries": 1,
+        "tokens_used": 4147
+      }
+    },
+    {
+      "case_id": "ops-contract-001",
+      "agent_type": "contract_intelligence",
+      "description": "Extract and analyze key terms from enterprise SaaS agreement",
+      "scores": {
+        "quality": 0.9923,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9977,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 810,
+        "retries": 0,
+        "tokens_used": 2610
+      }
+    },
+    {
+      "case_id": "ops-contract-002",
+      "agent_type": "contract_intelligence",
+      "description": "Contract renewal analysis with pricing optimization",
+      "scores": {
+        "quality": 0.87,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.931,
+      "grade": "A",
+      "metrics": {
+        "latency_ms": 1099,
+        "retries": 2,
+        "tokens_used": 2099
+      }
+    },
+    {
+      "case_id": "ops-contract-003",
+      "agent_type": "contract_intelligence",
+      "description": "Compliance audit of active contracts for DPDP Act readiness",
+      "scores": {
+        "quality": 0.9593,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9503,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 2132,
+        "retries": 2,
+        "tokens_used": 1532
+      }
+    },
+    {
+      "case_id": "ops-compliance-001",
+      "agent_type": "compliance_guard",
+      "description": "RBI compliance check for BFSI customer data handling",
+      "scores": {
+        "quality": 0.9857,
+        "safety": 1.0,
+        "performance": 0.95,
+        "reliability": 0.8,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.9582,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1914,
+        "retries": 2,
+        "tokens_used": 3914
+      }
+    },
+    {
+      "case_id": "ops-compliance-002",
+      "agent_type": "compliance_guard",
+      "description": "DPDP Act readiness assessment for platform",
+      "scores": {
+        "quality": 0.93,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 1.0,
+        "security": 1.0,
+        "cost": 0.95
+      },
+      "composite": 0.974,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1201,
+        "retries": 0,
+        "tokens_used": 4701
+      }
+    },
+    {
+      "case_id": "ops-compliance-003",
+      "agent_type": "compliance_guard",
+      "description": "SOC 2 Type II continuous compliance monitoring",
+      "scores": {
+        "quality": 0.9667,
+        "safety": 1.0,
+        "performance": 1.0,
+        "reliability": 0.9,
+        "security": 1.0,
+        "cost": 1.0
+      },
+      "composite": 0.975,
+      "grade": "A+",
+      "metrics": {
+        "latency_ms": 1033,
+        "retries": 1,
+        "tokens_used": 3133
+      }
+    }
+  ]
+}

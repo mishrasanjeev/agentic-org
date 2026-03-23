@@ -11,6 +11,7 @@ export default function Approvals() {
   const [loading, setLoading] = useState(true);
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [tab, setTab] = useState<"pending" | "decided">("pending");
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   useEffect(() => {
     fetchApprovals();
@@ -19,7 +20,7 @@ export default function Approvals() {
   async function fetchApprovals() {
     setLoading(true);
     try {
-      const { data } = await api.get("/approvals");
+      const { data } = await api.get("/approvals", { params: { status: "all" } });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setItems(items);
     } catch {
@@ -30,11 +31,14 @@ export default function Approvals() {
   }
 
   async function handleDecide(id: string, decision: string, notes: string) {
+    setFeedback(null);
     try {
       await api.post(`/approvals/${id}/decide`, { decision, notes });
+      setFeedback({ type: "success", msg: `Decision "${decision}" submitted successfully.` });
       fetchApprovals();
-    } catch (e) {
-      console.error("Failed to submit decision", e);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Failed to submit decision";
+      setFeedback({ type: "error", msg: detail });
     }
   }
 
@@ -65,6 +69,12 @@ export default function Approvals() {
           </select>
         </div>
       </div>
+
+      {feedback && (
+        <div className={`rounded-lg px-4 py-3 text-sm ${feedback.type === "success" ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+          {feedback.msg}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground">Loading approvals...</p>

@@ -18,6 +18,7 @@ import Schemas from "./pages/Schemas";
 import Audit from "./pages/Audit";
 import Observatory from "./pages/Observatory";
 import Settings from "./pages/Settings";
+import Evals from "./pages/Evals";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/evals" element={<Evals />} />
 
       {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
       <Route

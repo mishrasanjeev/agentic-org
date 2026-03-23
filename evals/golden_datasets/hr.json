@@ -1,0 +1,661 @@
+[
+  {
+    "id": "hr-onb-001",
+    "agent_type": "onboarding",
+    "description": "Onboard new software engineer with full Indian compliance setup",
+    "input": {
+      "employee_name": "Priya Sharma",
+      "employee_id": "EMP-2026-0342",
+      "designation": "Senior Software Engineer",
+      "department": "Engineering",
+      "doj": "2026-04-01",
+      "ctc": 2400000.00,
+      "location": "Bangalore",
+      "aadhaar_last4": "XXXX-XXXX-7891",
+      "pan": "ABCPS1234K",
+      "bank_account": "ICICI-XXXXXX4567",
+      "pf_applicable": true,
+      "esi_applicable": false,
+      "tax_regime": "new"
+    },
+    "expected_output": {
+      "status": "onboarding_initiated",
+      "uan_generation": "pending",
+      "pf_registration": true,
+      "pf_contribution_employee": 1800.00,
+      "pf_contribution_employer": 1800.00,
+      "esi_applicable": false,
+      "esi_reason": "gross_salary_exceeds_21000_threshold",
+      "professional_tax_state": "Karnataka",
+      "professional_tax_monthly": 200.00,
+      "it_assets_assigned": ["laptop", "monitor", "vpn_access", "email_account"],
+      "welcome_kit_dispatched": true,
+      "buddy_assigned": "Rahul Mehta",
+      "checklist_completion": 0.75,
+      "pending_items": ["uan_activation", "mediclaim_enrollment", "nda_signature"],
+      "recommended_action": "complete_day1_orientation_checklist"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "hr-onb-002",
+    "agent_type": "onboarding",
+    "description": "Onboard contract worker with limited access and compliance",
+    "input": {
+      "employee_name": "Vikram Patel",
+      "employee_id": "CON-2026-0089",
+      "designation": "DevOps Consultant",
+      "department": "Infrastructure",
+      "doj": "2026-04-15",
+      "contract_type": "fixed_term",
+      "contract_duration_months": 6,
+      "monthly_rate": 250000.00,
+      "vendor_name": "TechForce Solutions Pvt Ltd",
+      "vendor_gstin": "27AABCT5678E1ZK",
+      "location": "Mumbai",
+      "aadhaar_last4": "XXXX-XXXX-3456"
+    },
+    "expected_output": {
+      "status": "contract_onboarding_initiated",
+      "employment_type": "contract",
+      "pf_applicable": false,
+      "esi_applicable": false,
+      "tds_section": "194C",
+      "tds_rate": 2.0,
+      "access_level": "restricted",
+      "it_assets_assigned": ["vpn_access", "email_account"],
+      "physical_access": "visitor_badge",
+      "nda_required": true,
+      "bgv_status": "pending",
+      "contract_end_date": "2026-10-14",
+      "auto_offboard_scheduled": true,
+      "recommended_action": "complete_vendor_compliance_verification"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.94]
+  },
+  {
+    "id": "hr-onb-003",
+    "agent_type": "onboarding",
+    "description": "Onboard senior executive with relocation package and ESOP",
+    "input": {
+      "employee_name": "Anjali Krishnamurthy",
+      "employee_id": "EMP-2026-0015",
+      "designation": "VP Engineering",
+      "department": "Engineering",
+      "doj": "2026-05-01",
+      "ctc": 12000000.00,
+      "esop_units": 50000,
+      "esop_vesting_schedule": "4yr_1yr_cliff",
+      "relocation_from": "San Francisco",
+      "relocation_to": "Bangalore",
+      "relocation_allowance": 1500000.00,
+      "location": "Bangalore",
+      "aadhaar_last4": "XXXX-XXXX-9012",
+      "pan": "ABCPK5678L"
+    },
+    "expected_output": {
+      "status": "executive_onboarding_initiated",
+      "pf_registration": true,
+      "pf_contribution_employee": 1800.00,
+      "pf_contribution_employer": 1800.00,
+      "esop_grant_letter": "pending_board_approval",
+      "esop_cliff_date": "2027-05-01",
+      "relocation_package_approved": true,
+      "housing_advance": 500000.00,
+      "travel_reimbursement": 300000.00,
+      "it_assets_assigned": ["laptop_premium", "monitor_dual", "vpn_access", "email_account", "admin_tools"],
+      "reporting_setup": "cto_direct",
+      "checklist_completion": 0.60,
+      "pending_items": ["board_esop_approval", "relocation_vendor_booking", "leadership_announcement", "nda_signature"],
+      "recommended_action": "schedule_board_esop_approval_and_relocation_logistics"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.90]
+  },
+  {
+    "id": "hr-pay-001",
+    "agent_type": "payroll_engine",
+    "description": "Process monthly payroll for March 2026 with full statutory deductions",
+    "input": {
+      "employee_id": "EMP-2026-0342",
+      "employee_name": "Priya Sharma",
+      "month": "2026-03",
+      "basic_salary": 100000.00,
+      "hra": 50000.00,
+      "special_allowance": 30000.00,
+      "lta": 10000.00,
+      "food_allowance": 10000.00,
+      "pf_applicable": true,
+      "tax_regime": "new",
+      "declared_investments": {},
+      "location": "Bangalore",
+      "working_days": 22,
+      "days_worked": 22,
+      "lop_days": 0,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "gross_salary": 200000.00,
+      "pf_employee": 1800.00,
+      "pf_employer": 1800.00,
+      "esi_employee": 0.00,
+      "esi_employer": 0.00,
+      "professional_tax": 200.00,
+      "income_tax_tds": 12500.00,
+      "total_deductions": 14500.00,
+      "net_salary": 185500.00,
+      "employer_cost": 201800.00,
+      "ctc_monthly": 200000.00,
+      "payslip_generated": true,
+      "bank_transfer_initiated": true,
+      "statutory_remittances": [
+        {"type": "EPF", "amount": 3600.00, "due_date": "2026-04-15"},
+        {"type": "PT", "amount": 200.00, "due_date": "2026-04-15"},
+        {"type": "TDS", "amount": 12500.00, "due_date": "2026-04-07"}
+      ],
+      "recommended_action": "none"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.94, 0.99]
+  },
+  {
+    "id": "hr-pay-002",
+    "agent_type": "payroll_engine",
+    "description": "Process payroll with overtime, variable pay, and arrears",
+    "input": {
+      "employee_id": "EMP-2025-1105",
+      "employee_name": "Rajesh Kumar",
+      "month": "2026-03",
+      "basic_salary": 35000.00,
+      "hra": 14000.00,
+      "special_allowance": 8000.00,
+      "conveyance": 3000.00,
+      "pf_applicable": true,
+      "esi_applicable": true,
+      "tax_regime": "old",
+      "overtime_hours": 24,
+      "overtime_rate": 337.50,
+      "variable_pay": 15000.00,
+      "arrears_basic": 5000.00,
+      "declared_investments": {"section_80c": 150000.00, "section_80d": 25000.00},
+      "location": "Pune",
+      "working_days": 22,
+      "days_worked": 22,
+      "lop_days": 0,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "gross_salary": 88100.00,
+      "overtime_amount": 8100.00,
+      "pf_employee": 4800.00,
+      "pf_employer": 4800.00,
+      "esi_employee": 661.00,
+      "esi_employer": 2875.00,
+      "professional_tax": 200.00,
+      "income_tax_tds": 0.00,
+      "total_deductions": 5661.00,
+      "net_salary": 82439.00,
+      "employer_cost": 95775.00,
+      "payslip_generated": true,
+      "bank_transfer_initiated": true,
+      "recommended_action": "none"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.90, 0.97]
+  },
+  {
+    "id": "hr-pay-003",
+    "agent_type": "payroll_engine",
+    "description": "Full and final settlement for resigned employee",
+    "input": {
+      "employee_id": "EMP-2024-0567",
+      "employee_name": "Sneha Reddy",
+      "settlement_type": "resignation",
+      "last_working_date": "2026-03-15",
+      "doj": "2024-06-01",
+      "basic_salary": 80000.00,
+      "earned_leave_balance": 18,
+      "notice_period_days": 90,
+      "notice_served_days": 60,
+      "gratuity_eligible": false,
+      "pf_balance": 345600.00,
+      "variable_pay_pending": 120000.00,
+      "recovery_laptop": 0.00,
+      "recovery_training_bond": 150000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "salary_days_march": 15,
+      "salary_amount": 120000.00,
+      "leave_encashment": 115200.00,
+      "notice_shortfall_days": 30,
+      "notice_recovery": 240000.00,
+      "variable_pay": 120000.00,
+      "training_bond_recovery": 150000.00,
+      "gross_settlement": 355200.00,
+      "total_recoveries": 390000.00,
+      "tds_on_settlement": 0.00,
+      "net_payable": 0.00,
+      "amount_due_from_employee": 34800.00,
+      "pf_transfer_initiated": true,
+      "form_16_scheduled": true,
+      "experience_letter_generated": true,
+      "recommended_action": "recover_outstanding_34800_from_employee"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "hr-ta-001",
+    "agent_type": "talent_acquisition",
+    "description": "Screen candidates for Senior Data Engineer role in Bangalore",
+    "input": {
+      "requisition_id": "REQ-2026-0089",
+      "role": "Senior Data Engineer",
+      "department": "Data Platform",
+      "location": "Bangalore",
+      "budget_ctc_range": {"min": 2000000, "max": 3500000},
+      "must_have_skills": ["Apache Spark", "Python", "BigQuery", "Airflow"],
+      "nice_to_have_skills": ["Kafka", "dbt", "Kubernetes"],
+      "experience_range": {"min": 5, "max": 10},
+      "candidates": [
+        {"name": "Arun Nair", "experience_years": 7, "current_ctc": 2200000, "skills": ["Spark", "Python", "BigQuery", "Airflow", "Kafka"], "notice_period_days": 30},
+        {"name": "Meena Iyer", "experience_years": 6, "current_ctc": 1800000, "skills": ["Spark", "Python", "Redshift", "Luigi"], "notice_period_days": 60},
+        {"name": "Karthik Rajan", "experience_years": 9, "current_ctc": 3200000, "skills": ["Spark", "Python", "BigQuery", "Airflow", "Kafka", "dbt", "Kubernetes"], "notice_period_days": 90}
+      ],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "ranked_candidates": [
+        {"name": "Karthik Rajan", "score": 0.92, "recommendation": "strong_yes", "expected_ctc": 3500000},
+        {"name": "Arun Nair", "score": 0.85, "recommendation": "yes", "expected_ctc": 2800000},
+        {"name": "Meena Iyer", "score": 0.58, "recommendation": "maybe", "expected_ctc": 2300000}
+      ],
+      "shortlisted": 2,
+      "rejected": 0,
+      "maybe": 1,
+      "interview_slots_proposed": true,
+      "recommended_action": "schedule_interviews_for_karthik_and_arun"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "hr-ta-002",
+    "agent_type": "talent_acquisition",
+    "description": "Generate offer letter for selected candidate with Indian compliance",
+    "input": {
+      "requisition_id": "REQ-2026-0089",
+      "candidate_name": "Arun Nair",
+      "role": "Senior Data Engineer",
+      "department": "Data Platform",
+      "offered_ctc": 2800000.00,
+      "doj_proposed": "2026-05-05",
+      "location": "Bangalore",
+      "probation_months": 6,
+      "notice_period_days": 90,
+      "esop_units": 5000,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "offer_letter_generated": true,
+      "ctc_breakup": {
+        "basic": 1120000.00,
+        "hra": 560000.00,
+        "special_allowance": 698400.00,
+        "lta": 100000.00,
+        "food_allowance": 120000.00,
+        "pf_employer": 21600.00,
+        "gratuity_provision": 53846.00,
+        "mediclaim": 25000.00,
+        "esop_value_estimated": 101154.00
+      },
+      "monthly_gross": 216533.00,
+      "monthly_net_estimated": 191000.00,
+      "offer_validity_days": 7,
+      "background_verification_initiated": true,
+      "status": "offer_sent",
+      "recommended_action": "follow_up_if_no_response_in_3_days"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.85, 0.94]
+  },
+  {
+    "id": "hr-ta-003",
+    "agent_type": "talent_acquisition",
+    "description": "Campus recruitment drive analysis for IIT Madras batch 2026",
+    "input": {
+      "campus": "IIT Madras",
+      "batch_year": 2026,
+      "roles_offered": ["Software Engineer", "Data Analyst", "ML Engineer"],
+      "total_candidates_appeared": 120,
+      "shortlisted_post_test": 35,
+      "interviewed": 28,
+      "offers_made": 12,
+      "ctc_offered": 1800000.00,
+      "competing_companies": ["Google", "Microsoft", "Flipkart", "Razorpay"],
+      "currency": "INR"
+    },
+    "expected_output": {
+      "conversion_rate": 0.343,
+      "offer_acceptance_expected": 8,
+      "acceptance_rate_predicted": 0.667,
+      "cost_per_hire": 45000.00,
+      "total_recruitment_cost": 540000.00,
+      "brand_score_campus": 7.2,
+      "competitor_benchmark": {"avg_ctc": 2000000.00, "our_position": "below_median"},
+      "drop_risk_candidates": 3,
+      "recommended_action": "increase_ctc_to_2000000_to_match_competitors"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.75, 0.88]
+  },
+  {
+    "id": "hr-perf-001",
+    "agent_type": "performance_coach",
+    "description": "Generate quarterly performance review summary for engineering team",
+    "input": {
+      "team": "Platform Engineering",
+      "review_period": "2025-26-Q3",
+      "team_size": 12,
+      "ratings": [
+        {"employee_id": "EMP-2024-0101", "name": "Amit Desai", "rating": 4.5, "goals_met": 5, "goals_total": 5},
+        {"employee_id": "EMP-2024-0102", "name": "Kavitha Nair", "rating": 4.2, "goals_met": 4, "goals_total": 5},
+        {"employee_id": "EMP-2025-0201", "name": "Rohan Shah", "rating": 2.8, "goals_met": 2, "goals_total": 5},
+        {"employee_id": "EMP-2024-0103", "name": "Divya Prasad", "rating": 3.8, "goals_met": 4, "goals_total": 5}
+      ],
+      "team_avg_rating": 3.83
+    },
+    "expected_output": {
+      "team_summary": {
+        "avg_rating": 3.83,
+        "top_performers": ["Amit Desai", "Kavitha Nair"],
+        "needs_improvement": ["Rohan Shah"],
+        "goal_completion_rate": 0.75,
+        "rating_distribution": {"exceeds": 2, "meets": 1, "below": 1}
+      },
+      "pip_candidates": [{"name": "Rohan Shah", "rating": 2.8, "consecutive_low_quarters": 1}],
+      "promotion_candidates": [{"name": "Amit Desai", "rating": 4.5, "tenure_months": 24}],
+      "retention_risk": [{"name": "Kavitha Nair", "risk_score": 0.35, "reason": "market_competitive_offer"}],
+      "recommended_action": "initiate_pip_for_rohan_and_discuss_promotion_for_amit"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.92]
+  },
+  {
+    "id": "hr-perf-002",
+    "agent_type": "performance_coach",
+    "description": "Generate individual development plan for underperforming employee",
+    "input": {
+      "employee_id": "EMP-2025-0201",
+      "employee_name": "Rohan Shah",
+      "designation": "Software Engineer",
+      "department": "Platform Engineering",
+      "current_rating": 2.8,
+      "areas_of_concern": ["code_quality", "meeting_deadlines", "communication"],
+      "manager": "Priya Sharma",
+      "tenure_months": 14
+    },
+    "expected_output": {
+      "plan_type": "performance_improvement_plan",
+      "duration_weeks": 8,
+      "milestones": [
+        {"week": 2, "goal": "complete_code_review_workshop", "metric": "pr_rejection_rate_below_20pct"},
+        {"week": 4, "goal": "deliver_2_sprint_tasks_on_time", "metric": "zero_deadline_misses"},
+        {"week": 6, "goal": "lead_1_team_standup_per_week", "metric": "manager_feedback_3plus"},
+        {"week": 8, "goal": "overall_rating_improvement", "metric": "rating_above_3.2"}
+      ],
+      "support_resources": ["mentorship_pairing", "udemy_courses_assigned", "weekly_1on1_with_manager"],
+      "consequences_if_not_met": "termination_review",
+      "next_review_date": "2026-05-18",
+      "recommended_action": "schedule_kickoff_meeting_with_employee_and_manager"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.82, 0.93]
+  },
+  {
+    "id": "hr-perf-003",
+    "agent_type": "performance_coach",
+    "description": "Annual compensation review with market benchmarking",
+    "input": {
+      "review_cycle": "FY2025-26",
+      "department": "Engineering",
+      "headcount": 85,
+      "avg_rating": 3.7,
+      "budget_increment_pct": 12.0,
+      "attrition_rate_current": 18.5,
+      "market_median_increment": 10.0,
+      "critical_roles_count": 15,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "proposed_increment_distribution": {
+        "exceeds_expectations": 18.0,
+        "meets_expectations": 12.0,
+        "below_expectations": 0.0,
+        "new_joiners_under_6m": 5.0
+      },
+      "total_increment_cost": 18360000.00,
+      "budget_utilization_pct": 95.0,
+      "critical_role_retention_budget": 4500000.00,
+      "predicted_attrition_post_review": 14.2,
+      "employees_above_market": 12,
+      "employees_below_market": 23,
+      "equity_adjustment_needed": 8,
+      "recommended_action": "prioritize_below_market_corrections_and_critical_role_retention"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.78, 0.90]
+  },
+  {
+    "id": "hr-off-001",
+    "agent_type": "offboarding",
+    "description": "Process voluntary resignation with exit interview and compliance",
+    "input": {
+      "employee_id": "EMP-2024-0567",
+      "employee_name": "Sneha Reddy",
+      "designation": "Senior Product Manager",
+      "department": "Product",
+      "last_working_date": "2026-03-15",
+      "reason": "better_opportunity",
+      "notice_period_served": true,
+      "exit_interview_completed": true,
+      "feedback_themes": ["work_life_balance", "limited_growth", "compensation"]
+    },
+    "expected_output": {
+      "offboarding_status": "in_progress",
+      "tasks": [
+        {"task": "revoke_system_access", "status": "scheduled", "date": "2026-03-15"},
+        {"task": "collect_assets", "status": "pending", "items": ["laptop", "access_card", "parking_tag"]},
+        {"task": "knowledge_transfer", "status": "completed", "transferred_to": "Amit Desai"},
+        {"task": "fnf_settlement", "status": "pending", "estimated_date": "2026-04-15"},
+        {"task": "pf_transfer_form", "status": "shared", "form": "Form_13"},
+        {"task": "experience_letter", "status": "draft_ready"},
+        {"task": "gratuity_check", "status": "not_eligible", "reason": "tenure_below_5_years"}
+      ],
+      "alumni_network_invitation": true,
+      "rehire_eligible": true,
+      "recommended_action": "complete_asset_collection_and_process_fnf"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.88, 0.96]
+  },
+  {
+    "id": "hr-off-002",
+    "agent_type": "offboarding",
+    "description": "Process involuntary termination with legal compliance",
+    "input": {
+      "employee_id": "EMP-2023-0234",
+      "employee_name": "Suresh Menon",
+      "designation": "Software Engineer",
+      "department": "Backend Services",
+      "termination_type": "performance",
+      "pip_completed": true,
+      "pip_outcome": "failed",
+      "legal_review_completed": true,
+      "notice_period_days": 30,
+      "notice_buyout": true,
+      "tenure_months": 34
+    },
+    "expected_output": {
+      "offboarding_status": "termination_initiated",
+      "termination_letter_generated": true,
+      "notice_buyout_amount": 85000.00,
+      "immediate_access_revocation": true,
+      "tasks": [
+        {"task": "revoke_all_access", "status": "completed", "date": "2026-03-23"},
+        {"task": "collect_assets", "status": "in_progress"},
+        {"task": "fnf_settlement", "status": "calculating"},
+        {"task": "legal_documentation", "status": "completed"},
+        {"task": "separation_agreement", "status": "pending_signature"}
+      ],
+      "gratuity_eligible": false,
+      "rehire_eligible": false,
+      "legal_risk": "low",
+      "recommended_action": "obtain_signed_separation_agreement_before_releasing_fnf"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.85, 0.94]
+  },
+  {
+    "id": "hr-off-003",
+    "agent_type": "offboarding",
+    "description": "Process retirement with gratuity and pension compliance",
+    "input": {
+      "employee_id": "EMP-2010-0012",
+      "employee_name": "Ramesh Krishnan",
+      "designation": "Principal Architect",
+      "department": "Architecture",
+      "retirement_date": "2026-03-31",
+      "doj": "2010-04-01",
+      "tenure_years": 16,
+      "last_drawn_basic": 180000.00,
+      "pf_balance": 4500000.00,
+      "earned_leave_balance": 45,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "offboarding_status": "retirement_processing",
+      "gratuity_eligible": true,
+      "gratuity_amount": 1384615.00,
+      "gratuity_tax_exempt_limit": 2000000.00,
+      "gratuity_taxable": 0.00,
+      "leave_encashment": 648000.00,
+      "leave_encashment_tax_exempt": 300000.00,
+      "leave_encashment_taxable": 348000.00,
+      "pf_withdrawal": 4500000.00,
+      "total_settlement": 6532615.00,
+      "pension_form_10d": true,
+      "farewell_event_scheduled": true,
+      "tasks": [
+        {"task": "gratuity_payment", "status": "approved", "amount": 1384615.00},
+        {"task": "pf_final_withdrawal", "status": "form_19_submitted"},
+        {"task": "pension_nomination", "status": "completed"},
+        {"task": "experience_letter", "status": "ready"},
+        {"task": "service_certificate", "status": "ready"}
+      ],
+      "recommended_action": "process_gratuity_and_schedule_farewell"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.90, 0.97]
+  },
+  {
+    "id": "hr-ld-001",
+    "agent_type": "ld_coordinator",
+    "description": "Create Q1 FY2026-27 training calendar for engineering department",
+    "input": {
+      "department": "Engineering",
+      "headcount": 85,
+      "budget": 2500000.00,
+      "skill_gaps_identified": ["cloud_architecture", "system_design", "ai_ml_fundamentals", "leadership"],
+      "mandatory_compliance_training": ["posh", "data_privacy", "insider_trading"],
+      "quarter": "Q1-FY2027",
+      "currency": "INR"
+    },
+    "expected_output": {
+      "training_calendar": [
+        {"program": "AWS Solutions Architect Bootcamp", "type": "technical", "participants": 20, "cost": 600000.00, "month": "April"},
+        {"program": "System Design Masterclass", "type": "technical", "participants": 30, "cost": 450000.00, "month": "April"},
+        {"program": "AI/ML for Engineers", "type": "technical", "participants": 25, "cost": 500000.00, "month": "May"},
+        {"program": "Engineering Leadership Program", "type": "leadership", "participants": 10, "cost": 400000.00, "month": "May"},
+        {"program": "POSH Awareness", "type": "compliance", "participants": 85, "cost": 0.00, "month": "June"},
+        {"program": "Data Privacy & DPDP Act", "type": "compliance", "participants": 85, "cost": 50000.00, "month": "June"}
+      ],
+      "total_cost": 2000000.00,
+      "budget_utilization": 80.0,
+      "training_hours_per_employee": 24,
+      "compliance_coverage": 100.0,
+      "recommended_action": "get_manager_approvals_and_send_nominations"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.83, 0.93]
+  },
+  {
+    "id": "hr-ld-002",
+    "agent_type": "ld_coordinator",
+    "description": "Track and report training effectiveness metrics",
+    "input": {
+      "program": "AWS Solutions Architect Bootcamp",
+      "participants": 20,
+      "completion_rate": 0.90,
+      "pre_assessment_avg": 45.0,
+      "post_assessment_avg": 78.0,
+      "participant_nps": 72,
+      "certifications_achieved": 14,
+      "cost": 600000.00,
+      "currency": "INR"
+    },
+    "expected_output": {
+      "effectiveness_score": 0.82,
+      "knowledge_gain": 33.0,
+      "knowledge_gain_pct": 73.3,
+      "certification_rate": 0.70,
+      "roi_estimated": 2.8,
+      "cost_per_certification": 42857.14,
+      "cost_per_participant": 30000.00,
+      "kirkpatrick_level_1": 0.72,
+      "kirkpatrick_level_2": 0.78,
+      "recommended_action": "continue_program_and_enroll_next_batch"
+    },
+    "expected_hitl": false,
+    "expected_confidence_range": [0.85, 0.94]
+  },
+  {
+    "id": "hr-ld-003",
+    "agent_type": "ld_coordinator",
+    "description": "Identify high-potential employees for leadership development pipeline",
+    "input": {
+      "department": "Engineering",
+      "headcount": 85,
+      "criteria": {
+        "min_tenure_months": 18,
+        "min_rating": 4.0,
+        "min_9box_position": "high_potential",
+        "manager_nomination": true
+      },
+      "candidates": [
+        {"name": "Amit Desai", "tenure_months": 24, "rating": 4.5, "nine_box": "star", "nominated": true},
+        {"name": "Kavitha Nair", "tenure_months": 24, "rating": 4.2, "nine_box": "high_potential", "nominated": true},
+        {"name": "Priya Sharma", "tenure_months": 12, "rating": 4.8, "nine_box": "star", "nominated": true},
+        {"name": "Divya Prasad", "tenure_months": 24, "rating": 3.8, "nine_box": "core_player", "nominated": false}
+      ]
+    },
+    "expected_output": {
+      "hipo_identified": [
+        {"name": "Amit Desai", "readiness": "ready_now", "development_track": "engineering_manager"},
+        {"name": "Kavitha Nair", "readiness": "ready_in_1_year", "development_track": "tech_lead"}
+      ],
+      "not_eligible": [
+        {"name": "Priya Sharma", "reason": "tenure_below_18_months"},
+        {"name": "Divya Prasad", "reason": "rating_and_nomination_criteria_not_met"}
+      ],
+      "development_investment_per_hipo": 300000.00,
+      "total_program_cost": 600000.00,
+      "recommended_action": "enroll_amit_and_kavitha_in_leadership_accelerator"
+    },
+    "expected_hitl": true,
+    "expected_confidence_range": [0.80, 0.91]
+  }
+]
