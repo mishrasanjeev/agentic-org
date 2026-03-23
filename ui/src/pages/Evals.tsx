@@ -85,9 +85,15 @@ type SortKey = "agent" | "domain" | "quality" | "safety" | "performance" | "reli
 /* ------------------------------------------------------------------ */
 
 function scoreColor(v: number): string {
-  if (v >= 90) return "bg-emerald-100 text-emerald-800";
-  if (v >= 80) return "bg-yellow-100 text-yellow-800";
+  const pct = v > 1 ? v : v * 100;
+  if (pct >= 90) return "bg-emerald-100 text-emerald-800";
+  if (pct >= 80) return "bg-yellow-100 text-yellow-800";
   return "bg-red-100 text-red-800";
+}
+
+function fmtPct(v: number): string {
+  const pct = v > 1 ? v : v * 100;
+  return `${Math.round(pct)}%`;
 }
 
 function metricCardColor(v: number): string {
@@ -160,7 +166,7 @@ export default function Evals() {
             domain: name,
             composite: d.avg_composite || 0,
             grade: d.grade || "?",
-            agentCount: d.agent_count || 0,
+            agentCount: d.agent_count || d.cases_evaluated || 0,
           })
         );
         const parsed: EvalsData = {
@@ -322,12 +328,12 @@ export default function Evals() {
                 className={`rounded-xl bg-gradient-to-br ${DOMAIN_BG[d.domain] ?? "from-slate-500 to-slate-600"} text-white p-5 shadow-md`}
               >
                 <p className="text-sm font-medium opacity-80 capitalize">{d.domain}</p>
-                <p className="text-3xl font-bold mt-1">{d.composite}%</p>
+                <p className="text-3xl font-bold mt-1">{d.composite > 1 ? d.composite : (d.composite * 100).toFixed(1)}%</p>
                 <div className="flex items-center justify-between mt-3">
                   <span className="inline-block bg-white/20 rounded-full px-2.5 py-0.5 text-xs font-semibold">
                     {d.grade}
                   </span>
-                  <span className="text-xs opacity-75">{d.agentCount} agents</span>
+                  <span className="text-xs opacity-75">{d.agentCount} test cases</span>
                 </div>
               </div>
             ))}
@@ -399,7 +405,7 @@ export default function Evals() {
                     {(["quality", "safety", "performance", "reliability", "security", "cost", "composite"] as const).map((k) => (
                       <td key={k} className="px-4 py-3">
                         <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${scoreColor(a[k])}`}>
-                          {a[k]}%
+                          {fmtPct(a[k])}
                         </span>
                       </td>
                     ))}
