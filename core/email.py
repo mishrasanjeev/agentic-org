@@ -14,6 +14,11 @@ def send_email(to: str, subject: str, html: str) -> None:
     if not password:
         logger.warning("AGENTICORG_GMAIL_APP_PASSWORD not set — skipping email")
         return
+    # Skip fake/test domains to avoid bounces
+    domain = to.split("@")[-1] if "@" in to else ""
+    if domain.endswith(".local") or domain.endswith(".test") or domain == "example.com":
+        logger.info("Skipping email to test domain: %s", to)
+        return
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
     msg["From"] = sender
