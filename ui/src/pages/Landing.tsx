@@ -450,7 +450,7 @@ export default function Landing() {
             </div>
 
             <p className="mt-4 text-sm text-slate-500">
-              No credit card required &middot; Deploy in 5 minutes &middot; SOC-2 ready
+              No credit card required &middot; Free to start &middot; Full audit trail built in
             </p>
           </div>
 
@@ -842,7 +842,7 @@ export default function Landing() {
               Stop paying people to do what AI agents can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              24 agents. 42 connectors. Deploy in 5 minutes.
+              24 agents. 42 connectors. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

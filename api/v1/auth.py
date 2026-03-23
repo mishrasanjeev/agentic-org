@@ -1,19 +1,21 @@
-"""Auth endpoints — login (email/password + Google OAuth) + signup."""
+"""Auth endpoints — login (email/password + Google OAuth) + signup + logout."""
 
 from __future__ import annotations
 
 import logging
 import re
+import time
 import uuid
+from collections import defaultdict
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from auth.jwt import create_access_token
+from auth.jwt import blacklist_token, create_access_token
 from core.config import settings
 from core.database import async_session_factory
 from core.email import send_welcome_email
@@ -23,6 +25,31 @@ from core.rbac import get_allowed_domains, get_scopes_for_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+# ---------------------------------------------------------------------------
+# Rate limiting for signup (max 5 per IP per hour)
+# ---------------------------------------------------------------------------
+_signup_attempts: dict[str, list[float]] = defaultdict(list)
+_SIGNUP_MAX = 5
+_SIGNUP_WINDOW = 3600  # 1 hour
+
+
+# ---------------------------------------------------------------------------
+# Password policy (SOC-2 control)
+# ---------------------------------------------------------------------------
+
+def _validate_password(password: str) -> None:
+    """Raise HTTPException(400) if password does not meet policy."""
+    if (
+        len(password) < 8
+        or not re.search(r"[A-Z]", password)
+        or not re.search(r"[a-z]", password)
+        or not re.search(r"[0-9]", password)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters with uppercase, lowercase, and a number",
+        )
 
 
 class LoginRequest(BaseModel):
@@ -52,8 +79,21 @@ def _make_slug(name: str) -> str:
 
 
 @router.post("/signup", response_model=LoginResponse, status_code=201)
-async def signup(body: SignupRequest):
+async def signup(body: SignupRequest, request: Request):
     """Register a new organization and admin user."""
+    # Rate-limit signups per IP
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    _signup_attempts[client_ip] = [
+        t for t in _signup_attempts[client_ip] if now - t < _SIGNUP_WINDOW
+    ]
+    if len(_signup_attempts[client_ip]) >= _SIGNUP_MAX:
+        raise HTTPException(status_code=429, detail="Too many signup attempts — try again later")
+    _signup_attempts[client_ip].append(now)
+
+    # Password policy
+    _validate_password(body.password)
+
     async with async_session_factory() as session:
         # Check email not already registered globally
         existing = await session.execute(
@@ -81,7 +121,7 @@ async def signup(body: SignupRequest):
         await session.flush()
 
         # Create admin user
-        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt()).decode()
+        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
         user = User(
             id=uuid.uuid4(),
             tenant_id=tenant.id,
@@ -247,6 +287,17 @@ async def google_login(body: GoogleLoginRequest):
             "tenant_id": str(user.tenant_id),
         },
     )
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    """Blacklist the current token so it cannot be reused."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = auth_header[7:]
+    blacklist_token(token)
+    return {"status": "logged_out"}
 
 
 @router.get("/config")

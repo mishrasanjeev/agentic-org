@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 
 import bcrypt as _bcrypt
@@ -32,6 +33,20 @@ def _get_tenant_id(request: Request) -> str:
     if not tid:
         raise HTTPException(status_code=401, detail="Missing tenant context")
     return tid
+
+
+def _validate_password(password: str) -> None:
+    """Raise HTTPException(400) if password does not meet SOC-2 policy."""
+    if (
+        len(password) < 8
+        or not re.search(r"[A-Z]", password)
+        or not re.search(r"[a-z]", password)
+        or not re.search(r"[0-9]", password)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters with uppercase, lowercase, and a number",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +221,8 @@ async def accept_invite(body: AcceptInviteRequest):
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid invite token — missing user ID")
 
+    _validate_password(body.password)
+
     async with async_session_factory() as session:
         result = await session.execute(
             select(User).where(User.id == uuid.UUID(user_id))
@@ -216,7 +233,7 @@ async def accept_invite(body: AcceptInviteRequest):
         if user.status == "active":
             raise HTTPException(status_code=409, detail="Invitation already accepted")
 
-        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt()).decode()
+        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
         user.password_hash = pw_hash
         user.status = "active"
         session.add(user)

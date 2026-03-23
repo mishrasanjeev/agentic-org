@@ -16,6 +16,18 @@ JWKS_CACHE_TTL = 3600
 
 
 # ---------------------------------------------------------------------------
+# Token blacklist (in-memory; cleared on restart — tokens expire in 60 min)
+# ---------------------------------------------------------------------------
+
+_blacklisted_tokens: set[str] = set()
+
+
+def blacklist_token(token: str) -> None:
+    """Add a token to the blacklist so it is rejected on future validation."""
+    _blacklisted_tokens.add(token)
+
+
+# ---------------------------------------------------------------------------
 # Local HS256 token helpers
 # ---------------------------------------------------------------------------
 
@@ -35,6 +47,8 @@ def create_access_token(data: dict, expires_minutes: int = 60) -> str:
 
 def validate_local_token(token: str) -> dict:
     """Decode and validate an HS256-signed local JWT."""
+    if token in _blacklisted_tokens:
+        raise ValueError("Token has been revoked")
     try:
         payload = jwt.decode(
             token,
