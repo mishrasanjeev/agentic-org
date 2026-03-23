@@ -22,6 +22,10 @@ import Settings from "./pages/Settings";
 import Evals from "./pages/Evals";
 import Pricing from "./pages/Pricing";
 import Playground from "./pages/Playground";
+import Signup from "./pages/Signup";
+import Onboarding from "./pages/Onboarding";
+import InviteAccept from "./pages/InviteAccept";
+import SLAMonitor from "./pages/SLAMonitor";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -32,6 +36,8 @@ export default function App() {
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/invite" element={<InviteAccept />} />
       <Route path="/evals" element={<Evals />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/playground" element={<Playground />} />
@@ -173,6 +179,24 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <Audit />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Onboarding />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/sla"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <SLAMonitor />
             </Layout>
           </ProtectedRoute>
         }

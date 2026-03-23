@@ -30,19 +30,42 @@ export default function Audit() {
     }
   }
 
-  async function exportAudit() {
-    try {
-      const { data } = await api.get("/compliance/evidence-package");
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `audit-evidence-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error("Export failed", e);
-    }
+  function downloadJSON(data: AuditEntry[], filename: string) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadCSV(data: AuditEntry[], filename: string) {
+    const headers = ["id", "event_type", "actor_type", "action", "outcome", "created_at"];
+    const rows = data.map((entry) =>
+      headers.map((h) => {
+        const val = String(entry[h as keyof AuditEntry] ?? "");
+        return `"${val.replace(/"/g, '""')}"`;
+      }).join(",")
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportJSON() {
+    const datestamp = new Date().toISOString().slice(0, 10);
+    downloadJSON(entries, `audit-evidence-${datestamp}.json`);
+  }
+
+  function exportCSV() {
+    const datestamp = new Date().toISOString().slice(0, 10);
+    downloadCSV(entries, `audit-log-${datestamp}.csv`);
   }
 
   const outcomeColor = (outcome: string) => {
@@ -55,7 +78,10 @@ export default function Audit() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Audit Log</h2>
-        <Button variant="outline" onClick={exportAudit}>Export Evidence Package</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportJSON}>Export Evidence Package</Button>
+          <Button variant="outline" onClick={exportCSV}>Download CSV</Button>
+        </div>
       </div>
 
       <div className="flex gap-4 items-center">

@@ -164,8 +164,15 @@ export default function Login() {
             </div>
           </div>
 
+          {/* Create account link */}
+          <div className="mt-4 text-center">
+            <Link to="/signup" className="text-sm text-primary hover:underline">
+              Create a new organization &rarr;
+            </Link>
+          </div>
+
           {/* Back link */}
-          <div className="mt-6 text-center">
+          <div className="mt-3 text-center">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               &larr; Back to home
             </Link>

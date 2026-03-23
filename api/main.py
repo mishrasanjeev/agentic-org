@@ -25,6 +25,7 @@ from api.v1 import (
     auth as v1_auth,
 )
 from api.v1 import demo as v1_demo
+from api.v1 import org as v1_org
 from api.websocket.feed import router as ws_feed_router
 from auth.middleware import AuthMiddleware
 from core.config import settings
@@ -79,5 +80,6 @@ app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
 app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
+app.include_router(v1_org.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])

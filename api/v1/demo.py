@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import logging
-import smtplib
-from email.mime.text import MIMEText
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from core.database import async_session_factory
+from core.email import send_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,15 +27,7 @@ class DemoRequest(BaseModel):
 
 
 def _send_email(body: DemoRequest) -> None:
-    """Send email notification via Gmail SMTP. Fails silently."""
-    import os
-
-    app_password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
-    sender = os.getenv("AGENTICORG_DEMO_SENDER", "agenticorg.alerts@gmail.com")
-    if not app_password:
-        logger.warning("AGENTICORG_GMAIL_APP_PASSWORD not set — skipping email")
-        return
-
+    """Send demo request notification email via shared email utility."""
     subject = f"AgenticOrg Demo Request — {body.name} ({body.role or 'Not specified'})"
     html = f"""<h2>New Demo Request</h2>
 <table style="border-collapse:collapse;font-family:sans-serif;">
@@ -47,20 +38,7 @@ def _send_email(body: DemoRequest) -> None:
 <tr><td style="padding:8px;font-weight:bold;">Phone:</td><td style="padding:8px;">{body.phone or '—'}</td></tr>
 </table>
 <p style="color:#666;font-size:12px;margin-top:20px;">Sent from agenticorg.ai</p>"""
-
-    msg = MIMEText(html, "html")
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = NOTIFY_TO
-    msg["Reply-To"] = body.email
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(sender, app_password)
-            smtp.send_message(msg)
-        logger.info("Demo request email sent to %s", NOTIFY_TO)
-    except Exception:
-        logger.exception("Failed to send demo request email")
+    send_email(NOTIFY_TO, subject, html)
 
 
 @router.post("/demo-request", status_code=201)

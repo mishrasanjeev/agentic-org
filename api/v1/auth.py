@@ -1,7 +1,9 @@
-"""Auth endpoints — login (email/password + Google OAuth)."""
+"""Auth endpoints — login (email/password + Google OAuth) + signup."""
 
 from __future__ import annotations
 
+import logging
+import re
 import uuid
 
 import bcrypt as _bcrypt
@@ -14,9 +16,12 @@ from sqlalchemy import select
 from auth.jwt import create_access_token
 from core.config import settings
 from core.database import async_session_factory
+from core.email import send_welcome_email
+from core.models.tenant import Tenant
 from core.models.user import User
 from core.rbac import get_allowed_domains, get_scopes_for_role
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
@@ -31,6 +36,102 @@ class LoginResponse(BaseModel):
     user: dict
 
 
+class SignupRequest(BaseModel):
+    org_name: str
+    admin_name: str
+    admin_email: str
+    password: str
+
+
+def _make_slug(name: str) -> str:
+    """Generate a URL-safe slug from an organization name."""
+    slug = name.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = re.sub(r"-{2,}", "-", slug)
+    return slug.strip("-")
+
+
+@router.post("/signup", response_model=LoginResponse, status_code=201)
+async def signup(body: SignupRequest):
+    """Register a new organization and admin user."""
+    async with async_session_factory() as session:
+        # Check email not already registered globally
+        existing = await session.execute(
+            select(User).where(User.email == body.admin_email)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Email already registered")
+
+        # Generate slug and ensure uniqueness
+        slug = _make_slug(body.org_name)
+        slug_check = await session.execute(
+            select(Tenant).where(Tenant.slug == slug)
+        )
+        if slug_check.scalar_one_or_none():
+            slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+
+        # Create tenant
+        tenant = Tenant(
+            id=uuid.uuid4(),
+            name=body.org_name,
+            slug=slug,
+            settings={"onboarding_complete": False, "onboarding_step": 1},
+        )
+        session.add(tenant)
+        await session.flush()
+
+        # Create admin user
+        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt()).decode()
+        user = User(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            email=body.admin_email,
+            name=body.admin_name,
+            role="admin",
+            domain="all",
+            password_hash=pw_hash,
+            status="active",
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(tenant)
+        await session.refresh(user)
+
+    # Build JWT
+    token = create_access_token(
+        data={
+            "sub": user.email,
+            "agenticorg:tenant_id": str(user.tenant_id),
+            "grantex:scopes": get_scopes_for_role(user.role),
+            "name": user.name,
+            "role": user.role,
+            "domain": user.domain,
+            "agenticorg:domains": get_allowed_domains(user.role),
+        },
+        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
+    )
+
+    # Send welcome email (non-blocking)
+    try:
+        send_welcome_email(body.admin_email, body.org_name, body.admin_name)
+    except Exception:
+        logger.exception("Welcome email failed but signup succeeded")
+
+    return LoginResponse(
+        access_token=token,
+        user={
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "domain": user.domain,
+            "tenant_id": str(user.tenant_id),
+            "org_name": tenant.name,
+            "org_slug": tenant.slug,
+            "onboarding_complete": tenant.settings.get("onboarding_complete", False),
+        },
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest):
     async with async_session_factory() as session:
@@ -38,10 +139,16 @@ async def login(body: LoginRequest):
             select(User).where(User.email == body.email, User.status == "active")
         )
         user = result.scalar_one_or_none()
-    if not user or not user.password_hash:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        if not user or not user.password_hash:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        # Fetch tenant for onboarding status
+        tenant_result = await session.execute(
+            select(Tenant).where(Tenant.id == user.tenant_id)
+        )
+        tenant = tenant_result.scalar_one_or_none()
+    tenant_settings = tenant.settings if tenant else {}
     token = create_access_token(
         data={
             "sub": user.email,
@@ -62,6 +169,7 @@ async def login(body: LoginRequest):
             "role": user.role,
             "domain": user.domain,
             "tenant_id": str(user.tenant_id),
+            "onboarding_complete": tenant_settings.get("onboarding_complete", False),
         },
     )
 

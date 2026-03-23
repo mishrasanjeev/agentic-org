@@ -11,6 +11,7 @@ const ALL_NAV = [
   { path: "/dashboard/connectors", label: "Connectors", roles: ["admin"] },
   { path: "/dashboard/schemas", label: "Schemas", roles: ["admin"] },
   { path: "/dashboard/audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/sla", label: "SLA Monitor", roles: ["admin"] },
   { path: "/dashboard/settings", label: "Settings", roles: ["admin"] },
 ];
 

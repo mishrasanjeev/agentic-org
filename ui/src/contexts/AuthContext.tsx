@@ -6,6 +6,7 @@ interface AuthUser {
   role: string;
   domain: string;
   tenant_id: string;
+  onboardingComplete?: boolean;
 }
 
 interface AuthContextType {
@@ -13,6 +14,7 @@ interface AuthContextType {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
+  signup: (orgName: string, name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -37,10 +39,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || "Login failed");
     }
     const data = await res.json();
+    const loginUser: AuthUser = { ...data.user, onboardingComplete: data.user?.onboarding_complete ?? true };
     localStorage.setItem("token", data.access_token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+    localStorage.setItem("user", JSON.stringify(loginUser));
     setToken(data.access_token);
-    setUser(data.user);
+    setUser(loginUser);
+  }, []);
+
+  const signup = useCallback(async (orgName: string, name: string, email: string, password: string) => {
+    const res = await fetch("/api/v1/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ org_name: orgName, name, email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Signup failed" }));
+      throw new Error(err.detail || "Signup failed");
+    }
+    const data = await res.json();
+    const userData: AuthUser = { ...data.user, onboardingComplete: data.user?.onboarding_complete ?? false };
+    localStorage.setItem("token", data.access_token);
+    localStorage.setItem("user", JSON.stringify(userData));
+    setToken(data.access_token);
+    setUser(userData);
   }, []);
 
   const loginWithGoogle = useCallback(async (credential: string) => {
@@ -54,10 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || "Google login failed");
     }
     const data = await res.json();
+    const googleUser: AuthUser = { ...data.user, onboardingComplete: data.user?.onboarding_complete ?? true };
     localStorage.setItem("token", data.access_token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+    localStorage.setItem("user", JSON.stringify(googleUser));
     setToken(data.access_token);
-    setUser(data.user);
+    setUser(googleUser);
   }, []);
 
   const logout = useCallback(() => {
@@ -68,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, login, loginWithGoogle, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ token, user, login, loginWithGoogle, signup, logout, isAuthenticated: !!token }}>
       {children}
     </AuthContext.Provider>
   );
