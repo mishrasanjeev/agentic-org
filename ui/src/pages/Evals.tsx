@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { Helmet } from "react-helmet-async";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell, LabelList,
@@ -255,6 +256,11 @@ export default function Evals() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Helmet>
+        <title>Evaluation Matrix — AgenticOrg | 22 Agents Scored Across 6 Dimensions</title>
+        <meta name="description" content="Published evaluation scorecard for AgenticOrg's 24 AI agents. Quality, safety, performance, reliability, security, and cost metrics." />
+        <link rel="canonical" href="https://agenticorg.ai/evals" />
+      </Helmet>
       {/* ---- Header ---- */}
       <header className="bg-slate-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

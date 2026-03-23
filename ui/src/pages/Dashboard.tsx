@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -117,6 +118,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <Helmet>
+        <title>Dashboard — AgenticOrg</title>
+      </Helmet>
       <h2 className="text-2xl font-bold">Dashboard</h2>
 
       {/* Top metrics row */}

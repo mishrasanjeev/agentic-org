@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import ROICalculator from "../components/ROICalculator";
 
 /* ------------------------------------------------------------------ */
@@ -44,10 +45,12 @@ function FadeIn({ children, className = "", delay = 0 }: {
 /* ------------------------------------------------------------------ */
 /*  Browser Chrome Frame — wraps iframes in a macOS-style window       */
 /* ------------------------------------------------------------------ */
-function BrowserFrame({ src, title, className = "" }: {
+function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
   src: string;
   title: string;
+  alt?: string;
   className?: string;
+  loading?: "lazy" | "eager";
 }) {
   return (
     <div className={`rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-800 ${className}`}>
@@ -67,9 +70,9 @@ function BrowserFrame({ src, title, className = "" }: {
       {/* Content — static screenshot */}
       <img
         src={src}
-        alt={title}
+        alt={alt || title}
         className="w-full h-auto block"
-        loading="lazy"
+        loading={loading}
       />
     </div>
   );
@@ -320,6 +323,11 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased">
+      <Helmet>
+        <title>AgenticOrg — Enterprise AI Agent Platform | 24 Agents, 42 Connectors</title>
+        <meta name="description" content="Deploy 24 autonomous AI agents across Finance, HR, Marketing, and Operations. Human-in-the-loop governance, 42 enterprise connectors, and India-first compliance. Start free." />
+        <link rel="canonical" href="https://agenticorg.ai/" />
+      </Helmet>
 
       {/* ============================================================ */}
       {/* 1. NAVBAR                                                     */}
@@ -447,8 +455,10 @@ export default function Landing() {
           {/* Right — Product screenshot */}
           <div className="hidden lg:block">
             <BrowserFrame
-              src="/screenshots/dashboard.png"
+              src="/screenshots/dashboard.webp"
               title="app.agenticorg.ai/dashboard"
+              alt="AgenticOrg dashboard showing agent fleet status, pending approvals, and real-time metrics"
+              loading="eager"
             />
           </div>
         </div>
@@ -529,8 +539,9 @@ export default function Landing() {
             <FadeIn delay={0}>
               <div className="space-y-4">
                 <BrowserFrame
-                  src="/screenshots/agents.png"
+                  src="/screenshots/agents.webp"
                   title="app.agenticorg.ai/dashboard/agents"
+                  alt="Agent fleet management view showing 24 AI agents across Finance, HR, Marketing, and Ops"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
@@ -543,8 +554,9 @@ export default function Landing() {
             <FadeIn delay={150}>
               <div className="space-y-4">
                 <BrowserFrame
-                  src="/screenshots/observatory.png"
+                  src="/screenshots/observatory.webp"
                   title="app.agenticorg.ai/dashboard/observatory"
+                  alt="Live observatory dashboard with real-time agent monitoring, throughput, and error tracking"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Live Observatory</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
@@ -557,8 +569,9 @@ export default function Landing() {
             <FadeIn delay={300}>
               <div className="space-y-4">
                 <BrowserFrame
-                  src="/screenshots/approvals.png"
+                  src="/screenshots/approvals.webp"
                   title="app.agenticorg.ai/dashboard/approvals"
+                  alt="Human-in-the-loop approval queue for reviewing and approving critical agent decisions"
                 />
                 <h3 className="text-xl font-bold text-slate-900">HITL Approvals</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
@@ -684,8 +697,9 @@ export default function Landing() {
 
           <FadeIn>
             <BrowserFrame
-              src="/screenshots/observatory.png"
+              src="/screenshots/observatory.webp"
               title="app.agenticorg.ai/dashboard/observatory"
+              alt="Live demo of AgenticOrg observatory showing real-time agent activity and metrics"
             />
           </FadeIn>
 

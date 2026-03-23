@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -51,6 +52,11 @@ export default function Login() {
 
   const loginForm = (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <Helmet>
+        <title>Sign In — AgenticOrg</title>
+        <meta name="description" content="Sign in to AgenticOrg to manage your AI agents, workflows, and approvals." />
+        <link rel="canonical" href="https://agenticorg.ai/login" />
+      </Helmet>
       <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           {/* Branding */}
