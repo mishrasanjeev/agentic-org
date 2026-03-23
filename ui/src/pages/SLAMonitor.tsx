@@ -33,10 +33,10 @@ export default function SLAMonitor() {
       const isHealthy = data.status === "ok" || data.status === "healthy";
 
       setMetrics([
-        { label: "Uptime", current: isHealthy ? "99.95%" : "99.50%", target: "99.9%", ok: isHealthy },
-        { label: "API P95 Latency", current: "1.2s", target: "< 2s", ok: true },
-        { label: "Agent Success Rate", current: "97.3%", target: "> 95%", ok: true },
-        { label: "HITL Response Time", current: "2.1 hrs", target: "< 4 hrs", ok: true },
+        { label: "Uptime", current: isHealthy ? "Healthy" : "Degraded", target: "99.9%", ok: isHealthy },
+        { label: "API P95 Latency", current: isHealthy ? "< 2s" : "N/A", target: "< 2s", ok: isHealthy },
+        { label: "Agent Success Rate", current: "Measuring", target: "> 95%", ok: true },
+        { label: "HITL Response Time", current: "Measuring", target: "< 4 hrs", ok: true },
       ]);
 
       // Generate last 10 health checks

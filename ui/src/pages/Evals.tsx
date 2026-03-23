@@ -292,10 +292,10 @@ export default function Evals() {
           <h2 className="text-xl font-bold text-slate-900 mb-6">Platform Summary</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {([
-              { label: "STP Rate", value: data.platform.stpRate },
-              { label: "HITL Rate", value: data.platform.hitlRate },
-              { label: "Mean Confidence", value: data.platform.meanConfidence },
-              { label: "Uptime SLA", value: data.platform.uptimeSla },
+              { label: "Target STP Rate", value: data.platform.stpRate },
+              { label: "Target HITL Rate", value: data.platform.hitlRate },
+              { label: "Target Confidence", value: data.platform.meanConfidence },
+              { label: "Target Uptime", value: data.platform.uptimeSla },
             ] as const).map((m) => (
               <div
                 key={m.label}
