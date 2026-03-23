@@ -1,0 +1,73 @@
+# AgenticOrg — Enterprise AI Agent Platform
+
+> AgenticOrg deploys 24 AI agents across Finance, HR, Marketing, and Operations that automate enterprise back-office work with human-in-the-loop governance.
+
+## What is AgenticOrg?
+
+AgenticOrg is an enterprise AI agent platform. It provides 24 pre-built AI agents that automate back-office operations across 5 departments: Finance, HR, Marketing, Operations, and Back Office. Each agent connects to 42 enterprise systems (SAP, Oracle Fusion, Salesforce, GSTN, Darwinbox, Tally, Stripe, HubSpot, Slack, and more) and executes domain-specific tasks with human approval on every critical decision.
+
+## Key Features
+
+- **24 AI Agents**: AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A, Onboarding, Payroll Engine, Talent Acquisition, Performance Coach, Offboarding, L&D Coordinator, Campaign Pilot, Content Factory, SEO Strategist, CRM Intelligence, Brand Monitor, Support Triage, IT Operations, Compliance Guard, Contract Intelligence, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
+- **42 Enterprise Connectors**: Oracle Fusion, SAP S/4HANA, Salesforce, GSTN Portal, Income Tax India, EPFO, Darwinbox, Tally Prime, Zoho Books, QuickBooks, Stripe, Banking AA, Pinelabs Plural, Slack, GitHub, Jira, Confluence, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, PagerDuty, ServiceNow, Zendesk, and more
+- **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Invoices above ₹5 lakhs, all tax filings, month-end close, high-value offers are escalated to department heads (CFO, CHRO, CMO, COO)
+- **Shadow Mode**: Test agents against real data before promoting to production
+- **Role-Based Access Control**: 6 roles (CEO, CFO, CHRO, CMO, COO, Auditor) with domain isolation
+- **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
+- **Evaluation Matrix**: 66 golden test cases across 6 dimensions (quality, safety, performance, reliability, security, cost)
+- **Complete Audit Trail**: Every agent decision logged with 7-year retention
+
+## India-First Connectors
+
+AgenticOrg is built for Indian enterprise with native connectors for:
+- GSTN (Goods and Services Tax Network) — GSTR-1, 3B, 9 filing
+- Income Tax India — 26Q, 24Q, Form 16A
+- EPFO (Employees Provident Fund Organisation)
+- Darwinbox HRMS
+- Tally Prime
+- Banking Account Aggregator (AA)
+
+## Use Cases by Role
+
+### CFO (Finance)
+- Invoice processing with OCR, GSTIN validation, 3-way matching
+- Daily bank reconciliation (99.7% auto-match rate)
+- GST/TDS computation and filing preparation
+- Month-end close automation
+- Cash flow forecasting and board pack generation
+
+### CHRO (HR)
+- New hire onboarding (offer letter → IT provisioning → training)
+- Payroll processing with PF, ESI, TDS computation
+- Resume screening and interview scheduling
+- Performance management and OKR tracking
+- Exit processing and final settlement
+
+### CMO (Marketing)
+- Multi-channel campaign orchestration
+- Content generation with brand guidelines
+- SEO audits and keyword research
+- Lead scoring and CRM segmentation
+- Brand sentiment monitoring
+
+### COO (Operations)
+- Support ticket classification and routing
+- Infrastructure monitoring and incident response
+- Compliance audit and policy enforcement
+- Contract review and renewal management
+- Vendor risk scoring and spend analysis
+
+## Pricing
+
+- Free: 3 agents, 5 connectors, 100 tasks/day
+- Pro ($499/month): 12 agents, 20 connectors, unlimited tasks
+- Enterprise (custom): All 24 agents, 42 connectors, dedicated support
+
+## Links
+
+- Website: https://agenticorg.ai
+- Playground (try live): https://agenticorg.ai/playground
+- Pricing: https://agenticorg.ai/pricing
+- Evaluation Matrix: https://agenticorg.ai/evals
+- Sign Up: https://agenticorg.ai/signup
+- GitHub: https://github.com/mishrasanjeev/agentic-org

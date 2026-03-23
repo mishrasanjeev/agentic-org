@@ -1,19 +1,34 @@
 User-agent: *
 Allow: /
+Allow: /pricing
+Allow: /playground
 Allow: /evals
+Allow: /signup
 Allow: /login
 Disallow: /dashboard/
 Disallow: /api/
+Disallow: /onboarding
+Disallow: /invite
 
-# Allow search engines to see public pages
+User-agent: GPTBot
+Allow: /
+Allow: /pricing
+Allow: /playground
+Allow: /evals
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
 User-agent: Googlebot
 Allow: /
-Allow: /evals
-Allow: /login
 
 User-agent: Bingbot
 Allow: /
-Allow: /evals
-Allow: /login
 
 Sitemap: https://agenticorg.ai/sitemap.xml
