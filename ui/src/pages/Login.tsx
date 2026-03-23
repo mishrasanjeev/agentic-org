@@ -12,6 +12,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [showDemo, setShowDemo] = useState(false);
 
   // Fetch Google Client ID from backend config
   useEffect(() => {
@@ -142,27 +143,38 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Demo credentials hint */}
-          <div className="mt-6 rounded-lg bg-muted/50 border border-border px-4 py-3">
-            <p className="text-xs text-muted-foreground text-center mb-2">Demo logins (click to fill):</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {[
-                { role: "CEO/Admin", email: "ceo@agenticorg.local", pw: "ceo123!" },
-                { role: "CFO", email: "cfo@agenticorg.local", pw: "cfo123!", desc: "Finance" },
-                { role: "CHRO", email: "chro@agenticorg.local", pw: "chro123!", desc: "HR" },
-                { role: "CMO", email: "cmo@agenticorg.local", pw: "cmo123!", desc: "Marketing" },
-                { role: "COO", email: "coo@agenticorg.local", pw: "coo123!", desc: "Operations" },
-                { role: "Auditor", email: "auditor@agenticorg.local", pw: "audit123!", desc: "Read-only" },
-              ].map(c => (
-                <button key={c.email} type="button"
-                  onClick={() => { setEmail(c.email); setPassword(c.pw); }}
-                  className="text-left p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
-                  <span className="font-medium text-foreground text-xs">{c.role}</span>
-                  {c.desc && <span className="text-muted-foreground text-[10px] ml-1">({c.desc})</span>}
-                </button>
-              ))}
-            </div>
+          {/* Demo access toggle */}
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => setShowDemo(!showDemo)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showDemo ? "Hide demo logins" : "Try the demo instead →"}
+            </button>
           </div>
+          {showDemo && (
+            <div className="mt-3 rounded-lg bg-muted/50 border border-border px-4 py-3">
+              <p className="text-xs text-muted-foreground text-center mb-2">Click a role to explore with sample data:</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { role: "CEO/Admin", email: "ceo@agenticorg.local", pw: "ceo123!" },
+                  { role: "CFO", email: "cfo@agenticorg.local", pw: "cfo123!", desc: "Finance" },
+                  { role: "CHRO", email: "chro@agenticorg.local", pw: "chro123!", desc: "HR" },
+                  { role: "CMO", email: "cmo@agenticorg.local", pw: "cmo123!", desc: "Marketing" },
+                  { role: "COO", email: "coo@agenticorg.local", pw: "coo123!", desc: "Operations" },
+                  { role: "Auditor", email: "auditor@agenticorg.local", pw: "audit123!", desc: "Read-only" },
+                ].map(c => (
+                  <button key={c.email} type="button"
+                    onClick={() => { setEmail(c.email); setPassword(c.pw); }}
+                    className="text-left p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                    <span className="font-medium text-foreground text-xs">{c.role}</span>
+                    {c.desc && <span className="text-muted-foreground text-[10px] ml-1">({c.desc})</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Create account link */}
           <div className="mt-4 text-center">
