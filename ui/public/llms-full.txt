@@ -1,0 +1,359 @@
+# AgenticOrg — Complete Product Documentation for LLMs
+
+> AgenticOrg is an enterprise AI agent platform that deploys 24 pre-built AI agents across Finance, HR, Marketing, and Operations. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 42 enterprise systems. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+
+## Product Overview
+
+AgenticOrg replaces manual back-office work with AI agents that reason, execute, and escalate. Every critical decision requires human approval. The platform is role-based: CFOs see only finance agents, CHROs see only HR agents, etc.
+
+Website: https://agenticorg.ai
+Playground (try live): https://agenticorg.ai/playground
+Pricing: https://agenticorg.ai/pricing
+Evaluation Matrix: https://agenticorg.ai/evals
+GitHub: https://github.com/mishrasanjeev/agentic-org
+
+---
+
+## Architecture
+
+8-layer stack:
+1. API Gateway (FastAPI, JWT auth, rate limiting)
+2. Orchestration (Nexus orchestrator, DAG workflows, parallel execution)
+3. Agent Runtime (LLM reasoning via Gemini 2.5 Flash, tool calling, confidence scoring)
+4. HITL Governance (approval queues, role-based escalation, timeout policies)
+5. Connector Hub (42 pre-built connectors with circuit breakers)
+6. Schema Registry (18 validated data schemas)
+7. Observability (Prometheus metrics, OpenTelemetry traces, structured logging)
+8. Infrastructure (GKE Autopilot, Cloud SQL PostgreSQL, Redis)
+
+---
+
+## All 24 Agents — Detailed
+
+### Finance Domain (6 agents, CFO oversight)
+
+#### AP Processor (ap_processor)
+- Confidence floor: 88%
+- What it does: OCR extracts invoice data from PDFs. Validates GSTIN against government portal. Runs 3-way match (invoice → purchase order → goods receipt note). Schedules payment on day 9 for 2% early-payment discount. Posts journal entry to GL with idempotency key.
+- HITL triggers: Invoice total > ₹5,00,000. 3-way match mismatch (delta > tolerance). GSTIN validation ambiguous. Vendor risk score > 7. Confidence below 88%.
+- Connected systems: Oracle Fusion (read: PO, GRN; write: journal), GSTN (validate), Banking AA (queue payment), Email (remittance advice)
+- Anti-hallucination: Never invents PO numbers, GRN numbers, or GL codes. Never proceeds after tool error without retry then escalate. Never marks "matched" without confirmed tool response.
+
+#### AR Collections (ar_collections)
+- Confidence floor: 85%
+- What it does: Fetches AR aging from Oracle Fusion. Classifies by days overdue (30/60/90+). Tiered escalation: Day 30 email reminder, Day 60 WhatsApp + payment link via Pinelabs, Day 90+ Twilio voice call. Reconciles payments on receipt.
+- HITL triggers: 3 collection attempts failed. Dispute raised. Confidence below 85%.
+- Connected systems: Oracle Fusion (read: AR aging, invoice), WhatsApp, Email, Twilio, Pinelabs Plural (payment links), Salesforce (customer log)
+
+#### Reconciliation Agent (recon_agent)
+- Confidence floor: 95% (highest in platform)
+- What it does: Daily T+0 bank-to-GL matching. Fetches bank transactions via Banking AA API and GL entries from Oracle. Matches by amount + date + reference. Auto-posts matched items. Generates ranked GL suggestions for unmatched. Creates recon report.
+- Performance: 99.7% auto-match rate. 847 transactions matched in 18 seconds.
+- HITL triggers: Break > ₹50,000. Break > 0.01% of daily volume. Confidence below 95%.
+- Anti-hallucination: Never auto-posts without confirmed GL account. No estimated matches (all-or-nothing).
+
+#### Tax Compliance (tax_compliance)
+- Confidence floor: 92%
+- What it does: Fetches taxable transactions from ERP. Computes GST liability (CGST/SGST/IGST splits). Computes TDS per section (194C/194J/194H). Reconciles with GSTR-2A from government. Prepares GSTR-1/3B/9 returns and 26Q/24Q TDS returns.
+- HITL triggers: EVERY filing requires human approval (100% escalation rate for regulatory compliance). Mismatch > 5% with government records. Confidence below 92%.
+- Anti-hallucination: Never computes tax on estimated figures. All inputs from verified ERP transactions only.
+
+#### Month-End Close (close_agent)
+- Confidence floor: 80%
+- What it does: Checks subledger availability. Runs intercompany eliminations. Computes prepaid amortization, accruals, fixed asset depreciation. Drafts P&L, Balance Sheet, Cash Flow with AI variance commentary. Assembles close package in Confluence.
+- HITL triggers: EVERY close requires CFO sign-off (100% escalation). Subledger unavailability. Variance > ₹1,00,000.
+- Target: Month-end close in 1 day instead of 5.
+
+#### FP&A Agent (fpa_agent)
+- Confidence floor: 78% (lowest in platform — forecasting is inherently uncertain)
+- What it does: Fetches actuals from Oracle GL and budgets. Computes budget vs actual variance. Identifies top 5 variance drivers. Builds rolling 13-week cash forecast with 3 scenarios (base/bull/bear). Generates board pack with visualizations.
+- HITL triggers: Reforecast deviation > 15%. Budget reallocation > ₹10,00,000. CFO sign-off on board pack.
+- All outputs labeled "MODEL_OUTPUT" not "ACTUALS".
+
+### HR Domain (6 agents, CHRO oversight)
+
+#### Onboarding Agent (onboarding)
+- Confidence floor: 90%
+- 6-step workflow: Offer letter (DocuSign) → IT provisioning (laptop, email, Slack, GitHub) → Compliance training (5 modules) → Manager introduction → Welcome channel → 30/60/90 day plan
+- HITL triggers: CTC > ₹25,00,000. VP+ level hires.
+
+#### Payroll Engine (payroll_engine)
+- Confidence floor: 92%
+- Computes gross-to-net: Basic + HRA + special allowance - PF - ESI - Professional Tax - TDS (old/new regime). Generates salary slips. EPFO ECR generation with UAN validation.
+- Accuracy requirement: Gross-to-net must balance within ±₹1.
+- HITL triggers: Any anomaly (overtime > 60hrs, negative leave balance).
+
+#### Talent Acquisition (talent_acquisition)
+- Confidence floor: 82%
+- Resume screening with PII stripping (email, phone, Aadhaar masked). Interview scheduling across 5 panelists with parallel calendar fetch. Offer management.
+- HITL triggers: Offer > ₹20,00,000.
+
+#### Performance Coach (performance_coach)
+- Confidence floor: 80%
+- OKR tracking, 360-degree feedback aggregation, performance improvement plan generation.
+- HITL triggers: PIP required.
+
+#### Offboarding Agent (offboarding)
+- Confidence floor: 88%
+- Exit interview, asset recovery, IT access revocation (all systems within 30 min), final settlement processing.
+- HITL triggers: Always (compliance requirement).
+
+#### L&D Coordinator (ld_coordinator)
+- Confidence floor: 85%
+- Training needs analysis, course recommendations, certification tracking.
+- HITL triggers: Training budget > ₹5,00,000.
+
+### Marketing Domain (5 agents, CMO oversight)
+
+#### Campaign Pilot (campaign_pilot)
+- Confidence floor: 85%
+- Multi-channel campaign orchestration across email, social (Instagram, LinkedIn, Twitter), and Google/Meta ads. Audience segmentation via CRM data.
+- HITL triggers: Campaign budget > ₹10,00,000.
+
+#### Content Factory (content_factory)
+- Confidence floor: 80%
+- Generates blog posts, social media copy, email sequences aligned with brand guidelines.
+- HITL triggers: All content requires review before publish.
+
+#### SEO Strategist (seo_strategist)
+- Confidence floor: 82%
+- Keyword research via Ahrefs, technical SEO audits, content optimization recommendations, landing page meta tag optimization.
+
+#### CRM Intelligence (crm_intelligence)
+- Confidence floor: 87%
+- Lead scoring from HubSpot/Salesforce data, pipeline analysis, customer segmentation into tiers.
+- HITL triggers: Lead score change > 20 points.
+
+#### Brand Monitor (brand_monitor)
+- Confidence floor: 78%
+- Social listening via Brandwatch, real-time sentiment analysis, competitor tracking. Twitter/LinkedIn mention monitoring.
+- HITL triggers: Sentiment score < -0.5 (negative crisis). 100+ negative mentions/hour.
+
+### Operations Domain (5 agents, COO oversight)
+
+#### Support Triage (support_triage)
+- Confidence floor: 88%
+- Auto-classifies incoming support tickets by category, priority, and department. Routes to appropriate team. Suggests resolution based on knowledge base.
+- Performance: 88% auto-classify accuracy. 1,560 tickets triaged.
+- HITL triggers: Priority = P1.
+
+#### IT Operations (it_operations)
+- Confidence floor: 90%
+- Infrastructure monitoring, incident detection, root cause analysis, runbook execution, auto-scaling triggers.
+- HITL triggers: Severity = critical. Connected to PagerDuty for on-call notification.
+
+#### Compliance Guard (compliance_guard)
+- Confidence floor: 92%
+- Policy enforcement, quarterly audit preparation, regulatory change tracking (RBI, SEBI, DPDPA).
+- HITL triggers: Always (compliance decisions require human sign-off).
+
+#### Contract Intelligence (contract_intelligence)
+- Confidence floor: 85%
+- Contract review, clause extraction, renewal deadline tracking, SLA breach detection.
+- HITL triggers: Contract value > ₹50,00,000.
+
+#### Vendor Manager (vendor_manager)
+- Confidence floor: 80%
+- Vendor onboarding with sanctions screening, performance scoring, spend analysis.
+- HITL triggers: Annual spend > ₹10,00,000. Sanctions hit.
+
+---
+
+## 42 Enterprise Connectors
+
+### ERP & Accounting
+- Oracle Fusion: GL, AP/AR, budgets, period close (OAuth2)
+- SAP S/4HANA: FI documents, purchase orders, goods receipts (OAuth2/OData)
+- Tally Prime: Vouchers, ledger balances, GST reports (API Key)
+- QuickBooks: Invoices, payments, payroll, financial reports (OAuth2)
+- Zoho Books: Invoices, expenses, bank reconciliation (OAuth2)
+
+### Government & Tax (India-specific)
+- GSTN: GSTR-1/3B/9 filing, GSTR-2A fetch, e-way bill, e-invoice IRN (DSC + API Key)
+- Income Tax India: 26Q/24Q filing, 26AS credit check, Form 16A download (DSC + API Key)
+- EPFO: ECR upload, UAN validation, PF transfer (API Key)
+- MCA Portal: Company compliance filing
+
+### Banking & Payments
+- Banking Account Aggregator (AA): Bank statements, NEFT/RTGS, balance check (OAuth2)
+- Stripe: Charges, subscriptions, payouts, disputes (API Key)
+- Pinelabs Plural: Payment links, settlements, refunds (API Key)
+
+### HRMS
+- Darwinbox: Employee data, attendance, leave, payroll (OAuth2)
+- Keka: HR operations (OAuth2)
+- Greenhouse: Recruiting, candidates, jobs (API Key)
+- LinkedIn Talent: Recruiter API (OAuth2)
+
+### CRM & Marketing
+- Salesforce: Leads, accounts, contacts, opportunities (OAuth2)
+- HubSpot: Contacts, deals, marketing automation (API Key)
+- Google Ads: Campaign management, performance data (OAuth2)
+- LinkedIn Ads: Campaign analytics (OAuth2)
+- Meta Ads: Facebook/Instagram ad management (OAuth2)
+- Buffer: Social media scheduling (OAuth2)
+- Ahrefs: SEO data, keyword research (API Key)
+- Brandwatch: Social listening, sentiment analysis (OAuth2)
+- Mixpanel: Product analytics, user events (API Key)
+
+### Communication
+- Slack: Messages, channels, notifications (OAuth2)
+- Email/SendGrid: Transactional email (API Key)
+- Twilio: SMS, voice calls (API Key)
+- WhatsApp Business: Messaging (OAuth2)
+
+### Project & IT
+- Jira: Issues, projects, sprints (API Key)
+- Confluence: Pages, spaces (OAuth2)
+- GitHub: Repos, issues, PRs (OAuth2)
+- PagerDuty: Incidents, services, on-call (API Key)
+- ServiceNow: Incidents, service requests (OAuth2)
+- Zendesk: Tickets, users, organizations (OAuth2)
+
+### Identity & Security
+- Okta: Users, groups, authentication (OAuth2)
+- DocuSign: Envelopes, signatures (OAuth2)
+- Sanctions API: OFAC/UN sanctions screening (API Key)
+
+### Cloud & Storage
+- Google Cloud Storage / S3: Document upload/download
+- Google Calendar: Events, scheduling
+- Zoom: Meetings, recordings (OAuth2)
+- LangSmith: LLM observability, traces (API Key)
+
+---
+
+## Human-in-the-Loop (HITL) Governance
+
+Every agent has configurable HITL conditions. When triggered, the agent stops execution and creates an approval item in the HITL queue. The relevant department head (CFO, CHRO, CMO, COO) sees the item with full context (reasoning trace, input data, confidence score, recommended action) and can approve, reject, or defer.
+
+### HITL Trigger Types
+- amount_threshold: Transaction amount exceeds configured limit
+- confidence_below_floor: Agent confidence below minimum threshold
+- regulatory_filing: All government filings (zero auto-file policy)
+- break_threshold: Reconciliation break above limit
+- anomaly_detection: Unexpected pattern detected
+- budget_approval: Spend above approval threshold
+- incident_escalation: High-severity incident requiring acknowledgment
+
+### HITL Flow
+1. Agent detects trigger condition
+2. Creates HITL item with priority (critical/high/normal/low)
+3. Assigns to role-based queue (cfo/chro/cmo/coo)
+4. Department head reviews context and decides (approve/reject/defer)
+5. Agent resumes or stops based on decision
+6. Full decision audit trail with timestamp, decision, notes
+
+---
+
+## Shadow Mode & Quality Gates
+
+Before promoting an agent to production, it runs in "shadow mode" — processing real data in parallel with the production agent but without taking action. The Shadow Comparator evaluates across 6 quality gates:
+
+1. Output Accuracy (threshold ≥ 0.90): Structural + semantic similarity
+2. Confidence Calibration (Pearson r ≥ 0.70): Correlation of confidence scores
+3. HITL Rate Comparison (tolerance ±5pp): Shadow vs reference HITL trigger rates
+4. Hallucination Detection (zero tolerance): Output containing data absent from tool results
+5. Tool Error Rate (< 2%): Shadow agent tool error rate
+6. Latency Comparison (≤ 1.3x reference P95): Performance within acceptable range
+
+All 6 gates must pass for promotion.
+
+---
+
+## Role-Based Access Control
+
+| Role | Sees | Can Write | HITL Queue |
+|------|------|-----------|------------|
+| CEO/Admin | All domains | Everything | All approvals |
+| CFO | Finance agents, workflows, audit | Finance domain | Finance approvals |
+| CHRO | HR agents, workflows, audit | HR domain | HR approvals |
+| CMO | Marketing agents, workflows, audit | Marketing domain | Marketing approvals |
+| COO | Operations agents, workflows, audit | Ops domain | Ops approvals |
+| Auditor | Audit log (all domains) | Nothing (read-only) | None |
+
+---
+
+## Evaluation Matrix
+
+66 golden test cases across 4 domains, scored on 6 dimensions:
+- Quality: Output accuracy vs golden dataset (field-by-field comparison)
+- Safety: Hallucination rate + PII leak detection
+- Performance: P95 latency vs SLA target
+- Reliability: Error recovery, checkpoint fidelity
+- Security: Scope enforcement, injection resistance
+- Cost: Token efficiency vs budget
+
+Grading: A+ (≥95%), A (≥90%), B+ (≥85%), B (≥80%), C (≥70%), F (<70%)
+All 22 evaluated agents pass with A or A+ grade.
+
+Published at: https://agenticorg.ai/evals
+
+---
+
+## Pricing
+
+### Free (₹0/month)
+- 3 agents
+- 5 connectors
+- 100 tasks/day
+- Community support
+- Shadow mode
+- Basic audit trail
+
+### Pro (₹42,000/month or $499/month)
+- 12 agents
+- 20 connectors
+- Unlimited tasks
+- Email support (24h SLA)
+- Custom workflows
+- Priority HITL queue
+- Full audit trail with export
+
+### Enterprise (Custom pricing)
+- All 24 agents
+- All 42 connectors
+- Unlimited everything
+- Dedicated support engineer
+- 99.9% uptime SLA
+- Custom connector development
+- On-premise deployment option
+- SOC-2 controls implemented
+
+---
+
+## Security
+
+- Encryption at rest (Google-managed, Cloud SQL)
+- Encryption in transit (HTTPS/TLS)
+- JWT authentication with RS256/HS256
+- bcrypt password hashing (12 rounds)
+- Token revocation (logout blacklist)
+- Rate limiting (10 auth failures = 15-min block, 5 signups/IP/hour)
+- PII masking (email, Aadhaar, PAN, phone auto-masked in audit logs)
+- Tenant isolation (Row-Level Security)
+- RBAC (6 roles, domain-scoped)
+- Automated daily database backups (7 retained)
+- Complete audit trail (7-year retention)
+- Security headers: HSTS, CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff
+
+---
+
+## Technology Stack
+
+- Backend: Python 3.12, FastAPI, SQLAlchemy (async), asyncpg
+- Frontend: React 18, TypeScript, Vite, Tailwind CSS, recharts
+- Database: PostgreSQL 16 (Cloud SQL), Redis 7
+- LLM: Gemini 2.5 Flash (default), Claude, GPT-4o (configurable)
+- Infrastructure: GKE Autopilot (asia-south1), Cloud SQL, Artifact Registry
+- CI/CD: GitHub Actions (lint → test → build → deploy)
+- Monitoring: Prometheus (13 metrics), OpenTelemetry, structlog
+- License: Apache 2.0
+
+---
+
+## Contact
+
+- Website: https://agenticorg.ai
+- Book a demo: https://agenticorg.ai (click "Book a Demo")
+- GitHub: https://github.com/mishrasanjeev/agentic-org
