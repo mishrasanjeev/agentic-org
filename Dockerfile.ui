@@ -3,6 +3,8 @@ WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
 RUN npm install
 COPY ui/ .
+ARG VITE_GA4_ID=""
+ENV VITE_GA4_ID=$VITE_GA4_ID
 RUN npm run build
 
 FROM nginx:alpine

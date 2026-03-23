@@ -103,6 +103,7 @@ jobs:
       - name: Build and push UI image
         run: |
           docker build \
+            --build-arg VITE_GA4_ID=${{ vars.VITE_GA4_ID }} \
             -t ${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }} \
             -t ${{ env.GAR_REGISTRY }}/agenticorg-ui:latest \
             -f Dockerfile.ui .
