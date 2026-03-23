@@ -346,7 +346,7 @@ export default function Landing() {
           <div className="hidden md:flex items-center gap-8">
             <a href="#platform" className="text-slate-300 hover:text-white text-sm transition-colors">Platform</a>
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
-            <a href="#roi-calculator" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</a>
+            <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
             <a href="#how-it-works" className="text-slate-300 hover:text-white text-sm transition-colors">Resources</a>
           </div>
 
@@ -379,7 +379,7 @@ export default function Landing() {
           <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3">
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
-            <a href="#roi-calculator" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</a>
+            <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
             <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
@@ -910,6 +910,7 @@ export default function Landing() {
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Resources</h4>
               <ul className="space-y-2">
                 <li><a href="#how-it-works" className="text-slate-400 hover:text-white text-sm transition-colors">How It Works</a></li>
+                <li><Link to="/pricing" className="text-slate-400 hover:text-white text-sm transition-colors">Pricing</Link></li>
                 <li><a href="#roi-calculator" className="text-slate-400 hover:text-white text-sm transition-colors">ROI Calculator</a></li>
                 <li><a href="#demo" className="text-slate-400 hover:text-white text-sm transition-colors">Live Demo</a></li>
                 <li>

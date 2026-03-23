@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router-dom";
+import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
@@ -19,15 +20,19 @@ import Audit from "./pages/Audit";
 import Observatory from "./pages/Observatory";
 import Settings from "./pages/Settings";
 import Evals from "./pages/Evals";
+import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
   return (
+    <>
+    <Analytics />
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/evals" element={<Evals />} />
+      <Route path="/pricing" element={<Pricing />} />
 
       {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
       <Route
@@ -184,5 +189,6 @@ export default function App() {
       {/* 404 catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </>
   );
 }

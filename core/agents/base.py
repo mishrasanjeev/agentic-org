@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import abc
 import json
 import os
 import time
@@ -28,7 +27,7 @@ logger = structlog.get_logger()
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 
 
-class BaseAgent(abc.ABC):
+class BaseAgent:
     """Abstract agent with LLM reasoning, tool calling, HITL, and confidence scoring."""
 
     agent_type: str = ""
@@ -67,9 +66,8 @@ class BaseAgent(abc.ABC):
             self._system_prompt = template
         return self._system_prompt
 
-    @abc.abstractmethod
     async def execute(self, task: TaskAssignment) -> TaskResult:
-        """Main execution pipeline."""
+        """Main execution pipeline — full LLM reasoning, validation, confidence, and HITL."""
         start = time.monotonic()
         trace: list[str] = []
         tool_calls: list[ToolCallRecord] = []

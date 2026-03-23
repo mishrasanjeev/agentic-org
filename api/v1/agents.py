@@ -7,18 +7,30 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_user_domains
+from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentLifecycleEvent, AgentVersion
+from core.models.audit import AuditLog
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
     AgentUpdate,
     PaginatedResponse,
 )
+from core.schemas.messages import (
+    HITLPolicy,
+    TargetAgent,
+    TaskAssignment,
+    TaskInput,
+    TaskMetadata,
+)
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -275,13 +287,122 @@ async def update_agent(
 @router.post("/agents/{agent_id}/run")
 async def run_agent(
     agent_id: UUID,
-    payload: dict = None,
+    payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    # Keep as-is: queues a task, not a direct DB operation
+    """Instantiate agent from registry and execute against user input."""
     if payload is None:
         payload = {}
-    return {"task_id": str(_uuid.uuid4()), "agent_id": str(agent_id), "status": "queued"}
+    tid = _uuid.UUID(tenant_id)
+
+    # 1. Load agent config from DB
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        agent_row = result.scalar_one_or_none()
+        if not agent_row:
+            raise HTTPException(404, "Agent not found")
+        if agent_row.status == "retired":
+            raise HTTPException(409, "Cannot run a retired agent")
+
+        agent_config = _agent_to_dict(agent_row)
+
+    # 2. Ensure all agent modules are registered
+    import core.agents  # noqa: F401 — triggers @AgentRegistry.register for all agents
+
+    # 3. Instantiate agent from registry
+    agent_cls = AgentRegistry.get_by_type(agent_config["agent_type"])
+    if not agent_cls:
+        raise HTTPException(
+            422,
+            f"No registered agent class for type '{agent_config['agent_type']}'. "
+            f"Available: {AgentRegistry.all_types()}",
+        )
+
+    agent_instance = AgentRegistry.create_from_config({
+        "id": agent_config["id"],
+        "tenant_id": tenant_id,
+        "agent_type": agent_config["agent_type"],
+        "authorized_tools": agent_config.get("authorized_tools", []),
+        "prompt_variables": agent_config.get("prompt_variables", {}),
+        "hitl_condition": agent_config.get("hitl_condition", ""),
+        "output_schema": agent_config.get("output_schema"),
+    })
+
+    # 4. Build TaskAssignment from user payload
+    correlation_id = f"run_{_uuid.uuid4().hex[:12]}"
+    task_assignment = TaskAssignment(
+        message_id=f"msg_{_uuid.uuid4().hex[:12]}",
+        correlation_id=correlation_id,
+        workflow_run_id=payload.get("workflow_run_id", f"adhoc_{_uuid.uuid4().hex[:8]}"),
+        workflow_definition_id=payload.get("workflow_definition_id", "adhoc"),
+        step_id=payload.get("step_id", "step_0"),
+        step_index=payload.get("step_index", 0),
+        total_steps=payload.get("total_steps", 1),
+        target_agent=TargetAgent(
+            agent_id=agent_config["id"],
+            agent_type=agent_config["agent_type"],
+            agent_token="runtime",
+        ),
+        task=TaskInput(
+            action=payload.get("action", "process"),
+            inputs=payload.get("inputs", {}),
+            context=payload.get("context", {}),
+        ),
+        hitl_policy=HITLPolicy(
+            enabled=bool(agent_config.get("hitl_condition")),
+            threshold_expression=agent_config.get("hitl_condition", ""),
+        ),
+        metadata=TaskMetadata(priority=payload.get("priority", "normal")),
+    )
+
+    # 5. Execute
+    try:
+        task_result = await agent_instance.execute(task_assignment)
+    except Exception as exc:
+        logger.error("agent_run_error", agent_id=str(agent_id), error=str(exc))
+        raise HTTPException(500, f"Agent execution failed: {exc}") from exc
+
+    # 6. Store result in audit log
+    async with get_tenant_session(tid) as session:
+        audit_entry = AuditLog(
+            tenant_id=tid,
+            event_type="agent.run",
+            actor_type="agent",
+            actor_id=str(agent_id),
+            agent_id=agent_id,
+            resource_type="task_result",
+            resource_id=task_result.message_id,
+            action="execute",
+            outcome=task_result.status,
+            details={
+                "correlation_id": correlation_id,
+                "confidence": task_result.confidence,
+                "reasoning_trace": task_result.reasoning_trace,
+                "performance": task_result.performance.model_dump(),
+                "has_hitl": task_result.hitl_request is not None,
+            },
+        )
+        session.add(audit_entry)
+
+    # 7. Return the real result
+    response = {
+        "task_id": task_result.message_id,
+        "agent_id": str(agent_id),
+        "correlation_id": correlation_id,
+        "status": task_result.status,
+        "output": task_result.output,
+        "confidence": task_result.confidence,
+        "reasoning_trace": task_result.reasoning_trace,
+        "performance": task_result.performance.model_dump(),
+    }
+    if task_result.hitl_request:
+        response["hitl_request"] = task_result.hitl_request.model_dump()
+    if task_result.error:
+        response["error"] = task_result.error
+
+    return response
 
 
 # ── POST /agents/{id}/pause ──────────────────────────────────────────────────
