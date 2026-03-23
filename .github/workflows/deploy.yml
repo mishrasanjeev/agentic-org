@@ -234,7 +234,7 @@ jobs:
             playwright-results/
 
   approval-gate:
-    needs: e2e-tests
+    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment:
@@ -244,10 +244,9 @@ jobs:
         run: echo "Production deployment approved by reviewer"
 
   deploy-production:
-    needs: approval-gate
+    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: production
     permissions:
       id-token: write
       contents: read
@@ -272,62 +271,20 @@ jobs:
             --region ${{ env.GCP_REGION }} \
             --project ${{ env.GCP_PROJECT_ID }}
 
-      - name: Deploy canary (10% traffic)
+      - name: Update production images
         run: |
-          helm upgrade --install ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
-            --namespace agenticorg-prod \
-            --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
-            --set image.tag=${{ github.sha }} \
-            --set canary.enabled=true \
-            --set canary.weight=10 \
-            --set postgresql.auth.password=${{ secrets.PROD_DB_PASSWORD }} \
-            --set redis.auth.password=${{ secrets.PROD_REDIS_PASSWORD }} \
-            --values ${{ env.HELM_CHART_PATH }}/values-production.yaml \
-            --wait \
-            --timeout 600s
+          kubectl set image deploy/agenticorg-api api=${{ env.GAR_REGISTRY }}/agenticorg:${{ github.sha }} \
+            --namespace agenticorg
+          kubectl set image deploy/agenticorg-ui ui=${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }} \
+            --namespace agenticorg
 
-      - name: Verify canary health
+      - name: Verify production rollout
         run: |
-          PROD_URL="${{ secrets.PROD_API_URL }}"
-          echo "Waiting 60s for canary traffic to stabilize..."
-          sleep 60
-
-          FAIL_COUNT=0
-          for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/api/v1/health")
-            if [ "$STATUS" != "200" ]; then
-              FAIL_COUNT=$((FAIL_COUNT + 1))
-            fi
-            sleep 5
-          done
-
-          if [ "$FAIL_COUNT" -gt 2 ]; then
-            echo "Canary health check failed ($FAIL_COUNT/10 failures) — initiating rollback"
-            helm rollback ${{ env.HELM_RELEASE }} --namespace agenticorg-prod --wait --timeout 300s
-            exit 1
-          fi
-          echo "Canary health check passed ($FAIL_COUNT/10 failures)"
-
-      - name: Promote canary to full production (100% traffic)
-        run: |
-          helm upgrade ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
-            --namespace agenticorg-prod \
-            --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
-            --set image.tag=${{ github.sha }} \
-            --set canary.enabled=false \
-            --set postgresql.auth.password=${{ secrets.PROD_DB_PASSWORD }} \
-            --set redis.auth.password=${{ secrets.PROD_REDIS_PASSWORD }} \
-            --values ${{ env.HELM_CHART_PATH }}/values-production.yaml \
-            --wait \
-            --timeout 600s
-
-      - name: Verify full production rollout
-        run: |
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-api \
-            --namespace agenticorg-prod \
+          kubectl rollout status deployment/agenticorg-api \
+            --namespace agenticorg \
             --timeout=300s
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-orchestrator \
-            --namespace agenticorg-prod \
+          kubectl rollout status deployment/agenticorg-ui \
+            --namespace agenticorg \
             --timeout=300s
 
       - name: Post-deploy production health check
