@@ -176,15 +176,16 @@ export default function Login() {
             </div>
           )}
 
-          {/* Create account link */}
-          <div className="mt-4 text-center">
-            <Link to="/signup" className="text-sm text-primary hover:underline">
+          {/* Create account — prominent */}
+          <div className="mt-6 p-4 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 text-center">
+            <p className="text-sm text-muted-foreground mb-2">New to AgenticOrg?</p>
+            <Link to="/signup" className="inline-flex items-center justify-center w-full rounded-lg border border-primary bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors">
               Create a new organization &rarr;
             </Link>
           </div>
 
           {/* Back link */}
-          <div className="mt-3 text-center">
+          <div className="mt-4 text-center">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               &larr; Back to home
             </Link>
