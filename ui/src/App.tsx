@@ -21,6 +21,7 @@ import Observatory from "./pages/Observatory";
 import Settings from "./pages/Settings";
 import Evals from "./pages/Evals";
 import Pricing from "./pages/Pricing";
+import Playground from "./pages/Playground";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/evals" element={<Evals />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/playground" element={<Playground />} />
 
       {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
       <Route

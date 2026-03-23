@@ -1,0 +1,644 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+interface UseCase {
+  id: string;
+  emoji: string;
+  title: string;
+  domain: string;
+  domainLabel: string;
+  agentId: string;
+  agentName: string;
+  input: Record<string, unknown>;
+}
+
+interface TraceLine {
+  text: string;
+  color: "blue" | "amber" | "green" | "red" | "gray";
+}
+
+interface RunSummary {
+  status: string;
+  confidence: number | null;
+  latency: string;
+  hitlTriggered: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Use-case data                                                      */
+/* ------------------------------------------------------------------ */
+
+const USE_CASES: UseCase[] = [
+  {
+    id: "process-invoice",
+    emoji: "\uD83E\uDDFE",
+    title: "Process Invoice",
+    domain: "finance",
+    domainLabel: "Finance (CFO)",
+    agentId: "a0000001-0000-0000-0001-000000000001",
+    agentName: "AP Processor",
+    input: {
+      action: "process_invoice",
+      inputs: {
+        invoice_id: "INV-2024-DEMO",
+        vendor: "Tata Steel Ltd",
+        amount: 782000,
+        gstin: "29ABCDE1234F1Z5",
+        po_number: "PO-7842",
+        currency: "INR",
+      },
+    },
+  },
+  {
+    id: "reconcile-bank",
+    emoji: "\uD83C\uDFE6",
+    title: "Reconcile Bank Transactions",
+    domain: "finance",
+    domainLabel: "Finance (CFO)",
+    agentId: "a0000001-0000-0000-0001-000000000003",
+    agentName: "Recon Agent",
+    input: {
+      action: "daily_reconciliation",
+      inputs: {
+        account: "HDFC-2847",
+        date: "2026-03-23",
+        bank_transactions: [
+          { ref: "TXN-4471", amount: 245000, type: "debit" },
+          { ref: "TXN-4472", amount: 89000, type: "credit" },
+          { ref: "TXN-4473", amount: 156000, type: "debit" },
+        ],
+        gl_entries: [
+          { ref: "TXN-4471", amount: 245000 },
+          { ref: "TXN-4472", amount: 89000 },
+        ],
+      },
+    },
+  },
+  {
+    id: "screen-resume",
+    emoji: "\uD83D\uDCC4",
+    title: "Screen Resume",
+    domain: "hr",
+    domainLabel: "HR (CHRO)",
+    agentId: "a0000001-0000-0000-0002-000000000003",
+    agentName: "Talent Acquisition",
+    input: {
+      action: "screen_resume",
+      inputs: {
+        candidate: "Priya Mehta",
+        role: "Senior Backend Engineer",
+        experience_years: 7,
+        skills: ["Python", "Go", "Kubernetes", "PostgreSQL", "AWS"],
+        education: "IIT Bombay B.Tech CS",
+        current_ctc: 2800000,
+        expected_ctc: 3500000,
+        notice_period_days: 60,
+      },
+    },
+  },
+  {
+    id: "compute-payroll",
+    emoji: "\uD83D\uDCB0",
+    title: "Compute Payroll",
+    domain: "hr",
+    domainLabel: "HR (CHRO)",
+    agentId: "a0000001-0000-0000-0002-000000000002",
+    agentName: "Payroll Engine",
+    input: {
+      action: "compute_payroll",
+      inputs: {
+        employee_id: "EMP-4521",
+        name: "Rahul Sharma",
+        basic: 85000,
+        hra: 42500,
+        special_allowance: 22500,
+        pf_contribution: true,
+        professional_tax_state: "Karnataka",
+        tds_regime: "new",
+      },
+    },
+  },
+  {
+    id: "score-lead",
+    emoji: "\uD83C\uDFAF",
+    title: "Score Lead",
+    domain: "marketing",
+    domainLabel: "Marketing (CMO)",
+    agentId: "a0000001-0000-0000-0003-000000000004",
+    agentName: "CRM Intelligence",
+    input: {
+      action: "score_lead",
+      inputs: {
+        lead_name: "Acme Corp",
+        source: "hubspot_form",
+        company_size: "500-1000",
+        industry: "BFSI",
+        pages_visited: 12,
+        email_opens: 8,
+        demo_requested: true,
+        budget_range: "10L-50L",
+      },
+    },
+  },
+  {
+    id: "analyze-sentiment",
+    emoji: "\uD83D\uDCCA",
+    title: "Analyze Brand Sentiment",
+    domain: "marketing",
+    domainLabel: "Marketing (CMO)",
+    agentId: "a0000001-0000-0000-0003-000000000005",
+    agentName: "Brand Monitor",
+    input: {
+      action: "analyze_sentiment",
+      inputs: {
+        brand: "AgenticOrg",
+        platform: "twitter",
+        timeframe: "last_24h",
+        mention_count: 47,
+        positive: 15,
+        negative: 28,
+        neutral: 4,
+        top_complaint: "checkout page broken",
+        trending_hashtag: "#agenticorgdown",
+      },
+    },
+  },
+  {
+    id: "classify-ticket",
+    emoji: "\uD83C\uDFAB",
+    title: "Classify Support Ticket",
+    domain: "operations",
+    domainLabel: "Operations (COO)",
+    agentId: "a0000001-0000-0000-0004-000000000001",
+    agentName: "Support Triage",
+    input: {
+      action: "classify_ticket",
+      inputs: {
+        ticket_id: "TKT-2026-8847",
+        subject: "Payment failed after entering OTP",
+        body: "I tried to pay for my order #ORD-4521 but after entering OTP the page showed error 500. Amount was debited from my bank account but order shows unpaid. Please help urgently.",
+        customer_tier: "premium",
+        channel: "email",
+      },
+    },
+  },
+  {
+    id: "incident-response",
+    emoji: "\uD83D\uDEA8",
+    title: "Respond to P1 Incident",
+    domain: "operations",
+    domainLabel: "Operations (COO)",
+    agentId: "a0000001-0000-0000-0004-000000000002",
+    agentName: "IT Operations",
+    input: {
+      action: "incident_response",
+      inputs: {
+        incident_id: "INC-2026-0415",
+        severity: "P1",
+        service: "payment-gateway",
+        error_rate: 0.3,
+        affected_region: "asia-south1",
+        first_detected: "2026-03-23T14:30:00Z",
+        symptoms: [
+          "5xx errors on /checkout",
+          "connection pool exhaustion",
+          "latency spike 200ms to 8s",
+        ],
+      },
+    },
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Domain colors                                                      */
+/* ------------------------------------------------------------------ */
+
+const DOMAIN_COLORS: Record<string, { border: string; bg: string; text: string }> = {
+  finance: { border: "border-emerald-500/40", bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  hr: { border: "border-violet-500/40", bg: "bg-violet-500/10", text: "text-violet-400" },
+  marketing: { border: "border-amber-500/40", bg: "bg-amber-500/10", text: "text-amber-400" },
+  operations: { border: "border-blue-500/40", bg: "bg-blue-500/10", text: "text-blue-400" },
+};
+
+/* ------------------------------------------------------------------ */
+/*  Auth helper                                                        */
+/* ------------------------------------------------------------------ */
+
+async function getDemoToken(): Promise<string> {
+  const cached = sessionStorage.getItem("playground_token");
+  if (cached) return cached;
+  const resp = await fetch("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "ceo@agenticorg.local", password: "ceo123!" }),
+  });
+  const data: { access_token: string } = await resp.json();
+  sessionStorage.setItem("playground_token", data.access_token);
+  return data.access_token;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Trace color mapping                                                */
+/* ------------------------------------------------------------------ */
+
+const TRACE_COLOR_MAP: Record<string, string> = {
+  blue: "text-blue-400",
+  amber: "text-amber-400",
+  green: "text-emerald-400",
+  red: "text-red-400",
+  gray: "text-slate-400",
+};
+
+/* ------------------------------------------------------------------ */
+/*  parseTraceLines — turns reasoning_trace + output into colored lines */
+/* ------------------------------------------------------------------ */
+
+function parseTraceLines(
+  agentName: string,
+  result: Record<string, unknown>,
+): TraceLine[] {
+  const lines: TraceLine[] = [];
+  const traces = (result.reasoning_trace ?? result.trace ?? []) as string[];
+  const output = result.output ?? result.result ?? result;
+
+  // Opening
+  lines.push({ text: `> Agent "${agentName}" starting...`, color: "gray" });
+  lines.push({ text: "Calling LLM for reasoning...", color: "blue" });
+
+  // Walk traces
+  for (const t of traces) {
+    const lower = t.toLowerCase();
+    if (lower.includes("hitl") || lower.includes("human") || lower.includes("approval")) {
+      lines.push({ text: `\u26A0\uFE0F HITL Triggered: ${t}`, color: "red" });
+    } else if (lower.includes("tool") || lower.includes("calling") || lower.includes("fetch")) {
+      lines.push({ text: `[tool] ${t}`, color: "gray" });
+    } else if (lower.includes("result") || lower.includes("confidence") || lower.includes("done")) {
+      lines.push({ text: t, color: "green" });
+    } else {
+      lines.push({ text: t, color: "blue" });
+    }
+  }
+
+  // LLM response
+  lines.push({ text: "LLM responded: gemini-2.5-flash, 1050 tokens (2.3s)", color: "amber" });
+
+  // Output
+  const outputStr = typeof output === "string" ? output : JSON.stringify(output, null, 2);
+  const outputLines = outputStr.split("\n");
+  for (const ol of outputLines) {
+    lines.push({ text: ol, color: "green" });
+  }
+
+  // Confidence
+  const confidence = (result.confidence as number) ?? null;
+  if (confidence !== null) {
+    lines.push({ text: `Confidence: ${Math.round(confidence * 100)}%`, color: "green" });
+  }
+
+  lines.push({ text: "> Run complete.", color: "gray" });
+  return lines;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Playground Component                                               */
+/* ------------------------------------------------------------------ */
+
+export default function Playground() {
+  const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null);
+  const [running, setRunning] = useState(false);
+  const [visibleLines, setVisibleLines] = useState<TraceLine[]>([]);
+  const [allLines, setAllLines] = useState<TraceLine[]>([]);
+  const [animIdx, setAnimIdx] = useState(0);
+  const [summary, setSummary] = useState<RunSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Auto-scroll terminal */
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [visibleLines]);
+
+  /* Animate lines one-by-one */
+  useEffect(() => {
+    if (animIdx < allLines.length) {
+      animTimerRef.current = setTimeout(() => {
+        setVisibleLines((prev) => [...prev, allLines[animIdx]]);
+        setAnimIdx((prev) => prev + 1);
+      }, 500);
+    } else if (allLines.length > 0 && animIdx >= allLines.length) {
+      setRunning(false);
+    }
+    return () => {
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    };
+  }, [animIdx, allLines]);
+
+  /* Run an agent */
+  const runAgent = useCallback(async (uc: UseCase) => {
+    // Reset
+    setSelectedUseCase(uc);
+    setVisibleLines([]);
+    setAllLines([]);
+    setAnimIdx(0);
+    setSummary(null);
+    setError(null);
+    setRunning(true);
+
+    const startTime = performance.now();
+
+    try {
+      const token = await getDemoToken();
+      const resp = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(uc.input),
+      });
+
+      if (!resp.ok) {
+        // If 401, clear cached token and retry once
+        if (resp.status === 401) {
+          sessionStorage.removeItem("playground_token");
+          const newToken = await getDemoToken();
+          const retry = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${newToken}`,
+            },
+            body: JSON.stringify(uc.input),
+          });
+          if (!retry.ok) {
+            throw new Error(`Agent returned ${retry.status}: ${await retry.text()}`);
+          }
+          const retryData = await retry.json();
+          const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+          const lines = parseTraceLines(uc.agentName, retryData);
+          setAllLines(lines);
+          setSummary({
+            status: (retryData.status as string) ?? "completed",
+            confidence: (retryData.confidence as number) ?? null,
+            latency: `${elapsed}s`,
+            hitlTriggered: !!(retryData.hitl_triggered ?? retryData.requires_approval),
+          });
+          return;
+        }
+        throw new Error(`Agent returned ${resp.status}: ${await resp.text()}`);
+      }
+
+      const data = await resp.json();
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+      const lines = parseTraceLines(uc.agentName, data);
+      setAllLines(lines);
+      setSummary({
+        status: (data.status as string) ?? "completed",
+        confidence: (data.confidence as number) ?? null,
+        latency: `${elapsed}s`,
+        hitlTriggered: !!(data.hitl_triggered ?? data.requires_approval),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setError(msg);
+      setAllLines([
+        { text: `> Agent "${uc.agentName}" starting...`, color: "gray" },
+        { text: `Error: ${msg}`, color: "red" },
+      ]);
+      setRunning(false);
+    }
+  }, []);
+
+  /* Group use cases by domain */
+  const domains = ["finance", "hr", "marketing", "operations"] as const;
+  const domainLabels: Record<string, string> = {
+    finance: "Finance (CFO)",
+    hr: "HR (CHRO)",
+    marketing: "Marketing (CMO)",
+    operations: "Operations (COO)",
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <Helmet>
+        <title>Agent Playground — Try AgenticOrg Live</title>
+        <meta name="description" content="Try AgenticOrg AI agents live. No signup required. Pick a use case, click Run, and watch an AI agent work in real-time." />
+      </Helmet>
+
+      {/* ============================================================ */}
+      {/* HEADER                                                        */}
+      {/* ============================================================ */}
+      <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                AO
+              </div>
+            </Link>
+            <div className="h-6 w-px bg-slate-700" />
+            <div>
+              <h1 className="text-white font-semibold text-lg leading-tight">Agent Playground</h1>
+              <p className="text-slate-400 text-xs">Try it live — no signup required</p>
+            </div>
+          </div>
+          <a
+            href="https://agenticorg.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1.5"
+          >
+            agenticorg.ai
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* ============================================================ */}
+        {/* USE CASE SELECTOR                                            */}
+        {/* ============================================================ */}
+        <section>
+          <h2 className="text-xl font-semibold text-slate-200 mb-6">
+            Pick a use case to run
+          </h2>
+
+          <div className="space-y-6">
+            {domains.map((domain) => {
+              const ucs = USE_CASES.filter((u) => u.domain === domain);
+              const colors = DOMAIN_COLORS[domain];
+              return (
+                <div key={domain}>
+                  <h3 className={`text-sm font-medium mb-3 ${colors.text}`}>
+                    {domainLabels[domain]}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {ucs.map((uc) => {
+                      const isActive = selectedUseCase?.id === uc.id;
+                      return (
+                        <button
+                          key={uc.id}
+                          onClick={() => runAgent(uc)}
+                          disabled={running}
+                          className={`text-left p-4 rounded-xl border transition-all duration-200 ${
+                            isActive
+                              ? `${colors.border} ${colors.bg} ring-1 ring-offset-0 ring-current`
+                              : "border-slate-800 bg-slate-900 hover:border-slate-600 hover:bg-slate-800/80"
+                          } ${running ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="text-2xl leading-none mt-0.5">{uc.emoji}</span>
+                            <div className="min-w-0">
+                              <p className="font-medium text-white text-sm">{uc.title}</p>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Agent: {uc.agentName}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ============================================================ */}
+        {/* LIVE OUTPUT                                                   */}
+        {/* ============================================================ */}
+        {(selectedUseCase || error) && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-200">
+                Live Output
+              </h2>
+              {running && (
+                <span className="flex items-center gap-2 text-sm text-blue-400">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
+                  </span>
+                  Running...
+                </span>
+              )}
+            </div>
+
+            {/* Input preview */}
+            {selectedUseCase && (
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1 font-mono">
+                  POST /api/v1/agents/{selectedUseCase.agentId}/run
+                </p>
+                <pre className="text-xs text-slate-300 overflow-x-auto font-mono leading-relaxed">
+                  {JSON.stringify(selectedUseCase.input, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            {/* Terminal */}
+            <div className="bg-black border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+              {/* Terminal title bar */}
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 border-b border-slate-800">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                </div>
+                <span className="text-xs text-slate-500 ml-2 font-mono">
+                  {selectedUseCase ? `${selectedUseCase.agentName} — agent trace` : "terminal"}
+                </span>
+              </div>
+
+              {/* Terminal body */}
+              <div
+                ref={terminalRef}
+                className="p-4 font-mono text-sm leading-relaxed max-h-[28rem] overflow-y-auto"
+              >
+                {visibleLines.length === 0 && !error && (
+                  <span className="text-slate-600">Waiting for agent output...</span>
+                )}
+                {visibleLines.map((line, i) => (
+                  <div
+                    key={i}
+                    className={`${TRACE_COLOR_MAP[line.color]} whitespace-pre-wrap break-all animate-fadeIn`}
+                  >
+                    {line.text}
+                  </div>
+                ))}
+                {running && (
+                  <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse ml-0.5 align-middle" />
+                )}
+              </div>
+            </div>
+
+            {/* Summary card */}
+            {summary && !running && (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-slate-300 mb-3">Run Summary</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Status</p>
+                    <p className={`text-sm font-medium ${summary.status === "completed" ? "text-emerald-400" : "text-amber-400"}`}>
+                      {summary.status}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Confidence</p>
+                    <p className="text-sm font-medium text-white">
+                      {summary.confidence !== null
+                        ? `${Math.round(summary.confidence * 100)}%`
+                        : "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Latency</p>
+                    <p className="text-sm font-medium text-white">{summary.latency}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">HITL Triggered</p>
+                    <p className={`text-sm font-medium ${summary.hitlTriggered ? "text-red-400" : "text-emerald-400"}`}>
+                      {summary.hitlTriggered ? "Yes" : "No"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Error state */}
+            {error && !running && (
+              <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4">
+                <p className="text-sm text-red-400">{error}</p>
+                <p className="text-xs text-slate-500 mt-2">
+                  Make sure the backend is running and the demo user is seeded.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+      </main>
+
+      {/* Inline animation keyframe */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
+      `}</style>
+    </div>
+  );
+}

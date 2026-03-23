@@ -347,6 +347,7 @@ export default function Landing() {
             <a href="#platform" className="text-slate-300 hover:text-white text-sm transition-colors">Platform</a>
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
             <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
+            <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
             <a href="#how-it-works" className="text-slate-300 hover:text-white text-sm transition-colors">Resources</a>
           </div>
 
@@ -380,6 +381,7 @@ export default function Landing() {
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
             <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
+            <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
             <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
