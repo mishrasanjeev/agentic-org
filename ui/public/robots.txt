@@ -1,13 +1,19 @@
 User-agent: *
 Allow: /
-Disallow: /dashboard
-Disallow: /agents
-Disallow: /workflows
-Disallow: /approvals
-Disallow: /connectors
-Disallow: /schemas
-Disallow: /audit
-Disallow: /settings
+Allow: /evals
+Allow: /login
+Disallow: /dashboard/
 Disallow: /api/
+
+# Allow search engines to see public pages
+User-agent: Googlebot
+Allow: /
+Allow: /evals
+Allow: /login
+
+User-agent: Bingbot
+Allow: /
+Allow: /evals
+Allow: /login
 
 Sitemap: https://agenticorg.ai/sitemap.xml

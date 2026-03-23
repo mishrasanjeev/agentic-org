@@ -1,15 +1,24 @@
 {
-  "name": "AgenticOrg",
+  "name": "AgenticOrg — Enterprise AI Agent Platform",
   "short_name": "AgenticOrg",
-  "description": "Enterprise AI Agent Platform",
-  "start_url": "/dashboard",
+  "description": "Deploy 24 AI agents across Finance, HR, Marketing & Ops with human-in-the-loop governance and 42 enterprise connectors.",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "lang": "en",
+  "categories": ["business", "productivity", "finance"],
   "icons": [
     {"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml"},
     {"src": "/favicon-32x32.png", "sizes": "32x32", "type": "image/png"},
-    {"src": "/favicon-192x192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "/favicon-512x512.png", "sizes": "512x512", "type": "image/png"}
+    {"src": "/favicon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/favicon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ],
+  "screenshots": [
+    {"src": "/screenshots/dashboard.png", "sizes": "1920x1080", "type": "image/png", "label": "Dashboard with agent metrics and charts"},
+    {"src": "/screenshots/observatory.png", "sizes": "1920x1080", "type": "image/png", "label": "Live Agent Observatory"},
+    {"src": "/screenshots/approvals.png", "sizes": "1920x1080", "type": "image/png", "label": "HITL Approval Queue"}
   ]
 }
