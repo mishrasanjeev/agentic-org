@@ -433,10 +433,10 @@ export default function Landing() {
             {/* CTAs */}
             <div className="mt-8 flex flex-col sm:flex-row items-start gap-4">
               <Link
-                to="/login"
+                to="/signup"
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
               >
-                Start Free
+                Start Free →
               </Link>
               <a
                 href="#demo"
@@ -847,10 +847,10 @@ export default function Landing() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                to="/login"
+                to="/signup"
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
               >
-                Start Free
+                Start Free →
               </Link>
               <button
                 onClick={() => setShowDemo(true)}
