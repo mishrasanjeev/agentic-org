@@ -153,11 +153,19 @@ class BaseAgent:
         response: LLMResponse = await llm_router.complete(messages)
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
+        # Strip markdown code blocks (```json ... ```) that Gemini often wraps
+        content = response.content.strip()
+        if content.startswith("```"):
+            lines = content.split("\n")
+            # Remove first line (```json) and last line (```)
+            lines = [line for line in lines if not line.strip().startswith("```")]
+            content = "\n".join(lines).strip()
+
         try:
-            return json.loads(response.content)
+            return json.loads(content)
         except json.JSONDecodeError:
             trace.append("LLM output not valid JSON, wrapping")
-            return {"raw_output": response.content, "status": "completed"}
+            return {"raw_output": content, "status": "completed"}
 
     def _validate_output(self, output: dict[str, Any]) -> bool:
         """Validate output against declared schema."""

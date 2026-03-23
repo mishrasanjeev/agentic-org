@@ -50,7 +50,17 @@ const USE_CASES: UseCase[] = [
         amount: 782000,
         gstin: "29ABCDE1234F1Z5",
         po_number: "PO-7842",
+        po_amount: 782000,
+        grn_number: "GRN-4521",
+        grn_amount: 782000,
+        invoice_date: "2026-03-20",
+        due_date: "2026-04-19",
         currency: "INR",
+        line_items: [
+          { description: "Hot Rolled Steel Coil 3mm", qty: 50, unit_price: 12640, amount: 632000 },
+          { description: "Freight and Handling", qty: 1, unit_price: 150000, amount: 150000 },
+        ],
+        bank_details: { ifsc: "SBIN0001234", account: "38429876543" },
       },
     },
   },
@@ -284,20 +294,63 @@ function parseTraceLines(
     }
   }
 
-  // LLM response
-  lines.push({ text: "LLM responded: gemini-2.5-flash, 1050 tokens (2.3s)", color: "amber" });
+  // Extract performance from real response
+  const perf = result.performance as Record<string, unknown> | undefined;
+  const tokensUsed = traces.find(t => t.includes("tokens"))?.match(/(\d+)\s*tokens/)?.[1] || "~1000";
+  const latencyMs = perf?.total_latency_ms ?? "—";
+  lines.push({ text: `LLM responded: gemini-2.5-flash, ${tokensUsed} tokens (${typeof latencyMs === "number" ? (latencyMs / 1000).toFixed(1) + "s" : "—"})`, color: "amber" });
 
-  // Output
-  const outputStr = typeof output === "string" ? output : JSON.stringify(output, null, 2);
-  const outputLines = outputStr.split("\n");
-  for (const ol of outputLines) {
-    lines.push({ text: ol, color: "green" });
+  // Parse output intelligently — show key fields, not raw JSON
+  const out = (typeof output === "object" && output !== null) ? output as Record<string, unknown> : {};
+  const rawOut = out.raw_output as string | undefined;
+  const parsed = rawOut ? (() => { try { return JSON.parse(rawOut); } catch { return out; } })() : out;
+  const p = (typeof parsed === "object" && parsed !== null) ? parsed as Record<string, unknown> : out;
+
+  // Show meaningful fields as clean lines
+  if (p.status) lines.push({ text: `Status: ${p.status}`, color: "green" });
+  if (p.invoice_id) lines.push({ text: `Invoice: ${p.invoice_id}`, color: "green" });
+  if (p.match_delta !== undefined) lines.push({ text: `3-Way Match Delta: ${p.match_delta ?? "N/A"}`, color: p.match_delta === 0 ? "green" : "amber" });
+  if (p.payment_scheduled_date) lines.push({ text: `Payment Scheduled: ${p.payment_scheduled_date}`, color: "green" });
+  if (p.gl_posting_id) lines.push({ text: `GL Posting: ${p.gl_posting_id}`, color: "green" });
+  if (p.escalation_reason) lines.push({ text: `Escalation: ${p.escalation_reason}`, color: "red" });
+  if (p.score !== undefined) lines.push({ text: `Score: ${p.score}`, color: "green" });
+  if (p.classification) lines.push({ text: `Classification: ${p.classification}`, color: "green" });
+  if (p.priority) lines.push({ text: `Priority: ${p.priority}`, color: "amber" });
+  if (p.net_pay) lines.push({ text: `Net Pay: ₹${Number(p.net_pay).toLocaleString("en-IN")}`, color: "green" });
+  if (p.pf_deduction) lines.push({ text: `PF Deduction: ₹${Number(p.pf_deduction).toLocaleString("en-IN")}`, color: "gray" });
+  if (p.tds) lines.push({ text: `TDS: ₹${Number(p.tds).toLocaleString("en-IN")}`, color: "gray" });
+  if (p.recommendation) lines.push({ text: `Recommendation: ${p.recommendation}`, color: "green" });
+  if (p.root_cause) lines.push({ text: `Root Cause: ${p.root_cause}`, color: "amber" });
+  if (p.sentiment_score !== undefined) lines.push({ text: `Sentiment: ${p.sentiment_score}`, color: Number(p.sentiment_score) < 0 ? "red" : "green" });
+  if (p.matched !== undefined) lines.push({ text: `Matched: ${p.matched}/${p.total ?? "?"}`, color: "green" });
+  if (p.breaks !== undefined) lines.push({ text: `Breaks Found: ${p.breaks}`, color: Number(p.breaks) > 0 ? "red" : "green" });
+
+  // Show processing trace from agent if available
+  const agentTrace = (p.processing_trace ?? p.trace ?? p.steps) as string[] | undefined;
+  if (Array.isArray(agentTrace)) {
+    for (const step of agentTrace) {
+      lines.push({ text: `  → ${step}`, color: "gray" });
+    }
+  }
+
+  // Show raw output only if we didn't extract any meaningful fields
+  const meaningfulFields = ["status", "invoice_id", "score", "classification", "net_pay", "matched", "recommendation", "root_cause", "sentiment_score"];
+  const hasMeaningful = meaningfulFields.some(f => p[f] !== undefined);
+  if (!hasMeaningful && Object.keys(p).length > 0) {
+    lines.push({ text: JSON.stringify(p, null, 2).substring(0, 500), color: "gray" });
   }
 
   // Confidence
-  const confidence = (result.confidence as number) ?? null;
+  const confidence = (result.confidence as number) ?? (p.confidence as number) ?? null;
   if (confidence !== null) {
-    lines.push({ text: `Confidence: ${Math.round(confidence * 100)}%`, color: "green" });
+    const pct = confidence > 1 ? confidence : confidence * 100;
+    lines.push({ text: `Confidence: ${Math.round(pct)}%`, color: pct >= 90 ? "green" : pct >= 80 ? "amber" : "red" });
+  }
+
+  // HITL info
+  const hitl = result.hitl_request as Record<string, unknown> | undefined;
+  if (hitl) {
+    lines.push({ text: `⚠️ Human approval required: ${hitl.trigger_condition || "Threshold exceeded"}`, color: "red" });
   }
 
   lines.push({ text: "> Run complete.", color: "gray" });
