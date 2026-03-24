@@ -47,7 +47,7 @@ You are responsible for:
 - Managing user access and permissions within your organization.
 
 ### 3.3 Account Security
-You must immediately notify us at mishra.sanjeev@gmail.com if you become aware of any unauthorized access to or use of your account.
+You must immediately notify us at sanjeev@agenticorg.ai if you become aware of any unauthorized access to or use of your account.
 
 ---
 
@@ -140,7 +140,7 @@ We reserve the right to modify, suspend, or discontinue the Service (or any part
 ## 10. Termination
 
 ### 10.1 By You
-You may terminate your account at any time through the platform settings or by contacting mishra.sanjeev@gmail.com.
+You may terminate your account at any time through the platform settings or by contacting sanjeev@agenticorg.ai.
 
 ### 10.2 By Us
 We may suspend or terminate your access if you breach these Terms, subject to reasonable notice where practicable.
@@ -178,7 +178,7 @@ Our failure to enforce any right or provision of these Terms shall not constitut
 You may not assign your rights under these Terms without our prior written consent. We may assign our rights without restriction.
 
 ### 12.5 Notices
-Notices to you will be sent to the email address associated with your account. Notices to us should be sent to mishra.sanjeev@gmail.com.
+Notices to you will be sent to the email address associated with your account. Notices to us should be sent to sanjeev@agenticorg.ai.
 
 ---
 
@@ -186,8 +186,8 @@ Notices to you will be sent to the email address associated with your account. N
 
 For questions about these Terms of Service:
 
-- **Email:** mishra.sanjeev@gmail.com
-- **Security issues:** mishra.sanjeev@gmail.com
+- **Email:** sanjeev@agenticorg.ai
+- **Security issues:** sanjeev@agenticorg.ai
 - **Address:** Agentic Org, India
 
 ---

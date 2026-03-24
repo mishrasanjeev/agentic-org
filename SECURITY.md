@@ -4,7 +4,7 @@
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Email **mishra.sanjeev@gmail.com** with:
+Email **sanjeev@agenticorg.ai** with:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact assessment

@@ -10,6 +10,7 @@ const ALL_NAV = [
   { path: "/dashboard/approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/connectors", label: "Connectors", roles: ["admin"] },
   { path: "/dashboard/prompt-templates", label: "Prompt Templates", roles: ["admin"] },
+  { path: "/dashboard/sales", label: "Sales Pipeline", roles: ["admin"] },
   { path: "/dashboard/schemas", label: "Schemas", roles: ["admin"] },
   { path: "/dashboard/audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/sla", label: "SLA Monitor", roles: ["admin"] },

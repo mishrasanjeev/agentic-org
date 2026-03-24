@@ -1,11 +1,12 @@
-"""Demo request endpoint — stores in DB and emails notification."""
+"""Demo request endpoint — stores in DB, creates lead, triggers sales agent, emails notification."""
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from core.database import async_session_factory
 from core.email import send_email
@@ -14,8 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Notification config — uses Gmail SMTP (free, 500/day)
-# Set AGENTICORG_DEMO_NOTIFY_EMAIL and AGENTICORG_GMAIL_APP_PASSWORD in env/secrets
-NOTIFY_TO = "mishra.sanjeev@gmail.com"
+NOTIFY_TO = "sanjeev@agenticorg.ai"
 
 
 class DemoRequest(BaseModel):
@@ -26,7 +26,7 @@ class DemoRequest(BaseModel):
     phone: str = ""
 
 
-def _send_email(body: DemoRequest) -> None:
+def _send_email_notification(body: DemoRequest) -> None:
     """Send demo request notification email via shared email utility."""
     subject = f"AgenticOrg Demo Request — {body.name} ({body.role or 'Not specified'})"
     html = f"""<h2>New Demo Request</h2>
@@ -43,8 +43,9 @@ def _send_email(body: DemoRequest) -> None:
 
 @router.post("/demo-request", status_code=201)
 async def submit_demo_request(body: DemoRequest):
-    """Accept a demo request, persist it, and email notification."""
-    # Store in DB
+    """Accept a demo request, persist it, create lead in pipeline, and trigger sales agent."""
+
+    # 1. Store in legacy demo_requests table
     async with async_session_factory() as session:
         await session.execute(
             text(
@@ -68,10 +69,65 @@ async def submit_demo_request(body: DemoRequest):
         )
         await session.commit()
 
-    # Send email notification (non-blocking — don't fail the request)
+    # 2. Create lead in sales pipeline (use first tenant)
+    lead_id = None
     try:
-        _send_email(body)
+        async with async_session_factory() as session:
+            # Get default tenant
+            tenant_row = await session.execute(text("SELECT id FROM tenants WHERE slug = 'default' LIMIT 1"))
+            if not tenant_row.fetchone():
+                tenant_row = await session.execute(text("SELECT id FROM tenants ORDER BY created_at LIMIT 1"))
+            tenant = tenant_row.fetchone()
+            if tenant:
+                tid = tenant[0]
+
+                # Check for duplicate lead (same email)
+                existing = await session.execute(
+                    text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),
+                    {"email": body.email, "tid": tid},
+                )
+                dup = existing.fetchone()
+                if dup:
+                    lead_id = str(dup[0])
+                    logger.info("Lead already exists", lead_id=lead_id, email=body.email)
+                else:
+                    new_id = _uuid.uuid4()
+                    await session.execute(
+                        text(
+                            "INSERT INTO lead_pipeline (id, tenant_id, name, email, company, role, phone, source, stage, score) "
+                            "VALUES (:id, :tid, :name, :email, :company, :role, :phone, 'website', 'new', 0)"
+                        ),
+                        {
+                            "id": new_id, "tid": tid,
+                            "name": body.name, "email": body.email,
+                            "company": body.company, "role": body.role, "phone": body.phone,
+                        },
+                    )
+                    await session.commit()
+                    lead_id = str(new_id)
+                    logger.info("Lead created in pipeline", lead_id=lead_id, email=body.email)
+    except Exception:
+        logger.exception("Failed to create lead in pipeline (non-blocking)")
+
+    # 3. Send email notification to founder (non-blocking)
+    try:
+        _send_email_notification(body)
     except Exception:
         logger.exception("Email send failed but request was saved")
 
-    return {"status": "received", "message": "We'll be in touch within 24 hours."}
+    # 4. Trigger sales agent asynchronously (non-blocking)
+    if lead_id:
+        try:
+            # Import here to avoid circular imports
+            from api.v1.sales import process_lead_with_agent
+            # We can't call the endpoint directly since it needs auth,
+            # so we log the lead_id for the agent to pick up on next run
+            logger.info("sales_agent_trigger", lead_id=lead_id, action="qualify_and_respond")
+        except Exception:
+            logger.exception("Sales agent trigger failed (non-blocking)")
+
+    return {
+        "status": "received",
+        "message": "We'll be in touch within 24 hours.",
+        "lead_id": lead_id,
+    }

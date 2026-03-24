@@ -8,6 +8,8 @@ from core.models.agent import AgentTeamMember as AgentTeamMember
 from core.models.agent import AgentVersion as AgentVersion
 from core.models.agent import ShadowComparison as ShadowComparison
 from core.models.audit import AuditLog as AuditLog
+from core.models.lead_pipeline import EmailSequence as EmailSequence
+from core.models.lead_pipeline import LeadPipeline as LeadPipeline
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
 from core.models.base import BaseModel as BaseModel

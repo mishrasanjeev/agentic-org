@@ -33,6 +33,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const SLAMonitor = lazy(() => import("./pages/SLAMonitor"));
 const PromptTemplates = lazy(() => import("./pages/PromptTemplates"));
+const SalesPipeline = lazy(() => import("./pages/SalesPipeline"));
 
 /* ── Blog / Content pages ── */
 const Blog = lazy(() => import("./pages/blog/Blog"));
@@ -234,6 +235,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <SLAMonitor />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/sales"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <SalesPipeline />
             </Layout>
           </ProtectedRoute>
         }

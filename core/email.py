@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def send_email(to: str, subject: str, html: str) -> None:
     """Send HTML email via Gmail SMTP. Fails silently."""
     password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
-    sender = os.getenv("AGENTICORG_DEMO_SENDER", "mishra.sanjeev@gmail.com")
+    sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
     if not password:
         logger.warning("AGENTICORG_GMAIL_APP_PASSWORD not set — skipping email")
         return

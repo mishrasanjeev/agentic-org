@@ -19,6 +19,7 @@ from api.v1 import (
     evals,
     health,
     prompt_templates,
+    sales,
     schemas,
     workflows,
 )
@@ -73,6 +74,7 @@ app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(v1_auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 app.include_router(prompt_templates.router, prefix="/api/v1", tags=["Prompt Templates"])
+app.include_router(sales.router, prefix="/api/v1", tags=["Sales"])
 app.include_router(agent_teams.router, prefix="/api/v1", tags=["Agent Teams"])
 app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
 app.include_router(approvals.router, prefix="/api/v1", tags=["Approvals"])

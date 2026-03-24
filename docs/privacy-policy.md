@@ -87,7 +87,7 @@ If you are located in the European Economic Area (EEA), the following rights and
 When personal data is transferred outside the EEA, we rely on Standard Contractual Clauses (SCCs) approved by the European Commission, or other lawful transfer mechanisms.
 
 ### 5.4 Data Protection Officer
-For GDPR-related inquiries, contact our Data Protection Officer at mishra.sanjeev@gmail.com.
+For GDPR-related inquiries, contact our Data Protection Officer at sanjeev@agenticorg.ai.
 
 ---
 
@@ -112,7 +112,7 @@ Data belonging to Indian data principals is stored in data centers located in In
 
 ### 6.5 Grievance Officer
 Name: Grievance Officer, Agentic Org
-Email: mishra.sanjeev@gmail.com
+Email: sanjeev@agenticorg.ai
 Response time: Within 30 days of receiving your request.
 
 ---
@@ -121,7 +121,7 @@ Response time: Within 30 days of receiving your request.
 
 To exercise any of your rights under GDPR, the DPDP Act, or other applicable laws:
 
-1. **Email:** Send a request to mishra.sanjeev@gmail.com with the subject line "Data Subject Request".
+1. **Email:** Send a request to sanjeev@agenticorg.ai with the subject line "Data Subject Request".
 2. **In-platform:** Navigate to Settings > Privacy > Data Requests in the AgenticOrg dashboard.
 3. **Verification:** We will verify your identity before processing any request.
 4. **Response time:** We aim to respond within 30 days. For complex requests, we may extend this by an additional 60 days with prior notice.
@@ -168,7 +168,7 @@ We may update this Privacy Policy from time to time. Material changes will be co
 
 For questions or concerns about this Privacy Policy:
 
-- **Email:** mishra.sanjeev@gmail.com
+- **Email:** sanjeev@agenticorg.ai
 - **Address:** Agentic Org, India
 
 ---
