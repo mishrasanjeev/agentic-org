@@ -8,11 +8,16 @@ logger = logging.getLogger(__name__)
 
 
 def send_email(to: str, subject: str, html: str) -> None:
-    """Send HTML email via Gmail SMTP. Fails silently."""
+    """Send HTML email via Gmail SMTP. Fails silently.
+
+    Uses AGENTICORG_SMTP_LOGIN for SMTP authentication (Gmail account)
+    and AGENTICORG_DEMO_SENDER for the display From address.
+    """
     password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
-    sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
-    if not password:
-        logger.warning("AGENTICORG_GMAIL_APP_PASSWORD not set — skipping email")
+    smtp_login = os.getenv("AGENTICORG_SMTP_LOGIN", os.getenv("AGENTICORG_DEMO_SENDER", ""))
+    display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
+    if not password or not smtp_login:
+        logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set — skipping email")
         return
     # Skip fake/test domains to avoid bounces
     domain = to.split("@")[-1] if "@" in to else ""
@@ -21,12 +26,14 @@ def send_email(to: str, subject: str, html: str) -> None:
         return
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
-    msg["From"] = sender
+    msg["From"] = f"AgenticOrg <{display_sender}>"
+    msg["Reply-To"] = display_sender
     msg["To"] = to
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(sender, password)
+            smtp.login(smtp_login, password)
             smtp.send_message(msg)
+        logger.info("Email sent to %s from %s (via %s)", to, display_sender, smtp_login)
     except Exception:
         logger.exception("Failed to send email")
 
