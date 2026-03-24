@@ -1,21 +1,25 @@
-# AgenticOrg — Enterprise AI Agent Platform
+# AgenticOrg — AI Virtual Employees for Enterprise
 
-> AgenticOrg deploys 24 AI agents across Finance, HR, Marketing, and Operations that automate enterprise back-office work with human-in-the-loop governance.
+> AgenticOrg lets you create AI virtual employees or deploy 24+ pre-built agents across Finance, HR, Marketing, and Operations — with human-in-the-loop governance on every critical decision.
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI agent platform. It provides 24 pre-built AI agents that automate back-office operations across 5 departments: Finance, HR, Marketing, Operations, and Back Office. Each agent connects to 42 enterprise systems (SAP, Oracle Fusion, Salesforce, GSTN, Darwinbox, Tally, Stripe, HubSpot, Slack, and more) and executes domain-specific tasks with human approval on every critical decision.
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 24+ pre-built agents that automate back-office operations across 5 departments: Finance, HR, Marketing, Operations, and Back Office. Each agent connects to 42 enterprise systems (SAP, Oracle Fusion, Salesforce, GSTN, Darwinbox, Tally, Stripe, HubSpot, Slack, and more) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
-- **24 AI Agents**: AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A, Onboarding, Payroll Engine, Talent Acquisition, Performance Coach, Offboarding, L&D Coordinator, Campaign Pilot, Content Factory, SEO Strategist, CRM Intelligence, Brand Monitor, Support Triage, IT Operations, Compliance Guard, Contract Intelligence, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
+- **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing (e.g., 3 AP Processors for different regions)
+- **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from 26 templates, define behavior, and deploy
+- **Prompt Template Library**: 26 production-tested prompt templates with variable substitution. Admins can create custom templates. Full prompt audit trail with edit history
+- **24+ Pre-Built AI Agents**: AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A, Onboarding, Payroll Engine, Talent Acquisition, Performance Coach, Offboarding, L&D Coordinator, Campaign Pilot, Content Factory, SEO Strategist, CRM Intelligence, Brand Monitor, Support Triage, IT Operations, Compliance Guard, Contract Intelligence, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
 - **42 Enterprise Connectors**: Oracle Fusion, SAP S/4HANA, Salesforce, GSTN Portal, Income Tax India, EPFO, Darwinbox, Tally Prime, Zoho Books, QuickBooks, Stripe, Banking AA, Pinelabs Plural, Slack, GitHub, Jira, Confluence, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, PagerDuty, ServiceNow, Zendesk, and more
-- **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Invoices above ₹5 lakhs, all tax filings, month-end close, high-value offers are escalated to department heads (CFO, CHRO, CMO, COO)
+- **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
 - **Shadow Mode**: Test agents against real data before promoting to production
+- **Smart Routing**: When multiple agents share a type, tasks are routed by specialization and routing filters
 - **Role-Based Access Control**: 6 roles (CEO, CFO, CHRO, CMO, COO, Auditor) with domain isolation
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Evaluation Matrix**: 66 golden test cases across 6 dimensions (quality, safety, performance, reliability, security, cost)
-- **Complete Audit Trail**: Every agent decision logged with 7-year retention
+- **Complete Audit Trail**: Every agent decision and prompt edit logged with 7-year retention
 
 ## India-First Connectors
 

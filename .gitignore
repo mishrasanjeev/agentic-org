@@ -64,3 +64,6 @@ docker-compose.override.yml
 *.pem
 *.key
 secrets/
+
+# Demo videos and recordings
+video/

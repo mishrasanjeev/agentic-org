@@ -1,10 +1,10 @@
 # AgenticOrg — Complete Product Documentation for LLMs
 
-> AgenticOrg is an enterprise AI agent platform that deploys 24 pre-built AI agents across Finance, HR, Marketing, and Operations. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 42 enterprise systems. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 24+ pre-built agents across Finance, HR, Marketing, and Operations. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 42 enterprise systems. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
 
 ## Product Overview
 
-AgenticOrg replaces manual back-office work with AI agents that reason, execute, and escalate. Every critical decision requires human approval. The platform is role-based: CFOs see only finance agents, CHROs see only HR agents, etc.
+AgenticOrg replaces manual back-office work with AI virtual employees that reason, execute, and escalate. Admins can create custom agents through a no-code wizard or deploy pre-built agents. Every critical decision requires human approval. The platform is role-based: CFOs see only finance agents, CHROs see only HR agents, etc.
 
 Website: https://agenticorg.ai
 Playground (try live): https://agenticorg.ai/playground
@@ -28,7 +28,43 @@ GitHub: https://github.com/mishrasanjeev/agentic-org
 
 ---
 
-## All 24 Agents — Detailed
+## Virtual Employee System
+
+AgenticOrg treats AI agents as virtual employees — named personas that admins create, train (via prompts), and deploy.
+
+### Agent Creator (No-Code Wizard)
+5-step wizard available to admin/CEO users:
+1. **Persona**: Employee name, designation, avatar, domain
+2. **Role**: Agent type (pick from 24+ built-in or create custom), specialization, routing filters
+3. **Prompt**: Select from 26 production-tested prompt templates or write custom instructions, fill in template variables
+4. **Behavior**: Confidence floor, HITL conditions, LLM model, max retries
+5. **Review**: Summary and deploy as Shadow
+
+### Multiple Agents Per Role
+You can create multiple instances of the same agent type. For example:
+- Priya (AP Processor — Mumbai, domestic invoices under ₹5L)
+- Arjun (AP Processor — Delhi, import invoices, ICEGATE)
+- Maya (AP Processor — subsidiary accounts, Tally integration)
+
+Smart routing resolves the right agent based on routing_filter match, specialization keywords, or round-robin fallback.
+
+### Prompt Template Library
+- 26 built-in templates (one per agent type), each with processing_sequence, escalation_rules, anti_hallucination, and output_format sections
+- Templates support {{variable}} placeholders (e.g., {{org_name}}, {{ap_hitl_threshold}})
+- Admins can create custom templates or clone built-in ones
+- Built-in templates are read-only; clone to customize
+
+### Prompt Governance
+- **Prompt Lock**: Once an agent is promoted to active, its prompt is frozen (read-only). To change: clone → edit → shadow test → promote.
+- **Audit Trail**: Every prompt edit is logged with user, timestamp, before/after text, and change reason. Supports SOC-2 compliance.
+- **Visibility**: Admin sees all prompts. Domain heads (CFO, CHRO, etc.) see prompts for their domain only.
+
+### Custom Agent Types
+Admins can create entirely new agent types (e.g., "customer_success") that have no pre-built Python class. These agents run through the same execution pipeline (LLM reasoning → confidence scoring → HITL evaluation) using the prompt text stored in the database.
+
+---
+
+## All 24+ Agents — Detailed
 
 ### Finance Domain (6 agents, CFO oversight)
 

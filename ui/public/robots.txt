@@ -5,6 +5,8 @@ Allow: /playground
 Allow: /evals
 Allow: /signup
 Allow: /login
+Allow: /blog
+Allow: /blog/
 Disallow: /dashboard/
 Disallow: /api/
 Disallow: /onboarding
@@ -15,6 +17,7 @@ Allow: /
 Allow: /pricing
 Allow: /playground
 Allow: /evals
+Allow: /blog
 
 User-agent: Google-Extended
 Allow: /
