@@ -4,8 +4,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import KillSwitch from "@/components/KillSwitch";
-import api from "@/lib/api";
-import type { Agent } from "@/types";
+import api, { agentsApi } from "@/lib/api";
+import type { Agent, PromptEditHistoryEntry } from "@/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Cell,
@@ -15,7 +15,7 @@ export default function AgentDetail() {
   const { id } = useParams();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "config" | "shadow" | "cost">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost">("overview");
 
   useEffect(() => {
     if (id) fetchAgent();
@@ -55,17 +55,35 @@ export default function AgentDetail() {
   const confidenceFloor = agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A";
   const shadowAccuracy = agent.shadow_accuracy_current != null ? `${(agent.shadow_accuracy_current * 100).toFixed(1)}%` : "N/A";
 
+  const displayName = agent.employee_name || agent.name;
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">{agent.name || `Agent ${id}`}</h2>
-          <p className="text-sm text-muted-foreground">{agent.agent_type || "Unknown type"} | {agent.domain || "Unknown domain"}</p>
+      {/* Persona Header */}
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-4">
+          {agent.avatar_url ? (
+            <img src={agent.avatar_url} alt={displayName} className="w-16 h-16 rounded-full object-cover" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <h2 className="text-2xl font-bold">{displayName}</h2>
+            <p className="text-sm text-muted-foreground">
+              {agent.designation || agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} | {agent.domain || "Unknown domain"}
+            </p>
+            {agent.specialization && (
+              <p className="text-xs text-muted-foreground mt-1">Specialization: {agent.specialization}</p>
+            )}
+            {agent.is_builtin && <Badge variant="outline" className="mt-1">Built-in</Badge>}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handlePromote}>Promote</Button>
           <Button variant="outline" size="sm" onClick={handleRollback}>Rollback</Button>
-          <KillSwitch agentId={id || ""} agentName={agent.name || "Agent"} onPaused={fetchAgent} />
+          <KillSwitch agentId={id || ""} agentName={displayName} onPaused={fetchAgent} />
         </div>
       </div>
 
@@ -83,7 +101,7 @@ export default function AgentDetail() {
       </div>
 
       <div className="flex gap-4 border-b pb-2">
-        {(["overview", "config", "shadow", "cost"] as const).map((tab) => (
+        {(["overview", "config", "prompt", "shadow", "cost"] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
             {tab}
           </button>
@@ -92,6 +110,7 @@ export default function AgentDetail() {
 
       {activeTab === "overview" && <OverviewTab agent={agent} />}
       {activeTab === "config" && <ConfigTab agent={agent} />}
+      {activeTab === "prompt" && <PromptTab agent={agent} />}
       {activeTab === "shadow" && <ShadowTab agent={agent} />}
       {activeTab === "cost" && <CostTab agent={agent} />}
     </div>
@@ -179,6 +198,74 @@ function ConfigTab({ agent }: { agent: Agent }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/* ─── Prompt Tab ─── */
+function PromptTab({ agent }: { agent: Agent }) {
+  const [history, setHistory] = useState<PromptEditHistoryEntry[]>([]);
+  const isLocked = agent.status === "active";
+
+  useEffect(() => {
+    agentsApi.promptHistory(agent.id).then(({ data }) => setHistory(data || [])).catch(() => {});
+  }, [agent.id]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-sm font-semibold">System Prompt</CardTitle>
+            {isLocked ? (
+              <div className="flex items-center gap-2">
+                <Badge variant="destructive">Locked</Badge>
+                <span className="text-xs text-muted-foreground">Clone this agent to edit prompt</span>
+              </div>
+            ) : (
+              <Badge variant="secondary">Editable</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {agent.system_prompt_text ? (
+            <pre className="bg-muted rounded p-4 text-xs font-mono whitespace-pre-wrap max-h-96 overflow-auto">
+              {agent.system_prompt_text}
+            </pre>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This agent uses a built-in file-based prompt template ({agent.agent_type}.prompt.txt).
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit History */}
+      {history.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Prompt Edit History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {history.map((entry) => (
+                <div key={entry.id} className="border-l-2 border-muted pl-3 py-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{entry.edited_by || "System"}</span>
+                    <span>{new Date(entry.created_at).toLocaleString()}</span>
+                  </div>
+                  {entry.change_reason && (
+                    <p className="text-sm mt-1">Reason: {entry.change_reason}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {entry.prompt_before ? `Changed ${entry.prompt_before.length} → ${entry.prompt_after.length} chars` : `Initial prompt (${entry.prompt_after.length} chars)`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

@@ -2,6 +2,11 @@ import { useState, useRef, useCallback, useEffect, type FormEvent } from "react"
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import ROICalculator from "../components/ROICalculator";
+import AgentActivityTicker from "../components/AgentActivityTicker";
+import AgentsInAction from "../components/AgentsInAction";
+import WorkflowAnimation from "../components/WorkflowAnimation";
+import InteractiveDemo from "../components/InteractiveDemo";
+import SocialProof from "../components/SocialProof";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -196,8 +201,11 @@ function DemoModal({ onClose }: { onClose: () => void }) {
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="demo-modal-title"
     >
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-8 animate-in fade-in zoom-in">
+      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-8 animate-in fade-in zoom-in" role="document">
         {/* Close button */}
         <button
           onClick={onClose}
@@ -227,13 +235,14 @@ function DemoModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold text-slate-900 mb-1">Book a Demo</h3>
+            <h3 id="demo-modal-title" className="text-xl font-bold text-slate-900 mb-1">Book a Demo</h3>
             <p className="text-sm text-slate-500 mb-6">See AgenticOrg in action. Fill out the form and we'll schedule a call.</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
+                <label htmlFor="demo-name" className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
                 <input
+                  id="demo-name"
                   required
                   type="text"
                   placeholder="Your full name"
@@ -244,8 +253,9 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Work Email <span className="text-red-500">*</span></label>
+                <label htmlFor="demo-email" className="block text-sm font-medium text-slate-700 mb-1">Work Email <span className="text-red-500">*</span></label>
                 <input
+                  id="demo-email"
                   required
                   type="email"
                   placeholder="you@company.com"
@@ -256,8 +266,9 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Company</label>
+                <label htmlFor="demo-company" className="block text-sm font-medium text-slate-700 mb-1">Company</label>
                 <input
+                  id="demo-company"
                   type="text"
                   placeholder="Company name"
                   value={form.company}
@@ -267,8 +278,9 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                <label htmlFor="demo-role" className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                 <select
+                  id="demo-role"
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className={fieldClass}
@@ -285,8 +297,9 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                <label htmlFor="demo-phone" className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
                 <input
+                  id="demo-phone"
                   type="tel"
                   placeholder="+91 98765 43210"
                   value={form.phone}
@@ -323,16 +336,17 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
-        <title>AgenticOrg — Enterprise AI Agent Platform | 24 Agents, 42 Connectors</title>
-        <meta name="description" content="Deploy 24 autonomous AI agents across Finance, HR, Marketing, and Operations. Human-in-the-loop governance, 42 enterprise connectors, and India-first compliance. Start free." />
+        <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
+        <meta name="description" content="Create AI virtual employees in minutes — or deploy 24+ pre-built agents across Finance, HR, Marketing & Ops. No-code agent builder with human-in-the-loop governance, 42 enterprise connectors, and prompt template library. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
       {/* ============================================================ */}
       {/* 1. NAVBAR                                                     */}
       {/* ============================================================ */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2">
@@ -348,6 +362,7 @@ export default function Landing() {
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
             <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
             <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
+            <Link to="/blog" className="text-slate-300 hover:text-white text-sm transition-colors">Blog</Link>
             <a href="#how-it-works" className="text-slate-300 hover:text-white text-sm transition-colors">Resources</a>
           </div>
 
@@ -365,7 +380,7 @@ export default function Landing() {
             >
               Book a Demo
             </button>
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white p-2" aria-label="Menu">
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white p-2" aria-label="Toggle navigation menu" aria-expanded={mobileMenuOpen}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {mobileMenuOpen
                   ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -377,11 +392,12 @@ export default function Landing() {
 
         {/* Mobile dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3">
+          <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3" role="navigation" aria-label="Mobile navigation">
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
             <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
             <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
+            <Link to="/blog" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Blog</Link>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
             <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
@@ -392,7 +408,7 @@ export default function Landing() {
       {/* ============================================================ */}
       {/* 2. HERO                                                       */}
       {/* ============================================================ */}
-      <section className="relative min-h-screen flex items-center overflow-hidden bg-slate-900">
+      <section id="main-content" className="relative min-h-screen flex items-center overflow-hidden bg-slate-900">
         {/* Animated bg */}
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
@@ -415,7 +431,7 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">Now Live &mdash; 24 AI Agents Across 5 Departments</span>
+              <span className="text-slate-300 text-sm">Now Live &mdash; Create AI Virtual Employees or Deploy 24+ Pre-Built Agents</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -426,7 +442,7 @@ export default function Landing() {
             </h1>
 
             <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed">
-              AI agents that process invoices, run payroll, launch campaigns, and resolve incidents
+              Name them. Train them. Deploy them. AI virtual employees that process invoices, run payroll, launch campaigns, and resolve incidents
               &mdash; with human approval on every critical decision.
             </p>
 
@@ -454,14 +470,9 @@ export default function Landing() {
             </p>
           </div>
 
-          {/* Right — Product screenshot */}
+          {/* Right — Live agent activity ticker */}
           <div className="hidden lg:block">
-            <BrowserFrame
-              src="/screenshots/dashboard.webp"
-              title="app.agenticorg.ai/dashboard"
-              alt="AgenticOrg dashboard showing agent fleet status, pending approvals, and real-time metrics"
-              loading="eager"
-            />
+            <AgentActivityTicker />
           </div>
         </div>
       </section>
@@ -523,20 +534,44 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* 4b. AGENTS IN ACTION — Animated Virtual Employees             */}
+      {/* ============================================================ */}
+      <section className="py-24 bg-slate-900 scroll-mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
+                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-slate-300 text-sm">Virtual Employees at Work</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Watch Your AI Team in Action</h2>
+              <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
+                Each virtual employee has a name, a specialization, and tailored instructions. Click any card to see them work.
+              </p>
+            </div>
+          </FadeIn>
+
+          <FadeIn delay={200}>
+            <AgentsInAction />
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
       {/* 5. PLATFORM OVERVIEW                                          */}
       {/* ============================================================ */}
       <section id="platform" className="py-24 bg-white scroll-mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. 24 Agents. Complete Automation.</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Everything you need to deploy, monitor, and govern autonomous AI agents at enterprise scale.
+                Deploy 24+ pre-built agents or create custom AI virtual employees &mdash; all with enterprise-grade monitoring and governance.
               </p>
             </div>
           </FadeIn>
 
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {/* Agent Fleet */}
             <FadeIn delay={0}>
               <div className="space-y-4">
@@ -547,7 +582,7 @@ export default function Landing() {
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  View, configure, and deploy 24 pre-built agents across Finance, HR, Marketing, Ops, and Back Office. Each agent comes with domain-specific tools, memory, and safety guardrails.
+                  View, configure, and deploy 24+ pre-built agents across Finance, HR, Marketing, Ops, and Back Office &mdash; or create custom virtual employees with names, personas, and specializations.
                 </p>
               </div>
             </FadeIn>
@@ -578,6 +613,25 @@ export default function Landing() {
                 <h3 className="text-xl font-bold text-slate-900">HITL Approvals</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
                   Human-in-the-loop governance for every critical decision. Approve, reject, or override agent actions with full context. No agent acts without your say on high-stakes operations.
+                </p>
+              </div>
+            </FadeIn>
+
+            {/* Agent Creator */}
+            <FadeIn delay={450}>
+              <div className="space-y-4">
+                <div className="rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-gradient-to-br from-blue-600 to-violet-700 p-8 flex flex-col items-center justify-center min-h-[200px]">
+                  <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <p className="text-white font-semibold text-center">Create Your Own</p>
+                  <p className="text-blue-100 text-xs text-center mt-1">No code required</p>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Agent Creator</h3>
+                <p className="text-slate-600 text-sm leading-relaxed">
+                  Build custom AI virtual employees in minutes. Give them a name, a role, and tailored instructions through a guided wizard &mdash; no code required. 26 production-tested prompt templates included.
                 </p>
               </div>
             </FadeIn>
@@ -664,7 +718,7 @@ export default function Landing() {
 
             <div className="grid md:grid-cols-3 gap-12">
               {[
-                { num: "1", title: "Sign in & pick your agents", desc: "Choose from 24 pre-built agents across 5 domains. Each agent is production-ready with domain-specific tools and safety guardrails." },
+                { num: "1", title: "Create or pick your agents", desc: "Choose from 24+ pre-built agents, or create custom AI virtual employees with names, specializations, and tailored instructions — all through a guided wizard." },
                 { num: "2", title: "Connect your systems", desc: "42 connectors for SAP, Oracle, GSTN, Darwinbox, Slack, and more. Plug into your existing infrastructure in minutes, not months." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents automate the repetitive work. You approve critical decisions via HITL governance. Full audit trail on every action." },
               ].map((step, i) => (
@@ -680,6 +734,17 @@ export default function Landing() {
               ))}
             </div>
           </div>
+
+          {/* Workflow Animation */}
+          <FadeIn delay={300}>
+            <div className="mt-20">
+              <h3 className="text-center text-xl font-bold text-slate-900 mb-2">How an Agent Processes a Task</h3>
+              <p className="text-center text-sm text-slate-500 mb-8 max-w-lg mx-auto">Watch a real invoice flow through the agent pipeline &mdash; from arrival to approval.</p>
+              <div className="bg-slate-900 rounded-2xl p-8">
+                <WorkflowAnimation />
+              </div>
+            </div>
+          </FadeIn>
         </div>
       </section>
 
@@ -687,32 +752,37 @@ export default function Landing() {
       {/* 8. LIVE DEMO                                                  */}
       {/* ============================================================ */}
       <section id="demo" className="py-24 bg-slate-900 scroll-mt-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <div className="text-center mb-12">
-              <h2 className="text-3xl sm:text-4xl font-bold text-white">See It In Action</h2>
-              <p className="mt-4 text-lg text-slate-400">
-                This is a live production system. Not a mockup. Not a prototype.
+            <div className="text-center mb-4">
+              <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
+                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-slate-300 text-sm">Live Agent Execution</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Watch Agents Think, Execute & Decide</h2>
+              <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
+                Real agent reasoning traces. Real tool calls. Real confidence scores. Pick a scenario and watch the full execution pipeline.
               </p>
             </div>
           </FadeIn>
 
-          <FadeIn>
-            <BrowserFrame
-              src="/screenshots/observatory.webp"
-              title="app.agenticorg.ai/dashboard/observatory"
-              alt="Live demo of AgenticOrg observatory showing real-time agent activity and metrics"
-            />
+          <FadeIn delay={200}>
+            <InteractiveDemo />
           </FadeIn>
 
           <FadeIn>
-            <div className="text-center mt-10">
-              <p className="text-slate-400 mb-6">This is real. Not a mockup. Login and try it yourself.</p>
+            <div className="text-center mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                to="/login"
+                to="/playground"
                 className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
               >
-                Try Live Demo
+                Try It Yourself — Playground
+              </Link>
+              <Link
+                to="/login"
+                className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
+              >
+                Login to Full Dashboard
               </Link>
             </div>
           </FadeIn>
@@ -786,6 +856,13 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* 9b. SOCIAL PROOF / TESTIMONIALS                               */}
+      {/* ============================================================ */}
+      <FadeIn>
+        <SocialProof />
+      </FadeIn>
+
+      {/* ============================================================ */}
       {/* 10. ROI CALCULATOR                                            */}
       {/* ============================================================ */}
       <ROICalculator />
@@ -839,10 +916,10 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop paying people to do what AI agents can do better.
+              Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              24 agents. 42 connectors. Free to start.
+              24+ pre-built agents. Unlimited custom agents. 42 connectors. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -915,6 +992,7 @@ export default function Landing() {
                 <li><Link to="/pricing" className="text-slate-400 hover:text-white text-sm transition-colors">Pricing</Link></li>
                 <li><a href="#roi-calculator" className="text-slate-400 hover:text-white text-sm transition-colors">ROI Calculator</a></li>
                 <li><a href="#demo" className="text-slate-400 hover:text-white text-sm transition-colors">Live Demo</a></li>
+                <li><Link to="/blog" className="text-slate-400 hover:text-white text-sm transition-colors">Blog</Link></li>
                 <li>
                   <a href="https://github.com/mishrasanjeev/agentic-org" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white text-sm transition-colors">
                     GitHub

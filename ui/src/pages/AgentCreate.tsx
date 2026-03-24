@@ -1,35 +1,118 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import api from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import api, { promptTemplatesApi } from "@/lib/api";
+import type { PromptTemplate } from "@/types";
 
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
 const AGENT_TYPES: Record<string, string[]> = {
-  finance: ["ap_processor", "ar_collections", "expense_auditor", "tax_filing", "revenue_forecaster", "recon_agent"],
-  hr: ["talent_acquisition", "onboarding", "payroll", "performance", "learning_dev", "offboarding"],
-  marketing: ["content_gen", "seo_optimizer", "campaign_analytics", "social_scheduler", "lead_scoring"],
-  ops: ["support_triage", "vendor_manager", "contract_intel", "compliance_guard", "it_ops"],
-  backoffice: ["legal_ops", "risk_sentinel", "facilities"],
+  finance: ["ap_processor", "ar_collections", "recon_agent", "tax_compliance", "close_agent", "fpa_agent"],
+  hr: ["talent_acquisition", "onboarding_agent", "payroll_engine", "performance_coach", "ld_coordinator", "offboarding_agent"],
+  marketing: ["content_factory", "campaign_pilot", "seo_strategist", "crm_intelligence", "brand_monitor"],
+  ops: ["support_triage", "vendor_manager", "contract_intelligence", "compliance_guard", "it_operations"],
+  backoffice: ["legal_ops", "risk_sentinel", "facilities_agent"],
 };
+
+const STEPS = ["Persona", "Role", "Prompt", "Behavior", "Review"];
+
+function humanize(s: string) {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function AgentCreate() {
   const navigate = useNavigate();
-  const [domain, setDomain] = useState("finance");
-  const [agentType, setAgentType] = useState(AGENT_TYPES.finance[0]);
-  const [name, setName] = useState("");
-  const [confidenceFloor, setConfidenceFloor] = useState(0.85);
+  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) { setError("Agent name is required"); return; }
+  // Step 1: Persona
+  const [employeeName, setEmployeeName] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [domain, setDomain] = useState("finance");
+
+  // Step 2: Role
+  const [agentType, setAgentType] = useState(AGENT_TYPES.finance[0]);
+  const [customType, setCustomType] = useState("");
+  const [useCustomType, setUseCustomType] = useState(false);
+  const [specialization, setSpecialization] = useState("");
+  const [routingFilters, setRoutingFilters] = useState<Array<{ key: string; value: string }>>([]);
+
+  // Step 3: Prompt
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [promptText, setPromptText] = useState("");
+  const [promptVars, setPromptVars] = useState<Record<string, string>>({});
+
+  // Step 4: Behavior
+  const [confidenceFloor, setConfidenceFloor] = useState(0.88);
+  const [hitlCondition, setHitlCondition] = useState("confidence < 0.88");
+  const [maxRetries, setMaxRetries] = useState(3);
+
+  // Load templates when domain changes
+  useEffect(() => {
+    promptTemplatesApi.list({ domain }).then(({ data }) => {
+      const items = Array.isArray(data) ? data : data.items || [];
+      setTemplates(items);
+    }).catch(() => setTemplates([]));
+  }, [domain]);
+
+  // When template is selected, load its text and variables
+  useEffect(() => {
+    if (!selectedTemplateId) return;
+    const t = templates.find((t) => t.id === selectedTemplateId);
+    if (t) {
+      setPromptText(t.template_text);
+      const vars: Record<string, string> = {};
+      (t.variables || []).forEach((v) => { vars[v.name] = v.default || ""; });
+      setPromptVars(vars);
+    }
+  }, [selectedTemplateId, templates]);
+
+  function resolvedPrompt() {
+    let text = promptText;
+    Object.entries(promptVars).forEach(([k, v]) => {
+      text = text.split(`{{${k}}}`).join(v || `{{${k}}}`);
+    });
+    return text;
+  }
+
+  const finalType = useCustomType ? customType : agentType;
+  const routingFilter: Record<string, string> = {};
+  routingFilters.forEach(({ key, value }) => { if (key && value) routingFilter[key] = value; });
+
+  function canNext() {
+    if (step === 0) return employeeName.trim().length > 0;
+    if (step === 1) return finalType.trim().length > 0;
+    if (step === 2) return promptText.trim().length > 0;
+    if (step === 3) return true;
+    return true;
+  }
+
+  async function handleCreate() {
     setSubmitting(true);
     setError("");
     try {
-      const { data } = await api.post("/agents", { name: name.trim(), agent_type: agentType, domain, confidence_floor: confidenceFloor, status: "shadow" });
-      navigate(`/dashboard/agents/${data.id || ""}`);
+      const { data } = await api.post("/agents", {
+        name: employeeName.trim(),
+        employee_name: employeeName.trim(),
+        designation: designation.trim() || undefined,
+        avatar_url: avatarUrl.trim() || undefined,
+        domain,
+        agent_type: finalType,
+        specialization: specialization.trim() || undefined,
+        routing_filter: Object.keys(routingFilter).length > 0 ? routingFilter : {},
+        system_prompt_text: resolvedPrompt(),
+        system_prompt: "",
+        prompt_variables: promptVars,
+        confidence_floor: confidenceFloor,
+        hitl_policy: { condition: hitlCondition },
+        max_retries: maxRetries,
+        initial_status: "shadow",
+      });
+      navigate(`/dashboard/agents/${data.agent_id || ""}`);
     } catch {
       setError("Failed to create agent. Please try again.");
     } finally {
@@ -38,53 +121,200 @@ export default function AgentCreate() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Create Agent</h2>
-        <Button variant="outline" onClick={() => navigate("/dashboard/agents")}>Back to Agents</Button>
+        <h2 className="text-2xl font-bold">Create Virtual Employee</h2>
+        <Button variant="outline" onClick={() => navigate("/dashboard/agents")}>Back</Button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="flex gap-1">
+        {STEPS.map((s, i) => (
+          <div key={s} className="flex-1 text-center">
+            <div className={`h-2 rounded-full ${i <= step ? "bg-primary" : "bg-muted"}`} />
+            <p className={`text-xs mt-1 ${i === step ? "font-semibold text-primary" : "text-muted-foreground"}`}>{s}</p>
+          </div>
+        ))}
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Agent Configuration</CardTitle></CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Agent Name *</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Invoice Processor - APAC" className="border rounded px-3 py-2 text-sm w-full mt-1" />
-            </div>
+        <CardHeader>
+          <CardTitle>Step {step + 1}: {STEPS[step]}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
 
-            <div className="grid grid-cols-2 gap-4">
+          {/* Step 1: Persona */}
+          {step === 0 && (
+            <>
               <div>
-                <label className="text-sm font-medium">Domain</label>
+                <label className="text-sm font-medium">Employee Name *</label>
+                <input type="text" value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} placeholder="e.g. Priya, Arjun, Maya" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                <p className="text-xs text-muted-foreground mt-1">The virtual employee's identity — how they'll appear across the platform.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Designation</label>
+                <input type="text" value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Senior AP Analyst - Mumbai Office" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Avatar URL</label>
+                <input type="text" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://example.com/avatar.jpg" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Domain *</label>
                 <select value={domain} onChange={(e) => { setDomain(e.target.value); setAgentType(AGENT_TYPES[e.target.value][0]); }} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                  {DOMAINS.map((d) => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
+                  {DOMAINS.map((d) => <option key={d} value={d}>{humanize(d)}</option>)}
                 </select>
+              </div>
+            </>
+          )}
+
+          {/* Step 2: Role */}
+          {step === 1 && (
+            <>
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium mb-2">
+                  <input type="checkbox" checked={useCustomType} onChange={(e) => setUseCustomType(e.target.checked)} />
+                  Create custom agent type
+                </label>
+                {useCustomType ? (
+                  <input type="text" value={customType} onChange={(e) => setCustomType(e.target.value)} placeholder="e.g. customer_success" className="border rounded px-3 py-2 text-sm w-full" />
+                ) : (
+                  <select value={agentType} onChange={(e) => setAgentType(e.target.value)} className="border rounded px-3 py-2 text-sm w-full">
+                    {AGENT_TYPES[domain].map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
+                  </select>
+                )}
               </div>
               <div>
-                <label className="text-sm font-medium">Agent Type</label>
-                <select value={agentType} onChange={(e) => setAgentType(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                  {AGENT_TYPES[domain].map((t) => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
+                <label className="text-sm font-medium">Specialization</label>
+                <textarea value={specialization} onChange={(e) => setSpecialization(e.target.value)} placeholder="e.g. Import invoices above 10L, ICEGATE compliance" className="border rounded px-3 py-2 text-sm w-full mt-1" rows={2} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Routing Filters</label>
+                <p className="text-xs text-muted-foreground mb-2">When multiple agents share this type, routing filters decide who gets the task.</p>
+                {routingFilters.map((f, i) => (
+                  <div key={i} className="flex gap-2 mb-2">
+                    <input type="text" value={f.key} onChange={(e) => { const n = [...routingFilters]; n[i].key = e.target.value; setRoutingFilters(n); }} placeholder="Key (e.g. region)" className="border rounded px-2 py-1 text-sm flex-1" />
+                    <input type="text" value={f.value} onChange={(e) => { const n = [...routingFilters]; n[i].value = e.target.value; setRoutingFilters(n); }} placeholder="Value (e.g. APAC)" className="border rounded px-2 py-1 text-sm flex-1" />
+                    <Button variant="outline" size="sm" onClick={() => setRoutingFilters(routingFilters.filter((_, j) => j !== i))}>Remove</Button>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={() => setRoutingFilters([...routingFilters, { key: "", value: "" }])}>+ Add Filter</Button>
+              </div>
+            </>
+          )}
+
+          {/* Step 3: Prompt */}
+          {step === 2 && (
+            <>
+              <div>
+                <label className="text-sm font-medium">Select Template</label>
+                <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                  <option value="">— Write custom prompt —</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {humanize(t.name)} {t.is_builtin ? "(built-in)" : ""}
+                    </option>
+                  ))}
                 </select>
               </div>
-            </div>
+              {Object.keys(promptVars).length > 0 && (
+                <div className="bg-muted/50 rounded p-3 space-y-2">
+                  <p className="text-sm font-medium">Template Variables</p>
+                  {Object.entries(promptVars).map(([k, v]) => (
+                    <div key={k} className="flex items-center gap-2">
+                      <code className="text-xs bg-muted px-1 rounded whitespace-nowrap">{`{{${k}}}`}</code>
+                      <input type="text" value={v} onChange={(e) => setPromptVars({ ...promptVars, [k]: e.target.value })} placeholder={`Value for ${k}`} className="border rounded px-2 py-1 text-sm flex-1" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium">Prompt Text *</label>
+                <textarea value={promptText} onChange={(e) => setPromptText(e.target.value)} placeholder="You are the {{role}} Agent for {{org_name}}..." className="border rounded px-3 py-2 text-sm w-full mt-1 font-mono" rows={12} />
+                <p className="text-xs text-muted-foreground mt-1">{promptText.length} characters</p>
+              </div>
+            </>
+          )}
 
-            <div>
-              <label className="text-sm font-medium">Confidence Floor: {(confidenceFloor * 100).toFixed(0)}%</label>
-              <input type="range" min={0.5} max={0.99} step={0.01} value={confidenceFloor} onChange={(e) => setConfidenceFloor(Number(e.target.value))} className="w-full mt-1" />
-              <p className="text-xs text-muted-foreground mt-1">Agent will escalate to HITL when confidence drops below this threshold.</p>
-            </div>
+          {/* Step 4: Behavior */}
+          {step === 3 && (
+            <>
+              <div>
+                <label className="text-sm font-medium">Confidence Floor: {(confidenceFloor * 100).toFixed(0)}%</label>
+                <input type="range" min={0.5} max={0.99} step={0.01} value={confidenceFloor} onChange={(e) => setConfidenceFloor(Number(e.target.value))} className="w-full mt-1" />
+                <p className="text-xs text-muted-foreground mt-1">Agent escalates to HITL when confidence drops below this threshold.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">HITL Condition</label>
+                <input type="text" value={hitlCondition} onChange={(e) => setHitlCondition(e.target.value)} placeholder="confidence < 0.88 OR amount > 500000" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Max Retries</label>
+                <input type="number" min={1} max={10} value={maxRetries} onChange={(e) => setMaxRetries(Number(e.target.value))} className="border rounded px-3 py-2 text-sm w-24 mt-1" />
+              </div>
+              <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
+                <p>New agents start in <strong>Shadow Mode</strong>. They observe and produce outputs without taking actions. Promote to Active after validation.</p>
+              </div>
+            </>
+          )}
 
-            <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
-              <p>New agents start in <strong>Shadow Mode</strong> by default. They will observe and produce outputs alongside the existing process without taking any actions. Promote to Active after validation.</p>
-            </div>
+          {/* Step 5: Review */}
+          {step === 4 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 bg-muted/30 rounded-lg p-4">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={employeeName} className="w-16 h-16 rounded-full object-cover" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                    {employeeName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-lg font-semibold">{employeeName}</h3>
+                  {designation && <p className="text-sm text-muted-foreground">{designation}</p>}
+                  <div className="flex gap-2 mt-1">
+                    <Badge>{humanize(domain)}</Badge>
+                    <Badge variant="outline">{humanize(finalType)}</Badge>
+                    <Badge variant="secondary">Shadow</Badge>
+                  </div>
+                </div>
+              </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Agent Type:</span> {humanize(finalType)}</div>
+                <div><span className="text-muted-foreground">Confidence Floor:</span> {(confidenceFloor * 100).toFixed(0)}%</div>
+                <div><span className="text-muted-foreground">HITL Condition:</span> {hitlCondition}</div>
+                <div><span className="text-muted-foreground">Max Retries:</span> {maxRetries}</div>
+                {specialization && <div className="col-span-2"><span className="text-muted-foreground">Specialization:</span> {specialization}</div>}
+                {Object.keys(routingFilter).length > 0 && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Routing:</span> {Object.entries(routingFilter).map(([k, v]) => `${k}=${v}`).join(", ")}</div>
+                )}
+              </div>
 
-            <div className="flex gap-3">
-              <Button type="submit" disabled={submitting}>{submitting ? "Creating..." : "Create Agent"}</Button>
-              <Button type="button" variant="outline" onClick={() => navigate("/dashboard/agents")}>Cancel</Button>
+              <div>
+                <p className="text-sm font-medium mb-1">Prompt Preview ({promptText.length} chars)</p>
+                <pre className="bg-muted rounded p-3 text-xs max-h-40 overflow-auto whitespace-pre-wrap">{resolvedPrompt().slice(0, 500)}{resolvedPrompt().length > 500 ? "..." : ""}</pre>
+              </div>
             </div>
-          </form>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          {/* Navigation */}
+          <div className="flex justify-between pt-4 border-t">
+            <Button variant="outline" onClick={() => step > 0 ? setStep(step - 1) : navigate("/dashboard/agents")}>
+              {step === 0 ? "Cancel" : "Back"}
+            </Button>
+            {step < 4 ? (
+              <Button onClick={() => setStep(step + 1)} disabled={!canNext()}>
+                Next
+              </Button>
+            ) : (
+              <Button onClick={handleCreate} disabled={submitting}>
+                {submitting ? "Creating..." : "Create as Shadow"}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

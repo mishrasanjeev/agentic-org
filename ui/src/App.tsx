@@ -1,37 +1,60 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+
+/* ── Critical path: Landing page loaded eagerly ── */
 import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Agents from "./pages/Agents";
-import AgentCreate from "./pages/AgentCreate";
-import AgentDetail from "./pages/AgentDetail";
-import Workflows from "./pages/Workflows";
-import WorkflowCreate from "./pages/WorkflowCreate";
-import WorkflowDetail from "./pages/WorkflowDetail";
-import WorkflowRun from "./pages/WorkflowRun";
-import Approvals from "./pages/Approvals";
-import Connectors from "./pages/Connectors";
-import ConnectorCreate from "./pages/ConnectorCreate";
-import Schemas from "./pages/Schemas";
-import Audit from "./pages/Audit";
-import Observatory from "./pages/Observatory";
-import Settings from "./pages/Settings";
-import Evals from "./pages/Evals";
-import Pricing from "./pages/Pricing";
-import Playground from "./pages/Playground";
-import Signup from "./pages/Signup";
-import Onboarding from "./pages/Onboarding";
-import InviteAccept from "./pages/InviteAccept";
-import SLAMonitor from "./pages/SLAMonitor";
 import NotFound from "./pages/NotFound";
+
+/* ── Everything else lazy-loaded ── */
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const InviteAccept = lazy(() => import("./pages/InviteAccept"));
+const Evals = lazy(() => import("./pages/Evals"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Playground = lazy(() => import("./pages/Playground"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Agents = lazy(() => import("./pages/Agents"));
+const AgentCreate = lazy(() => import("./pages/AgentCreate"));
+const AgentDetail = lazy(() => import("./pages/AgentDetail"));
+const Workflows = lazy(() => import("./pages/Workflows"));
+const WorkflowCreate = lazy(() => import("./pages/WorkflowCreate"));
+const WorkflowDetail = lazy(() => import("./pages/WorkflowDetail"));
+const WorkflowRun = lazy(() => import("./pages/WorkflowRun"));
+const Approvals = lazy(() => import("./pages/Approvals"));
+const Connectors = lazy(() => import("./pages/Connectors"));
+const ConnectorCreate = lazy(() => import("./pages/ConnectorCreate"));
+const Schemas = lazy(() => import("./pages/Schemas"));
+const Audit = lazy(() => import("./pages/Audit"));
+const Observatory = lazy(() => import("./pages/Observatory"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const SLAMonitor = lazy(() => import("./pages/SLAMonitor"));
+const PromptTemplates = lazy(() => import("./pages/PromptTemplates"));
+
+/* ── Blog / Content pages ── */
+const Blog = lazy(() => import("./pages/blog/Blog"));
+const BlogPost = lazy(() => import("./pages/blog/BlogPost"));
+
+/* ── Loading fallback ── */
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 animate-pulse" />
+        <p className="text-sm text-slate-400">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <>
     <Analytics />
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
@@ -41,6 +64,10 @@ export default function App() {
       <Route path="/evals" element={<Evals />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/playground" element={<Playground />} />
+
+      {/* Blog / Content pages */}
+      <Route path="/blog" element={<Blog />} />
+      <Route path="/blog/:slug" element={<BlogPost />} />
 
       {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
       <Route
@@ -76,7 +103,7 @@ export default function App() {
       <Route
         path="/dashboard/agents/new"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <AgentCreate />
             </Layout>
@@ -154,6 +181,16 @@ export default function App() {
         }
       />
       <Route
+        path="/dashboard/prompt-templates"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <PromptTemplates />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/dashboard/connectors/new"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
@@ -215,6 +252,7 @@ export default function App() {
       {/* 404 catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
     </>
   );
 }

@@ -21,9 +21,20 @@ export const agentsApi = {
   list: (params?: Record<string, string>) => api.get("/agents", { params }),
   get: (id: string) => api.get(`/agents/${id}`),
   create: (data: any) => api.post("/agents", data),
+  update: (id: string, data: any) => api.patch(`/agents/${id}`, data),
+  run: (id: string, payload?: any) => api.post(`/agents/${id}/run`, payload),
   pause: (id: string) => api.post(`/agents/${id}/pause`),
   resume: (id: string) => api.post(`/agents/${id}/resume`),
   promote: (id: string) => api.post(`/agents/${id}/promote`),
+  clone: (id: string, data: any) => api.post(`/agents/${id}/clone`, data),
+  promptHistory: (id: string) => api.get(`/agents/${id}/prompt-history`),
+};
+export const promptTemplatesApi = {
+  list: (params?: Record<string, string>) => api.get("/prompt-templates", { params }),
+  get: (id: string) => api.get(`/prompt-templates/${id}`),
+  create: (data: any) => api.post("/prompt-templates", data),
+  update: (id: string, data: any) => api.put(`/prompt-templates/${id}`, data),
+  delete: (id: string) => api.delete(`/prompt-templates/${id}`),
 };
 export const workflowsApi = {
   list: () => api.get("/workflows"),
