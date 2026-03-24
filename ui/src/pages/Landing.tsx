@@ -1005,7 +1005,7 @@ export default function Landing() {
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Company</h4>
               <ul className="space-y-2">
-                <li><a href="mailto:hello@agenticorg.ai" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
+                <li><a href="mailto:sanjeev@agenticorg.ai" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
                 <li><span className="text-slate-400 text-sm">Edumatica Pvt Ltd</span></li>
                 <li><span className="text-slate-400 text-sm">Bengaluru, India</span></li>
               </ul>
@@ -1017,8 +1017,8 @@ export default function Landing() {
               &copy; 2026 AgenticOrg &middot; Edumatica Pvt Ltd. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
-              <a href="mailto:hello@agenticorg.ai" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
-              <a href="mailto:hello@agenticorg.ai" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
+              <a href="mailto:sanjeev@agenticorg.ai" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
+              <a href="mailto:sanjeev@agenticorg.ai" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
               <span className="text-sm text-slate-600">agenticorg.ai</span>
             </div>
           </div>
