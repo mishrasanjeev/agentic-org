@@ -58,12 +58,20 @@ class BaseAgent:
     @property
     def system_prompt(self) -> str:
         if self._system_prompt is None:
-            path = os.path.join(PROMPTS_DIR, self.prompt_file)
-            with open(path) as f:
-                template = f.read()
-            for key, val in self.prompt_variables.items():
-                template = template.replace("{{" + key + "}}", val)
-            self._system_prompt = template
+            if self.prompt_file:
+                # Built-in agent: load from filesystem
+                path = os.path.join(PROMPTS_DIR, self.prompt_file)
+                with open(path) as f:
+                    template = f.read()
+                for key, val in self.prompt_variables.items():
+                    template = template.replace("{{" + key + "}}", val)
+                self._system_prompt = template
+            else:
+                # Custom agent with no file — use a minimal default
+                self._system_prompt = (
+                    "You are an AI agent. Process the given task and return a JSON "
+                    "response with 'status', 'confidence' (0.0-1.0), and 'processing_trace'."
+                )
         return self._system_prompt
 
     async def execute(self, task: TaskAssignment) -> TaskResult:

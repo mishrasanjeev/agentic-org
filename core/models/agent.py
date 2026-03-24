@@ -29,8 +29,9 @@ from core.models.base import BaseModel
 class Agent(BaseModel):
     __tablename__ = "agents"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "agent_type", "version"),
+        UniqueConstraint("tenant_id", "agent_type", "employee_name", "version"),
         Index("idx_agents_tenant_domain", "tenant_id", "domain"),
+        Index("idx_agents_routing", "tenant_id", "agent_type", "status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -76,6 +77,14 @@ class Agent(BaseModel):
     ttl_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Virtual employee persona fields
+    employee_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    designation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    specialization: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    routing_filter: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    system_prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )

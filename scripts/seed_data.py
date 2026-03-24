@@ -258,11 +258,11 @@ async def _seed_agents(conn: asyncpg.Connection, tenant_id: str) -> None:
             INSERT INTO agents (
                 tenant_id, name, agent_type, domain, description,
                 system_prompt_ref, confidence_floor, hitl_condition,
-                status
+                status, is_builtin, employee_name
             ) VALUES (
                 $1, $2, $3, $4, $5,
                 $6, $7, $8,
-                'active'
+                'active', TRUE, $2
             )
             """,
             tid,
@@ -279,6 +279,66 @@ async def _seed_agents(conn: asyncpg.Connection, tenant_id: str) -> None:
         )
 
     print(f"  Processed {len(SYSTEM_AGENTS)} agents")
+
+
+async def _seed_prompt_templates(conn: asyncpg.Connection, tenant_id: str) -> None:
+    """Seed prompt templates from .prompt.txt files into prompt_templates table."""
+    import uuid as _uuid
+
+    tid = _uuid.UUID(tenant_id)
+    prompts_dir = PROJECT_ROOT / "core" / "agents" / "prompts"
+    if not prompts_dir.exists():
+        print("  WARNING: prompts directory not found")
+        return
+
+    count = 0
+    for path in sorted(prompts_dir.glob("*.prompt.txt")):
+        agent_type = path.stem.replace(".prompt", "")
+
+        # Find matching agent config for domain
+        agent_cfg = next(
+            (a for a in SYSTEM_AGENTS if a["agent_type"] == agent_type), None
+        )
+        domain = agent_cfg["domain"] if agent_cfg else "general"
+
+        exists = await conn.fetchval(
+            """
+            SELECT 1 FROM prompt_templates
+            WHERE tenant_id = $1 AND name = $2 AND agent_type = $3
+            """,
+            tid,
+            agent_type,
+            agent_type,
+        )
+        if exists:
+            print(f"  Template '{agent_type}' already exists — skipped")
+            continue
+
+        template_text = path.read_text(encoding="utf-8")
+
+        # Extract {{var}} placeholders
+        variables = [
+            {"name": v, "description": "", "default": ""}
+            for v in sorted(set(re.findall(r"\{\{(\w+)\}\}", template_text)))
+        ]
+
+        await conn.execute(
+            """
+            INSERT INTO prompt_templates
+                (tenant_id, name, agent_type, domain, template_text, variables, is_builtin)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, TRUE)
+            """,
+            tid,
+            agent_type,
+            agent_type,
+            domain,
+            template_text,
+            json.dumps(variables),
+        )
+        count += 1
+        print(f"  Inserted template '{agent_type}' ({domain})")
+
+    print(f"  Seeded {count} prompt templates")
 
 
 # ---------------------------------------------------------------------------
@@ -300,8 +360,11 @@ async def main() -> None:
         print("\n[3/4] Seeding schema registry")
         await _seed_schemas(conn, tenant_id)
 
-        print("\n[4/4] Seeding system agents")
+        print("\n[4/5] Seeding system agents")
         await _seed_agents(conn, tenant_id)
+
+        print("\n[5/5] Seeding prompt templates")
+        await _seed_prompt_templates(conn, tenant_id)
 
         print("\nSeed complete.")
     finally:

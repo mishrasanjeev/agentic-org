@@ -16,6 +16,7 @@ from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
+from core.models.prompt_template import PromptEditHistory
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
@@ -86,6 +87,14 @@ def _agent_to_dict(agent: Agent) -> dict:
         "expires_at": agent.expires_at.isoformat() if agent.expires_at else None,
         "created_at": agent.created_at.isoformat() if agent.created_at else None,
         "updated_at": agent.updated_at.isoformat() if agent.updated_at else None,
+        # Virtual employee persona fields
+        "employee_name": agent.employee_name,
+        "avatar_url": agent.avatar_url,
+        "designation": agent.designation,
+        "specialization": agent.specialization,
+        "routing_filter": agent.routing_filter,
+        "is_builtin": agent.is_builtin,
+        "system_prompt_text": agent.system_prompt_text,
     }
 
 
@@ -100,7 +109,8 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             agent_type=body.agent_type,
             domain=body.domain,
             description=None,
-            system_prompt_ref=body.system_prompt,
+            system_prompt_ref=body.system_prompt or "",
+            system_prompt_text=body.system_prompt_text,
             prompt_variables=body.prompt_variables,
             llm_model=body.llm.model,
             llm_fallback=body.llm.fallback_model,
@@ -120,6 +130,12 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             cost_controls=body.cost_controls.model_dump(),
             scaling=body.scaling.model_dump(),
             ttl_hours=body.ttl_hours,
+            # Virtual employee persona fields
+            employee_name=body.employee_name or body.name,
+            avatar_url=body.avatar_url,
+            designation=body.designation,
+            specialization=body.specialization,
+            routing_filter=body.routing_filter,
         )
         session.add(agent)
         await session.flush()  # populate agent.id
@@ -263,10 +279,25 @@ async def update_agent(
             raise HTTPException(404, "Agent not found")
 
         update_data = body.model_dump(exclude_unset=True)
+
+        # Prompt lock: reject prompt edits on active agents
+        prompt_changing = "system_prompt_text" in update_data or "system_prompt" in update_data
+        if prompt_changing and agent.status == "active":
+            raise HTTPException(
+                409,
+                "Prompt is locked on active agents. Clone this agent to make changes.",
+            )
+
+        # Track prompt changes for audit
+        old_prompt = agent.system_prompt_text
+        change_reason = update_data.pop("change_reason", None)
+
         if "name" in update_data:
             agent.name = update_data["name"]
         if "system_prompt" in update_data:
             agent.system_prompt_ref = update_data["system_prompt"]
+        if "system_prompt_text" in update_data:
+            agent.system_prompt_text = update_data["system_prompt_text"]
         if "prompt_variables" in update_data:
             agent.prompt_variables = update_data["prompt_variables"]
         if "authorized_tools" in update_data:
@@ -279,6 +310,29 @@ async def update_agent(
             agent.llm_model = update_data["llm"]["model"]
             agent.llm_fallback = update_data["llm"].get("fallback_model")
             agent.llm_config = update_data["llm"]
+        # Persona fields
+        if "employee_name" in update_data:
+            agent.employee_name = update_data["employee_name"]
+        if "avatar_url" in update_data:
+            agent.avatar_url = update_data["avatar_url"]
+        if "designation" in update_data:
+            agent.designation = update_data["designation"]
+        if "specialization" in update_data:
+            agent.specialization = update_data["specialization"]
+        if "routing_filter" in update_data:
+            agent.routing_filter = update_data["routing_filter"]
+
+        # Audit trail for prompt edits
+        new_prompt = agent.system_prompt_text
+        if prompt_changing and old_prompt != new_prompt:
+            audit = PromptEditHistory(
+                tenant_id=tid,
+                agent_id=agent.id,
+                prompt_before=old_prompt,
+                prompt_after=new_prompt or "",
+                change_reason=change_reason,
+            )
+            session.add(audit)
 
     return {"id": str(agent_id), "updated": True}
 
@@ -311,15 +365,7 @@ async def run_agent(
     # 2. Ensure all agent modules are registered
     import core.agents  # noqa: F401 — triggers @AgentRegistry.register for all agents
 
-    # 3. Instantiate agent from registry
-    agent_cls = AgentRegistry.get_by_type(agent_config["agent_type"])
-    if not agent_cls:
-        raise HTTPException(
-            422,
-            f"No registered agent class for type '{agent_config['agent_type']}'. "
-            f"Available: {AgentRegistry.all_types()}",
-        )
-
+    # 3. Instantiate agent from registry (supports both built-in and custom types)
     agent_instance = AgentRegistry.create_from_config({
         "id": agent_config["id"],
         "tenant_id": tenant_id,
@@ -328,6 +374,7 @@ async def run_agent(
         "prompt_variables": agent_config.get("prompt_variables", {}),
         "hitl_condition": agent_config.get("hitl_condition", ""),
         "output_schema": agent_config.get("output_schema"),
+        "system_prompt_text": agent_config.get("system_prompt_text"),
     })
 
     # 4. Build TaskAssignment from user payload
@@ -619,6 +666,7 @@ async def clone_agent(
             domain=parent.domain,
             description=parent.description,
             system_prompt_ref=body.overrides.get("system_prompt", parent.system_prompt_ref),
+            system_prompt_text=body.overrides.get("system_prompt_text", parent.system_prompt_text),
             prompt_variables=body.overrides.get("prompt_variables", parent.prompt_variables),
             llm_model=parent.llm_model,
             llm_fallback=parent.llm_fallback,
@@ -643,6 +691,12 @@ async def clone_agent(
             cost_controls=parent.cost_controls,
             scaling=parent.scaling,
             ttl_hours=parent.ttl_hours,
+            # Copy persona fields from parent, allow overrides
+            employee_name=body.overrides.get("employee_name", body.name),
+            avatar_url=body.overrides.get("avatar_url", parent.avatar_url),
+            designation=body.overrides.get("designation", parent.designation),
+            specialization=body.overrides.get("specialization", parent.specialization),
+            routing_filter=body.overrides.get("routing_filter", parent.routing_filter),
         )
         session.add(clone)
         await session.flush()
@@ -666,3 +720,37 @@ async def clone_agent(
         "status": clone.status,
         "parent_id": str(agent_id),
     }
+
+
+# ── GET /agents/{id}/prompt-history ────────────────────────────────────────
+@router.get("/agents/{agent_id}/prompt-history")
+async def get_prompt_history(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Return prompt edit audit trail for an agent."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(PromptEditHistory)
+            .where(
+                PromptEditHistory.agent_id == agent_id,
+                PromptEditHistory.tenant_id == tid,
+            )
+            .order_by(PromptEditHistory.created_at.desc())
+            .limit(50)
+        )
+        entries = result.scalars().all()
+
+    return [
+        {
+            "id": str(e.id),
+            "agent_id": str(e.agent_id),
+            "edited_by": str(e.edited_by) if e.edited_by else None,
+            "prompt_before": e.prompt_before,
+            "prompt_after": e.prompt_after,
+            "change_reason": e.change_reason,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ]

@@ -1,0 +1,168 @@
+"""Prompt template CRUD endpoints — admin + domain head access."""
+
+from __future__ import annotations
+
+import uuid as _uuid
+from uuid import UUID
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+
+from api.deps import get_current_tenant, get_user_domains
+from core.database import get_tenant_session
+from core.models.prompt_template import PromptTemplate
+from core.schemas.api import PromptTemplateCreate, PromptTemplateUpdate
+
+logger = structlog.get_logger()
+
+router = APIRouter()
+
+
+def _template_to_dict(t: PromptTemplate) -> dict:
+    return {
+        "id": str(t.id),
+        "name": t.name,
+        "agent_type": t.agent_type,
+        "domain": t.domain,
+        "template_text": t.template_text,
+        "variables": t.variables,
+        "description": t.description,
+        "is_builtin": t.is_builtin,
+        "is_active": t.is_active,
+        "created_by": str(t.created_by) if t.created_by else None,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+    }
+
+
+# ── GET /prompt-templates ──────────────────────────────────────────────────
+@router.get("/prompt-templates")
+async def list_prompt_templates(
+    agent_type: str | None = None,
+    domain: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(PromptTemplate).where(
+            PromptTemplate.tenant_id == tid,
+            PromptTemplate.is_active == True,  # noqa: E712
+        )
+
+        # RBAC: domain heads see only their domain
+        if user_domains is not None:
+            query = query.where(PromptTemplate.domain.in_(user_domains))
+
+        if agent_type:
+            query = query.where(PromptTemplate.agent_type == agent_type)
+        if domain:
+            query = query.where(PromptTemplate.domain == domain)
+
+        query = query.order_by(PromptTemplate.agent_type, PromptTemplate.name)
+        result = await session.execute(query)
+        templates = result.scalars().all()
+
+    return [_template_to_dict(t) for t in templates]
+
+
+# ── GET /prompt-templates/{id} ─────────────────────────────────────────────
+@router.get("/prompt-templates/{template_id}")
+async def get_prompt_template(
+    template_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(PromptTemplate).where(
+                PromptTemplate.id == template_id, PromptTemplate.tenant_id == tid
+            )
+        )
+        template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(404, "Prompt template not found")
+    return _template_to_dict(template)
+
+
+# ── POST /prompt-templates ─────────────────────────────────────────────────
+@router.post("/prompt-templates", status_code=201)
+async def create_prompt_template(
+    body: PromptTemplateCreate,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        template = PromptTemplate(
+            tenant_id=tid,
+            name=body.name,
+            agent_type=body.agent_type,
+            domain=body.domain,
+            template_text=body.template_text,
+            variables=body.variables,
+            description=body.description,
+        )
+        session.add(template)
+        await session.flush()
+
+    return {"id": str(template.id), "created": True}
+
+
+# ── PUT /prompt-templates/{id} ─────────────────────────────────────────────
+@router.put("/prompt-templates/{template_id}")
+async def update_prompt_template(
+    template_id: UUID,
+    body: PromptTemplateUpdate,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(PromptTemplate).where(
+                PromptTemplate.id == template_id, PromptTemplate.tenant_id == tid
+            )
+        )
+        template = result.scalar_one_or_none()
+        if not template:
+            raise HTTPException(404, "Prompt template not found")
+        if template.is_builtin:
+            raise HTTPException(
+                409, "Cannot edit built-in templates. Clone it to create a custom version."
+            )
+
+        update_data = body.model_dump(exclude_unset=True)
+        if "name" in update_data:
+            template.name = update_data["name"]
+        if "template_text" in update_data:
+            template.template_text = update_data["template_text"]
+        if "variables" in update_data:
+            template.variables = update_data["variables"]
+        if "description" in update_data:
+            template.description = update_data["description"]
+
+    return {"id": str(template_id), "updated": True}
+
+
+# ── DELETE /prompt-templates/{id} ──────────────────────────────────────────
+@router.delete("/prompt-templates/{template_id}")
+async def delete_prompt_template(
+    template_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(PromptTemplate).where(
+                PromptTemplate.id == template_id, PromptTemplate.tenant_id == tid
+            )
+        )
+        template = result.scalar_one_or_none()
+        if not template:
+            raise HTTPException(404, "Prompt template not found")
+        if template.is_builtin:
+            raise HTTPException(409, "Cannot delete built-in templates")
+
+        template.is_active = False  # Soft delete
+
+    return {"id": str(template_id), "deleted": True}

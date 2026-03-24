@@ -46,10 +46,13 @@ class AgentCreate(BaseModel):
     agent_type: str
     domain: str
     llm: LLMConfig = Field(default_factory=LLMConfig)
-    system_prompt: str
+    system_prompt: str = ""
+    system_prompt_text: str | None = None
     prompt_variables: dict[str, str] = {}
     authorized_tools: list[str] = []
-    hitl_policy: HITLPolicyConfig
+    hitl_policy: HITLPolicyConfig = Field(
+        default_factory=lambda: HITLPolicyConfig(condition="confidence < 0.88")
+    )
     confidence_floor: float = 0.88
     max_retries: int = 3
     output_schema: str | None = None
@@ -60,16 +63,30 @@ class AgentCreate(BaseModel):
     scaling: ScalingConfig = Field(default_factory=ScalingConfig)
     cost_controls: CostControlConfig = Field(default_factory=CostControlConfig)
     ttl_hours: int | None = None
+    # Virtual employee persona fields
+    employee_name: str | None = None
+    avatar_url: str | None = None
+    designation: str | None = None
+    specialization: str | None = None
+    routing_filter: dict[str, str] = {}
 
 
 class AgentUpdate(BaseModel):
     name: str | None = None
     system_prompt: str | None = None
+    system_prompt_text: str | None = None
     prompt_variables: dict[str, str] | None = None
     authorized_tools: list[str] | None = None
     hitl_policy: HITLPolicyConfig | None = None
     confidence_floor: float | None = None
     llm: LLMConfig | None = None
+    # Virtual employee persona fields
+    employee_name: str | None = None
+    avatar_url: str | None = None
+    designation: str | None = None
+    specialization: str | None = None
+    routing_filter: dict[str, str] | None = None
+    change_reason: str | None = None
 
 
 class AgentResponse(BaseModel):
@@ -193,3 +210,45 @@ class FleetLimits(BaseModel):
     max_agents_per_domain: dict[str, int] = {}
     max_shadow_agents: int = 10
     max_replicas_global_ceiling: int = 20
+
+
+# ── Prompt template schemas ──
+
+
+class PromptTemplateCreate(BaseModel):
+    name: str
+    agent_type: str
+    domain: str
+    template_text: str
+    variables: list[dict[str, str]] = []
+    description: str | None = None
+
+
+class PromptTemplateUpdate(BaseModel):
+    name: str | None = None
+    template_text: str | None = None
+    variables: list[dict[str, str]] | None = None
+    description: str | None = None
+
+
+class PromptTemplateResponse(BaseModel):
+    id: UUID
+    name: str
+    agent_type: str
+    domain: str
+    template_text: str
+    variables: list[dict[str, str]]
+    description: str | None
+    is_builtin: bool
+    is_active: bool
+    created_at: datetime
+
+
+class PromptEditHistoryResponse(BaseModel):
+    id: UUID
+    agent_id: UUID
+    edited_by: UUID | None
+    prompt_before: str | None
+    prompt_after: str
+    change_reason: str | None
+    created_at: datetime
