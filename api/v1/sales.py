@@ -1,13 +1,15 @@
-"""Sales pipeline API — lead management, sales agent triggers, email sequences."""
+"""Sales pipeline API — lead management, sales agent triggers, email sequences, auto-outreach."""
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 
@@ -458,4 +460,261 @@ async def get_sales_metrics(tenant_id: str = Depends(get_current_tenant)):
         "avg_score": avg_score,
         "emails_sent_this_week": emails_sent,
         "stale_leads": stale_leads,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CSV IMPORT — Bulk lead upload + auto-trigger sales agent on each
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/sales/import-csv")
+async def import_leads_csv(
+    file: UploadFile = File(...),
+    auto_process: bool = True,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Import leads from CSV. Expected columns: name, email, company, role, phone (optional).
+
+    If auto_process=true, triggers sales agent on each new lead after import.
+    """
+    tid = _uuid.UUID(tenant_id)
+    content = await file.read()
+    text_content = content.decode("utf-8-sig")  # Handle BOM
+    reader = csv.DictReader(io.StringIO(text_content))
+
+    imported = []
+    skipped = []
+
+    async with get_tenant_session(tid) as session:
+        for row in reader:
+            email = (row.get("email") or row.get("Email") or "").strip()
+            name = (row.get("name") or row.get("Name") or row.get("full_name") or "").strip()
+            if not email or not name:
+                skipped.append({"reason": "missing name or email", "row": dict(row)})
+                continue
+
+            # Check duplicate
+            exists = await session.execute(
+                select(LeadPipeline.id).where(
+                    LeadPipeline.tenant_id == tid, LeadPipeline.email == email
+                )
+            )
+            if exists.scalar_one_or_none():
+                skipped.append({"reason": "duplicate email", "email": email})
+                continue
+
+            lead = LeadPipeline(
+                tenant_id=tid,
+                name=name,
+                email=email,
+                company=(row.get("company") or row.get("Company") or "").strip(),
+                role=(row.get("role") or row.get("Role") or row.get("title") or row.get("Title") or "").strip(),
+                phone=(row.get("phone") or row.get("Phone") or "").strip(),
+                source="csv_import",
+                stage="new",
+                score=0,
+            )
+            session.add(lead)
+            await session.flush()
+            imported.append({"id": str(lead.id), "name": name, "email": email})
+
+    # Auto-trigger sales agent on each imported lead
+    processed = 0
+    if auto_process and imported:
+        for lead_info in imported:
+            try:
+                # Call process_lead internally
+                await process_lead_with_agent(
+                    payload={"lead_id": lead_info["id"], "action": "qualify_and_respond"},
+                    tenant_id=tenant_id,
+                )
+                processed += 1
+            except Exception as e:
+                logger.warning("csv_import_process_failed", lead_id=lead_info["id"], error=str(e))
+
+    return {
+        "imported": len(imported),
+        "skipped": len(skipped),
+        "processed_by_agent": processed,
+        "leads": imported,
+        "skip_details": skipped[:10],  # Show first 10 skip reasons
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUTOMATED FOLLOW-UP ENGINE — Process all leads needing follow-up
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Follow-up schedule: step → days after first contact
+FOLLOWUP_SCHEDULE = {
+    0: 0,   # Instant response (already sent)
+    1: 1,   # Day 1: Value add
+    2: 3,   # Day 3: Social proof
+    3: 7,   # Day 7: Direct ask
+    4: 14,  # Day 14: Breakup
+}
+
+
+@router.post("/sales/run-followups")
+async def run_automated_followups(
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Process all leads that need follow-up based on their sequence step and timing.
+
+    Call this daily via CronJob or Cloud Scheduler.
+    Returns summary of actions taken.
+    """
+    tid = _uuid.UUID(tenant_id)
+    now = datetime.now(UTC)
+    results = {"processed": 0, "emailed": 0, "skipped": 0, "errors": 0, "details": []}
+
+    async with get_tenant_session(tid) as session:
+        # Get all active leads (not closed, not brand new with no contact)
+        active_leads = await session.execute(
+            select(LeadPipeline).where(
+                LeadPipeline.tenant_id == tid,
+                LeadPipeline.stage.not_in(["closed_won", "closed_lost"]),
+            ).order_by(LeadPipeline.score.desc())
+        )
+        leads = active_leads.scalars().all()
+
+    for lead in leads:
+        try:
+            # Determine next sequence step
+            current_step = lead.followup_count
+            if current_step > 4:
+                # Sequence complete — skip
+                results["skipped"] += 1
+                continue
+
+            if current_step == 0 and lead.stage == "new":
+                # Never contacted — send initial outreach
+                pass  # Process below
+            elif lead.last_contacted_at:
+                # Check if enough time has passed for next step
+                days_since_contact = (now - lead.last_contacted_at).days
+                required_days = FOLLOWUP_SCHEDULE.get(current_step, 999)
+                prev_days = FOLLOWUP_SCHEDULE.get(current_step - 1, 0) if current_step > 0 else 0
+                gap_needed = required_days - prev_days
+
+                if days_since_contact < gap_needed:
+                    results["skipped"] += 1
+                    continue
+            else:
+                results["skipped"] += 1
+                continue
+
+            # Trigger sales agent for this lead
+            try:
+                resp = await process_lead_with_agent(
+                    payload={
+                        "lead_id": str(lead.id),
+                        "action": "followup",
+                        "sequence_step": current_step,
+                    },
+                    tenant_id=str(tid),
+                )
+                results["processed"] += 1
+                if resp.get("output", {}).get("email"):
+                    results["emailed"] += 1
+                results["details"].append({
+                    "lead": lead.name,
+                    "step": current_step,
+                    "status": resp.get("status"),
+                })
+            except Exception as e:
+                results["errors"] += 1
+                logger.warning("followup_failed", lead=lead.name, error=str(e))
+
+        except Exception as e:
+            results["errors"] += 1
+            logger.warning("followup_error", lead_id=str(lead.id), error=str(e))
+
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SEED TARGET LEADS — Pre-built list of Indian enterprise prospects
+# ═══════════════════════════════════════════════════════════════════════════
+
+TARGET_PROSPECTS = [
+    {"name": "Amit Sharma", "email": "amit.sharma@infosys.com", "company": "Infosys", "role": "VP Finance"},
+    {"name": "Priya Mehta", "email": "priya.mehta@wipro.com", "company": "Wipro", "role": "CFO"},
+    {"name": "Rajesh Iyer", "email": "rajesh.iyer@hcl.com", "company": "HCL Technologies", "role": "Head Operations"},
+    {"name": "Neha Gupta", "email": "neha.gupta@zoho.com", "company": "Zoho Corporation", "role": "VP HR"},
+    {"name": "Vikram Patel", "email": "vikram.patel@freshworks.com", "company": "Freshworks", "role": "CFO"},
+    {"name": "Sunita Reddy", "email": "sunita.reddy@razorpay.com", "company": "Razorpay", "role": "Head Finance"},
+    {"name": "Karthik Nair", "email": "karthik.nair@swiggy.com", "company": "Swiggy", "role": "VP Operations"},
+    {"name": "Anjali Singh", "email": "anjali.singh@zerodha.com", "company": "Zerodha", "role": "COO"},
+    {"name": "Rohit Bansal", "email": "rohit.bansal@snapdeal.com", "company": "Snapdeal", "role": "CFO"},
+    {"name": "Meera Joshi", "email": "meera.joshi@nykaa.com", "company": "Nykaa", "role": "VP Finance"},
+    {"name": "Arjun Kapoor", "email": "arjun.kapoor@policybazaar.com", "company": "PolicyBazaar", "role": "Head HR"},
+    {"name": "Divya Krishnan", "email": "divya.krishnan@bharatpe.com", "company": "BharatPe", "role": "CFO"},
+    {"name": "Sanjay Mittal", "email": "sanjay.mittal@delhivery.com", "company": "Delhivery", "role": "COO"},
+    {"name": "Pooja Agarwal", "email": "pooja.agarwal@cred.club", "company": "CRED", "role": "VP Finance"},
+    {"name": "Rahul Verma", "email": "rahul.verma@zomato.com", "company": "Zomato", "role": "Head Operations"},
+    {"name": "Anita Deshmukh", "email": "anita.deshmukh@tatasteel.com", "company": "Tata Steel", "role": "VP Finance"},
+    {"name": "Suresh Kumar", "email": "suresh.kumar@mahindra.com", "company": "Mahindra Group", "role": "CFO"},
+    {"name": "Kavita Rao", "email": "kavita.rao@biocon.com", "company": "Biocon", "role": "Head HR"},
+    {"name": "Vivek Pandey", "email": "vivek.pandey@dream11.com", "company": "Dream11", "role": "COO"},
+    {"name": "Nandini Bhat", "email": "nandini.bhat@flipkart.com", "company": "Flipkart", "role": "VP Operations"},
+]
+
+
+@router.post("/sales/seed-prospects")
+async def seed_target_prospects(
+    auto_process: bool = False,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Seed 20 pre-built Indian enterprise prospects into pipeline.
+    Set auto_process=true to immediately trigger sales agent on each.
+    """
+    tid = _uuid.UUID(tenant_id)
+    imported = []
+    skipped = []
+
+    async with get_tenant_session(tid) as session:
+        for prospect in TARGET_PROSPECTS:
+            exists = await session.execute(
+                select(LeadPipeline.id).where(
+                    LeadPipeline.tenant_id == tid, LeadPipeline.email == prospect["email"]
+                )
+            )
+            if exists.scalar_one_or_none():
+                skipped.append(prospect["email"])
+                continue
+
+            lead = LeadPipeline(
+                tenant_id=tid,
+                name=prospect["name"],
+                email=prospect["email"],
+                company=prospect["company"],
+                role=prospect["role"],
+                source="target_list",
+                stage="new",
+                score=0,
+            )
+            session.add(lead)
+            await session.flush()
+            imported.append({"id": str(lead.id), "name": prospect["name"], "company": prospect["company"]})
+
+    # Auto-process if requested
+    processed = 0
+    if auto_process:
+        for lead_info in imported:
+            try:
+                await process_lead_with_agent(
+                    payload={"lead_id": lead_info["id"]},
+                    tenant_id=tenant_id,
+                )
+                processed += 1
+            except Exception as e:
+                logger.warning("seed_process_failed", lead=lead_info["name"], error=str(e))
+
+    return {
+        "seeded": len(imported),
+        "skipped_duplicates": len(skipped),
+        "processed_by_agent": processed,
+        "leads": imported,
     }
