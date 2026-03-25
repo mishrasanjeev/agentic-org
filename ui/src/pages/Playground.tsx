@@ -361,6 +361,71 @@ function parseTraceLines(
 /*  Playground Component                                               */
 /* ------------------------------------------------------------------ */
 
+/* ── Your Agents section — shows user-created agents from API ── */
+function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) => void; running: boolean; selectedId?: string }) {
+  const [agents, setAgents] = useState<any[]>([]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch("/api/v1/agents?per_page=50", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => {
+        const items = data.items || [];
+        // Filter to non-builtin agents only
+        const custom = items.filter((a: any) => !a.is_builtin);
+        setAgents(custom);
+      })
+      .catch(() => {});
+  }, []);
+
+  if (agents.length === 0) return null;
+
+  return (
+    <section>
+      <h2 className="text-xl font-semibold text-slate-200 mb-4">Your Agents</h2>
+      <p className="text-sm text-slate-400 mb-4">Agents you created — click to run.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {agents.map((agent) => {
+          const uc = {
+            id: `custom-${agent.id}`,
+            agentId: agent.id,
+            agentName: agent.employee_name || agent.name,
+            title: agent.designation || agent.agent_type.replace(/_/g, " "),
+            domain: agent.domain,
+            emoji: agent.domain === "finance" ? "\uD83D\uDCB0" : agent.domain === "hr" ? "\uD83D\uDC65" : agent.domain === "marketing" ? "\uD83D\uDCE3" : "\u2699\uFE0F",
+            input: { action: "process", inputs: {} },
+          };
+          const isActive = selectedId === uc.id;
+          return (
+            <button
+              key={agent.id}
+              onClick={() => onRun(uc)}
+              disabled={running}
+              className={`text-left p-4 rounded-xl border transition-all duration-200 ${
+                isActive
+                  ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500"
+                  : "border-slate-800 bg-slate-900 hover:border-slate-600 hover:bg-slate-800/80"
+              } ${running ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold">
+                  {(agent.employee_name || agent.name || "A").charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-white text-sm">{agent.employee_name || agent.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{agent.agent_type} | {agent.domain}</p>
+                  {agent.specialization && <p className="text-xs text-slate-500 mt-0.5 truncate">{agent.specialization}</p>}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function Playground() {
   const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null);
   const [running, setRunning] = useState(false);
@@ -567,6 +632,11 @@ export default function Playground() {
             })}
           </div>
         </section>
+
+        {/* ============================================================ */}
+        {/* YOUR AGENTS (fetched from API)                                */}
+        {/* ============================================================ */}
+        <UserAgentsSection onRun={(uc) => runAgent(uc)} running={running} selectedId={selectedUseCase?.id} />
 
         {/* ============================================================ */}
         {/* LIVE OUTPUT                                                   */}

@@ -15,6 +15,8 @@ export default function PromptTemplates() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [domainFilter, setDomainFilter] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -131,13 +133,57 @@ export default function PromptTemplates() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>{humanize(selected.name)}</CardTitle>
-              {selected.is_builtin && <Badge variant="outline">Built-in (read-only)</Badge>}
+              <div className="flex gap-2 items-center">
+                {selected.is_builtin ? (
+                  <>
+                    <Badge variant="outline">Built-in (read-only)</Badge>
+                    <Button variant="outline" size="sm" onClick={async () => {
+                      try {
+                        await promptTemplatesApi.create({
+                          name: `${selected.name}_custom`,
+                          agent_type: selected.agent_type,
+                          domain: selected.domain,
+                          template_text: selected.template_text,
+                          description: `Custom copy of ${selected.name}`,
+                        });
+                        fetchTemplates();
+                      } catch { /* ignore */ }
+                    }}>Clone to Edit</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => { setEditing(!editing); setEditText(selected.template_text); }}>
+                      {editing ? "Cancel Edit" : "Edit"}
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={async () => {
+                      if (!confirm("Delete this template?")) return;
+                      await promptTemplatesApi.delete(selected.id);
+                      setSelectedId(null);
+                      fetchTemplates();
+                    }}>Delete</Button>
+                  </>
+                )}
+              </div>
             </div>
+            {selected.is_builtin && (
+              <p className="text-xs text-muted-foreground mt-2">This is a system template and cannot be edited directly. Click "Clone to Edit" to create a custom copy.</p>
+            )}
           </CardHeader>
           <CardContent>
-            <pre className="bg-muted rounded p-4 text-xs font-mono whitespace-pre-wrap max-h-96 overflow-auto">
-              {selected.template_text}
-            </pre>
+            {editing && !selected.is_builtin ? (
+              <div className="space-y-3">
+                <textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="border rounded px-3 py-2 text-sm w-full font-mono" rows={15} />
+                <Button size="sm" onClick={async () => {
+                  await promptTemplatesApi.update(selected.id, { template_text: editText });
+                  setEditing(false);
+                  fetchTemplates();
+                }}>Save Changes</Button>
+              </div>
+            ) : (
+              <pre className="bg-muted rounded p-4 text-xs font-mono whitespace-pre-wrap max-h-96 overflow-auto">
+                {selected.template_text}
+              </pre>
+            )}
             {selected.variables && selected.variables.length > 0 && (
               <div className="mt-3">
                 <p className="text-sm font-medium">Variables</p>

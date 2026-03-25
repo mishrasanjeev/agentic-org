@@ -335,7 +335,7 @@ export default function Landing() {
   const closeMobile = useCallback(() => setMobileMenuOpen(false), []);
 
   return (
-    <div className="min-h-screen font-sans text-slate-900 antialiased">
+    <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>

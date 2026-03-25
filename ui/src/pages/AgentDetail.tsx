@@ -34,14 +34,33 @@ export default function AgentDetail() {
     }
   }
 
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   async function handlePromote() {
-    await api.post(`/agents/${id}/promote`);
-    fetchAgent();
+    setActionLoading("promote");
+    setActionError(null);
+    try {
+      await api.post(`/agents/${id}/promote`);
+      fetchAgent();
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || "Promote failed");
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   async function handleRollback() {
-    await api.post(`/agents/${id}/rollback`);
-    fetchAgent();
+    setActionLoading("rollback");
+    setActionError(null);
+    try {
+      await api.post(`/agents/${id}/rollback`);
+      fetchAgent();
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || "Rollback failed");
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   if (loading) return <p className="text-muted-foreground">Loading agent...</p>;
@@ -80,10 +99,17 @@ export default function AgentDetail() {
             {agent.is_builtin && <Badge variant="outline" className="mt-1">Built-in</Badge>}
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handlePromote}>Promote</Button>
-          <Button variant="outline" size="sm" onClick={handleRollback}>Rollback</Button>
-          <KillSwitch agentId={id || ""} agentName={displayName} onPaused={fetchAgent} />
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handlePromote} disabled={actionLoading !== null || agent.status === "active"}>
+              {actionLoading === "promote" ? "Promoting..." : "Promote"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleRollback} disabled={actionLoading !== null}>
+              {actionLoading === "rollback" ? "Rolling back..." : "Rollback"}
+            </Button>
+            <KillSwitch agentId={id || ""} agentName={displayName} onPaused={fetchAgent} />
+          </div>
+          {actionError && <p className="text-xs text-destructive">{actionError}</p>}
         </div>
       </div>
 

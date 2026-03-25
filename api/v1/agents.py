@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -16,6 +16,7 @@ from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
+from core.models.hitl import HITLQueue
 from core.models.prompt_template import PromptEditHistory
 from core.schemas.api import (
     AgentCloneRequest,
@@ -432,6 +433,32 @@ async def run_agent(
             },
         )
         session.add(audit_entry)
+
+    # 6b. Create HITL queue entry if HITL was triggered
+    if task_result.hitl_request:
+        async with get_tenant_session(tid) as session:
+            hitl_entry = HITLQueue(
+                tenant_id=tid,
+                agent_id=agent_id,
+                workflow_run_id=None,
+                title=f"HITL: {agent_config['agent_type']} — {task_result.hitl_request.trigger_condition}",
+                trigger_type=task_result.hitl_request.trigger_type,
+                priority="high" if task_result.confidence < 0.7 else "normal",
+                assignee_role=agent_config.get("domain", "admin"),
+                decision_options={
+                    "options": ["approve", "reject", "override"],
+                    "context": task_result.output,
+                },
+                context={
+                    "correlation_id": correlation_id,
+                    "agent_type": agent_config["agent_type"],
+                    "confidence": task_result.confidence,
+                    "reasoning_trace": task_result.reasoning_trace,
+                    "trigger": task_result.hitl_request.trigger_condition,
+                },
+                expires_at=datetime.now(UTC) + timedelta(hours=4),
+            )
+            session.add(hitl_entry)
 
     # 7. Return the real result
     response = {
