@@ -67,3 +67,5 @@ secrets/
 
 # Demo videos and recordings
 video/
+scripts/slack_demo.py
+tests/connector_e2e/
