@@ -6,6 +6,7 @@ import csv
 import io
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -563,7 +564,7 @@ async def run_automated_followups(
     """
     tid = _uuid.UUID(tenant_id)
     now = datetime.now(UTC)
-    results = {"processed": 0, "emailed": 0, "skipped": 0, "errors": 0, "details": []}
+    results: dict[str, Any] = {"processed": 0, "emailed": 0, "skipped": 0, "errors": 0, "details": []}
 
     async with get_tenant_session(tid) as session:
         # Get all active leads (not closed, not brand new with no contact)
@@ -578,8 +579,8 @@ async def run_automated_followups(
     for lead in leads:
         try:
             # Determine next sequence step
-            current_step = lead.followup_count
-            if current_step > 4:  # type: ignore[operator]
+            current_step = int(lead.followup_count)
+            if current_step > 4:
                 # Sequence complete — skip
                 results["skipped"] += 1
                 continue
@@ -591,7 +592,7 @@ async def run_automated_followups(
                 # Check if enough time has passed for next step
                 days_since_contact = (now - lead.last_contacted_at).days
                 required_days = FOLLOWUP_SCHEDULE.get(current_step, 999)
-                prev_days = FOLLOWUP_SCHEDULE.get(current_step - 1, 0) if current_step > 0 else 0  # type: ignore[operator]
+                prev_days = FOLLOWUP_SCHEDULE.get(current_step - 1, 0) if current_step > 0 else 0
                 gap_needed = required_days - prev_days
 
                 if days_since_contact < gap_needed:
@@ -732,7 +733,7 @@ async def process_inbox(
     Call this via CronJob every 5-10 minutes.
     """
     tid = _uuid.UUID(tenant_id)
-    results = {"replies_found": 0, "matched": 0, "responded": 0, "errors": 0, "details": []}
+    results: dict[str, Any] = {"replies_found": 0, "matched": 0, "responded": 0, "errors": 0, "details": []}
 
     try:
         from core.gmail_agent import get_recent_replies, mark_as_read, send_reply
