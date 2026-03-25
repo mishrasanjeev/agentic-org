@@ -287,7 +287,7 @@ async def _run_sales_agent_on_lead(
             if "next_followup_at" in output and output["next_followup_at"]:
                 lead.next_followup_at = datetime.fromisoformat(output["next_followup_at"])
             lead.last_contacted_at = datetime.now(UTC)
-            lead.followup_count += 1
+            lead.followup_count += 1  # type: ignore[operator]
 
             email_data = output.get("email")
             if email_data and email_data.get("to"):
@@ -579,7 +579,7 @@ async def run_automated_followups(
         try:
             # Determine next sequence step
             current_step = lead.followup_count
-            if current_step > 4:
+            if current_step > 4:  # type: ignore[operator]
                 # Sequence complete — skip
                 results["skipped"] += 1
                 continue
@@ -591,7 +591,7 @@ async def run_automated_followups(
                 # Check if enough time has passed for next step
                 days_since_contact = (now - lead.last_contacted_at).days
                 required_days = FOLLOWUP_SCHEDULE.get(current_step, 999)
-                prev_days = FOLLOWUP_SCHEDULE.get(current_step - 1, 0) if current_step > 0 else 0
+                prev_days = FOLLOWUP_SCHEDULE.get(current_step - 1, 0) if current_step > 0 else 0  # type: ignore[operator]
                 gap_needed = required_days - prev_days
 
                 if days_since_contact < gap_needed:
@@ -836,7 +836,7 @@ async def process_inbox(
                             tenant_id=tid,
                             lead_id=_uuid.UUID(lead_id),
                             sequence_name="reply",
-                            step_number=len(prev_emails) + 1,
+                            step_number=len(prev_emails) + 1,  # type: ignore[operator]
                             email_subject=f"Re: {reply['subject']}",
                             email_body=response_body,
                             status="sent",

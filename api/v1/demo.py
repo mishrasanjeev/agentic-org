@@ -86,7 +86,7 @@ async def submit_demo_request(body: DemoRequest):
             dup = existing.fetchone()
             if dup:
                 lead_id = str(dup[0])
-                logger.info("Lead already exists", lead_id=lead_id, email=body.email)
+                logger.info("Lead already exists: %s (%s)", lead_id, body.email)
             else:
                 new_id = _uuid.uuid4()
                 await session.execute(
@@ -104,7 +104,7 @@ async def submit_demo_request(body: DemoRequest):
                 )
                 await session.commit()
                 lead_id = str(new_id)
-                logger.info("Lead created in pipeline", lead_id=lead_id, email=body.email)
+                logger.info("Lead created in pipeline: %s (%s)", lead_id, body.email)
     except Exception:
         logger.exception("Failed to create lead in pipeline (non-blocking)")
 
@@ -121,7 +121,7 @@ async def submit_demo_request(body: DemoRequest):
             from api.v1.sales import _run_sales_agent_on_lead
             agent_result = await _run_sales_agent_on_lead(default_tenant_id, lead_id)
             agent_status = agent_result.get("status")
-            logger.info("sales_agent_triggered", lead_id=lead_id, status=agent_status)
+            logger.info("sales_agent_triggered: %s status=%s", lead_id, agent_status)
         except Exception:
             logger.exception("Sales agent trigger failed (non-blocking)")
 
