@@ -1,10 +1,11 @@
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Signup() {
-  const { signup } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [orgName, setOrgName] = useState("");
   const [name, setName] = useState("");
@@ -13,6 +14,27 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/auth/config")
+      .then((r) => r.json())
+      .then((data) => { if (data.google_client_id) setGoogleClientId(data.google_client_id); })
+      .catch(() => {});
+  }, []);
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    setError(null);
+    setLoading(true);
+    try {
+      await loginWithGoogle(credentialResponse.credential);
+      navigate("/onboarding");
+    } catch (err: any) {
+      setError(err.message || "Google signup failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -32,7 +54,7 @@ export default function Signup() {
     }
   };
 
-  return (
+  const signupForm = (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <Helmet>
         <title>Create Account — AgenticOrg</title>
@@ -141,6 +163,25 @@ export default function Signup() {
             </button>
           </form>
 
+          {/* Google signup */}
+          {googleClientId && (
+            <div className="mt-4">
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or</span></div>
+              </div>
+              <div className="flex justify-center">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError("Google sign-up failed")}
+                  size="large"
+                  width={350}
+                  text="signup_with"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Sign-in link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground">
@@ -154,4 +195,13 @@ export default function Signup() {
       </div>
     </div>
   );
+
+  if (googleClientId) {
+    return (
+      <GoogleOAuthProvider clientId={googleClientId}>
+        {signupForm}
+      </GoogleOAuthProvider>
+    );
+  }
+  return signupForm;
 }

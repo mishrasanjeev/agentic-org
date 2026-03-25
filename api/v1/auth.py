@@ -247,9 +247,16 @@ async def google_login(body: GoogleLoginRequest):
             # Auto-create user with a default tenant
             from core.models.tenant import Tenant
 
-            # Find default tenant or create one
-            tenant_result = await session.execute(select(Tenant).limit(1))
+            # Find default tenant
+            tenant_result = await session.execute(
+                select(Tenant).where(Tenant.slug == "default").limit(1)
+            )
             tenant = tenant_result.scalar_one_or_none()
+            if not tenant:
+                tenant_result = await session.execute(
+                    select(Tenant).order_by(Tenant.created_at).limit(1)
+                )
+                tenant = tenant_result.scalar_one_or_none()
             if not tenant:
                 raise HTTPException(status_code=403, detail="No tenant configured")
 
