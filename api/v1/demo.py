@@ -6,7 +6,7 @@ import uuid as _uuid
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from core.database import async_session_factory
 from core.email import send_email
@@ -72,11 +72,11 @@ async def submit_demo_request(body: DemoRequest):
     # 2. Create lead in sales pipeline
     # Use the default org tenant (00000000-0000-0000-0000-000000000001)
     # This is a single-tenant deployment — hardcoding avoids repeated tenant lookup bugs
-    DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
+    default_tenant_id = "00000000-0000-0000-0000-000000000001"
     lead_id = None
     try:
         async with async_session_factory() as session:
-            tid = _uuid.UUID(DEFAULT_TENANT_ID)
+            tid = _uuid.UUID(default_tenant_id)
 
             # Check for duplicate lead (same email)
             existing = await session.execute(
@@ -91,8 +91,10 @@ async def submit_demo_request(body: DemoRequest):
                 new_id = _uuid.uuid4()
                 await session.execute(
                     text(
-                        "INSERT INTO lead_pipeline (id, tenant_id, name, email, company, role, phone, source, stage, score) "
-                        "VALUES (:id, :tid, :name, :email, :company, :role, :phone, 'website', 'new', 0)"
+                        "INSERT INTO lead_pipeline (id, tenant_id, name, email, "
+                        "company, role, phone, source, stage, score) "
+                        "VALUES (:id, :tid, :name, :email, "
+                        ":company, :role, :phone, 'website', 'new', 0)"
                     ),
                     {
                         "id": new_id, "tid": tid,
@@ -117,7 +119,7 @@ async def submit_demo_request(body: DemoRequest):
     if lead_id:
         try:
             from api.v1.sales import _run_sales_agent_on_lead
-            agent_result = await _run_sales_agent_on_lead(DEFAULT_TENANT_ID, lead_id)
+            agent_result = await _run_sales_agent_on_lead(default_tenant_id, lead_id)
             agent_status = agent_result.get("status")
             logger.info("sales_agent_triggered", lead_id=lead_id, status=agent_status)
         except Exception:

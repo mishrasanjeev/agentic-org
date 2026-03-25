@@ -13,14 +13,12 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from core.agents.base import BaseAgent
 from core.agents.registry import AgentRegistry
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Registry Tests

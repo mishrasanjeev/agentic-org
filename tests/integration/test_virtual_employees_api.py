@@ -21,7 +21,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
@@ -166,7 +165,7 @@ class TestPromptLock:
         assert resp.status_code == 200
 
     async def test_patch_prompt_on_active_agent_rejected(self, client: AsyncClient, auth_headers):
-        agent_id = await self._create_active_agent(client, auth_headers)
+        await self._create_active_agent(client, auth_headers)
 
         # Force to active (simulate promotion)
         # We need to directly update the status — use the promote endpoint won't work

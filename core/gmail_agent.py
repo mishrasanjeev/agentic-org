@@ -13,9 +13,7 @@ import os
 import re
 from datetime import UTC, datetime, timedelta
 from email.mime.text import MIMEText
-from pathlib import Path
 
-from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 
 logger = logging.getLogger(__name__)

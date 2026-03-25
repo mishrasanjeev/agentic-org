@@ -9,15 +9,15 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
 from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
-from core.models.lead_pipeline import EmailSequence, LeadPipeline
 from core.models.audit import AuditLog
+from core.models.lead_pipeline import EmailSequence, LeadPipeline
 from core.schemas.messages import (
     HITLPolicy,
     TargetAgent,
@@ -117,7 +117,7 @@ async def get_pipeline(
     return {
         "funnel": funnel,
         "total": sum(funnel.values()),
-        "leads": [_lead_to_dict(l) for l in leads],
+        "leads": [_lead_to_dict(lead) for lead in leads],
     }
 
 
@@ -189,7 +189,10 @@ async def update_lead(
 
 # ── POST /sales/pipeline/process-lead — Trigger sales agent on a lead ──
 
-async def _run_sales_agent_on_lead(tenant_id: str, lead_id: str, action: str = "qualify_and_respond", sequence_step: int = 0) -> dict:
+async def _run_sales_agent_on_lead(
+    tenant_id: str, lead_id: str,
+    action: str = "qualify_and_respond", sequence_step: int = 0,
+) -> dict:
     """Core logic: run sales agent on a lead. Called from API endpoint and demo request trigger."""
     tid = _uuid.UUID(tenant_id)
 
@@ -299,7 +302,11 @@ async def _run_sales_agent_on_lead(tenant_id: str, lead_id: str, action: str = "
                 session.add(email_record)
                 try:
                     from core.email import send_email
-                    send_email(to=email_data["to"], subject=email_data.get("subject", "AgenticOrg"), html=email_data.get("body_html", ""))
+                    send_email(
+                        to=email_data["to"],
+                        subject=email_data.get("subject", "AgenticOrg"),
+                        html=email_data.get("body_html", ""),
+                    )
                     email_record.status = "sent"
                     email_record.sent_at = datetime.now(UTC)
                 except Exception as e:
@@ -309,7 +316,11 @@ async def _run_sales_agent_on_lead(tenant_id: str, lead_id: str, action: str = "
                 tenant_id=tid, event_type="sales.process_lead", actor_type="agent",
                 actor_id=agent_config["id"], resource_type="lead", resource_id=str(lead.id),
                 action="process_lead", outcome=task_result.status,
-                details={"score": output.get("lead_score"), "stage": output.get("lead_stage"), "confidence": task_result.confidence},
+                details={
+                    "score": output.get("lead_score"),
+                    "stage": output.get("lead_stage"),
+                    "confidence": task_result.confidence,
+                },
             )
             session.add(audit)
 
@@ -317,8 +328,9 @@ async def _run_sales_agent_on_lead(tenant_id: str, lead_id: str, action: str = "
     slack_msg = output.get("slack_message")
     if slack_msg:
         try:
-            from core.config import external_keys
             import httpx
+
+            from core.config import external_keys
             async with httpx.AsyncClient() as client:
                 await client.post(
                     "https://slack.com/api/chat.postMessage",
@@ -360,155 +372,6 @@ async def process_lead_with_agent(
         raise HTTPException(400, result["error"])
     return result
 
-    # NOTE: Previous duplicate code block removed.
-    # All logic now lives in _run_sales_agent_on_lead() above.
-    agent_config_DEAD = {
-        "id": str(agent_row.id),
-        "tenant_id": tenant_id,
-        "agent_type": agent_row.agent_type,
-        "authorized_tools": agent_row.authorized_tools or [],
-        "prompt_variables": agent_row.prompt_variables or {},
-        "hitl_condition": agent_row.hitl_condition or "",
-        "output_schema": agent_row.output_schema,
-        "system_prompt_text": agent_row.system_prompt_text,
-    }
-
-    # Ensure agent modules registered
-    import core.agents  # noqa: F401
-
-    agent_instance = AgentRegistry.create_from_config(agent_config)
-
-    # Build task
-    task_assignment = TaskAssignment(
-        message_id=f"msg_{_uuid.uuid4().hex[:12]}",
-        correlation_id=f"sales_{_uuid.uuid4().hex[:12]}",
-        workflow_run_id=f"sales_pipeline_{_uuid.uuid4().hex[:8]}",
-        workflow_definition_id="sales_pipeline",
-        step_id="process_lead",
-        step_index=0,
-        total_steps=1,
-        target_agent=TargetAgent(
-            agent_id=agent_config["id"],
-            agent_type="sales_agent",
-            agent_token="runtime",
-        ),
-        task=TaskInput(
-            action=payload.get("action", "qualify_and_respond"),
-            inputs={"lead": lead_data},
-            context={
-                "sequence_step": payload.get("sequence_step", 0),
-                "action_type": payload.get("action", "qualify_and_respond"),
-            },
-        ),
-        hitl_policy=HITLPolicy(
-            enabled=True,
-            threshold_expression=agent_config.get("hitl_condition", ""),
-        ),
-        metadata=TaskMetadata(priority="high"),
-    )
-
-    try:
-        task_result = await agent_instance.execute(task_assignment)
-    except Exception as exc:
-        logger.error("sales_agent_error", lead_id=lead_id, error=str(exc))
-        raise HTTPException(500, f"Sales agent execution failed: {exc}") from exc
-
-    # Process agent output — update lead, send email, post to Slack
-    output = task_result.output or {}
-
-    async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(LeadPipeline).where(LeadPipeline.id == _uuid.UUID(lead_id))
-        )
-        lead = result.scalar_one_or_none()
-        if lead:
-            # Update score
-            if "lead_score" in output:
-                lead.score = output["lead_score"]
-            if "qualification" in output:
-                lead.score_factors = output["qualification"].get("score_factors", {})
-            # Update stage
-            if "lead_stage" in output and output["lead_stage"] != lead.stage:
-                lead.stage = output["lead_stage"]
-            # Update follow-up
-            if "next_followup_at" in output and output["next_followup_at"]:
-                lead.next_followup_at = datetime.fromisoformat(output["next_followup_at"])
-            lead.last_contacted_at = datetime.now(UTC)
-            lead.followup_count += 1
-
-            # Record email if agent generated one
-            email_data = output.get("email")
-            if email_data and email_data.get("to"):
-                email_record = EmailSequence(
-                    tenant_id=tid,
-                    lead_id=lead.id,
-                    sequence_name=email_data.get("sequence_name", "initial_outreach"),
-                    step_number=email_data.get("step_number", 0),
-                    email_subject=email_data.get("subject"),
-                    email_body=email_data.get("body_html"),
-                    status="pending",
-                )
-                session.add(email_record)
-
-                # Actually send the email
-                try:
-                    from core.email import send_email
-                    send_email(
-                        to=email_data["to"],
-                        subject=email_data.get("subject", "AgenticOrg"),
-                        html=email_data.get("body_html", ""),
-                    )
-                    email_record.status = "sent"
-                    email_record.sent_at = datetime.now(UTC)
-                except Exception as e:
-                    logger.warning("sales_email_failed", lead_id=lead_id, error=str(e))
-
-            # Audit log
-            audit = AuditLog(
-                tenant_id=tid,
-                event_type="sales.process_lead",
-                actor_type="agent",
-                actor_id=agent_config["id"],
-                resource_type="lead",
-                resource_id=str(lead.id),
-                action="process_lead",
-                outcome=task_result.status,
-                details={
-                    "score": output.get("lead_score"),
-                    "stage": output.get("lead_stage"),
-                    "confidence": task_result.confidence,
-                    "action": output.get("action"),
-                },
-            )
-            session.add(audit)
-
-    # Send Slack alert for new leads
-    slack_msg = output.get("slack_message")
-    if slack_msg:
-        try:
-            from core.config import external_keys
-            import httpx
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    "https://slack.com/api/chat.postMessage",
-                    headers={"Authorization": f"Bearer {external_keys.slack_bot_token}"},
-                    json={
-                        "channel": slack_msg.get("channel", "C0AMMN62FBR"),
-                        "text": slack_msg.get("text", ""),
-                    },
-                )
-        except Exception as e:
-            logger.warning("sales_slack_failed", error=str(e))
-
-    return {
-        "task_id": task_result.message_id,
-        "lead_id": lead_id,
-        "status": task_result.status,
-        "output": output,
-        "confidence": task_result.confidence,
-        "reasoning_trace": task_result.reasoning_trace,
-    }
-
 
 # ── GET /sales/pipeline/due-followups — Leads needing follow-up ──
 
@@ -524,7 +387,7 @@ async def get_due_followups(tenant_id: str = Depends(get_current_tenant)):
             ).order_by(LeadPipeline.score.desc())
         )
         leads = result.scalars().all()
-    return [_lead_to_dict(l) for l in leads]
+    return [_lead_to_dict(lead) for lead in leads]
 
 
 # ── GET /sales/metrics — Weekly digest data ──
@@ -603,7 +466,7 @@ async def get_sales_metrics(tenant_id: str = Depends(get_current_tenant)):
 
 @router.post("/sales/import-csv")
 async def import_leads_csv(
-    file: UploadFile = File(...),
+    file: UploadFile,
     auto_process: bool = True,
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -872,7 +735,7 @@ async def process_inbox(
     results = {"replies_found": 0, "matched": 0, "responded": 0, "errors": 0, "details": []}
 
     try:
-        from core.gmail_agent import get_recent_replies, send_reply, mark_as_read
+        from core.gmail_agent import get_recent_replies, mark_as_read, send_reply
     except ImportError as e:
         return {"error": f"Gmail agent not available: {e}"}
 
@@ -936,7 +799,11 @@ async def process_inbox(
                     ).order_by(EmailSequence.step_number)
                 )
                 prev_emails = [
-                    {"subject": e.email_subject, "body": e.email_body[:500] if e.email_body else "", "step": e.step_number}
+                    {
+                        "subject": e.email_subject,
+                        "body": e.email_body[:500] if e.email_body else "",
+                        "step": e.step_number,
+                    }
                     for e in email_history.scalars().all()
                 ]
 
