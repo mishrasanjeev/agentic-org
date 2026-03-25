@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await fetch("/api/v1/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ org_name: orgName, name, email, password }),
+      body: JSON.stringify({ org_name: orgName, admin_name: name, admin_email: email, password }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Signup failed" }));
