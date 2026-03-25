@@ -851,3 +851,152 @@ async def seed_target_prospects(
         "processed_by_agent": processed,
         "leads": imported,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# INBOX MONITOR — Read replies, match to leads, auto-respond
+# ═══════════════════════════════════════════════════════════════════════════
+
+DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001"
+
+
+@router.post("/sales/process-inbox")
+async def process_inbox(
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Read recent inbox replies, match to pipeline leads, trigger sales agent for response.
+
+    Call this via CronJob every 5-10 minutes.
+    """
+    tid = _uuid.UUID(tenant_id)
+    results = {"replies_found": 0, "matched": 0, "responded": 0, "errors": 0, "details": []}
+
+    try:
+        from core.gmail_agent import get_recent_replies, send_reply, mark_as_read
+    except ImportError as e:
+        return {"error": f"Gmail agent not available: {e}"}
+
+    # Get recent replies (last 6 hours)
+    try:
+        replies = get_recent_replies(since_hours=6)
+    except Exception as e:
+        logger.error("inbox_fetch_failed", error=str(e))
+        return {"error": f"Failed to fetch inbox: {e}"}
+
+    results["replies_found"] = len(replies)
+
+    for reply in replies:
+        try:
+            # Match reply to a lead in pipeline
+            async with get_tenant_session(tid) as session:
+                lead_result = await session.execute(
+                    select(LeadPipeline).where(
+                        LeadPipeline.tenant_id == tid,
+                        LeadPipeline.email == reply["from_email"],
+                        LeadPipeline.stage.not_in(["closed_won", "closed_lost"]),
+                    )
+                )
+                lead = lead_result.scalar_one_or_none()
+
+            if not lead:
+                # Unknown sender — create a new lead
+                async with get_tenant_session(tid) as session:
+                    lead = LeadPipeline(
+                        tenant_id=tid,
+                        name=reply["from_name"],
+                        email=reply["from_email"],
+                        source="email_reply",
+                        stage="new",
+                        score=0,
+                    )
+                    session.add(lead)
+                    await session.flush()
+                    lead_id = str(lead.id)
+                logger.info("new_lead_from_reply", email=reply["from_email"], lead_id=lead_id)
+            else:
+                lead_id = str(lead.id)
+
+                # Update lead stage — they replied, so they're interested
+                async with get_tenant_session(tid) as session:
+                    result = await session.execute(
+                        select(LeadPipeline).where(LeadPipeline.id == lead.id)
+                    )
+                    db_lead = result.scalar_one_or_none()
+                    if db_lead and db_lead.stage in ("new", "contacted"):
+                        db_lead.stage = "qualified"
+                        logger.info("lead_qualified_by_reply", email=reply["from_email"])
+
+            results["matched"] += 1
+
+            # Get email history for context
+            async with get_tenant_session(tid) as session:
+                email_history = await session.execute(
+                    select(EmailSequence).where(
+                        EmailSequence.lead_id == _uuid.UUID(lead_id)
+                    ).order_by(EmailSequence.step_number)
+                )
+                prev_emails = [
+                    {"subject": e.email_subject, "body": e.email_body[:500] if e.email_body else "", "step": e.step_number}
+                    for e in email_history.scalars().all()
+                ]
+
+            # Trigger sales agent with reply context
+            agent_result = await _run_sales_agent_on_lead(
+                tenant_id=str(tid),
+                lead_id=lead_id,
+                action="respond_to_reply",
+                sequence_step=len(prev_emails),
+            )
+
+            # Send the response via Gmail API (in-thread)
+            agent_output = agent_result.get("output", {}) or {}
+            agent_email = agent_output.get("email", {}) or {}
+            response_body = agent_email.get("body_html", "")
+
+            if response_body and agent_result.get("status") == "completed":
+                try:
+                    sent_id = send_reply(
+                        thread_id=reply["thread_id"],
+                        to=reply["from_email"],
+                        subject=reply["subject"],
+                        html_body=response_body,
+                    )
+                    mark_as_read(reply["message_id"])
+
+                    # Record the sent reply
+                    async with get_tenant_session(tid) as session:
+                        email_record = EmailSequence(
+                            tenant_id=tid,
+                            lead_id=_uuid.UUID(lead_id),
+                            sequence_name="reply",
+                            step_number=len(prev_emails) + 1,
+                            email_subject=f"Re: {reply['subject']}",
+                            email_body=response_body,
+                            status="sent",
+                            sent_at=datetime.now(UTC),
+                        )
+                        session.add(email_record)
+
+                    results["responded"] += 1
+                    results["details"].append({
+                        "from": reply["from_email"],
+                        "subject": reply["subject"],
+                        "action": "responded",
+                        "gmail_id": sent_id,
+                    })
+                except Exception as e:
+                    logger.warning("reply_send_failed", error=str(e))
+                    results["errors"] += 1
+            else:
+                results["details"].append({
+                    "from": reply["from_email"],
+                    "subject": reply["subject"],
+                    "action": "agent_no_response",
+                    "agent_status": agent_result.get("status"),
+                })
+
+        except Exception as e:
+            results["errors"] += 1
+            logger.warning("inbox_process_error", email=reply.get("from_email"), error=str(e))
+
+    return results
