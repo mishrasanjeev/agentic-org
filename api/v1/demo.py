@@ -69,43 +69,40 @@ async def submit_demo_request(body: DemoRequest):
         )
         await session.commit()
 
-    # 2. Create lead in sales pipeline (use first tenant)
+    # 2. Create lead in sales pipeline
+    # Use the default org tenant (00000000-0000-0000-0000-000000000001)
+    # This is a single-tenant deployment — hardcoding avoids repeated tenant lookup bugs
+    DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
     lead_id = None
     try:
         async with async_session_factory() as session:
-            # Get default tenant
-            tenant_row = await session.execute(text("SELECT id FROM tenants WHERE slug = 'default' LIMIT 1"))
-            if not tenant_row.fetchone():
-                tenant_row = await session.execute(text("SELECT id FROM tenants ORDER BY created_at LIMIT 1"))
-            tenant = tenant_row.fetchone()
-            if tenant:
-                tid = tenant[0]
+            tid = _uuid.UUID(DEFAULT_TENANT_ID)
 
-                # Check for duplicate lead (same email)
-                existing = await session.execute(
-                    text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),
-                    {"email": body.email, "tid": tid},
+            # Check for duplicate lead (same email)
+            existing = await session.execute(
+                text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),
+                {"email": body.email, "tid": tid},
+            )
+            dup = existing.fetchone()
+            if dup:
+                lead_id = str(dup[0])
+                logger.info("Lead already exists", lead_id=lead_id, email=body.email)
+            else:
+                new_id = _uuid.uuid4()
+                await session.execute(
+                    text(
+                        "INSERT INTO lead_pipeline (id, tenant_id, name, email, company, role, phone, source, stage, score) "
+                        "VALUES (:id, :tid, :name, :email, :company, :role, :phone, 'website', 'new', 0)"
+                    ),
+                    {
+                        "id": new_id, "tid": tid,
+                        "name": body.name, "email": body.email,
+                        "company": body.company, "role": body.role, "phone": body.phone,
+                    },
                 )
-                dup = existing.fetchone()
-                if dup:
-                    lead_id = str(dup[0])
-                    logger.info("Lead already exists", lead_id=lead_id, email=body.email)
-                else:
-                    new_id = _uuid.uuid4()
-                    await session.execute(
-                        text(
-                            "INSERT INTO lead_pipeline (id, tenant_id, name, email, company, role, phone, source, stage, score) "
-                            "VALUES (:id, :tid, :name, :email, :company, :role, :phone, 'website', 'new', 0)"
-                        ),
-                        {
-                            "id": new_id, "tid": tid,
-                            "name": body.name, "email": body.email,
-                            "company": body.company, "role": body.role, "phone": body.phone,
-                        },
-                    )
-                    await session.commit()
-                    lead_id = str(new_id)
-                    logger.info("Lead created in pipeline", lead_id=lead_id, email=body.email)
+                await session.commit()
+                lead_id = str(new_id)
+                logger.info("Lead created in pipeline", lead_id=lead_id, email=body.email)
     except Exception:
         logger.exception("Failed to create lead in pipeline (non-blocking)")
 
@@ -115,19 +112,20 @@ async def submit_demo_request(body: DemoRequest):
     except Exception:
         logger.exception("Email send failed but request was saved")
 
-    # 4. Trigger sales agent asynchronously (non-blocking)
+    # 4. Trigger sales agent to qualify + send personalized email (non-blocking)
+    agent_status = None
     if lead_id:
         try:
-            # Import here to avoid circular imports
-            from api.v1.sales import process_lead_with_agent
-            # We can't call the endpoint directly since it needs auth,
-            # so we log the lead_id for the agent to pick up on next run
-            logger.info("sales_agent_trigger", lead_id=lead_id, action="qualify_and_respond")
+            from api.v1.sales import _run_sales_agent_on_lead
+            agent_result = await _run_sales_agent_on_lead(DEFAULT_TENANT_ID, lead_id)
+            agent_status = agent_result.get("status")
+            logger.info("sales_agent_triggered", lead_id=lead_id, status=agent_status)
         except Exception:
             logger.exception("Sales agent trigger failed (non-blocking)")
 
     return {
         "status": "received",
-        "message": "We'll be in touch within 24 hours.",
+        "message": "We'll be in touch within 2 minutes.",
         "lead_id": lead_id,
+        "agent_status": agent_status,
     }

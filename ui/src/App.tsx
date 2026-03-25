@@ -39,6 +39,9 @@ const SalesPipeline = lazy(() => import("./pages/SalesPipeline"));
 const Blog = lazy(() => import("./pages/blog/Blog"));
 const BlogPost = lazy(() => import("./pages/blog/BlogPost"));
 
+/* ── Google Ads landing pages ── */
+const AdsLanding = lazy(() => import("./pages/ads/AdsLanding"));
+
 /* ── Loading fallback ── */
 function PageLoader() {
   return (
@@ -69,6 +72,11 @@ export default function App() {
       {/* Blog / Content pages */}
       <Route path="/blog" element={<Blog />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
+
+      {/* Google Ads landing pages */}
+      <Route path="/solutions/ai-invoice-processing" element={<AdsLanding />} />
+      <Route path="/solutions/automated-bank-reconciliation" element={<AdsLanding />} />
+      <Route path="/solutions/payroll-automation" element={<AdsLanding />} />
 
       {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
       <Route
