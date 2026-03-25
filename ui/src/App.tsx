@@ -42,6 +42,10 @@ const BlogPost = lazy(() => import("./pages/blog/BlogPost"));
 /* ── Google Ads landing pages ── */
 const AdsLanding = lazy(() => import("./pages/ads/AdsLanding"));
 
+/* ── Resource / SEO content pages ── */
+const Resources = lazy(() => import("./pages/resources/Resources"));
+const ResourcePage = lazy(() => import("./pages/resources/ResourcePage"));
+
 /* ── Loading fallback ── */
 function PageLoader() {
   return (
@@ -73,6 +77,10 @@ export default function App() {
       {/* Blog / Content pages */}
       <Route path="/blog" element={<Blog />} />
       <Route path="/blog/:slug" element={<BlogPost />} />
+
+      {/* Resource / SEO content pages */}
+      <Route path="/resources" element={<Resources />} />
+      <Route path="/resources/:slug" element={<ResourcePage />} />
 
       {/* Google Ads landing pages */}
       <Route path="/solutions/ai-invoice-processing" element={<AdsLanding />} />
