@@ -549,6 +549,7 @@ export default function Playground() {
       <Helmet>
         <title>Agent Playground — Try AgenticOrg Live</title>
         <meta name="description" content="Try AgenticOrg AI agents live. No signup required. Pick a use case, click Run, and watch an AI agent work in real-time." />
+        <link rel="canonical" href="https://agenticorg.ai/playground" />
       </Helmet>
 
       {/* ============================================================ */}

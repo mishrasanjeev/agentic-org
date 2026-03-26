@@ -286,7 +286,8 @@ export default function Pricing() {
     <div className="min-h-screen bg-white">
       <Helmet>
         <title>Pricing | AgenticOrg</title>
-        <meta name="description" content="Simple, transparent pricing for AgenticOrg. Start free, scale with Pro, go all-in with Enterprise." />
+        <meta name="description" content="Simple, transparent pricing for AgenticOrg. Start free with 35 agents, scale with Pro, go all-in with Enterprise." />
+        <link rel="canonical" href="https://agenticorg.ai/pricing" />
       </Helmet>
 
       {/* Demo modal */}
