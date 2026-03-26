@@ -101,6 +101,18 @@ Each agent is a **virtual employee** with:
 
 **Multiple agents per role**: You can have 3 AP Processors — each for a different region, vendor type, or threshold. Smart routing picks the right one.
 
+### 3.2b Per-Agent LLM Selection
+
+Each agent can use a different LLM model. The platform supports Gemini 2.5 Flash (default), Claude 3.5 Sonnet, and GPT-4o. If the required API key isn't configured, the agent safely falls back to the global default (Gemini). This means agents created with "claude" won't break if the Anthropic key is removed — they'll just use Gemini instead.
+
+### 3.2c Org Chart Hierarchy
+
+Agents can report to other agents via `parent_agent_id` and `reporting_to` fields. This creates a management hierarchy: AP Analysts report to VP Finance, who reports to CFO. When an agent fails or triggers HITL, the task can escalate to the parent agent automatically. The hierarchy is visible in the agent detail view.
+
+### 3.2d Per-Agent Budget Enforcement
+
+Each agent can have a monthly cost cap (e.g., $200/month). Before every execution, the system checks if the agent's monthly spend has exceeded the cap. If exceeded, the agent returns `E1008 budget_exceeded` instead of making an LLM call. Cost is tracked per execution in the `AgentCostLedger` table. Admins can view budget usage via `GET /agents/{id}/budget`. Agents without budget limits run unlimited.
+
 ### 3.3 Agent Creator Wizard (Admin Only)
 
 5-step no-code wizard at `/dashboard/agents/new`:

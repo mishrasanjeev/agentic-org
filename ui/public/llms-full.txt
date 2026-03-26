@@ -62,6 +62,15 @@ Smart routing resolves the right agent based on routing_filter match, specializa
 ### Custom Agent Types
 Admins can create entirely new agent types (e.g., "customer_success") that have no pre-built Python class. These agents run through the same execution pipeline (LLM reasoning → confidence scoring → HITL evaluation) using the prompt text stored in the database.
 
+### Per-Agent LLM Selection
+Each agent can specify its preferred LLM model: Gemini 2.5 Flash (default, free tier), Claude 3.5 Sonnet (Anthropic), or GPT-4o (OpenAI). The system checks if the required API key is configured before using the specified model — if not, it safely falls back to the global default (Gemini). This means agents created with "claude" won't break if the Anthropic key is removed.
+
+### Org Chart Hierarchy
+Agents can report to other agents via `parent_agent_id` and `reporting_to` fields. When an agent fails or triggers HITL, the task escalates to the parent agent. This creates management chains: AP Analysts → VP Finance → CFO. The hierarchy is visible in agent detail views and used for routing decisions.
+
+### Per-Agent Budget Enforcement
+Each agent can have monthly cost caps (e.g., $200/month). Before every execution, the system checks if the agent's cumulative monthly spend exceeds the cap. If exceeded, the agent returns E1008 (budget_exceeded) without making an LLM call. Cost is tracked per execution in the AgentCostLedger table. Agents without budget limits run unlimited. Budget status available via GET /agents/{id}/budget.
+
 ---
 
 ## All 24+ Agents — Detailed

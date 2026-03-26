@@ -14,7 +14,7 @@ class EventMetadata(BaseModel):
 
 
 class PlatformEvent(BaseModel):
-    """Standard event envelope for all 24 event types."""
+    """Standard event envelope for all event types."""
 
     event_id: str
     event_type: str

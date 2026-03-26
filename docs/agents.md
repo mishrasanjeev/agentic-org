@@ -2,7 +2,7 @@
 
 ## Overview
 
-AgenticOrg ships with 24 specialist agents across 5 enterprise domains, coordinated by the NEXUS orchestrator. Each agent has:
+AgenticOrg ships with 24+ specialist agents (plus unlimited custom agents) across 5 enterprise domains, coordinated by the NEXUS orchestrator. Each agent has:
 
 - **Production system prompt** with domain-specific instructions
 - **Token scope** limiting which connectors and actions it can use

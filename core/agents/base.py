@@ -1,4 +1,4 @@
-"""Base agent class — all 24 agents extend this."""
+"""Base agent class — all built-in + custom agents extend this."""
 
 from __future__ import annotations
 

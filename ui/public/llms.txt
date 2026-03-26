@@ -20,6 +20,10 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Evaluation Matrix**: 66 golden test cases across 6 dimensions (quality, safety, performance, reliability, security, cost)
 - **Complete Audit Trail**: Every agent decision and prompt edit logged with 7-year retention
+- **Per-Agent LLM Selection**: Each agent can use Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o. Safe fallback if API key missing
+- **Org Chart Hierarchy**: Agents report to other agents (parent_agent_id). Hierarchical escalation on failure or HITL
+- **Per-Agent Budget Enforcement**: Monthly cost caps with auto-block. Budget endpoint shows real-time spend. Agents without budget run unlimited
+- **353+ Automated Tests**: Unit, connector harness (42 connectors), synthetic data (invoices/resumes/contracts), Playwright browser tests
 
 ## India-First Connectors
 

@@ -59,7 +59,7 @@ graph TB
         HITL_Eval["HITL Evaluation"]
     end
 
-    subgraph L2["<b>L2: Agent Layer</b><br/><i>24 specialists</i>"]
+    subgraph L2["<b>L2: Agent Layer</b><br/><i>24+ specialists + custom</i>"]
         direction LR
         Confidence["Confidence Scoring"]
         HITL_Trigger["HITL Trigger<br/>Evaluation"]
