@@ -138,6 +138,10 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             designation=body.designation,
             specialization=body.specialization,
             routing_filter=body.routing_filter,
+            reporting_to=body.reporting_to,
+            parent_agent_id=(
+                _uuid.UUID(body.parent_agent_id) if body.parent_agent_id else None
+            ),
         )
         session.add(agent)
         await session.flush()  # populate agent.id
@@ -323,6 +327,10 @@ async def update_agent(
             agent.specialization = update_data["specialization"]
         if "routing_filter" in update_data:
             agent.routing_filter = update_data["routing_filter"]
+        if "reporting_to" in update_data:
+            agent.reporting_to = update_data["reporting_to"]
+        if "parent_agent_id" in update_data and update_data["parent_agent_id"]:
+            agent.parent_agent_id = _uuid.UUID(update_data["parent_agent_id"])
 
         # Audit trail for prompt edits
         new_prompt = agent.system_prompt_text
