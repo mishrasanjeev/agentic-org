@@ -69,3 +69,21 @@ secrets/
 video/
 scripts/slack_demo.py
 tests/connector_e2e/
+
+# Claude Code working directory
+.claude/
+
+# Old seed scripts with hardcoded data
+scripts/seed_demo_data.sql
+scripts/seed_final.sql
+scripts/seed_fix.sql
+scripts/seed_fix2.sql
+scripts/seed_simple.sql
+
+# Playwright reports and temp configs
+ui/playwright-report/
+ui/playwright-demo.config.ts
+ui/test-results/
+
+# Temp build files
+cloudbuild-ui.yaml
