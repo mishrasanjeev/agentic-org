@@ -22,7 +22,9 @@ export default function Connectors() {
     setLoading(true);
     try {
       const { data } = await api.get("/connectors");
-      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      const raw = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      // API returns connector_id, map to id for consistency
+      const items = raw.map((c: any) => ({ ...c, id: c.id || c.connector_id }));
       setConnectors(items);
     } catch {
       setConnectors([]);
@@ -32,11 +34,14 @@ export default function Connectors() {
   }
 
   async function healthCheck(id: string) {
+    if (!id) { alert("No connector ID"); return; }
     try {
       const { data } = await api.get(`/connectors/${id}/health`);
-      alert(`Health: ${data.status || "unknown"}`);
-    } catch {
-      alert("Health check failed");
+      const status = data.healthy ? "Healthy" : "Unhealthy";
+      alert(`${data.name || "Connector"}: ${status}\nStatus: ${data.status}\nLast check: ${data.health_check_at || "Never"}`);
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || err.message || "Unknown error";
+      alert(`Health check failed: ${detail}`);
     }
   }
 
