@@ -2,6 +2,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
 RUN npm install
+ARG CACHE_BUST=1
 COPY ui/ .
 ARG VITE_GA4_ID=""
 ENV VITE_GA4_ID=$VITE_GA4_ID
