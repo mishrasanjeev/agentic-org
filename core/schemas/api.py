@@ -206,7 +206,7 @@ class PaginatedResponse(BaseModel):
 
 
 class FleetLimits(BaseModel):
-    max_active_agents: int = 50
+    max_active_agents: int = 35
     max_agents_per_domain: dict[str, int] = {}
     max_shadow_agents: int = 10
     max_replicas_global_ceiling: int = 20

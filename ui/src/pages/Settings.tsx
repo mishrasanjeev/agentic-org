@@ -11,7 +11,7 @@ interface FleetLimits {
 }
 
 const DEFAULT_LIMITS: FleetLimits = {
-  max_active_agents: 50,
+  max_active_agents: 35,
   max_agents_per_domain: { finance: 20, hr: 20, marketing: 20, ops: 20, backoffice: 20 },
   max_shadow_agents: 10,
   max_replicas_per_type: 20,

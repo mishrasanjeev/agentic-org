@@ -330,7 +330,7 @@ Published at: https://agenticorg.ai/evals
 ## Pricing
 
 ### Free (₹0/month)
-- 3 agents
+- 35 agents
 - 5 connectors
 - 100 tasks/day
 - Community support

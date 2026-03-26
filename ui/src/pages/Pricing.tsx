@@ -129,9 +129,9 @@ const TIERS = [
     cta: "Start Free",
     ctaLink: "/login",
     features: [
-      "3 AI agents",
-      "5 connectors",
-      "100 tasks/day",
+      "35 AI agents",
+      "20 connectors",
+      "500 tasks/day",
       "Community support",
       "Shadow mode testing",
       "Basic audit log",
@@ -192,9 +192,9 @@ interface ComparisonRow {
 }
 
 const COMPARISON: ComparisonRow[] = [
-  { feature: "AI Agents", free: "3", pro: "12", enterprise: "24" },
-  { feature: "Connectors", free: "5", pro: "20", enterprise: "42" },
-  { feature: "Tasks per day", free: "100", pro: "Unlimited", enterprise: "Unlimited" },
+  { feature: "AI Agents", free: "35", pro: "Unlimited", enterprise: "Unlimited" },
+  { feature: "Connectors", free: "20", pro: "42", enterprise: "42" },
+  { feature: "Tasks per day", free: "500", pro: "Unlimited", enterprise: "Unlimited" },
   { feature: "Shadow mode", free: true, pro: true, enterprise: true },
   { feature: "Custom workflows", free: false, pro: true, enterprise: true },
   { feature: "Human-in-the-Loop (HITL)", free: "Basic", pro: "Priority", enterprise: "Dedicated" },
@@ -336,7 +336,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Start free with 3 agents. Scale to 24 agents and 42 connectors as your team grows.
+            Start free with 35 agents. Scale to unlimited agents and 42 connectors as your team grows.
             No hidden fees. Cancel anytime.
           </p>
         </div>
