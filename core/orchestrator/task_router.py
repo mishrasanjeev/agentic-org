@@ -89,3 +89,20 @@ class TaskRouter:
 
         # Fallback: first active agent
         return candidates[0].id
+
+    @staticmethod
+    async def escalate_to_parent(
+        agent_id: UUID, session
+    ) -> UUID | None:
+        """When an agent fails or HITL triggers, find parent agent for escalation.
+
+        Walks up the parent chain. Returns parent agent ID or None if no parent.
+        """
+        from core.models.agent import Agent
+
+        agent = await session.get(Agent, agent_id)
+        if agent and agent.parent_agent_id:
+            parent = await session.get(Agent, agent.parent_agent_id)
+            if parent and parent.status == "active":
+                return parent.id
+        return None  # No parent or parent not active → escalate to human

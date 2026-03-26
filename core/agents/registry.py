@@ -58,6 +58,8 @@ class AgentRegistry:
             prompt_variables=config.get("prompt_variables", {}),
             hitl_condition=config.get("hitl_condition", ""),
             output_schema=config.get("output_schema"),
+            llm_model=config.get("llm_model"),
+            cost_controls=config.get("cost_controls"),
         )
 
         # Override prompt if inline text provided (custom agents or persona-modified)

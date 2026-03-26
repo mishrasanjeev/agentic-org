@@ -45,6 +45,8 @@ class BaseAgent:
         hitl_condition: str = "",
         output_schema: str | None = None,
         tool_gateway: Any = None,
+        llm_model: str | None = None,
+        cost_controls: dict | None = None,
     ):
         self.agent_id = agent_id
         self.tenant_id = tenant_id
@@ -53,6 +55,8 @@ class BaseAgent:
         self.hitl_condition = hitl_condition
         self.output_schema = output_schema
         self.tool_gateway = tool_gateway
+        self.llm_model = llm_model
+        self.cost_controls = cost_controls or {}
         self._system_prompt: str | None = None
 
     @property
@@ -151,14 +155,48 @@ class BaseAgent:
                 start=start,
             )
 
+    def _resolve_llm_model(self) -> str | None:
+        """Resolve which LLM model to use, with safe API key check.
+
+        Returns model string if the agent's preferred model is usable,
+        or None to fall back to global default (Gemini).
+        """
+        if not self.llm_model:
+            return None  # Use global default
+
+        model = self.llm_model.lower()
+
+        # Gemini always works (production default)
+        if "gemini" in model:
+            return self.llm_model
+
+        # Claude requires Anthropic API key
+        if "claude" in model:
+            from core.config import external_keys
+            if external_keys.anthropic_api_key:
+                return self.llm_model
+            return None  # Fall back to global default
+
+        # GPT requires OpenAI API key
+        if "gpt" in model:
+            from core.config import external_keys
+            if external_keys.openai_api_key:
+                return self.llm_model
+            return None  # Fall back to global default
+
+        return None  # Unknown model → global default
+
     async def _reason(self, context: dict, trace: list[str]) -> dict[str, Any]:
         """Call LLM with system prompt and task context."""
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": json.dumps(context, default=str)},
         ]
-        trace.append("Calling LLM for reasoning")
-        response: LLMResponse = await llm_router.complete(messages)
+        model_override = self._resolve_llm_model()
+        trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
+        response: LLMResponse = await llm_router.complete(
+            messages, model_override=model_override
+        )
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
         # Strip markdown code blocks (```json ... ```) that Gemini often wraps

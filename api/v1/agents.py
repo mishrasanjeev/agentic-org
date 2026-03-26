@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from api.deps import get_current_tenant, get_user_domains
 from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
-from core.models.agent import Agent, AgentLifecycleEvent, AgentVersion
+from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
 from core.models.hitl import HITLQueue
 from core.models.prompt_template import PromptEditHistory
@@ -96,6 +96,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "routing_filter": agent.routing_filter,
         "is_builtin": agent.is_builtin,
         "system_prompt_text": agent.system_prompt_text,
+        "reporting_to": agent.reporting_to,
     }
 
 
@@ -376,6 +377,8 @@ async def run_agent(
         "hitl_condition": agent_config.get("hitl_condition", ""),
         "output_schema": agent_config.get("output_schema"),
         "system_prompt_text": agent_config.get("system_prompt_text"),
+        "llm_model": agent_config.get("llm_model"),
+        "cost_controls": agent_config.get("cost_controls"),
     })
 
     # 4. Build TaskAssignment from user payload
@@ -405,12 +408,56 @@ async def run_agent(
         metadata=TaskMetadata(priority=payload.get("priority", "normal")),
     )
 
-    # 5. Execute
+    # 5a. Budget check (if cost controls configured)
+    cost_controls = agent_config.get("cost_controls", {})
+    monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if cost_controls else 0
+    if monthly_cap and monthly_cap > 0:
+        async with get_tenant_session(tid) as session:
+            from sqlalchemy import func as sqlfunc
+            month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            spent_result = await session.execute(
+                select(sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0)).where(
+                    AgentCostLedger.agent_id == agent_id,
+                    AgentCostLedger.period_date >= month_start,
+                )
+            )
+            monthly_spent = float(spent_result.scalar() or 0)
+            if monthly_spent >= monthly_cap:
+                return {
+                    "task_id": f"msg_{_uuid.uuid4().hex[:12]}",
+                    "agent_id": str(agent_id),
+                    "status": "budget_exceeded",
+                    "error": {
+                        "code": "E1008",
+                        "message": f"Monthly budget exceeded: ${monthly_spent:.2f} / ${monthly_cap:.2f}",
+                    },
+                    "output": {},
+                    "confidence": 0,
+                    "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
+                }
+
+    # 5b. Execute
     try:
         task_result = await agent_instance.execute(task_assignment)
     except Exception as exc:
         logger.error("agent_run_error", agent_id=str(agent_id), error=str(exc))
         raise HTTPException(500, f"Agent execution failed: {exc}") from exc
+
+    # 5c. Track cost in ledger
+    if task_result.performance and task_result.performance.llm_cost_usd:
+        try:
+            async with get_tenant_session(tid) as session:
+                ledger_entry = AgentCostLedger(
+                    tenant_id=tid,
+                    agent_id=agent_id,
+                    period_date=datetime.now(UTC),
+                    token_count=task_result.performance.llm_tokens_used or 0,
+                    cost_usd=task_result.performance.llm_cost_usd,
+                    task_count=1,
+                )
+                session.add(ledger_entry)
+        except Exception as e:
+            logger.warning("cost_tracking_failed", agent_id=str(agent_id), error=str(e))
 
     # 6. Store result in audit log
     async with get_tenant_session(tid) as session:
@@ -781,3 +828,62 @@ async def get_prompt_history(
         }
         for e in entries
     ]
+
+
+# ── GET /agents/{id}/budget ────────────────────────────────────────────────
+@router.get("/agents/{agent_id}/budget")
+async def get_agent_budget(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Return current budget usage for an agent."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        cost_controls = agent.cost_controls or {}
+        monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0)
+        daily_budget = cost_controls.get("daily_token_budget", 0)
+
+        # Query monthly spend
+        from sqlalchemy import func as sqlfunc
+        month_start = datetime.now(UTC).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        spent_q = await session.execute(
+            select(
+                sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0),
+                sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.token_count), 0),
+                sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.task_count), 0),
+            ).where(
+                AgentCostLedger.agent_id == agent_id,
+                AgentCostLedger.period_date >= month_start,
+            )
+        )
+        row = spent_q.fetchone()
+        monthly_spent = float(row[0]) if row else 0
+        monthly_tokens = int(row[1]) if row else 0
+        monthly_tasks = int(row[2]) if row else 0
+
+    pct_used = (monthly_spent / monthly_cap * 100) if monthly_cap > 0 else 0
+    warnings = []
+    if pct_used >= 100:
+        warnings.append("Monthly budget exceeded — agent will be paused on next run")
+    elif pct_used >= 80:
+        warnings.append("Monthly budget at 80%+ — approaching limit")
+
+    return {
+        "agent_id": str(agent_id),
+        "monthly_cap_usd": monthly_cap,
+        "monthly_spent_usd": round(monthly_spent, 4),
+        "monthly_pct_used": round(pct_used, 1),
+        "monthly_tokens": monthly_tokens,
+        "monthly_tasks": monthly_tasks,
+        "daily_token_budget": daily_budget,
+        "warnings": warnings,
+    }
