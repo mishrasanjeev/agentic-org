@@ -65,9 +65,8 @@ class TestConnectorToolExecution:
             health = await connector.health_check()
             assert isinstance(health, dict)
             assert "status" in health
-        except Exception:
-            # Some connectors may not implement health_check
-            pass
+        except Exception:  # noqa: S110
+            pass  # Some connectors may not implement health_check
 
 
 class TestConnectorRegistry:

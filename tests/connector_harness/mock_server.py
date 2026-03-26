@@ -70,8 +70,14 @@ def _build_response(path: str, body: dict) -> dict:
             "message": f"{verb} completed",
         }
 
-    # Acknowledge/Reset/Add/Enrol/Define verbs
-    if verb in ("acknowledge", "reset", "add", "enrol", "define", "set", "merge", "escalate", "fulfil", "submit", "complete", "pay", "record", "sync", "reconcile", "provision", "book", "pause", "reallocate", "adjust", "identify", "copy"):
+    # Acknowledge/Reset/Add/Enrol/Define and other action verbs
+    action_verbs = (
+        "acknowledge", "reset", "add", "enrol", "define", "set", "merge",
+        "escalate", "fulfil", "submit", "complete", "pay", "record", "sync",
+        "reconcile", "provision", "book", "pause", "reallocate", "adjust",
+        "identify", "copy",
+    )
+    if verb in action_verbs:
         return {
             "status": "success",
             "id": f"mock-{int(time.time())}",

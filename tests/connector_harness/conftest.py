@@ -94,10 +94,8 @@ async def make_connector(name: str, mock_url: str):
     instance.base_url = mock_url
     try:
         await instance.connect()
-    except Exception:
-        # Some connectors may fail connect() due to auth quirks
-        # but we can still test tool execution
-        pass
+    except Exception:  # noqa: S110
+        pass  # Some connectors fail connect() due to auth quirks — OK for testing
 
     # Ensure base_url is still mock (some connectors override in connect)
     instance.base_url = mock_url

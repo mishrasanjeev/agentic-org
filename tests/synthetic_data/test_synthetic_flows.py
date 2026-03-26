@@ -159,7 +159,11 @@ class TestAPInvoiceProcessing:
         assert result.get("status") in ("completed", "hitl_triggered")
         # High value should be noted in output or trace
         all_text = json.dumps(result.get("output", {})) + " ".join(str(t) for t in result.get("reasoning_trace", []))
-        assert "2950000" in all_text or "29.5" in all_text or "high" in all_text.lower() or "threshold" in all_text.lower()
+        has_value_flag = (
+            "2950000" in all_text or "29.5" in all_text
+            or "high" in all_text.lower() or "threshold" in all_text.lower()
+        )
+        assert has_value_flag
 
     def test_incomplete_ocr(self, headers, invoices):
         """INV-SYNTH-005: Missing required fields — should flag incomplete."""
