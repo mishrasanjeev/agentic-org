@@ -14,6 +14,8 @@ export interface Agent {
   routing_filter?: Record<string, string>;
   is_builtin?: boolean;
   system_prompt_text?: string;
+  parent_agent_id?: string | null;
+  reporting_to?: string | null;
 }
 export interface PromptTemplate {
   id: string; name: string; agent_type: string; domain: string;

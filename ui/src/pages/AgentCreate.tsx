@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api, { promptTemplatesApi } from "@/lib/api";
-import type { PromptTemplate } from "@/types";
+import api, { promptTemplatesApi, agentsApi } from "@/lib/api";
+import type { Agent, PromptTemplate } from "@/types";
 
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
 const AGENT_TYPES: Record<string, string[]> = {
@@ -46,10 +46,24 @@ export default function AgentCreate() {
   const [promptText, setPromptText] = useState("");
   const [promptVars, setPromptVars] = useState<Record<string, string>>({});
 
+  // Step 2 (cont): Org Chart
+  const [parentAgentId, setParentAgentId] = useState("");
+  const [reportingTo, setReportingTo] = useState("");
+  const [availableParents, setAvailableParents] = useState<Agent[]>([]);
+
   // Step 4: Behavior
   const [confidenceFloor, setConfidenceFloor] = useState(0.88);
   const [hitlCondition, setHitlCondition] = useState("confidence < 0.88");
   const [maxRetries, setMaxRetries] = useState(3);
+  const [llmModel, setLlmModel] = useState("gemini-2.5-flash");
+
+  // Load available parent agents when domain changes
+  useEffect(() => {
+    agentsApi.list({ domain, status: "active" }).then(({ data }) => {
+      const items = Array.isArray(data) ? data : data.items || [];
+      setAvailableParents(items);
+    }).catch(() => setAvailableParents([]));
+  }, [domain]);
 
   // Load templates when domain changes
   useEffect(() => {
@@ -111,6 +125,9 @@ export default function AgentCreate() {
         hitl_policy: { condition: hitlCondition },
         max_retries: maxRetries,
         initial_status: "shadow",
+        llm_model: llmModel,
+        parent_agent_id: parentAgentId || undefined,
+        reporting_to: reportingTo || undefined,
       });
       navigate(`/dashboard/agents/${data.agent_id || ""}`);
     } catch {
@@ -200,6 +217,22 @@ export default function AgentCreate() {
                 ))}
                 <Button variant="outline" size="sm" onClick={() => setRoutingFilters([...routingFilters, { key: "", value: "" }])}>+ Add Filter</Button>
               </div>
+              <div>
+                <label className="text-sm font-medium">Reports To (Org Chart)</label>
+                <p className="text-xs text-muted-foreground mb-2">Select a parent agent for escalation hierarchy. Leave empty for no parent.</p>
+                <select value={parentAgentId} onChange={(e) => {
+                  setParentAgentId(e.target.value);
+                  const parent = availableParents.find((a) => a.id === e.target.value);
+                  setReportingTo(parent ? (parent.employee_name || parent.name) : "");
+                }} className="border rounded px-3 py-2 text-sm w-full">
+                  <option value="">— No parent (escalates to human) —</option>
+                  {availableParents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.employee_name || a.name} ({humanize(a.agent_type)}) — {humanize(a.domain)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           )}
 
@@ -239,6 +272,22 @@ export default function AgentCreate() {
           {/* Step 4: Behavior */}
           {step === 3 && (
             <>
+              <div>
+                <label className="text-sm font-medium">LLM Model</label>
+                <select value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (default)</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                  <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (requires API key)</option>
+                  <option value="claude-opus-4-20250514">Claude Opus 4 (requires API key)</option>
+                  <option value="gpt-4o">GPT-4o (requires API key)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (requires API key)</option>
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {llmModel.includes("claude") || llmModel.includes("gpt")
+                    ? "This model requires an API key. If not configured, the agent will fall back to Gemini."
+                    : "Gemini is always available — no additional API key needed."}
+                </p>
+              </div>
               <div>
                 <label className="text-sm font-medium">Confidence Floor: {(confidenceFloor * 100).toFixed(0)}%</label>
                 <input type="range" min={0.5} max={0.99} step={0.01} value={confidenceFloor} onChange={(e) => setConfidenceFloor(Number(e.target.value))} className="w-full mt-1" />
@@ -285,6 +334,8 @@ export default function AgentCreate() {
                 <div><span className="text-muted-foreground">Confidence Floor:</span> {(confidenceFloor * 100).toFixed(0)}%</div>
                 <div><span className="text-muted-foreground">HITL Condition:</span> {hitlCondition}</div>
                 <div><span className="text-muted-foreground">Max Retries:</span> {maxRetries}</div>
+                <div><span className="text-muted-foreground">LLM Model:</span> {llmModel}</div>
+                {reportingTo && <div><span className="text-muted-foreground">Reports To:</span> {reportingTo}</div>}
                 {specialization && <div className="col-span-2"><span className="text-muted-foreground">Specialization:</span> {specialization}</div>}
                 {Object.keys(routingFilter).length > 0 && (
                   <div className="col-span-2"><span className="text-muted-foreground">Routing:</span> {Object.entries(routingFilter).map(([k, v]) => `${k}=${v}`).join(", ")}</div>

@@ -96,6 +96,9 @@ export default function AgentDetail() {
             {agent.specialization && (
               <p className="text-xs text-muted-foreground mt-1">Specialization: {agent.specialization}</p>
             )}
+            {agent.reporting_to && (
+              <p className="text-xs text-muted-foreground mt-1">Reports to: <span className="font-medium text-foreground">{agent.reporting_to}</span></p>
+            )}
             {agent.is_builtin && <Badge variant="outline" className="mt-1">Built-in</Badge>}
           </div>
         </div>
@@ -152,6 +155,8 @@ function OverviewTab({ agent }: { agent: Agent }) {
     { label: "Description", value: agent.description || "No description" },
     { label: "HITL Condition", value: agent.hitl_condition || "None" },
     { label: "Confidence Floor", value: agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A" },
+    { label: "LLM Model", value: agent.llm_model || "Default (Gemini)" },
+    { label: "Reports To", value: agent.reporting_to || "None (escalates to human)" },
     { label: "Created", value: new Date(agent.created_at).toLocaleString() },
   ];
 
