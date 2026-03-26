@@ -170,7 +170,7 @@ def main():
     code, data = api("POST", "auth/login", {"email": "cfo@agenticorg.local", "password": "cfo123!"})
     cfo_token = data.get("access_token", "")
     code, data = api("GET", "agents", token=cfo_token)
-    domains = set(a["domain"] for a in data.get("items", []))
+    domains = {a["domain"] for a in data.get("items", [])}
     check("CFO RBAC finance only", domains == {"finance"}, str(domains))
 
     code, _ = api("GET", "agents/a0000001-0000-0000-0001-000000000001", token=token)
