@@ -39,6 +39,7 @@ dependencies = [
     "google-cloud-secret-manager>=2.20.0",
     "google-api-python-client>=2.150.0",
     "google-auth>=2.36.0",
+    "dnspython>=2.7.0",
     "structlog>=24.4.0",
     "opentelemetry-api>=1.29.0",
     "opentelemetry-sdk>=1.29.0",

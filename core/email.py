@@ -1,14 +1,54 @@
-"""Email utility — Gmail SMTP for notifications."""
+"""Email utility — Gmail SMTP for notifications with domain validation."""
 import logging
 import os
 import smtplib
 from email.mime.text import MIMEText
 
+import dns.resolver
+
 logger = logging.getLogger(__name__)
+
+# Domains that are known to bounce or are test-only
+_BLOCKED_DOMAINS = {
+    "example.com", "test.com", "localhost", "mailinator.com",
+    "guerrillamail.com", "sharklasers.com", "yopmail.com",
+}
+
+
+def _has_mx_record(domain: str) -> bool:
+    """Check if a domain has valid MX records (can receive email)."""
+    try:
+        answers = dns.resolver.resolve(domain, "MX")
+        return len(answers) > 0
+    except Exception:
+        return False
+
+
+def validate_email_domain(email: str) -> tuple[bool, str]:
+    """Validate that an email address can receive mail.
+
+    Returns (is_valid, reason).
+    """
+    if "@" not in email:
+        return False, "Invalid email format"
+
+    domain = email.split("@")[-1].lower().strip()
+
+    # Block test/fake domains
+    if domain.endswith(".local") or domain.endswith(".test"):
+        return False, f"Test domain: {domain}"
+    if domain in _BLOCKED_DOMAINS:
+        return False, f"Blocked domain: {domain}"
+
+    # Check MX records
+    if not _has_mx_record(domain):
+        return False, f"No MX records for {domain} — cannot receive email"
+
+    return True, "OK"
 
 
 def send_email(to: str, subject: str, html: str) -> None:
-    """Send HTML email via Gmail SMTP. Fails silently.
+    """Send HTML email via Gmail SMTP. Validates domain before sending.
 
     Uses AGENTICORG_SMTP_LOGIN for SMTP authentication (Gmail account)
     and AGENTICORG_DEMO_SENDER for the display From address.
@@ -19,10 +59,11 @@ def send_email(to: str, subject: str, html: str) -> None:
     if not password or not smtp_login:
         logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set — skipping email")
         return
-    # Skip fake/test domains to avoid bounces
-    domain = to.split("@")[-1] if "@" in to else ""
-    if domain.endswith(".local") or domain.endswith(".test") or domain == "example.com":
-        logger.info("Skipping email to test domain: %s", to)
+
+    # Validate email domain before sending
+    is_valid, reason = validate_email_domain(to)
+    if not is_valid:
+        logger.warning("Skipping email to %s: %s", to, reason)
         return
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
