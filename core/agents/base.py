@@ -185,7 +185,13 @@ class BaseAgent:
 
     def _compute_confidence(self, output: dict[str, Any]) -> float:
         """Compute confidence score from output."""
-        return float(output.get("confidence", output.get("agent_confidence", 0.85)))
+        raw = output.get("confidence", output.get("agent_confidence", 0.85))
+        try:
+            return float(raw)
+        except (ValueError, TypeError):
+            # LLM returned non-numeric confidence like "high", "medium", "low"
+            mapping = {"high": 0.95, "medium": 0.75, "low": 0.5}
+            return mapping.get(str(raw).lower().strip(), 0.85)
 
     def _evaluate_hitl(self, output: dict, confidence: float) -> HITLRequest | None:
         """Evaluate HITL trigger conditions."""
