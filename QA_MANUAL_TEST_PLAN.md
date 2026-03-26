@@ -3,7 +3,7 @@
 **Version:** 2.1.0
 **Last Updated:** 2026-03-26
 **Production URL:** https://app.agenticorg.ai
-**Total Test Cases:** 195
+**Total Test Cases:** 291
 
 ## Demo Credentials
 
@@ -1789,44 +1789,818 @@
 
 ---
 
+## Module 28: Org Chart Hierarchy & Parent Escalation
+
+### TC-ORG-CHART-001: Create agent with parent (reporting_to)
+**Steps:**
+1. Login as CEO/Admin
+2. Create a parent agent: Name = "VP Finance", Type = "finance_manager", Domain = "finance", Status = shadow
+3. Promote the parent agent to active
+4. Create a child agent: Name = "Priya AP", Type = "accounts_payable_processor", Domain = "finance"
+5. In Step 2 of the wizard, set "Reports to" dropdown to "VP Finance"
+6. Complete creation
+
+**Expected Result:** Child agent created with parent_agent_id pointing to VP Finance's UUID. reporting_to field populated. Agent detail page shows "Reports to: VP Finance" in the persona header.
+
+---
+
+### TC-ORG-CHART-002: View hierarchy in agent detail
+**Steps:**
+1. Open the child agent (Priya AP) from TC-ORG-CHART-001
+2. Check the persona header section
+3. Check the Overview tab
+
+**Expected Result:** Persona header displays: employee name "Priya AP", designation, and "Reports to: VP Finance". Overview tab shows parent_agent_id field with the parent's UUID.
+
+---
+
+### TC-ORG-CHART-003: Escalation to parent agent on HITL
+**Steps:**
+1. Create parent agent "VP Finance" (active)
+2. Create child agent "AP Processor" with parent_agent_id = VP Finance, confidence_floor = 0.99
+3. Run child agent with a normal task (will produce confidence < 0.99)
+4. Check HITL queue and escalation behavior
+
+**Expected Result:** HITL triggered due to low confidence. Escalation chain uses parent_agent_id to identify VP Finance as the escalation target. HITL item's context includes the parent agent reference.
+
+---
+
+### TC-ORG-CHART-004: Escalation chain — 3 levels deep
+**Steps:**
+1. Create Agent C (grandchild) → parent = Agent B
+2. Create Agent B (child) → parent = Agent A
+3. Create Agent A (root) → no parent
+4. Call escalate_to_parent on Agent C
+
+**Expected Result:** Agent C escalates to Agent B. If Agent B also escalates, it goes to Agent A. If Agent A escalates, returns null (escalate to human). No infinite loop.
+
+---
+
+### TC-ORG-CHART-005: Escalation when parent is paused
+**Steps:**
+1. Create parent agent "VP Finance" (active)
+2. Create child agent with parent_agent_id = VP Finance
+3. Pause the parent agent (kill switch)
+4. Trigger HITL on child agent
+
+**Expected Result:** Escalation recognizes parent is paused. Returns null (escalate to human) since parent cannot handle tasks. No error thrown.
+
+---
+
+### TC-ORG-CHART-006: Agent without parent — escalation to human
+**Steps:**
+1. Create agent with no parent_agent_id (null)
+2. Trigger HITL on this agent
+
+**Expected Result:** Escalation returns null. HITL item created with standard human approval flow. No parent agent referenced.
+
+---
+
+### TC-ORG-CHART-007: Update parent_agent_id via PATCH
+**Steps:**
+1. Create two agents: Agent A (parent) and Agent B (child, no parent)
+2. PATCH Agent B with: `{"parent_agent_id": "<Agent A UUID>", "reporting_to": "Agent A"}`
+3. GET Agent B details
+
+**Expected Result:** Agent B now shows parent_agent_id = Agent A's UUID. reporting_to = "Agent A". Relationship reflected in agent detail page.
+
+---
+
+### TC-ORG-CHART-008: Remove parent (set to null)
+**Steps:**
+1. Take an agent with a parent_agent_id set
+2. PATCH with: `{"parent_agent_id": null, "reporting_to": null}`
+3. GET agent details
+
+**Expected Result:** parent_agent_id and reporting_to cleared. Agent now has no hierarchy. Escalation falls through to human.
+
+---
+
+## Module 29: Per-Agent LLM Model Selection
+
+### TC-LLM-001: Create agent with Gemini model
+**Steps:**
+1. Create new agent via wizard
+2. In Step 4 (Behavior), select LLM Model = "gemini-2.5-flash"
+3. Complete creation
+4. Run the agent
+
+**Expected Result:** Agent created with llm_model = "gemini-2.5-flash". Agent executes using Gemini. No fallback needed. Output includes performance.model used.
+
+---
+
+### TC-LLM-002: Create agent with Claude model — no API key
+**Steps:**
+1. Verify ANTHROPIC_API_KEY is NOT set in production
+2. Create agent with llm_model = "claude-3-5-sonnet-20241022"
+3. Run the agent
+
+**Expected Result:** Agent falls back to Gemini (global default) since no Anthropic API key. Agent executes successfully. No error about missing Claude key. Output valid.
+
+---
+
+### TC-LLM-003: Create agent with GPT model — no API key
+**Steps:**
+1. Verify OPENAI_API_KEY is NOT set in production
+2. Create agent with llm_model = "gpt-4o"
+3. Run the agent
+
+**Expected Result:** Agent falls back to Gemini since no OpenAI API key. Agent executes successfully. No error.
+
+---
+
+### TC-LLM-004: Agent with Claude model — API key present
+**Steps:**
+1. Set ANTHROPIC_API_KEY in environment (if available for testing)
+2. Create agent with llm_model = "claude-3-5-sonnet-20241022"
+3. Run the agent
+
+**Expected Result:** Agent executes using Claude (not Gemini). Output reflects Claude-style response. Performance metrics show Claude model used.
+
+---
+
+### TC-LLM-005: Agent with no llm_model set (null)
+**Steps:**
+1. Create agent without specifying llm_model
+2. Run the agent
+
+**Expected Result:** Agent uses global default (Gemini 2.5 Flash from settings.llm_primary). Executes normally.
+
+---
+
+### TC-LLM-006: Agent with unknown/invalid model name
+**Steps:**
+1. Create agent with llm_model = "nonexistent-model-xyz"
+2. Run the agent
+
+**Expected Result:** _resolve_llm_model returns None (unknown model). Falls back to global default Gemini. Agent executes without error.
+
+---
+
+### TC-LLM-007: LLM model dropdown in Agent Create wizard
+**Steps:**
+1. Open /dashboard/agents/new
+2. Navigate to Step 4 (Behavior)
+3. Check the LLM Model dropdown
+
+**Expected Result:** Dropdown shows available models: Gemini 2.5 Flash (default/active), Claude 3.5 Sonnet (requires API key), GPT-4o (requires API key). Note text indicates which models require API keys.
+
+---
+
+### TC-LLM-008: Two agents with different models — back to back
+**Steps:**
+1. Create Agent A with llm_model = "gemini-2.5-flash"
+2. Create Agent B with llm_model = "claude-3-5-sonnet-20241022" (falls back to Gemini if no key)
+3. Run Agent A, note result
+4. Run Agent B, note result
+
+**Expected Result:** Both agents execute successfully. Agent A uses Gemini. Agent B uses Claude (if key) or Gemini (fallback). No cross-contamination between model settings.
+
+---
+
+## Module 30: Per-Agent Budget Enforcement
+
+### TC-BUDGET-001: Create agent with monthly budget cap
+**Steps:**
+1. Create agent with cost_controls = {"monthly_cost_cap_usd": 10.00}
+2. GET /api/v1/agents/{id}/budget
+
+**Expected Result:** Budget endpoint returns: monthly_cap_usd = 10.00, monthly_spent_usd = 0.00, monthly_pct_used = 0.0, monthly_tasks = 0, warnings = [].
+
+---
+
+### TC-BUDGET-002: Cost tracking after execution
+**Steps:**
+1. Create agent with cost_controls = {"monthly_cost_cap_usd": 100.00}
+2. Run agent once
+3. GET /api/v1/agents/{id}/budget
+
+**Expected Result:** monthly_spent_usd > 0 (reflects LLM cost). monthly_tasks = 1. monthly_pct_used = (spent/cap * 100). Cost recorded in AgentCostLedger.
+
+---
+
+### TC-BUDGET-003: Budget exceeded — execution blocked
+**Steps:**
+1. Create agent with cost_controls = {"monthly_cost_cap_usd": 0.001} (very low cap)
+2. Run agent once (should succeed, cost likely exceeds 0.001)
+3. Run agent a second time
+
+**Expected Result:** Second run returns error with code E1008 "budget_exceeded". Message indicates monthly cap reached. Agent may auto-pause.
+
+---
+
+### TC-BUDGET-004: Agent without budget — unlimited execution
+**Steps:**
+1. Create agent with no cost_controls (null or empty {})
+2. Run agent 5 times
+3. GET /api/v1/agents/{id}/budget
+
+**Expected Result:** All 5 runs succeed. Budget endpoint returns: monthly_cap_usd = 0 (or null), no warnings. No execution blocking.
+
+---
+
+### TC-BUDGET-005: Budget warning at 80% utilization
+**Steps:**
+1. Create agent with monthly_cost_cap_usd = 1.00
+2. Run agent until ~80% of budget consumed
+3. GET /api/v1/agents/{id}/budget
+
+**Expected Result:** warnings array contains a warning about approaching budget limit (e.g., "80% of monthly budget consumed"). Agent still runs but flagged.
+
+---
+
+### TC-BUDGET-006: Budget resets monthly
+**Steps:**
+1. Create agent with budget cap
+2. Run agent until budget partially consumed
+3. Verify monthly_spent_usd > 0
+4. Check that cost is tracked by period_date (current month)
+
+**Expected Result:** Cost tracked per month. A new month would reset the counter. Budget endpoint shows current month spend only.
+
+---
+
+### TC-BUDGET-007: Cost tab in Agent Detail UI
+**Steps:**
+1. Open agent with budget set in /dashboard/agents/{id}
+2. Click "Cost" tab
+
+**Expected Result:** Shows: monthly budget cap (e.g., "$100.00"), current spend (e.g., "$3.47"), utilization bar (3.47%), tasks this month, tokens used. If near limit: amber warning. If over: red warning with "Budget Exceeded" message.
+
+---
+
+### TC-BUDGET-008: Cost tab — no budget configured
+**Steps:**
+1. Open agent with no cost_controls
+2. Click "Cost" tab
+
+**Expected Result:** Shows "No budget configured" or "Unlimited" message. No utilization bar. No warnings.
+
+---
+
+## Module 31: Smart Routing (Multi-Agent)
+
+### TC-ROUTE-001: Routing by routing_filter match
+**Steps:**
+1. Create Agent A: type = "accounts_payable_processor", routing_filter = {"region": "Mumbai"}, status = active
+2. Create Agent B: type = "accounts_payable_processor", routing_filter = {"region": "Delhi"}, status = active
+3. Run task with routing_context = {"region": "Mumbai"}
+
+**Expected Result:** Task routed to Agent A (Mumbai filter matches). Agent B not selected. Task result shows agent_id = Agent A's UUID.
+
+---
+
+### TC-ROUTE-002: Routing by specialization match
+**Steps:**
+1. Create Agent A: type = "accounts_payable_processor", specialization = "domestic invoices", status = active
+2. Create Agent B: type = "accounts_payable_processor", specialization = "import invoices", status = active
+3. Run task with routing_context = {"description": "Process this domestic invoice from Mumbai vendor"}
+
+**Expected Result:** Task routed to Agent A (specialization "domestic invoices" matches description). Case-insensitive substring match.
+
+---
+
+### TC-ROUTE-003: Routing fallback — no filter match
+**Steps:**
+1. Create Agent A: routing_filter = {"region": "Mumbai"}
+2. Create Agent B: routing_filter = {"region": "Delhi"}
+3. Run task with routing_context = {"region": "Chennai"}
+
+**Expected Result:** Neither filter matches. Falls back to first active agent of the type (ordered by created_at). Task executes on fallback agent.
+
+---
+
+### TC-ROUTE-004: Routing priority — filter > specialization > fallback
+**Steps:**
+1. Create Agent A: routing_filter = {"region": "APAC"} (exact match)
+2. Create Agent B: specialization = "APAC invoices" (keyword match)
+3. Create Agent C: no filter, no specialization (fallback)
+4. Run task with routing_context = {"region": "APAC", "description": "APAC invoices"}
+
+**Expected Result:** Agent A selected (routing_filter match takes priority over specialization match). Routing order is: filter match first → specialization second → fallback last.
+
+---
+
+### TC-ROUTE-005: Routing with single agent — no ambiguity
+**Steps:**
+1. Ensure only one active agent of type "payroll_processor"
+2. Run task for that type
+
+**Expected Result:** Single agent selected immediately. No routing logic needed. Task executes on the only available agent.
+
+---
+
+### TC-ROUTE-006: Routing filter — partial key match
+**Steps:**
+1. Create Agent with routing_filter = {"region": "APAC", "product": "enterprise"}
+2. Run task with routing_context = {"region": "APAC"} (missing "product" key)
+
+**Expected Result:** Partial match succeeds — all keys present in routing_context match the agent's filter. Missing keys in context don't disqualify.
+
+---
+
+### TC-ROUTE-007: Routing filter — case sensitivity
+**Steps:**
+1. Create Agent with routing_filter = {"region": "APAC"}
+2. Run task with routing_context = {"region": "apac"} (lowercase)
+
+**Expected Result:** Match fails (values compared with ==, case-sensitive). Falls through to specialization or fallback. QA should document this behavior.
+
+---
+
+## Module 32: Persona & Virtual Employee Fields
+
+### TC-PERSONA-001: Create agent with full persona
+**Steps:**
+1. Create agent with: employee_name = "Priya Sharma", designation = "Senior AP Analyst", specialization = "Domestic invoices, high-value transactions", avatar_url = "https://example.com/avatar.png", routing_filter = {"region": "Mumbai"}
+
+**Expected Result:** All persona fields saved. Agent detail shows: "Priya Sharma" as display name, "Senior AP Analyst" as designation, specialization text, avatar image rendered.
+
+---
+
+### TC-PERSONA-002: Update persona via PATCH
+**Steps:**
+1. PATCH /api/v1/agents/{id} with: `{"employee_name": "Priya K. Sharma", "designation": "Lead AP Analyst"}`
+2. GET agent details
+
+**Expected Result:** employee_name updated to "Priya K. Sharma". designation updated to "Lead AP Analyst". Other fields unchanged. Agent detail page reflects new values.
+
+---
+
+### TC-PERSONA-003: Agent list shows employee_name
+**Steps:**
+1. Navigate to /dashboard/agents
+2. Find an agent with employee_name set
+
+**Expected Result:** Agent card shows employee_name (e.g., "Priya Sharma") as the primary display name, not the system agent name. Avatar initial derived from employee_name.
+
+---
+
+### TC-PERSONA-004: Agent without persona fields
+**Steps:**
+1. Create agent without employee_name, designation, specialization
+2. View in agent list and detail
+
+**Expected Result:** Falls back to showing agent.name and agent_type. No empty fields or broken UI. Avatar shows initial from agent name.
+
+---
+
+### TC-PERSONA-005: Multiple agents same type — different personas
+**Steps:**
+1. Create Agent 1: type = "accounts_payable_processor", employee_name = "Priya", specialization = "Domestic, Mumbai"
+2. Create Agent 2: type = "accounts_payable_processor", employee_name = "Arjun", specialization = "Import, Delhi"
+3. View both in agent list
+
+**Expected Result:** Both agents appear as separate cards with distinct names (Priya, Arjun), different specializations. Both are same agent_type but different personas.
+
+---
+
+## Module 33: Prompt Lock & Edit History
+
+### TC-LOCK-001: Edit prompt on active agent — blocked
+**Steps:**
+1. Find an active agent (status = "active")
+2. Call PATCH /api/v1/agents/{id} with body: `{"system_prompt_text": "new prompt text"}`
+
+**Expected Result:** Returns 409 Conflict. Error message: "Cannot edit prompt of an active agent. Clone the agent to make changes." Prompt unchanged.
+
+---
+
+### TC-LOCK-002: Edit non-prompt fields on active agent — allowed
+**Steps:**
+1. Find an active agent
+2. Call PATCH /api/v1/agents/{id} with body: `{"designation": "Updated Title", "max_retries": 5}`
+
+**Expected Result:** Returns 200 OK. designation and max_retries updated. Prompt NOT affected. Active status maintained.
+
+---
+
+### TC-LOCK-003: Edit prompt on shadow agent — allowed
+**Steps:**
+1. Find a shadow agent
+2. Call PATCH /api/v1/agents/{id} with body: `{"system_prompt_text": "updated shadow prompt", "change_reason": "Testing prompt update"}`
+
+**Expected Result:** Prompt updated successfully. Prompt edit history entry created with: prompt_before, prompt_after, change_reason, edited_by, timestamp.
+
+---
+
+### TC-LOCK-004: Prompt edit history — full audit trail
+**Steps:**
+1. Create shadow agent with initial prompt
+2. Update prompt 3 times with different change_reasons
+3. GET /api/v1/agents/{id}/prompt-history
+
+**Expected Result:** Returns 3 entries sorted newest first. Each entry has: prompt_before, prompt_after, change_reason, edited_by (user ID), created_at. Character count diff visible.
+
+---
+
+### TC-LOCK-005: Clone active agent to edit prompt
+**Steps:**
+1. Find an active agent with locked prompt
+2. POST /api/v1/agents/{id}/clone with body: `{"name": "Clone for Edit", "agent_type": "clone_test"}`
+3. Update clone's prompt (PATCH with system_prompt_text)
+
+**Expected Result:** Clone created in shadow status. Clone's prompt is editable. Original active agent's prompt remains locked and unchanged.
+
+---
+
+### TC-LOCK-006: Prompt lock UI display
+**Steps:**
+1. Open active agent detail → Prompt tab
+2. Check UI elements
+
+**Expected Result:** Prompt text displayed as read-only (grey background or lock icon). "Prompt Locked" badge visible. "Clone to Edit" button available. Edit button disabled or hidden.
+
+---
+
+### TC-LOCK-007: Shadow agent prompt — editable UI
+**Steps:**
+1. Open shadow agent detail → Prompt tab
+2. Check UI elements
+
+**Expected Result:** Prompt text is editable (white background, cursor active). Edit/Save buttons visible. No lock badge.
+
+---
+
+## Module 34: Sales Pipeline — Advanced Flows
+
+### TC-SALES-ADV-001: Update lead stage via PATCH
+**Steps:**
+1. Find a lead in "new" stage
+2. PATCH /api/v1/sales/pipeline/{lead_id} with: `{"stage": "qualified", "score": 75}`
+3. GET the lead
+
+**Expected Result:** Lead stage updated to "qualified". Score updated to 75. Updated timestamp set. Lead appears in "Qualified" section of funnel.
+
+---
+
+### TC-SALES-ADV-002: Update lead BANT fields
+**Steps:**
+1. PATCH lead with: `{"budget": "$50K annual", "authority": "CTO", "need": "Invoice automation", "timeline": "Q2 2026"}`
+2. GET lead details
+
+**Expected Result:** All BANT fields saved. Visible in lead detail panel. Fields can be partially filled (some null, some set).
+
+---
+
+### TC-SALES-ADV-003: Update deal value and schedule demo
+**Steps:**
+1. PATCH lead with: `{"deal_value_usd": 25000.00, "demo_scheduled_at": "2026-04-01T10:00:00Z", "stage": "demo_scheduled"}`
+2. GET lead details
+
+**Expected Result:** deal_value_usd = 25000.00, demo_scheduled_at set, stage = "demo_scheduled". Lead moves to Demo Scheduled in funnel.
+
+---
+
+### TC-SALES-ADV-004: Mark lead as lost
+**Steps:**
+1. PATCH lead with: `{"stage": "lost", "lost_reason": "Chose competitor product"}`
+2. GET lead details
+
+**Expected Result:** Stage = "lost". lost_reason saved. Lead appears in "Closed Lost" section of funnel (red).
+
+---
+
+### TC-SALES-ADV-005: Run automated follow-ups
+**Steps:**
+1. Ensure there are leads with next_followup_at in the past
+2. POST /api/v1/sales/run-followups
+
+**Expected Result:** Returns: processed (number of leads checked), emailed (emails sent), skipped (not due or sequence complete), errors. Each processed lead's followup_count incremented. last_contacted_at updated.
+
+---
+
+### TC-SALES-ADV-006: Follow-up respects timing schedule
+**Steps:**
+1. Create lead, process it (step 0 sent)
+2. Immediately call run-followups
+
+**Expected Result:** Lead skipped — insufficient time since last contact (Day 1 follow-up requires 1 day gap). Returns in "skipped" count. No duplicate email sent.
+
+---
+
+### TC-SALES-ADV-007: Follow-up sequence completion
+**Steps:**
+1. Process a lead through all 5 follow-up steps (Day 0, 1, 3, 7, 14)
+2. Call run-followups again after step 5
+
+**Expected Result:** Lead skipped — sequence complete. No more emails sent. followup_count stays at 5.
+
+---
+
+### TC-SALES-ADV-008: Process inbox — Gmail reply detection
+**Steps:**
+1. Send a sales email to a real recipient
+2. Have the recipient reply
+3. POST /api/v1/sales/process-inbox
+
+**Expected Result:** Returns: replies_found (>= 1), matched (matched to lead by email), responded (auto-response sent), details (per-reply breakdown). Reply detected and matched to correct lead.
+
+---
+
+### TC-SALES-ADV-009: Process lead with different actions
+**Steps:**
+1. POST /api/v1/sales/pipeline/process-lead with `{"lead_id": "...", "action": "qualify_and_respond"}`
+2. POST with `{"lead_id": "...", "action": "followup", "sequence_step": 2}`
+
+**Expected Result:** "qualify_and_respond" → agent qualifies lead and generates initial outreach email. "followup" with step 2 → sends Day 3 follow-up template. Different actions produce different email content and lead updates.
+
+---
+
+### TC-SALES-ADV-010: Import CSV — validation errors
+**Steps:**
+1. Create CSV with: missing email column, or invalid email format, or empty rows
+2. POST /api/v1/sales/import-csv
+
+**Expected Result:** Returns: imported = 0 (or partial), skipped with skip_details explaining each failure. No server crash on malformed CSV.
+
+---
+
+### TC-SALES-ADV-011: Import CSV — duplicate detection
+**Steps:**
+1. Import CSV with 5 leads (unique emails)
+2. Import same CSV again
+
+**Expected Result:** Second import: imported = 0, skipped = 5, skip_details shows "duplicate email" for each. No duplicate leads in pipeline.
+
+---
+
+### TC-SALES-ADV-012: Seed prospects — idempotent
+**Steps:**
+1. POST /api/v1/sales/seed-prospects
+2. Note the seeded count
+3. POST /api/v1/sales/seed-prospects again
+
+**Expected Result:** First call: seeded = 20 (Indian enterprise prospects). Second call: seeded = 0, skipped_duplicates = 20. No duplicate leads.
+
+---
+
+### TC-SALES-ADV-013: Sales metrics accuracy
+**Steps:**
+1. GET /api/v1/sales/metrics
+2. Manually count leads per stage from GET /api/v1/sales/pipeline
+
+**Expected Result:** Metrics match actual data: total_leads = count of all leads, funnel breakdown matches stage counts, avg_score = average of all lead scores, emails_sent_this_week = count of EmailSequence records with sent_at this week.
+
+---
+
+## Module 35: Prompt Template — Advanced Flows
+
+### TC-TPL-ADV-001: Edit built-in template — blocked (409)
+**Steps:**
+1. Find a built-in template (is_builtin = true)
+2. PUT /api/v1/prompt-templates/{id} with modified template_text
+
+**Expected Result:** Returns 409 Conflict. Message: "Built-in templates cannot be edited. Clone to create a custom version." Template unchanged.
+
+---
+
+### TC-TPL-ADV-002: Delete built-in template — blocked
+**Steps:**
+1. Find a built-in template
+2. DELETE /api/v1/prompt-templates/{id}
+
+**Expected Result:** Returns 409 Conflict. Built-in templates cannot be deleted.
+
+---
+
+### TC-TPL-ADV-003: RBAC — CFO sees only finance templates
+**Steps:**
+1. Login as CFO
+2. GET /api/v1/prompt-templates
+
+**Expected Result:** Only finance domain templates returned. HR, marketing, ops templates not visible.
+
+---
+
+### TC-TPL-ADV-004: RBAC — CEO sees all templates
+**Steps:**
+1. Login as CEO
+2. GET /api/v1/prompt-templates
+
+**Expected Result:** All templates returned across all domains (finance, hr, marketing, ops, backoffice). Both built-in and custom templates visible.
+
+---
+
+### TC-TPL-ADV-005: Template variable extraction
+**Steps:**
+1. Create template with text: "You are a {{role}} agent specializing in {{domain}}. Process {{document_type}} for {{company_name}}."
+2. GET the template
+
+**Expected Result:** variables field contains: ["role", "domain", "document_type", "company_name"]. Variables auto-extracted from {{placeholder}} syntax.
+
+---
+
+### TC-TPL-ADV-006: Template with no variables
+**Steps:**
+1. Create template with text: "You are a general purpose assistant." (no {{placeholders}})
+2. GET the template
+
+**Expected Result:** variables field empty or []. Template usable without variable substitution.
+
+---
+
+### TC-TPL-ADV-007: Use template in agent creation
+**Steps:**
+1. Create a template with variables
+2. In Agent Create wizard Step 3, select this template
+3. Fill in variable values
+4. Check prompt preview
+
+**Expected Result:** Template loaded. Variable input fields generated for each {{variable}}. Preview shows template with variables substituted. Created agent's system_prompt_text has the final resolved text.
+
+---
+
+## Module 36: Gmail Integration & Inbox Management
+
+### TC-GMAIL-001: Process inbox — no replies
+**Steps:**
+1. Ensure no new replies in Gmail inbox
+2. POST /api/v1/sales/process-inbox
+
+**Expected Result:** Returns: replies_found = 0, matched = 0, responded = 0. No errors.
+
+---
+
+### TC-GMAIL-002: Gmail service account authentication
+**Steps:**
+1. Verify AGENTICORG_GMAIL_SA_KEY_JSON or AGENTICORG_GMAIL_SA_KEY is set
+2. Verify AGENTICORG_GMAIL_USER = "sanjeev@agenticorg.ai"
+3. POST /api/v1/sales/process-inbox
+
+**Expected Result:** Gmail API authenticates via service account with domain-wide delegation. Accesses sanjeev@agenticorg.ai inbox. No auth errors.
+
+---
+
+### TC-GMAIL-003: Gmail service account — missing config
+**Steps:**
+1. If possible, test with missing SA key environment variable
+2. POST /api/v1/sales/process-inbox
+
+**Expected Result:** Graceful error returned. No server crash. Error message indicates Gmail configuration missing.
+
+---
+
+## Module 37: Agent Clone — Advanced Flows
+
+### TC-CLONE-001: Clone inherits all settings
+**Steps:**
+1. Create agent with: custom prompt, routing_filter, specialization, persona fields, cost_controls, llm_model
+2. POST /api/v1/agents/{id}/clone with name and type overrides
+3. GET the clone's details
+
+**Expected Result:** Clone has identical: system_prompt_text, routing_filter, specialization, confidence_floor, authorized_tools, cost_controls, llm_model. Clone has NEW: name, agent_type, id, version = "1.0.0", status = "shadow".
+
+---
+
+### TC-CLONE-002: Clone starts in shadow mode
+**Steps:**
+1. Clone an active agent
+2. Check clone's status
+
+**Expected Result:** Clone status = "shadow" regardless of original's status. Clone needs independent promotion to go active.
+
+---
+
+### TC-CLONE-003: Clone with overrides
+**Steps:**
+1. POST /api/v1/agents/{id}/clone with overrides: `{"overrides": {"system_prompt_text": "Customized clone prompt", "specialization": "Different specialization"}}`
+2. GET clone details
+
+**Expected Result:** Clone has the overridden prompt and specialization. Other fields inherited from original. parent_id in response points to original.
+
+---
+
+### TC-CLONE-004: Multiple clones from same original
+**Steps:**
+1. Clone Agent A → creates Clone B
+2. Clone Agent A again → creates Clone C
+3. Verify B and C are independent
+
+**Expected Result:** Clone B and C have different IDs. Both reference Agent A as parent_id. Editing Clone B does not affect Clone C or Agent A.
+
+---
+
+## Module 38: Confidence & HITL — Advanced Flows
+
+### TC-CONF-001: Confidence exactly at floor — no HITL
+**Steps:**
+1. Create agent with confidence_floor = 0.85
+2. Run agent with input that produces confidence = 0.85 (exactly at floor)
+
+**Expected Result:** HITL NOT triggered. Confidence >= floor means pass. Status = "completed".
+
+---
+
+### TC-CONF-002: Confidence just below floor — HITL triggered
+**Steps:**
+1. Create agent with confidence_floor = 0.85
+2. Run agent with input that produces confidence = 0.84
+
+**Expected Result:** HITL triggered. Status = "hitl_required". Approval item created in queue with trigger_type = "confidence_below_floor".
+
+---
+
+### TC-CONF-003: Confidence returned as "high" string
+**Steps:**
+1. Run agent where LLM returns `{"confidence": "high"}`
+2. Check response confidence value
+
+**Expected Result:** confidence mapped to 0.95. If confidence_floor < 0.95, no HITL. Processed correctly.
+
+---
+
+### TC-CONF-004: Confidence returned as "medium" string
+**Steps:**
+1. Run agent where LLM returns `{"confidence": "medium"}`
+
+**Expected Result:** confidence mapped to 0.75. If confidence_floor > 0.75, HITL triggered.
+
+---
+
+### TC-CONF-005: Confidence returned as "low" string
+**Steps:**
+1. Run agent where LLM returns `{"confidence": "low"}`
+
+**Expected Result:** confidence mapped to 0.5. HITL almost certainly triggered (most floors > 0.5).
+
+---
+
+### TC-CONF-006: Confidence field missing from LLM output
+**Steps:**
+1. Run agent where LLM returns output without "confidence" key
+
+**Expected Result:** Default confidence = 0.85 used. HITL triggered if floor > 0.85.
+
+---
+
+### TC-CONF-007: HITL decision options
+**Steps:**
+1. Trigger HITL on any agent
+2. Check the HITL item's decision_options
+
+**Expected Result:** decision_options include: ["approve", "reject", "defer"]. Each has a label and action. Approve continues execution, reject fails it, defer keeps it pending.
+
+---
+
+### TC-CONF-008: HITL item expiry
+**Steps:**
+1. Trigger HITL
+2. Check expires_at on the HITL item
+
+**Expected Result:** expires_at set to ~4 hours from creation. After expiry, item should auto-expire (status changes to "expired").
+
+---
+
 ---
 
 ## Test Execution Summary
 
-| Module | Test Cases | Priority |
-|--------|-----------|----------|
-| Landing Page & Public Pages | TC-LP-001 to TC-LP-018 | High |
-| Authentication | TC-AUTH-001 to TC-AUTH-015 | Critical |
-| Dashboard | TC-DASH-001 to TC-DASH-005 | High |
-| Agent Fleet | TC-AGT-001 to TC-AGT-013 | High |
-| Agent Creation | TC-CRT-001 to TC-CRT-007 | Critical |
-| Agent Execution | TC-EXEC-001 to TC-EXEC-008 | Critical |
-| Workflows | TC-WF-001 to TC-WF-005 | Medium |
-| Approvals (HITL) | TC-HITL-001 to TC-HITL-006 | Critical |
-| Connectors | TC-CONN-001 to TC-CONN-004 | Medium |
-| Prompt Templates | TC-TPL-001 to TC-TPL-007 | High |
-| Sales Pipeline | TC-SALES-001 to TC-SALES-009 | High |
-| Audit Log | TC-AUDIT-001 to TC-AUDIT-006 | Medium |
-| Compliance (DSAR) | TC-COMP-001 to TC-COMP-004 | Medium |
-| Organization | TC-ORG-001 to TC-ORG-006 | High |
-| Settings | TC-SET-001 to TC-SET-005 | Medium |
-| Email System | TC-EMAIL-001 to TC-EMAIL-006 | High |
-| Demo Request | TC-DEMO-001 to TC-DEMO-004 | High |
-| Schemas | TC-SCH-001 to TC-SCH-003 | Low |
-| Health & API | TC-API-001 to TC-API-006 | Critical |
-| Agent Teams | TC-TEAM-001 | Low |
-| Config | TC-CFG-001 to TC-CFG-002 | Low |
-| Cross-Cutting | TC-CC-001 to TC-CC-012 | Critical |
-| Performance | TC-PERF-001 to TC-PERF-004 | High |
-| Backward Compat | TC-BC-001 to TC-BC-006 | Critical |
-| Onboarding | TC-ONB-001 to TC-ONB-002 | Medium |
-| WebSocket | TC-WS-001 | Low |
-| Negative/Edge | TC-NEG-001 to TC-NEG-010 | High |
+| # | Module | Test Cases | Count | Priority |
+|---|--------|-----------|-------|----------|
+| 1 | Landing Page & Public Pages | TC-LP-001 to TC-LP-018 | 18 | High |
+| 2 | Authentication | TC-AUTH-001 to TC-AUTH-015 | 15 | Critical |
+| 3 | Dashboard | TC-DASH-001 to TC-DASH-005 | 5 | High |
+| 4 | Agent Fleet | TC-AGT-001 to TC-AGT-013 | 13 | High |
+| 5 | Agent Creation | TC-CRT-001 to TC-CRT-007 | 7 | Critical |
+| 6 | Agent Execution | TC-EXEC-001 to TC-EXEC-008 | 8 | Critical |
+| 7 | Workflows | TC-WF-001 to TC-WF-005 | 5 | Medium |
+| 8 | Approvals (HITL) | TC-HITL-001 to TC-HITL-006 | 6 | Critical |
+| 9 | Connectors | TC-CONN-001 to TC-CONN-004 | 4 | Medium |
+| 10 | Prompt Templates | TC-TPL-001 to TC-TPL-007 | 7 | High |
+| 11 | Sales Pipeline | TC-SALES-001 to TC-SALES-009 | 9 | High |
+| 12 | Audit Log | TC-AUDIT-001 to TC-AUDIT-006 | 6 | Medium |
+| 13 | Compliance (DSAR) | TC-COMP-001 to TC-COMP-004 | 4 | Medium |
+| 14 | Organization | TC-ORG-001 to TC-ORG-006 | 6 | High |
+| 15 | Settings | TC-SET-001 to TC-SET-005 | 5 | Medium |
+| 16 | Email System | TC-EMAIL-001 to TC-EMAIL-006 | 6 | High |
+| 17 | Demo Request | TC-DEMO-001 to TC-DEMO-004 | 4 | High |
+| 18 | Schemas | TC-SCH-001 to TC-SCH-003 | 3 | Low |
+| 19 | Health & API | TC-API-001 to TC-API-006 | 6 | Critical |
+| 20 | Agent Teams | TC-TEAM-001 | 1 | Low |
+| 21 | Config | TC-CFG-001 to TC-CFG-002 | 2 | Low |
+| 22 | Cross-Cutting | TC-CC-001 to TC-CC-012 | 12 | Critical |
+| 23 | Performance | TC-PERF-001 to TC-PERF-004 | 4 | High |
+| 24 | Backward Compat | TC-BC-001 to TC-BC-006 | 6 | Critical |
+| 25 | Onboarding | TC-ONB-001 to TC-ONB-002 | 2 | Medium |
+| 26 | WebSocket | TC-WS-001 | 1 | Low |
+| 27 | Negative/Edge | TC-NEG-001 to TC-NEG-010 | 10 | High |
+| 28 | **Org Chart Hierarchy** | TC-ORG-CHART-001 to TC-ORG-CHART-008 | **8** | **Critical** |
+| 29 | **Per-Agent LLM Selection** | TC-LLM-001 to TC-LLM-008 | **8** | **Critical** |
+| 30 | **Per-Agent Budget** | TC-BUDGET-001 to TC-BUDGET-008 | **8** | **Critical** |
+| 31 | **Smart Routing (Multi-Agent)** | TC-ROUTE-001 to TC-ROUTE-007 | **7** | **Critical** |
+| 32 | **Persona & Virtual Employee** | TC-PERSONA-001 to TC-PERSONA-005 | **5** | **High** |
+| 33 | **Prompt Lock & Edit History** | TC-LOCK-001 to TC-LOCK-007 | **7** | **Critical** |
+| 34 | **Sales Pipeline — Advanced** | TC-SALES-ADV-001 to TC-SALES-ADV-013 | **13** | **High** |
+| 35 | **Prompt Template — Advanced** | TC-TPL-ADV-001 to TC-TPL-ADV-007 | **7** | **High** |
+| 36 | **Gmail Integration** | TC-GMAIL-001 to TC-GMAIL-003 | **3** | **High** |
+| 37 | **Agent Clone — Advanced** | TC-CLONE-001 to TC-CLONE-004 | **4** | **High** |
+| 38 | **Confidence & HITL — Advanced** | TC-CONF-001 to TC-CONF-008 | **8** | **Critical** |
 
-**Total: 195 test cases**
+**Total: 291 test cases**
 
 ### Recommended Execution Order:
-1. **Critical first:** Authentication, Agent Execution, Cross-Cutting (security), API Health, Backward Compatibility
-2. **High priority:** Landing Page, Agent Fleet, Agent Creation, Prompt Templates, Sales Pipeline, Email, Demo Request, Performance, Negative/Edge
-3. **Medium:** Dashboard, Workflows, Approvals, Connectors, Audit, Compliance, Settings, Onboarding
-4. **Low:** Schemas, Agent Teams, Config, WebSocket
+1. **Critical first (103 cases):** Authentication, Agent Execution, Cross-Cutting (security), API Health, Backward Compatibility, Org Chart Hierarchy, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL
+2. **High priority (128 cases):** Landing Page, Agent Fleet, Agent Creation, Prompt Templates, Sales Pipeline (basic + advanced), Email, Demo Request, Performance, Negative/Edge, Persona Fields, Gmail Integration, Agent Clone, Template Advanced
+3. **Medium (33 cases):** Dashboard, Workflows, Approvals, Connectors, Audit, Compliance, Settings, Onboarding
+4. **Low (7 cases):** Schemas, Agent Teams, Config, WebSocket
