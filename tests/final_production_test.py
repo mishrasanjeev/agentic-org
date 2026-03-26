@@ -15,9 +15,10 @@ def api(method, path, body=None, token=None):
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(f"{BASE}/{path}", data=data, method=method, headers=headers)
+    url = f"{BASE}/{path}"
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)  # noqa: S310
     try:
-        resp = urllib.request.urlopen(req, context=ctx, timeout=30)
+        resp = urllib.request.urlopen(req, context=ctx, timeout=30)  # noqa: S310
         return resp.status, json.loads(resp.read())
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read()) if e.readable() else {}
@@ -107,7 +108,10 @@ def main():
             "name": f"{name} - {title}", "agent_type": atype, "domain": domain,
             "employee_name": name, "designation": title,
             "specialization": f"{title} specialist",
-            "system_prompt_text": f"You are {name}, {title}. Domain: {domain}. Return JSON with status, confidence, processing_trace.",
+            "system_prompt_text": (
+                f"You are {name}, {title}. Domain: {domain}. "
+                "Return JSON with status, confidence, processing_trace."
+            ),
             "hitl_policy": {"condition": "confidence < 0.85"},
         }, token=token)
         aid = data.get("agent_id", "")
@@ -116,7 +120,7 @@ def main():
             print(f"  FAIL create {name} ({atype})")
 
     created = sum(1 for v in agent_ids.values() if v)
-    check(f"Create 30 agents", created == 30, f"{created}/30")
+    check("Create 30 agents", created == 30, f"{created}/30")
 
     # 6. Run all 30
     print("\n--- 5. Run All 30 Agents ---")
@@ -125,7 +129,7 @@ def main():
     hitl_count = 0
     domains_ok = set()
 
-    for atype, domain, name, title in agents_def:
+    for atype, domain, name, _title in agents_def:
         aid = agent_ids.get(atype)
         if not aid:
             run_fail += 1
@@ -143,7 +147,7 @@ def main():
             run_fail += 1
             print(f"  FAIL run {name} ({atype}): {status}")
 
-    check(f"Run 30 agents", run_pass == 30, f"{run_pass}/30, {hitl_count} HITL")
+    check("Run 30 agents", run_pass == 30, f"{run_pass}/30, {hitl_count} HITL")
     check("All 5 domains covered", len(domains_ok) == 5, str(sorted(domains_ok)))
 
     # 7. Agent detail + persona
@@ -151,7 +155,8 @@ def main():
     first_id = agent_ids.get("ap_processor", "")
     code, data = api("GET", f"agents/{first_id}", token=token)
     check("Agent detail", code == 200)
-    check("Persona fields", all(k in data for k in ["employee_name", "designation", "specialization", "routing_filter", "is_builtin"]))
+    persona_keys = ["employee_name", "designation", "specialization", "routing_filter", "is_builtin"]
+    check("Persona fields", all(k in data for k in persona_keys))
 
     # 8. Prompt template CRUD
     print("\n--- 7. Prompt Templates ---")
