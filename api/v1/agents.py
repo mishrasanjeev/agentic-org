@@ -414,7 +414,7 @@ async def run_agent(
     if monthly_cap and monthly_cap > 0:
         async with get_tenant_session(tid) as session:
             from sqlalchemy import func as sqlfunc
-            month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
             spent_result = await session.execute(
                 select(sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0)).where(
                     AgentCostLedger.agent_id == agent_id,
@@ -853,7 +853,7 @@ async def get_agent_budget(
         # Query monthly spend
         from sqlalchemy import func as sqlfunc
         month_start = datetime.now(UTC).replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
+            day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None
         )
         spent_q = await session.execute(
             select(
