@@ -1,0 +1,177 @@
+{
+  "description": "Synthetic invoices for AP Processor testing — covers matched, mismatched, duplicate, invalid GSTIN, high-value HITL, and incomplete scenarios",
+  "invoices": [
+    {
+      "id": "INV-SYNTH-001",
+      "scenario": "happy_path_matched",
+      "description": "Clean domestic invoice, all fields present, PO matches within tolerance",
+      "ocr_extracted": {
+        "invoice_id": "INV-2026-4521",
+        "vendor_id": "VND-TATA-001",
+        "vendor_name": "Tata Steel Limited",
+        "gstin": "27AAACT2727Q1ZV",
+        "invoice_date": "2026-03-15",
+        "due_date": "2026-04-14",
+        "po_reference": "PO-NF-8847",
+        "grn_reference": "GRN-NF-3321",
+        "line_items": [
+          {"description": "HR Coils 2mm", "quantity": 500, "unit_price": 580, "amount": 290000},
+          {"description": "CR Sheets 1.5mm", "quantity": 100, "unit_price": 345, "amount": 34500}
+        ],
+        "subtotal": 324500,
+        "cgst": 29205,
+        "sgst": 29205,
+        "total": 382910,
+        "bank_details": {"account": "1234567890", "ifsc": "SBIN0001234", "bank": "SBI"},
+        "currency": "INR"
+      },
+      "po_data": {
+        "po_number": "PO-NF-8847",
+        "vendor_id": "VND-TATA-001",
+        "amount": 383000,
+        "status": "approved",
+        "created_date": "2026-02-20"
+      },
+      "grn_data": {
+        "grn_number": "GRN-NF-3321",
+        "po_reference": "PO-NF-8847",
+        "received_quantity": 600,
+        "status": "complete",
+        "received_date": "2026-03-10"
+      },
+      "expected_result": {
+        "status": "matched",
+        "match_delta": 90,
+        "match_delta_pct": 0.023,
+        "payment_action": "schedule",
+        "hitl_triggered": false
+      }
+    },
+    {
+      "id": "INV-SYNTH-002",
+      "scenario": "3way_mismatch",
+      "description": "Invoice total significantly differs from PO — should trigger HITL",
+      "ocr_extracted": {
+        "invoice_id": "INV-2026-4522",
+        "vendor_id": "VND-INFO-002",
+        "vendor_name": "Infosys Limited",
+        "gstin": "29AABCI1305A1Z5",
+        "invoice_date": "2026-03-18",
+        "due_date": "2026-04-17",
+        "po_reference": "PO-NF-9001",
+        "grn_reference": "GRN-NF-3400",
+        "line_items": [
+          {"description": "SAP FICO Consulting - 40 hours", "quantity": 40, "unit_price": 8500, "amount": 340000},
+          {"description": "Travel & Expenses", "quantity": 1, "unit_price": 45000, "amount": 45000}
+        ],
+        "subtotal": 385000,
+        "cgst": 34650,
+        "sgst": 34650,
+        "total": 454300,
+        "bank_details": {"account": "9876543210", "ifsc": "HDFC0001234", "bank": "HDFC"},
+        "currency": "INR"
+      },
+      "po_data": {
+        "po_number": "PO-NF-9001",
+        "vendor_id": "VND-INFO-002",
+        "amount": 340000,
+        "status": "approved"
+      },
+      "expected_result": {
+        "status": "mismatch",
+        "match_delta": 114300,
+        "match_delta_pct": 33.6,
+        "hitl_triggered": true,
+        "hitl_reason": "Match delta exceeds 2% tolerance"
+      }
+    },
+    {
+      "id": "INV-SYNTH-003",
+      "scenario": "invalid_gstin",
+      "description": "Vendor GSTIN is invalid — should fail validation",
+      "ocr_extracted": {
+        "invoice_id": "INV-2026-4523",
+        "vendor_id": "VND-FAKE-003",
+        "vendor_name": "ABC Enterprises",
+        "gstin": "99ZZZZZ9999Z9Z9",
+        "invoice_date": "2026-03-20",
+        "due_date": "2026-04-19",
+        "po_reference": "PO-NF-9010",
+        "line_items": [{"description": "Office Supplies", "quantity": 1, "unit_price": 15000, "amount": 15000}],
+        "subtotal": 15000,
+        "total": 17700,
+        "bank_details": {"account": "1111111111", "ifsc": "UTIB0001234"},
+        "currency": "INR"
+      },
+      "expected_result": {
+        "status": "gstin_invalid",
+        "hitl_triggered": false
+      }
+    },
+    {
+      "id": "INV-SYNTH-004",
+      "scenario": "high_value_hitl",
+      "description": "Invoice above ₹5L threshold — should trigger HITL regardless of match",
+      "ocr_extracted": {
+        "invoice_id": "INV-2026-4524",
+        "vendor_id": "VND-WIPRO-004",
+        "vendor_name": "Wipro Limited",
+        "gstin": "29AABCW8841M1Z9",
+        "invoice_date": "2026-03-22",
+        "due_date": "2026-04-21",
+        "po_reference": "PO-NF-9020",
+        "grn_reference": "GRN-NF-3500",
+        "line_items": [
+          {"description": "Cloud Migration Services", "quantity": 1, "unit_price": 2500000, "amount": 2500000}
+        ],
+        "subtotal": 2500000,
+        "cgst": 225000,
+        "sgst": 225000,
+        "total": 2950000,
+        "bank_details": {"account": "5555555555", "ifsc": "ICIC0001234"},
+        "currency": "INR"
+      },
+      "po_data": {
+        "po_number": "PO-NF-9020",
+        "amount": 2950000,
+        "status": "approved"
+      },
+      "expected_result": {
+        "status": "matched",
+        "hitl_triggered": true,
+        "hitl_reason": "Invoice total > 500000 threshold"
+      }
+    },
+    {
+      "id": "INV-SYNTH-005",
+      "scenario": "incomplete_ocr",
+      "description": "OCR extraction missing required fields — should fail at extract step",
+      "ocr_extracted": {
+        "invoice_id": "INV-2026-4525",
+        "vendor_name": "Unknown Vendor",
+        "invoice_date": "2026-03-25",
+        "line_items": [{"description": "Misc services", "amount": 50000}],
+        "total": 59000
+      },
+      "expected_result": {
+        "status": "incomplete",
+        "missing_fields": ["vendor_id", "gstin", "due_date", "po_reference", "bank_details"]
+      }
+    },
+    {
+      "id": "INV-SYNTH-006",
+      "scenario": "duplicate_invoice",
+      "description": "Same invoice_id + vendor_id submitted twice — should detect duplicate",
+      "ocr_extracted": {
+        "invoice_id": "INV-2026-4521",
+        "vendor_id": "VND-TATA-001",
+        "vendor_name": "Tata Steel Limited",
+        "gstin": "27AAACT2727Q1ZV",
+        "total": 382910
+      },
+      "expected_result": {
+        "status": "duplicate"
+      }
+    }
+  ]
+}

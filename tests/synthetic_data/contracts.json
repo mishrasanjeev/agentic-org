@@ -1,0 +1,118 @@
+{
+  "description": "Synthetic contracts for Contract Intelligence agent — covers standard, non-standard clauses, renewal, high-value HITL",
+  "contracts": [
+    {
+      "id": "CTR-SYNTH-001",
+      "scenario": "standard_saas_contract",
+      "description": "Standard SaaS subscription — no unusual clauses",
+      "parsed_data": {
+        "contract_type": "SaaS Subscription",
+        "parties": {
+          "vendor": {"name": "CloudServe India Pvt Ltd", "gstin": "29AABCC1234D1Z5"},
+          "customer": {"name": "TechVista Solutions Pvt Ltd", "gstin": "27AABCT5678E1Z2"}
+        },
+        "effective_date": "2026-04-01",
+        "expiry_date": "2027-03-31",
+        "auto_renewal": true,
+        "renewal_notice_days": 60,
+        "contract_value": {"amount": 1200000, "currency": "INR", "payment_terms": "quarterly"},
+        "clauses": [
+          {"type": "standard", "name": "Service Level Agreement", "sla_uptime": "99.9%", "penalty": "5% monthly fee per 0.1% downtime"},
+          {"type": "standard", "name": "Data Protection", "compliance": "DPDPA 2023"},
+          {"type": "standard", "name": "Limitation of Liability", "cap": "12 months fees"},
+          {"type": "standard", "name": "Termination for Convenience", "notice_period": "90 days"},
+          {"type": "standard", "name": "IP Ownership", "ownership": "customer retains data, vendor retains platform IP"}
+        ],
+        "obligations": [
+          {"party": "vendor", "obligation": "Maintain 99.9% uptime", "frequency": "monthly"},
+          {"party": "vendor", "obligation": "Security audit report", "frequency": "annual"},
+          {"party": "customer", "obligation": "Payment within 30 days of invoice", "frequency": "quarterly"}
+        ]
+      },
+      "expected_result": {
+        "status": "indexed",
+        "risk_level": "low",
+        "non_standard_clauses": 0,
+        "hitl_triggered": false,
+        "renewal_alert_date": "2027-01-31"
+      }
+    },
+    {
+      "id": "CTR-SYNTH-002",
+      "scenario": "non_standard_clauses_hitl",
+      "description": "Contract with non-standard indemnification and unlimited liability — should trigger HITL",
+      "parsed_data": {
+        "contract_type": "IT Services Agreement",
+        "parties": {
+          "vendor": {"name": "Megabyte Systems Ltd"},
+          "customer": {"name": "TechVista Solutions Pvt Ltd"}
+        },
+        "effective_date": "2026-05-01",
+        "expiry_date": "2028-04-30",
+        "contract_value": {"amount": 5000000, "currency": "INR"},
+        "clauses": [
+          {"type": "standard", "name": "Scope of Work", "description": "ERP implementation"},
+          {"type": "non_standard", "name": "Unlimited Indemnification", "description": "Customer shall indemnify vendor for ALL losses including consequential damages without any cap", "risk": "high"},
+          {"type": "non_standard", "name": "Exclusive Jurisdiction", "description": "All disputes subject to courts in Delaware, USA only", "risk": "medium"},
+          {"type": "non_standard", "name": "Non-Compete", "description": "Customer cannot use competing products for 3 years after termination", "risk": "high"},
+          {"type": "standard", "name": "Termination", "notice_period": "180 days"}
+        ]
+      },
+      "expected_result": {
+        "status": "review_required",
+        "risk_level": "high",
+        "non_standard_clauses": 3,
+        "hitl_triggered": true,
+        "hitl_reason": "Non-standard clauses detected: Unlimited Indemnification, Exclusive Jurisdiction, Non-Compete"
+      }
+    },
+    {
+      "id": "CTR-SYNTH-003",
+      "scenario": "high_value_hitl",
+      "description": "Contract value above ₹25L threshold — HITL regardless of clauses",
+      "parsed_data": {
+        "contract_type": "Managed Services",
+        "parties": {
+          "vendor": {"name": "Wipro Limited"},
+          "customer": {"name": "TechVista Solutions Pvt Ltd"}
+        },
+        "effective_date": "2026-06-01",
+        "expiry_date": "2029-05-31",
+        "contract_value": {"amount": 35000000, "currency": "INR"},
+        "clauses": [
+          {"type": "standard", "name": "SLA", "sla_uptime": "99.95%"},
+          {"type": "standard", "name": "Data Protection"},
+          {"type": "standard", "name": "Termination", "notice_period": "90 days"}
+        ]
+      },
+      "expected_result": {
+        "status": "review_required",
+        "risk_level": "medium",
+        "hitl_triggered": true,
+        "hitl_reason": "Contract value ₹3.5Cr exceeds ₹25L threshold"
+      }
+    },
+    {
+      "id": "CTR-SYNTH-004",
+      "scenario": "renewal_approaching",
+      "description": "Contract expiring in 45 days — should flag for renewal action",
+      "parsed_data": {
+        "contract_type": "Support & Maintenance",
+        "parties": {
+          "vendor": {"name": "Oracle India Pvt Ltd"},
+          "customer": {"name": "TechVista Solutions Pvt Ltd"}
+        },
+        "effective_date": "2025-05-01",
+        "expiry_date": "2026-05-10",
+        "auto_renewal": false,
+        "renewal_notice_days": 30,
+        "contract_value": {"amount": 800000, "currency": "INR"}
+      },
+      "expected_result": {
+        "status": "renewal_action_required",
+        "days_to_expiry": 45,
+        "recommendation": "Initiate renewal negotiation or identify alternative vendor"
+      }
+    }
+  ]
+}

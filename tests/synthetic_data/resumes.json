@@ -1,0 +1,176 @@
+{
+  "description": "Synthetic resumes for Talent Acquisition agent screening — covers strong match, weak match, overqualified, career changer, and incomplete resume",
+  "job_requisition": {
+    "title": "Senior Backend Engineer (Python/FastAPI)",
+    "department": "Engineering",
+    "level": "L5 (Senior)",
+    "location": "Bengaluru, India",
+    "salary_band": {"min": 2500000, "max": 4000000, "currency": "INR"},
+    "required_skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "Kubernetes"],
+    "preferred_skills": ["Redis", "gRPC", "Terraform", "AWS/GCP"],
+    "min_experience_years": 5,
+    "education": "B.Tech/M.Tech CS or equivalent"
+  },
+  "rubric": {
+    "technical_skills": {"weight": 35, "criteria": "Match against required + preferred skills"},
+    "experience_relevance": {"weight": 25, "criteria": "Years + domain relevance"},
+    "education": {"weight": 15, "criteria": "Degree level + institution tier"},
+    "project_complexity": {"weight": 15, "criteria": "Scale, architecture decisions, impact"},
+    "communication": {"weight": 10, "criteria": "Resume clarity, structure, conciseness"}
+  },
+  "resumes": [
+    {
+      "id": "RES-SYNTH-001",
+      "scenario": "strong_match",
+      "description": "Ideal candidate — 7 years Python, strong FastAPI experience, Kubernetes, relevant projects",
+      "parsed_data": {
+        "name": "Candidate A",
+        "email": "candidate_a@email.test",
+        "phone": "+91 98765 43210",
+        "current_title": "Backend Engineer",
+        "current_company": "Razorpay",
+        "total_experience_years": 7,
+        "education": [
+          {"degree": "B.Tech Computer Science", "institution": "IIT Bombay", "year": 2019, "gpa": 8.5}
+        ],
+        "skills": ["Python", "FastAPI", "Django", "PostgreSQL", "Redis", "Docker", "Kubernetes", "Terraform", "GCP", "gRPC", "Celery", "SQLAlchemy"],
+        "experience": [
+          {
+            "company": "Razorpay",
+            "title": "Senior Backend Engineer",
+            "duration": "2022-present (4 years)",
+            "highlights": [
+              "Led payment gateway microservices handling 2M transactions/day",
+              "Designed distributed reconciliation system (99.99% accuracy)",
+              "Mentored team of 4 junior engineers"
+            ]
+          },
+          {
+            "company": "Flipkart",
+            "title": "Backend Engineer",
+            "duration": "2019-2022 (3 years)",
+            "highlights": [
+              "Built inventory management APIs serving 50K RPM",
+              "Migrated monolith to FastAPI microservices"
+            ]
+          }
+        ],
+        "certifications": ["GCP Professional Cloud Architect"]
+      },
+      "expected_result": {
+        "rubric_score": 92,
+        "recommendation": "shortlist",
+        "stage": "phone_screen"
+      }
+    },
+    {
+      "id": "RES-SYNTH-002",
+      "scenario": "weak_match",
+      "description": "Junior developer — only 2 years experience, missing key skills",
+      "parsed_data": {
+        "name": "Candidate B",
+        "email": "candidate_b@email.test",
+        "total_experience_years": 2,
+        "education": [
+          {"degree": "B.Tech IT", "institution": "VIT Vellore", "year": 2024}
+        ],
+        "skills": ["Python", "Django", "MySQL", "HTML", "CSS", "JavaScript"],
+        "experience": [
+          {
+            "company": "TCS",
+            "title": "Software Developer",
+            "duration": "2024-present (2 years)",
+            "highlights": [
+              "Developed internal dashboards using Django",
+              "Wrote unit tests for REST APIs"
+            ]
+          }
+        ]
+      },
+      "expected_result": {
+        "rubric_score": 35,
+        "recommendation": "reject",
+        "reason": "Below minimum experience (2 vs 5 years), missing FastAPI/Docker/K8s"
+      }
+    },
+    {
+      "id": "RES-SYNTH-003",
+      "scenario": "overqualified_hitl",
+      "description": "VP-level candidate applying for L5 — HITL for HR Head review",
+      "parsed_data": {
+        "name": "Candidate C",
+        "email": "candidate_c@email.test",
+        "current_title": "VP Engineering",
+        "current_company": "PhonePe",
+        "total_experience_years": 15,
+        "education": [
+          {"degree": "M.Tech CS", "institution": "IISc Bangalore", "year": 2011}
+        ],
+        "skills": ["Python", "FastAPI", "Go", "Kubernetes", "System Design", "Team Leadership", "P&L Management"],
+        "experience": [
+          {
+            "company": "PhonePe",
+            "title": "VP Engineering",
+            "duration": "2020-present",
+            "highlights": ["Led 80-person engineering org", "Built payment infra processing ₹2Cr/day"]
+          }
+        ]
+      },
+      "expected_result": {
+        "rubric_score": 88,
+        "recommendation": "hitl_review",
+        "hitl_reason": "L7+ senior hire — requires HR Head approval",
+        "hitl_triggered": true
+      }
+    },
+    {
+      "id": "RES-SYNTH-004",
+      "scenario": "career_changer",
+      "description": "Data scientist transitioning to backend — some overlap but different domain",
+      "parsed_data": {
+        "name": "Candidate D",
+        "email": "candidate_d@email.test",
+        "current_title": "Senior Data Scientist",
+        "current_company": "Swiggy",
+        "total_experience_years": 6,
+        "education": [
+          {"degree": "M.S. Statistics", "institution": "ISI Kolkata", "year": 2020}
+        ],
+        "skills": ["Python", "FastAPI", "TensorFlow", "Pandas", "SQL", "Docker", "Airflow"],
+        "experience": [
+          {
+            "company": "Swiggy",
+            "title": "Senior Data Scientist",
+            "duration": "2021-present",
+            "highlights": [
+              "Built ML pipeline serving 10M predictions/day",
+              "Deployed FastAPI model-serving endpoints",
+              "Managed PostgreSQL + Redis data stores"
+            ]
+          }
+        ]
+      },
+      "expected_result": {
+        "rubric_score": 62,
+        "recommendation": "maybe",
+        "notes": "Strong Python + FastAPI but primarily ML/DS background, not pure backend"
+      }
+    },
+    {
+      "id": "RES-SYNTH-005",
+      "scenario": "incomplete_resume",
+      "description": "Resume with missing sections — agent should flag gaps",
+      "parsed_data": {
+        "name": "Candidate E",
+        "email": "candidate_e@email.test",
+        "skills": ["Java", "Spring Boot"],
+        "experience": []
+      },
+      "expected_result": {
+        "rubric_score": 10,
+        "recommendation": "reject",
+        "reason": "Incomplete resume — no experience, no education, wrong tech stack"
+      }
+    }
+  ]
+}
