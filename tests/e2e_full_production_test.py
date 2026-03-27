@@ -183,6 +183,7 @@ def test_agent_lifecycle():
         "confidence_floor": 0.85, "hitl_policy": {"condition": "confidence < 0.85"},
         "max_retries": 3, "initial_status": "shadow", "org_level": 0,
         "llm_model": "gemini-2.5-flash",
+        "shadow_min_samples": 0,
     })
     check("Create parent agent (VP Finance)", r.status_code in (200, 201), r.text[:100])
     parent_id = r.json().get("agent_id", "")
@@ -200,6 +201,7 @@ def test_agent_lifecycle():
         "parent_agent_id": parent_id, "reporting_to": "VP Finance Bot",
         "routing_filter": {"region": "Mumbai"},
         "llm_model": "gemini-2.5-flash",
+        "shadow_min_samples": 0,
     })
     check("Create child agent (Priya) with parent", r.status_code in (200, 201))
     child_id = r.json().get("agent_id", "")
@@ -625,10 +627,11 @@ def test_schemas():
     check("Create schema", r.status_code in (200, 201))
 
     r = api("PUT", f"/schemas/e2e_schema_{UNIQUE}", token=t, json={
+        "name": f"e2e_schema_{UNIQUE}",
         "version": "1.1.0", "description": "Updated",
         "json_schema": {"type": "object"}, "is_default": False,
     })
-    check("Upsert schema", r.status_code == 200)
+    check("Upsert schema", r.status_code == 200, r.text[:100])
 
 
 # ═══════════════════════════════════════════════════════════════════════════
