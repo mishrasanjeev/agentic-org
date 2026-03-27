@@ -217,6 +217,158 @@ async def list_agents(
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ORG TREE + CSV IMPORT — must be declared BEFORE /agents/{agent_id}
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/agents/org-tree")
+async def get_org_tree(
+    domain: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Return agents as a hierarchical org tree."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(Agent).where(Agent.tenant_id == tid)
+        if domain:
+            query = query.where(Agent.domain == domain)
+        query = query.order_by(Agent.org_level.asc(), Agent.created_at.asc())
+        result = await session.execute(query)
+        agents = result.scalars().all()
+
+    agents_by_id: dict[str, dict] = {}
+    for a in agents:
+        agents_by_id[str(a.id)] = {
+            "id": str(a.id),
+            "name": a.name,
+            "employee_name": a.employee_name,
+            "designation": a.designation,
+            "domain": a.domain,
+            "agent_type": a.agent_type,
+            "status": a.status,
+            "avatar_url": a.avatar_url,
+            "org_level": a.org_level,
+            "parent_agent_id": str(a.parent_agent_id) if a.parent_agent_id else None,
+            "specialization": a.specialization,
+            "children": [],
+        }
+
+    roots: list[dict] = []
+    for _aid, node in agents_by_id.items():
+        pid = node.get("parent_agent_id")
+        if pid and pid in agents_by_id:
+            agents_by_id[pid]["children"].append(node)
+        else:
+            roots.append(node)
+
+    return {"tree": roots, "flat_count": len(agents_by_id)}
+
+
+@router.post("/agents/import-csv")
+async def import_agents_csv(
+    file: UploadFile,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Import agents from CSV with two-pass parent linking."""
+    tid = _uuid.UUID(tenant_id)
+    content = await file.read()
+    text_content = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text_content))
+
+    imported: list[dict] = []
+    skipped: list[dict] = []
+    rows_with_parent: list[dict] = []
+
+    async with get_tenant_session(tid) as session:
+        for row in reader:
+            name = (row.get("name") or row.get("Name") or "").strip()
+            agent_type = (row.get("agent_type") or "").strip()
+            domain = (row.get("domain") or "").strip()
+
+            if not name or not agent_type or not domain:
+                skipped.append({"reason": "missing required field", "row": dict(row)})
+                continue
+
+            designation = (row.get("designation") or "").strip()
+            specialization = (row.get("specialization") or "").strip()
+            reporting_to_name = (row.get("reporting_to_name") or "").strip()
+            org_level_str = (row.get("org_level") or "").strip()
+            llm_model = (row.get("llm_model") or "").strip()
+            confidence_str = (row.get("confidence_floor") or "").strip()
+
+            org_level = int(org_level_str) if org_level_str.isdigit() else 0
+            confidence_floor = Decimal("0.88")
+            if confidence_str:
+                try:
+                    confidence_floor = Decimal(confidence_str)
+                except (ValueError, ArithmeticError):
+                    confidence_floor = Decimal("0.88")
+
+            agent = Agent(
+                tenant_id=tid, name=name, employee_name=name,
+                agent_type=agent_type, domain=domain,
+                designation=designation or None,
+                specialization=specialization or None,
+                system_prompt_ref="", system_prompt_text="",
+                hitl_condition="confidence < 0.88",
+                status="shadow", version="1.0.0",
+                confidence_floor=confidence_floor,
+                org_level=org_level, llm_model=llm_model or None,
+                parent_agent_id=None,
+            )
+            session.add(agent)
+            await session.flush()
+            imported.append({
+                "id": str(agent.id), "name": name,
+                "agent_type": agent_type, "domain": domain,
+            })
+            if reporting_to_name:
+                rows_with_parent.append({
+                    "agent_id": str(agent.id), "agent_name": name,
+                    "agent_domain": domain,
+                    "reporting_to_name": reporting_to_name,
+                })
+
+    parent_links_set = 0
+    if rows_with_parent:
+        async with get_tenant_session(tid) as session:
+            all_result = await session.execute(
+                select(Agent).where(Agent.tenant_id == tid)
+            )
+            all_agents = all_result.scalars().all()
+            name_map: dict[tuple[str, str], _uuid.UUID] = {}
+            for a in all_agents:
+                name_map[(a.employee_name or a.name, a.domain)] = a.id
+
+            for link in rows_with_parent:
+                rtn = link["reporting_to_name"]
+                if rtn == link["agent_name"]:
+                    skipped.append({"reason": "self-reference", "agent": rtn})
+                    continue
+                pid = name_map.get((rtn, link["agent_domain"]))
+                if not pid:
+                    skipped.append({
+                        "reason": f"parent '{rtn}' not found in {link['agent_domain']}",
+                        "agent": link["agent_name"],
+                    })
+                    continue
+                ar = await session.execute(
+                    select(Agent).where(Agent.id == _uuid.UUID(link["agent_id"]))
+                )
+                agent_row = ar.scalar_one_or_none()
+                if agent_row:
+                    agent_row.parent_agent_id = pid
+                    agent_row.reporting_to = rtn
+                    parent_links_set += 1
+
+    return {
+        "imported": len(imported), "skipped": len(skipped),
+        "parent_links_set": parent_links_set,
+        "agents": imported, "skip_details": skipped[:10],
+    }
+
+
 # ── GET /agents/{id} ────────────────────────────────────────────────────────
 @router.get("/agents/{agent_id}")
 async def get_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
@@ -901,213 +1053,4 @@ async def get_agent_budget(
         "monthly_tasks": monthly_tasks,
         "daily_token_budget": daily_budget,
         "warnings": warnings,
-    }
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# ORG TREE — Hierarchical view of all agents
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.get("/agents/org-tree")
-async def get_org_tree(
-    domain: str | None = None,
-    tenant_id: str = Depends(get_current_tenant),
-):
-    """Return agents as a hierarchical org tree.
-
-    Agents with no parent_agent_id are roots; others nest under their parent's children array.
-    """
-    tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
-        query = select(Agent).where(Agent.tenant_id == tid)
-        if domain:
-            query = query.where(Agent.domain == domain)
-        query = query.order_by(Agent.org_level.asc(), Agent.created_at.asc())
-        result = await session.execute(query)
-        agents = result.scalars().all()
-
-    # Build lookup dict
-    agents_by_id: dict[str, dict] = {}
-    for a in agents:
-        agents_by_id[str(a.id)] = {
-            "id": str(a.id),
-            "name": a.name,
-            "employee_name": a.employee_name,
-            "designation": a.designation,
-            "domain": a.domain,
-            "agent_type": a.agent_type,
-            "status": a.status,
-            "avatar_url": a.avatar_url,
-            "org_level": a.org_level,
-            "parent_agent_id": str(a.parent_agent_id) if a.parent_agent_id else None,
-            "specialization": a.specialization,
-            "children": [],
-        }
-
-    # Build tree
-    roots: list[dict] = []
-    for _agent_id, node in agents_by_id.items():
-        parent_id = node.get("parent_agent_id")
-        if parent_id and parent_id in agents_by_id:
-            agents_by_id[parent_id]["children"].append(node)
-        else:
-            roots.append(node)
-
-    return {"tree": roots, "flat_count": len(agents_by_id)}
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CSV IMPORT — Bulk agent upload with two-pass parent linking
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.post("/agents/import-csv")
-async def import_agents_csv(
-    file: UploadFile,
-    tenant_id: str = Depends(get_current_tenant),
-):
-    """Import agents from CSV with two-pass parent linking.
-
-    Expected columns: name, agent_type, domain, designation, specialization,
-    reporting_to_name, org_level, llm_model, confidence_floor.
-    Required: name, agent_type, domain.
-    """
-    tid = _uuid.UUID(tenant_id)
-    content = await file.read()
-    text_content = content.decode("utf-8-sig")  # Handle BOM
-    reader = csv.DictReader(io.StringIO(text_content))
-
-    imported: list[dict] = []
-    skipped: list[dict] = []
-    rows_with_parent: list[dict] = []  # (row data, created agent id)
-
-    # ── Pass 1: Create all agents with parent_agent_id=null ──
-    async with get_tenant_session(tid) as session:
-        for row in reader:
-            name = (row.get("name") or row.get("Name") or "").strip()
-            agent_type = (row.get("agent_type") or row.get("Agent_Type") or "").strip()
-            domain = (row.get("domain") or row.get("Domain") or "").strip()
-
-            if not name or not agent_type or not domain:
-                skipped.append({"reason": "missing required field (name, agent_type, or domain)", "row": dict(row)})
-                continue
-
-            # Parse optional fields
-            designation = (row.get("designation") or row.get("Designation") or "").strip()
-            specialization = (row.get("specialization") or row.get("Specialization") or "").strip()
-            reporting_to_name = (row.get("reporting_to_name") or row.get("Reporting_To_Name") or "").strip()
-            org_level_str = (row.get("org_level") or row.get("Org_Level") or "").strip()
-            llm_model = (row.get("llm_model") or row.get("LLM_Model") or "").strip()
-            confidence_str = (row.get("confidence_floor") or row.get("Confidence_Floor") or "").strip()
-
-            org_level = 0
-            if org_level_str:
-                try:
-                    org_level = int(org_level_str)
-                except ValueError:
-                    pass
-
-            confidence_floor = Decimal("0.88")
-            if confidence_str:
-                try:
-                    confidence_floor = Decimal(confidence_str)
-                except (ValueError, ArithmeticError):
-                    confidence_floor = Decimal("0.88")
-
-            agent = Agent(
-                tenant_id=tid,
-                name=name,
-                employee_name=name,
-                agent_type=agent_type,
-                domain=domain,
-                designation=designation or None,
-                specialization=specialization or None,
-                system_prompt_ref="",
-                system_prompt_text="",
-                hitl_condition="confidence < 0.88",
-                status="shadow",
-                version="1.0.0",
-                confidence_floor=confidence_floor,
-                org_level=org_level,
-                llm_model=llm_model or None,
-                parent_agent_id=None,
-            )
-            session.add(agent)
-            await session.flush()
-
-            agent_info = {
-                "id": str(agent.id),
-                "name": name,
-                "employee_name": name,
-                "agent_type": agent_type,
-                "domain": domain,
-            }
-            imported.append(agent_info)
-
-            if reporting_to_name:
-                rows_with_parent.append({
-                    "agent_id": str(agent.id),
-                    "agent_name": name,
-                    "agent_domain": domain,
-                    "reporting_to_name": reporting_to_name,
-                })
-
-    # ── Build name+domain -> agent_id map (existing agents + newly created) ──
-    parent_links_set = 0
-
-    if rows_with_parent:
-        async with get_tenant_session(tid) as session:
-            # Load all agents for this tenant to build the lookup map
-            all_result = await session.execute(
-                select(Agent).where(Agent.tenant_id == tid)
-            )
-            all_agents = all_result.scalars().all()
-
-            # Map: (employee_name, domain) -> agent id
-            name_domain_map: dict[tuple[str, str], _uuid.UUID] = {}
-            for a in all_agents:
-                key = (a.employee_name or a.name, a.domain)
-                name_domain_map[key] = a.id
-
-            # ── Pass 2: Set parent_agent_id for rows with reporting_to_name ──
-            for link in rows_with_parent:
-                reporting_to_name = link["reporting_to_name"]
-                agent_name = link["agent_name"]
-                agent_domain = link["agent_domain"]
-
-                # Detect self-reference
-                if reporting_to_name == agent_name:
-                    skipped.append({
-                        "reason": "self-reference (reporting_to_name == own name)",
-                        "agent": agent_name,
-                    })
-                    continue
-
-                parent_key = (reporting_to_name, agent_domain)
-                parent_id = name_domain_map.get(parent_key)
-
-                if not parent_id:
-                    skipped.append({
-                        "reason": f"reporting_to_name '{reporting_to_name}' not found in domain '{agent_domain}'",
-                        "agent": agent_name,
-                    })
-                    continue
-
-                # Update the agent's parent link
-                agent_result = await session.execute(
-                    select(Agent).where(Agent.id == _uuid.UUID(link["agent_id"]))
-                )
-                agent_row = agent_result.scalar_one_or_none()
-                if agent_row:
-                    agent_row.parent_agent_id = parent_id
-                    agent_row.reporting_to = reporting_to_name
-                    parent_links_set += 1
-
-    return {
-        "imported": len(imported),
-        "skipped": len(skipped),
-        "parent_links_set": parent_links_set,
-        "agents": imported,
-        "skip_details": skipped[:10],
     }
