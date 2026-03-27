@@ -3,7 +3,7 @@
 **Version:** 2.1.1
 **Last Updated:** 2026-03-27
 **Production URL:** https://app.agenticorg.ai
-**Total Test Cases:** 508
+**Total Test Cases:** 526
 
 ## Demo Credentials
 
@@ -3926,6 +3926,207 @@
 
 ---
 
+## Module 56: Org Chart — End-to-End Integration Flows
+
+### TC-E2E-ORG-001: Full flow — create hierarchy via wizard then view in org chart
+**Steps:**
+1. Login as CEO
+2. Create parent agent "VP Finance" via Agent Create wizard (Step 2: no Reports To)
+3. Promote VP Finance to active
+4. Create child agent "AP Analyst - Priya" via wizard (Step 2: Reports To = VP Finance)
+5. Create child agent "AP Analyst - Arjun" via wizard (Step 2: Reports To = VP Finance)
+6. Navigate to /dashboard/org-chart
+7. Filter by Finance
+
+**Expected Result:** Tree shows VP Finance as root with 2 children (Priya and Arjun). Connector lines link parent to children. All 3 agents visible. Clicking any node navigates to agent detail.
+
+---
+
+### TC-E2E-ORG-002: Full flow — CSV import then view in org chart
+**Steps:**
+1. Prepare CSV:
+```
+name,agent_type,domain,designation,reporting_to_name,org_level
+VP Tax,tax_compliance,finance,VP Tax & Compliance,,0
+GST Officer,tax_compliance,finance,GST Filing Officer,VP Tax,1
+TDS Analyst,tax_compliance,finance,TDS Analyst,VP Tax,1
+```
+2. Navigate to /dashboard/agents → Import CSV
+3. Upload the file
+4. Check results panel
+5. Navigate to /dashboard/org-chart → Filter Finance
+
+**Expected Result:** 3 agents imported, 2 parent links set, 0 skipped. Org chart shows VP Tax as root with GST Officer and TDS Analyst as children. All in shadow mode (yellow dots).
+
+---
+
+### TC-E2E-ORG-003: Full flow — edit parent via Agent Detail then verify org chart
+**Steps:**
+1. Open an agent detail page (one without a parent)
+2. In Overview tab, click Edit next to "Reports To"
+3. Select a parent from the dropdown
+4. Click Save
+5. Navigate to /dashboard/org-chart
+
+**Expected Result:** Agent now appears as a child of the selected parent in the org chart tree. The persona header shows "Reports to: {parent name}".
+
+---
+
+### TC-E2E-ORG-004: Full flow — remove parent via Agent Detail then verify org chart
+**Steps:**
+1. Open an agent that has a parent set
+2. In Overview tab, click Edit next to "Reports To"
+3. Select "— No parent (escalates to human) —"
+4. Click Save
+5. Navigate to /dashboard/org-chart
+
+**Expected Result:** Agent now appears as a root node (no parent). Previous parent no longer shows this agent as a child.
+
+---
+
+### TC-E2E-ORG-005: Full flow — CSV import then promote agents level by level
+**Steps:**
+1. Import a 3-level hierarchy via CSV (Head → Managers → Analysts)
+2. All agents start as shadow
+3. Promote Analysts first (bottom level)
+4. Then promote Managers
+5. Then promote Head
+
+**Expected Result:** Each promotion changes status from shadow to active. Org chart shows progressive green dots as agents are promoted. Bottom-up promotion ensures children are active before parents.
+
+---
+
+### TC-E2E-ORG-006: Full flow — escalation triggers when child agent has low confidence
+**Steps:**
+1. Create parent agent (active, confidence_floor = 0.5)
+2. Create child agent (active, confidence_floor = 0.99, parent = parent agent)
+3. Run the child agent with a normal task
+
+**Expected Result:** Child agent executes, produces confidence < 0.99, triggers HITL. Escalation chain: child → parent (active, returned). Parent agent referenced in the HITL item context. If parent agent also fails, escalates to human CFO.
+
+---
+
+### TC-E2E-ORG-007: Full flow — multi-department org chart
+**Steps:**
+1. Import CSV with agents for ALL 4 departments:
+   - Finance: VP Finance → 2 analysts
+   - HR: VP HR → 2 analysts
+   - Marketing: VP Marketing → 2 analysts
+   - Ops: VP Ops → 2 analysts
+2. Navigate to /dashboard/org-chart (All Departments)
+
+**Expected Result:** 4 root nodes (one per department VP). Each with 2 children. Different domain colors: emerald (finance), purple (HR), amber (marketing), blue (ops). 12 agents total. Filter by Finance shows only 3, by HR shows only 3, etc.
+
+---
+
+### TC-E2E-ORG-008: CSV import — large file (20+ agents)
+**Steps:**
+1. Prepare a CSV with 20+ agents across multiple levels (Head → Directors → Managers → Analysts)
+2. Import via /dashboard/agents
+3. Check result
+4. View in org chart
+
+**Expected Result:** All agents imported within 30 seconds. Parent links correctly set for all levels. Org chart renders the full tree without performance issues. Expand/collapse works on deep branches.
+
+---
+
+### TC-E2E-ORG-009: CSV import — BOM-encoded file from Excel
+**Steps:**
+1. Open a CSV in Microsoft Excel and save as "CSV UTF-8"
+2. Import this file (Excel adds BOM: EF BB BF at file start)
+
+**Expected Result:** Import handles BOM correctly (utf-8-sig decoding). No "missing required field" errors caused by BOM corrupting the first column header. All rows imported successfully.
+
+---
+
+### TC-E2E-ORG-010: Org chart — API response structure
+**Steps:**
+1. Call GET /api/v1/agents/org-tree directly with auth token
+2. Inspect JSON response
+
+**Expected Result:** Response has `{"tree": [...], "flat_count": N}`. Each tree node has: id, name, employee_name, designation, domain, agent_type, status, avatar_url, org_level, parent_agent_id, specialization, children (array). Children recursively have the same structure. flat_count matches total agents (not just roots).
+
+---
+
+### TC-E2E-ORG-011: Org chart — domain filter via API
+**Steps:**
+1. Call GET /api/v1/agents/org-tree?domain=finance
+2. Call GET /api/v1/agents/org-tree?domain=hr
+3. Call GET /api/v1/agents/org-tree (no filter)
+
+**Expected Result:** finance filter returns only finance agents in tree. hr filter returns only HR agents. No filter returns all agents. flat_count differs per filter.
+
+---
+
+### TC-E2E-ORG-012: Import CSV — error state UI
+**Steps:**
+1. Open import panel
+2. Try to import without selecting a file (button should be disabled)
+3. Upload a non-CSV file (e.g., .jpg)
+4. Check error handling
+
+**Expected Result:** Upload button disabled when no file selected. Non-CSV file may fail parsing — error displayed in red panel: "Import failed" or specific error message. No server crash.
+
+---
+
+### TC-E2E-ORG-013: Import CSV — confidence_floor and llm_model from CSV
+**Steps:**
+1. Prepare CSV with confidence_floor=0.95 and llm_model=claude-3-5-sonnet-20241022 for one agent
+2. Import
+3. Check agent detail
+
+**Expected Result:** Agent created with confidence_floor=0.95 (not default 0.88). llm_model="claude-3-5-sonnet-20241022" stored. Agent falls back to Gemini at runtime (no Claude key) but model preference saved.
+
+---
+
+### TC-E2E-ORG-014: Org chart loading state
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Observe initial render before API returns
+
+**Expected Result:** Shows "Loading org chart..." text while API fetches. Replaced by tree/list once data arrives.
+
+---
+
+### TC-E2E-ORG-015: Org chart — agent count stats in header
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Check the subtitle stats
+
+**Expected Result:** Shows "X agents | Y department heads | Z in hierarchy". X = flat_count from API. Y = number of root nodes (tree.length). Z = agents with parent_agent_id set or with children.
+
+---
+
+### TC-E2E-ORG-016: List view — click to navigate
+**Steps:**
+1. Switch to List view on org chart
+2. Click any row
+
+**Expected Result:** Navigates to /dashboard/agents/{id}. Same behavior as tree view click.
+
+---
+
+### TC-E2E-ORG-017: Org chart accessible to CFO, CHRO, CMO, COO roles
+**Steps:**
+1. Login as CFO → navigate to /dashboard/org-chart → page loads
+2. Login as CHRO → navigate to /dashboard/org-chart → page loads
+3. Login as CMO → navigate to /dashboard/org-chart → page loads
+4. Login as COO → navigate to /dashboard/org-chart → page loads
+5. Login as Auditor → try /dashboard/org-chart
+
+**Expected Result:** CFO, CHRO, CMO, COO, and Admin can all access the org chart. Auditor cannot access it (not in allowedRoles).
+
+---
+
+### TC-E2E-ORG-018: Sidebar "Org Chart" appears between "Agents" and "Workflows"
+**Steps:**
+1. Login as CEO
+2. Check sidebar navigation order
+
+**Expected Result:** Navigation order includes: Dashboard, Observatory, Agents, **Org Chart**, Workflows, Approvals... The "Org Chart" link is between "Agents" and "Workflows" in the sidebar.
+
+---
+
 ---
 
 ## Test Execution Summary
@@ -3991,6 +4192,7 @@
 | 53 | Org Chart Tree Visualization | TC-ORGTREE-001 to TC-ORGTREE-014 | 14 | Critical |
 | 54 | CSV Bulk Import | TC-CSV-001 to TC-CSV-014 | 14 | Critical |
 | 55 | Smart Escalation | TC-ESC-001 to TC-ESC-010 | 10 | Critical |
+| 56 | **Org Chart E2E Integration** | TC-E2E-ORG-001 to TC-E2E-ORG-018 | **18** | **Critical** |
 
 **Total: 508 test cases**
 
@@ -3998,10 +4200,11 @@
 - **Functional Flows (Modules 1-27):** 195 cases
 - **Feature-Specific Flows (Modules 28-38):** 96 cases
 - **UI Interaction Testing (Modules 39-52):** 179 cases
-- **New Feature Modules (Modules 53-55):** 38 cases
+- **Org Chart / CSV / Escalation (Modules 53-55):** 38 cases
+- **Org Chart E2E Integration (Module 56):** 18 cases
 
 ### Recommended Execution Order:
-1. **Critical first (158 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compatibility, Org Chart, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL, Org Chart Tree Visualization, CSV Bulk Import, Smart Escalation
+1. **Critical first (176 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compat, Org Chart Hierarchy, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL, Org Chart Tree Visualization, CSV Bulk Import, Smart Escalation, Org Chart E2E Integration
 2. **High priority (222 cases):** Landing Page, Agent Fleet, Agent Creation + UI, Agent Detail UI, Prompt Templates + UI, Sales Pipeline (all), Email, Demo Request, Performance, Negative/Edge, Persona, Gmail, Agent Clone, Playground UI, Login UI
 3. **Medium (121 cases):** Dashboard + UI, Workflows + UI, Approvals + UI, Connectors + UI, Audit, Compliance, Settings + UI, Onboarding, Signup UI, Pricing UI, Landing UI
 4. **Low (7 cases):** Schemas, Agent Teams, Config, WebSocket
