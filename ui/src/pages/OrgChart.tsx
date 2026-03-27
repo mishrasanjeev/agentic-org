@@ -29,108 +29,185 @@ const STATUS_COLOR: Record<string, string> = {
   staging: "bg-blue-500",
 };
 
-const DOMAIN_COLOR: Record<string, string> = {
-  finance: "border-emerald-500/50 bg-emerald-500/5",
-  hr: "border-purple-500/50 bg-purple-500/5",
-  marketing: "border-amber-500/50 bg-amber-500/5",
-  ops: "border-blue-500/50 bg-blue-500/5",
-  backoffice: "border-slate-500/50 bg-slate-500/5",
+const DOMAIN_BORDER: Record<string, string> = {
+  finance: "border-emerald-500",
+  hr: "border-purple-500",
+  marketing: "border-amber-500",
+  ops: "border-blue-500",
+  backoffice: "border-slate-400",
+};
+
+const DOMAIN_BG: Record<string, string> = {
+  finance: "bg-emerald-50 dark:bg-emerald-950/30",
+  hr: "bg-purple-50 dark:bg-purple-950/30",
+  marketing: "bg-amber-50 dark:bg-amber-950/30",
+  ops: "bg-blue-50 dark:bg-blue-950/30",
+  backoffice: "bg-slate-50 dark:bg-slate-950/30",
 };
 
 function humanize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/* ═══ Org Chart CSS (inline style tag) ═══ */
+const orgChartStyles = `
+.org-tree ul {
+  padding-top: 20px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 0;
+}
+.org-tree li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 20px 12px 0 12px;
+}
+/* Vertical line from parent down to horizontal bar */
+.org-tree li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 20px;
+  background: var(--connector-color, #d1d5db);
+}
+/* Horizontal bar connecting siblings */
+.org-tree li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 2px;
+  background: var(--connector-color, #d1d5db);
+  right: 0;
+}
+.org-tree li:first-child::after {
+  left: 50%;
+  right: auto;
+}
+.org-tree li:last-child::after {
+  right: 50%;
+  left: auto;
+}
+.org-tree li:only-child::before {
+  height: 20px;
+}
+.org-tree li:only-child::after {
+  display: none;
+}
+.org-tree li:first-child::before {
+  border: none;
+}
+.org-tree li:last-child::before {
+  border: none;
+}
+/* Both sides for middle children */
+.org-tree li:not(:first-child):not(:last-child)::after {
+  width: 100%;
+  left: 0;
+}
+/* Vertical line from node down to its children */
+.org-tree ul::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  background: var(--connector-color, #d1d5db);
+}
+/* Root level: no connector above */
+.org-tree > ul > li::before,
+.org-tree > ul > li::after,
+.org-tree > ul::before {
+  display: none;
+}
+`;
+
 /* ─── Single Node Card ─── */
-function NodeCard({ node, onClick }: { node: OrgNode; onClick: () => void }) {
+function NodeCard({ node, onClick, childCount, collapsed, onToggle }: {
+  node: OrgNode;
+  onClick: () => void;
+  childCount: number;
+  collapsed: boolean;
+  onToggle?: () => void;
+}) {
   const displayName = node.employee_name || node.name;
+  const borderClass = DOMAIN_BORDER[node.domain] || "border-border";
+  const bgClass = DOMAIN_BG[node.domain] || "bg-card";
+
   return (
-    <button
-      onClick={onClick}
-      className={`border-2 rounded-xl px-4 py-3 min-w-[180px] max-w-[220px] text-left hover:shadow-lg transition-all cursor-pointer ${DOMAIN_COLOR[node.domain] || "border-border bg-card"}`}
-    >
-      <div className="flex items-center gap-2.5">
-        {node.avatar_url ? (
-          <img src={node.avatar_url} alt={displayName} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
-            {displayName.charAt(0).toUpperCase()}
+    <div className="flex flex-col items-center">
+      <button
+        onClick={onClick}
+        className={`border-2 ${borderClass} ${bgClass} rounded-xl px-4 py-3 w-[200px] text-left hover:shadow-xl hover:scale-105 transition-all cursor-pointer relative`}
+      >
+        <div className="flex items-center gap-2.5">
+          {node.avatar_url ? (
+            <img src={node.avatar_url} alt={displayName} className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-2 ring-white" />
+          ) : (
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ring-2 ring-white ${bgClass} text-foreground`}>
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_COLOR[node.status] || "bg-gray-400"}`} />
+              <p className="text-sm font-semibold truncate leading-tight">{displayName}</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+              {node.designation || humanize(node.agent_type)}
+            </p>
           </div>
-        )}
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLOR[node.status] || "bg-gray-400"}`} />
-            <p className="text-sm font-semibold truncate">{displayName}</p>
-          </div>
-          <p className="text-[11px] text-muted-foreground truncate">
-            {node.designation || humanize(node.agent_type)}
-          </p>
         </div>
-      </div>
-      {node.specialization && (
-        <p className="text-[10px] text-muted-foreground mt-1.5 line-clamp-2">{node.specialization}</p>
+        {node.specialization && (
+          <p className="text-[10px] text-muted-foreground mt-2 line-clamp-1 italic">{node.specialization}</p>
+        )}
+        <div className="flex gap-1 mt-2">
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium">{humanize(node.domain)}</Badge>
+          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">{node.status}</Badge>
+          {node.org_level === 0 && <Badge className="text-[9px] px-1.5 py-0 bg-primary/10 text-primary border-0">Head</Badge>}
+        </div>
+      </button>
+      {/* Expand/collapse toggle */}
+      {childCount > 0 && onToggle && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className="mt-1 w-6 h-6 rounded-full bg-muted border-2 border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors z-10"
+          title={collapsed ? `Expand ${childCount} reports` : "Collapse"}
+        >
+          {collapsed ? `+${childCount}` : "\u2212"}
+        </button>
       )}
-      <div className="flex gap-1 mt-2">
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{humanize(node.domain)}</Badge>
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{node.status}</Badge>
-      </div>
-    </button>
+    </div>
   );
 }
 
-/* ─── Recursive Tree Branch ─── */
-function TreeBranch({ node, onNavigate, depth }: { node: OrgNode; onNavigate: (id: string) => void; depth: number }) {
+/* ─── Recursive Tree Node ─── */
+function TreeNode({ node, onNavigate, depth }: { node: OrgNode; onNavigate: (id: string) => void; depth: number }) {
   const [collapsed, setCollapsed] = useState(depth >= 3);
   const hasChildren = node.children.length > 0;
 
   return (
-    <div className="flex flex-col items-center">
-      {/* The node card */}
-      <div className="relative">
-        <NodeCard node={node} onClick={() => onNavigate(node.id)} />
-        {hasChildren && (
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors z-10"
-            title={collapsed ? `Expand (${node.children.length})` : "Collapse"}
-          >
-            {collapsed ? node.children.length : "\u2212"}
-          </button>
-        )}
-      </div>
-
-      {/* Connector line down to children */}
+    <li>
+      <NodeCard
+        node={node}
+        onClick={() => onNavigate(node.id)}
+        childCount={node.children.length}
+        collapsed={collapsed}
+        onToggle={hasChildren ? () => setCollapsed(!collapsed) : undefined}
+      />
       {hasChildren && !collapsed && (
-        <>
-          <div className="w-px h-6 bg-border" />
-          {/* Horizontal bar + children */}
-          {node.children.length === 1 ? (
-            <TreeBranch node={node.children[0]} onNavigate={onNavigate} depth={depth + 1} />
-          ) : (
-            <div className="flex flex-col items-center">
-              {/* Horizontal connector bar */}
-              <div className="flex items-start">
-                {node.children.map((child, i) => (
-                  <div key={child.id} className="flex flex-col items-center">
-                    {/* Top connector: vertical line up to the horizontal bar */}
-                    <div className="flex">
-                      {/* Left half of horizontal bar */}
-                      <div className={`h-px w-6 ${i === 0 ? "bg-transparent" : "bg-border"} self-start mt-0`} />
-                      {/* Right half of horizontal bar */}
-                      <div className={`h-px w-6 ${i === node.children.length - 1 ? "bg-transparent" : "bg-border"} self-start mt-0`} />
-                    </div>
-                    {/* Vertical line down to child */}
-                    <div className="w-px h-4 bg-border" />
-                    {/* Recurse */}
-                    <TreeBranch node={child} onNavigate={onNavigate} depth={depth + 1} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <ul>
+          {node.children.map((child) => (
+            <TreeNode key={child.id} node={child} onNavigate={onNavigate} depth={depth + 1} />
+          ))}
+        </ul>
       )}
-    </div>
+    </li>
   );
 }
 
@@ -147,31 +224,41 @@ function ListView({ nodes, onNavigate }: { nodes: OrgNode[]; onNavigate: (id: st
   const flat = nodes.flatMap((n) => flatten(n, 0));
 
   return (
-    <div className="space-y-1">
-      {flat.map(({ node, level }) => (
-        <button
-          key={node.id}
-          onClick={() => onNavigate(node.id)}
-          className="flex items-center gap-3 w-full text-left px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors"
-          style={{ paddingLeft: `${level * 28 + 12}px` }}
-        >
-          {level > 0 && <span className="text-muted-foreground text-xs">{"└"}</span>}
-          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_COLOR[node.status] || "bg-gray-400"}`} />
-          {node.avatar_url ? (
-            <img src={node.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-              {(node.employee_name || node.name).charAt(0).toUpperCase()}
+    <div className="space-y-0.5">
+      {flat.map(({ node, level }) => {
+        const borderClass = DOMAIN_BORDER[node.domain] || "border-border";
+        return (
+          <button
+            key={node.id}
+            onClick={() => onNavigate(node.id)}
+            className={`flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors ${level === 0 ? `border-l-4 ${borderClass}` : ""}`}
+            style={{ paddingLeft: `${level * 32 + 12}px` }}
+          >
+            {level > 0 && (
+              <span className="text-muted-foreground/40 text-xs font-mono">
+                {"\u2514\u2500"}
+              </span>
+            )}
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_COLOR[node.status] || "bg-gray-400"}`} />
+            {node.avatar_url ? (
+              <img src={node.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                {(node.employee_name || node.name).charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <span className="text-sm font-medium">{node.employee_name || node.name}</span>
+              <span className="text-xs text-muted-foreground ml-2">{node.designation || humanize(node.agent_type)}</span>
+              {node.children.length > 0 && (
+                <span className="text-[10px] text-muted-foreground ml-2">({node.children.length} reports)</span>
+              )}
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <span className="text-sm font-medium">{node.employee_name || node.name}</span>
-            <span className="text-xs text-muted-foreground ml-2">{node.designation || humanize(node.agent_type)}</span>
-          </div>
-          <Badge variant="outline" className="text-[10px]">{humanize(node.domain)}</Badge>
-          <Badge variant="secondary" className="text-[10px]">{node.status}</Badge>
-        </button>
-      ))}
+            <Badge variant="outline" className="text-[10px]">{humanize(node.domain)}</Badge>
+            <Badge variant="secondary" className="text-[10px]">{node.status}</Badge>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -202,7 +289,6 @@ export default function OrgChart() {
     navigate(`/dashboard/agents/${id}`);
   }
 
-  // Count agents with hierarchy (has parent or has children)
   function countWithHierarchy(nodes: OrgNode[]): number {
     let count = 0;
     for (const n of nodes) {
@@ -216,6 +302,7 @@ export default function OrgChart() {
 
   return (
     <div className="space-y-6">
+      <style>{orgChartStyles}</style>
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Organization Chart</h2>
@@ -251,15 +338,15 @@ export default function OrgChart() {
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Active</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500" /> Shadow</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Paused</span>
         <span className="text-border">|</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded border-2 border-emerald-500/50" /> Finance</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded border-2 border-purple-500/50" /> HR</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded border-2 border-amber-500/50" /> Marketing</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded border-2 border-blue-500/50" /> Ops</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-emerald-500" /> Finance</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-purple-500" /> HR</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-amber-500" /> Marketing</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-blue-500" /> Ops</span>
       </div>
 
       {loading ? (
@@ -276,11 +363,13 @@ export default function OrgChart() {
           </CardContent>
         </Card>
       ) : viewMode === "tree" ? (
-        <div className="overflow-x-auto pb-8">
-          <div className="flex gap-12 justify-center min-w-max pt-4">
-            {tree.map((root) => (
-              <TreeBranch key={root.id} node={root} onNavigate={handleNavigate} depth={0} />
-            ))}
+        <div className="overflow-x-auto pb-8" style={{ "--connector-color": "hsl(var(--border))" } as React.CSSProperties}>
+          <div className="org-tree min-w-max">
+            <ul>
+              {tree.map((root) => (
+                <TreeNode key={root.id} node={root} onNavigate={handleNavigate} depth={0} />
+              ))}
+            </ul>
           </div>
         </div>
       ) : (
