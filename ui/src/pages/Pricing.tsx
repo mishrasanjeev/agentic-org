@@ -147,7 +147,7 @@ const TIERS = [
     cta: "Start Pro",
     ctaLink: "demo",
     features: [
-      "12 AI agents",
+      "Unlimited AI agents",
       "20 connectors",
       "Unlimited tasks",
       "Email support",
@@ -479,7 +479,7 @@ export default function Pricing() {
             Ready to automate your enterprise?
           </h2>
           <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Start with 3 free agents today, or book a demo to see the full platform in action.
+            Start free with 35 agents and 20 connectors, or book a demo to see the full platform in action.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
