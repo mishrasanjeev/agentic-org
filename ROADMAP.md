@@ -9,7 +9,7 @@
 - 27 prompt templates with audit trail
 - HITL governance with configurable thresholds
 - Per-agent LLM selection (Gemini/Claude/GPT-4o)
-- Org chart hierarchy (parent-child agent relationships)
+- Org chart hierarchy (parent-child agent relationships, org_level field, smart escalation chain, CSV bulk import) -- DONE
 - Per-agent budget enforcement with auto-pause
 - Sales Agent with automated pipeline + Gmail integration
 - 39-page SEO content (blog + resources across 7 topic clusters)
@@ -33,6 +33,10 @@
 - [ ] Publish/discover community-built agents
 - [ ] Template sharing (like Paperclip's ClipMart concept)
 - [ ] One-click agent installation
+
+### Org Chart Enhancements
+- [ ] Drag-and-drop rearranging of agents in the org tree UI
+- [ ] Department templates (pre-built org structures for Finance, HR, etc.)
 
 ### Workflow Builder UI
 - [ ] Visual drag-and-drop workflow editor

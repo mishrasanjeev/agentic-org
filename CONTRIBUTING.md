@@ -94,6 +94,15 @@ npm run dev    # http://localhost:5173
 - Clone agents inherit parent scopes — cannot elevate permissions
 - Kill switch must work in <30 seconds
 
+### Org Chart Tree Structure
+
+Agents are organized in a parent-child hierarchy per department. Key patterns:
+
+- Each agent has an `org_level` field (e.g., `"Head"`, `"Manager"`, `"Analyst"`) and an optional `parent_agent_id` foreign key
+- The `/agents/org-tree` endpoint returns the full tree, built recursively from the `parent_agent_id` references
+- **Smart escalation**: When an agent's confidence falls below its threshold, the task auto-escalates to its parent in the org tree. Implement escalation-aware logic in `core/orchestrator/`
+- **CSV bulk import** (`/agents/import-csv`): Parses a CSV with columns like `name, designation, domain, org_level, parent_name` and creates agents in dependency order (parents before children). Validation rejects orphan rows and duplicate names within a department
+
 ## Connector Development
 
 ### Adding a New Connector

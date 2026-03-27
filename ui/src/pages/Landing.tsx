@@ -636,6 +636,51 @@ export default function Landing() {
               </div>
             </FadeIn>
           </div>
+
+          {/* Org Chart Hierarchy — 3-card row */}
+          <div className="grid md:grid-cols-3 gap-8 mt-16">
+            <FadeIn delay={0}>
+              <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">Real Org Chart Hierarchy</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Mirror your company&apos;s department structure with AI agents. Visual tree view at <span className="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">/dashboard/org-chart</span> shows agent hierarchy per department &mdash; heads, seniors, specialists, and juniors.
+                </p>
+              </div>
+            </FadeIn>
+
+            <FadeIn delay={150}>
+              <div className="bg-gradient-to-br from-slate-50 to-emerald-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">CSV Bulk Import</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Upload your org chart and create 50+ agents in seconds. A single CSV defines the full hierarchy &mdash; VPs, Directors, Managers, Analysts &mdash; with parent-child relationships and escalation chains built automatically.
+                </p>
+              </div>
+            </FadeIn>
+
+            <FadeIn delay={300}>
+              <div className="bg-gradient-to-br from-slate-50 to-purple-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">Smart Escalation</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Agents escalate to their parent agent, then the domain head, then a human &mdash; exactly like your real org. Junior agents defer to seniors, seniors defer to department heads, and department heads trigger HITL approval.
+                </p>
+              </div>
+            </FadeIn>
+          </div>
         </div>
       </section>
 

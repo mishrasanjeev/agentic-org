@@ -116,6 +116,9 @@
       "SOC-2 Ready Security",
       "Per-Agent LLM Selection — Gemini, Claude, GPT-4o with Safe Fallback",
       "Org Chart Hierarchy — Agents Report to Managers with Escalation",
+      "Organization Chart — Visual Agent Hierarchy per Department",
+      "CSV Bulk Import — Upload Org Charts to Create Agent Teams",
+      "Smart Escalation Chain — Parent Agent → Domain Head → Human Approval",
       "Per-Agent Budget Enforcement — Monthly Cost Caps with Auto-Block"
     ],
     "screenshot": "https://agenticorg.ai/screenshots/dashboard.png",
@@ -205,6 +208,14 @@
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "Yes. You can create multiple instances of the same agent type, each with a unique name, specialization, and routing rules. For example, you might have Priya (AP Processor - Mumbai, domestic invoices) and Arjun (AP Processor - Delhi, import invoices). Smart routing automatically sends tasks to the right agent based on routing filters and specialization."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I import my company's org chart?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Upload a CSV with your department hierarchy and AgenticOrg creates the full agent tree — VPs, Directors, Managers, Analysts — with parent-child escalation chains. Each agent starts in shadow mode for safe testing before promotion."
         }
       }
     ]

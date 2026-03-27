@@ -3,7 +3,7 @@
 **Version:** 2.1.1
 **Last Updated:** 2026-03-27
 **Production URL:** https://app.agenticorg.ai
-**Total Test Cases:** 470
+**Total Test Cases:** 508
 
 ## Demo Credentials
 
@@ -3535,6 +3535,399 @@
 
 ---
 
+## Module 53: Org Chart Tree Visualization
+
+### TC-ORGTREE-001: Org chart page loads
+**Steps:**
+1. Login as CEO (ceo@agenticorg.local / ceo123!)
+2. Navigate to /dashboard/org-chart
+3. Open browser DevTools → Console tab
+
+**Expected Result:** Page loads within 3 seconds. Title reads "Organization Chart". Subtitle shows agent count, department head count, and hierarchy count (e.g., "24 agents | 4 department heads | 20 in hierarchy"). No JavaScript errors in console.
+
+---
+
+### TC-ORGTREE-002: Tree view shows hierarchy with connector lines
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Ensure "Tree" view is selected (default)
+3. Verify the visual tree structure
+
+**Expected Result:** Root nodes (department heads) display at the top. Vertical connector lines (w-px h-6 bg-border) connect parent cards to child cards. Horizontal connector bars join sibling children. Each node renders as a card with avatar/initial, name, designation, domain badge, and status badge.
+
+---
+
+### TC-ORGTREE-003: List view shows indented flat list
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Click the "List" toggle button
+3. Observe the flat list rendering
+
+**Expected Result:** View switches to a flat indented list inside a Card component. Each row shows a status dot, avatar/initial, agent name, designation/agent_type, domain badge, and status badge. Child agents are indented with increasing left padding (28px per level). Level > 0 rows show a "└" connector character.
+
+---
+
+### TC-ORGTREE-004: Domain filter (All, Finance, HR, Marketing, Ops, Backoffice)
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Click the domain dropdown (default "All Departments")
+3. Select "Finance"
+4. Observe the tree reload
+5. Select "Hr"
+6. Select "All Departments" again
+
+**Expected Result:** When "Finance" is selected, only agents with domain=finance appear in the tree. The API call includes ?domain=finance. When "Hr" is selected, only HR agents appear. When "All Departments" is re-selected, all agents appear and no domain param is sent to the API. Agent counts in the subtitle update accordingly for each filter.
+
+---
+
+### TC-ORGTREE-005: View toggle (Tree/List)
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Confirm "Tree" button is highlighted (bg-primary text-primary-foreground)
+3. Click "List" button
+4. Confirm "List" button is now highlighted and "Tree" is not
+5. Click "Tree" again
+
+**Expected Result:** Toggle buttons switch between tree and list rendering. The active button has the primary background color. The inactive button has the default background with hover:bg-muted. Switching views preserves the current domain filter selection and does not re-fetch data.
+
+---
+
+### TC-ORGTREE-006: Click node navigates to agent detail
+**Steps:**
+1. Navigate to /dashboard/org-chart in Tree view
+2. Click on any agent node card
+3. Observe the URL change
+
+**Expected Result:** Browser navigates to /dashboard/agents/{agent-uuid} where the UUID matches the clicked agent's ID. The agent detail page loads with correct agent information matching the card that was clicked.
+
+---
+
+### TC-ORGTREE-007: Expand/collapse on deep branches
+**Steps:**
+1. Navigate to /dashboard/org-chart in Tree view
+2. Find a node with children at depth >= 3 (auto-collapsed)
+3. Click the circular expand button (shows child count number)
+4. Observe children appear
+5. Click the collapse button (shows minus sign)
+
+**Expected Result:** Nodes at depth >= 3 are collapsed by default with a circular button showing the child count (e.g., "3"). Clicking expands the branch to show children with connector lines. The button changes to show a minus sign. Clicking again collapses the branch back. No layout jump or console errors during expand/collapse.
+
+---
+
+### TC-ORGTREE-008: Empty state — no hierarchy
+**Steps:**
+1. Login as a new org that has no agents with parent_agent_id set
+2. Navigate to /dashboard/org-chart
+
+**Expected Result:** A centered card displays: "No agents with hierarchy found." with helper text: "Create agents and set 'Reports To' to build your org chart, or import a hierarchy via CSV." Two buttons appear: "Create Agent" (navigates to /dashboard/agents/new) and "Go to Agent Fleet" (navigates to /dashboard/agents).
+
+---
+
+### TC-ORGTREE-009: Status dot colors (green/yellow/red/blue)
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Identify agents with different statuses: active, shadow, paused, staging
+3. Verify the status indicator dot color for each
+
+**Expected Result:** Active agents show a green dot (bg-green-500). Shadow agents show a yellow dot (bg-yellow-500). Paused agents show a red dot (bg-red-500). Staging agents show a blue dot (bg-blue-500). Any unknown status shows a gray dot (bg-gray-400). Dots appear in both Tree view (inside NodeCard) and List view.
+
+---
+
+### TC-ORGTREE-010: Domain color coding (emerald/purple/amber/blue borders)
+**Steps:**
+1. Navigate to /dashboard/org-chart in Tree view
+2. Identify agent cards from different domains
+3. Compare border/background colors
+
+**Expected Result:** Finance domain cards have emerald border and subtle emerald background (border-emerald-500/50 bg-emerald-500/5). HR cards have purple styling. Marketing cards have amber styling. Ops cards have blue styling. Backoffice cards have slate styling. Any unknown domain uses the default border-border bg-card.
+
+---
+
+### TC-ORGTREE-011: Legend displays correctly
+**Steps:**
+1. Navigate to /dashboard/org-chart
+2. Locate the legend row between the header and the tree content
+
+**Expected Result:** Legend shows three status indicators: a green dot labeled "Active", a yellow dot labeled "Shadow", and a red dot labeled "Paused". After a vertical separator, it shows four domain color swatches: emerald for "Finance", purple for "HR", amber for "Marketing", and blue for "Ops". Legend is visible in both Tree and List view modes.
+
+---
+
+### TC-ORGTREE-012: Sidebar nav shows "Org Chart" link
+**Steps:**
+1. Login to the dashboard
+2. Look at the left sidebar navigation
+
+**Expected Result:** The sidebar contains an "Org Chart" link/item. Clicking it navigates to /dashboard/org-chart. The link is highlighted/active when on the org chart page. It appears alongside other nav items like "Agent Fleet", "Workflows", etc.
+
+---
+
+### TC-ORGTREE-013: CFO sees only finance tree when domain-scoped
+**Steps:**
+1. Login as CFO (cfo@agenticorg.local / cfo123!)
+2. Navigate to /dashboard/org-chart
+3. Check the domain filter dropdown
+
+**Expected Result:** If the CFO role is RBAC-restricted to the finance domain, the org-tree API is called with the user's domain scope. Only finance-domain agents appear in the tree. The domain filter may be pre-set or the API backend enforces the domain restriction. No agents from HR, Marketing, or Ops domains appear.
+
+---
+
+### TC-ORGTREE-014: Horizontal scroll on wide trees
+**Steps:**
+1. Navigate to /dashboard/org-chart in Tree view
+2. Ensure there is a root node with 5+ direct children (wide tree)
+3. Check for horizontal scrolling
+
+**Expected Result:** The tree container has overflow-x-auto applied. When the tree is wider than the viewport, a horizontal scrollbar appears. Users can scroll left/right to see all branches. The tree content has min-w-max to prevent wrapping. No content is clipped or hidden without scroll access.
+
+---
+
+---
+
+## Module 54: CSV Bulk Import
+
+### TC-CSV-001: Import CSV button visible on Agents page
+**Steps:**
+1. Login as CEO (ceo@agenticorg.local / ceo123!)
+2. Navigate to /dashboard/agents
+3. Locate the top-right action buttons
+
+**Expected Result:** An "Import CSV" button (variant="outline") is visible next to the "Create Agent" button. The button text reads "Import CSV".
+
+---
+
+### TC-CSV-002: Import panel toggle (show/hide)
+**Steps:**
+1. Navigate to /dashboard/agents
+2. Click the "Import CSV" button
+3. Observe the import panel appear
+4. Click the "Import CSV" button again
+5. Observe the import panel disappear
+
+**Expected Result:** First click: an import Card panel appears below the header with title "Import Agents from CSV", description text, a "Download Template" button, a file input, and an "Upload & Import" button. Second click: the panel hides. The toggle is controlled by the showImport state variable.
+
+---
+
+### TC-CSV-003: Download template CSV
+**Steps:**
+1. Navigate to /dashboard/agents
+2. Click "Import CSV" to open the panel
+3. Click "Download Template"
+4. Check the downloaded file
+
+**Expected Result:** A file named "agent_import_template.csv" downloads. The CSV contains a header row with columns: name, agent_type, domain, designation, specialization, reporting_to_name, org_level, llm_model, confidence_floor. It contains one example data row with "Priya Sharma" as a sample entry showing all field formats.
+
+---
+
+### TC-CSV-004: Upload and import valid CSV — happy path
+**Steps:**
+1. Navigate to /dashboard/agents and open the import panel
+2. Create a CSV file with valid columns: name, agent_type, domain (all required filled)
+3. Select the CSV file via the file input
+4. Click "Upload & Import"
+5. Wait for the import to complete
+
+**Expected Result:** The button shows "Importing..." while processing and is disabled. After completion, a green success panel appears showing: "{N} agents imported | {M} parent links set | {S} skipped". The agent list below refreshes automatically (fetchAgents called). Newly imported agents appear in the list.
+
+---
+
+### TC-CSV-005: CSV with reporting_to_name — parent links set
+**Steps:**
+1. Prepare a CSV with 3 rows: a manager (e.g., "VP Finance", domain=finance, no reporting_to_name) and 2 subordinates with reporting_to_name="VP Finance"
+2. Import the CSV via the import panel
+
+**Expected Result:** All 3 agents are imported. The result shows "2 parent links set". The two subordinates have their parent_agent_id set to the VP Finance agent. On the org chart page, the VP Finance appears as a parent node with the two subordinates as children.
+
+---
+
+### TC-CSV-006: CSV with missing required fields — skip rows
+**Steps:**
+1. Prepare a CSV where row 1 has name, agent_type, domain (valid) and row 2 is missing the "name" field and row 3 is missing "domain"
+2. Import the CSV
+
+**Expected Result:** Row 1 is imported successfully. Rows 2 and 3 are skipped. The result shows "1 agents imported | 2 skipped". The skip_details section is visible and lists "missing required field" as the reason for each skipped row.
+
+---
+
+### TC-CSV-007: CSV with self-reference — skip and report
+**Steps:**
+1. Prepare a CSV with a row where name="Alice" and reporting_to_name="Alice" (self-reference)
+2. Import the CSV
+
+**Expected Result:** The agent "Alice" is imported (agent creation succeeds). However, the parent link is skipped because the reporting_to_name matches the agent's own name. The skip_details show reason "self-reference" for that row. parent_links_set is 0.
+
+---
+
+### TC-CSV-008: CSV with unknown parent name — skip and report
+**Steps:**
+1. Prepare a CSV with a row where name="Bob" and reporting_to_name="NonExistentManager" (a name not present in any agent in the same domain)
+2. Import the CSV
+
+**Expected Result:** Agent "Bob" is imported successfully. The parent link is skipped because "NonExistentManager" does not match any existing agent in the same domain. The skip_details show reason "parent 'NonExistentManager' not found in {domain}". parent_links_set is 0.
+
+---
+
+### TC-CSV-009: Duplicate import — second run skips existing agents
+**Steps:**
+1. Import a CSV with 3 agents (e.g., "Agent A", "Agent B", "Agent C")
+2. Confirm all 3 are imported
+3. Import the same CSV file again
+
+**Expected Result:** On second import, the system creates new agent records (since the import endpoint does not check for duplicates by name). The result shows 3 imported again. To verify idempotency expectations, check the agent list — there will be 6 agents total (3 pairs). Note: the current implementation does not deduplicate by name; this is the expected behavior to document.
+
+---
+
+### TC-CSV-010: Import result display (imported count, skipped, parent links)
+**Steps:**
+1. Import a CSV with a mix of valid and invalid rows
+2. Observe the result panel
+
+**Expected Result:** A green panel (bg-green-50) shows three bold metrics: imported count, parent links set count, and skipped count. Format: "{N} agents imported | {M} parent links set | {S} skipped". If all rows fail, the skipped count matches total rows and imported is 0.
+
+---
+
+### TC-CSV-011: Skip details expandable section
+**Steps:**
+1. Import a CSV that has some skipped rows (e.g., missing fields or unknown parent)
+2. Observe the result panel
+3. Click "Skipped rows" summary text to expand
+
+**Expected Result:** Below the counts, a collapsible details element appears with a "Skipped rows" summary. Clicking it expands to show a list of skipped items, each displaying the reason and the agent name. Up to 10 skip details are shown (API returns skip_details[:10]).
+
+---
+
+### TC-CSV-012: Agents appear in org chart after import
+**Steps:**
+1. Import a CSV with 3 agents where 2 have reporting_to_name linking them to the first
+2. Navigate to /dashboard/org-chart
+3. Search for the imported agents in the tree
+
+**Expected Result:** The root agent (no reporting_to_name) appears as a top-level node. The two subordinate agents appear as children under the root agent. Connector lines are drawn. All three agents show status "shadow" (yellow dot) since CSV import creates agents in shadow mode.
+
+---
+
+### TC-CSV-013: All imported agents start in shadow mode
+**Steps:**
+1. Import a CSV with 5 valid agents
+2. Navigate to /dashboard/agents
+3. Filter by status "Shadow"
+
+**Expected Result:** All 5 newly imported agents appear with status "shadow". The CSV import endpoint hardcodes status="shadow" for all created agents. No imported agent is active, paused, or any other status.
+
+---
+
+### TC-CSV-014: org_level column respected from CSV
+**Steps:**
+1. Prepare a CSV where one agent has org_level=1 and another has org_level=3
+2. Import the CSV
+3. Navigate to /dashboard/agents/{id} for each agent
+
+**Expected Result:** The agent with org_level=1 is stored with org_level=1 in the database. The agent with org_level=3 is stored with org_level=3. If org_level is empty or non-numeric in the CSV, it defaults to 0. The org_level value is visible on the agent detail page and affects ordering in the org tree (sorted by org_level ascending).
+
+---
+
+---
+
+## Module 55: Smart Escalation
+
+### TC-ESC-001: Escalation walks to active parent
+**Steps:**
+1. Set up a chain: Agent C (active) → reports to Agent B (active) → reports to Agent A (active)
+2. Trigger escalation from Agent C via the TaskRouter.escalate() method
+3. Inspect the returned escalation result
+
+**Expected Result:** Escalation returns escalated_to = Agent B's UUID (the immediate active parent). escalation_type = "parent_agent". The chain list contains [C, B]. Reason states "Escalated to active parent {B.id} after 1 hop(s)". Agent A is not visited because B is already active.
+
+---
+
+### TC-ESC-002: Escalation skips paused parent, continues to grandparent
+**Steps:**
+1. Set up a chain: Agent C (active) → reports to Agent B (paused) → reports to Agent A (active)
+2. Trigger escalation from Agent C
+3. Inspect the result
+
+**Expected Result:** Agent B is skipped because its status is "paused" (in _INACTIVE_STATUSES). Escalation continues to Agent A. Result: escalated_to = Agent A's UUID, escalation_type = "parent_agent", chain = [C, B, A]. Reason states "Escalated to active parent {A.id} after 2 hop(s)". A log message "Skipping inactive parent {B.id} (status=paused)" is emitted.
+
+---
+
+### TC-ESC-003: Escalation max depth (5 hops) — no infinite loop
+**Steps:**
+1. Set up a chain of 7 agents: G → F → E → D → C → B → A, all with status "shadow" (non-active, non-paused)
+2. Trigger escalation from Agent G with max_depth=5
+
+**Expected Result:** Escalation walks 5 hops (F, E, D, C, B) then stops (does not reach A). Since none are active, the parent chain is exhausted. The method falls back to domain-head lookup. The chain list has 6 entries [G, F, E, D, C, B]. No infinite loop or stack overflow occurs regardless of chain length.
+
+---
+
+### TC-ESC-004: Cycle detection — A to B to A stops gracefully
+**Steps:**
+1. Set up a cycle: Agent A (parent_agent_id = B) and Agent B (parent_agent_id = A), both active
+2. Trigger escalation from Agent A
+3. Inspect the result
+
+**Expected Result:** The escalation walks from A to B (active, returns). If B were inactive: walks to A again, detects A is already in the visited set, logs "Escalation cycle detected: {A.id} already visited", breaks the loop, and falls back to domain-head. No infinite loop. The chain reflects only unique nodes visited before cycle detection.
+
+---
+
+### TC-ESC-005: Domain head fallback when no parent found
+**Steps:**
+1. Create Agent X (active, domain=finance, parent_agent_id=NULL — no parent)
+2. Create Agent Y (active, domain=finance, parent_agent_id=NULL — this is the domain head, created first)
+3. Trigger escalation from Agent X
+
+**Expected Result:** Agent X has no parent_agent_id, so the parent chain walk completes immediately with 0 hops. The method calls resolve_domain_head(tenant_id, "finance", session). It finds Agent Y (active, no parent, same domain, oldest). Result: escalated_to = Y.id, escalation_type = "domain_head". Reason includes "fell back to domain head".
+
+---
+
+### TC-ESC-006: Human fallback when no domain head exists
+**Steps:**
+1. Create Agent X (active, domain=finance) with no parent
+2. Ensure Agent X is the only agent in the finance domain (so it is visited, not eligible as domain_head fallback)
+3. Trigger escalation from Agent X
+
+**Expected Result:** Parent chain walk finds no parent. resolve_domain_head returns X itself, but X is already in the visited set so it is excluded. No other domain head exists. Result: escalated_to = None, escalation_type = "human". Reason states "No active parent or domain head found for agent {X.id} (domain=finance); escalating to human operator".
+
+---
+
+### TC-ESC-007: DOMAIN_TO_ROLE mapping (finance to cfo, hr to chro, etc.)
+**Steps:**
+1. Inspect the DOMAIN_TO_ROLE constant in task_router.py
+2. Verify all domain-to-role mappings
+
+**Expected Result:** The DOMAIN_TO_ROLE dict contains exactly: finance → "cfo", hr → "chro", marketing → "cmo", ops → "coo", backoffice → "admin". These five entries cover all domains used in the platform. The mapping is used for identifying executive-level escalation targets by domain.
+
+---
+
+### TC-ESC-008: Backward compatibility — escalate_to_parent still returns UUID or None
+**Steps:**
+1. Call TaskRouter.escalate_to_parent(agent_id, session) using the same agent chain as TC-ESC-001
+2. Inspect the return value type
+
+**Expected Result:** The method returns a UUID object (the escalated_to agent ID) when an escalation target is found, or None when the escalation falls through to human. It does not return the full dict — it extracts result["escalated_to"] from the inner escalate() call. This preserves the original API contract for existing callers.
+
+---
+
+### TC-ESC-009: Escalation from nonexistent agent
+**Steps:**
+1. Generate a random UUID that does not correspond to any agent
+2. Call TaskRouter.escalate(random_uuid, session)
+3. Inspect the result
+
+**Expected Result:** The method returns escalated_to = None, escalation_type = "human", chain = [] (empty), reason = "Starting agent {random_uuid} not found". No exception is thrown. The method handles the missing agent gracefully.
+
+---
+
+### TC-ESC-010: resolve_domain_head picks oldest active root agent
+**Steps:**
+1. Create Agent A (active, domain=finance, no parent, created_at = 2026-01-01)
+2. Create Agent B (active, domain=finance, no parent, created_at = 2026-03-01)
+3. Call TaskRouter.resolve_domain_head(tenant_id, "finance", session)
+
+**Expected Result:** Returns Agent A's UUID because the query orders by created_at ascending and limits to 1. Agent B is a valid candidate but is newer. The domain head is deterministically the oldest active root agent in the given domain.
+
+---
+
+---
+
 ## Test Execution Summary
 
 | # | Module | Test Cases | Count | Priority |
@@ -3594,16 +3987,21 @@
 | 50 | Landing Page — UI | TC-LAND-UI-001 to TC-LAND-UI-008 | 8 | Medium |
 | 51 | Prompt Templates Page — UI | TC-TPL-UI-001 to TC-TPL-UI-008 | 8 | High |
 | 52 | Sales Pipeline — UI | TC-SALES-UI-001 to TC-SALES-UI-008 | 8 | High |
+| | **NEW FEATURE MODULES** | | | |
+| 53 | Org Chart Tree Visualization | TC-ORGTREE-001 to TC-ORGTREE-014 | 14 | Critical |
+| 54 | CSV Bulk Import | TC-CSV-001 to TC-CSV-014 | 14 | Critical |
+| 55 | Smart Escalation | TC-ESC-001 to TC-ESC-010 | 10 | Critical |
 
-**Total: 470 test cases**
+**Total: 508 test cases**
 
 ### Breakdown by Category:
 - **Functional Flows (Modules 1-27):** 195 cases
 - **Feature-Specific Flows (Modules 28-38):** 96 cases
 - **UI Interaction Testing (Modules 39-52):** 179 cases
+- **New Feature Modules (Modules 53-55):** 38 cases
 
 ### Recommended Execution Order:
-1. **Critical first (120 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compatibility, Org Chart, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL
+1. **Critical first (158 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compatibility, Org Chart, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL, Org Chart Tree Visualization, CSV Bulk Import, Smart Escalation
 2. **High priority (222 cases):** Landing Page, Agent Fleet, Agent Creation + UI, Agent Detail UI, Prompt Templates + UI, Sales Pipeline (all), Email, Demo Request, Performance, Negative/Edge, Persona, Gmail, Agent Clone, Playground UI, Login UI
 3. **Medium (121 cases):** Dashboard + UI, Workflows + UI, Approvals + UI, Connectors + UI, Audit, Compliance, Settings + UI, Onboarding, Signup UI, Pricing UI, Landing UI
 4. **Low (7 cases):** Schemas, Agent Teams, Config, WebSocket

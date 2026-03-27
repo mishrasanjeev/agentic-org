@@ -80,6 +80,9 @@ Each agent is a virtual employee with persona, specialization, and routing:
 - **Specialization** (Domestic invoices < 5L) — task routing
 - **Multiple agents per role** — 3 AP Processors for different regions with smart routing
 
+### Organization Chart
+Visual tree hierarchy per department. Each agent has an `org_level` field (e.g., Head → Manager → Analyst) and a parent reference, forming a reporting chain used for smart escalation — when an agent's confidence is below threshold, the task auto-escalates to its parent in the org tree. CSV bulk import lets you onboard entire departments in one upload.
+
 ### No-Code Agent Creator
 5-step wizard: Persona → Role → Prompt → Behavior → Deploy as Shadow
 
@@ -170,6 +173,8 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | POST | /agents | JWT | Create agent |
 | POST | /agents/{id}/run | JWT | Execute agent |
 | PATCH | /agents/{id} | JWT | Update (prompt lock on active) |
+| GET | /agents/org-tree | JWT | Org chart tree (department hierarchy) |
+| POST | /agents/import-csv | JWT | Bulk import agents via CSV |
 | POST | /agents/{id}/clone | JWT | Clone with persona |
 | POST | /agents/{id}/promote | JWT | Shadow → Active |
 | GET | /agents/{id}/prompt-history | JWT | Prompt audit trail |
