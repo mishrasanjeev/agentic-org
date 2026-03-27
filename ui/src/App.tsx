@@ -8,44 +8,59 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 
+/* ── Lazy import with auto-reload on chunk failure ── */
+function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
+  return lazy(() =>
+    factory().catch(() => {
+      const reloaded = sessionStorage.getItem("chunk_reload");
+      if (!reloaded) {
+        sessionStorage.setItem("chunk_reload", "1");
+        window.location.reload();
+      }
+      sessionStorage.removeItem("chunk_reload");
+      return factory();
+    })
+  );
+}
+
 /* ── Everything else lazy-loaded ── */
-const Login = lazy(() => import("./pages/Login"));
-const Signup = lazy(() => import("./pages/Signup"));
-const InviteAccept = lazy(() => import("./pages/InviteAccept"));
-const Evals = lazy(() => import("./pages/Evals"));
-const Pricing = lazy(() => import("./pages/Pricing"));
-const Playground = lazy(() => import("./pages/Playground"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Agents = lazy(() => import("./pages/Agents"));
-const AgentCreate = lazy(() => import("./pages/AgentCreate"));
-const AgentDetail = lazy(() => import("./pages/AgentDetail"));
-const Workflows = lazy(() => import("./pages/Workflows"));
-const WorkflowCreate = lazy(() => import("./pages/WorkflowCreate"));
-const WorkflowDetail = lazy(() => import("./pages/WorkflowDetail"));
-const WorkflowRun = lazy(() => import("./pages/WorkflowRun"));
-const Approvals = lazy(() => import("./pages/Approvals"));
-const Connectors = lazy(() => import("./pages/Connectors"));
-const ConnectorCreate = lazy(() => import("./pages/ConnectorCreate"));
-const Schemas = lazy(() => import("./pages/Schemas"));
-const Audit = lazy(() => import("./pages/Audit"));
-const Observatory = lazy(() => import("./pages/Observatory"));
-const Settings = lazy(() => import("./pages/Settings"));
-const Onboarding = lazy(() => import("./pages/Onboarding"));
-const SLAMonitor = lazy(() => import("./pages/SLAMonitor"));
-const PromptTemplates = lazy(() => import("./pages/PromptTemplates"));
-const SalesPipeline = lazy(() => import("./pages/SalesPipeline"));
-const OrgChart = lazy(() => import("./pages/OrgChart"));
+const Login = lazyRetry(() => import("./pages/Login"));
+const Signup = lazyRetry(() => import("./pages/Signup"));
+const InviteAccept = lazyRetry(() => import("./pages/InviteAccept"));
+const Evals = lazyRetry(() => import("./pages/Evals"));
+const Pricing = lazyRetry(() => import("./pages/Pricing"));
+const Playground = lazyRetry(() => import("./pages/Playground"));
+const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
+const Agents = lazyRetry(() => import("./pages/Agents"));
+const AgentCreate = lazyRetry(() => import("./pages/AgentCreate"));
+const AgentDetail = lazyRetry(() => import("./pages/AgentDetail"));
+const Workflows = lazyRetry(() => import("./pages/Workflows"));
+const WorkflowCreate = lazyRetry(() => import("./pages/WorkflowCreate"));
+const WorkflowDetail = lazyRetry(() => import("./pages/WorkflowDetail"));
+const WorkflowRun = lazyRetry(() => import("./pages/WorkflowRun"));
+const Approvals = lazyRetry(() => import("./pages/Approvals"));
+const Connectors = lazyRetry(() => import("./pages/Connectors"));
+const ConnectorCreate = lazyRetry(() => import("./pages/ConnectorCreate"));
+const Schemas = lazyRetry(() => import("./pages/Schemas"));
+const Audit = lazyRetry(() => import("./pages/Audit"));
+const Observatory = lazyRetry(() => import("./pages/Observatory"));
+const Settings = lazyRetry(() => import("./pages/Settings"));
+const Onboarding = lazyRetry(() => import("./pages/Onboarding"));
+const SLAMonitor = lazyRetry(() => import("./pages/SLAMonitor"));
+const PromptTemplates = lazyRetry(() => import("./pages/PromptTemplates"));
+const SalesPipeline = lazyRetry(() => import("./pages/SalesPipeline"));
+const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 
 /* ── Blog / Content pages ── */
-const Blog = lazy(() => import("./pages/blog/Blog"));
-const BlogPost = lazy(() => import("./pages/blog/BlogPost"));
+const Blog = lazyRetry(() => import("./pages/blog/Blog"));
+const BlogPost = lazyRetry(() => import("./pages/blog/BlogPost"));
 
 /* ── Google Ads landing pages ── */
-const AdsLanding = lazy(() => import("./pages/ads/AdsLanding"));
+const AdsLanding = lazyRetry(() => import("./pages/ads/AdsLanding"));
 
 /* ── Resource / SEO content pages ── */
-const Resources = lazy(() => import("./pages/resources/Resources"));
-const ResourcePage = lazy(() => import("./pages/resources/ResourcePage"));
+const Resources = lazyRetry(() => import("./pages/resources/Resources"));
+const ResourcePage = lazyRetry(() => import("./pages/resources/ResourcePage"));
 
 /* ── Loading fallback ── */
 function PageLoader() {
