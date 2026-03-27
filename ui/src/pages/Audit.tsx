@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -13,13 +13,13 @@ export default function Audit() {
 
   useEffect(() => {
     fetchAudit();
-  }, [page, eventTypeFilter]);
+  }, [page]);
 
   async function fetchAudit() {
     setLoading(true);
     try {
+      // Fetch without event_type filter — we filter client-side for partial matching
       const params: Record<string, string> = { page: String(page), per_page: String(perPage) };
-      if (eventTypeFilter) params.event_type = eventTypeFilter;
       const { data } = await api.get("/audit", { params });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setEntries(items);
@@ -29,6 +29,16 @@ export default function Audit() {
       setLoading(false);
     }
   }
+
+  // Client-side partial match filtering for event_type
+  const filteredEntries = useMemo(() => {
+    if (!eventTypeFilter.trim()) return entries;
+    const needle = eventTypeFilter.toLowerCase().trim();
+    return entries.filter((entry) =>
+      entry.event_type.toLowerCase().includes(needle) ||
+      entry.action?.toLowerCase().includes(needle)
+    );
+  }, [entries, eventTypeFilter]);
 
   function downloadJSON(data: AuditEntry[], filename: string) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -60,12 +70,12 @@ export default function Audit() {
 
   function exportJSON() {
     const datestamp = new Date().toISOString().slice(0, 10);
-    downloadJSON(entries, `audit-evidence-${datestamp}.json`);
+    downloadJSON(filteredEntries, `audit-evidence-${datestamp}.json`);
   }
 
   function exportCSV() {
     const datestamp = new Date().toISOString().slice(0, 10);
-    downloadCSV(entries, `audit-log-${datestamp}.csv`);
+    downloadCSV(filteredEntries, `audit-log-${datestamp}.csv`);
   }
 
   const outcomeColor = (outcome: string) => {
@@ -76,7 +86,7 @@ export default function Audit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h2 className="text-2xl font-bold">Audit Log</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportJSON}>Export Evidence Package</Button>
@@ -85,21 +95,39 @@ export default function Audit() {
       </div>
 
       <div className="flex gap-4 items-center">
-        <input
-          type="text"
-          placeholder="Filter by event type..."
-          value={eventTypeFilter}
-          onChange={(e) => { setEventTypeFilter(e.target.value); setPage(1); }}
-          className="border rounded px-3 py-2 text-sm w-64"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Filter by event type (partial match)..."
+            value={eventTypeFilter}
+            onChange={(e) => setEventTypeFilter(e.target.value)}
+            className="border rounded px-3 py-2 text-sm w-64 pr-8"
+          />
+          {eventTypeFilter && (
+            <button
+              onClick={() => setEventTypeFilter("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear filter"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          )}
+        </div>
+        {eventTypeFilter && (
+          <span className="text-sm text-muted-foreground">
+            Showing {filteredEntries.length} of {entries.length} entries
+          </span>
+        )}
       </div>
 
       {loading ? (
         <p className="text-muted-foreground">Loading audit entries...</p>
-      ) : entries.length === 0 ? (
-        <p className="text-muted-foreground">No audit entries found.</p>
+      ) : filteredEntries.length === 0 ? (
+        <p className="text-muted-foreground">
+          {eventTypeFilter ? `No audit entries matching "${eventTypeFilter}". Try a shorter search term.` : "No audit entries found."}
+        </p>
       ) : (
-        <div className="border rounded overflow-hidden">
+        <div className="border rounded overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted">
               <tr>
@@ -111,7 +139,7 @@ export default function Audit() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="border-t hover:bg-muted/50">
                   <td className="p-3 font-mono text-xs">{new Date(entry.created_at).toLocaleString()}</td>
                   <td className="p-3"><Badge variant="outline">{entry.event_type}</Badge></td>

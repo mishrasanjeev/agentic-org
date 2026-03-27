@@ -124,7 +124,7 @@ export default function Dashboard() {
       <h2 className="text-2xl font-bold">Dashboard</h2>
 
       {/* Top metrics row */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {metrics.map((m) => (
           <Card key={m.label}>
             <CardHeader>
@@ -138,7 +138,7 @@ export default function Dashboard() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Agent Status Pie Chart */}
         <Card>
           <CardHeader>
@@ -234,7 +234,7 @@ export default function Dashboard() {
       </Card>
 
       {/* Bottom row: Activity Feed + Pending Approvals */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Activity Feed */}
         <Card>
           <CardHeader>
@@ -245,28 +245,34 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">No recent activity.</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
-                {auditEntries.slice(0, 10).map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between p-2 rounded bg-muted text-sm"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge
-                        variant={entry.outcome === "success" ? "success" : entry.outcome === "failure" ? "destructive" : "secondary"}
-                      >
-                        {entry.outcome}
-                      </Badge>
-                      <span className="truncate">
-                        <span className="font-medium">{entry.event_type}</span>
-                        {" "}
-                        <span className="text-muted-foreground">{entry.action}</span>
+                {auditEntries.slice(0, 10).map((entry) => {
+                  const outcomeConfig = entry.outcome === "success"
+                    ? { dot: "bg-green-500", variant: "success" as const, label: "Success" }
+                    : entry.outcome === "failure" || entry.outcome === "error"
+                    ? { dot: "bg-red-500", variant: "destructive" as const, label: "Failed" }
+                    : { dot: "bg-yellow-500", variant: "warning" as const, label: entry.outcome || "Pending" };
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between p-2 rounded bg-muted text-sm"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${outcomeConfig.dot}`} title={outcomeConfig.label} />
+                        <Badge variant={outcomeConfig.variant}>
+                          {outcomeConfig.label}
+                        </Badge>
+                        <span className="truncate">
+                          <span className="font-medium">{entry.event_type}</span>
+                          {" "}
+                          <span className="text-muted-foreground">{entry.action}</span>
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                        {new Date(entry.created_at).toLocaleString()}
                       </span>
                     </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
-                      {new Date(entry.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

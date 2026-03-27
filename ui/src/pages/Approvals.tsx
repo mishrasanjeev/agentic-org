@@ -20,11 +20,33 @@ export default function Approvals() {
   async function fetchApprovals() {
     setLoading(true);
     try {
-      const { data } = await api.get("/approvals", { params: { status: "all" } });
-      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-      setItems(items);
+      // Fetch both pending and decided in parallel to ensure all items are shown
+      const [pendingResp, decidedResp] = await Promise.allSettled([
+        api.get("/approvals", { params: { status: "pending" } }),
+        api.get("/approvals", { params: { status: "decided" } }),
+      ]);
+      const extract = (r: PromiseSettledResult<any>) =>
+        r.status === "fulfilled"
+          ? (Array.isArray(r.value.data) ? r.value.data : Array.isArray(r.value.data?.items) ? r.value.data.items : [])
+          : [];
+      const allItems = [...extract(pendingResp), ...extract(decidedResp)];
+      // Deduplicate by id in case both endpoints return overlapping items
+      const seen = new Set<string>();
+      const unique = allItems.filter((item: any) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+      setItems(unique);
     } catch {
-      setItems([]);
+      // Fallback: try fetching without status filter
+      try {
+        const { data } = await api.get("/approvals");
+        const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+        setItems(items);
+      } catch {
+        setItems([]);
+      }
     } finally {
       setLoading(false);
     }

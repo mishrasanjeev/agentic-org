@@ -22,6 +22,7 @@ from core.email import send_welcome_email
 from core.models.tenant import Tenant
 from core.models.user import User
 from core.rbac import get_allowed_domains, get_scopes_for_role
+from core.seed_tenant import seed_tenant_defaults
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -133,6 +134,14 @@ async def signup(body: SignupRequest, request: Request):
             status="active",
         )
         session.add(user)
+        await session.flush()
+
+        # Seed built-in agents and prompt templates for the new org
+        try:
+            await seed_tenant_defaults(session, tenant.id)
+        except Exception:
+            logger.exception("Failed to seed defaults for tenant %s — signup continues", tenant.id)
+
         await session.commit()
         await session.refresh(tenant)
         await session.refresh(user)

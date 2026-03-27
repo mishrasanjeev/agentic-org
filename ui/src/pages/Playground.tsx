@@ -239,7 +239,12 @@ const DOMAIN_COLORS: Record<string, { border: string; bg: string; text: string }
 /*  Auth helper                                                        */
 /* ------------------------------------------------------------------ */
 
-async function getDemoToken(): Promise<string> {
+async function getAuthToken(): Promise<string> {
+  // First try to use the logged-in user's token (needed for custom agents)
+  const userToken = localStorage.getItem("token");
+  if (userToken) return userToken;
+
+  // Fallback to demo token for public playground access
   const cached = sessionStorage.getItem("playground_token");
   if (cached) return cached;
   const resp = await fetch("/api/v1/auth/login", {
@@ -473,7 +478,7 @@ export default function Playground() {
     const startTime = performance.now();
 
     try {
-      const token = await getDemoToken();
+      const token = await getAuthToken();
       const resp = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
         method: "POST",
         headers: {
@@ -487,7 +492,7 @@ export default function Playground() {
         // If 401, clear cached token and retry once
         if (resp.status === 401) {
           sessionStorage.removeItem("playground_token");
-          const newToken = await getDemoToken();
+          const newToken = await getAuthToken();
           const retry = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
             method: "POST",
             headers: {

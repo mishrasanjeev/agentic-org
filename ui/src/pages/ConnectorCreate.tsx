@@ -11,6 +11,7 @@ export default function ConnectorCreate() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [category, setCategory] = useState("finance");
+  const [baseUrl, setBaseUrl] = useState("");
   const [authType, setAuthType] = useState("api_key");
   const [rateLimitRpm, setRateLimitRpm] = useState(100);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +23,7 @@ export default function ConnectorCreate() {
     setSubmitting(true);
     setError("");
     try {
-      await api.post("/connectors", { name: name.trim(), category, auth_type: authType, rate_limit_rpm: rateLimitRpm });
+      await api.post("/connectors", { name: name.trim(), category, base_url: baseUrl.trim() || undefined, auth_type: authType, rate_limit_rpm: rateLimitRpm });
       navigate("/dashboard/connectors");
     } catch {
       setError("Failed to register connector. Please try again.");
@@ -47,7 +48,13 @@ export default function ConnectorCreate() {
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. SAP S/4HANA" className="border rounded px-3 py-2 text-sm w-full mt-1" />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium">Base URL</label>
+              <input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.example.com" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+              <p className="text-xs text-muted-foreground mt-1">The API endpoint for this connector (e.g., https://api.sap.com/v1)</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium">Category</label>
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">

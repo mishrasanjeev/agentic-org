@@ -30,6 +30,14 @@ interface Metrics {
   avg_score: number; emails_sent_this_week: number; stale_leads: number;
 }
 
+interface AgentResult {
+  leadId: string;
+  status: string;
+  output: Record<string, any>;
+  confidence: number | null;
+  reasoning_trace: string[];
+}
+
 export default function SalesPipeline() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [funnel, setFunnel] = useState<Record<string, number>>({});
@@ -38,6 +46,10 @@ export default function SalesPipeline() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
+  const [showAddLead, setShowAddLead] = useState(false);
+  const [newLead, setNewLead] = useState({ name: "", email: "", company: "", role: "", deal_value_usd: "" });
+  const [addingLead, setAddingLead] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -57,11 +69,42 @@ export default function SalesPipeline() {
 
   async function triggerAgent(leadId: string) {
     setProcessing(leadId);
+    setAgentResult(null);
     try {
-      await api.post("/sales/pipeline/process-lead", { lead_id: leadId, action: "qualify_and_respond" });
+      const { data } = await api.post("/sales/pipeline/process-lead", { lead_id: leadId, action: "qualify_and_respond" });
+      // Store the agent result for display
+      setAgentResult({
+        leadId,
+        status: data.status || "completed",
+        output: data.output || {},
+        confidence: data.confidence ?? null,
+        reasoning_trace: data.reasoning_trace || [],
+      });
       await fetchData();
+      // Auto-select the processed lead to show details
+      const updatedLead = leads.find(l => l.id === leadId);
+      if (updatedLead) setSelectedLead(updatedLead);
     } catch { /* ignore */ }
     finally { setProcessing(null); }
+  }
+
+  async function handleAddLead(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newLead.name.trim() || !newLead.email.trim()) return;
+    setAddingLead(true);
+    try {
+      await api.post("/sales/pipeline/leads", {
+        name: newLead.name.trim(),
+        email: newLead.email.trim(),
+        company: newLead.company.trim() || undefined,
+        role: newLead.role.trim() || undefined,
+        deal_value_usd: newLead.deal_value_usd ? Number(newLead.deal_value_usd) : undefined,
+      });
+      setNewLead({ name: "", email: "", company: "", role: "", deal_value_usd: "" });
+      setShowAddLead(false);
+      await fetchData();
+    } catch { /* ignore */ }
+    finally { setAddingLead(false); }
   }
 
   const scoreColor = (score: number) =>
@@ -73,13 +116,54 @@ export default function SalesPipeline() {
         <title>Sales Pipeline — AgenticOrg</title>
       </Helmet>
 
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold">Sales Pipeline</h2>
           <p className="text-sm text-muted-foreground">Aarav (AI Sales Agent) manages lead qualification and outreach</p>
         </div>
-        <Button onClick={fetchData} variant="outline" size="sm">Refresh</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowAddLead(!showAddLead)} variant={showAddLead ? "outline" : "default"} size="sm">
+            {showAddLead ? "Cancel" : "Add Lead"}
+          </Button>
+          <Button onClick={fetchData} variant="outline" size="sm">Refresh</Button>
+        </div>
       </div>
+
+      {/* Add Lead Form */}
+      {showAddLead && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Add New Lead</CardTitle></CardHeader>
+          <CardContent>
+            <form onSubmit={handleAddLead} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Name *</label>
+                  <input type="text" value={newLead.name} onChange={(e) => setNewLead({ ...newLead, name: e.target.value })} placeholder="John Doe" className="border rounded px-3 py-2 text-sm w-full mt-1" required />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Email *</label>
+                  <input type="email" value={newLead.email} onChange={(e) => setNewLead({ ...newLead, email: e.target.value })} placeholder="john@company.com" className="border rounded px-3 py-2 text-sm w-full mt-1" required />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Company</label>
+                  <input type="text" value={newLead.company} onChange={(e) => setNewLead({ ...newLead, company: e.target.value })} placeholder="Acme Corp" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Role</label>
+                  <input type="text" value={newLead.role} onChange={(e) => setNewLead({ ...newLead, role: e.target.value })} placeholder="VP Engineering" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Deal Value (USD)</label>
+                  <input type="number" value={newLead.deal_value_usd} onChange={(e) => setNewLead({ ...newLead, deal_value_usd: e.target.value })} placeholder="10000" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                </div>
+              </div>
+              <Button type="submit" size="sm" disabled={addingLead}>
+                {addingLead ? "Adding..." : "Add Lead"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Metrics Cards */}
       {metrics && (
@@ -171,58 +255,80 @@ export default function SalesPipeline() {
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : leads.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No leads yet. Demo requests will appear here automatically.</p>
+            <div className="text-center py-8">
+              <p className="text-sm text-muted-foreground mb-3">No leads yet. Add a lead or demo requests will appear here automatically.</p>
+              <Button size="sm" onClick={() => setShowAddLead(true)}>Add Your First Lead</Button>
+            </div>
           ) : (
             <div className="space-y-2">
               {leads.map((lead) => {
                 const stage = STAGES.find((s) => s.key === lead.stage);
+                const isSelected = selectedLead?.id === lead.id;
                 return (
-                  <div
-                    key={lead.id}
-                    className={`flex items-center gap-4 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer ${selectedLead?.id === lead.id ? "bg-muted border-primary" : ""}`}
-                    onClick={() => setSelectedLead(selectedLead?.id === lead.id ? null : lead)}
-                  >
-                    {/* Score */}
-                    <div className={`text-lg font-bold w-10 text-center ${scoreColor(lead.score)}`}>
-                      {lead.score}
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{lead.name}</span>
-                        {lead.company && <span className="text-xs text-muted-foreground">@ {lead.company}</span>}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-muted-foreground">{lead.email}</span>
-                        {lead.role && <span className="text-xs text-muted-foreground">| {lead.role}</span>}
-                      </div>
-                    </div>
-
-                    {/* Stage */}
-                    <Badge className={`${stage?.color} text-white text-xs`}>
-                      {stage?.label || lead.stage}
-                    </Badge>
-
-                    {/* Follow-ups */}
-                    <div className="text-xs text-muted-foreground text-right w-20">
-                      {lead.followup_count} emails
-                      {lead.next_followup_at && (
-                        <div className="text-xs text-amber-600">
-                          Due {new Date(lead.next_followup_at).toLocaleDateString()}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Action */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={processing === lead.id}
-                      onClick={(e) => { e.stopPropagation(); triggerAgent(lead.id); }}
+                  <div key={lead.id}>
+                    <div
+                      className={`flex items-center gap-4 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer ${isSelected ? "bg-muted border-primary" : ""}`}
+                      onClick={() => setSelectedLead(isSelected ? null : lead)}
                     >
-                      {processing === lead.id ? "Running..." : "Run Agent"}
-                    </Button>
+                      {/* Score */}
+                      <div className={`text-lg font-bold w-10 text-center ${scoreColor(lead.score)}`}>
+                        {lead.score}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{lead.name}</span>
+                          {lead.company && <span className="text-xs text-muted-foreground">@ {lead.company}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-muted-foreground">{lead.email}</span>
+                          {lead.role && <span className="text-xs text-muted-foreground">| {lead.role}</span>}
+                        </div>
+                      </div>
+
+                      {/* Stage */}
+                      <Badge className={`${stage?.color} text-white text-xs`}>
+                        {stage?.label || lead.stage}
+                      </Badge>
+
+                      {/* Follow-ups */}
+                      <div className="text-xs text-muted-foreground text-right w-20 hidden sm:block">
+                        {lead.followup_count} emails
+                        {lead.next_followup_at && (
+                          <div className="text-xs text-amber-600">
+                            Due {new Date(lead.next_followup_at).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={processing === lead.id}
+                        onClick={(e) => { e.stopPropagation(); triggerAgent(lead.id); }}
+                      >
+                        {processing === lead.id ? "Running..." : "Run Agent"}
+                      </Button>
+                    </div>
+
+                    {/* Inline Detail Panel */}
+                    {isSelected && (
+                      <div className="ml-4 mr-4 mt-1 mb-2 p-4 rounded-lg border border-primary/20 bg-muted/30">
+                        <h4 className="text-sm font-semibold mb-3">{lead.name} — Details</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div><span className="text-muted-foreground text-xs block">Email</span> {lead.email}</div>
+                          <div><span className="text-muted-foreground text-xs block">Company</span> {lead.company || "—"}</div>
+                          <div><span className="text-muted-foreground text-xs block">Role</span> {lead.role || "—"}</div>
+                          <div><span className="text-muted-foreground text-xs block">Score</span> <span className={scoreColor(lead.score)}>{lead.score}/100</span></div>
+                          <div><span className="text-muted-foreground text-xs block">Stage</span> {stage?.label || lead.stage}</div>
+                          <div><span className="text-muted-foreground text-xs block">Follow-ups</span> {lead.followup_count}</div>
+                          <div><span className="text-muted-foreground text-xs block">Created</span> {new Date(lead.created_at).toLocaleDateString()}</div>
+                          <div><span className="text-muted-foreground text-xs block">Deal Value</span> {lead.deal_value_usd ? `$${lead.deal_value_usd.toLocaleString()}` : "—"}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -231,23 +337,98 @@ export default function SalesPipeline() {
         </CardContent>
       </Card>
 
-      {/* Selected Lead Detail */}
-      {selectedLead && (
+      {/* Agent Result Display */}
+      {agentResult && (
         <Card>
           <CardHeader>
-            <CardTitle>{selectedLead.name} — Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div><span className="text-muted-foreground">Email:</span> {selectedLead.email}</div>
-              <div><span className="text-muted-foreground">Company:</span> {selectedLead.company || "—"}</div>
-              <div><span className="text-muted-foreground">Role:</span> {selectedLead.role || "—"}</div>
-              <div><span className="text-muted-foreground">Score:</span> <span className={scoreColor(selectedLead.score)}>{selectedLead.score}/100</span></div>
-              <div><span className="text-muted-foreground">Stage:</span> {selectedLead.stage}</div>
-              <div><span className="text-muted-foreground">Follow-ups:</span> {selectedLead.followup_count}</div>
-              <div><span className="text-muted-foreground">Created:</span> {new Date(selectedLead.created_at).toLocaleDateString()}</div>
-              <div><span className="text-muted-foreground">Deal Value:</span> {selectedLead.deal_value_usd ? `$${selectedLead.deal_value_usd}` : "—"}</div>
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-sm">Agent Execution Result</CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant={agentResult.status === "completed" ? "success" : agentResult.status === "error" ? "destructive" : "secondary"}>
+                  {agentResult.status}
+                </Badge>
+                {agentResult.confidence !== null && (
+                  <Badge variant="outline">
+                    Confidence: {Math.round((agentResult.confidence > 1 ? agentResult.confidence : agentResult.confidence * 100))}%
+                  </Badge>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setAgentResult(null)}>Dismiss</Button>
+              </div>
             </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Qualification Output */}
+            {agentResult.output.qualification && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Qualification</p>
+                <div className="bg-muted rounded p-3 text-sm">
+                  {typeof agentResult.output.qualification === "object" ? (
+                    <pre className="font-mono text-xs whitespace-pre-wrap">{JSON.stringify(agentResult.output.qualification, null, 2)}</pre>
+                  ) : (
+                    <p>{String(agentResult.output.qualification)}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendation */}
+            {agentResult.output.recommendation && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Next Action Recommendation</p>
+                <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900">
+                  {String(agentResult.output.recommendation)}
+                </div>
+              </div>
+            )}
+
+            {/* Email Content */}
+            {agentResult.output.email && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Email Content</p>
+                <div className="bg-muted rounded p-3 text-sm space-y-1">
+                  {agentResult.output.email.subject && <p><span className="font-medium">Subject:</span> {agentResult.output.email.subject}</p>}
+                  {agentResult.output.email.body && <pre className="font-mono text-xs whitespace-pre-wrap mt-2">{agentResult.output.email.body}</pre>}
+                </div>
+              </div>
+            )}
+
+            {/* Lead Score Update */}
+            {agentResult.output.lead_score !== undefined && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground uppercase">Updated Score:</span>
+                <span className={`font-bold ${scoreColor(agentResult.output.lead_score)}`}>{agentResult.output.lead_score}/100</span>
+              </div>
+            )}
+
+            {/* Lead Stage Update */}
+            {agentResult.output.lead_stage && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground uppercase">Updated Stage:</span>
+                <Badge variant="secondary">{agentResult.output.lead_stage}</Badge>
+              </div>
+            )}
+
+            {/* Reasoning Trace */}
+            {agentResult.reasoning_trace.length > 0 && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Show reasoning trace ({agentResult.reasoning_trace.length} steps)</summary>
+                <div className="mt-2 bg-muted rounded p-3 space-y-1 font-mono">
+                  {agentResult.reasoning_trace.map((step, i) => (
+                    <div key={i} className="text-muted-foreground">{step}</div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {/* Raw output fallback if no structured fields */}
+            {!agentResult.output.qualification && !agentResult.output.recommendation && !agentResult.output.email && Object.keys(agentResult.output).length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Agent Output</p>
+                <pre className="bg-muted rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-60 overflow-auto">
+                  {JSON.stringify(agentResult.output, null, 2)}
+                </pre>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

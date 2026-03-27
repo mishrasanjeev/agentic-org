@@ -69,6 +69,14 @@ export default function Onboarding() {
     navigate("/dashboard");
   };
 
+  const GETTING_STARTED_STEPS = [
+    { icon: "1", title: "Explore your AI agents", desc: "24 pre-built agents are ready across Finance, HR, Marketing, Operations, and Back Office.", link: "/dashboard/agents" },
+    { icon: "2", title: "Try the Playground", desc: "Run agents with sample data to see how they work — no configuration needed.", link: "/playground" },
+    { icon: "3", title: "Set up Connectors", desc: "Connect your ERP, CRM, HRIS, and other tools to power your agents with real data.", link: "/dashboard/connectors" },
+    { icon: "4", title: "Create Workflows", desc: "Chain agents together into automated workflows with human-in-the-loop approval gates.", link: "/dashboard/workflows" },
+    { icon: "5", title: "Review Prompt Templates", desc: "Customize agent behavior using the prompt library — clone and edit to match your processes.", link: "/dashboard/prompt-templates" },
+  ];
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <Helmet>
@@ -78,10 +86,10 @@ export default function Onboarding() {
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           {/* Progress indicator */}
           <div className="flex items-center justify-center gap-2 mb-8">
-            {[1, 2, 3].map((s) => (
+            {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
-                className={`h-2 w-16 rounded-full transition-colors ${
+                className={`h-2 w-12 rounded-full transition-colors ${
                   s <= step ? "bg-primary" : "bg-muted"
                 }`}
               />
@@ -228,11 +236,50 @@ export default function Onboarding() {
                 </button>
               </div>
 
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(4)}
+                  className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Getting Started Guide */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold">You're all set!</h2>
+                <p className="text-muted-foreground mt-2">
+                  Here's what you can do next to get the most out of AgenticOrg.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {GETTING_STARTED_STEPS.map((item) => (
+                  <button
+                    key={item.icon}
+                    onClick={() => navigate(item.link)}
+                    className="w-full text-left flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 hover:border-primary/30 transition-colors"
+                  >
+                    <span className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">
+                      {item.icon}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{item.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
               <button
                 onClick={finishOnboarding}
                 className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
               >
-                Finish
+                Go to Dashboard
               </button>
             </div>
           )}

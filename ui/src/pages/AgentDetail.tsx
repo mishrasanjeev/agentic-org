@@ -303,11 +303,35 @@ function ConfigTab({ agent }: { agent: Agent }) {
 /* ─── Prompt Tab ─── */
 function PromptTab({ agent }: { agent: Agent }) {
   const [history, setHistory] = useState<PromptEditHistoryEntry[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(agent.system_prompt_text || "");
+  const [editReason, setEditReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const isLocked = agent.status === "active";
 
   useEffect(() => {
     agentsApi.promptHistory(agent.id).then(({ data }) => setHistory(data || [])).catch(() => {});
   }, [agent.id]);
+
+  async function handleSavePrompt() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await agentsApi.update(agent.id, {
+        system_prompt_text: editText,
+        prompt_change_reason: editReason || undefined,
+      });
+      setEditing(false);
+      setEditReason("");
+      // Refresh history
+      agentsApi.promptHistory(agent.id).then(({ data }) => setHistory(data || [])).catch(() => {});
+    } catch (err: any) {
+      setSaveError(err.response?.data?.detail || "Failed to save prompt");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -321,12 +345,52 @@ function PromptTab({ agent }: { agent: Agent }) {
                 <span className="text-xs text-muted-foreground">Clone this agent to edit prompt</span>
               </div>
             ) : (
-              <Badge variant="secondary">Editable</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Editable</Badge>
+                {!editing && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setEditText(agent.system_prompt_text || ""); setEditing(true); }}
+                  >
+                    Edit
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </CardHeader>
         <CardContent>
-          {agent.system_prompt_text ? (
+          {editing && !isLocked ? (
+            <div className="space-y-3">
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm font-mono min-h-[200px] max-h-96 overflow-auto"
+                rows={12}
+                placeholder="Enter system prompt text..."
+              />
+              <div>
+                <label className="text-xs text-muted-foreground">Change reason (optional)</label>
+                <input
+                  type="text"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="e.g. Updated tone, added compliance instructions"
+                  className="w-full border rounded px-3 py-1.5 text-sm mt-1"
+                />
+              </div>
+              {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSavePrompt} disabled={saving || !editText.trim()}>
+                  {saving ? "Saving..." : "Save Prompt"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => { setEditing(false); setSaveError(null); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : agent.system_prompt_text ? (
             <pre className="bg-muted rounded p-4 text-xs font-mono whitespace-pre-wrap max-h-96 overflow-auto">
               {agent.system_prompt_text}
             </pre>
@@ -370,6 +434,9 @@ function PromptTab({ agent }: { agent: Agent }) {
 
 /* ─── Shadow Tab ─── */
 function ShadowTab({ agent }: { agent: Agent }) {
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
   const sampleCount = agent.shadow_sample_count ?? 0;
   const minSamples = agent.shadow_min_samples ?? 100;
   const sampleProgress = minSamples > 0 ? Math.min((sampleCount / minSamples) * 100, 100) : 0;
@@ -386,14 +453,45 @@ function ShadowTab({ agent }: { agent: Agent }) {
   const meetsCount = sampleCount >= minSamples;
   const promotionReady = meetsThreshold && meetsCount;
 
+  async function generateSample() {
+    setGenerating(true);
+    setGenResult(null);
+    try {
+      await api.post(`/agents/${agent.id}/run`, {
+        action: "shadow_sample",
+        inputs: { mode: "test", generate_sample: true },
+      });
+      setGenResult({ type: "success", msg: "Shadow sample generated successfully. Refresh to see updated count." });
+    } catch (err: any) {
+      setGenResult({ type: "error", msg: err.response?.data?.detail || "Failed to generate sample. The agent may need to be configured first." });
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Sample Progress */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Shadow Sample Progress</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-sm font-semibold">Shadow Sample Progress</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generateSample}
+              disabled={generating || meetsCount}
+            >
+              {generating ? "Generating..." : "Generate Test Sample"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {genResult && (
+            <div className={`rounded-lg px-3 py-2 text-sm ${genResult.type === "success" ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+              {genResult.msg}
+            </div>
+          )}
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Samples collected</span>
             <span className="font-medium">{sampleCount} / {minSamples}</span>
@@ -407,7 +505,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
           <p className="text-xs text-muted-foreground">
             {meetsCount
               ? "Sample count requirement met"
-              : `${minSamples - sampleCount} more samples needed`}
+              : `${minSamples - sampleCount} more samples needed — use "Generate Test Sample" to collect samples`}
           </p>
         </CardContent>
       </Card>

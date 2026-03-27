@@ -62,8 +62,10 @@ async def query_audit(
             count_base = count_base.where(AuditLog.agent_id.in_(domain_agent_ids))
 
         if event_type:
-            base = base.where(AuditLog.event_type == event_type)
-            count_base = count_base.where(AuditLog.event_type == event_type)
+            # Support partial matching: use ILIKE for substring search
+            pattern = f"%{event_type}%"
+            base = base.where(AuditLog.event_type.ilike(pattern))
+            count_base = count_base.where(AuditLog.event_type.ilike(pattern))
 
         if agent_id:
             agent_uuid = _uuid.UUID(agent_id)
