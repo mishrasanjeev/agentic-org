@@ -7,14 +7,10 @@ Tests 43 API endpoints, all UI-visible flows, database state, and logs.
 Run: python tests/e2e_full_production_test.py
 """
 
-import csv
-import io
-import json
 import os
 import sys
-import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -325,7 +321,7 @@ def test_csv_import():
     print("\n=== SECTION 7: CSV Bulk Import ===")
     t = tokens["admin"]
 
-    csv_content = f"""name,agent_type,domain,designation,specialization,reporting_to_name,org_level
+    csv_content = """name,agent_type,domain,designation,specialization,reporting_to_name,org_level
 Controller Bot,close_agent,finance,Controller,Month-end close,,0
 Recon Lead,recon_agent,finance,Recon Lead,Bank reconciliation,Controller Bot,1
 Recon Analyst,recon_agent,finance,Analyst,Intercompany recon,Recon Lead,2
@@ -711,10 +707,10 @@ def test_logout():
 # ═══════════════════════════════════════════════════════════════════════════
 def main():
     print(f"{'=' * 70}")
-    print(f"AgenticOrg Full E2E Production Test")
+    print("AgenticOrg Full E2E Production Test")
     print(f"Base: {BASE}")
     print(f"Org:  {ORG_NAME}")
-    print(f"Time: {datetime.now(timezone.utc).isoformat()}")
+    print(f"Time: {datetime.now(UTC).isoformat()}")
     print(f"{'=' * 70}")
 
     test_health()
@@ -745,7 +741,7 @@ def main():
     total = len(results)
 
     print(f"\n{'=' * 70}")
-    print(f"TEST REPORT SUMMARY")
+    print("TEST REPORT SUMMARY")
     print(f"{'=' * 70}")
     print(f"Total:  {total}")
     print(f"Passed: {passed} ({passed * 100 // total}%)")
@@ -753,13 +749,13 @@ def main():
     print(f"{'=' * 70}")
 
     if failed > 0:
-        print(f"\nFAILED TESTS:")
+        print("\nFAILED TESTS:")
         for r in results:
             if r["status"] == "FAIL":
                 print(f"  [{r['id']:3d}] {r['name']}: {r['detail']}")
 
     print(f"\n{'=' * 70}")
-    print(f"FULL RESULTS:")
+    print("FULL RESULTS:")
     print(f"{'=' * 70}")
     for r in results:
         icon = "PASS" if r["status"] == "PASS" else "FAIL"
