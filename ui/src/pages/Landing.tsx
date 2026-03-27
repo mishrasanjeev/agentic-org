@@ -87,17 +87,6 @@ function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
-const LOGO_BAR = [
-  { name: "Oracle", short: "OC" },
-  { name: "SAP", short: "SAP" },
-  { name: "Salesforce", short: "SF" },
-  { name: "Slack", short: "SL" },
-  { name: "GSTN", short: "GS" },
-  { name: "Darwinbox", short: "DB" },
-  { name: "Stripe", short: "ST" },
-  { name: "HubSpot", short: "HS" },
-];
-
 const PAIN_STATS = [
   { value: "72 hours", label: "Average month-end close cycle", color: "text-red-500" },
   { value: "\u20B912L/year", label: "Lost to missed early-payment discounts", color: "text-orange-500" },
@@ -468,6 +457,12 @@ export default function Landing() {
             <p className="mt-4 text-sm text-slate-500">
               No credit card required &middot; Free to start &middot; Full audit trail built in
             </p>
+
+            <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-slate-400">
+              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Upload your org chart CSV</span>
+              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Agents match your hierarchy</span>
+              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Human approval on every critical decision</span>
+            </div>
           </div>
 
           {/* Right — Live agent activity ticker */}
@@ -482,17 +477,25 @@ export default function Landing() {
       {/* ============================================================ */}
       <section className="py-10 bg-white border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-slate-400 mb-6">Trusted by teams using</p>
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
-            {LOGO_BAR.map((l) => (
-              <div key={l.name} className="flex items-center gap-2 text-slate-400">
-                <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">
-                  {l.short}
-                </div>
-                <span className="text-sm font-medium">{l.name}</span>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="text-3xl font-extrabold text-slate-900">24+</div>
+              <p className="text-sm text-slate-500 mt-1">Pre-built AI Agents</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="text-3xl font-extrabold text-slate-900">42</div>
+              <p className="text-sm text-slate-500 mt-1">Enterprise Connectors</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="text-3xl font-extrabold text-emerald-600">84%</div>
+              <p className="text-sm text-slate-500 mt-1">Code Test Coverage</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="text-3xl font-extrabold text-blue-600">100%</div>
+              <p className="text-sm text-slate-500 mt-1">E2E Tests Passing</p>
+            </div>
           </div>
+          <p className="text-center text-xs text-slate-400 mt-4">Connects with SAP, Oracle, Salesforce, GSTN, EPFO, Darwinbox, Tally, Slack, Jira, HubSpot, Stripe & more</p>
         </div>
       </section>
 
@@ -685,6 +688,89 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* 5b. GET STARTED IN 3 MINUTES                                 */}
+      {/* ============================================================ */}
+      <section className="py-24 bg-gradient-to-b from-white to-slate-50 scroll-mt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5 mb-6">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                <span className="text-emerald-700 text-sm font-medium">Live in under 3 minutes</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">From Org Chart to AI Workforce — 3 Steps</h2>
+              <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
+                Give us your department structure. We'll give you AI employees for every role.
+              </p>
+            </div>
+          </FadeIn>
+
+          <div className="grid md:grid-cols-3 gap-0 md:gap-0">
+            {/* Step 1 */}
+            <FadeIn delay={0}>
+              <div className="relative bg-white rounded-2xl md:rounded-r-none border border-slate-200 p-8 h-full">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-lg">1</div>
+                  <h3 className="text-lg font-bold text-slate-900">Sign Up & Upload</h3>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">Create your org in 30 seconds. Then upload a CSV with your team structure — names, roles, reporting lines.</p>
+                <div className="bg-slate-50 rounded-lg p-3 font-mono text-xs text-slate-500 border border-slate-100">
+                  <div>name,role,domain,reports_to</div>
+                  <div className="text-slate-700">VP Finance,fpa_agent,finance,</div>
+                  <div className="text-slate-700">Priya,ap_processor,finance,VP Finance</div>
+                  <div className="text-slate-700">Arjun,ap_processor,finance,VP Finance</div>
+                </div>
+                <Link to="/signup" className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700">
+                  Create Free Account →
+                </Link>
+              </div>
+            </FadeIn>
+
+            {/* Step 2 */}
+            <FadeIn delay={150}>
+              <div className="relative bg-white border-y md:border border-slate-200 p-8 h-full">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-lg">2</div>
+                  <h3 className="text-lg font-bold text-slate-900">See Your Org Chart</h3>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">Agents appear in a visual org chart — just like your real company. Hierarchy, escalation chains, department views.</p>
+                <div className="bg-slate-900 rounded-lg p-4 text-center">
+                  <div className="inline-block bg-emerald-500/20 border border-emerald-500/40 rounded-lg px-3 py-1.5 text-xs text-emerald-400 mb-2">VP Finance</div>
+                  <div className="w-px h-4 bg-slate-600 mx-auto" />
+                  <div className="flex gap-3 justify-center">
+                    <div className="bg-blue-500/20 border border-blue-500/40 rounded-lg px-2 py-1 text-[10px] text-blue-400">Priya (AP)</div>
+                    <div className="bg-blue-500/20 border border-blue-500/40 rounded-lg px-2 py-1 text-[10px] text-blue-400">Arjun (AP)</div>
+                  </div>
+                </div>
+                <Link to="/login" className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-purple-600 hover:text-purple-700">
+                  Try Demo Dashboard →
+                </Link>
+              </div>
+            </FadeIn>
+
+            {/* Step 3 */}
+            <FadeIn delay={300}>
+              <div className="relative bg-white rounded-2xl md:rounded-l-none border border-slate-200 p-8 h-full">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-lg">3</div>
+                  <h3 className="text-lg font-bold text-slate-900">Agents Start Working</h3>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">Agents start in Shadow Mode — observe, learn, validate. Promote to Active when ready. You approve every critical decision.</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-yellow-500" /><span className="text-slate-600">Shadow: Agent observes, humans do the work</span></div>
+                  <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-slate-600">Active: Agent works, humans approve decisions</span></div>
+                  <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-slate-600">Escalation: Junior → Senior → Head → Human</span></div>
+                </div>
+                <Link to="/playground" className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-emerald-600 hover:text-emerald-700">
+                  Try in Playground →
+                </Link>
+              </div>
+            </FadeIn>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
       {/* 6. ROLE-SPECIFIC SECTIONS                                     */}
       {/* ============================================================ */}
       <section id="solutions" className="py-24 bg-slate-50 scroll-mt-16">
@@ -787,6 +873,29 @@ export default function Landing() {
               <p className="text-center text-sm text-slate-500 mb-8 max-w-lg mx-auto">Watch a real invoice flow through the agent pipeline &mdash; from arrival to approval.</p>
               <div className="bg-slate-900 rounded-2xl p-8">
                 <WorkflowAnimation />
+              </div>
+            </div>
+          </FadeIn>
+
+          {/* Pricing strip */}
+          <FadeIn>
+            <div className="mt-16 bg-slate-50 rounded-2xl border border-slate-200 p-8">
+              <div className="grid md:grid-cols-3 gap-6 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">Free</div>
+                  <p className="text-sm text-slate-500 mt-1">35 agents, 20 connectors, 500 tasks/day</p>
+                  <Link to="/signup" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Start Free →</Link>
+                </div>
+                <div className="border-x border-slate-200 px-6">
+                  <div className="text-2xl font-bold text-blue-600">Pro — $499/mo</div>
+                  <p className="text-sm text-slate-500 mt-1">Unlimited agents, unlimited tasks, priority support</p>
+                  <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Get Started →</button>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">Enterprise</div>
+                  <p className="text-sm text-slate-500 mt-1">Custom SLA, on-premise, SSO, dedicated support</p>
+                  <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Contact Sales →</button>
+                </div>
               </div>
             </div>
           </FadeIn>
