@@ -122,6 +122,47 @@ async def get_pipeline(
     }
 
 
+# ── Static /sales/pipeline/* routes BEFORE {lead_id} to avoid FastAPI conflict ──
+
+@router.get("/sales/pipeline/due-followups")
+async def get_due_followups(tenant_id: str = Depends(get_current_tenant)):
+    """Leads needing follow-up (next_followup_at <= now)."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(LeadPipeline).where(
+                LeadPipeline.tenant_id == tid,
+                LeadPipeline.next_followup_at <= datetime.now(UTC),
+                LeadPipeline.stage.not_in(["closed_won", "closed_lost"]),
+            ).order_by(LeadPipeline.score.desc())
+        )
+        leads = result.scalars().all()
+    return [_lead_to_dict(lead) for lead in leads]
+
+
+@router.post("/sales/pipeline/process-lead")
+async def process_lead_with_agent(
+    payload: dict | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Run the sales agent against a specific lead for qualification + outreach."""
+    if payload is None:
+        payload = {}
+    lead_id = payload.get("lead_id")
+    if not lead_id:
+        raise HTTPException(400, "lead_id is required")
+
+    result = await _run_sales_agent_on_lead(
+        tenant_id=tenant_id,
+        lead_id=lead_id,
+        action=payload.get("action", "qualify_and_respond"),
+        sequence_step=payload.get("sequence_step", 0),
+    )
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
 # ── GET /sales/pipeline/{id} ──
 
 @router.get("/sales/pipeline/{lead_id}")
@@ -349,46 +390,6 @@ async def _run_sales_agent_on_lead(
         "confidence": task_result.confidence,
         "reasoning_trace": task_result.reasoning_trace,
     }
-
-
-@router.post("/sales/pipeline/process-lead")
-async def process_lead_with_agent(
-    payload: dict | None = None,
-    tenant_id: str = Depends(get_current_tenant),
-):
-    """Run the sales agent against a specific lead for qualification + outreach."""
-    if payload is None:
-        payload = {}
-    lead_id = payload.get("lead_id")
-    if not lead_id:
-        raise HTTPException(400, "lead_id is required")
-
-    result = await _run_sales_agent_on_lead(
-        tenant_id=tenant_id,
-        lead_id=lead_id,
-        action=payload.get("action", "qualify_and_respond"),
-        sequence_step=payload.get("sequence_step", 0),
-    )
-    if "error" in result:
-        raise HTTPException(400, result["error"])
-    return result
-
-
-# ── GET /sales/pipeline/due-followups — Leads needing follow-up ──
-
-@router.get("/sales/pipeline/due-followups")
-async def get_due_followups(tenant_id: str = Depends(get_current_tenant)):
-    tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(LeadPipeline).where(
-                LeadPipeline.tenant_id == tid,
-                LeadPipeline.next_followup_at <= datetime.now(UTC),
-                LeadPipeline.stage.not_in(["closed_won", "closed_lost"]),
-            ).order_by(LeadPipeline.score.desc())
-        )
-        leads = result.scalars().all()
-    return [_lead_to_dict(lead) for lead in leads]
 
 
 # ── GET /sales/metrics — Weekly digest data ──
