@@ -137,7 +137,7 @@ export default function AgentDetail() {
         ))}
       </div>
 
-      {activeTab === "overview" && <OverviewTab agent={agent} />}
+      {activeTab === "overview" && <OverviewTab agent={agent} onUpdated={fetchAgent} />}
       {activeTab === "config" && <ConfigTab agent={agent} />}
       {activeTab === "prompt" && <PromptTab agent={agent} />}
       {activeTab === "shadow" && <ShadowTab agent={agent} />}
@@ -147,7 +147,36 @@ export default function AgentDetail() {
 }
 
 /* ─── Overview Tab ─── */
-function OverviewTab({ agent }: { agent: Agent }) {
+function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void }) {
+  const [editingParent, setEditingParent] = useState(false);
+  const [parentCandidates, setParentCandidates] = useState<Agent[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState(agent.parent_agent_id || "");
+  const [savingParent, setSavingParent] = useState(false);
+
+  useEffect(() => {
+    if (editingParent) {
+      agentsApi.list({ domain: agent.domain, status: "active" }).then(({ data }) => {
+        const items = (Array.isArray(data) ? data : data.items || []).filter((a: Agent) => a.id !== agent.id);
+        setParentCandidates(items);
+      }).catch(() => setParentCandidates([]));
+    }
+  }, [editingParent, agent.domain, agent.id]);
+
+  async function saveParent() {
+    setSavingParent(true);
+    try {
+      const parent = parentCandidates.find((a) => a.id === selectedParentId);
+      await agentsApi.update(agent.id, {
+        parent_agent_id: selectedParentId || null,
+        reporting_to: parent ? (parent.employee_name || parent.name) : null,
+      });
+      setEditingParent(false);
+      onUpdated();
+    } catch { /* ignore */ } finally {
+      setSavingParent(false);
+    }
+  }
+
   const fields: Array<{ label: string; value: React.ReactNode }> = [
     { label: "Agent ID", value: <span className="font-mono text-xs">{agent.id}</span> },
     { label: "Domain", value: <Badge variant="secondary">{agent.domain}</Badge> },
@@ -156,7 +185,6 @@ function OverviewTab({ agent }: { agent: Agent }) {
     { label: "HITL Condition", value: agent.hitl_condition || "None" },
     { label: "Confidence Floor", value: agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A" },
     { label: "LLM Model", value: agent.llm_model || "Default (Gemini)" },
-    { label: "Reports To", value: agent.reporting_to || "None (escalates to human)" },
     { label: "Created", value: new Date(agent.created_at).toLocaleString() },
   ];
 
@@ -170,6 +198,46 @@ function OverviewTab({ agent }: { agent: Agent }) {
               <span>{f.value}</span>
             </div>
           ))}
+        </div>
+
+        {/* Reports To — Editable */}
+        <div className="pt-2 border-t">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground text-xs uppercase tracking-wide">Reports To (Org Chart)</span>
+            {!editingParent && (
+              <Button variant="outline" size="sm" onClick={() => { setSelectedParentId(agent.parent_agent_id || ""); setEditingParent(true); }}>
+                Edit
+              </Button>
+            )}
+          </div>
+          {editingParent ? (
+            <div className="mt-2 flex items-center gap-2">
+              <select
+                value={selectedParentId}
+                onChange={(e) => setSelectedParentId(e.target.value)}
+                className="border rounded px-3 py-1.5 text-sm flex-1"
+              >
+                <option value="">— No parent (escalates to human) —</option>
+                {parentCandidates.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.employee_name || a.name} ({a.agent_type.replace(/_/g, " ")})
+                  </option>
+                ))}
+              </select>
+              <Button size="sm" onClick={saveParent} disabled={savingParent}>
+                {savingParent ? "Saving..." : "Save"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditingParent(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm mt-1">
+              {agent.reporting_to
+                ? <><span className="font-medium">{agent.reporting_to}</span> <span className="text-muted-foreground">(escalates to parent agent)</span></>
+                : <span className="text-muted-foreground">None — escalates directly to human</span>}
+            </p>
+          )}
         </div>
 
         {/* Authorized Tools */}
