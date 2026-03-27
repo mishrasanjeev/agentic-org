@@ -1,9 +1,9 @@
 # AgenticOrg — End-to-End Manual Test Plan
 
-**Version:** 2.1.0
-**Last Updated:** 2026-03-26
+**Version:** 2.1.1
+**Last Updated:** 2026-03-27
 **Production URL:** https://app.agenticorg.ai
-**Total Test Cases:** 291
+**Total Test Cases:** 470
 
 ## Demo Credentials
 
@@ -2552,12 +2552,994 @@
 
 ---
 
+## Module 39: Agent Create Wizard — UI Interactions
+
+### TC-CRT-UI-001: Domain change cascades to parent agents and templates
+**Steps:**
+1. Open /dashboard/agents/new
+2. In Step 1, select Domain = "Finance"
+3. Click Next to Step 2
+4. Note available agent types and parent agents in dropdown
+5. Go Back to Step 1, change Domain to "HR"
+6. Click Next to Step 2
+
+**Expected Result:** Agent types update from finance types (ap_processor, recon_agent…) to HR types (talent_acquisition, onboarding_agent…). "Reports To" dropdown refreshes to show only active HR agents. Templates in Step 3 will also change to HR domain.
+
+---
+
+### TC-CRT-UI-002: Custom agent type toggle
+**Steps:**
+1. In Step 2, uncheck "Create custom agent type" — verify dropdown shown
+2. Check "Create custom agent type" — verify text input appears
+3. Type "custom_data_analyst" in the text input
+4. Uncheck again — verify dropdown returns
+
+**Expected Result:** Checking the box replaces the dropdown with a free-text input. Unchecking restores the dropdown. The custom type text persists if you toggle back.
+
+---
+
+### TC-CRT-UI-003: Routing filter add/remove
+**Steps:**
+1. In Step 2, click "+ Add Filter"
+2. Enter Key = "region", Value = "APAC"
+3. Click "+ Add Filter" again
+4. Enter Key = "product", Value = "enterprise"
+5. Click "Remove" on the first filter
+
+**Expected Result:** Each click adds a new key-value row. Remove button deletes that specific row. Remaining filters preserved. Review step shows only the surviving filter(s).
+
+---
+
+### TC-CRT-UI-004: Reports To dropdown — populated with active agents
+**Steps:**
+1. In Step 1, select Domain = "Finance"
+2. In Step 2, click the "Reports To" dropdown
+
+**Expected Result:** Dropdown shows "— No parent (escalates to human) —" as default. Below that, lists all active finance agents with format: "{employee_name} ({Agent Type}) — Finance". Paused/shadow agents NOT shown.
+
+---
+
+### TC-CRT-UI-005: Reports To dropdown — select and deselect parent
+**Steps:**
+1. Select a parent agent from the dropdown
+2. Verify "Reports To" shows in Step 5 Review
+3. Go back and change to "— No parent —"
+4. Verify Step 5 Review no longer shows Reports To
+
+**Expected Result:** Selecting a parent populates both parentAgentId and reportingTo. Deselecting clears both. Review step reflects the current selection.
+
+---
+
+### TC-CRT-UI-006: LLM model selector
+**Steps:**
+1. Navigate to Step 4 (Behavior)
+2. Check the LLM Model dropdown options
+3. Select "Claude 3.5 Sonnet"
+4. Read the helper text below
+5. Select "Gemini 2.5 Flash"
+6. Read the helper text
+
+**Expected Result:** Dropdown shows 6 options: Gemini 2.5 Flash (default), Gemini 2.5 Pro, Claude 3.5 Sonnet, Claude Opus 4, GPT-4o, GPT-4o Mini. Selecting Claude/GPT shows: "This model requires an API key. If not configured, the agent will fall back to Gemini." Selecting Gemini shows: "Gemini is always available — no additional API key needed."
+
+---
+
+### TC-CRT-UI-007: LLM model shown in Review step
+**Steps:**
+1. Select LLM Model = "GPT-4o" in Step 4
+2. Click Next to Step 5 Review
+
+**Expected Result:** Review grid shows "LLM Model: gpt-4o" alongside other settings.
+
+---
+
+### TC-CRT-UI-008: Confidence floor slider boundary values
+**Steps:**
+1. In Step 4, drag confidence floor slider to minimum (0.5)
+2. Verify display shows "50%"
+3. Drag to maximum (0.99)
+4. Verify display shows "99%"
+5. Set to 0.88 (default)
+6. Verify display shows "88%"
+
+**Expected Result:** Slider moves between 50% and 99%. Label updates in real-time as slider moves. Value is reflected in Review step.
+
+---
+
+### TC-CRT-UI-009: Max Retries input validation
+**Steps:**
+1. In Step 4, set Max Retries = 1 (minimum)
+2. Try to type 0 — verify clamped to 1
+3. Set to 10 (maximum)
+4. Try to type 11 — verify clamped to 10
+
+**Expected Result:** Input enforces min=1, max=10 range. Values outside range are clamped or rejected.
+
+---
+
+### TC-CRT-UI-010: Step validation — disabled Next button
+**Steps:**
+1. Step 1: Clear Employee Name field, try clicking Next
+2. Step 2: If using custom type, clear it, try clicking Next
+3. Step 3: Clear prompt text, try clicking Next
+
+**Expected Result:** Next button is disabled (greyed out) when required fields are empty. Step 1 requires employee_name. Step 2 requires agent type. Step 3 requires prompt text.
+
+---
+
+### TC-CRT-UI-011: Cancel and Back button labels
+**Steps:**
+1. On Step 1, check left button label
+2. Click Next to Step 2, check left button label
+3. Click Next to Step 3, check left button label
+
+**Expected Result:** Step 1 left button shows "Cancel" (navigates to agent list). Steps 2-5 left button shows "Back" (goes to previous step).
+
+---
+
+### TC-CRT-UI-012: Avatar URL preview in Review
+**Steps:**
+1. In Step 1, enter Avatar URL = a valid image URL
+2. Go to Step 5 Review
+
+**Expected Result:** Review shows the avatar image (16x16 rounded circle). If no URL entered, shows initial letter circle instead.
+
+---
+
+### TC-CRT-UI-013: Creation failure error message
+**Steps:**
+1. Fill all wizard steps with valid data
+2. Disconnect network (or simulate API failure)
+3. Click "Create as Shadow"
+
+**Expected Result:** Error message displayed: "Failed to create agent. Please try again." Button re-enables after failure. User stays on Review step.
+
+---
+
+### TC-CRT-UI-014: Submitting state — button disabled
+**Steps:**
+1. Fill all wizard steps
+2. Click "Create as Shadow"
+3. Observe button during API call
+
+**Expected Result:** Button text changes to "Creating..." and is disabled during submission. Prevents double-click. Re-enables on success (redirects) or failure (shows error).
+
+---
+
+## Module 40: Agent Detail — UI Interactions
+
+### TC-DET-UI-001: Persona header — employee name display
+**Steps:**
+1. Open an agent with employee_name set (e.g., "Priya Sharma")
+2. Check the header section
+
+**Expected Result:** Header shows "Priya Sharma" (employee_name) as primary name, NOT the system agent name. Designation shown below. Domain badge visible.
+
+---
+
+### TC-DET-UI-002: Persona header — avatar rendering
+**Steps:**
+1. Open agent with avatar_url set
+2. Open agent without avatar_url
+
+**Expected Result:** Agent with URL shows rounded image. Agent without URL shows colored initial circle (first letter of name, uppercase).
+
+---
+
+### TC-DET-UI-003: Persona header — Reports To display
+**Steps:**
+1. Open agent with reporting_to = "VP Finance"
+2. Open agent without reporting_to
+
+**Expected Result:** First agent shows "Reports to: VP Finance" in muted text below specialization. Second agent does not show the Reports To line at all.
+
+---
+
+### TC-DET-UI-004: Overview tab — LLM Model and Reports To fields
+**Steps:**
+1. Open agent detail → Overview tab
+2. Check for LLM Model and Reports To rows
+
+**Expected Result:** LLM Model shows the configured model (e.g., "gemini-2.5-flash") or "Default (Gemini)". Reports To shows parent name or "None (escalates to human)".
+
+---
+
+### TC-DET-UI-005: Promote button — disabled when active
+**Steps:**
+1. Open an active agent
+2. Check Promote button state
+
+**Expected Result:** Promote button is disabled (greyed out) with no click handler. Cannot promote an already-active agent.
+
+---
+
+### TC-DET-UI-006: Promote button — loading state
+**Steps:**
+1. Open a shadow agent
+2. Click Promote
+3. Observe button during API call
+
+**Expected Result:** Button text changes to "Promoting..." and is disabled. After success, agent status updates to "active" and page refreshes.
+
+---
+
+### TC-DET-UI-007: Rollback button — loading and error state
+**Steps:**
+1. Click Rollback on an agent
+2. If rollback fails, check error display
+
+**Expected Result:** Button shows "Rolling back..." during API call. On failure, red error text appears below the action buttons. Error auto-clears on next action attempt.
+
+---
+
+### TC-DET-UI-008: Agent not found
+**Steps:**
+1. Navigate to /dashboard/agents/nonexistent-uuid-here
+
+**Expected Result:** Page shows "Agent not found." message. No crash or blank page.
+
+---
+
+### TC-DET-UI-009: Kill switch on detail page
+**Steps:**
+1. Open an active agent
+2. Click the red Kill Switch button
+3. Confirm the action
+
+**Expected Result:** Agent paused. Status badge changes from "active" to "paused". Page refreshes to reflect new status. Kill switch button disappears (already paused).
+
+---
+
+### TC-DET-UI-010: Tab switching preserves state
+**Steps:**
+1. Open agent detail, view Overview tab
+2. Switch to Config tab
+3. Switch to Prompt tab
+4. Switch back to Overview
+
+**Expected Result:** Each tab renders its content. Switching tabs does not trigger additional API calls (data loaded once). Active tab has underline indicator.
+
+---
+
+### TC-DET-UI-011: Authorized tools display
+**Steps:**
+1. Open agent with authorized_tools = ["slack_send", "pdf_extract"]
+2. Check Overview and Config tabs
+
+**Expected Result:** Both tabs show tool badges: "slack_send", "pdf_extract". If no tools: shows "No tools configured".
+
+---
+
+### TC-DET-UI-012: Shadow tab — progress bar colors
+**Steps:**
+1. Open shadow agent with sample_count < min_samples
+2. Check progress bar color
+3. Open shadow agent with sample_count >= min_samples
+4. Check progress bar color
+
+**Expected Result:** Below requirement: yellow bar. Met requirement: green bar. Bar width proportional to count/min ratio.
+
+---
+
+### TC-DET-UI-013: Shadow tab — promotion readiness checklist
+**Steps:**
+1. Open shadow agent not ready for promotion
+
+**Expected Result:** Shows two items with checkmark/X indicators: "Sample count (X/100)" and "Accuracy (X% / 95.0%)". Badge shows "Not yet ready". When both met: badge shows "Ready to promote" in green.
+
+---
+
+### TC-DET-UI-014: Cost tab — utilization bar colors
+**Steps:**
+1. Open agent with spend < 80% of cap → green bar
+2. Open agent with spend 80-99% of cap → yellow bar with "Approaching budget limit"
+3. Open agent with spend > cap → red bar with "Over budget! Agent may be throttled."
+
+**Expected Result:** Bar color matches budget status. Percentage label shows actual value. Text warning matches the color state.
+
+---
+
+### TC-DET-UI-015: Built-in badge rendering
+**Steps:**
+1. Open a built-in agent (is_builtin = true)
+2. Check persona header
+
+**Expected Result:** "Built-in" outline badge shown below specialization line.
+
+---
+
+## Module 41: Login Page — UI Interactions
+
+### TC-LOGIN-UI-001: Demo credentials toggle
+**Steps:**
+1. Navigate to /login
+2. Click "Try the demo instead →"
+3. Verify demo credentials section expands
+4. Click "Hide demo logins"
+
+**Expected Result:** Toggle button text changes between "Try the demo instead →" and "Hide demo logins". Clicking reveals/hides grid of 6 demo role buttons.
+
+---
+
+### TC-LOGIN-UI-002: Demo credential button — auto-fill
+**Steps:**
+1. Expand demo credentials
+2. Click "CFO" button
+
+**Expected Result:** Email field fills with "cfo@agenticorg.local". Password field fills with "cfo123!". User can then click "Sign in with email" to login.
+
+---
+
+### TC-LOGIN-UI-003: Loading state during login
+**Steps:**
+1. Enter valid credentials
+2. Click "Sign in with email"
+3. Observe button during API call
+
+**Expected Result:** Button text changes to "Signing in..." and is disabled. Prevents double-click.
+
+---
+
+### TC-LOGIN-UI-004: Error message display
+**Steps:**
+1. Enter wrong password
+2. Click Sign in
+3. Observe error area
+
+**Expected Result:** Red error message displayed below the form. Message persists until next login attempt. No redirect.
+
+---
+
+### TC-LOGIN-UI-005: Navigation links
+**Steps:**
+1. Click "Create a new organization →" link
+2. Verify navigation to /signup
+3. Go back, click back-to-home link
+4. Verify navigation to /
+
+**Expected Result:** Both links navigate to correct pages.
+
+---
+
+### TC-LOGIN-UI-006: Google OAuth button conditional rendering
+**Steps:**
+1. Check if Google sign-in button is visible on login page
+
+**Expected Result:** Button visible only if Google Client ID is configured (fetched from /api/v1/auth/config). If not configured, no Google button shown — no error.
+
+---
+
+## Module 42: Signup Page — UI Interactions
+
+### TC-SIGNUP-UI-001: All fields required
+**Steps:**
+1. Leave all fields empty
+2. Click "Create Account"
+
+**Expected Result:** Browser HTML5 validation prevents submission. Required indicators on: Organization Name, Your Name, Email, Password, Confirm Password.
+
+---
+
+### TC-SIGNUP-UI-002: Loading state during signup
+**Steps:**
+1. Fill all fields correctly
+2. Click Create Account
+3. Observe button
+
+**Expected Result:** Button text changes to "Creating account..." and is disabled during API call.
+
+---
+
+### TC-SIGNUP-UI-003: Error message display
+**Steps:**
+1. Try to sign up with an email that already exists
+2. Observe error
+
+**Expected Result:** Error message displayed in red text above or below the form. Form remains filled for correction.
+
+---
+
+### TC-SIGNUP-UI-004: Sign in link
+**Steps:**
+1. On signup page, click "Sign in" link
+
+**Expected Result:** Navigates to /login page.
+
+---
+
+## Module 43: Dashboard — UI Interactions
+
+### TC-DASH-UI-001: Metric card color coding
+**Steps:**
+1. Login as CEO, view dashboard
+2. Check the 4 metric cards
+
+**Expected Result:** Total Agents: default text. Active Agents: green text (text-green-600). Pending Approvals: red text (text-red-600). Shadow Agents: yellow text (text-yellow-600).
+
+---
+
+### TC-DASH-UI-002: Pie chart rendering and interaction
+**Steps:**
+1. Check the Agent Status pie chart
+2. Hover over a segment
+
+**Expected Result:** Pie chart shows distribution of active/shadow/paused agents with colored segments. Hovering shows tooltip with count and label.
+
+---
+
+### TC-DASH-UI-003: Domain distribution bar chart
+**Steps:**
+1. Check the Domain Distribution bar chart
+
+**Expected Result:** Bar chart shows 4-5 bars (Finance, HR, Marketing, Ops, Backoffice) with agent counts. Labels angled for readability. Colors match domain scheme.
+
+---
+
+### TC-DASH-UI-004: Activity feed — badge colors
+**Steps:**
+1. Scroll to Recent Activity section
+2. Check outcome badges
+
+**Expected Result:** "success" = green badge, "failure"/"error" = red badge, other = grey/secondary badge.
+
+---
+
+### TC-DASH-UI-005: Pending approvals click-through
+**Steps:**
+1. Click on a pending approval item in dashboard summary
+
+**Expected Result:** Navigates to /dashboard/approvals page.
+
+---
+
+### TC-DASH-UI-006: Loading state
+**Steps:**
+1. Login and navigate to /dashboard
+2. Observe initial render
+
+**Expected Result:** Shows "Loading dashboard data..." message while APIs fetch. Replaced by charts and data once loaded.
+
+---
+
+### TC-DASH-UI-007: Empty states
+**Steps:**
+1. Login as a new org with no agents or activity
+
+**Expected Result:** Charts show empty state messages (e.g., "No agents found"). No JavaScript errors. Dashboard still renders structural layout.
+
+---
+
+## Module 44: Approvals Page — UI Interactions
+
+### TC-APPR-UI-001: Tab switching — Pending vs Decided
+**Steps:**
+1. Navigate to /dashboard/approvals
+2. Click "Decided" tab
+3. Click "Pending" tab
+
+**Expected Result:** Tabs switch content. Active tab has visual indicator. Pending tab shows count badge (e.g., "Pending (3)"). Decided tab shows decided count.
+
+---
+
+### TC-APPR-UI-002: Priority filter — live filtering
+**Steps:**
+1. Select "Critical" from priority dropdown
+2. Verify list updates
+3. Select "All" to reset
+
+**Expected Result:** List filters to show only items matching selected priority. Changing filter triggers re-fetch.
+
+---
+
+### TC-APPR-UI-003: Feedback message after decision
+**Steps:**
+1. Approve an item with notes
+2. Check for success feedback
+
+**Expected Result:** Green success message appears: "Decision recorded successfully" (or similar). Message auto-dismisses or persists until next action.
+
+---
+
+### TC-APPR-UI-004: Empty approval queue
+**Steps:**
+1. Approve/reject all pending items
+2. Check Pending tab
+
+**Expected Result:** Shows "No pending approvals" message. No broken layout.
+
+---
+
+## Module 45: Connectors Page — UI Interactions
+
+### TC-CONN-UI-001: Stats cards accuracy
+**Steps:**
+1. Navigate to /dashboard/connectors
+2. Compare stats cards with connector list
+
+**Expected Result:** Total count matches number of connector cards. Active count matches green-status connectors. Unhealthy count matches red-status connectors.
+
+---
+
+### TC-CONN-UI-002: Health check button and result
+**Steps:**
+1. Click "Health Check" on a connector
+2. Wait for result
+
+**Expected Result:** Button triggers API call. Result shown in alert/modal: "Healthy" (green) or "Unhealthy" (red) with timestamp.
+
+---
+
+### TC-CONN-UI-003: Register Connector navigation
+**Steps:**
+1. Click "Register Connector" button
+
+**Expected Result:** Navigates to /dashboard/connectors/new page.
+
+---
+
+### TC-CONN-UI-004: Loading and empty states
+**Steps:**
+1. Navigate to connectors page, observe initial load
+2. Filter to a category with no connectors
+
+**Expected Result:** Loading: shows "Loading connectors..." text. Empty filter: shows "No connectors found" message.
+
+---
+
+## Module 46: Workflows Page — UI Interactions
+
+### TC-WF-UI-001: Workflow card rendering
+**Steps:**
+1. Navigate to /dashboard/workflows
+2. Check each workflow card
+
+**Expected Result:** Each card shows: name, Active/Inactive badge, version (e.g., "v1.0.0"), trigger type, created date. Hover effect (shadow increase).
+
+---
+
+### TC-WF-UI-002: Run Now button
+**Steps:**
+1. Click "Run Now" on a workflow
+2. Observe result
+
+**Expected Result:** Workflow run triggered. Success message or redirect to run detail page. Run appears in workflow run history.
+
+---
+
+### TC-WF-UI-003: View button navigation
+**Steps:**
+1. Click "View" on a workflow card
+
+**Expected Result:** Navigates to /dashboard/workflows/{id} detail page.
+
+---
+
+### TC-WF-UI-004: Create Workflow navigation
+**Steps:**
+1. Click "Create Workflow" button
+
+**Expected Result:** Navigates to /dashboard/workflows/new page.
+
+---
+
+### TC-WF-UI-005: Loading and empty states
+**Steps:**
+1. Observe initial page load
+2. Check page with no workflows
+
+**Expected Result:** Loading: "Loading workflows...". Empty: "No workflows configured yet." with Create Workflow button.
+
+---
+
+## Module 47: Settings Page — UI Interactions
+
+### TC-SET-UI-001: Fleet limits input changes
+**Steps:**
+1. Navigate to /dashboard/settings
+2. Change Max Active Agents to 50
+3. Change Max Shadow Agents to 15
+4. Change Max Replicas Per Type to 25
+
+**Expected Result:** All number inputs accept new values. No validation errors for reasonable values.
+
+---
+
+### TC-SET-UI-002: Per-domain max agents
+**Steps:**
+1. Change each domain's max agents: finance=25, hr=20, marketing=15, ops=20, backoffice=10
+2. Save settings
+3. Refresh page
+
+**Expected Result:** All 5 domain-specific inputs accept values. Values persist after save and page refresh.
+
+---
+
+### TC-SET-UI-003: PII masking toggle
+**Steps:**
+1. Set PII Masking to "Disabled"
+2. Save
+3. Refresh and verify value
+
+**Expected Result:** Dropdown switches between "Enabled" and "Disabled". Value persists.
+
+---
+
+### TC-SET-UI-004: Data region dropdown
+**Steps:**
+1. Select "US" from data region
+2. Save
+3. Refresh
+
+**Expected Result:** Dropdown shows India/EU/US options with GCP regions. Selected value persists.
+
+---
+
+### TC-SET-UI-005: Save success feedback
+**Steps:**
+1. Make any change
+2. Click "Save Settings"
+
+**Expected Result:** Button shows "Saving..." during API call. Green success message: "Settings saved successfully" appears after save. Message auto-hides after ~3 seconds.
+
+---
+
+## Module 48: Playground Page — UI Interactions
+
+### TC-PLAY-UI-001: Use case card selection
+**Steps:**
+1. Navigate to /playground
+2. Click "Process Invoice" use case card
+3. Click "Screen Resume" use case card
+
+**Expected Result:** Selected card has highlighted border/background. Previous selection deselected. Run button enabled.
+
+---
+
+### TC-PLAY-UI-002: Run button disabled during execution
+**Steps:**
+1. Select a use case
+2. Click Run
+3. Try clicking Run again during execution
+
+**Expected Result:** Button disabled during execution. Shows loading indicator. Re-enables after completion.
+
+---
+
+### TC-PLAY-UI-003: Execution trace — terminal display
+**Steps:**
+1. Run any use case
+2. Watch the terminal output area
+
+**Expected Result:** Color-coded lines appear sequentially: blue (agent startup), amber (LLM calls), green (results), red (HITL if triggered). Terminal auto-scrolls to bottom. Monospace font.
+
+---
+
+### TC-PLAY-UI-004: Summary card after execution
+**Steps:**
+1. Run a use case to completion
+2. Check summary section
+
+**Expected Result:** Shows: Status (success/failure badge), Confidence (percentage), Latency (milliseconds), HITL Triggered (Yes/No). All values populated from API response.
+
+---
+
+### TC-PLAY-UI-005: Error state display
+**Steps:**
+1. Run a use case that fails (e.g., if agent is unavailable)
+2. Check error display
+
+**Expected Result:** Error message displayed in red. Terminal shows error trace. Summary card shows failure status.
+
+---
+
+### TC-PLAY-UI-006: User agents section
+**Steps:**
+1. Login as CEO (or user with custom agents)
+2. Navigate to /playground
+3. Scroll to "Your Agents" section
+
+**Expected Result:** Section shows custom agents created by the user. Each listed with name, type, domain. Can be selected and run like pre-built use cases.
+
+---
+
+## Module 49: Pricing Page — UI Interactions
+
+### TC-PRICE-UI-001: Three tier cards rendering
+**Steps:**
+1. Navigate to /pricing
+2. Check the 3 pricing cards
+
+**Expected Result:** Free ($0/month), Pro ($499/month, highlighted with "Popular" badge), Enterprise (Custom). Pro card has visual emphasis (scale, ring border).
+
+---
+
+### TC-PRICE-UI-002: Feature comparison table
+**Steps:**
+1. Scroll to comparison table
+2. Check all rows
+
+**Expected Result:** Table has 15+ feature rows. Each cell shows: checkmark (included), X (not included), or text value (e.g., "7 days", "Unlimited"). All 3 columns (Free, Pro, Enterprise) populated.
+
+---
+
+### TC-PRICE-UI-003: FAQ accordion
+**Steps:**
+1. Scroll to FAQ section
+2. Click first question to expand
+3. Click again to collapse
+4. Click a different question
+
+**Expected Result:** Questions expand/collapse on click. Only one question open at a time (or multiple, depending on implementation). Answers fully visible when expanded.
+
+---
+
+### TC-PRICE-UI-004: CTA buttons open demo modal
+**Steps:**
+1. Click "Start Pro" button on Pro tier card
+2. Close modal
+3. Click "Contact Sales" on Enterprise tier card
+
+**Expected Result:** Both buttons open the Book a Demo modal. Modal has form fields (Name, Email, Company, Role). Submit shows success message.
+
+---
+
+### TC-PRICE-UI-005: Navbar navigation
+**Steps:**
+1. On pricing page, click logo/home link
+2. Navigate back, click "Evaluations" link
+3. Navigate back, click "Sign In" button
+
+**Expected Result:** Logo → home (/). Evaluations → /evals. Sign In → /login. All navigations work.
+
+---
+
+### TC-PRICE-UI-006: Mobile menu toggle
+**Steps:**
+1. Open pricing page on mobile viewport (375px width)
+2. Click hamburger menu icon
+3. Click a nav link
+
+**Expected Result:** Menu icon opens mobile navigation overlay. Links work. Menu closes after navigation.
+
+---
+
+## Module 50: Landing Page — UI Interactions
+
+### TC-LAND-UI-001: Hero CTA buttons
+**Steps:**
+1. Click "Get Started Free" button in hero section
+2. Navigate back
+3. Click "Play in Playground" button
+
+**Expected Result:** "Get Started Free" → /signup. "Play in Playground" → /playground.
+
+---
+
+### TC-LAND-UI-002: Book a Demo modal — from button
+**Steps:**
+1. Click "Book a Demo" button in navbar or hero
+2. Fill form: Name, Email, Company, Role dropdown, Phone
+3. Submit
+
+**Expected Result:** Modal opens. All fields editable. Role dropdown includes CEO/CFO/CHRO/CMO/COO/CTO/Other. Submit shows success: "We'll be in touch within 2 minutes."
+
+---
+
+### TC-LAND-UI-003: Mobile menu toggle and navigation
+**Steps:**
+1. Open landing on mobile viewport
+2. Tap hamburger icon
+3. Tap "Pricing" link
+
+**Expected Result:** Mobile menu slides open. Tapping link navigates to /pricing and closes menu.
+
+---
+
+### TC-LAND-UI-004: Navbar sign-in button
+**Steps:**
+1. Click "Sign In" in navbar
+
+**Expected Result:** Navigates to /login page.
+
+---
+
+### TC-LAND-UI-005: Logo bar renders
+**Steps:**
+1. Scroll to logo bar section
+
+**Expected Result:** Shows partner logos: Oracle, SAP, Salesforce, Slack, GSTN, Darwinbox, Stripe, HubSpot. All logos render (no broken images).
+
+---
+
+### TC-LAND-UI-006: Role cards — content accuracy
+**Steps:**
+1. Scroll to role cards section
+2. Check each card: CFO, CHRO, CMO, COO
+
+**Expected Result:** Each card shows: role title, list of agents for that role, key metric. CFO: "₹69,800/month saved". CHRO: "Zero payroll errors". CMO: "3.2x ROI". COO: "42 tickets/day auto-triaged".
+
+---
+
+### TC-LAND-UI-007: India Connectors section
+**Steps:**
+1. Scroll to India connectors section
+
+**Expected Result:** Shows: GSTN, EPFO, Darwinbox, Pine Labs Plural, Tally, DigiLocker. Each with icon/name.
+
+---
+
+### TC-LAND-UI-008: Scroll animations
+**Steps:**
+1. Scroll down slowly through the page
+2. Watch sections as they enter viewport
+
+**Expected Result:** Sections fade in smoothly as they enter the viewport (useInView animations). No janky jumps.
+
+---
+
+## Module 51: Prompt Templates Page — UI Interactions
+
+### TC-TPL-UI-001: Create template form toggle
+**Steps:**
+1. Navigate to /dashboard/prompt-templates
+2. Click "Create Template" button
+3. Verify form appears
+4. Click Cancel or close
+
+**Expected Result:** Create form slides open with fields: Name, Agent Type, Domain, Description, Template Text. Closing/cancelling hides the form.
+
+---
+
+### TC-TPL-UI-002: Create form validation
+**Steps:**
+1. Open create form
+2. Leave Name, Agent Type, and Template Text empty
+3. Check "Create Template" submit button
+
+**Expected Result:** Submit button is disabled when required fields (Name, Agent Type, Template Text) are empty. Enabled when all filled.
+
+---
+
+### TC-TPL-UI-003: Template card — click to expand
+**Steps:**
+1. Click on a template card in the list
+2. Verify detail section appears below/beside
+3. Click another template
+
+**Expected Result:** First click expands template detail (shows full text, variables, edit/clone buttons). Clicking another template switches detail to the new one.
+
+---
+
+### TC-TPL-UI-004: Clone button for built-in template
+**Steps:**
+1. Click a built-in template
+2. Verify "Clone to Edit" button is shown (not Edit/Delete)
+3. Click "Clone to Edit"
+
+**Expected Result:** Clone creates new template named "{original}_custom". New template appears in list as non-built-in. New template is editable.
+
+---
+
+### TC-TPL-UI-005: Edit and Save for custom template
+**Steps:**
+1. Click a custom (non-built-in) template
+2. Click Edit button
+3. Modify template text
+4. Click "Save Changes"
+
+**Expected Result:** Edit mode: textarea becomes editable. Save triggers API update. Success: template text updated, view returns to read mode.
+
+---
+
+### TC-TPL-UI-006: Delete custom template
+**Steps:**
+1. Click a custom template
+2. Click Delete button
+3. Confirm deletion
+
+**Expected Result:** Template removed from list. API call to DELETE endpoint. Template no longer available in agent creation dropdown.
+
+---
+
+### TC-TPL-UI-007: Variables display
+**Steps:**
+1. Click a template with {{variables}}
+2. Check variables section
+
+**Expected Result:** Variables shown as badges: e.g., "{{company_name}}", "{{domain}}", "{{role}}". Each extracted from template text.
+
+---
+
+### TC-TPL-UI-008: Domain filter
+**Steps:**
+1. Select "Finance" from domain filter dropdown
+2. Verify only finance templates shown
+3. Check template count label updates
+
+**Expected Result:** List filters to finance domain only. Count label (e.g., "12 templates") updates to match filtered count.
+
+---
+
+## Module 52: Sales Pipeline — UI Interactions
+
+### TC-SALES-UI-001: Funnel bar — click to filter
+**Steps:**
+1. Navigate to /dashboard/sales
+2. Click on "Qualified" segment in the funnel bar
+3. Verify table filters
+4. Click "Qualified" again to deselect
+
+**Expected Result:** Clicking a segment filters the lead table to that stage only. Clicking again (or clicking "All" legend) resets to show all leads.
+
+---
+
+### TC-SALES-UI-002: Stage legend buttons
+**Steps:**
+1. Click "Demo Scheduled" in the stage legend below the funnel
+
+**Expected Result:** Lead table filters to show only demo_scheduled leads. Button appears "selected" (highlighted).
+
+---
+
+### TC-SALES-UI-003: Lead row expand/collapse
+**Steps:**
+1. Click a lead row in the table
+2. Verify detail panel expands
+3. Click the same row again
+
+**Expected Result:** First click: detail panel shows below (or beside) with Email, Company, Role, Score, Stage, Follow-ups, Created, Deal Value. Second click: collapses detail.
+
+---
+
+### TC-SALES-UI-004: Run Agent button — loading state
+**Steps:**
+1. Click "Run Agent" on a lead
+2. Observe button during execution
+
+**Expected Result:** Button text changes to "Running..." and is disabled. After completion: button re-enables, lead data may update (score, stage).
+
+---
+
+### TC-SALES-UI-005: Refresh button
+**Steps:**
+1. Click the Refresh button on the pipeline page
+2. Observe data reload
+
+**Expected Result:** Metrics cards and lead table refresh with latest data from API. Brief loading state may appear.
+
+---
+
+### TC-SALES-UI-006: Metrics card accuracy
+**Steps:**
+1. Compare the 6 metrics cards with actual pipeline data
+
+**Expected Result:** Total Leads matches lead count. New This Week matches leads created in last 7 days. Avg Score = average of all lead scores. Emails Sent = EmailSequence records this week. Stale = leads contacted but inactive for 7+ days. Won = leads with stage "won".
+
+---
+
+### TC-SALES-UI-007: Empty pipeline state
+**Steps:**
+1. Login as a new org with no leads
+2. Navigate to /dashboard/sales
+
+**Expected Result:** Shows "No leads yet" or empty table message. Funnel bar is empty. Metrics show zeros. No JavaScript errors.
+
+---
+
+### TC-SALES-UI-008: Deal value and follow-up date display
+**Steps:**
+1. Find a lead with deal_value_usd and next_followup_at set
+
+**Expected Result:** Deal value shows as "$25,000" (formatted). Follow-up date shows as formatted date. If no value: shows "—" dash.
+
+---
+
 ---
 
 ## Test Execution Summary
 
 | # | Module | Test Cases | Count | Priority |
 |---|--------|-----------|-------|----------|
+| | **FUNCTIONAL FLOWS** | | | |
 | 1 | Landing Page & Public Pages | TC-LP-001 to TC-LP-018 | 18 | High |
 | 2 | Authentication | TC-AUTH-001 to TC-AUTH-015 | 15 | Critical |
 | 3 | Dashboard | TC-DASH-001 to TC-DASH-005 | 5 | High |
@@ -2579,28 +3561,49 @@
 | 19 | Health & API | TC-API-001 to TC-API-006 | 6 | Critical |
 | 20 | Agent Teams | TC-TEAM-001 | 1 | Low |
 | 21 | Config | TC-CFG-001 to TC-CFG-002 | 2 | Low |
-| 22 | Cross-Cutting | TC-CC-001 to TC-CC-012 | 12 | Critical |
+| 22 | Cross-Cutting (RBAC, Security) | TC-CC-001 to TC-CC-012 | 12 | Critical |
 | 23 | Performance | TC-PERF-001 to TC-PERF-004 | 4 | High |
 | 24 | Backward Compat | TC-BC-001 to TC-BC-006 | 6 | Critical |
 | 25 | Onboarding | TC-ONB-001 to TC-ONB-002 | 2 | Medium |
 | 26 | WebSocket | TC-WS-001 | 1 | Low |
 | 27 | Negative/Edge | TC-NEG-001 to TC-NEG-010 | 10 | High |
-| 28 | **Org Chart Hierarchy** | TC-ORG-CHART-001 to TC-ORG-CHART-008 | **8** | **Critical** |
-| 29 | **Per-Agent LLM Selection** | TC-LLM-001 to TC-LLM-008 | **8** | **Critical** |
-| 30 | **Per-Agent Budget** | TC-BUDGET-001 to TC-BUDGET-008 | **8** | **Critical** |
-| 31 | **Smart Routing (Multi-Agent)** | TC-ROUTE-001 to TC-ROUTE-007 | **7** | **Critical** |
-| 32 | **Persona & Virtual Employee** | TC-PERSONA-001 to TC-PERSONA-005 | **5** | **High** |
-| 33 | **Prompt Lock & Edit History** | TC-LOCK-001 to TC-LOCK-007 | **7** | **Critical** |
-| 34 | **Sales Pipeline — Advanced** | TC-SALES-ADV-001 to TC-SALES-ADV-013 | **13** | **High** |
-| 35 | **Prompt Template — Advanced** | TC-TPL-ADV-001 to TC-TPL-ADV-007 | **7** | **High** |
-| 36 | **Gmail Integration** | TC-GMAIL-001 to TC-GMAIL-003 | **3** | **High** |
-| 37 | **Agent Clone — Advanced** | TC-CLONE-001 to TC-CLONE-004 | **4** | **High** |
-| 38 | **Confidence & HITL — Advanced** | TC-CONF-001 to TC-CONF-008 | **8** | **Critical** |
+| | **FEATURE-SPECIFIC FLOWS** | | | |
+| 28 | Org Chart Hierarchy | TC-ORG-CHART-001 to TC-ORG-CHART-008 | 8 | Critical |
+| 29 | Per-Agent LLM Selection | TC-LLM-001 to TC-LLM-008 | 8 | Critical |
+| 30 | Per-Agent Budget | TC-BUDGET-001 to TC-BUDGET-008 | 8 | Critical |
+| 31 | Smart Routing (Multi-Agent) | TC-ROUTE-001 to TC-ROUTE-007 | 7 | Critical |
+| 32 | Persona & Virtual Employee | TC-PERSONA-001 to TC-PERSONA-005 | 5 | High |
+| 33 | Prompt Lock & Edit History | TC-LOCK-001 to TC-LOCK-007 | 7 | Critical |
+| 34 | Sales Pipeline — Advanced | TC-SALES-ADV-001 to TC-SALES-ADV-013 | 13 | High |
+| 35 | Prompt Template — Advanced | TC-TPL-ADV-001 to TC-TPL-ADV-007 | 7 | High |
+| 36 | Gmail Integration | TC-GMAIL-001 to TC-GMAIL-003 | 3 | High |
+| 37 | Agent Clone — Advanced | TC-CLONE-001 to TC-CLONE-004 | 4 | High |
+| 38 | Confidence & HITL — Advanced | TC-CONF-001 to TC-CONF-008 | 8 | Critical |
+| | **UI INTERACTION TESTING** | | | |
+| 39 | Agent Create Wizard — UI | TC-CRT-UI-001 to TC-CRT-UI-014 | 14 | High |
+| 40 | Agent Detail — UI | TC-DET-UI-001 to TC-DET-UI-015 | 15 | High |
+| 41 | Login Page — UI | TC-LOGIN-UI-001 to TC-LOGIN-UI-006 | 6 | High |
+| 42 | Signup Page — UI | TC-SIGNUP-UI-001 to TC-SIGNUP-UI-004 | 4 | Medium |
+| 43 | Dashboard — UI | TC-DASH-UI-001 to TC-DASH-UI-007 | 7 | Medium |
+| 44 | Approvals Page — UI | TC-APPR-UI-001 to TC-APPR-UI-004 | 4 | Medium |
+| 45 | Connectors Page — UI | TC-CONN-UI-001 to TC-CONN-UI-004 | 4 | Medium |
+| 46 | Workflows Page — UI | TC-WF-UI-001 to TC-WF-UI-005 | 5 | Medium |
+| 47 | Settings Page — UI | TC-SET-UI-001 to TC-SET-UI-005 | 5 | Medium |
+| 48 | Playground Page — UI | TC-PLAY-UI-001 to TC-PLAY-UI-006 | 6 | High |
+| 49 | Pricing Page — UI | TC-PRICE-UI-001 to TC-PRICE-UI-006 | 6 | Medium |
+| 50 | Landing Page — UI | TC-LAND-UI-001 to TC-LAND-UI-008 | 8 | Medium |
+| 51 | Prompt Templates Page — UI | TC-TPL-UI-001 to TC-TPL-UI-008 | 8 | High |
+| 52 | Sales Pipeline — UI | TC-SALES-UI-001 to TC-SALES-UI-008 | 8 | High |
 
-**Total: 291 test cases**
+**Total: 470 test cases**
+
+### Breakdown by Category:
+- **Functional Flows (Modules 1-27):** 195 cases
+- **Feature-Specific Flows (Modules 28-38):** 96 cases
+- **UI Interaction Testing (Modules 39-52):** 179 cases
 
 ### Recommended Execution Order:
-1. **Critical first (103 cases):** Authentication, Agent Execution, Cross-Cutting (security), API Health, Backward Compatibility, Org Chart Hierarchy, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL
-2. **High priority (128 cases):** Landing Page, Agent Fleet, Agent Creation, Prompt Templates, Sales Pipeline (basic + advanced), Email, Demo Request, Performance, Negative/Edge, Persona Fields, Gmail Integration, Agent Clone, Template Advanced
-3. **Medium (33 cases):** Dashboard, Workflows, Approvals, Connectors, Audit, Compliance, Settings, Onboarding
+1. **Critical first (120 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compatibility, Org Chart, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL
+2. **High priority (222 cases):** Landing Page, Agent Fleet, Agent Creation + UI, Agent Detail UI, Prompt Templates + UI, Sales Pipeline (all), Email, Demo Request, Performance, Negative/Edge, Persona, Gmail, Agent Clone, Playground UI, Login UI
+3. **Medium (121 cases):** Dashboard + UI, Workflows + UI, Approvals + UI, Connectors + UI, Audit, Compliance, Settings + UI, Onboarding, Signup UI, Pricing UI, Landing UI
 4. **Low (7 cases):** Schemas, Agent Teams, Config, WebSocket
