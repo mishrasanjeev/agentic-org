@@ -16,6 +16,7 @@ export interface Agent {
   system_prompt_text?: string;
   parent_agent_id?: string | null;
   reporting_to?: string | null;
+  org_level?: number;
 }
 export interface PromptTemplate {
   id: string; name: string; agent_type: string; domain: string;

@@ -34,6 +34,7 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const SLAMonitor = lazy(() => import("./pages/SLAMonitor"));
 const PromptTemplates = lazy(() => import("./pages/PromptTemplates"));
 const SalesPipeline = lazy(() => import("./pages/SalesPipeline"));
+const OrgChart = lazy(() => import("./pages/OrgChart"));
 
 /* ── Blog / Content pages ── */
 const Blog = lazy(() => import("./pages/blog/Blog"));
@@ -114,6 +115,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <Agents />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/org-chart"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+            <Layout>
+              <OrgChart />
             </Layout>
           </ProtectedRoute>
         }

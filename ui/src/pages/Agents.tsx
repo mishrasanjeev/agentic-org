@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
 import KillSwitch from "@/components/KillSwitch";
-import api from "@/lib/api";
+import api, { agentsApi } from "@/lib/api";
 import type { Agent } from "@/types";
 
 const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice"];
@@ -17,6 +17,10 @@ export default function Agents() {
   const [domainFilter, setDomainFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
 
   useEffect(() => {
     fetchAgents();
@@ -49,12 +53,73 @@ export default function Agents() {
     paused: agents.filter((a) => a.status === "paused").length,
   };
 
+  async function handleCsvImport() {
+    if (!importFile) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const { data } = await agentsApi.importCsv(importFile);
+      setImportResult(data);
+      fetchAgents();
+    } catch (err: any) {
+      setImportResult({ error: err.response?.data?.detail || "Import failed" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = "name,agent_type,domain,designation,specialization,reporting_to_name,org_level,llm_model,confidence_floor\nPriya Sharma,ap_processor,finance,Senior AP Analyst,Domestic invoices Mumbai,VP Finance,2,gemini-2.5-flash,0.88\n";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "agent_import_template.csv"; a.click();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Agent Fleet</h2>
-        <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowImport(!showImport)}>Import CSV</Button>
+          <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
+        </div>
       </div>
+
+      {/* CSV Import Panel */}
+      {showImport && (
+        <Card>
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Import Agents from CSV</p>
+                <p className="text-xs text-muted-foreground">Upload a CSV with your org hierarchy. Agents are created in shadow mode. Parent links set via "reporting_to_name" column.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>Download Template</Button>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input type="file" accept=".csv" onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportResult(null); }} className="text-sm" />
+              <Button size="sm" onClick={handleCsvImport} disabled={!importFile || importing}>
+                {importing ? "Importing..." : "Upload & Import"}
+              </Button>
+            </div>
+            {importResult && (
+              <div className={`text-sm p-3 rounded ${importResult.error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                {importResult.error ? (
+                  <p>{importResult.error}</p>
+                ) : (
+                  <>
+                    <p><strong>{importResult.imported}</strong> agents imported | <strong>{importResult.parent_links_set}</strong> parent links set | <strong>{importResult.skipped}</strong> skipped</p>
+                    {importResult.skip_details?.length > 0 && (
+                      <details className="mt-1"><summary className="cursor-pointer text-xs">Skipped rows</summary>
+                        <ul className="text-xs mt-1">{importResult.skip_details.map((s: any, i: number) => <li key={i}>{s.reason}: {s.row?.name || "unknown"}</li>)}</ul>
+                      </details>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-4 gap-4">
         {Object.entries(stats).map(([label, value]) => (

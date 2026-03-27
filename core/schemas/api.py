@@ -71,6 +71,7 @@ class AgentCreate(BaseModel):
     routing_filter: dict[str, str] = {}
     parent_agent_id: str | None = None
     reporting_to: str | None = None
+    org_level: int | None = None
 
 
 class AgentUpdate(BaseModel):
@@ -90,6 +91,7 @@ class AgentUpdate(BaseModel):
     routing_filter: dict[str, str] | None = None
     parent_agent_id: str | None = None
     reporting_to: str | None = None
+    org_level: int | None = None
     change_reason: str | None = None
 
 
