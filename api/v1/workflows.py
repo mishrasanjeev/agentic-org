@@ -6,7 +6,7 @@ import uuid as _uuid
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -73,11 +73,14 @@ def _run_to_dict(run: WorkflowRun, include_steps: bool = False) -> dict:
 # ── GET /workflows ───────────────────────────────────────────────────────────
 @router.get("/workflows", response_model=PaginatedResponse)
 async def list_workflows(
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=20, ge=1, le=100),
+    page: int = 1,
+    per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
+    if page < 1:
+        raise HTTPException(422, "page must be >= 1")
+    per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         count_q = (

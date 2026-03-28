@@ -6,7 +6,7 @@ import uuid as _uuid
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_user_domains
@@ -45,11 +45,14 @@ async def list_approvals(
     domain: str | None = None,
     priority: str | None = None,
     status: str | None = None,
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=20, ge=1, le=100),
+    page: int = 1,
+    per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
+    if page < 1:
+        raise HTTPException(422, "page must be >= 1")
+    per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         base = select(HITLQueue).where(HITLQueue.tenant_id == tid)

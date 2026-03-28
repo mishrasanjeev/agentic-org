@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid as _uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
@@ -38,12 +38,15 @@ def _connector_to_dict(conn: Connector) -> dict:
 @router.get("/connectors")
 async def list_connectors(
     category: str | None = None,
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=50, ge=1, le=100),
+    page: int = 1,
+    per_page: int = 50,
     tenant_id: str = Depends(get_current_tenant),
 ):
     from sqlalchemy import func
 
+    if page < 1:
+        raise HTTPException(422, "page must be >= 1")
+    per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         query = select(Connector).where(Connector.tenant_id == tid)
