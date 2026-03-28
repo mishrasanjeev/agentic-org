@@ -167,6 +167,7 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
                     for field in auth_jwt_module.settings.model_fields
                 },
                 "jwt_issuer": "agenticorg-test-issuer",
+                "jwt_public_key_url": "https://test.example.com/.well-known/jwks.json",
             }
         ),
     )
