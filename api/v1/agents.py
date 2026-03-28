@@ -169,6 +169,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             tenant_id=tid,
             event_type="agent.create",
             actor_type="user",
+            actor_id=str(tid),
             agent_id=agent.id,
             resource_type="agent",
             resource_id=str(agent.id),
