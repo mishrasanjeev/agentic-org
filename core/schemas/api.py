@@ -42,9 +42,9 @@ class CostControlConfig(BaseModel):
 
 
 class AgentCreate(BaseModel):
-    name: str
-    agent_type: str
-    domain: str
+    name: str = Field(..., max_length=255)
+    agent_type: str = Field(..., max_length=100)
+    domain: str = Field(..., max_length=50)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     system_prompt: str = ""
     system_prompt_text: str | None = None

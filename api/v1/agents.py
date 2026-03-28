@@ -10,7 +10,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_user_domains
@@ -177,8 +177,8 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 async def list_agents(
     domain: str | None = None,
     status: str | None = None,
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(default=1, ge=1, description="Page number (starts at 1)"),
+    per_page: int = Query(default=20, ge=1, le=100, description="Items per page (max 100)"),
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):

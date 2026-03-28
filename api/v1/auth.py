@@ -181,8 +181,23 @@ async def signup(body: SignupRequest, request: Request):
     )
 
 
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_LOGIN_MAX = 5
+_LOGIN_WINDOW = 60  # 1 minute
+
+
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, request: Request):
+    # Rate-limit login attempts per IP
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    _login_attempts[client_ip] = [
+        t for t in _login_attempts[client_ip] if now - t < _LOGIN_WINDOW
+    ]
+    if len(_login_attempts[client_ip]) >= _LOGIN_MAX:
+        raise HTTPException(status_code=429, detail="Too many login attempts — try again in 1 minute")
+    _login_attempts[client_ip].append(now)
+
     async with async_session_factory() as session:
         result = await session.execute(
             select(User).where(User.email == body.email, User.status == "active")

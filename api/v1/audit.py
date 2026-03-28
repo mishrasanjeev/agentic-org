@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid as _uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_user_domains, get_user_role
@@ -42,8 +42,8 @@ async def query_audit(
     agent_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
-    page: int = 1,
-    per_page: int = 50,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=100),
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
     user_role: str = Depends(get_user_role),

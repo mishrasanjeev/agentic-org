@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid as _uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
@@ -31,8 +31,8 @@ def _schema_to_dict(s: SchemaRegistry) -> dict:
 # ── GET /schemas ─────────────────────────────────────────────────────────────
 @router.get("/schemas", response_model=PaginatedResponse)
 async def list_schemas(
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
     tenant_id: str = Depends(get_current_tenant),
 ):
     tid = _uuid.UUID(tenant_id)

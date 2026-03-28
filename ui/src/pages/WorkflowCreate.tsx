@@ -52,7 +52,7 @@ export default function WorkflowCreate() {
         version,
         domain,
         trigger_type: triggerType,
-        steps: parsed,
+        definition: { steps: parsed },
       });
       navigate(`/dashboard/workflows/${data.id || ""}`);
     } catch {

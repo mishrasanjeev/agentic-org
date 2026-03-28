@@ -11,7 +11,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
@@ -34,12 +34,13 @@ router = APIRouter()
 # ── Schemas ──
 
 class LeadCreate(BaseModel):
-    name: str
-    email: str
+    name: str = Field(..., max_length=255)
+    email: str = Field(..., max_length=255)
     company: str = ""
     role: str = ""
     phone: str = ""
     source: str = "website"
+    deal_value_usd: float | None = None
     utm_source: str | None = None
     utm_medium: str | None = None
     utm_campaign: str | None = None
@@ -89,6 +90,31 @@ def _lead_to_dict(lead: LeadPipeline) -> dict:
         "created_at": lead.created_at.isoformat() if lead.created_at else None,
         "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,
     }
+
+
+# ── POST /sales/pipeline/leads — Create a new lead ──
+
+@router.post("/sales/pipeline/leads", status_code=201)
+async def create_lead(body: LeadCreate, tenant_id: str = Depends(get_current_tenant)):
+    """Create a new lead in the sales pipeline."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        lead = LeadPipeline(
+            tenant_id=tid,
+            name=body.name.strip(),
+            email=body.email.strip().lower(),
+            company=body.company.strip() if body.company else "",
+            role=body.role.strip() if body.role else "",
+            phone=body.phone.strip() if body.phone else "",
+            source=body.source or "manual",
+            stage="new",
+            score=0,
+            deal_value_usd=body.deal_value_usd,
+        )
+        session.add(lead)
+        await session.commit()
+        await session.refresh(lead)
+    return _lead_to_dict(lead)
 
 
 # ── GET /sales/pipeline — Pipeline overview with funnel metrics ──

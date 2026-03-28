@@ -2,29 +2,73 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
 import httpx
+import redis.asyncio as aioredis
 from jose import JWTError, jwt
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _jwks_cache: dict[str, Any] = {}
 _jwks_cache_time: float = 0
 JWKS_CACHE_TTL = 3600
 
-
 # ---------------------------------------------------------------------------
-# Token blacklist (in-memory; cleared on restart — tokens expire in 60 min)
+# Token blacklist — Redis-backed with in-memory fallback
 # ---------------------------------------------------------------------------
 
-_blacklisted_tokens: set[str] = set()
+_blacklisted_tokens: set[str] = set()  # In-memory fallback
+_redis_client: aioredis.Redis | None = None
+_BLACKLIST_TTL = 3700  # slightly longer than token expiry (60 min)
+
+
+def _get_redis() -> aioredis.Redis | None:
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        except Exception:
+            logger.warning("Redis unavailable for token blacklist — using in-memory fallback")
+    return _redis_client
 
 
 def blacklist_token(token: str) -> None:
     """Add a token to the blacklist so it is rejected on future validation."""
     _blacklisted_tokens.add(token)
+    # Also store in Redis asynchronously — the sync caller can't await,
+    # so we store in memory as primary and Redis is best-effort via check
+    r = _get_redis()
+    if r is not None:
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(r.setex(f"token_blacklist:{token[:32]}", _BLACKLIST_TTL, "1"))
+            else:
+                asyncio.run(r.setex(f"token_blacklist:{token[:32]}", _BLACKLIST_TTL, "1"))
+        except Exception:
+            logger.debug("Redis blacklist write failed — in-memory fallback active")
+
+
+async def _is_blacklisted(token: str) -> bool:
+    """Check if token is blacklisted (memory + Redis)."""
+    if token in _blacklisted_tokens:
+        return True
+    r = _get_redis()
+    if r is not None:
+        try:
+            val = await r.get(f"token_blacklist:{token[:32]}")
+            if val:
+                _blacklisted_tokens.add(token)  # cache locally too
+                return True
+        except Exception:
+            logger.debug("Redis blacklist read failed — checking memory only")
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +160,10 @@ async def validate_token(token: str) -> dict[str, Any]:
     Tries local HS256 first (for self-issued tokens), then falls back
     to JWKS RS256 validation (for external auth or test-patched JWKS).
     """
+    # Check Redis blacklist for any token type
+    if await _is_blacklisted(token):
+        raise ValueError("Token has been revoked")
+
     # Try local HS256 first
     try:
         return validate_local_token(token)
