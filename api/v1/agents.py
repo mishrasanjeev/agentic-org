@@ -534,6 +534,10 @@ async def run_agent(
     """Instantiate agent from registry and execute against user input."""
     if payload is None:
         payload = {}
+    # Validate that inputs are not empty
+    inputs = payload.get("inputs", {})
+    if not inputs:
+        raise HTTPException(400, "inputs field is required and cannot be empty")
     tid = _uuid.UUID(tenant_id)
 
     # 1. Load agent config from DB
@@ -692,7 +696,7 @@ async def run_agent(
             )
             session.add(hitl_entry)
 
-    # 6b. Increment shadow sample count if agent is in shadow mode
+    # 6b. Increment shadow sample count and update accuracy if agent is in shadow mode
     if agent_config.get("status") == "shadow" and task_result.status in ("completed", "hitl_triggered"):
         async with get_tenant_session(tid) as session:
             result = await session.execute(
@@ -700,7 +704,18 @@ async def run_agent(
             )
             agent_to_update = result.scalar_one_or_none()
             if agent_to_update:
-                agent_to_update.shadow_sample_count = (agent_to_update.shadow_sample_count or 0) + 1
+                new_count = (agent_to_update.shadow_sample_count or 0) + 1
+                agent_to_update.shadow_sample_count = new_count
+
+                # Compute running shadow accuracy from confidence scores
+                # Use a weighted running average: blend existing accuracy with new sample confidence
+                current_accuracy = float(agent_to_update.shadow_accuracy_current or 0)
+                sample_score = task_result.confidence if task_result.confidence else 0.0
+                agent_to_update.shadow_accuracy_current = round(
+                    ((current_accuracy * (new_count - 1)) + sample_score) / new_count,
+                    3,
+                )
+
                 await session.commit()
 
     # 7. Return the real result
@@ -818,10 +833,12 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                     f"Shadow agent has {agent.shadow_sample_count}/{agent.shadow_min_samples} samples; "
                     f"cannot promote until minimum is met",
                 )
-            if (
-                agent.shadow_accuracy_current is not None
-                and agent.shadow_accuracy_current < agent.shadow_accuracy_floor
-            ):
+            if agent.shadow_accuracy_current is None:
+                raise HTTPException(
+                    409,
+                    "Shadow accuracy not yet computed; run shadow samples first",
+                )
+            if agent.shadow_accuracy_current < agent.shadow_accuracy_floor:
                 raise HTTPException(
                     409,
                     f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {agent.shadow_accuracy_floor}",

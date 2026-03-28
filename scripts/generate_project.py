@@ -723,7 +723,7 @@ def gen_pydantic_schemas():
         output_schema: str | None = None
         initial_status: str = "shadow"
         shadow_comparison_agent: str | None = None
-        shadow_min_samples: int = 100
+        shadow_min_samples: int = 10
         shadow_accuracy_floor: float = 0.95
         scaling: ScalingConfig = Field(default_factory=ScalingConfig)
         cost_controls: CostControlConfig = Field(default_factory=CostControlConfig)

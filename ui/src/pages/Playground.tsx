@@ -369,6 +369,8 @@ function parseTraceLines(
 /* ── Your Agents section — shows user-created agents from API ── */
 function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) => void; running: boolean; selectedId?: string }) {
   const [agents, setAgents] = useState<any[]>([]);
+  const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
+  const [inputErrors, setInputErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -380,50 +382,89 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
         // Filter to non-builtin agents only
         const custom = items.filter((a: any) => !a.is_builtin);
         setAgents(custom);
+        // Initialize default input for each agent
+        const defaults: Record<string, string> = {};
+        for (const a of custom) {
+          defaults[a.id] = JSON.stringify({ action: "process", inputs: { text: "Hello, process this request" } }, null, 2);
+        }
+        setCustomInputs(defaults);
       })
       .catch(() => {});
   }, []);
 
   if (agents.length === 0) return null;
 
+  function handleRun(agent: any) {
+    const raw = customInputs[agent.id] || '{ "action": "process", "inputs": {} }';
+    try {
+      const parsed = JSON.parse(raw);
+      setInputErrors((prev) => ({ ...prev, [agent.id]: "" }));
+      const uc = {
+        id: `custom-${agent.id}`,
+        agentId: agent.id,
+        agentName: agent.employee_name || agent.name,
+        title: agent.designation || agent.agent_type.replace(/_/g, " "),
+        domain: agent.domain,
+        emoji: agent.domain === "finance" ? "\uD83D\uDCB0" : agent.domain === "hr" ? "\uD83D\uDC65" : agent.domain === "marketing" ? "\uD83D\uDCE3" : "\u2699\uFE0F",
+        input: parsed,
+      };
+      onRun(uc);
+    } catch {
+      setInputErrors((prev) => ({ ...prev, [agent.id]: "Invalid JSON" }));
+    }
+  }
+
   return (
     <section>
       <h2 className="text-xl font-semibold text-slate-200 mb-4">Your Agents</h2>
-      <p className="text-sm text-slate-400 mb-4">Agents you created — click to run.</p>
+      <p className="text-sm text-slate-400 mb-4">Agents you created — edit the input JSON and click Run.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {agents.map((agent) => {
-          const uc = {
-            id: `custom-${agent.id}`,
-            agentId: agent.id,
-            agentName: agent.employee_name || agent.name,
-            title: agent.designation || agent.agent_type.replace(/_/g, " "),
-            domain: agent.domain,
-            emoji: agent.domain === "finance" ? "\uD83D\uDCB0" : agent.domain === "hr" ? "\uD83D\uDC65" : agent.domain === "marketing" ? "\uD83D\uDCE3" : "\u2699\uFE0F",
-            input: { action: "process", inputs: {} },
-          };
-          const isActive = selectedId === uc.id;
+          const ucId = `custom-${agent.id}`;
+          const isActive = selectedId === ucId;
           return (
-            <button
+            <div
               key={agent.id}
-              onClick={() => onRun(uc)}
-              disabled={running}
-              className={`text-left p-4 rounded-xl border transition-all duration-200 ${
+              className={`p-4 rounded-xl border transition-all duration-200 ${
                 isActive
                   ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500"
-                  : "border-slate-800 bg-slate-900 hover:border-slate-600 hover:bg-slate-800/80"
-              } ${running ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                  : "border-slate-800 bg-slate-900"
+              }`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold">
                   {(agent.employee_name || agent.name || "A").charAt(0)}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium text-white text-sm">{agent.employee_name || agent.name}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{agent.agent_type} | {agent.domain}</p>
                   {agent.specialization && <p className="text-xs text-slate-500 mt-0.5 truncate">{agent.specialization}</p>}
                 </div>
               </div>
-            </button>
+              <textarea
+                value={customInputs[agent.id] || ""}
+                onChange={(e) => {
+                  setCustomInputs((prev) => ({ ...prev, [agent.id]: e.target.value }));
+                  setInputErrors((prev) => ({ ...prev, [agent.id]: "" }));
+                }}
+                className="w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 min-h-[80px] max-h-40 resize-y focus:border-blue-500 focus:outline-none"
+                placeholder='{ "action": "process", "inputs": { ... } }'
+              />
+              {inputErrors[agent.id] && (
+                <p className="text-xs text-red-400 mt-1">{inputErrors[agent.id]}</p>
+              )}
+              <button
+                onClick={() => handleRun(agent)}
+                disabled={running}
+                className={`mt-2 w-full text-center py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  running
+                    ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer"
+                }`}
+              >
+                {running && isActive ? "Running..." : "Run"}
+              </button>
+            </div>
           );
         })}
       </div>

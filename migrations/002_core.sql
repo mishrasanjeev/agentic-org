@@ -46,7 +46,7 @@ CREATE TABLE agents (
   version VARCHAR(20) NOT NULL DEFAULT '1.0.0',
   parent_agent_id UUID REFERENCES agents(id),
   shadow_comparison_agent_id UUID REFERENCES agents(id),
-  shadow_min_samples INTEGER NOT NULL DEFAULT 100,
+  shadow_min_samples INTEGER NOT NULL DEFAULT 10,
   shadow_accuracy_floor NUMERIC(4,3) NOT NULL DEFAULT 0.950,
   shadow_sample_count INTEGER NOT NULL DEFAULT 0,
   shadow_accuracy_current NUMERIC(4,3),

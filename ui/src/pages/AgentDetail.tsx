@@ -63,6 +63,19 @@ export default function AgentDetail() {
     }
   }
 
+  async function handleResume() {
+    setActionLoading("resume");
+    setActionError(null);
+    try {
+      await agentsApi.resume(id || "");
+      fetchAgent();
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || "Resume failed");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   if (loading) return <p className="text-muted-foreground">Loading agent...</p>;
   if (!agent) return <p className="text-muted-foreground">Agent not found.</p>;
 
@@ -104,13 +117,21 @@ export default function AgentDetail() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handlePromote} disabled={actionLoading !== null || agent.status === "active"}>
-              {actionLoading === "promote" ? "Promoting..." : "Promote"}
-            </Button>
+            {agent.status === "paused" ? (
+              <Button variant="outline" size="sm" onClick={handleResume} disabled={actionLoading !== null}>
+                {actionLoading === "resume" ? "Resuming..." : "Resume"}
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handlePromote} disabled={actionLoading !== null || agent.status === "active"}>
+                {actionLoading === "promote" ? "Promoting..." : "Promote"}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleRollback} disabled={actionLoading !== null}>
               {actionLoading === "rollback" ? "Rolling back..." : "Rollback"}
             </Button>
-            <KillSwitch agentId={id || ""} agentName={displayName} onPaused={fetchAgent} />
+            {agent.status !== "paused" && (
+              <KillSwitch agentId={id || ""} agentName={displayName} onPaused={fetchAgent} />
+            )}
           </div>
           {actionError && <p className="text-xs text-destructive">{actionError}</p>}
         </div>
@@ -438,7 +459,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
   const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const sampleCount = agent.shadow_sample_count ?? 0;
-  const minSamples = agent.shadow_min_samples ?? 100;
+  const minSamples = agent.shadow_min_samples ?? 10;
   const sampleProgress = minSamples > 0 ? Math.min((sampleCount / minSamples) * 100, 100) : 0;
 
   const accuracyCurrent = agent.shadow_accuracy_current != null ? agent.shadow_accuracy_current * 100 : 0;
