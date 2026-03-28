@@ -308,8 +308,8 @@ class TestCreateAgent:
         assert result["status"] == "shadow"
         assert result["version"] == "1.0.0"
         assert result["token_issued"] is True
-        # Agent and AgentVersion both added
-        assert mock_session.add.call_count == 2
+        # Agent + AgentVersion + AuditLog all added
+        assert mock_session.add.call_count == 3
 
     @pytest.mark.asyncio
     async def test_create_agent_with_parent_id(self, mock_session, tenant_id):
