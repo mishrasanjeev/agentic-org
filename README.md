@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-green.svg)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Tests-328_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-353_passing-brightgreen.svg)](tests/)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -24,7 +24,7 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 | Custom Agents | Unlimited (no-code wizard) |
 | Enterprise Connectors | 42 (SAP, Oracle, GSTN, Darwinbox, Slack, Stripe...) |
 | Prompt Templates | 27 production-tested |
-| Automated Tests | 328 (unit + connector + synthetic + browser) |
+| Automated Tests | 353 (unit + connector + synthetic + browser) |
 | LLM | Gemini 2.5 Flash (primary), Claude/GPT-4o fallback |
 | Deployment | GKE Autopilot, ~$95/month |
 

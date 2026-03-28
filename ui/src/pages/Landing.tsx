@@ -634,7 +634,7 @@ export default function Landing() {
                 </div>
                 <h3 className="text-xl font-bold text-slate-900">Agent Creator</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Build custom AI virtual employees in minutes. Give them a name, a role, and tailored instructions through a guided wizard &mdash; no code required. 26 production-tested prompt templates included.
+                  Build custom AI virtual employees in minutes. Give them a name, a role, and tailored instructions through a guided wizard &mdash; no code required. 27 production-tested prompt templates included.
                 </p>
               </div>
             </FadeIn>

@@ -148,7 +148,7 @@ const TIERS = [
     ctaLink: "demo",
     features: [
       "Unlimited AI agents",
-      "20 connectors",
+      "42 connectors",
       "Unlimited tasks",
       "Email support",
       "Custom workflows",
@@ -167,7 +167,7 @@ const TIERS = [
     cta: "Contact Sales",
     ctaLink: "demo",
     features: [
-      "All 24 AI agents",
+      "Unlimited AI agents",
       "42 connectors",
       "Unlimited everything",
       "Dedicated support",
@@ -227,7 +227,7 @@ const FAQS = [
   },
   {
     q: "What connectors are included?",
-    a: "Free includes Oracle, SAP, Salesforce, Slack, and GSTN. Pro adds 15 more including Darwinbox, Stripe, HubSpot, and EPFO. Enterprise includes all 42 connectors plus custom integrations.",
+    a: "Free includes 20 core connectors (Oracle, SAP, Salesforce, Slack, GSTN, and more). Pro and Enterprise include all 42 connectors (Darwinbox, Stripe, HubSpot, EPFO, Jira, and more). Enterprise adds custom integrations.",
   },
   {
     q: "Is my data secure?",
@@ -479,7 +479,7 @@ export default function Pricing() {
             Ready to automate your enterprise?
           </h2>
           <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Start free with 35 agents and 20 connectors, or book a demo to see the full platform in action.
+            Start free with 35 agents and 20 connectors. Upgrade to Pro for 42 connectors and unlimited tasks.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
