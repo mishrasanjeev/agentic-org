@@ -164,6 +164,29 @@ async def create_workflow(
     }
 
 
+# ── DELETE /workflows/{wf_id} ────────────────────────────────────────────────
+@router.delete("/workflows/{wf_id}")
+async def delete_workflow(
+    wf_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Soft-delete a workflow by setting is_active=False."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(WorkflowDefinition).where(
+                WorkflowDefinition.id == wf_id,
+                WorkflowDefinition.tenant_id == tid,
+            )
+        )
+        wf = result.scalar_one_or_none()
+        if not wf:
+            raise HTTPException(404, "Workflow not found")
+        wf.is_active = False
+        await session.commit()
+    return {"status": "deleted", "workflow_id": str(wf_id)}
+
+
 # ── POST /workflows/{wf_id}/run ─────────────────────────────────────────────
 @router.post("/workflows/{wf_id}/run")
 async def run_workflow(

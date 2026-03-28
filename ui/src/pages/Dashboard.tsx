@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [approvals, setApprovals] = useState<HITLItem[]>([]);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchWarnings, setFetchWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     fetchAll();
@@ -43,6 +44,7 @@ export default function Dashboard() {
 
   async function fetchAll() {
     setLoading(true);
+    const warnings: string[] = [];
     try {
       const [agentsResp, approvalsResp, auditResp] = await Promise.allSettled([
         api.get("/agents"),
@@ -53,18 +55,25 @@ export default function Dashboard() {
       if (agentsResp.status === "fulfilled") {
         const d = agentsResp.value.data;
         setAgents(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []);
+      } else {
+        warnings.push("Agents data could not be loaded");
       }
       if (approvalsResp.status === "fulfilled") {
         const d = approvalsResp.value.data;
         setApprovals(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []);
+      } else {
+        warnings.push("Approvals data could not be loaded");
       }
       if (auditResp.status === "fulfilled") {
         const d = auditResp.value.data;
         setAuditEntries(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []);
+      } else {
+        warnings.push("Audit data could not be loaded");
       }
     } catch {
-      // individual failures handled by allSettled
+      warnings.push("Dashboard data could not be loaded");
     } finally {
+      setFetchWarnings(warnings);
       setLoading(false);
     }
   }
@@ -122,6 +131,15 @@ export default function Dashboard() {
         <title>Dashboard — AgenticOrg</title>
       </Helmet>
       <h2 className="text-2xl font-bold">Dashboard</h2>
+
+      {fetchWarnings.length > 0 && (
+        <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
+          <p className="font-medium">Some data may be incomplete:</p>
+          <ul className="list-disc list-inside mt-1">
+            {fetchWarnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </div>
+      )}
 
       {/* Top metrics row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -44,11 +44,15 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
+_is_production = settings.env == "production"
+
 app = FastAPI(
     title="AgenticOrg",
     description="AI Virtual Employee Platform — 24+ agents, 42 connectors",
     version="2.1.0",
     lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
 )
 
 # CORS: open in dev, restricted in production

@@ -55,6 +55,19 @@ export default function Agents() {
 
   async function handleCsvImport() {
     if (!importFile) return;
+    // Validate file before upload
+    if (!importFile.name.toLowerCase().endsWith(".csv")) {
+      setImportResult({ error: "Only CSV files are supported. Please select a .csv file." });
+      return;
+    }
+    if (importFile.size > 5 * 1024 * 1024) {
+      setImportResult({ error: "File too large. Maximum size is 5 MB." });
+      return;
+    }
+    if (importFile.size === 0) {
+      setImportResult({ error: "File is empty. Please select a valid CSV file." });
+      return;
+    }
     setImporting(true);
     setImportResult(null);
     try {

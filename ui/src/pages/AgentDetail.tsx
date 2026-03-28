@@ -308,7 +308,7 @@ function PromptTab({ agent }: { agent: Agent }) {
   const [editReason, setEditReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const isLocked = agent.status === "active";
+  const isLocked = agent.status === "active" || agent.is_builtin;
 
   useEffect(() => {
     agentsApi.promptHistory(agent.id).then(({ data }) => setHistory(data || [])).catch(() => {});

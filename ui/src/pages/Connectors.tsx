@@ -13,6 +13,7 @@ export default function Connectors() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [healthResult, setHealthResult] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     fetchConnectors();
@@ -34,14 +35,15 @@ export default function Connectors() {
   }
 
   async function healthCheck(id: string) {
-    if (!id) { alert("No connector ID"); return; }
+    if (!id) return;
+    setHealthResult(null);
     try {
       const { data } = await api.get(`/connectors/${id}/health`);
       const status = data.healthy ? "Healthy" : "Unhealthy";
-      alert(`${data.name || "Connector"}: ${status}\nStatus: ${data.status}\nLast check: ${data.health_check_at || "Never"}`);
+      setHealthResult({ id, msg: `${data.name || "Connector"}: ${status} | Last check: ${data.health_check_at || "Never"}`, ok: !!data.healthy });
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.message || "Unknown error";
-      alert(`Health check failed: ${detail}`);
+      setHealthResult({ id, msg: `Health check failed: ${detail}`, ok: false });
     }
   }
 
@@ -67,6 +69,13 @@ export default function Connectors() {
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Active</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-green-600">{stats.active}</p></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Unhealthy</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-red-600">{stats.unhealthy}</p></CardContent></Card>
       </div>
+
+      {healthResult && (
+        <div className={`rounded-lg px-4 py-3 text-sm flex items-center justify-between ${healthResult.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+          <span>{healthResult.msg}</span>
+          <button onClick={() => setHealthResult(null)} className="ml-2 text-xs underline">Dismiss</button>
+        </div>
+      )}
 
       <div className="flex gap-4 items-center">
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="border rounded px-3 py-2 text-sm">
