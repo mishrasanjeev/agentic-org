@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from typing import Any
@@ -37,6 +38,17 @@ def _get_redis() -> aioredis.Redis | None:
     return _redis_client
 
 
+def _token_redis_key(token: str) -> str:
+    """Derive a unique Redis key from a token using SHA-256.
+
+    The previous implementation used ``token[:32]`` which collides for all
+    JWTs sharing the same header (e.g. every HS256 token starts with the
+    same 36-char base64url header).  A hash of the full token is unique.
+    """
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    return f"token_blacklist:{digest}"
+
+
 def blacklist_token(token: str) -> None:
     """Add a token to the blacklist so it is rejected on future validation."""
     _blacklisted_tokens.add(token)
@@ -46,11 +58,13 @@ def blacklist_token(token: str) -> None:
     if r is not None:
         try:
             import asyncio
+
+            key = _token_redis_key(token)
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                loop.create_task(r.setex(f"token_blacklist:{token[:32]}", _BLACKLIST_TTL, "1"))
+                loop.create_task(r.setex(key, _BLACKLIST_TTL, "1"))
             else:
-                asyncio.run(r.setex(f"token_blacklist:{token[:32]}", _BLACKLIST_TTL, "1"))
+                asyncio.run(r.setex(key, _BLACKLIST_TTL, "1"))
         except Exception:
             logger.debug("Redis blacklist write failed — in-memory fallback active")
 
@@ -62,7 +76,7 @@ async def _is_blacklisted(token: str) -> bool:
     r = _get_redis()
     if r is not None:
         try:
-            val = await r.get(f"token_blacklist:{token[:32]}")
+            val = await r.get(_token_redis_key(token))
             if val:
                 _blacklisted_tokens.add(token)  # cache locally too
                 return True

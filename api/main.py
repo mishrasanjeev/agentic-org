@@ -38,6 +38,27 @@ async def lifespan(app: FastAPI):
     from core.database import init_db
 
     await init_db()
+
+    # One-time cleanup: remove poisoned blacklist keys created by the old
+    # token[:32] scheme.  All HS256 JWTs share the same header prefix, so a
+    # single logout previously blocked every HS256 token.
+    try:
+        import redis.asyncio as aioredis
+
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        cursor, keys = await r.scan(match="token_blacklist:*", count=500)
+        if keys:
+            await r.delete(*keys)
+        while cursor:
+            cursor, batch = await r.scan(cursor=cursor, match="token_blacklist:*", count=500)
+            if batch:
+                await r.delete(*batch)
+        await r.aclose()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).debug("Blacklist cleanup skipped: %s", exc)
+
     yield
     from core.database import close_db
 
