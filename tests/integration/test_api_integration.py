@@ -151,7 +151,7 @@ class TestAgentCRUDLifecycle:
         agent_id = str(uuid.uuid4())
         resp = await client.post(
             f"/api/v1/agents/{agent_id}/run",
-            json={"invoice_id": "INV-001"},
+            json={"action": "process", "inputs": {"invoice_id": "INV-001"}},
             headers=auth_headers,
         )
         # Non-existent agent returns 404
