@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -86,6 +87,7 @@ export default function Audit() {
 
   return (
     <div className="space-y-6">
+      <Helmet><title>Audit Log — AgenticOrg</title></Helmet>
       <div className="flex justify-between items-center flex-wrap gap-2">
         <h2 className="text-2xl font-bold">Audit Log</h2>
         <div className="flex gap-2">

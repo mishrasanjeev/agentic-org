@@ -164,6 +164,19 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
         )
         session.add(version_row)
 
+        # Audit log for agent creation
+        audit_entry = AuditLog(
+            tenant_id=tid,
+            event_type="agent.create",
+            actor_type="user",
+            agent_id=agent.id,
+            resource_type="agent",
+            resource_id=str(agent.id),
+            action=f"Created agent '{agent.name}' ({agent.agent_type})",
+            outcome="success",
+        )
+        session.add(audit_entry)
+
     return {
         "agent_id": str(agent.id),
         "status": agent.status,
@@ -677,6 +690,17 @@ async def run_agent(
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
             session.add(hitl_entry)
+
+    # 6b. Increment shadow sample count if agent is in shadow mode
+    if agent_config.get("status") == "shadow" and task_result.status in ("completed", "hitl_triggered"):
+        async with get_tenant_session(tid) as session:
+            result = await session.execute(
+                select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+            )
+            agent_to_update = result.scalar_one_or_none()
+            if agent_to_update:
+                agent_to_update.shadow_sample_count = (agent_to_update.shadow_sample_count or 0) + 1
+                await session.commit()
 
     # 7. Return the real result
     response = {

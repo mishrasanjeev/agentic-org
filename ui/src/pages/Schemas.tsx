@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -245,6 +246,7 @@ export default function Schemas() {
 
   return (
     <div className="space-y-6">
+      <Helmet><title>Schemas — AgenticOrg</title></Helmet>
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Schema Registry</h2>
         <Button onClick={() => { setSelectedSchema(null); setShowEditor(true); setTimeout(() => document.getElementById("schema-editor")?.scrollIntoView({ behavior: "smooth" }), 100); }}>Create Schema</Button>

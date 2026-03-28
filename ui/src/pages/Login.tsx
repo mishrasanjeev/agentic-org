@@ -178,7 +178,7 @@ export default function Login() {
           </div>
           {showDemo && (
             <div className="mt-3 rounded-lg bg-muted/50 border border-border px-4 py-3">
-              <p className="text-xs text-muted-foreground text-center mb-2">Click a role to explore with sample data:</p>
+              <p className="text-xs text-muted-foreground text-center mb-2">Click a role to explore with sample data <span className="text-amber-600">(sandbox only — not real credentials)</span>:</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
                   { role: "CEO/Admin", email: "ceo@agenticorg.local", pw: "ceo123!" },

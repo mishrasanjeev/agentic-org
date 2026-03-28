@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from auth.jwt import blacklist_token, create_access_token
 from core.config import settings
@@ -212,6 +212,21 @@ async def login(body: LoginRequest, request: Request):
             select(Tenant).where(Tenant.id == user.tenant_id)
         )
         tenant = tenant_result.scalar_one_or_none()
+
+        # Auto-seed defaults for orgs created before the seed feature was added
+        if tenant and user.role == "admin":
+            from core.models.agent import Agent
+            agent_count = await session.execute(
+                select(func.count()).select_from(Agent).where(Agent.tenant_id == user.tenant_id)
+            )
+            if (agent_count.scalar() or 0) == 0:
+                try:
+                    await seed_tenant_defaults(session, user.tenant_id)
+                    await session.commit()
+                    logger.info("Auto-seeded defaults for pre-existing tenant %s on login", user.tenant_id)
+                except Exception:
+                    logger.exception("Auto-seed on login failed for tenant %s", user.tenant_id)
+
     tenant_settings = tenant.settings if tenant else {}
     token = create_access_token(
         data={
@@ -268,21 +283,23 @@ async def google_login(body: GoogleLoginRequest):
         user = result.scalar_one_or_none()
 
         if not user:
-            # Auto-create user with a default tenant
-            from core.models.tenant import Tenant
-
-            # Find default tenant
-            tenant_result = await session.execute(
-                select(Tenant).where(Tenant.slug == "default").limit(1)
+            # Create a NEW tenant for this Google user (no cross-tenant leakage)
+            org_name = f"{name}'s Organization"
+            slug = _make_slug(org_name)
+            slug_check = await session.execute(
+                select(Tenant).where(Tenant.slug == slug)
             )
-            tenant = tenant_result.scalar_one_or_none()
-            if not tenant:
-                tenant_result = await session.execute(
-                    select(Tenant).order_by(Tenant.created_at).limit(1)
-                )
-                tenant = tenant_result.scalar_one_or_none()
-            if not tenant:
-                raise HTTPException(status_code=403, detail="No tenant configured")
+            if slug_check.scalar_one_or_none():
+                slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+
+            tenant = Tenant(
+                id=uuid.uuid4(),
+                name=org_name,
+                slug=slug,
+                settings={"onboarding_complete": False, "onboarding_step": 1},
+            )
+            session.add(tenant)
+            await session.flush()
 
             user = User(
                 id=uuid.uuid4(),
@@ -290,9 +307,18 @@ async def google_login(body: GoogleLoginRequest):
                 email=email,
                 name=name,
                 role="admin",
+                domain="all",
                 status="active",
             )
             session.add(user)
+            await session.flush()
+
+            # Seed built-in agents and templates for the new org
+            try:
+                await seed_tenant_defaults(session, tenant.id)
+            except Exception:
+                logger.exception("Failed to seed defaults for Google signup tenant %s", tenant.id)
+
             await session.commit()
             await session.refresh(user)
 

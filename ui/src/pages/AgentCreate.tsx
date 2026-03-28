@@ -125,7 +125,7 @@ export default function AgentCreate() {
         hitl_policy: { condition: hitlCondition },
         max_retries: maxRetries,
         initial_status: "shadow",
-        llm_model: llmModel,
+        llm: { model: llmModel, fallback_model: "gemini-2.5-flash-preview-05-20" },
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
       });
