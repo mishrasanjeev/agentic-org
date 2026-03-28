@@ -35,6 +35,13 @@ export default function WorkflowRun() {
     if (runId) fetchRun();
   }, [runId]);
 
+  // Auto-refresh while workflow is running
+  useEffect(() => {
+    if (!run || run.status !== "running") return;
+    const interval = setInterval(fetchRun, 3000);
+    return () => clearInterval(interval);
+  }, [run?.status]);
+
   async function fetchRun() {
     setLoading(true);
     try {

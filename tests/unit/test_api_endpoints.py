@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import BackgroundTasks
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -731,7 +732,7 @@ class TestApprovalsEndpoints:
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await decide(hitl_id=item.id, body=body, tenant_id=tenant_id)
+            resp = await decide(hitl_id=item.id, body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -751,7 +752,7 @@ class TestApprovalsEndpoints:
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await decide(hitl_id=uuid.uuid4(), body=body, tenant_id=tenant_id)
+                await decide(hitl_id=uuid.uuid4(), body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
             assert exc_info.value.status_code == 404
         finally:
             ctx.stop()
@@ -770,7 +771,7 @@ class TestApprovalsEndpoints:
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await decide(hitl_id=item.id, body=body, tenant_id=tenant_id)
+                await decide(hitl_id=item.id, body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
             assert exc_info.value.status_code == 409
         finally:
             ctx.stop()
@@ -792,7 +793,7 @@ class TestApprovalsEndpoints:
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await decide(hitl_id=item.id, body=body, tenant_id=tenant_id)
+                await decide(hitl_id=item.id, body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
             assert exc_info.value.status_code == 410
         finally:
             ctx.stop()
@@ -1548,8 +1549,9 @@ class TestWorkflowsEndpoints:
         from api.v1.workflows import _run_to_dict
         run = _make_workflow_run(steps=[])
         d = _run_to_dict(run, include_steps=True)
-        # steps is empty list, so truthy check fails -> no "steps" key
-        assert "steps" not in d
+        # steps key is always present when include_steps=True (even if empty)
+        assert "steps" in d
+        assert d["steps"] == []
 
     def test_run_to_dict_none_timestamps(self):
         from api.v1.workflows import _run_to_dict
@@ -1700,7 +1702,7 @@ class TestWorkflowsEndpoints:
 
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
-            resp = await run_workflow(wf_id=wf.id, body=body, tenant_id=tenant_id)
+            resp = await run_workflow(wf_id=wf.id, background_tasks=BackgroundTasks(), body=body, tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -1718,7 +1720,7 @@ class TestWorkflowsEndpoints:
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await run_workflow(wf_id=uuid.uuid4(), tenant_id=tenant_id)
+                await run_workflow(wf_id=uuid.uuid4(), background_tasks=BackgroundTasks(), tenant_id=tenant_id)
             assert exc_info.value.status_code == 404
         finally:
             ctx.stop()
@@ -1735,7 +1737,7 @@ class TestWorkflowsEndpoints:
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await run_workflow(wf_id=wf.id, tenant_id=tenant_id)
+                await run_workflow(wf_id=wf.id, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
             assert exc_info.value.status_code == 409
         finally:
             ctx.stop()
@@ -1750,7 +1752,7 @@ class TestWorkflowsEndpoints:
 
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
-            resp = await run_workflow(wf_id=wf.id, body=None, tenant_id=tenant_id)
+            resp = await run_workflow(wf_id=wf.id, background_tasks=BackgroundTasks(), body=None, tenant_id=tenant_id)
         finally:
             ctx.stop()
 

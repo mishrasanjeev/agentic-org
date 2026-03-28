@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -16,6 +17,7 @@ from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
 
 router = APIRouter()
+_log = structlog.get_logger()
 
 
 def _wf_to_dict(wf: WorkflowDefinition) -> dict:
@@ -65,8 +67,8 @@ def _run_to_dict(run: WorkflowRun, include_steps: bool = False) -> dict:
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "created_at": run.created_at.isoformat() if run.created_at else None,
     }
-    if include_steps and run.steps:
-        d["steps"] = [_step_to_dict(s) for s in run.steps]
+    if include_steps:
+        d["steps"] = [_step_to_dict(s) for s in (run.steps or [])]
     return d
 
 
@@ -187,10 +189,170 @@ async def delete_workflow(
     return {"status": "deleted", "workflow_id": str(wf_id)}
 
 
+# ── Background workflow execution ──────────────────────────────────────────
+
+
+async def _execute_workflow_bg(
+    tenant_id: _uuid.UUID,
+    run_id: _uuid.UUID,
+    definition: dict,
+    trigger_payload: dict | None,
+) -> None:
+    """Execute workflow steps in background and sync each result to the DB."""
+    from core.models.agent import Agent
+    from core.models.hitl import HITLQueue
+    from workflows.engine import WorkflowEngine
+    from workflows.state_store import WorkflowStateStore
+
+    state_store = WorkflowStateStore()
+    await state_store.init()
+    engine = WorkflowEngine(state_store)
+
+    try:
+        engine_run_id = await engine.start_run(definition, trigger_payload)
+
+        # Persist engine_run_id so HITL resume can find it later
+        async with get_tenant_session(tenant_id) as session:
+            db_run = (
+                await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
+            ).scalar_one()
+            db_run.context = {**(db_run.context or {}), "_engine_run_id": engine_run_id}
+
+        steps_def = {s["id"]: s for s in definition.get("steps", [])}
+        synced_steps: set[str] = set()
+
+        while True:
+            await engine.execute_next(engine_run_id)
+
+            state = await state_store.load(engine_run_id)
+            if not state:
+                break
+
+            # ---- sync new step results to DB ----
+            async with get_tenant_session(tenant_id) as session:
+                db_run = (
+                    await session.execute(
+                        select(WorkflowRun).where(WorkflowRun.id == run_id)
+                    )
+                ).scalar_one()
+
+                for step_id, step_result in state.get("step_results", {}).items():
+                    if step_id in synced_steps:
+                        continue
+
+                    step_def = steps_def.get(step_id, {})
+                    agent_id = None
+                    raw_agent = step_def.get("agent_id")
+                    if raw_agent:
+                        try:
+                            agent_id = _uuid.UUID(str(raw_agent))
+                        except (ValueError, TypeError):
+                            agent_id = None
+
+                    step_status = step_result.get("status", "completed")
+                    session.add(
+                        StepExecution(
+                            tenant_id=tenant_id,
+                            workflow_run_id=run_id,
+                            step_id=step_id,
+                            step_type=step_def.get("type", "agent"),
+                            agent_id=agent_id,
+                            status=step_status,
+                            output=step_result.get("output"),
+                            confidence=step_result.get("confidence"),
+                            error=(
+                                {"message": step_result["error"]}
+                                if step_result.get("error")
+                                else None
+                            ),
+                            started_at=datetime.now(UTC),
+                            completed_at=(
+                                datetime.now(UTC)
+                                if step_status != "waiting_hitl"
+                                else None
+                            ),
+                        )
+                    )
+                    synced_steps.add(step_id)
+
+                    # Create HITLQueue entry for approval steps
+                    if step_status == "waiting_hitl":
+                        timeout_h = step_def.get("timeout_hours", 4)
+                        hitl_agent_id = agent_id
+                        if not hitl_agent_id:
+                            hitl_agent_id = (
+                                await session.execute(
+                                    select(Agent.id)
+                                    .where(Agent.tenant_id == tenant_id)
+                                    .limit(1)
+                                )
+                            ).scalar_one_or_none()
+                        if hitl_agent_id:
+                            session.add(
+                                HITLQueue(
+                                    tenant_id=tenant_id,
+                                    workflow_run_id=run_id,
+                                    agent_id=hitl_agent_id,
+                                    title=f"Approval required: {step_def.get('title', step_id)}",
+                                    trigger_type="workflow_step",
+                                    priority=step_def.get("priority", "normal"),
+                                    assignee_role=step_result.get(
+                                        "assignee_role",
+                                        step_def.get("assignee_role", "admin"),
+                                    ),
+                                    decision_options=step_def.get(
+                                        "decision_options",
+                                        {"options": ["approve", "reject"]},
+                                    ),
+                                    context={
+                                        "workflow_run_id": str(run_id),
+                                        "step_id": step_id,
+                                        "engine_run_id": engine_run_id,
+                                    },
+                                    expires_at=datetime.now(UTC)
+                                    + timedelta(hours=timeout_h),
+                                )
+                            )
+
+                db_run.steps_completed = len(synced_steps)
+                db_run.status = state.get("status", "running")
+                if state.get("status") in ("completed", "failed", "timed_out"):
+                    db_run.completed_at = datetime.now(UTC)
+                if state.get("status") == "completed":
+                    db_run.result = state.get("step_results")
+
+            if state.get("status") in (
+                "completed",
+                "failed",
+                "waiting_hitl",
+                "timed_out",
+                "cancelled",
+            ):
+                break
+
+    except Exception as exc:
+        _log.error("workflow_bg_failed", run_id=str(run_id), error=str(exc))
+        try:
+            async with get_tenant_session(tenant_id) as session:
+                db_run = (
+                    await session.execute(
+                        select(WorkflowRun).where(WorkflowRun.id == run_id)
+                    )
+                ).scalar_one()
+                db_run.status = "failed"
+                db_run.error = {"message": str(exc)}
+                db_run.completed_at = datetime.now(UTC)
+        except Exception as inner:
+            _log.error("workflow_bg_error_handler_failed", error=str(inner))
+    finally:
+        await state_store.close()
+
+
 # ── POST /workflows/{wf_id}/run ─────────────────────────────────────────────
 @router.post("/workflows/{wf_id}/run")
 async def run_workflow(
     wf_id: UUID,
+    background_tasks: BackgroundTasks,
     body: WorkflowRunTrigger | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -211,8 +373,10 @@ async def run_workflow(
         if not wf.is_active:
             raise HTTPException(409, "Workflow definition is inactive")
 
+        definition = wf.definition
+
         # Count steps from definition
-        steps_list = wf.definition.get("steps", [])
+        steps_list = definition.get("steps", [])
         steps_total = len(steps_list) if isinstance(steps_list, list) else None
 
         run = WorkflowRun(
@@ -226,6 +390,11 @@ async def run_workflow(
         )
         session.add(run)
         await session.flush()
+
+    # Execute workflow steps in the background
+    background_tasks.add_task(
+        _execute_workflow_bg, tid, run.id, definition, body.payload
+    )
 
     return {
         "run_id": str(run.id),

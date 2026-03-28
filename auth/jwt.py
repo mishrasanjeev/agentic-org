@@ -118,6 +118,8 @@ async def _fetch_jwks() -> dict[str, Any]:
     global _jwks_cache, _jwks_cache_time
     if _jwks_cache and (time.time() - _jwks_cache_time) < JWKS_CACHE_TTL:
         return _jwks_cache
+    if not settings.jwt_public_key_url:
+        raise ValueError("JWKS URL not configured (AGENTICORG_JWT_PUBLIC_KEY_URL is empty)")
     async with httpx.AsyncClient() as client:
         resp = await client.get(settings.jwt_public_key_url)
         resp.raise_for_status()
@@ -169,14 +171,16 @@ async def validate_token(token: str) -> dict[str, Any]:
     # Try local HS256 first
     try:
         return validate_local_token(token)
-    except ValueError:
-        pass
+    except ValueError as local_err:
+        # If no JWKS endpoint configured, local validation is the only path
+        if not settings.jwt_public_key_url:
+            raise local_err  # noqa: TRY201
 
     # Fall back to JWKS RS256
     try:
         return await _validate_jwks_token(token)
     except Exception as e:
-        raise ValueError(f"Token validation failed: {e}") from e
+        raise ValueError(str(e)) from e
 
 
 def extract_scopes(claims: dict[str, Any]) -> list[str]:

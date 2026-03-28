@@ -161,7 +161,7 @@ class TestSECAUTH003:
 
                 from auth.jwt import validate_token
 
-                with pytest.raises(ValueError, match="Token validation failed"):
+                with pytest.raises(ValueError, match="Token expired"):
                     await validate_token("expired.token.here")
 
     def test_expired_error_code_metadata(self):
@@ -185,16 +185,24 @@ class TestSECAUTH004:
         """SEC-AUTH-004: A JWT header with alg='none' must be rejected during
         token validation, preventing the alg:none bypass attack.
         """
+        from jose import JWTError
+
         with patch("auth.jwt._fetch_jwks", new_callable=AsyncMock) as mock_jwks:
             mock_jwks.return_value = {"keys": []}
 
             with patch("auth.jwt.jwt") as mock_jwt:
+                # Local HS256 validation must fail so the JWKS path is reached
+                mock_jwt.decode.side_effect = JWTError("invalid token")
                 mock_jwt.get_unverified_header.return_value = {"alg": "none", "kid": "k1"}
 
-                from auth.jwt import validate_token
+                # JWKS fallback requires a configured URL
+                with patch("auth.jwt.settings") as mock_settings:
+                    mock_settings.jwt_public_key_url = "https://example.com/.well-known/jwks.json"
 
-                with pytest.raises(ValueError, match="Algorithm none is not permitted"):
-                    await validate_token("forged.none.token")
+                    from auth.jwt import validate_token
+
+                    with pytest.raises(ValueError, match="Algorithm none is not permitted"):
+                        await validate_token("forged.none.token")
 
 
 # ===================================================================

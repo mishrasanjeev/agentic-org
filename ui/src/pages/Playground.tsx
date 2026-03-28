@@ -252,7 +252,13 @@ async function getAuthToken(): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: "ceo@agenticorg.local", password: "ceo123!" }),
   });
-  const data: { access_token: string } = await resp.json();
+  if (!resp.ok) {
+    throw new Error("Demo login failed — make sure the backend is running and the demo user is seeded.");
+  }
+  const data: { access_token?: string } = await resp.json();
+  if (!data.access_token) {
+    throw new Error("Login succeeded but no access token returned.");
+  }
   sessionStorage.setItem("playground_token", data.access_token);
   return data.access_token;
 }
@@ -533,6 +539,7 @@ export default function Playground() {
         // If 401, clear cached token and retry once
         if (resp.status === 401) {
           sessionStorage.removeItem("playground_token");
+          localStorage.removeItem("token");
           const newToken = await getAuthToken();
           const retry = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
             method: "POST",
