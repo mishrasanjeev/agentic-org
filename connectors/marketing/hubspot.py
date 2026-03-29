@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+import structlog
+
 from connectors.framework.base_connector import BaseConnector
+
+logger = structlog.get_logger()
 
 
 class HubspotConnector(BaseConnector):
@@ -35,22 +40,33 @@ class HubspotConnector(BaseConnector):
         self._tool_registry["get_campaign_analytics"] = self.get_campaign_analytics
 
     async def _authenticate(self):
-        # HubSpot Private App Token (preferred) or OAuth2
+        # Always try OAuth refresh first (tokens expire every 30 min)
+        refresh_token = self._get_secret("refresh_token")
+        client_id = self._get_secret("client_id")
+        client_secret = self._get_secret("client_secret")
+
+        if refresh_token and client_id:
+            fresh_token = await self._refresh_oauth(client_id, client_secret, refresh_token)
+            if fresh_token:
+                self._auth_headers = {
+                    "Authorization": f"Bearer {fresh_token}",
+                    "Content-Type": "application/json",
+                }
+                return
+
+        # Fallback: stored access_token / private app token
         access_token = self._get_secret("access_token") or self._get_secret("api_key")
         if access_token:
             self._auth_headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
             }
-            return
 
-        # Fallback: OAuth2 client credentials
-        client_id = self._get_secret("client_id")
-        client_secret = self._get_secret("client_secret")
-        refresh_token = self._get_secret("refresh_token")
-        if client_id and refresh_token:
-            import httpx
-
+    async def _refresh_oauth(
+        self, client_id: str, client_secret: str, refresh_token: str
+    ) -> str | None:
+        """Exchange refresh_token for a fresh access_token."""
+        try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
                     "https://api.hubapi.com/oauth/v1/token",
@@ -62,11 +78,32 @@ class HubspotConnector(BaseConnector):
                     },
                 )
                 resp.raise_for_status()
-                token = resp.json()["access_token"]
-            self._auth_headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            }
+                data = resp.json()
+                logger.info("hubspot_token_refreshed", expires_in=data.get("expires_in"))
+                return data["access_token"]
+        except Exception as exc:
+            logger.warning("hubspot_token_refresh_failed", error=str(exc))
+            return None
+
+    async def execute_tool(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Execute tool with automatic 401 retry (re-authenticates and retries once)."""
+        try:
+            return await super().execute_tool(tool_name, params)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 401:
+                raise
+            # Token expired mid-session — refresh and retry
+            logger.info("hubspot_401_retry", tool=tool_name)
+            await self._authenticate()
+            # Re-create client with fresh headers
+            if self._client:
+                await self._client.aclose()
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout_ms / 1000,
+                headers=self._auth_headers,
+            )
+            return await super().execute_tool(tool_name, params)
 
     async def health_check(self) -> dict[str, Any]:
         try:
@@ -141,10 +178,7 @@ class HubspotConnector(BaseConnector):
         if not contact_id:
             return {"error": "contact_id is required"}
         properties = {k: v for k, v in params.items() if k != "contact_id" and v is not None}
-        return await self._client.patch(
-            f"/crm/v3/objects/contacts/{contact_id}",
-            json={"properties": properties},
-        ).json() if self._client else {"error": "not connected"}
+        return await self._patch(f"/crm/v3/objects/contacts/{contact_id}", {"properties": properties})
 
     # ── Deals ───────────────────────────────────────────────────────────
 
@@ -200,14 +234,7 @@ class HubspotConnector(BaseConnector):
         if not deal_id:
             return {"error": "deal_id is required"}
         properties = {k: v for k, v in params.items() if k != "deal_id" and v is not None}
-        if not self._client:
-            return {"error": "not connected"}
-        resp = await self._client.patch(
-            f"/crm/v3/objects/deals/{deal_id}",
-            json={"properties": properties},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        return await self._patch(f"/crm/v3/objects/deals/{deal_id}", {"properties": properties})
 
     # ── Pipeline ────────────────────────────────────────────────────────
 

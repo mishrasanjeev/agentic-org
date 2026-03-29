@@ -106,6 +106,13 @@ class BaseConnector(abc.ABC):
         resp.raise_for_status()
         return resp.json()
 
+    async def _patch(self, path: str, data: dict | None = None) -> dict[str, Any]:
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.patch(path, json=data)
+        resp.raise_for_status()
+        return resp.json()
+
     async def _delete(self, path: str) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
