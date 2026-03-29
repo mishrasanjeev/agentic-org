@@ -58,6 +58,8 @@ class GithubConnector(BaseConnector):
         per_page = params.get("per_page", 30)
         sort = params.get("sort", "updated")
         data = await self._get("/user/repos", params={"per_page": per_page, "sort": sort})
+        if not isinstance(data, list):
+            return data  # error response from API
         return {
             "repos": [
                 {
@@ -83,12 +85,16 @@ class GithubConnector(BaseConnector):
         """List issues for a repository."""
         owner = params.get("owner", "")
         repo = params.get("repo", "")
+        if not owner or not repo:
+            return {"error": "owner and repo are required"}
         state = params.get("state", "open")
         per_page = params.get("per_page", 30)
         data = await self._get(
             f"/repos/{owner}/{repo}/issues",
             params={"state": state, "per_page": per_page},
         )
+        if not isinstance(data, list):
+            return data  # error response from API
         return {
             "issues": [
                 {
