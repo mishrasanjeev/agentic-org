@@ -28,6 +28,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await loginWithGoogle(credentialResponse.credential);
+      import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "google" }));
       navigate("/onboarding");
     } catch (err: any) {
       setError(err.message || "Google signup failed");
@@ -46,6 +47,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await signup(orgName, name, email, password);
+      import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "email" }));
       navigate("/onboarding");
     } catch (err: any) {
       setError(err.message || "Signup failed");

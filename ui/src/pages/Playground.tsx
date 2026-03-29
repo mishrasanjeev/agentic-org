@@ -543,6 +543,7 @@ export default function Playground() {
     setSummary(null);
     setError(null);
     setRunning(true);
+    import("@/components/Analytics").then(m => m.trackEvent("agent_run", { agent_name: uc.agentName, source: "playground" }));
 
     const startTime = performance.now();
 

@@ -44,6 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("user", JSON.stringify(loginUser));
     setToken(data.access_token);
     setUser(loginUser);
+    import("@/components/Analytics").then(m => {
+      m.trackEvent("login", { method: "email" });
+      m.identifyUser({ user_id: loginUser.email, role: loginUser.role, tenant_id: loginUser.tenant_id });
+    });
   }, []);
 
   const signup = useCallback(async (orgName: string, name: string, email: string, password: string) => {

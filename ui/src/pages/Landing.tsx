@@ -175,6 +175,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error("Request failed");
+      import("@/components/Analytics").then(m => m.trackEvent("demo_request", { company: form.company || "", role: form.role || "" }));
       setDone(true);
     } catch {
       setError("Something went wrong. Please try again.");

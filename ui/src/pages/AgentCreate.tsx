@@ -129,6 +129,7 @@ export default function AgentCreate() {
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
       });
+      import("@/components/Analytics").then(m => m.trackEvent("agent_create", { agent_type: agentType, domain }));
       navigate(`/dashboard/agents/${data.agent_id || ""}`);
     } catch {
       setError("Failed to create agent. Please try again.");
