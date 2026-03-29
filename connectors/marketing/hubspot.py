@@ -1,8 +1,8 @@
-"""Hubspot connector — marketing."""
+"""HubSpot connector — real HubSpot CRM API v3 integration."""
 
 from __future__ import annotations
 
-import httpx
+from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
 
@@ -15,55 +15,267 @@ class HubspotConnector(BaseConnector):
     rate_limit_rpm = 200
 
     def _register_tools(self):
+        # Contacts
+        self._tool_registry["list_contacts"] = self.list_contacts
+        self._tool_registry["search_contacts"] = self.search_contacts
         self._tool_registry["create_contact"] = self.create_contact
-        self._tool_registry["send_marketing_email"] = self.send_marketing_email
+        self._tool_registry["get_contact"] = self.get_contact
+        self._tool_registry["update_contact"] = self.update_contact
+        # Deals
+        self._tool_registry["list_deals"] = self.list_deals
         self._tool_registry["create_deal"] = self.create_deal
-        self._tool_registry["enrol_in_sequence"] = self.enrol_in_sequence
+        self._tool_registry["get_deal"] = self.get_deal
+        self._tool_registry["update_deal"] = self.update_deal
+        # Pipeline
+        self._tool_registry["list_pipelines"] = self.list_pipelines
+        # Companies
+        self._tool_registry["list_companies"] = self.list_companies
+        self._tool_registry["create_company"] = self.create_company
+        # Analytics
         self._tool_registry["get_campaign_analytics"] = self.get_campaign_analytics
-        self._tool_registry["run_ab_test"] = self.run_ab_test
-        self._tool_registry["segment_contact_list"] = self.segment_contact_list
 
     async def _authenticate(self):
+        # HubSpot Private App Token (preferred) or OAuth2
+        access_token = self._get_secret("access_token") or self._get_secret("api_key")
+        if access_token:
+            self._auth_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+            return
+
+        # Fallback: OAuth2 client credentials
         client_id = self._get_secret("client_id")
         client_secret = self._get_secret("client_secret")
-        token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                },
-            )
-            resp.raise_for_status()
-            token = resp.json()["access_token"]
-        self._auth_headers = {"Authorization": f"Bearer {token}"}
+        refresh_token = self._get_secret("refresh_token")
+        if client_id and refresh_token:
+            import httpx
 
-    async def create_contact(self, **params):
-        """Execute create_contact on hubspot."""
-        return await self._post("/create/contact", params)
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    "https://api.hubapi.com/oauth/v1/token",
+                    data={
+                        "grant_type": "refresh_token",
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "refresh_token": refresh_token,
+                    },
+                )
+                resp.raise_for_status()
+                token = resp.json()["access_token"]
+            self._auth_headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            }
 
-    async def send_marketing_email(self, **params):
-        """Execute send_marketing_email on hubspot."""
-        return await self._post("/send/marketing/email", params)
+    async def health_check(self) -> dict[str, Any]:
+        try:
+            data = await self._get("/crm/v3/objects/contacts", params={"limit": 1})
+            return {"status": "healthy", "total_contacts": data.get("total", 0)}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
 
-    async def create_deal(self, **params):
-        """Execute create_deal on hubspot."""
-        return await self._post("/create/deal", params)
+    # ── Contacts ────────────────────────────────────────────────────────
 
-    async def enrol_in_sequence(self, **params):
-        """Execute enrol_in_sequence on hubspot."""
-        return await self._post("/enrol/in/sequence", params)
+    async def list_contacts(self, **params) -> dict[str, Any]:
+        """List contacts with optional property selection."""
+        limit = params.get("limit", 20)
+        properties = params.get("properties", "firstname,lastname,email,company,phone")
+        data = await self._get(
+            "/crm/v3/objects/contacts",
+            params={"limit": limit, "properties": properties},
+        )
+        return {
+            "contacts": [
+                {
+                    "id": c["id"],
+                    **c.get("properties", {}),
+                }
+                for c in data.get("results", [])
+            ],
+            "total": data.get("total", len(data.get("results", []))),
+            "has_more": bool(data.get("paging", {}).get("next")),
+        }
 
-    async def get_campaign_analytics(self, **params):
-        """Execute get_campaign_analytics on hubspot."""
-        return await self._post("/get/campaign/analytics", params)
+    async def search_contacts(self, **params) -> dict[str, Any]:
+        """Search contacts by email, name, or custom properties."""
+        query = params.get("query", "")
+        if not query:
+            return {"error": "query is required"}
+        body = {
+            "filterGroups": [
+                {
+                    "filters": [
+                        {"propertyName": "email", "operator": "CONTAINS_TOKEN", "value": query},
+                    ]
+                }
+            ],
+            "properties": ["firstname", "lastname", "email", "company", "phone", "lifecyclestage"],
+            "limit": params.get("limit", 10),
+        }
+        return await self._post("/crm/v3/objects/contacts/search", body)
 
-    async def run_ab_test(self, **params):
-        """Execute run_ab_test on hubspot."""
-        return await self._post("/run/ab/test", params)
+    async def get_contact(self, **params) -> dict[str, Any]:
+        """Get a contact by ID."""
+        contact_id = params.get("contact_id", "")
+        if not contact_id:
+            return {"error": "contact_id is required"}
+        return await self._get(
+            f"/crm/v3/objects/contacts/{contact_id}",
+            params={"properties": "firstname,lastname,email,company,phone,lifecyclestage,hs_lead_status"},
+        )
 
-    async def segment_contact_list(self, **params):
-        """Execute segment_contact_list on hubspot."""
-        return await self._post("/segment/contact/list", params)
+    async def create_contact(self, **params) -> dict[str, Any]:
+        """Create a new contact."""
+        properties: dict[str, Any] = {}
+        for field in ("email", "firstname", "lastname", "company", "phone", "jobtitle", "website"):
+            if params.get(field):
+                properties[field] = params[field]
+        if not properties.get("email"):
+            return {"error": "email is required"}
+        return await self._post("/crm/v3/objects/contacts", {"properties": properties})
+
+    async def update_contact(self, **params) -> dict[str, Any]:
+        """Update contact properties."""
+        contact_id = params.get("contact_id", "")
+        if not contact_id:
+            return {"error": "contact_id is required"}
+        properties = {k: v for k, v in params.items() if k != "contact_id" and v is not None}
+        return await self._client.patch(
+            f"/crm/v3/objects/contacts/{contact_id}",
+            json={"properties": properties},
+        ).json() if self._client else {"error": "not connected"}
+
+    # ── Deals ───────────────────────────────────────────────────────────
+
+    async def list_deals(self, **params) -> dict[str, Any]:
+        """List deals with properties."""
+        limit = params.get("limit", 20)
+        data = await self._get(
+            "/crm/v3/objects/deals",
+            params={
+                "limit": limit,
+                "properties": "dealname,amount,dealstage,pipeline,closedate,hubspot_owner_id",
+            },
+        )
+        return {
+            "deals": [
+                {
+                    "id": d["id"],
+                    **d.get("properties", {}),
+                }
+                for d in data.get("results", [])
+            ],
+            "total": data.get("total", len(data.get("results", []))),
+        }
+
+    async def get_deal(self, **params) -> dict[str, Any]:
+        """Get a deal by ID."""
+        deal_id = params.get("deal_id", "")
+        if not deal_id:
+            return {"error": "deal_id is required"}
+        return await self._get(
+            f"/crm/v3/objects/deals/{deal_id}",
+            params={"properties": "dealname,amount,dealstage,pipeline,closedate"},
+        )
+
+    async def create_deal(self, **params) -> dict[str, Any]:
+        """Create a new deal in the pipeline."""
+        properties: dict[str, Any] = {
+            "dealname": params.get("dealname", ""),
+            "pipeline": params.get("pipeline", "default"),
+            "dealstage": params.get("dealstage", "appointmentscheduled"),
+        }
+        if params.get("amount"):
+            properties["amount"] = str(params["amount"])
+        if params.get("closedate"):
+            properties["closedate"] = params["closedate"]
+        if not properties["dealname"]:
+            return {"error": "dealname is required"}
+        return await self._post("/crm/v3/objects/deals", {"properties": properties})
+
+    async def update_deal(self, **params) -> dict[str, Any]:
+        """Update deal properties (stage, amount, etc.)."""
+        deal_id = params.get("deal_id", "")
+        if not deal_id:
+            return {"error": "deal_id is required"}
+        properties = {k: v for k, v in params.items() if k != "deal_id" and v is not None}
+        if not self._client:
+            return {"error": "not connected"}
+        resp = await self._client.patch(
+            f"/crm/v3/objects/deals/{deal_id}",
+            json={"properties": properties},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # ── Pipeline ────────────────────────────────────────────────────────
+
+    async def list_pipelines(self, **params) -> dict[str, Any]:
+        """List all deal pipelines and their stages."""
+        data = await self._get("/crm/v3/pipelines/deals")
+        return {
+            "pipelines": [
+                {
+                    "id": p["id"],
+                    "label": p.get("label"),
+                    "stages": [
+                        {"id": s["id"], "label": s.get("label"), "display_order": s.get("displayOrder")}
+                        for s in p.get("stages", [])
+                    ],
+                }
+                for p in data.get("results", [])
+            ],
+        }
+
+    # ── Companies ───────────────────────────────────────────────────────
+
+    async def list_companies(self, **params) -> dict[str, Any]:
+        """List companies."""
+        limit = params.get("limit", 20)
+        data = await self._get(
+            "/crm/v3/objects/companies",
+            params={"limit": limit, "properties": "name,domain,industry,numberofemployees"},
+        )
+        return {
+            "companies": [
+                {"id": c["id"], **c.get("properties", {})}
+                for c in data.get("results", [])
+            ],
+            "total": data.get("total", len(data.get("results", []))),
+        }
+
+    async def create_company(self, **params) -> dict[str, Any]:
+        """Create a company."""
+        properties: dict[str, Any] = {}
+        for field in ("name", "domain", "industry", "phone", "city", "numberofemployees"):
+            if params.get(field):
+                properties[field] = params[field]
+        if not properties.get("name"):
+            return {"error": "name is required"}
+        return await self._post("/crm/v3/objects/companies", {"properties": properties})
+
+    # ── Analytics ───────────────────────────────────────────────────────
+
+    async def get_campaign_analytics(self, **params) -> dict[str, Any]:
+        """Get marketing email campaign analytics."""
+        limit = params.get("limit", 10)
+        data = await self._get(
+            "/marketing/v1/emails",
+            params={"limit": limit, "orderBy": "-updated"},
+        )
+        if not isinstance(data, dict) or "objects" not in data:
+            return data if isinstance(data, dict) else {"raw": str(data)[:500]}
+        return {
+            "campaigns": [
+                {
+                    "id": e.get("id"),
+                    "name": e.get("name"),
+                    "subject": e.get("subject"),
+                    "state": e.get("state"),
+                    "stats": e.get("stats", {}),
+                }
+                for e in data.get("objects", [])
+            ],
+            "total": data.get("total", 0),
+        }
