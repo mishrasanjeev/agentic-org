@@ -479,7 +479,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">24+</div>
+              <div className="text-3xl font-extrabold text-slate-900">25</div>
               <p className="text-sm text-slate-500 mt-1">Pre-built AI Agents</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">

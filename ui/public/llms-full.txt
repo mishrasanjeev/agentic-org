@@ -1,6 +1,6 @@
 # AgenticOrg — Complete Product Documentation for LLMs
 
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 24+ pre-built agents across Finance, HR, Marketing, and Operations. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 42 enterprise systems. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 25 pre-built agents across Finance, HR, Marketing, and Operations. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 42 enterprise systems (269 tools) — agents call real APIs (Jira, HubSpot, GitHub verified). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
 
 ## Product Overview
 
@@ -35,7 +35,7 @@ AgenticOrg treats AI agents as virtual employees — named personas that admins 
 ### Agent Creator (No-Code Wizard)
 5-step wizard available to admin/CEO users:
 1. **Persona**: Employee name, designation, avatar, domain
-2. **Role**: Agent type (pick from 24+ built-in or create custom), specialization, routing filters
+2. **Role**: Agent type (pick from 25 built-in or create custom), specialization, routing filters
 3. **Prompt**: Select from 26 production-tested prompt templates or write custom instructions, fill in template variables
 4. **Behavior**: Confidence floor, HITL conditions, LLM model, max retries
 5. **Review**: Summary and deploy as Shadow
@@ -73,7 +73,7 @@ Each agent can have monthly cost caps (e.g., $200/month). Before every execution
 
 ---
 
-## All 24+ Agents — Detailed
+## All 25 Agents — Detailed
 
 ### Finance Domain (6 agents, CFO oversight)
 
@@ -357,7 +357,7 @@ Published at: https://agenticorg.ai/evals
 
 ### Enterprise (Custom pricing)
 - All 24 agents
-- All 42 connectors
+- All 42 connectors (269 tools, 3 verified live: GitHub, Jira, HubSpot)
 - Unlimited everything
 - Dedicated support engineer
 - 99.9% uptime SLA

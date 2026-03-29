@@ -44,7 +44,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     metaTitle: "What Are AI Agents for Enterprise? — Complete Guide 2026",
     metaDescription: "AI agents are autonomous software systems that reason, decide, and act on behalf of enterprise teams. Learn how they work, where they're used, and how they differ from chatbots and RPA.",
     keywords: ["AI agents enterprise", "what are AI agents", "enterprise AI automation", "autonomous AI agents"],
-    heroStat: { value: "24+", label: "Pre-built enterprise AI agents" },
+    heroStat: { value: "25", label: "Pre-built enterprise AI agents" },
     sections: [
       { heading: "AI Agents Are Not Chatbots", body: "An AI agent is fundamentally different from a chatbot. Chatbots respond to questions. AI agents take action. They can process invoices, reconcile bank statements, onboard employees, triage support tickets, and launch marketing campaigns — all autonomously, with human approval on critical decisions.\n\nThe key differentiator is agency: the ability to reason about a goal, break it into steps, use tools (APIs, databases, external services), and execute without constant human guidance." },
       { heading: "How Enterprise AI Agents Work", body: "Enterprise AI agents follow a pipeline: receive a task, load domain-specific instructions (prompt), reason using an LLM (like Gemini or GPT-4), call tools (ERP APIs, payment gateways, HR systems), validate their output, compute a confidence score, and either deliver the result or escalate to a human.\n\nThis pipeline is deterministic — agents follow predefined steps in order. They don't improvise. Anti-hallucination guardrails prevent them from inventing data. And Human-in-the-Loop (HITL) governance ensures no high-stakes decision is made without human approval." },
@@ -108,7 +108,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     sections: [
       { heading: "What to Look For", body: "An enterprise AI automation platform should provide: pre-built agents for common workflows, a no-code builder for custom agents, human-in-the-loop governance, enterprise connectors (SAP, Oracle, Salesforce), audit trails, role-based access control, and shadow mode testing." },
       { heading: "10 Evaluation Criteria", body: "1. Agent library breadth (how many pre-built agents?)\n2. Custom agent creation (no-code vs code-required?)\n3. HITL governance (configurable thresholds? escalation chains?)\n4. Connector ecosystem (how many enterprise systems supported?)\n5. Security (SOC-2? PII masking? tenant isolation?)\n6. Audit trail (WORM-compliant? retention policy?)\n7. LLM flexibility (which models? failover support?)\n8. Shadow mode (can you test without production risk?)\n9. India compliance (GSTN, EPFO, Darwinbox?)\n10. Total cost of ownership (per-agent pricing vs platform fee?)" },
-      { heading: "AgenticOrg vs Alternatives", body: "AgenticOrg provides 24+ pre-built agents, 42 enterprise connectors, no-code agent builder, HITL governance, shadow mode, and India-first compliance — all deployable in under 5 minutes on any Kubernetes cluster." },
+      { heading: "AgenticOrg vs Alternatives", body: "AgenticOrg provides 25 pre-built agents that call real APIs (Jira, HubSpot, GitHub), 42 enterprise connectors (269 tools), no-code agent builder, HITL governance, shadow mode, and India-first compliance — all deployable in under 5 minutes on any Kubernetes cluster." },
     ],
     faqs: [
       { q: "How much does an enterprise AI platform cost?", a: "Pricing varies. AgenticOrg offers a free tier (35 agents), Pro at $499/month (12 agents), and custom Enterprise plans. Total cost is typically 50-80% less than equivalent RPA deployments." },
@@ -422,7 +422,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     heroStat: { value: "5 min", label: "To create a custom AI agent" },
     sections: [
       { heading: "Why No-Code Matters", body: "Traditional AI deployment: 6 months of development, ML engineers, infrastructure setup. No-code agent creation: 5 minutes, business user, guided wizard. The difference is the difference between building a house and moving into one." },
-      { heading: "The 5-Step Wizard", body: "Step 1 — Persona: Name your AI employee, set their designation and specialization\nStep 2 — Role: Choose from 24+ agent types or create a custom one\nStep 3 — Prompt: Select from 26 templates or write custom instructions\nStep 4 — Behavior: Set confidence floor, HITL conditions, retry policy\nStep 5 — Review & Deploy: Launch in shadow mode for safe testing" },
+      { heading: "The 5-Step Wizard", body: "Step 1 — Persona: Name your AI employee, set their designation and specialization\nStep 2 — Role: Choose from 25 agent types or create a custom one\nStep 3 — Prompt: Select from 26 templates or write custom instructions\nStep 4 — Behavior: Set confidence floor, HITL conditions, retry policy\nStep 5 — Review & Deploy: Launch in shadow mode for safe testing" },
       { heading: "Multiple Agents, Same Role", body: "Create 3 AP Processors: Priya handles domestic invoices in Mumbai, Arjun handles import invoices in Delhi, Maya handles subsidiary accounts. Smart routing sends each invoice to the right agent." },
     ],
     faqs: [
@@ -439,7 +439,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     metaTitle: "AI Virtual Employees — The Future of Enterprise Workforce",
     metaDescription: "AI virtual employees are named AI agents with personas, specializations, and tailored instructions. They process invoices, run payroll, triage tickets — with human oversight.",
     keywords: ["AI virtual employees", "virtual employee AI", "AI workforce", "digital workers enterprise"],
-    heroStat: { value: "24+", label: "Virtual employees ready to deploy" },
+    heroStat: { value: "25", label: "Virtual employees ready to deploy" },
     sections: [
       { heading: "Beyond Bots — Virtual Employees", body: "Traditional automation creates bots — nameless, faceless scripts. AI virtual employees are different. They have names (Priya, Arjun, Maya), designations (Senior AP Analyst - Mumbai), specializations (domestic invoices under 5L), and tailored instructions. They appear in your agent fleet like real team members." },
       { heading: "Why Personas Matter", body: "Personas aren't cosmetic. When the CFO sees 'Priya (AP Processor) flagged invoice INV-4521 for review,' they know exactly who did what. The audit trail shows which virtual employee made which decision. Multiple employees can share the same role with different specializations — just like a real team." },
