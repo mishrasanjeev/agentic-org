@@ -81,14 +81,16 @@ class JiraConnector(BaseConnector):
 
     async def search_issues(self, **params) -> dict[str, Any]:
         """Search issues using JQL."""
-        jql = params.get("jql", "order by created DESC")
+        jql = params.get("jql", "project is not EMPTY order by created DESC")
         max_results = params.get("max_results", 20)
-        body = {
-            "jql": jql,
-            "maxResults": max_results,
-            "fields": ["summary", "status", "assignee", "priority", "created", "updated"],
-        }
-        data = await self._post("/rest/api/3/search", body)
+        data = await self._get(
+            "/rest/api/3/search/jql",
+            params={
+                "jql": jql,
+                "maxResults": max_results,
+                "fields": "summary,status,assignee,priority,created,updated",
+            },
+        )
         issues = data.get("issues", [])
         return {
             "total": data.get("total", 0),
@@ -97,7 +99,7 @@ class JiraConnector(BaseConnector):
                     "key": i["key"],
                     "summary": i.get("fields", {}).get("summary"),
                     "status": i.get("fields", {}).get("status", {}).get("name"),
-                    "priority": i.get("fields", {}).get("priority", {}).get("name"),
+                    "priority": (i.get("fields", {}).get("priority") or {}).get("name"),
                     "assignee": (i.get("fields", {}).get("assignee") or {}).get("displayName"),
                     "created": i.get("fields", {}).get("created"),
                 }
@@ -131,13 +133,13 @@ class JiraConnector(BaseConnector):
         project_key = params.get("project_key", "")
         if not project_key:
             return {"error": "project_key is required"}
-        data = await self._post("/rest/api/3/search", {
+        data = await self._get("/rest/api/3/search/jql", params={
             "jql": f"project = {project_key}",
             "maxResults": 0,
         })
         total = data.get("total", 0)
         # Get open vs closed
-        open_data = await self._post("/rest/api/3/search", {
+        open_data = await self._get("/rest/api/3/search/jql", params={
             "jql": f"project = {project_key} AND statusCategory != Done",
             "maxResults": 0,
         })

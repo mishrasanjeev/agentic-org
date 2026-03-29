@@ -34,12 +34,14 @@ class BaseConnector(abc.ABC):
 
     async def connect(self) -> None:
         """Initialize HTTP client and authenticate."""
+        # Authenticate first to populate _auth_headers
+        await self._authenticate()
+        # Then create client with the auth headers
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_ms / 1000,
             headers=self._auth_headers,
         )
-        await self._authenticate()
 
     async def disconnect(self) -> None:
         if self._client:

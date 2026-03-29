@@ -32,16 +32,6 @@ class GithubConnector(BaseConnector):
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        # Re-init client with updated headers
-        if self._client:
-            await self._client.aclose()
-        import httpx
-
-        self._client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=self.timeout_ms / 1000,
-            headers=self._auth_headers,
-        )
 
     async def health_check(self) -> dict[str, Any]:
         """Verify PAT is valid by fetching authenticated user."""
