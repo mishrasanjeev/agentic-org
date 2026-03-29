@@ -328,7 +328,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="Create AI virtual employees in minutes — or deploy 24+ pre-built agents across Finance, HR, Marketing & Ops. No-code agent builder with human-in-the-loop governance, 42 enterprise connectors, and prompt template library. Start free." />
+        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. 42 connectors (269 tools), human-in-the-loop governance, no-code builder. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -420,7 +420,7 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">Now Live &mdash; Create AI Virtual Employees or Deploy 24+ Pre-Built Agents</span>
+              <span className="text-slate-300 text-sm">Now Live &mdash; Agents That Act: Jira Tickets, HubSpot CRM, GitHub Repos via Real API Calls</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -569,7 +569,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Deploy 24+ pre-built agents or create custom AI virtual employees &mdash; all with enterprise-grade monitoring and governance.
+                25 pre-built agents that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. Not chatbots. Virtual employees.
               </p>
             </div>
           </FadeIn>
@@ -585,7 +585,7 @@ export default function Landing() {
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  View, configure, and deploy 24+ pre-built agents across Finance, HR, Marketing, Ops, and Back Office &mdash; or create custom virtual employees with names, personas, and specializations.
+                  25 pre-built agents across Finance, HR, Marketing, Ops, and Back Office &mdash; each connected to real tools (Jira, HubSpot, GitHub). Create custom virtual employees with names, personas, and tool access.
                 </p>
               </div>
             </FadeIn>
@@ -849,9 +849,9 @@ export default function Landing() {
 
             <div className="grid md:grid-cols-3 gap-12">
               {[
-                { num: "1", title: "Create or pick your agents", desc: "Choose from 24+ pre-built agents, or create custom AI virtual employees with names, specializations, and tailored instructions — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "42 connectors for SAP, Oracle, GSTN, Darwinbox, Slack, and more. Plug into your existing infrastructure in minutes, not months." },
-                { num: "3", title: "Agents work, you approve", desc: "Agents automate the repetitive work. You approve critical decisions via HITL governance. Full audit trail on every action." },
+                { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
+                { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — Jira, HubSpot, GitHub verified live. SAP, Oracle, GSTN, Darwinbox, Slack, and more. Agents call real APIs, not stubs." },
+                { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Full audit trail on every action." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
                   <div className="text-center">
@@ -1073,7 +1073,7 @@ export default function Landing() {
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              24+ pre-built agents. Unlimited custom agents. 42 connectors. Free to start.
+              25 agents that act. 42 connectors. 269 tools. 1,031 tests passing. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

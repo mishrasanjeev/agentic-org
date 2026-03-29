@@ -7,8 +7,8 @@ packages = ["core", "api", "auth", "connectors", "workflows", "scaling", "observ
 
 [project]
 name = "agenticorg"
-version = "2.1.0"
-description = "Enterprise Agent Swarm Platform — 24 agents, 42 connectors, unlimited scaling"
+version = "2.2.0"
+description = "AI Virtual Employee Platform — 25 agents that reason AND act, 42 connectors (269 tools), HITL governance"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"

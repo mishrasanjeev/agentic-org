@@ -1,12 +1,13 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — Create custom AI agents or deploy 24+ pre-built agents across Finance, HR, Marketing, Operations, and Back Office. Human-in-the-loop governance, 42 enterprise connectors, no-code agent builder.
+**AI Virtual Employee Platform** — 25 pre-built agents that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub) — not just generate text. 42 connectors, 269 tools, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-green.svg)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Tests-353_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-1031_passing-brightgreen.svg)](tests/)
+[![E2E](https://img.shields.io/badge/E2E-125%2F125_production-brightgreen.svg)](tests/e2e_full_production_test.py)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -20,11 +21,13 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 
 | Metric | Value |
 |--------|-------|
-| Pre-built Agents | 24 across 5 domains |
-| Custom Agents | Unlimited (no-code wizard) |
-| Enterprise Connectors | 42 (SAP, Oracle, GSTN, Darwinbox, Slack, Stripe...) |
+| Pre-built Agents | 25 across 5 domains |
+| Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
+| Enterprise Connectors | 42 connectors, **269 tools** |
+| Live Connectors (verified) | GitHub (9 tools), Jira (11 tools), HubSpot (13 tools) |
 | Prompt Templates | 27 production-tested |
-| Automated Tests | 353 (unit + connector + synthetic + browser) |
+| Automated Tests | **1,031** (unit + security + connector + synthetic + functional) |
+| Production E2E | **125/125 pass (100%)** against live deployment |
 | LLM | Gemini 2.5 Flash (primary), Claude/GPT-4o fallback |
 | Deployment | GKE Autopilot, ~$95/month |
 
@@ -39,6 +42,22 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 | Manual bank reconciliation | **99.7% auto-match** rate, done by 6 AM daily |
 | Zero payroll errors | PF, ESI, TDS computed automatically |
 
+### Agents That Act, Not Just Talk
+
+Unlike AI chatbots that only generate text, AgenticOrg agents **execute real actions**:
+
+```
+You: "Production API returning 500 errors. CloudSQL connection pool exhausted."
+
+Ops Commander (Aria Singh):
+  → Gemini reasons about severity (636 tokens, 2.6s)
+  → Creates Jira ticket KAN-5 via real API (1.1s)
+  → Sets priority to Highest, assigns engineering team
+  → Returns analysis + ticket link to you
+```
+
+Verified on production: agents have created **14 real Jira tickets**, read **HubSpot CRM data** (contacts, deals, companies), and queried **GitHub repo statistics** — all through the LLM → tool_calls → connector → API pipeline.
+
 ---
 
 ## Architecture
@@ -49,10 +68,16 @@ Landing Page (animations, interactive demo, blog, SEO)
 App Dashboard (agents, workflows, approvals, audit, sales pipeline)
     ↓
 FastAPI Backend
-    ├── Agent Registry → LLM Router (Gemini 2.5 Flash) → Tool Gateway
-    ├── NEXUS Orchestrator → HITL Queue → Audit Logger
-    ├── Sales Agent → Gmail API → Email Sequences
-    └── 42 Connectors (SAP, Oracle, GSTN, Darwinbox, Slack, Stripe...)
+    ├── Agent Registry → LLM Router (Gemini 2.5 Flash)
+    │       ↓ tool_calls                    ↑ synthesis
+    │   Tool Gateway → 42 Connectors (269 tools)
+    │       ├── Jira (11 tools) ← verified, creates real tickets
+    │       ├── HubSpot (13 tools) ← verified, reads real CRM
+    │       ├── GitHub (9 tools) ← verified, reads real repos
+    │       └── SAP, Oracle, GSTN, Darwinbox, Slack, Stripe...
+    ├── Workflow Engine → real agent execution → HITL Queue
+    ├── NEXUS Orchestrator → Audit Logger
+    └── Sales Agent → Gmail API → Email Sequences
     ↓
 PostgreSQL (Cloud SQL) + Redis + GCS
 ```
@@ -66,8 +91,8 @@ PostgreSQL (Cloud SQL) + Redis + GCS
 | **Marketing** | 5 | Content Factory, Campaign Pilot, SEO Strategist, CRM Intelligence, Brand Monitor |
 | **Operations** | 5 | Support Triage, Contract Intelligence, Compliance Guard, IT Operations, Vendor Manager |
 | **Back Office** | 3 | Risk Sentinel, Legal Ops, Facilities Agent |
-| **Sales** | 1 | Automated sales agent (qualification, email, pipeline) |
-| **Custom** | Unlimited | Create via 5-step no-code wizard |
+| **Sales** | 1 | Automated sales agent (qualification, email sequences, pipeline) |
+| **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
 
 ---
 
@@ -195,33 +220,38 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 ## Testing
 
 ```bash
-# Unit tests (124 tests, 5s)
+# All automated tests (1,031 tests)
+pytest tests/ --ignore=tests/e2e --ignore=tests/integration
+
+# Unit tests (739 tests)
 pytest tests/unit/
 
-# Connector harness — all 42 connectors (174 tests, 142s)
+# Security tests (84 tests)
+pytest tests/security/
+
+# Connector harness — all 42 connectors (174 tests)
 pytest tests/connector_harness/
 
-# Synthetic data — invoice/resume/contract flows (15 tests, 189s)
+# Synthetic data — invoice/resume/contract flows (15 tests)
 pytest tests/synthetic_data/
 
-# Playwright browser tests (15 tests, 90s)
-cd ui && npx playwright test --config=playwright-prod.config.ts
+# Full production E2E — 125 checks against live deployment
+python tests/e2e_full_production_test.py
 
-# Full production E2E (25 checks, 30 agents)
-python tests/final_production_test.py
-
-# All tests
-pytest tests/unit/ tests/connector_harness/ && cd ui && npx playwright test
+# Production connector test — real Jira/HubSpot/GitHub API calls
+python tests/test_production_connectors.py
 ```
 
 | Suite | Tests | What It Covers |
 |-------|-------|---------------|
-| Unit | 124 | Agents, registry, schemas, routing, prompts, RBAC |
-| Connector harness | 174 | 42 connectors × all tools via mock server |
+| Unit | 739 | Agents, registry, schemas, routing, prompts, RBAC, workflows |
+| Security | 84 | Auth bypass, token exploits, alg:none, HITL bypass, PII |
+| Connector harness | 174 | 42 connectors × all 269 tools |
 | Synthetic data | 15 | Invoice OCR → match, resume screening, contract analysis |
-| Playwright browser | 15 | Signup, login, agent CRUD, HITL, templates, mobile |
-| Production E2E | 25 | Fresh company, 30 agents created + run, full lifecycle |
-| **Total** | **353** | |
+| Ops/Marketing functional | 13 | End-to-end workflow scenarios |
+| Production E2E | 125 | Fresh org signup → 62 agents → workflows → HITL → audit → RBAC |
+| Production connectors | 17 | Real API calls to Jira, HubSpot, GitHub |
+| **Total** | **1,167** | **125/125 production E2E at 100%** |
 
 ---
 
@@ -231,10 +261,10 @@ pytest tests/unit/ tests/connector_harness/ && cd ui && npx playwright test
 agenticorg/
 ├── api/v1/                 # FastAPI endpoints (agents, auth, sales, templates, connectors)
 ├── core/
-│   ├── agents/             # 25 agent implementations + 27 prompt templates
+│   ├── agents/             # 25 agent types + 27 prompt templates
 │   │   ├── prompts/        # Production system prompts
 │   │   ├── registry.py     # Agent registry (built-in + custom type fallback)
-│   │   └── base.py         # BaseAgent: LLM reasoning, confidence, HITL
+│   │   └── base.py         # BaseAgent: LLM reasoning → tool calling → HITL
 │   ├── orchestrator/       # NEXUS: task routing, smart routing, state machine
 │   ├── llm/                # LLM router (Gemini primary, Claude/GPT-4o fallback)
 │   ├── models/             # SQLAlchemy ORM (agents, workflows, HITL, leads, templates)
@@ -255,9 +285,10 @@ agenticorg/
 │   └── pages/blog/         # 5 SEO blog articles
 │   └── pages/resources/    # 26 SEO content pages across 7 topic clusters
 ├── tests/
-│   ├── unit/               # 124 unit tests
-│   ├── connector_harness/  # Mock server + 174 connector tests
-│   ├── synthetic_data/     # Invoice, resume, contract test data + 15 tests
+│   ├── unit/               # 739 unit tests
+│   ├── security/           # 84 security tests
+│   ├── connector_harness/  # 174 connector tests (42 connectors × tools)
+│   ├── synthetic_data/     # Invoice, resume, contract test data
 │   └── e2e/                # Playwright browser tests
 ├── migrations/             # 8 PostgreSQL DDL files
 ├── helm/                   # Kubernetes Helm charts

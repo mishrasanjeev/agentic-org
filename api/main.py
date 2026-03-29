@@ -69,8 +69,8 @@ _is_production = settings.env == "production"
 
 app = FastAPI(
     title="AgenticOrg",
-    description="AI Virtual Employee Platform — 24+ agents, 42 connectors",
-    version="2.1.0",
+    description="AI Virtual Employee Platform — 25 agents that reason AND act, 42 connectors (269 tools)",
+    version="2.2.0",
     lifespan=lifespan,
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",

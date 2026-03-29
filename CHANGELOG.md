@@ -2,6 +2,39 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.0] - 2026-03-29
+
+### Added — Agent-to-Connector Bridge (Agents That Act)
+- **Tool Calling Pipeline**: Agents now parse LLM output for `tool_calls`, execute them via Tool Gateway against real external APIs, and synthesize results in a second LLM pass
+- **GitHub Connector**: 9 real API v3 tools (list_repos, get_repo, issues, PRs, releases, search_code, actions)
+- **Jira Connector**: 11 real Atlassian REST API tools (projects, issues, JQL search, transitions, comments, sprints, metrics)
+- **HubSpot Connector**: 13 real CRM API v3 tools (contacts, deals, companies, pipelines, analytics) with OAuth auto-refresh
+- **3 New Agents**: Ops Commander (Jira triage), CRM Intelligence (HubSpot analysis), DevOps Scout (GitHub + Jira health)
+- **3 Pre-built Workflows**: Incident Response Pipeline, Lead-to-Revenue Pipeline, Weekly DevOps Health Report
+- **Production Connector Test Suite**: 17 tests hitting real Jira/HubSpot/GitHub APIs
+
+### Fixed — Critical Production Bugs
+- **Workflow Engine**: `run_workflow` now actually executes the WorkflowEngine in background — creates StepExecution DB records, updates progress, creates HITLQueue entries for approval steps
+- **Token Blacklist**: Changed Redis key from `token[:32]` (shared by ALL HS256 JWTs) to SHA-256 hash — one logout was blocking every user
+- **Playground 401**: Token validation now guards empty JWKS URL; frontend handles demo login failure properly
+- **Agent Promote**: `shadow_min_samples=0` now bypasses shadow validation (was blocking all promotions)
+- **Base Connector Auth**: `_authenticate()` now runs before HTTP client creation so auth headers are included
+- **Jira Search API**: Migrated from deprecated `/rest/api/3/search` (410 Gone) to `/rest/api/3/search/jql`
+- **HubSpot OAuth**: Auto-refresh on token expiry + 401 retry with re-authentication
+
+### Changed
+- **Workflow `_execute_agent`**: Replaced hardcoded stub with real agent instantiation and LLM execution
+- **ToolGateway**: Optional dependencies (works without rate limiter/audit), dynamic connector resolution from registry + DB
+- **Playground UI**: Displays tool call results with connector name, status, and latency
+- **WorkflowRun UI**: Auto-polls every 3s while workflow is running
+- **Version**: 2.1.0 → 2.2.0
+
+### Metrics
+- Automated tests: 353 → **1,031** (pytest) + 125 production E2E
+- Production E2E: **125/125 (100%)** — all 21 sections, all demo users, full lifecycle
+- Connector tools: 42 connectors × **269 total tools**
+- Real API verified: GitHub (9), Jira (11), HubSpot (13) — 14 Jira tickets created on production
+
 ## [2.1.0] - 2026-03-21
 
 ### Added — Full PRD v4 Compliance
