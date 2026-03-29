@@ -58,6 +58,7 @@ class AgentRegistry:
             prompt_variables=config.get("prompt_variables", {}),
             hitl_condition=config.get("hitl_condition", ""),
             output_schema=config.get("output_schema"),
+            tool_gateway=config.get("tool_gateway"),
             llm_model=config.get("llm_model"),
             cost_controls=config.get("cost_controls"),
         )

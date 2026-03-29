@@ -556,18 +556,27 @@ async def run_agent(
     # 2. Ensure all agent modules are registered
     import core.agents  # noqa: F401 — triggers @AgentRegistry.register for all agents
 
-    # 3. Instantiate agent from registry (supports both built-in and custom types)
+    # 3. Build tool gateway for connector access
+    tool_gw = None
+    authorized_tools = agent_config.get("authorized_tools", [])
+    if authorized_tools:
+        from core.tool_gateway.gateway import ToolGateway
+
+        tool_gw = ToolGateway()
+
+    # 4. Instantiate agent from registry (supports both built-in and custom types)
     agent_instance = AgentRegistry.create_from_config({
         "id": agent_config["id"],
         "tenant_id": tenant_id,
         "agent_type": agent_config["agent_type"],
-        "authorized_tools": agent_config.get("authorized_tools", []),
+        "authorized_tools": authorized_tools,
         "prompt_variables": agent_config.get("prompt_variables", {}),
         "hitl_condition": agent_config.get("hitl_condition", ""),
         "output_schema": agent_config.get("output_schema"),
         "system_prompt_text": agent_config.get("system_prompt_text"),
         "llm_model": agent_config.get("llm_model"),
         "cost_controls": agent_config.get("cost_controls"),
+        "tool_gateway": tool_gw,
     })
 
     # 4. Build TaskAssignment from user payload

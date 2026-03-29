@@ -26,13 +26,87 @@ async def execute_step(step: dict, state: dict) -> dict[str, Any]:
 
 
 async def _execute_agent(step, state):
-    return {
-        "step_id": step["id"],
-        "type": "agent",
-        "status": "completed",
-        "agent": step.get("agent", ""),
-        "action": step.get("action", ""),
-    }
+    """Execute an agent step by instantiating and running the real agent."""
+    agent_type = step.get("agent", step.get("agent_type", ""))
+    agent_id = step.get("agent_id", "")
+    action = step.get("action", "process")
+    inputs = step.get("inputs", state.get("trigger_payload", {}))
+
+    # If no agent_id or agent_type, return stub (backward compat)
+    if not agent_type and not agent_id:
+        return {
+            "step_id": step["id"],
+            "type": "agent",
+            "status": "completed",
+            "agent": "",
+            "action": action,
+        }
+
+    try:
+        import core.agents  # noqa: F401 — triggers registration
+        from core.agents.registry import AgentRegistry
+        from core.schemas.messages import (
+            HITLPolicy,
+            TargetAgent,
+            TaskAssignment,
+            TaskInput,
+            TaskMetadata,
+        )
+
+        # Resolve tenant_id from state
+        tenant_id = state.get("tenant_id", "")
+
+        # Build agent config
+        config = {
+            "id": agent_id or f"wf_agent_{step['id']}",
+            "tenant_id": tenant_id,
+            "agent_type": agent_type,
+            "authorized_tools": step.get("authorized_tools", []),
+            "system_prompt_text": step.get("system_prompt_text", ""),
+            "llm_model": step.get("llm_model"),
+        }
+
+        agent_instance = AgentRegistry.create_from_config(config)
+
+        import uuid
+
+        task = TaskAssignment(
+            message_id=f"msg_{uuid.uuid4().hex[:12]}",
+            correlation_id=state.get("id", ""),
+            workflow_run_id=state.get("id", ""),
+            workflow_definition_id="workflow",
+            step_id=step["id"],
+            step_index=0,
+            total_steps=1,
+            target_agent=TargetAgent(
+                agent_id=config["id"],
+                agent_type=agent_type,
+                agent_token="workflow",
+            ),
+            task=TaskInput(action=action, inputs=inputs, context=state.get("context", {})),
+            hitl_policy=HITLPolicy(),
+            metadata=TaskMetadata(),
+        )
+
+        result = await agent_instance.execute(task)
+
+        return {
+            "step_id": step["id"],
+            "type": "agent",
+            "status": result.status,
+            "output": result.output,
+            "confidence": result.confidence,
+            "reasoning_trace": result.reasoning_trace,
+            "tool_calls": [tc.model_dump() for tc in result.tool_calls],
+        }
+    except Exception as e:
+        return {
+            "step_id": step["id"],
+            "type": "agent",
+            "status": "failed",
+            "error": str(e),
+            "agent": agent_type,
+        }
 
 
 async def _execute_condition(step, state):

@@ -351,6 +351,28 @@ function parseTraceLines(
     lines.push({ text: JSON.stringify(p, null, 2).substring(0, 500), color: "gray" });
   }
 
+  // Tool call results
+  const toolCalls = (result.tool_calls ?? []) as Array<Record<string, unknown>>;
+  if (toolCalls.length > 0) {
+    lines.push({ text: `--- Tool Calls (${toolCalls.length}) ---`, color: "amber" });
+    for (const tc of toolCalls) {
+      const status = tc.status as string;
+      const color = status === "success" ? "green" : "red";
+      lines.push({ text: `  ${tc.tool_name}: ${status} (${tc.latency_ms}ms)`, color });
+    }
+  }
+  const toolResults = (p.tool_results ?? []) as Array<Record<string, unknown>>;
+  if (toolResults.length > 0) {
+    for (const tr of toolResults) {
+      const res = tr.result as Record<string, unknown> | undefined;
+      lines.push({ text: `  ${tr.connector}.${tr.tool} result:`, color: "green" });
+      if (res) {
+        const preview = JSON.stringify(res).substring(0, 300);
+        lines.push({ text: `    ${preview}`, color: "gray" });
+      }
+    }
+  }
+
   // Confidence
   const confidence = (result.confidence as number) ?? (p.confidence as number) ?? null;
   if (confidence !== null) {

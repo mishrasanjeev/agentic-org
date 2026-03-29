@@ -79,22 +79,39 @@ class BaseAgent:
         return self._system_prompt
 
     async def execute(self, task: TaskAssignment) -> TaskResult:
-        """Main execution pipeline — full LLM reasoning, validation, confidence, and HITL."""
+        """Main execution pipeline — LLM reasoning, tool execution, validation, HITL."""
         start = time.monotonic()
         trace: list[str] = []
         tool_calls: list[ToolCallRecord] = []
         msg_id = f"msg_{uuid.uuid4().hex[:12]}"
 
         try:
-            # 1. Reason with LLM
-            context = {
+            # 1. Build context with available tool descriptions
+            context: dict[str, Any] = {
                 "task": task.task.model_dump(),
                 "step_id": task.step_id,
                 "step_index": task.step_index,
             }
+            tool_descriptions = self._build_tool_descriptions()
+            if tool_descriptions:
+                context["available_tools"] = tool_descriptions
+
+            # 2. Reason with LLM
             output = await self._reason(context, trace)
 
-            # 2. Validate output
+            # 3. Execute tool calls if the LLM requested any
+            requested_tools = output.pop("tool_calls", None)
+            if requested_tools and isinstance(requested_tools, list) and self.tool_gateway:
+                tool_results = await self._execute_tool_calls(
+                    requested_tools, trace, tool_calls
+                )
+                # Feed tool results back to LLM for final synthesis
+                if tool_results:
+                    output = await self._synthesize_with_tools(
+                        context, output, tool_results, trace
+                    )
+
+            # 4. Validate output
             if not self._validate_output(output):
                 trace.append("Output validation failed")
                 return self._make_result(
@@ -109,11 +126,11 @@ class BaseAgent:
                     start=start,
                 )
 
-            # 3. Compute confidence
+            # 5. Compute confidence
             confidence = self._compute_confidence(output)
             trace.append(f"Confidence: {confidence:.3f}")
 
-            # 4. Check HITL at agent level (orchestrator will also check)
+            # 6. Check HITL at agent level (orchestrator will also check)
             hitl = self._evaluate_hitl(output, confidence)
             if hitl:
                 trace.append(f"HITL triggered: {hitl.trigger_condition}")
@@ -255,21 +272,159 @@ class BaseAgent:
             )
         return None
 
+    def _build_tool_descriptions(self) -> list[dict[str, Any]] | None:
+        """Build tool descriptions from authorized_tools for the LLM prompt."""
+        if not self.authorized_tools or not self.tool_gateway:
+            return None
+
+        from connectors.registry import ConnectorRegistry
+
+        tools: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for tool_ref in self.authorized_tools:
+            # Format: "connector.tool_name" or "tool:connector:perm:resource"
+            if "." in tool_ref:
+                connector_name, tool_name = tool_ref.split(".", 1)
+            elif ":" in tool_ref:
+                parts = tool_ref.split(":")
+                connector_name = parts[1] if len(parts) > 1 else ""
+                tool_name = parts[3] if len(parts) > 3 else ""
+            else:
+                continue
+            key = f"{connector_name}.{tool_name}"
+            if key in seen or not connector_name:
+                continue
+            seen.add(key)
+            connector_cls = ConnectorRegistry.get(connector_name)
+            if not connector_cls:
+                continue
+            # Get tool function docstring for description
+            instance = connector_cls.__new__(connector_cls)
+            instance._tool_registry = {}
+            instance.config = {}
+            instance._register_tools()
+            handler = instance._tool_registry.get(tool_name)
+            desc = (handler.__doc__ or "").strip() if handler else ""
+            tools.append({
+                "connector": connector_name,
+                "tool": tool_name,
+                "description": desc,
+            })
+        return tools if tools else None
+
+    async def _execute_tool_calls(
+        self,
+        requested_tools: list[dict],
+        trace: list[str],
+        tool_records: list[ToolCallRecord],
+    ) -> list[dict[str, Any]]:
+        """Execute tool calls requested by the LLM and return results."""
+        results = []
+        for tc in requested_tools:
+            connector = tc.get("connector", "")
+            tool = tc.get("tool", "")
+            params = tc.get("params", {})
+            if not connector or not tool:
+                continue
+
+            trace.append(f"[tool] Calling {connector}.{tool}")
+            call_start = time.monotonic()
+            try:
+                result = await self._call_tool(
+                    connector_name=connector,
+                    tool_name=tool,
+                    params=params,
+                )
+                latency = int((time.monotonic() - call_start) * 1000)
+                status = "error" if "error" in result else "success"
+                trace.append(f"[tool] {connector}.{tool} → {status} ({latency}ms)")
+                tool_records.append(ToolCallRecord(
+                    tool_name=f"{connector}.{tool}",
+                    status=status,
+                    latency_ms=latency,
+                ))
+                results.append({
+                    "connector": connector,
+                    "tool": tool,
+                    "result": result,
+                })
+            except Exception as e:
+                latency = int((time.monotonic() - call_start) * 1000)
+                trace.append(f"[tool] {connector}.{tool} → error: {e}")
+                tool_records.append(ToolCallRecord(
+                    tool_name=f"{connector}.{tool}",
+                    status="error",
+                    latency_ms=latency,
+                ))
+                results.append({
+                    "connector": connector,
+                    "tool": tool,
+                    "result": {"error": str(e)},
+                })
+        return results
+
+    async def _synthesize_with_tools(
+        self,
+        original_context: dict,
+        initial_output: dict,
+        tool_results: list[dict],
+        trace: list[str],
+    ) -> dict[str, Any]:
+        """Call LLM again with tool results for final synthesis."""
+        trace.append("Synthesizing final output with tool results")
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": json.dumps(original_context, default=str)},
+            {"role": "assistant", "content": json.dumps(initial_output, default=str)},
+            {
+                "role": "user",
+                "content": (
+                    "Tool execution results:\n"
+                    + json.dumps(tool_results, default=str)
+                    + "\n\nIncorporate these results into your final JSON response."
+                ),
+            },
+        ]
+        model_override = self._resolve_llm_model()
+        response: LLMResponse = await llm_router.complete(
+            messages, model_override=model_override
+        )
+        trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
+
+        content = response.content.strip()
+        if content.startswith("```"):
+            lines = content.split("\n")
+            lines = [ln for ln in lines if not ln.strip().startswith("```")]
+            content = "\n".join(lines).strip()
+        try:
+            result = json.loads(content)
+            result["tool_results"] = tool_results
+            return result
+        except json.JSONDecodeError:
+            return {
+                **initial_output,
+                "tool_results": tool_results,
+                "synthesis": content,
+            }
+
     async def _call_tool(
-        self, tool_name: str, params: dict, idempotency_key: str = ""
+        self,
+        connector_name: str = "",
+        tool_name: str = "",
+        params: dict | None = None,
+        idempotency_key: str = "",
     ) -> dict[str, Any]:
         """Call tool through Tool Gateway."""
         if not self.tool_gateway:
             return {"error": "No tool gateway configured"}
 
-        connector = tool_name.split("_")[0] if "_" in tool_name else tool_name
         return await self.tool_gateway.execute(
             tenant_id=self.tenant_id,
             agent_id=self.agent_id,
             agent_scopes=self.authorized_tools,
-            connector_name=connector,
+            connector_name=connector_name,
             tool_name=tool_name,
-            params=params,
+            params=params or {},
             idempotency_key=idempotency_key or None,
         )
 
