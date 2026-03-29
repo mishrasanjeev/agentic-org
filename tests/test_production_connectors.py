@@ -30,7 +30,7 @@ def run_agent(token, agent_id, inputs, label):
         r = httpx.post(f"{API}/agents/{agent_id}/run", headers=headers, json={"inputs": inputs}, timeout=90)
         elapsed = round(time.time() - start, 1)
         if r.status_code != 200:
-            results.append({"test": label, "status": "FAIL", "detail": f"HTTP {r.status_code}: {r.text[:80]}", "time": elapsed})
+            results.append({"test": label, "status": "FAIL", "detail": f"HTTP {r.status_code}: {r.text[:80]}", "time": elapsed})  # noqa: E501
             return None
         d = r.json()
         trace = d.get("reasoning_trace", [])
@@ -127,19 +127,19 @@ def main():
     }, "JIRA-01: list_projects")
 
     run_agent(token, OPS_AGENT, {
-        "task": 'Search for issues in KAN project. Include tool_calls: [{"connector":"jira","tool":"search_issues","params":{"jql":"project = KAN order by created DESC","max_results":10}}]'
+        "task": 'Search for issues in KAN project. Include tool_calls: [{"connector":"jira","tool":"search_issues","params":{"jql":"project = KAN order by created DESC","max_results":10}}]'  # noqa: E501
     }, "JIRA-02: search_issues")
 
     run_agent(token, OPS_AGENT, {
-        "task": 'Get details of issue KAN-5. Include tool_calls: [{"connector":"jira","tool":"get_issue","params":{"issue_key":"KAN-5"}}]'
+        "task": 'Get details of issue KAN-5. Include tool_calls: [{"connector":"jira","tool":"get_issue","params":{"issue_key":"KAN-5"}}]'  # noqa: E501
     }, "JIRA-03: get_issue")
 
     run_agent(token, OPS_AGENT, {
-        "task": 'Add comment to KAN-5: "Reviewed by AI — monitoring resolution". Include tool_calls: [{"connector":"jira","tool":"add_comment","params":{"issue_key":"KAN-5","body":"Reviewed by AgenticOrg AI. Monitoring for resolution."}}]'
+        "task": 'Add comment to KAN-5: "Reviewed by AI — monitoring resolution". Include tool_calls: [{"connector":"jira","tool":"add_comment","params":{"issue_key":"KAN-5","body":"Reviewed by AgenticOrg AI. Monitoring for resolution."}}]'  # noqa: E501
     }, "JIRA-04: add_comment")
 
     run_agent(token, OPS_AGENT, {
-        "task": 'Get project metrics for KAN. Include tool_calls: [{"connector":"jira","tool":"get_project_metrics","params":{"project_key":"KAN"}}]'
+        "task": 'Get project metrics for KAN. Include tool_calls: [{"connector":"jira","tool":"get_project_metrics","params":{"project_key":"KAN"}}]'  # noqa: E501
     }, "JIRA-05: get_project_metrics")
 
     run_agent(token, OPS_AGENT, {
@@ -151,38 +151,38 @@ def main():
     print("\n=== HUBSPOT CONNECTOR (CRM Intelligence — Ravi Kapoor) ===")
 
     run_agent(token, CRM_AGENT, {
-        "task": 'List contacts from HubSpot. Include tool_calls: [{"connector":"hubspot","tool":"list_contacts","params":{"limit":10}}]'
+        "task": 'List contacts from HubSpot. Include tool_calls: [{"connector":"hubspot","tool":"list_contacts","params":{"limit":10}}]'  # noqa: E501
     }, "HUBSPOT-01: list_contacts")
 
     run_agent(token, CRM_AGENT, {
-        "task": 'List all deals from HubSpot. Include tool_calls: [{"connector":"hubspot","tool":"list_deals","params":{"limit":10}}]'
+        "task": 'List all deals from HubSpot. Include tool_calls: [{"connector":"hubspot","tool":"list_deals","params":{"limit":10}}]'  # noqa: E501
     }, "HUBSPOT-02: list_deals")
 
     run_agent(token, CRM_AGENT, {
-        "task": 'List companies from HubSpot. Include tool_calls: [{"connector":"hubspot","tool":"list_companies","params":{"limit":10}}]'
+        "task": 'List companies from HubSpot. Include tool_calls: [{"connector":"hubspot","tool":"list_companies","params":{"limit":10}}]'  # noqa: E501
     }, "HUBSPOT-03: list_companies")
 
     run_agent(token, CRM_AGENT, {
-        "task": 'Search contacts with email containing "agenticorg". Include tool_calls: [{"connector":"hubspot","tool":"search_contacts","params":{"query":"agenticorg"}}]'
+        "task": 'Search contacts with email containing "agenticorg". Include tool_calls: [{"connector":"hubspot","tool":"search_contacts","params":{"query":"agenticorg"}}]'  # noqa: E501
     }, "HUBSPOT-04: search_contacts")
 
     # ═══ GITHUB TESTS ═══
     print("\n=== GITHUB CONNECTOR (DevOps Scout — Kiran Rao) ===")
 
     run_agent(token, DEV_AGENT, {
-        "task": 'List GitHub repos. Include tool_calls: [{"connector":"github","tool":"list_repos","params":{"per_page":5}}]'
+        "task": 'List GitHub repos. Include tool_calls: [{"connector":"github","tool":"list_repos","params":{"per_page":5}}]'  # noqa: E501
     }, "GITHUB-01: list_repos")
 
     run_agent(token, DEV_AGENT, {
-        "task": 'Get stats for mishrasanjeev/agentic-org. Include tool_calls: [{"connector":"github","tool":"get_repository_statistics","params":{"owner":"mishrasanjeev","repo":"agentic-org"}}]'
+        "task": 'Get stats for mishrasanjeev/agentic-org. Include tool_calls: [{"connector":"github","tool":"get_repository_statistics","params":{"owner":"mishrasanjeev","repo":"agentic-org"}}]'  # noqa: E501
     }, "GITHUB-02: get_repo_statistics")
 
     run_agent(token, DEV_AGENT, {
-        "task": 'List issues in mishrasanjeev/agentic-org. Include tool_calls: [{"connector":"github","tool":"list_repository_issues","params":{"owner":"mishrasanjeev","repo":"agentic-org","per_page":5}}]'
+        "task": 'List issues in mishrasanjeev/agentic-org. Include tool_calls: [{"connector":"github","tool":"list_repository_issues","params":{"owner":"mishrasanjeev","repo":"agentic-org","per_page":5}}]'  # noqa: E501
     }, "GITHUB-03: list_issues")
 
     run_agent(token, DEV_AGENT, {
-        "task": 'Search code for "WorkflowEngine" in mishrasanjeev/agentic-org. Include tool_calls: [{"connector":"github","tool":"search_code","params":{"query":"WorkflowEngine repo:mishrasanjeev/agentic-org"}}]'
+        "task": 'Search code for "WorkflowEngine" in mishrasanjeev/agentic-org. Include tool_calls: [{"connector":"github","tool":"search_code","params":{"query":"WorkflowEngine repo:mishrasanjeev/agentic-org"}}]'  # noqa: E501
     }, "GITHUB-04: search_code")
 
     # ═══ WORKFLOW TESTS ═══
