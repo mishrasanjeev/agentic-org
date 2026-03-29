@@ -1274,7 +1274,7 @@ class TestToolGateway:
     @patch("core.tool_gateway.gateway.check_scope", return_value=(False, "no_matching_scope"))
     async def test_execute_scope_denied(self, mock_scope, gateway):
         result = await gateway.execute(
-            "t1", "a1", [], "oracle", "get_po", {}
+            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}
         )
         assert "error" in result
         assert result["error"]["code"] == "E1007"
@@ -1283,7 +1283,7 @@ class TestToolGateway:
     @patch("core.tool_gateway.gateway.check_scope", return_value=(False, "cap_exceeded:1000"))
     async def test_execute_cap_exceeded(self, mock_scope, gateway):
         result = await gateway.execute(
-            "t1", "a1", [], "oracle", "create_po", {}, amount=2000
+            "t1", "a1", ["tool:oracle:write:po:capped:1000"], "oracle", "create_po", {}, amount=2000
         )
         assert result["error"]["code"] == "E1008"
 

@@ -62,16 +62,20 @@ class ToolGateway:
         if agent_scopes:
             allowed, reason = check_scope(agent_scopes, connector_name, permission, resource, amount)
             if not allowed:
+                if "cap_exceeded" in reason:
+                    code, action_type = "E1008", "cap_exceeded"
+                else:
+                    code, action_type = "E1007", "scope_denied"
                 if self.audit:
                     await self.audit.log(
                         tenant_id=tenant_id,
                         agent_id=agent_id,
                         tool_name=tool_name,
-                        action="scope_denied",
+                        action=action_type,
                         outcome="blocked",
                         details={"reason": reason},
                     )
-                return {"error": {"code": "E1007", "message": f"Scope denied: {reason}"}}
+                return {"error": {"code": code, "message": f"{action_type}: {reason}"}}
 
         # 2. Check rate limit
         if self.rate_limiter:
