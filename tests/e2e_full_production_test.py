@@ -34,12 +34,17 @@ def check(name: str, passed: bool, detail: str = ""):
     print(f"  [{icon}] {len(results):3d}. {name}" + (f" — {detail}" if detail and not passed else ""))
 
 
-def api(method, path, token=None, **kwargs):
+def api(method, path, token=None, retries=1, **kwargs):
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     url = f"{API}{path}" if not path.startswith("http") else path
-    r = httpx.request(method, url, headers=headers, timeout=60, **kwargs)
+    for attempt in range(retries + 1):
+        r = httpx.request(method, url, headers=headers, timeout=60, **kwargs)
+        if r.status_code != 429 or attempt == retries:
+            return r
+        import time
+        time.sleep(2)
     return r
 
 

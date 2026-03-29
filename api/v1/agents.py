@@ -835,7 +835,8 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
             )
 
         # For shadow->active, validate minimum shadow samples met
-        if agent.status == "shadow":
+        # Skip validation entirely when shadow_min_samples=0 (opt-out)
+        if agent.status == "shadow" and agent.shadow_min_samples > 0:
             if agent.shadow_sample_count < agent.shadow_min_samples:
                 raise HTTPException(
                     409,
