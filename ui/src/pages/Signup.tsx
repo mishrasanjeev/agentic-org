@@ -13,6 +13,7 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
 
@@ -22,6 +23,39 @@ export default function Signup() {
       .then((data) => { if (data.google_client_id) setGoogleClientId(data.google_client_id); })
       .catch(() => {});
   }, []);
+
+  // Clear top-level error when user edits any field
+  useEffect(() => { setError(null); }, [orgName, name, email, password, confirmPassword]);
+
+  // Real-time password match validation
+  useEffect(() => {
+    if (!confirmPassword) {
+      setFieldErrors(prev => { const { confirmPassword: _, ...rest } = prev; return rest; });
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFieldErrors(prev => ({ ...prev, confirmPassword: "Passwords do not match" }));
+    } else {
+      setFieldErrors(prev => { const { confirmPassword: _, ...rest } = prev; return rest; });
+    }
+  }, [password, confirmPassword]);
+
+  // Real-time password strength
+  useEffect(() => {
+    if (!password) {
+      setFieldErrors(prev => { const { password: _, ...rest } = prev; return rest; });
+      return;
+    }
+    if (password.length < 8) {
+      setFieldErrors(prev => ({ ...prev, password: "Password must be at least 8 characters" }));
+    } else if (!/[A-Z]/.test(password)) {
+      setFieldErrors(prev => ({ ...prev, password: "Include at least one uppercase letter" }));
+    } else if (!/[0-9!@#$%^&*]/.test(password)) {
+      setFieldErrors(prev => ({ ...prev, password: "Include a number or special character" }));
+    } else {
+      setFieldErrors(prev => { const { password: _, ...rest } = prev; return rest; });
+    }
+  }, [password]);
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
     setError(null);
@@ -40,21 +74,50 @@ export default function Signup() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+
+    // Validate all fields
+    const errors: Record<string, string> = {};
+    if (!orgName.trim()) errors.orgName = "Organization name is required";
+    if (!name.trim()) errors.name = "Your name is required";
+    if (!email.trim()) errors.email = "Email is required";
+    if (password.length < 8) errors.password = "Password must be at least 8 characters";
+    if (password !== confirmPassword) errors.confirmPassword = "Passwords do not match";
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      // Show the most important error at the top too
+      const firstError = Object.values(errors)[0];
+      setError(firstError);
       return;
     }
+
     setLoading(true);
     try {
       await signup(orgName, name, email, password);
       import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "email" }));
       navigate("/onboarding");
     } catch (err: any) {
-      setError(err.message || "Signup failed");
+      const msg = err.message || "Signup failed";
+      // Parse backend errors for better messages
+      if (msg.includes("already exists") || msg.includes("duplicate")) {
+        setError("An account with this email already exists. Try signing in instead.");
+      } else if (msg.includes("password")) {
+        setError(msg);
+        setFieldErrors(prev => ({ ...prev, password: msg }));
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const inputClass = (field: string) =>
+    `w-full rounded-lg border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ${
+      fieldErrors[field]
+        ? "border-red-500 bg-red-50/50 focus:border-red-500 focus:ring-red-500/30"
+        : "border-border bg-background focus:border-primary"
+    }`;
 
   const signupForm = (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -77,10 +140,11 @@ export default function Signup() {
             </p>
           </div>
 
-          {/* Error message */}
+          {/* Top-level error */}
           {error && (
-            <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
-              {error}
+            <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex items-start gap-2">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+              <span>{error}</span>
             </div>
           )}
 
@@ -97,8 +161,9 @@ export default function Signup() {
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 placeholder="Acme Corp"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                className={inputClass("orgName")}
               />
+              {fieldErrors.orgName && <p className="mt-1 text-xs text-red-500">{fieldErrors.orgName}</p>}
             </div>
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1.5">
@@ -111,8 +176,9 @@ export default function Signup() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Jane Doe"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                className={inputClass("name")}
               />
+              {fieldErrors.name && <p className="mt-1 text-xs text-red-500">{fieldErrors.name}</p>}
             </div>
             <div>
               <label htmlFor="signupEmail" className="block text-sm font-medium text-foreground mb-1.5">
@@ -125,8 +191,9 @@ export default function Signup() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                className={inputClass("email")}
               />
+              {fieldErrors.email && <p className="mt-1 text-xs text-red-500">{fieldErrors.email}</p>}
             </div>
             <div>
               <label htmlFor="signupPassword" className="block text-sm font-medium text-foreground mb-1.5">
@@ -138,9 +205,13 @@ export default function Signup() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create a password"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                placeholder="Min 8 chars, uppercase + number/symbol"
+                className={inputClass("password")}
               />
+              {fieldErrors.password && <p className="mt-1 text-xs text-red-500">{fieldErrors.password}</p>}
+              {password && !fieldErrors.password && (
+                <p className="mt-1 text-xs text-emerald-500">Password strength: Good</p>
+              )}
             </div>
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1.5">
@@ -152,13 +223,19 @@ export default function Signup() {
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm your password"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                placeholder="Re-enter your password"
+                className={inputClass("confirmPassword")}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="mt-1 text-xs text-red-500">{fieldErrors.confirmPassword}</p>
+              )}
+              {confirmPassword && !fieldErrors.confirmPassword && (
+                <p className="mt-1 text-xs text-emerald-500">Passwords match</p>
+              )}
             </div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || Object.keys(fieldErrors).length > 0}
               className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? "Creating account..." : "Create account"}
