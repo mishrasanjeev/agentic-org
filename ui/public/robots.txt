@@ -3,8 +3,6 @@ Allow: /
 Allow: /pricing
 Allow: /playground
 Allow: /evals
-Allow: /signup
-Allow: /login
 Allow: /blog
 Allow: /blog/
 Allow: /resources
@@ -13,6 +11,9 @@ Disallow: /dashboard/
 Disallow: /api/
 Disallow: /onboarding
 Disallow: /invite
+Disallow: /accept-invite
+Disallow: /signup
+Disallow: /login
 
 User-agent: GPTBot
 Allow: /

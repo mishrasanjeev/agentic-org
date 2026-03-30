@@ -340,15 +340,15 @@ Published at: https://agenticorg.ai/evals
 
 ### Free (₹0/month)
 - 35 agents
-- 5 connectors
-- 100 tasks/day
+- 20 connectors
+- 500 tasks/day
 - Community support
 - Shadow mode
 - Basic audit trail
 
 ### Pro (₹42,000/month or $499/month)
-- 12 agents
-- 20 connectors
+- Unlimited agents
+- 42 connectors
 - Unlimited tasks
 - Email support (24h SLA)
 - Custom workflows
@@ -356,7 +356,7 @@ Published at: https://agenticorg.ai/evals
 - Full audit trail with export
 
 ### Enterprise (Custom pricing)
-- All 24 agents
+- Unlimited agents
 - All 42 connectors (269 tools, 3 verified live: GitHub, Jira, HubSpot)
 - Unlimited everything
 - Dedicated support engineer

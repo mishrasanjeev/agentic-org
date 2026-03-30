@@ -57,6 +57,7 @@ export default function Login() {
       <Helmet>
         <title>Sign In — AgenticOrg</title>
         <meta name="description" content="Sign in to AgenticOrg to manage your AI agents, workflows, and approvals." />
+        <meta name="robots" content="noindex, nofollow" />
         <link rel="canonical" href="https://agenticorg.ai/login" />
       </Helmet>
       <div className="w-full max-w-md">

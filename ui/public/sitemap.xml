@@ -2,243 +2,231 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://agenticorg.ai/</loc>
-    <lastmod>2026-03-23</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/pricing</loc>
-    <lastmod>2026-03-23</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/playground</loc>
-    <lastmod>2026-03-23</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/evals</loc>
-    <lastmod>2026-03-23</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://agenticorg.ai/signup</loc>
-    <lastmod>2026-03-23</lastmod>
-    <changefreq>monthly</changefreq>
+    <loc>https://agenticorg.ai/blog</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://agenticorg.ai/login</loc>
-    <lastmod>2026-03-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://agenticorg.ai/blog</loc>
-    <lastmod>2026-03-27</lastmod>
+    <loc>https://agenticorg.ai/resources</loc>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/blog/ai-invoice-processing-india</loc>
-    <lastmod>2026-03-20</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/blog/virtual-employee-vs-rpa</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/blog/automated-bank-reconciliation</loc>
-    <lastmod>2026-03-15</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/blog/hitl-governance-enterprise-ai</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://agenticorg.ai/blog/no-code-ai-agent-builder</loc>
-    <lastmod>2026-03-24</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/blog/org-chart-ai-virtual-employees</loc>
-    <lastmod>2026-03-27</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://agenticorg.ai/resources</loc>
-    <lastmod>2026-03-25</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://agenticorg.ai/blog/no-code-ai-agent-builder</loc>
+    <lastmod>2026-03-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/what-are-ai-agents-for-enterprise</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-agents-vs-rpa</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-agents-vs-chatbots</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/enterprise-ai-automation-platform</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/agentic-ai-explained</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-accounts-payable-automation</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/automated-bank-reconciliation-ai</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/gst-compliance-automation</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/month-end-close-automation</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-payroll-automation-india</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-employee-onboarding</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-talent-acquisition</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-support-ticket-triage</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-it-operations</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-compliance-automation</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/human-in-the-loop-ai</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-audit-trail</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/soc2-ai-compliance</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/shadow-mode-testing</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/no-code-ai-agent-builder</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/ai-virtual-employees</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/prompt-template-management</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/indian-enterprise-ai</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/epfo-automation-india</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/darwinbox-ai-integration</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://agenticorg.ai/resources/tally-ai-integration</loc>
-    <lastmod>2026-03-25</lastmod>
+    <lastmod>2026-03-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 </urlset>
-<!-- Updated: 2026-03-25T16:36:30Z -->
+<!-- Auto-generated: 2026-03-30T02:43:46.356Z -->

@@ -124,6 +124,7 @@ export default function Signup() {
       <Helmet>
         <title>Create Account — AgenticOrg</title>
         <meta name="description" content="Create your AgenticOrg account to manage AI agents, workflows, and approvals." />
+        <meta name="robots" content="noindex, nofollow" />
         <link rel="canonical" href="https://agenticorg.ai/signup" />
       </Helmet>
       <div className="w-full max-w-md">

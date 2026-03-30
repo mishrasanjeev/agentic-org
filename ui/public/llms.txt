@@ -69,8 +69,8 @@ AgenticOrg is built for Indian enterprise with native connectors for:
 ## Pricing
 
 - Free: 35 agents, 20 connectors, 500 tasks/day
-- Pro ($499/month): 12 agents, 20 connectors, unlimited tasks
-- Enterprise (custom): All 25 agents, 42 connectors (269 tools), dedicated support
+- Pro ($499/month): Unlimited agents, 42 connectors, unlimited tasks
+- Enterprise (custom): Unlimited agents, 42 connectors (269 tools), custom connectors, dedicated support
 
 ## Links
 
