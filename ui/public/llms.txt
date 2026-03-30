@@ -4,73 +4,67 @@
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 25 pre-built agents that automate back-office operations across 5 departments: Finance, HR, Marketing, Operations, and Back Office. Each agent connects to 42 enterprise systems (SAP, Oracle Fusion, Salesforce, GSTN, Darwinbox, Tally, Stripe, HubSpot, Slack, and more) and executes domain-specific tasks with human approval on every critical decision.
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 25 pre-built agents that automate back-office operations across 5 departments: Finance, HR, Marketing, Operations, Back Office. Each agent connects to 42 enterprise systems (269 tools) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
-- **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing (e.g., 3 AP Processors for different regions)
-- **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from 26 templates, define behavior, and deploy
-- **Prompt Template Library**: 26 production-tested prompt templates with variable substitution. Admins can create custom templates. Full prompt audit trail with edit history
-- **25 Pre-Built AI Agents**: AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A, Onboarding, Payroll Engine, Talent Acquisition, Performance Coach, Offboarding, L&D Coordinator, Campaign Pilot, Content Factory, SEO Strategist, CRM Intelligence, Brand Monitor, Support Triage, IT Operations, Compliance Guard, Contract Intelligence, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
-- **42 Enterprise Connectors (269 tools)**: Oracle Fusion, SAP S/4HANA, Salesforce, GSTN Portal, Income Tax India, EPFO, Darwinbox, Tally Prime, Zoho Books, QuickBooks, Stripe, Banking AA, Pinelabs Plural, Slack, GitHub (9 tools, verified), Jira (11 tools, verified), Confluence, HubSpot (13 tools, verified), Google Ads, LinkedIn Ads, Meta Ads, PagerDuty, ServiceNow, Zendesk, and more
-- **Agents That Act**: Agents don't just generate text — they call real external APIs. The Ops Commander creates Jira tickets. CRM Intelligence reads HubSpot contacts and deals. DevOps Scout queries GitHub repos. All via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back to LLM for synthesis
+- **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
+- **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
+- **25 Pre-Built AI Agents**: Ap Processor, Ar Collections, Close Agent, Fpa Agent, Recon Agent, Tax Compliance, Ld Coordinator, Offboarding Agent, Onboarding Agent, Payroll Engine, Performance Coach, Talent Acquisition, Brand Monitor, Campaign Pilot, Content Factory, Crm Intelligence, Seo Strategist, Compliance Guard, Contract Intelligence, It Operations, Support Triage, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
+- **42 Enterprise Connectors (269 tools)**: Banking Aa (7 tools), Gstn (8 tools), Income Tax India (7 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (6 tools), Tally (6 tools), Zoho Books (6 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Brandwatch (5 tools), Buffer (4 tools), Google Ads (5 tools), Hubspot (13 tools), Linkedin Ads (4 tools), Meta Ads (5 tools), Mixpanel (5 tools), Salesforce (6 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (9 tools), Google Calendar (5 tools), Langsmith (5 tools), Object Storage (6 tools), Sendgrid (5 tools), Slack (6 tools), Twilio (5 tools), Whatsapp (5 tools)
+- **Agents That Act**: Agents don't just generate text — they call real external APIs via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back
 - **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
 - **Shadow Mode**: Test agents against real data before promoting to production
-- **Smart Routing**: When multiple agents share a type, tasks are routed by specialization and routing filters
-- **Role-Based Access Control**: 6 roles (CEO, CFO, CHRO, CMO, COO, Auditor) with domain isolation
+- **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
-- **Evaluation Matrix**: 66 golden test cases across 6 dimensions (quality, safety, performance, reliability, security, cost)
-- **Complete Audit Trail**: Every agent decision and prompt edit logged with 7-year retention
-- **Per-Agent LLM Selection**: Each agent can use Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o. Safe fallback if API key missing
-- **Org Chart Hierarchy**: Agents report to other agents (parent_agent_id). Hierarchical escalation on failure or HITL
-- **Per-Agent Budget Enforcement**: Monthly cost caps with auto-block. Budget endpoint shows real-time spend. Agents without budget run unlimited
-- **1,031+ Automated Tests**: Unit (739), security (84), connector harness (174), synthetic data (15), functional (13). Plus 125/125 production E2E passing at 100%
+- **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
+
+## Agents by Department
+
+### Finance (6 agents, CFO oversight)
+- Ap Processor (confidence: 0.88)
+- Ar Collections (confidence: 0.85)
+- Close Agent (confidence: 0.8)
+- Fpa Agent (confidence: 0.78)
+- Recon Agent (confidence: 0.95)
+- Tax Compliance (confidence: 0.92)
+
+### HR (6 agents, CHRO oversight)
+- Ld Coordinator (confidence: 0.82)
+- Offboarding Agent (confidence: 0.95)
+- Onboarding Agent (confidence: 0.95)
+- Payroll Engine (confidence: 0.99)
+- Performance Coach (confidence: 0.8)
+- Talent Acquisition (confidence: 0.88)
+
+### Marketing (5 agents, CMO oversight)
+- Brand Monitor (confidence: 0.85)
+- Campaign Pilot (confidence: 0.85)
+- Content Factory (confidence: 0.88)
+- Crm Intelligence (confidence: 0.88)
+- Seo Strategist (confidence: 0.9)
+
+### Operations (5 agents, COO oversight)
+- Compliance Guard (confidence: 0.95)
+- Contract Intelligence (confidence: 0.82)
+- It Operations (confidence: 0.88)
+- Support Triage (confidence: 0.85)
+- Vendor Manager (confidence: 0.88)
+
+### Back Office (3 agents, COO oversight)
+- Facilities Agent (confidence: 0.8)
+- Legal Ops (confidence: 0.9)
+- Risk Sentinel (confidence: 0.95)
 
 ## India-First Connectors
 
-AgenticOrg is built for Indian enterprise with native connectors for:
-- GSTN (Goods and Services Tax Network) — GSTR-1, 3B, 9 filing
-- Income Tax India — 26Q, 24Q, Form 16A
-- EPFO (Employees Provident Fund Organisation)
-- Darwinbox HRMS
-- Tally Prime
-- Banking Account Aggregator (AA)
-
-## Use Cases by Role
-
-### CFO (Finance)
-- Invoice processing with OCR, GSTIN validation, 3-way matching
-- Daily bank reconciliation (99.7% auto-match rate)
-- GST/TDS computation and filing preparation
-- Month-end close automation
-- Cash flow forecasting and board pack generation
-
-### CHRO (HR)
-- New hire onboarding (offer letter → IT provisioning → training)
-- Payroll processing with PF, ESI, TDS computation
-- Resume screening and interview scheduling
-- Performance management and OKR tracking
-- Exit processing and final settlement
-
-### CMO (Marketing)
-- Multi-channel campaign orchestration
-- Content generation with brand guidelines
-- SEO audits and keyword research
-- Lead scoring and CRM segmentation
-- Brand sentiment monitoring
-
-### COO (Operations)
-- Support ticket classification and routing
-- Infrastructure monitoring and incident response
-- Compliance audit and policy enforcement
-- Contract review and renewal management
-- Vendor risk scoring and spend analysis
+AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa, Gstn, Income Tax India, Tally, Darwinbox, Epfo
 
 ## Pricing
 
-- Free: 35 agents, 20 connectors, 500 tasks/day
-- Pro ($499/month): Unlimited agents, 42 connectors, unlimited tasks
-- Enterprise (custom): Unlimited agents, 42 connectors (269 tools), custom connectors, dedicated support
+- Free ($0/month): 35 AI agents, 20 connectors, 500 tasks/day
+- Pro ($499/month): Unlimited AI agents, 42 connectors, Unlimited tasks
+- Enterprise (Custom): Unlimited AI agents, 42 connectors, Unlimited everything
 
 ## Links
 
@@ -78,5 +72,38 @@ AgenticOrg is built for Indian enterprise with native connectors for:
 - Playground (try live): https://agenticorg.ai/playground
 - Pricing: https://agenticorg.ai/pricing
 - Evaluation Matrix: https://agenticorg.ai/evals
-- Sign Up: https://agenticorg.ai/signup
+- Blog: https://agenticorg.ai/blog
+  - AI Invoice Processing for Indian Enterprises: GSTN, 3-Way Matching, and Beyond: https://agenticorg.ai/blog/ai-invoice-processing-india
+  - AI Virtual Employees vs RPA Bots: Why the Enterprise is Moving Beyond Robotic Process Automation: https://agenticorg.ai/blog/virtual-employee-vs-rpa
+  - Automated Bank Reconciliation: How AI Achieves 99.7% Match Rates: https://agenticorg.ai/blog/automated-bank-reconciliation
+  - Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates: https://agenticorg.ai/blog/hitl-governance-enterprise-ai
+  - Mirror Your Company Org Chart with AI Virtual Employees: https://agenticorg.ai/blog/org-chart-ai-virtual-employees
+  - No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes: https://agenticorg.ai/blog/no-code-ai-agent-builder
+- Resources: https://agenticorg.ai/resources
+  - What Are AI Agents for Enterprise?: https://agenticorg.ai/resources/what-are-ai-agents-for-enterprise
+  - AI Agents vs RPA: Why Enterprises Are Moving Beyond Robotic Process Automation: https://agenticorg.ai/resources/ai-agents-vs-rpa
+  - AI Agents vs Chatbots: What's the Difference?: https://agenticorg.ai/resources/ai-agents-vs-chatbots
+  - Enterprise AI Automation Platform: How to Choose One: https://agenticorg.ai/resources/enterprise-ai-automation-platform
+  - Agentic AI Explained: What It Means for Business: https://agenticorg.ai/resources/agentic-ai-explained
+  - AI Accounts Payable Automation: From Invoice to Payment in 11 Seconds: https://agenticorg.ai/resources/ai-accounts-payable-automation
+  - Automated Bank Reconciliation with AI: 99.7% Match Rate: https://agenticorg.ai/resources/automated-bank-reconciliation-ai
+  - GST Compliance Automation: GSTR Filing with AI: https://agenticorg.ai/resources/gst-compliance-automation
+  - Month-End Close Automation: 5 Days to 1 Day with AI: https://agenticorg.ai/resources/month-end-close-automation
+  - AI Payroll Automation India: Zero Errors, Zero Anxiety: https://agenticorg.ai/resources/ai-payroll-automation-india
+  - AI Employee Onboarding: 2 Weeks to 4 Hours: https://agenticorg.ai/resources/ai-employee-onboarding
+  - AI Talent Acquisition: From Job Post to Offer in Days, Not Months: https://agenticorg.ai/resources/ai-talent-acquisition
+  - AI Support Ticket Triage: 88% Auto-Classification Accuracy: https://agenticorg.ai/resources/ai-support-ticket-triage
+  - AI IT Operations: Automated Incident Response and Monitoring: https://agenticorg.ai/resources/ai-it-operations
+  - AI Compliance Automation: Continuous Monitoring, Not Annual Audits: https://agenticorg.ai/resources/ai-compliance-automation
+  - Human-in-the-Loop AI: Why Enterprise AI Needs Human Approval Gates: https://agenticorg.ai/resources/human-in-the-loop-ai
+  - AI Audit Trail: Every Agent Decision Logged, Explained, Exportable: https://agenticorg.ai/resources/ai-audit-trail
+  - SOC-2 Compliance for AI: How to Audit AI Agent Systems: https://agenticorg.ai/resources/soc2-ai-compliance
+  - Shadow Mode: Test AI Agents Without Production Risk: https://agenticorg.ai/resources/shadow-mode-testing
+  - No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes: https://agenticorg.ai/resources/no-code-ai-agent-builder
+  - AI Virtual Employees: Name Them, Train Them, Deploy Them: https://agenticorg.ai/resources/ai-virtual-employees
+  - Prompt Template Management: Version Control for AI Instructions: https://agenticorg.ai/resources/prompt-template-management
+  - AI for Indian Enterprise: GSTN, EPFO, Darwinbox, Tally — All Built In: https://agenticorg.ai/resources/indian-enterprise-ai
+  - EPFO Automation: PF Compliance Without the Manual Work: https://agenticorg.ai/resources/epfo-automation-india
+  - Darwinbox + AI: Supercharge Your HRMS with Intelligent Agents: https://agenticorg.ai/resources/darwinbox-ai-integration
+  - Tally + AI: Automate Accounting with AI Agents: https://agenticorg.ai/resources/tally-ai-integration
 - GitHub: https://github.com/mishrasanjeev/agentic-org
