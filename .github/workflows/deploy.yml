@@ -315,7 +315,7 @@ jobs:
         with: { node-version: "20" }
 
       - name: Write service account key
-        run: echo "${{ secrets.GSC_INDEXING_KEY }}" | base64 -d > ui/keys/gsc-indexing.json
+        run: mkdir -p ui/keys && echo "${{ secrets.GSC_INDEXING_KEY }}" | base64 -d > ui/keys/gsc-indexing.json
         shell: bash
 
       - name: Submit URLs to Google Indexing API + IndexNow
