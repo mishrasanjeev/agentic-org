@@ -421,7 +421,7 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">Now Live &mdash; Agents That Act: Jira Tickets, HubSpot CRM, GitHub Repos via Real API Calls</span>
+              <span className="text-slate-300 text-sm">Now Live &mdash; 42 Connectors, 269 Tools &mdash; Agents That Execute Real API Calls</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -851,7 +851,7 @@ export default function Landing() {
             <div className="grid md:grid-cols-3 gap-12">
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — Jira, HubSpot, GitHub verified live. SAP, Oracle, GSTN, Darwinbox, Slack, and more. Agents call real APIs, not stubs." },
+                { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Plug in your API keys and agents call real APIs." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Full audit trail on every action." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
