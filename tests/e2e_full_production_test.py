@@ -29,7 +29,7 @@ state: dict[str, str] = {}  # shared state between tests
 
 def check(name: str, passed: bool, detail: str = ""):
     status = "PASS" if passed else "FAIL"
-    results.append({"id": len(results) + 1, "name": name, "status": status, "detail": detail})
+    results.append({"id": len(results) + 1, "name": name, "status": status})
     icon = "+" if passed else "X"
     print(f"  [{icon}] {len(results):3d}. {name}" + (" — FAILED" if not passed else ""))
 

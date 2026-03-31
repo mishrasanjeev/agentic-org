@@ -187,9 +187,12 @@ async def process_lead_with_agent(
     if "error" in result:
         logger.error("sales_agent_error", lead_id=str(lead_id), error=result["error"])
         raise HTTPException(400, "Sales agent processing failed")
-    # Sanitize: only return safe fields to client
-    safe_keys = {"status", "lead_id", "action", "confidence", "response", "sequence_step"}
-    return {k: v for k, v in result.items() if k in safe_keys}
+    # Return only safe fields — never forward raw agent internals
+    return {
+        "status": str(result.get("status", "unknown")),
+        "lead_id": str(lead_id),
+        "confidence": result.get("confidence"),
+    }
 
 
 # ── GET /sales/pipeline/{id} ──
