@@ -10,6 +10,7 @@ export default function Workflows() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWorkflows();
@@ -29,13 +30,14 @@ export default function Workflows() {
   }
 
   async function triggerRun(wfId: string) {
+    setError(null);
     try {
       const { data } = await api.post(`/workflows/${wfId}/run`, {});
       if (data.run_id) {
         navigate(`/dashboard/workflows/${wfId}/runs/${data.run_id}`);
       }
-    } catch (e) {
-      console.error("Failed to trigger workflow run", e);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to trigger workflow run");
     }
   }
 
@@ -45,6 +47,10 @@ export default function Workflows() {
         <h2 className="text-2xl font-bold">Workflows</h2>
         <Button onClick={() => navigate("/dashboard/workflows/new")}>Create Workflow</Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-50 text-red-800 border border-red-200 px-4 py-3 text-sm">{error}</div>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground">Loading workflows...</p>

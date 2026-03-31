@@ -517,6 +517,11 @@ class TestConnectorsEndpoints:
             base_url="https://api.hubspot.com",
         )
 
+        # First execute call = duplicate check (return None), rest = default
+        mock_session.execute = AsyncMock(
+            side_effect=[_make_result(scalar_one=None)]
+        )
+
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
             resp = await register_connector(body=body, tenant_id=tenant_id)
@@ -533,6 +538,10 @@ class TestConnectorsEndpoints:
         from core.schemas.api import ConnectorCreate
 
         body = ConnectorCreate(name="Test", category="test", auth_type="none")
+
+        mock_session.execute = AsyncMock(
+            side_effect=[_make_result(scalar_one=None)]
+        )
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
@@ -1676,7 +1685,7 @@ class TestWorkflowsEndpoints:
             version="2.0",
             description="Full workflow",
             domain="hr",
-            definition={"steps": []},
+            definition={"steps": [{"id": "s1", "type": "agent", "agent_type": "payroll_engine"}]},
             trigger_type="schedule",
             trigger_config={"cron": "0 * * * *"},
         )

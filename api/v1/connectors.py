@@ -74,6 +74,16 @@ async def register_connector(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
+        # Check for duplicate name within tenant
+        existing = await session.execute(
+            select(Connector).where(
+                Connector.tenant_id == tid,
+                Connector.name == body.name,
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(409, f"Connector '{body.name}' already exists")
+
         connector = Connector(
             tenant_id=tid,
             name=body.name,

@@ -131,8 +131,8 @@ export default function AgentCreate() {
       });
       import("@/components/Analytics").then(m => m.trackEvent("agent_create", { agent_type: agentType, domain }));
       navigate(`/dashboard/agents/${data.agent_id || ""}`);
-    } catch {
-      setError("Failed to create agent. Please try again.");
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to create agent. Please try again.");
     } finally {
       setSubmitting(false);
     }

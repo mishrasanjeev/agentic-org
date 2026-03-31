@@ -143,6 +143,14 @@ async def create_workflow(
     body: WorkflowCreate,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    # Validate definition structure
+    if not body.definition or not isinstance(body.definition.get("steps"), list):
+        raise HTTPException(
+            400, "Workflow definition must contain a 'steps' array"
+        )
+    if len(body.definition["steps"]) == 0:
+        raise HTTPException(400, "Workflow must have at least one step")
+
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         wf = WorkflowDefinition(

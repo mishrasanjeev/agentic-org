@@ -77,7 +77,12 @@ export default function AgentDetail() {
   }
 
   if (loading) return <p className="text-muted-foreground">Loading agent...</p>;
-  if (!agent) return <p className="text-muted-foreground">Agent not found.</p>;
+  if (!agent) return (
+    <div className="space-y-4">
+      <p className="text-muted-foreground">Agent not found.</p>
+      <a href="/dashboard/agents" className="text-sm text-primary hover:underline">&larr; Back to Agents</a>
+    </div>
+  );
 
   const statusColor: Record<string, string> = {
     active: "success", shadow: "warning", paused: "destructive",

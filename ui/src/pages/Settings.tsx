@@ -24,6 +24,7 @@ export default function Settings() {
   const [auditRetention, setAuditRetention] = useState(7);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -41,12 +42,13 @@ export default function Settings() {
   async function saveSettings() {
     setSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
       await api.put("/config/fleet_limits", limits);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (e) {
-      console.error("Failed to save settings", e);
+    } catch (e: any) {
+      setSaveError(e?.response?.data?.detail || "Failed to save settings. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -117,6 +119,7 @@ export default function Settings() {
       <div className="flex gap-4 items-center">
         <Button onClick={saveSettings} disabled={saving}>{saving ? "Saving..." : "Save Settings"}</Button>
         {saved && <span className="text-sm text-green-600">Settings saved successfully.</span>}
+        {saveError && <span className="text-sm text-red-600">{saveError}</span>}
       </div>
     </div>
   );

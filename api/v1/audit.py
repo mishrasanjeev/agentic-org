@@ -71,17 +71,26 @@ async def query_audit(
             count_base = count_base.where(AuditLog.event_type.ilike(pattern))
 
         if agent_id:
-            agent_uuid = _uuid.UUID(agent_id)
+            try:
+                agent_uuid = _uuid.UUID(agent_id)
+            except (ValueError, AttributeError) as e:
+                raise HTTPException(400, "Invalid agent_id format") from e
             base = base.where(AuditLog.agent_id == agent_uuid)
             count_base = count_base.where(AuditLog.agent_id == agent_uuid)
 
         if date_from:
-            dt_from = datetime.fromisoformat(date_from)
+            try:
+                dt_from = datetime.fromisoformat(date_from)
+            except ValueError as e:
+                raise HTTPException(400, "Invalid date_from format — use ISO 8601") from e
             base = base.where(AuditLog.created_at >= dt_from)
             count_base = count_base.where(AuditLog.created_at >= dt_from)
 
         if date_to:
-            dt_to = datetime.fromisoformat(date_to)
+            try:
+                dt_to = datetime.fromisoformat(date_to)
+            except ValueError as e:
+                raise HTTPException(400, "Invalid date_to format — use ISO 8601") from e
             base = base.where(AuditLog.created_at <= dt_to)
             count_base = count_base.where(AuditLog.created_at <= dt_to)
 

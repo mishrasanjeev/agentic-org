@@ -54,9 +54,9 @@ export default function WorkflowCreate() {
         trigger_type: triggerType,
         definition: { steps: parsed },
       });
-      navigate(`/dashboard/workflows/${data.id || ""}`);
-    } catch {
-      setError("Failed to create workflow. Please try again.");
+      navigate(`/dashboard/workflows/${data.workflow_id || data.id || ""}`);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to create workflow. Please try again.");
     } finally {
       setSubmitting(false);
     }
