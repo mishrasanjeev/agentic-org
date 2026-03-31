@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from typing import Any
@@ -39,13 +38,15 @@ def _get_redis() -> aioredis.Redis | None:
 
 
 def _token_redis_key(token: str) -> str:
-    """Derive a unique Redis key from a token using SHA-256.
+    """Derive a unique Redis key from a token using HMAC-SHA256.
 
     The previous implementation used ``token[:32]`` which collides for all
     JWTs sharing the same header (e.g. every HS256 token starts with the
-    same 36-char base64url header).  A hash of the full token is unique.
+    same 36-char base64url header).  An HMAC of the full token is unique.
     """
-    digest = hashlib.sha3_256(token.encode()).hexdigest()  # noqa: S324
+    import hmac
+
+    digest = hmac.new(b"blacklist", token.encode(), "sha256").hexdigest()
     return f"token_blacklist:{digest}"
 
 

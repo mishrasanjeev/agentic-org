@@ -31,8 +31,7 @@ def check(name: str, passed: bool, detail: str = ""):
     status = "PASS" if passed else "FAIL"
     results.append({"id": len(results) + 1, "name": name, "status": status, "detail": detail})
     icon = "+" if passed else "X"
-    safe_detail = detail[:80] if detail else ""  # truncate to avoid leaking tokens
-    print(f"  [{icon}] {len(results):3d}. {name}" + (f" — {safe_detail}" if safe_detail and not passed else ""))
+    print(f"  [{icon}] {len(results):3d}. {name}" + (" — FAILED" if not passed else ""))
 
 
 def api(method, path, token=None, retries=1, **kwargs):

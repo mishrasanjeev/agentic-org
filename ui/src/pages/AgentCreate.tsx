@@ -312,8 +312,8 @@ export default function AgentCreate() {
           {step === 4 && (
             <div className="space-y-3">
               <div className="flex items-center gap-4 bg-muted/30 rounded-lg p-4">
-                {avatarUrl && /^https?:\/\//i.test(avatarUrl) ? (
-                  <img src={avatarUrl} alt={employeeName} className="w-16 h-16 rounded-full object-cover" />
+                {avatarUrl && /^https:\/\//i.test(avatarUrl) ? (
+                  <img src={encodeURI(avatarUrl)} alt={employeeName} className="w-16 h-16 rounded-full object-cover" />
                 ) : (
                   <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
                     {employeeName.charAt(0).toUpperCase()}
