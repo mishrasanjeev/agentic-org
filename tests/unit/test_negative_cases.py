@@ -339,13 +339,16 @@ class TestWorkflowCreate:
 class TestConnectorCreate:
     @pytest.mark.asyncio
     async def test_create_duplicate_name(self):
+        from sqlalchemy.exc import IntegrityError
+
         from api.v1.connectors import register_connector
         from core.schemas.api import ConnectorCreate
 
-        existing = MagicMock()
         mock_session = AsyncMock()
-        mock_session.execute = AsyncMock(return_value=_make_result(scalar_one=existing))
         mock_session.add = MagicMock()
+        mock_session.flush = AsyncMock(
+            side_effect=IntegrityError("", {}, Exception("duplicate"))
+        )
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
             with pytest.raises(HTTPException) as exc:

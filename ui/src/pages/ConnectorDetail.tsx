@@ -3,9 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
-
-const AUTH_TYPES = ["oauth2", "api_key", "basic", "bolt_bot_token", "certificate", "none"];
+import api, { extractApiError } from "@/lib/api";
+import { AUTH_TYPES, authTypeLabel, buildAuthConfig } from "@/lib/connector-constants";
 
 interface ConnectorDetail {
   connector_id: string;
@@ -68,13 +67,8 @@ export default function ConnectorDetailPage() {
         rate_limit_rpm: rateLimitRpm,
       };
       if (secretRef.trim()) update.secret_ref = secretRef.trim();
-      if (authToken.trim()) {
-        const authConfig: Record<string, string> = {};
-        if (authType === "bolt_bot_token") authConfig.bot_token = authToken.trim();
-        else if (authType === "api_key") authConfig.api_key = authToken.trim();
-        else authConfig.token = authToken.trim();
-        update.auth_config = authConfig;
-      }
+      const authConfig = buildAuthConfig(authType, authToken);
+      if (Object.keys(authConfig).length > 0) update.auth_config = authConfig;
 
       const { data } = await api.put(`/connectors/${id}`, update);
       setConnector(data);
@@ -82,8 +76,8 @@ export default function ConnectorDetailPage() {
       setAuthToken("");
       setSecretRef("");
       setFeedback({ type: "success", msg: "Connector updated successfully" });
-    } catch {
-      setFeedback({ type: "error", msg: "Failed to update connector" });
+    } catch (e: unknown) {
+      setFeedback({ type: "error", msg: extractApiError(e, "Failed to update connector") });
     } finally {
       setSaving(false);
     }
@@ -94,13 +88,18 @@ export default function ConnectorDetailPage() {
     try {
       const { data } = await api.get(`/connectors/${id}/health`);
       setFeedback({ type: data.healthy ? "success" : "error", msg: `Health: ${data.status} (${data.healthy ? "healthy" : "unhealthy"})` });
-    } catch {
-      setFeedback({ type: "error", msg: "Health check failed" });
+    } catch (e: unknown) {
+      setFeedback({ type: "error", msg: extractApiError(e, "Health check failed") });
     }
   }
 
   if (loading) return <p className="text-muted-foreground p-6">Loading connector...</p>;
-  if (!connector) return <p className="text-muted-foreground p-6">Connector not found</p>;
+  if (!connector) return (
+    <div className="space-y-4 p-6">
+      <p className="text-muted-foreground">Connector not found.</p>
+      <a href="/dashboard/connectors" className="text-sm text-primary hover:underline">&larr; Back to Connectors</a>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -161,9 +160,7 @@ export default function ConnectorDetailPage() {
                 {authType !== "none" && (
                   <>
                     <div>
-                      <label className="text-sm font-medium">
-                        {authType === "bolt_bot_token" ? "Bot Token" : authType === "api_key" ? "API Key" : "Auth Credential"}
-                      </label>
+                      <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
                       <input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Enter new credential (leave blank to keep existing)" className="border rounded px-3 py-2 text-sm w-full mt-1" />
                     </div>
                     <div>

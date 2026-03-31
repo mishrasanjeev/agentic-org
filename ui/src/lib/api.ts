@@ -16,6 +16,10 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+export function extractApiError(e: unknown, fallback = "An error occurred"): string {
+  const detail = (e as any)?.response?.data?.detail;
+  return typeof detail === "string" ? detail : fallback;
+}
 export default api;
 export const agentsApi = {
   list: (params?: Record<string, string>) => api.get("/agents", { params }),

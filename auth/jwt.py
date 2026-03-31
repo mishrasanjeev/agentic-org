@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac as _hmac
 import logging
 import time
 from typing import Any
@@ -22,7 +23,8 @@ JWKS_CACHE_TTL = 3600
 # Token blacklist — Redis-backed with in-memory fallback
 # ---------------------------------------------------------------------------
 
-_blacklisted_tokens: set[str] = set()  # In-memory fallback
+_blacklisted_tokens: dict[str, float] = {}  # token -> expiry timestamp
+_BLACKLIST_MAX_SIZE = 10_000  # prevent unbounded growth
 _redis_client: aioredis.Redis | None = None
 _BLACKLIST_TTL = 3700  # slightly longer than token expiry (60 min)
 
@@ -44,15 +46,19 @@ def _token_redis_key(token: str) -> str:
     JWTs sharing the same header (e.g. every HS256 token starts with the
     same 36-char base64url header).  An HMAC of the full token is unique.
     """
-    import hmac
-
-    digest = hmac.new(b"blacklist", token.encode(), "sha256").hexdigest()
+    digest = _hmac.new(b"blacklist", token.encode(), "sha256").hexdigest()
     return f"token_blacklist:{digest}"
 
 
 def blacklist_token(token: str) -> None:
     """Add a token to the blacklist so it is rejected on future validation."""
-    _blacklisted_tokens.add(token)
+    # Prune expired entries if cache is full
+    if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
+        now = time.time()
+        expired = [k for k, exp in _blacklisted_tokens.items() if now > exp]
+        for k in expired:
+            _blacklisted_tokens.pop(k, None)
+    _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
     # Also store in Redis asynchronously — the sync caller can't await,
     # so we store in memory as primary and Redis is best-effort via check
     r = _get_redis()
@@ -73,13 +79,15 @@ def blacklist_token(token: str) -> None:
 async def _is_blacklisted(token: str) -> bool:
     """Check if token is blacklisted (memory + Redis)."""
     if token in _blacklisted_tokens:
-        return True
+        if time.time() <= _blacklisted_tokens[token]:
+            return True
+        _blacklisted_tokens.pop(token, None)  # expired
     r = _get_redis()
     if r is not None:
         try:
             val = await r.get(_token_redis_key(token))
             if val:
-                _blacklisted_tokens.add(token)  # cache locally too
+                _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
                 return True
         except Exception:
             logger.debug("Redis blacklist read failed — checking memory only")
@@ -107,7 +115,7 @@ def create_access_token(data: dict, expires_minutes: int = 60) -> str:
 
 def validate_local_token(token: str) -> dict:
     """Decode and validate an HS256-signed local JWT."""
-    if token in _blacklisted_tokens:
+    if token in _blacklisted_tokens and time.time() <= _blacklisted_tokens[token]:
         raise ValueError("Token has been revoked")
     try:
         expected_issuer = "agenticorg.ai" if settings.env == "production" else "agenticorg-local"

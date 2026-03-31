@@ -5,7 +5,7 @@ import type { Connector } from "@/types";
 
 export default function ConnectorCard({ connector }: { connector: Connector }) {
   const navigate = useNavigate();
-  const connectorId = (connector as any).connector_id || connector.id;
+  const connectorId = connector.id;
   return (
     <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => navigate(`/dashboard/connectors/${connectorId}`)}>
       <CardHeader>

@@ -423,7 +423,7 @@ class TestConnectorsEndpoints:
         conn = _make_connector()
         d = _connector_to_dict(conn)
         expected_keys = {
-            "connector_id", "name", "category", "description", "base_url",
+            "id", "connector_id", "name", "category", "description", "base_url",
             "auth_type", "tool_functions", "data_schema_ref", "rate_limit_rpm",
             "timeout_ms", "status", "health_check_at", "created_at",
         }
@@ -517,11 +517,6 @@ class TestConnectorsEndpoints:
             base_url="https://api.hubspot.com",
         )
 
-        # First execute call = duplicate check (return None), rest = default
-        mock_session.execute = AsyncMock(
-            side_effect=[_make_result(scalar_one=None)]
-        )
-
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
             resp = await register_connector(body=body, tenant_id=tenant_id)
@@ -538,10 +533,6 @@ class TestConnectorsEndpoints:
         from core.schemas.api import ConnectorCreate
 
         body = ConnectorCreate(name="Test", category="test", auth_type="none")
-
-        mock_session.execute = AsyncMock(
-            side_effect=[_make_result(scalar_one=None)]
-        )
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:

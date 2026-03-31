@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
@@ -18,7 +19,8 @@ router = APIRouter()
 
 def _connector_to_dict(conn: Connector) -> dict:
     return {
-        "connector_id": str(conn.id),
+        "id": str(conn.id),
+        "connector_id": str(conn.id),  # kept for backward compat
         "name": conn.name,
         "category": conn.category,
         "description": conn.description,
@@ -74,16 +76,6 @@ async def register_connector(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        # Check for duplicate name within tenant
-        existing = await session.execute(
-            select(Connector).where(
-                Connector.tenant_id == tid,
-                Connector.name == body.name,
-            )
-        )
-        if existing.scalar_one_or_none():
-            raise HTTPException(409, f"Connector '{body.name}' already exists")
-
         connector = Connector(
             tenant_id=tid,
             name=body.name,
@@ -98,7 +90,10 @@ async def register_connector(
             status="active",
         )
         session.add(connector)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError:
+            raise HTTPException(409, f"Connector '{body.name}' already exists") from None
 
     return _connector_to_dict(connector)
 
@@ -142,7 +137,6 @@ async def update_connector(
 
         for field, value in body.model_dump(exclude_none=True).items():
             setattr(connector, field, value)
-        session.add(connector)
 
     return _connector_to_dict(connector)
 

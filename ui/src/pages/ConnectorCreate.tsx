@@ -2,19 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
+import { AUTH_TYPES, AUTH_FIELD_HINTS, authTypeLabel, buildAuthConfig } from "@/lib/connector-constants";
 
 const CATEGORIES = ["finance", "hr", "marketing", "ops", "comms"];
-const AUTH_TYPES = ["oauth2", "api_key", "basic", "bolt_bot_token", "certificate", "none"];
-
-const AUTH_FIELD_HINTS: Record<string, string> = {
-  oauth2: "Client ID, Client Secret, Token URL",
-  api_key: "API key or token",
-  basic: "Username and password",
-  bolt_bot_token: "Slack Bot User OAuth Token (xoxb-...)",
-  certificate: "Certificate path or PEM content",
-  none: "No authentication required",
-};
 
 export default function ConnectorCreate() {
   const navigate = useNavigate();
@@ -34,14 +25,7 @@ export default function ConnectorCreate() {
     setSubmitting(true);
     setError("");
     try {
-      const authConfig: Record<string, string> = {};
-      if (authToken.trim()) {
-        if (authType === "bolt_bot_token") authConfig.bot_token = authToken.trim();
-        else if (authType === "api_key") authConfig.api_key = authToken.trim();
-        else if (authType === "oauth2") authConfig.client_secret = authToken.trim();
-        else if (authType === "basic") authConfig.password = authToken.trim();
-        else authConfig.token = authToken.trim();
-      }
+      const authConfig = buildAuthConfig(authType, authToken);
       await api.post("/connectors", {
         name: name.trim(),
         category,
@@ -52,8 +36,8 @@ export default function ConnectorCreate() {
         rate_limit_rpm: rateLimitRpm,
       });
       navigate("/dashboard/connectors");
-    } catch {
-      setError("Failed to register connector. Please try again.");
+    } catch (e: unknown) {
+      setError(extractApiError(e, "Failed to register connector. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -106,9 +90,7 @@ export default function ConnectorCreate() {
               {authType !== "none" && (
                 <>
                   <div>
-                    <label className="text-sm font-medium">
-                      {authType === "bolt_bot_token" ? "Bot Token" : authType === "api_key" ? "API Key" : "Auth Credential"}
-                    </label>
+                    <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
                     <input
                       type="password"
                       value={authToken}
