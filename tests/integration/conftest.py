@@ -161,6 +161,10 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     gx_mw._failed_attempts.clear()
     gx_mw._blocked_ips.clear()
+
+    # Override _is_grantex_token to always return False in tests
+    # so RS256 test tokens go through the legacy path (which is patched above)
+    monkeypatch.setattr(gx_mw, "_is_grantex_token", lambda token: False)
     # Also override issuer validation so the test issuer is accepted
     monkeypatch.setattr(
         auth_jwt_module,
