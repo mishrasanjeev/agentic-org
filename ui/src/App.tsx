@@ -35,6 +35,7 @@ const Playground = lazyRetry(() => import("./pages/Playground"));
 const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
 const Agents = lazyRetry(() => import("./pages/Agents"));
 const AgentCreate = lazyRetry(() => import("./pages/AgentCreate"));
+const SOPUpload = lazyRetry(() => import("./pages/SOPUpload"));
 const AgentDetail = lazyRetry(() => import("./pages/AgentDetail"));
 const Workflows = lazyRetry(() => import("./pages/Workflows"));
 const WorkflowCreate = lazyRetry(() => import("./pages/WorkflowCreate"));
@@ -155,6 +156,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <AgentCreate />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/agents/from-sop"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <SOPUpload />
             </Layout>
           </ProtectedRoute>
         }

@@ -93,6 +93,7 @@ export default function Agents() {
         <h2 className="text-2xl font-bold">Agent Fleet</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowImport(!showImport)}>Import CSV</Button>
+          <Button variant="outline" onClick={() => navigate("/dashboard/agents/from-sop")}>Create from SOP</Button>
           <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
         </div>
       </div>

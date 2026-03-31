@@ -21,6 +21,7 @@ from api.v1 import (
     prompt_templates,
     sales,
     schemas,
+    sop,
     workflows,
 )
 from api.v1 import (
@@ -102,6 +103,7 @@ app.include_router(prompt_templates.router, prefix="/api/v1", tags=["Prompt Temp
 app.include_router(sales.router, prefix="/api/v1", tags=["Sales"])
 app.include_router(agent_teams.router, prefix="/api/v1", tags=["Agent Teams"])
 app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
+app.include_router(sop.router, prefix="/api/v1", tags=["SOP"])
 app.include_router(approvals.router, prefix="/api/v1", tags=["Approvals"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
