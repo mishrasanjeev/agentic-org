@@ -682,6 +682,141 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CONN-SLACK-007: Slack Connector Full Config from UI
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("CONN-SLACK-007: Slack Connector Config", () => {
+  test("ConnectorCreate shows auth_config fields for bolt_bot_token", async ({ page }) => {
+    await loginAsCeo(page);
+
+    await page.goto(`${BASE}/dashboard/connectors/new`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    // Select bolt_bot_token auth type
+    const authSelect = page.locator('label:has-text("Auth Type")').locator('..').locator('select');
+    await authSelect.selectOption("bolt_bot_token");
+    await page.waitForTimeout(500);
+
+    // Bot Token field should be visible
+    const bodyText = await page.textContent("body");
+    expect(bodyText).toContain("Bot Token");
+
+    // Secret Reference field should be visible
+    expect(bodyText).toContain("Secret Reference");
+  });
+
+  test("Register Slack connector with auth config via API", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    // Register Slack connector with auth_config
+    const createResp = await page.request.post(`${BASE}/api/v1/connectors`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `slack-test-${ts}`, category: "comms",
+        base_url: "https://slack.com/api",
+        auth_type: "bolt_bot_token",
+        auth_config: { bot_token: "xoxb-test-token" },
+        secret_ref: "gcp-secret-manager://slack-bot-token",
+        rate_limit_rpm: 100,
+      },
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const data = await createResp.json();
+    expect(data.connector_id).toBeTruthy();
+    expect(data.auth_type).toBe("bolt_bot_token");
+  });
+
+  test("Connector detail page loads and shows Edit button", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    // Create a connector first
+    const createResp = await page.request.post(`${BASE}/api/v1/connectors`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `slack-detail-${ts}`, category: "comms",
+        base_url: "https://slack.com/api",
+        auth_type: "bolt_bot_token",
+        rate_limit_rpm: 100,
+      },
+    });
+    const connId = (await createResp.json()).connector_id;
+
+    // Navigate to detail page
+    await page.goto(`${BASE}/dashboard/connectors/${connId}`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(2000);
+
+    // Should show connector name and Edit button
+    const bodyText = await page.textContent("body");
+    expect(bodyText).toContain(`slack-detail-${ts}`);
+    await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Health Check" })).toBeVisible();
+  });
+
+  test("Connector update endpoint works (PUT)", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    // Create connector
+    const createResp = await page.request.post(`${BASE}/api/v1/connectors`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `slack-update-${ts}`, category: "comms",
+        base_url: "https://slack.com/api",
+        auth_type: "bolt_bot_token",
+        rate_limit_rpm: 100,
+      },
+    });
+    const connId = (await createResp.json()).connector_id;
+
+    // Update connector with auth_config
+    const updateResp = await page.request.put(`${BASE}/api/v1/connectors/${connId}`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        auth_config: { bot_token: "xoxb-updated-token" },
+        secret_ref: "gcp-secret-manager://slack-bot-token-v2",
+        rate_limit_rpm: 200,
+      },
+    });
+    expect(updateResp.ok()).toBeTruthy();
+    const updated = await updateResp.json();
+    expect(updated.rate_limit_rpm).toBe(200);
+  });
+
+  test("Agents with Slack tools have send_message authorized", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    // Create support_triage agent (should get Slack tools)
+    const createResp = await page.request.post(`${BASE}/api/v1/agents`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `SlackAgent ${ts}`, agent_type: "support_triage", domain: "ops",
+        employee_name: `SlackBot ${ts}`,
+        system_prompt_text: "Test agent for Slack integration",
+        hitl_policy: { condition: "confidence < 0.88" },
+      },
+    });
+    const agentId = (await createResp.json()).agent_id;
+
+    // Verify Slack tools are in authorized_tools
+    const detailResp = await page.request.get(`${BASE}/api/v1/agents/${agentId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const agent = await detailResp.json();
+    expect(agent.authorized_tools).toContain("send_message");
+    expect(agent.authorized_tools).toContain("post_formatted_alert");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Signup Flow
 // ═══════════════════════════════════════════════════════════════════════════
 

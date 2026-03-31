@@ -114,6 +114,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "support_triage": [
         "create_ticket", "update_ticket", "escalate_to_group",
         "get_sla_breach_status", "get_csat_score", "apply_macro",
+        "send_message", "post_formatted_alert",
     ],
     "vendor_manager": [
         "search_issues", "create_issue", "add_comment",
@@ -126,11 +127,13 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "compliance_guard": [
         "get_compliance_notice", "get_access_log",
         "search_issues", "create_incident",
+        "send_message",
     ],
     "it_operations": [
         "create_incident", "trigger_alert_with_context",
         "acknowledge_incident", "manage_on_call_schedule",
-        "run_automated_runbook",
+        "run_automated_runbook", "send_message",
+        "post_formatted_alert",
     ],
     # Backoffice
     "legal_ops": [

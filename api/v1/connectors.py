@@ -11,7 +11,7 @@ from sqlalchemy import select
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
 from core.models.connector import Connector
-from core.schemas.api import ConnectorCreate
+from core.schemas.api import ConnectorCreate, ConnectorUpdate
 
 router = APIRouter()
 
@@ -89,6 +89,50 @@ async def register_connector(
         )
         session.add(connector)
         await session.flush()
+
+    return _connector_to_dict(connector)
+
+
+# ── GET /connectors/{conn_id} ────────────────────────────────────────────────
+@router.get("/connectors/{conn_id}")
+async def get_connector(
+    conn_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Connector).where(
+                Connector.id == conn_id, Connector.tenant_id == tid
+            )
+        )
+        connector = result.scalar_one_or_none()
+    if not connector:
+        raise HTTPException(404, "Connector not found")
+    return _connector_to_dict(connector)
+
+
+# ── PUT /connectors/{conn_id} ──────────────────────────────────────────────
+@router.put("/connectors/{conn_id}")
+async def update_connector(
+    conn_id: UUID,
+    body: ConnectorUpdate,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Connector).where(
+                Connector.id == conn_id, Connector.tenant_id == tid
+            )
+        )
+        connector = result.scalar_one_or_none()
+        if not connector:
+            raise HTTPException(404, "Connector not found")
+
+        for field, value in body.model_dump(exclude_none=True).items():
+            setattr(connector, field, value)
+        session.add(connector)
 
     return _connector_to_dict(connector)
 

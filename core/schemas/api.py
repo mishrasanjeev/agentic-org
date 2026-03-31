@@ -178,6 +178,16 @@ class ConnectorCreate(BaseModel):
     rate_limit_rpm: int = 60
 
 
+class ConnectorUpdate(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    auth_type: str | None = None
+    auth_config: dict[str, Any] | None = None
+    secret_ref: str | None = None
+    rate_limit_rpm: int | None = None
+    status: str | None = None
+
+
 # ── Schema registry ──
 
 

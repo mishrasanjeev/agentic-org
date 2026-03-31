@@ -43,6 +43,7 @@ const WorkflowRun = lazyRetry(() => import("./pages/WorkflowRun"));
 const Approvals = lazyRetry(() => import("./pages/Approvals"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
 const ConnectorCreate = lazyRetry(() => import("./pages/ConnectorCreate"));
+const ConnectorDetail = lazyRetry(() => import("./pages/ConnectorDetail"));
 const Schemas = lazyRetry(() => import("./pages/Schemas"));
 const Audit = lazyRetry(() => import("./pages/Audit"));
 const Observatory = lazyRetry(() => import("./pages/Observatory"));
@@ -244,6 +245,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <ConnectorCreate />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/connectors/:id"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <ConnectorDetail />
             </Layout>
           </ProtectedRoute>
         }
