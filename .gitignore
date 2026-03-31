@@ -87,6 +87,7 @@ scripts/seed_simple.sql
 ui/playwright-report/
 ui/playwright-demo.config.ts
 ui/test-results/
+test-results/
 
 # Temp build files
 cloudbuild-ui.yaml
