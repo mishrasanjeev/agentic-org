@@ -156,6 +156,11 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     mw._failed_attempts.clear()
     mw._blocked_ips.clear()
+    # Also clear the new Grantex middleware rate limiter
+    import auth.grantex_middleware as gx_mw
+
+    gx_mw._failed_attempts.clear()
+    gx_mw._blocked_ips.clear()
     # Also override issuer validation so the test issuer is accepted
     monkeypatch.setattr(
         auth_jwt_module,
