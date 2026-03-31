@@ -5,10 +5,7 @@ Covers: state, llm_factory, tool_adapter, agent_graph, runner, ap_processor.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ═══════════════════════════════════════════════════════════════════════════
 # State
@@ -300,18 +297,18 @@ class TestGrantexRegistration:
 
 class TestGrantexMiddleware:
     def test_is_grantex_token_rs256(self):
-        from auth.grantex_middleware import _is_grantex_token
-
         # RS256 header: {"alg":"RS256","typ":"JWT"}
         import base64
+
+        from auth.grantex_middleware import _is_grantex_token
         header = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode()
         fake_token = f"{header}.payload.signature"
         assert _is_grantex_token(fake_token) is True
 
     def test_is_grantex_token_hs256(self):
-        from auth.grantex_middleware import _is_grantex_token
-
         import base64
+
+        from auth.grantex_middleware import _is_grantex_token
         header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b"=").decode()
         fake_token = f"{header}.payload.signature"
         assert _is_grantex_token(fake_token) is False
