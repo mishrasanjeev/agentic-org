@@ -65,7 +65,15 @@ class TestSOPParserPrompt:
         from core.langgraph.sop_parser import parse_sop_document
 
         mock_response = MagicMock()
-        mock_response.content = '{"agent_name":"Test Agent","agent_type":"test_agent","domain":"finance","description":"Test","steps":[],"required_tools":["fetch_bank_statement"],"hitl_conditions":[],"confidence_floor":0.9,"escalation_chain":[],"suggested_prompt":"test prompt"}'
+        import json
+
+        mock_response.content = json.dumps({
+            "agent_name": "Test Agent", "agent_type": "test_agent",
+            "domain": "finance", "description": "Test", "steps": [],
+            "required_tools": ["fetch_bank_statement"],
+            "hitl_conditions": [], "confidence_floor": 0.9,
+            "escalation_chain": [], "suggested_prompt": "test prompt",
+        })
 
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -100,7 +108,15 @@ class TestSOPParserPrompt:
         from core.langgraph.sop_parser import parse_sop_document
 
         mock_response = MagicMock()
-        mock_response.content = '{"agent_name":"Test","agent_type":"test","domain":"ops","description":"Test","steps":[],"required_tools":["nonexistent_tool","fetch_bank_statement"],"hitl_conditions":[],"confidence_floor":0.88,"escalation_chain":[],"suggested_prompt":"test"}'
+        import json
+
+        mock_response.content = json.dumps({
+            "agent_name": "Test", "agent_type": "test",
+            "domain": "ops", "description": "Test", "steps": [],
+            "required_tools": ["nonexistent_tool", "fetch_bank_statement"],
+            "hitl_conditions": [], "confidence_floor": 0.88,
+            "escalation_chain": [], "suggested_prompt": "test",
+        })
 
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -117,7 +133,7 @@ class TestSOPEndpoints:
     async def test_parse_text_empty_rejected(self):
         from fastapi import HTTPException
 
-        from api.v1.sop import parse_text_sop, SOPParseRequest
+        from api.v1.sop import SOPParseRequest, parse_text_sop
 
         with pytest.raises(HTTPException) as exc:
             await parse_text_sop(
@@ -130,7 +146,7 @@ class TestSOPEndpoints:
     async def test_parse_text_too_long_rejected(self):
         from fastapi import HTTPException
 
-        from api.v1.sop import parse_text_sop, SOPParseRequest
+        from api.v1.sop import SOPParseRequest, parse_text_sop
 
         with pytest.raises(HTTPException) as exc:
             await parse_text_sop(
