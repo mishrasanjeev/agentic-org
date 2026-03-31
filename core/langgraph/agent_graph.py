@@ -236,14 +236,26 @@ def _check_hitl_trigger(
         return f"confidence {confidence:.3f} < floor {confidence_floor}"
 
     if hitl_condition and output:
-        # Evaluate simple expressions like "amount > 500000"
+        # Evaluate simple threshold expressions like "amount > 500000"
         try:
-            # Safe evaluation against output fields
-            for key, value in output.items():
-                hitl_condition = hitl_condition.replace(key, repr(value))
-            if eval(hitl_condition, {"__builtins__": {}}, {}):  # noqa: S307
-                return f"condition matched: {hitl_condition}"
-        except Exception:  # noqa: S110
-            pass  # HITL condition eval is best-effort; failures are not escalation-worthy
+            import ast
+            import operator
+
+            ops = {
+                ast.Gt: operator.gt, ast.Lt: operator.lt,
+                ast.GtE: operator.ge, ast.LtE: operator.le,
+                ast.Eq: operator.eq, ast.NotEq: operator.ne,
+            }
+            tree = ast.parse(hitl_condition, mode="eval")
+            if isinstance(tree.body, ast.Compare) and len(tree.body.comparators) == 1:
+                left_name = getattr(tree.body.left, "id", "")
+                left_val = output.get(left_name, 0)
+                right_node = tree.body.comparators[0]
+                right_val = getattr(right_node, "value", getattr(right_node, "n", 0))
+                op_fn = ops.get(type(tree.body.ops[0]))
+                if op_fn and op_fn(float(left_val), float(right_val)):
+                    return f"condition matched: {hitl_condition}"
+        except Exception:
+            pass  # HITL condition eval is best-effort
 
     return ""
