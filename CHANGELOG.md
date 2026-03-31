@@ -2,6 +2,40 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.3.0] - 2026-03-31
+
+### Added — Security, Error Handling & New Features
+- **Password Reset Flow**: Full forgot-password + reset-password with JWT tokens, rate-limited, email enumeration safe
+- **Connector Detail Page**: View/edit individual connector auth config, secret references, health checks
+- **Email Workflow Triggers**: `email_received` trigger type matches on subject keywords for inbox-driven workflows
+- **API Event Triggers**: `api_event` trigger type for event-driven workflow automation
+- **Agent Tool Auto-Population**: 25 agent types + 5 domain fallbacks auto-assign relevant tools on creation
+- **Slack Full Configuration**: Bot token auth, connector detail edit, Slack tools in support/ops agent defaults
+- **Negative Test Suite**: 22 unit tests + 19 E2E tests covering error paths (401, 400, 404, 409, 410, 429)
+
+### Fixed — QA Bug List (7 bugs)
+- **AUTH-RESET-001**: Password reset email flow (was just an alert() stub)
+- **ORG-INV-002**: Invite accept "Invalid issuer" — dynamic issuer matching for production
+- **AGENT-CONFIG-003**: Tools auto-populated based on agent_type/domain
+- **HITL-COUNT-004**: Decided tab shows decision badge instead of action buttons
+- **HITL-EXP-005**: Expired items filtered from Pending queue (backend + frontend)
+- **WF-CONN-006**: Email trigger + api_event added to workflow UI (was missing)
+- **CONN-SLACK-007**: Slack connector end-to-end config from UI
+
+### Security — All CodeQL + Dependabot Resolved
+- Fixed 17 CodeQL alerts: stack trace exposure, clear-text logging, XSS, socket binding, workflow permissions
+- Fixed 2 Dependabot alerts: picomatch 2.3.1→2.3.2, 4.0.3→4.0.4
+- Auth middleware: generic error messages (no internal details leaked)
+- Sales API: whitelisted response fields (no agent internals exposed)
+
+### Changed
+- Workflow UI: 5 trigger types (manual, schedule, webhook, api_event, email_received)
+- Approval card: readonly mode for decided items with decision + timestamp
+- ConnectorCard: clickable, navigates to detail page
+- All form pages: extract and display API error details instead of generic messages
+- Settings/Workflows: user-facing error messages instead of console.error
+- Automated tests: 1,031 → **1,053** (761 unit + 22 negative + 19 E2E negative + 125 E2E + 126 security)
+
 ## [2.2.0] - 2026-03-29
 
 ### Added — Agent-to-Connector Bridge (Agents That Act)

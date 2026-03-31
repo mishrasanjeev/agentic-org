@@ -18,6 +18,10 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
+- **Workflow Triggers**: 5 types — manual, schedule, webhook, email_received (inbox keyword matching), api_event (event-type routing)
+- **Password Reset**: Forgot-password + reset-password flow with JWT tokens, rate-limited, email-enumeration safe
+- **Connector Configuration**: Full detail/edit page for all 42 connectors — auth credentials, secret references, base URL, health checks
+- **Auto-Tool Assignment**: Agents auto-populated with relevant tools based on type (25 mappings) or domain (5 fallbacks)
 
 ## Agents by Department
 

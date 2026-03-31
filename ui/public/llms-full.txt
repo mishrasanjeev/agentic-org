@@ -242,6 +242,65 @@ Every agent has configurable HITL conditions. When triggered, the agent stops ex
 5. Agent resumes or stops based on decision
 6. Full decision audit trail with timestamp, decision, notes
 
+### Approval Queue Features
+- **Decided Tab**: Shows decision badge (Approved/Rejected/Deferred) with timestamp — no action buttons
+- **Expired Filtering**: Expired HITL items automatically hidden from Pending queue
+- **Priority Filtering**: Filter by critical/high/normal/low across both tabs
+
+---
+
+## Workflow Trigger Types
+
+Workflows can be triggered by 5 different event sources:
+
+| Trigger | Description | Config Example |
+|---------|-------------|---------------|
+| manual | User clicks "Run Now" | No config needed |
+| schedule | Cron-based recurring execution | `{"cron": "0 9 * * MON"}` |
+| webhook | External HTTP POST triggers workflow | `{"path": "/webhooks/invoice"}` |
+| email_received | Inbox keyword matching triggers workflow | `{"filter": {"subject_contains": ["invoice", "payment"]}}` |
+| api_event | Event-type routing from internal systems | `{"event_type": "lead.qualified"}` |
+
+---
+
+## Authentication & Account Recovery
+
+### Login Methods
+- Email/password with bcrypt hashing (SOC-2 compliant)
+- Google OAuth (Sign In With Google)
+- Organization invites with JWT tokens (24-hour expiry)
+
+### Password Reset Flow
+1. User clicks "Forgot Password?" on login page
+2. Submits email → API sends reset link (1-hour JWT token)
+3. User clicks link → enters new password on reset page
+4. Token is single-use (blacklisted after reset)
+5. Rate-limited: 3 requests per email per hour
+6. Email-enumeration safe: same response for valid/invalid emails
+
+---
+
+## Connector Configuration
+
+All 42 connectors can be fully configured from the UI:
+
+- **Register**: Name, category, base URL, auth type, credentials, secret reference
+- **Detail View**: Full connector info with health check button
+- **Edit**: Update auth credentials, secret references, base URL, rate limits
+- **Auth Types**: OAuth2, API Key, Basic Auth, Bolt Bot Token (Slack), Certificate, None
+- **Secret References**: GCP Secret Manager URIs for runtime credential resolution
+- **Health Checks**: Per-connector health monitoring with status badges
+
+---
+
+## Auto-Tool Assignment
+
+When creating an agent without specifying tools, the platform auto-assigns relevant tools:
+
+- **By Agent Type** (25 mappings): e.g., `ap_processor` gets `fetch_bank_statement`, `create_charge`, `initiate_neft`
+- **By Domain** (5 fallbacks): e.g., `finance` gets `fetch_bank_statement`, `get_account_balance`, `generate_financial_report`
+- **Slack Integration**: Support and ops agents (support_triage, it_operations, compliance_guard) get `send_message` and `post_formatted_alert`
+
 ---
 
 ## Shadow Mode & Quality Gates

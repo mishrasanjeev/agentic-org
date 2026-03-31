@@ -851,7 +851,7 @@ export default function Landing() {
             <div className="grid md:grid-cols-3 gap-12">
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Plug in your API keys and agents call real APIs." },
+                { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Full audit trail on every action." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
@@ -994,8 +994,8 @@ export default function Landing() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 ),
-                title: "Tenant Isolation",
-                desc: "Multi-org data segregation with row-level security. Complete compute and data isolation between tenants.",
+                title: "Secure Authentication",
+                desc: "Google OAuth, email/password login, secure password reset, org invitations with JWT tokens. Rate-limited, email-enumeration safe.",
               },
             ].map((f, i) => (
               <FadeIn key={f.title} delay={i * 100}>

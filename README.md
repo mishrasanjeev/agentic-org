@@ -193,6 +193,8 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | POST | /auth/signup | No | Create account |
 | POST | /auth/login | No | Get JWT token |
 | POST | /auth/google | No | Google OAuth |
+| POST | /auth/forgot-password | No | Request password reset email |
+| POST | /auth/reset-password | No | Reset password with token |
 | POST | /demo-request | No | Demo form → lead + sales agent |
 | GET | /agents | JWT | List agents (RBAC filtered) |
 | POST | /agents | JWT | Create agent |
@@ -214,16 +216,18 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | GET | /audit | JWT | Audit log |
 | GET | /connectors | JWT | List connectors |
 | GET | /connectors/{id}/health | JWT | Connector health check |
+| GET | /connectors/{id} | JWT | Connector details |
+| PUT | /connectors/{id} | JWT | Update connector config |
 
 ---
 
 ## Testing
 
 ```bash
-# All automated tests (1,031 tests)
+# All automated tests (1,053 tests)
 pytest tests/ --ignore=tests/e2e --ignore=tests/integration
 
-# Unit tests (739 tests)
+# Unit tests (761 tests)
 pytest tests/unit/
 
 # Security tests (84 tests)

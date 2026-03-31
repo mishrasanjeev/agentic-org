@@ -111,6 +111,57 @@ graph TD
     style ComplianceAll fill:#f3e5f5,stroke:#6a1b9a
 ```
 
+### Password Reset
+
+**Forgot Password**
+```
+POST /api/v1/auth/forgot-password
+```
+Public endpoint (no auth required). Sends a password reset email if the email is registered. Always returns 200 to prevent email enumeration. Rate-limited to 3 requests per email per hour.
+
+**Request Body:**
+```json
+{
+  "email": "user@company.com"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "ok",
+  "message": "If that email is registered, a reset link has been sent."
+}
+```
+
+**Reset Password**
+```
+POST /api/v1/auth/reset-password
+```
+Public endpoint (no auth required). Validates the reset JWT token and sets a new password. Token is single-use (blacklisted after use) and expires in 1 hour.
+
+**Request Body:**
+```json
+{
+  "token": "eyJhbGciOi...",
+  "password": "NewSecurePass1"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "ok",
+  "message": "Password has been reset. You can now sign in."
+}
+```
+
+**Error Responses:**
+| Status | Detail |
+|--------|--------|
+| 400 | Invalid or expired reset token |
+| 400 | Password must be at least 8 characters with uppercase, lowercase, and a number |
+
 ---
 
 ## Agents
@@ -181,6 +232,40 @@ Clone an existing agent with overrides. Child cannot elevate parent's scopes.
 POST /api/v1/agents/{id}/pause
 ```
 Immediately pauses agent, revokes token, stops accepting new tasks. Effective in <30 seconds.
+
+---
+
+## Connectors
+
+### Get Connector
+```
+GET /api/v1/connectors/{conn_id}
+```
+Returns full connector details including auth type and tool functions.
+
+### Update Connector
+```
+PUT /api/v1/connectors/{conn_id}
+```
+Update connector authentication, base URL, rate limit, or status.
+
+**Request Body:**
+```json
+{
+  "auth_type": "bolt_bot_token",
+  "auth_config": {"bot_token": "xoxb-..."},
+  "secret_ref": "gcp-secret-manager://slack-bot-token",
+  "rate_limit_rpm": 200
+}
+```
+
+**Response:** `200 OK` — Returns updated connector object.
+
+**Error Responses:**
+| Status | Detail |
+|--------|--------|
+| 404 | Connector not found |
+| 409 | Connector name already exists (on create) |
 
 ---
 
