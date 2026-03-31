@@ -128,7 +128,7 @@ export default function Login() {
                 <label htmlFor="password" className="block text-sm font-medium text-foreground">
                   Password
                 </label>
-                <Link to="/login" onClick={(e) => { e.preventDefault(); alert("Password reset link will be sent to your email. Contact your admin if you need assistance."); }} className="text-xs text-primary hover:text-primary/80 transition-colors">
+                <Link to="/forgot-password" className="text-xs text-primary hover:text-primary/80 transition-colors">
                   Forgot Password?
                 </Link>
               </div>

@@ -80,6 +80,16 @@ async def list_approvals(
             base = base.where(HITLQueue.status == "pending")
             count_base = count_base.where(HITLQueue.status == "pending")
 
+        # Exclude expired items from the pending queue
+        if status == "pending" or not status:
+            now = datetime.now(UTC)
+            base = base.where(
+                (HITLQueue.expires_at.is_(None)) | (HITLQueue.expires_at > now)
+            )
+            count_base = count_base.where(
+                (HITLQueue.expires_at.is_(None)) | (HITLQueue.expires_at > now)
+            )
+
         total = (await session.execute(count_base)).scalar() or 0
 
         query = (

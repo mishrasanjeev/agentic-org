@@ -34,6 +34,145 @@ from core.schemas.messages import (
     TaskMetadata,
 )
 
+_AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
+    # Finance
+    "ap_processor": [
+        "fetch_bank_statement", "create_charge", "initiate_neft",
+        "create_payout", "get_settlement_report",
+    ],
+    "ar_collections": [
+        "create_payment_link", "list_contacts", "create_charge",
+        "get_account_balance", "send_transactional_email",
+    ],
+    "recon_agent": [
+        "fetch_bank_statement", "get_transaction_list",
+        "check_account_balance", "generate_financial_report",
+    ],
+    "tax_compliance": [
+        "file_26q_return", "file_24q_return",
+        "check_tds_credit_in_26as", "file_itr",
+        "pay_tax_challan", "download_form_16a",
+    ],
+    "close_agent": [
+        "generate_financial_report", "fetch_bank_statement",
+        "get_account_balance", "search_content_fulltext",
+    ],
+    "fpa_agent": [
+        "generate_financial_report", "get_account_balance",
+        "get_campaign_performance_metrics", "get_project_metrics",
+    ],
+    # HR
+    "talent_acquisition": [
+        "post_job", "search_candidates", "get_applications",
+        "schedule_interview", "send_offer", "send_inmail",
+    ],
+    "onboarding_agent": [
+        "create_employee", "provision_user", "assign_group",
+        "create_page", "schedule_social_post",
+    ],
+    "payroll_engine": [
+        "run_payroll", "get_payslip", "get_attendance",
+        "post_leave", "file_24q_return",
+    ],
+    "performance_coach": [
+        "update_performance", "get_employee",
+        "get_org_chart", "add_comment",
+    ],
+    "ld_coordinator": [
+        "search_content_fulltext", "create_page",
+        "get_employee", "schedule_interview",
+    ],
+    "offboarding_agent": [
+        "terminate_employee", "deactivate_user",
+        "remove_group", "list_active_sessions",
+    ],
+    # Marketing
+    "content_factory": [
+        "schedule_social_post", "get_post_analytics",
+        "manage_publishing_queue", "approve_draft_post",
+        "create_page",
+    ],
+    "campaign_pilot": [
+        "get_campaign_performance_metrics",
+        "adjust_campaign_budget", "get_campaign_performance",
+        "reallocate_ad_budget", "get_reach_and_frequency_data",
+    ],
+    "seo_strategist": [
+        "get_campaign_performance_metrics",
+        "get_search_term_report", "search_content_fulltext",
+        "get_post_analytics",
+    ],
+    "crm_intelligence": [
+        "list_contacts", "search_contacts", "list_deals",
+        "get_deal", "get_campaign_analytics", "create_contact",
+    ],
+    "brand_monitor": [
+        "get_post_analytics", "get_campaign_performance",
+        "schedule_social_post", "search_contacts",
+    ],
+    # Ops
+    "support_triage": [
+        "create_ticket", "update_ticket", "escalate_to_group",
+        "get_sla_breach_status", "get_csat_score", "apply_macro",
+    ],
+    "vendor_manager": [
+        "search_issues", "create_issue", "add_comment",
+        "create_page", "get_project_metrics",
+    ],
+    "contract_intelligence": [
+        "search_content_fulltext", "create_page",
+        "search_issues", "get_page_tree",
+    ],
+    "compliance_guard": [
+        "get_compliance_notice", "get_access_log",
+        "search_issues", "create_incident",
+    ],
+    "it_operations": [
+        "create_incident", "trigger_alert_with_context",
+        "acknowledge_incident", "manage_on_call_schedule",
+        "run_automated_runbook",
+    ],
+    # Backoffice
+    "legal_ops": [
+        "search_content_fulltext", "create_page",
+        "search_issues", "get_page_tree",
+        "manage_space_permissions",
+    ],
+    "risk_sentinel": [
+        "get_access_log", "create_incident",
+        "get_compliance_notice", "search_issues",
+        "generate_postmortem_doc",
+    ],
+    "facilities_agent": [
+        "create_ticket", "update_ticket",
+        "create_issue", "get_sla_breach_status",
+    ],
+}
+
+_DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
+    "finance": [
+        "fetch_bank_statement", "create_charge",
+        "get_account_balance", "generate_financial_report",
+    ],
+    "hr": [
+        "get_employee", "create_employee",
+        "provision_user", "post_job",
+    ],
+    "marketing": [
+        "get_campaign_performance_metrics",
+        "schedule_social_post", "list_contacts",
+        "get_post_analytics",
+    ],
+    "ops": [
+        "create_ticket", "search_issues",
+        "create_incident", "get_sla_breach_status",
+    ],
+    "backoffice": [
+        "search_content_fulltext", "create_page",
+        "search_issues", "get_access_log",
+    ],
+}
+
 logger = structlog.get_logger()
 
 router = APIRouter()
@@ -107,6 +246,15 @@ def _agent_to_dict(agent: Agent) -> dict:
 @router.post("/agents", status_code=201)
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
+
+    # Auto-populate authorized tools based on agent type / domain when none provided
+    tools = body.authorized_tools
+    if not tools:
+        tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
+            body.agent_type,
+            _DOMAIN_DEFAULT_TOOLS.get(body.domain, []),
+        )
+
     async with get_tenant_session(tid) as session:
         agent = Agent(
             tenant_id=tid,
@@ -123,7 +271,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             confidence_floor=Decimal(str(body.confidence_floor)),
             hitl_condition=body.hitl_policy.condition,
             max_retries=body.max_retries,
-            authorized_tools=body.authorized_tools,
+            authorized_tools=tools,
             output_schema=body.output_schema,
             status=body.initial_status or "shadow",
             version="1.0.0",
@@ -156,7 +304,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             agent_id=agent.id,
             version=agent.version,
             system_prompt=body.system_prompt,
-            authorized_tools=body.authorized_tools,
+            authorized_tools=tools,
             hitl_policy=body.hitl_policy.model_dump(),
             llm_config=body.llm.model_dump(),
             confidence_floor=agent.confidence_floor,

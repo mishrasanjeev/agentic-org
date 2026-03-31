@@ -8,11 +8,11 @@ import uuid
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request
-from jose import JWTError, jwt
+from jose import JWTError
 from pydantic import BaseModel
 from sqlalchemy import select, update
 
-from auth.jwt import create_access_token
+from auth.jwt import create_access_token, validate_local_token
 from core.config import settings
 from core.database import async_session_factory
 from core.email import send_invite_email
@@ -204,14 +204,8 @@ async def invite_member(body: InviteRequest, request: Request):
 async def accept_invite(body: AcceptInviteRequest):
     """Validate invite JWT, set password, and activate the user."""
     try:
-        claims = jwt.decode(
-            body.token,
-            settings.secret_key,
-            algorithms=["HS256"],
-            audience="agenticorg-tool-gateway",
-            issuer="agenticorg-local",
-        )
-    except JWTError as e:
+        claims = validate_local_token(body.token)
+    except (ValueError, JWTError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid or expired invite token: {e}") from None
 
     if not claims.get("agenticorg:invite"):

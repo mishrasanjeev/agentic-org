@@ -27,6 +27,8 @@ function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
 const Login = lazyRetry(() => import("./pages/Login"));
 const Signup = lazyRetry(() => import("./pages/Signup"));
 const InviteAccept = lazyRetry(() => import("./pages/InviteAccept"));
+const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazyRetry(() => import("./pages/ResetPassword"));
 const Evals = lazyRetry(() => import("./pages/Evals"));
 const Pricing = lazyRetry(() => import("./pages/Pricing"));
 const Playground = lazyRetry(() => import("./pages/Playground"));
@@ -84,6 +86,8 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/invite" element={<InviteAccept />} />
       <Route path="/accept-invite" element={<InviteAccept />} />
       <Route path="/evals" element={<Evals />} />

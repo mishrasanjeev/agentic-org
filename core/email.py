@@ -88,6 +88,16 @@ def send_welcome_email(to: str, org_name: str, name: str) -> None:
     send_email(to, f"Welcome to AgenticOrg — {org_name}", html)
 
 
+def send_password_reset_email(to: str, reset_link: str) -> None:
+    html = (
+        "<h2>Reset Your Password</h2>"
+        "<p>We received a request to reset your AgenticOrg password.</p>"
+        f"<p><a href='{reset_link}'>Reset Password</a></p>"
+        "<p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>"
+    )
+    send_email(to, "Password Reset — AgenticOrg", html)
+
+
 def send_invite_email(
     to: str, org_name: str, inviter: str, role: str, invite_link: str,
 ) -> None:

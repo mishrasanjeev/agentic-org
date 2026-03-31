@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 
-const TRIGGER_TYPES = ["manual", "schedule", "webhook", "event"];
+const TRIGGER_TYPES = ["manual", "schedule", "webhook", "api_event", "email_received"];
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
 
 const STEP_TEMPLATE = JSON.stringify([
@@ -94,7 +94,7 @@ export default function WorkflowCreate() {
               <div>
                 <label className="text-sm font-medium">Trigger Type</label>
                 <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                  {TRIGGER_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                  {TRIGGER_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
                 </select>
               </div>
             </div>

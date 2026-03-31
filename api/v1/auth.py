@@ -15,10 +15,10 @@ from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from auth.jwt import blacklist_token, create_access_token
+from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from core.config import settings
 from core.database import async_session_factory
-from core.email import send_welcome_email
+from core.email import send_password_reset_email, send_welcome_email
 from core.models.tenant import Tenant
 from core.models.user import User
 from core.rbac import get_allowed_domains, get_scopes_for_role
@@ -344,6 +344,95 @@ async def google_login(body: GoogleLoginRequest):
             "tenant_id": str(user.tenant_id),
         },
     )
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+# Rate limiting for password reset (max 3 per email per hour)
+_reset_attempts: dict[str, list[float]] = defaultdict(list)
+_RESET_MAX = 3
+_RESET_WINDOW = 3600  # 1 hour
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest, request: Request):
+    """Send a password reset link if the email is registered."""
+    email = body.email.strip().lower()
+
+    # Rate-limit per email
+    now = time.time()
+    _reset_attempts[email] = [t for t in _reset_attempts[email] if now - t < _RESET_WINDOW]
+    if len(_reset_attempts[email]) >= _RESET_MAX:
+        # Still return success to avoid email enumeration
+        return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
+    _reset_attempts[email].append(now)
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(User).where(User.email == email, User.status == "active")
+        )
+        user = result.scalar_one_or_none()
+
+    # Always return the same response to prevent email enumeration
+    if user:
+        reset_token = create_access_token(
+            data={
+                "sub": user.email,
+                "agenticorg:tenant_id": str(user.tenant_id),
+                "agenticorg:reset": True,
+            },
+            expires_minutes=60,
+        )
+        reset_link = f"https://app.agenticorg.ai/reset-password?token={reset_token}"
+        try:
+            send_password_reset_email(user.email, reset_link)
+        except Exception:
+            logger.exception("Password reset email failed for %s", email)
+
+    return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    """Validate reset token and set a new password."""
+    try:
+        claims = validate_local_token(body.token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid or expired reset token: {e}") from None
+
+    if not claims.get("agenticorg:reset"):
+        raise HTTPException(status_code=400, detail="Token is not a password reset token")
+
+    _validate_password(body.password)
+
+    email = claims.get("sub")
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid reset token — missing user")
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(User).where(User.email == email, User.status == "active")
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+        user.password_hash = pw_hash
+        session.add(user)
+        await session.commit()
+
+    # Blacklist the reset token so it can't be reused
+    blacklist_token(body.token)
+
+    return {"status": "ok", "message": "Password has been reset. You can now sign in."}
 
 
 @router.post("/logout")

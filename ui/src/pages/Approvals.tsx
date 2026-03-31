@@ -64,7 +64,8 @@ export default function Approvals() {
     }
   }
 
-  const pending = items.filter((i) => i.status === "pending");
+  const now = new Date();
+  const pending = items.filter((i) => i.status === "pending" && (!i.expires_at || new Date(i.expires_at) > now));
   const decided = items.filter((i) => i.status !== "pending");
   const displayed = tab === "pending" ? pending : decided;
   const filtered = displayed.filter(
@@ -105,7 +106,7 @@ export default function Approvals() {
       ) : (
         <div className="space-y-4">
           {filtered.map((item) => (
-            <ApprovalCard key={item.id} item={item} onDecide={handleDecide} />
+            <ApprovalCard key={item.id} item={item} onDecide={handleDecide} readonly={tab === "decided"} />
           ))}
         </div>
       )}

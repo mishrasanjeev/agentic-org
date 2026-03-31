@@ -3,9 +3,9 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import type { HITLItem } from "@/types";
 
-interface Props { item: HITLItem; onDecide: (id: string, decision: string, notes: string) => void; }
+interface Props { item: HITLItem; onDecide: (id: string, decision: string, notes: string) => void; readonly?: boolean; }
 
-export default function ApprovalCard({ item, onDecide }: Props) {
+export default function ApprovalCard({ item, onDecide, readonly }: Props) {
   return (
     <Card>
       <CardHeader>
@@ -19,11 +19,21 @@ export default function ApprovalCard({ item, onDecide }: Props) {
         <details className="mb-4"><summary className="cursor-pointer text-sm font-medium">Reasoning Trace</summary>
           <pre className="mt-2 text-xs bg-muted p-3 rounded overflow-auto max-h-40">{JSON.stringify(item.context, null, 2)}</pre>
         </details>
-        <div className="flex gap-2">
-          <Button variant="default" onClick={() => onDecide(item.id, "approve", "")}>Approve</Button>
-          <Button variant="destructive" onClick={() => onDecide(item.id, "reject", "")}>Reject</Button>
-          <Button variant="outline" onClick={() => onDecide(item.id, "defer", "")}>Defer</Button>
-        </div>
+        {readonly ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Decision:</span>
+            <Badge variant={item.decision === "approve" ? "default" : item.decision === "reject" ? "destructive" : "secondary"}>
+              {(item.decision || item.status).charAt(0).toUpperCase() + (item.decision || item.status).slice(1)}
+            </Badge>
+            {item.decision_at && <span className="text-xs text-muted-foreground ml-2">{new Date(item.decision_at).toLocaleString()}</span>}
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button variant="default" onClick={() => onDecide(item.id, "approve", "")}>Approve</Button>
+            <Button variant="destructive" onClick={() => onDecide(item.id, "reject", "")}>Reject</Button>
+            <Button variant="outline" onClick={() => onDecide(item.id, "defer", "")}>Defer</Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

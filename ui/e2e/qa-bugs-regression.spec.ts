@@ -387,6 +387,295 @@ test.describe("G6: Built-in Template Clone", () => {
 // Signup Flow
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTH-RESET-001: Forgot Password Flow
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("AUTH-RESET-001: Forgot Password", () => {
+  test("Forgot Password page renders from login link", async ({ page }) => {
+    await page.goto(`${BASE}/login`);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Click "Forgot Password?" link
+    await page.click('a[href="/forgot-password"]');
+    await page.waitForURL("**/forgot-password**", { timeout: 10000 });
+
+    // Page should render with email input and submit button
+    await expect(page.locator('input[type="email"]')).toBeVisible();
+    await expect(page.locator('button[type="submit"]')).toBeVisible();
+    const bodyText = await page.textContent("body");
+    expect(bodyText).toContain("Reset your password");
+  });
+
+  test("Submitting email shows confirmation message", async ({ page }) => {
+    await page.goto(`${BASE}/forgot-password`);
+    await page.waitForLoadState("domcontentloaded");
+
+    await page.fill('input[type="email"]', "test@example.com");
+    await page.click('button[type="submit"]');
+    await page.waitForTimeout(3000);
+
+    // Should show success/confirmation message (not an error)
+    const bodyText = await page.textContent("body");
+    expect(bodyText).toContain("reset link has been sent");
+  });
+
+  test("Reset password page renders with token param", async ({ page }) => {
+    await page.goto(`${BASE}/reset-password?token=test`);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Should show password inputs (not a 404)
+    const bodyText = await page.textContent("body");
+    expect(bodyText).not.toContain("Page Not Found");
+    expect(bodyText).toContain("new password");
+  });
+
+  test("Reset password page without token shows error", async ({ page }) => {
+    await page.goto(`${BASE}/reset-password`);
+    await page.waitForLoadState("domcontentloaded");
+
+    const bodyText = await page.textContent("body");
+    expect(bodyText).toContain("no token");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ORG-INV-002: Invite Accept — No "Invalid issuer" error
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("ORG-INV-002: Invite Token Issuer", () => {
+  test("Invite via API uses correct issuer (no issuer mismatch)", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+
+    // Invite a user via API
+    const ts = Date.now();
+    const inviteResp = await page.request.post(`${BASE}/api/v1/org/invite`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: { email: `invite-test-${ts}@test.test`, name: "Test Invitee", role: "analyst" },
+    });
+    expect(inviteResp.ok()).toBeTruthy();
+    const inviteData = await inviteResp.json();
+    const inviteLink = inviteData.invite_link;
+    expect(inviteLink).toBeTruthy();
+
+    // Extract token from invite link
+    const inviteToken = new URL(inviteLink).searchParams.get("token");
+    expect(inviteToken).toBeTruthy();
+
+    // Accept the invite — should NOT return "Invalid issuer"
+    const acceptResp = await page.request.post(`${BASE}/api/v1/org/accept-invite`, {
+      headers: { "Content-Type": "application/json" },
+      data: { token: inviteToken, password: "TestPass@2026" },
+    });
+    expect(acceptResp.ok()).toBeTruthy();
+    const acceptData = await acceptResp.json();
+    expect(acceptData.access_token).toBeTruthy();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENT-CONFIG-003: Tools Auto-populated on Agent Creation
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("AGENT-CONFIG-003: Agent Tools Auto-populate", () => {
+  test("Creating agent without tools auto-populates based on type", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    // Create agent WITHOUT specifying authorized_tools
+    const createResp = await page.request.post(`${BASE}/api/v1/agents`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `Tools Test ${ts}`, agent_type: "ap_processor", domain: "finance",
+        employee_name: `ToolBot ${ts}`,
+        system_prompt_text: "Test agent for tools auto-population",
+        hitl_policy: { condition: "confidence < 0.88" },
+      },
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const agentId = (await createResp.json()).agent_id;
+
+    // Fetch agent detail and verify tools are populated
+    const detailResp = await page.request.get(`${BASE}/api/v1/agents/${agentId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(detailResp.ok()).toBeTruthy();
+    const agent = await detailResp.json();
+    expect(agent.authorized_tools).toBeTruthy();
+    expect(agent.authorized_tools.length).toBeGreaterThan(0);
+    expect(agent.authorized_tools).toContain("fetch_bank_statement");
+  });
+
+  test("Agent detail page shows populated tools (not 'No tools configured')", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    const createResp = await page.request.post(`${BASE}/api/v1/agents`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `UITools ${ts}`, agent_type: "support_triage", domain: "ops",
+        employee_name: `UIToolBot ${ts}`,
+        system_prompt_text: "Test agent for UI tools display",
+        hitl_policy: { condition: "confidence < 0.88" },
+      },
+    });
+    const agentId = (await createResp.json()).agent_id;
+
+    await page.goto(`${BASE}/dashboard/agents/${agentId}`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(2000);
+
+    const bodyText = await page.textContent("body");
+    expect(bodyText).not.toContain("No tools configured");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HITL-COUNT-004: Decided Tab — No Action Buttons
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("HITL-COUNT-004: Decided Tab UI", () => {
+  test("Decided tab shows decision status, not action buttons", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+    const ts = Date.now();
+
+    // Create agent that triggers HITL
+    const createResp = await page.request.post(`${BASE}/api/v1/agents`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: {
+        name: `DecidedTest ${ts}`, agent_type: `decided_${ts}`, domain: "finance",
+        employee_name: `DecBot ${ts}`,
+        system_prompt_text: 'Return {"status":"completed","confidence":0.3}',
+        confidence_floor: 0.99,
+        hitl_policy: { condition: "confidence < 0.99" },
+      },
+    });
+    const agentId = (await createResp.json()).agent_id;
+
+    // Run agent to trigger HITL
+    await page.request.post(`${BASE}/api/v1/agents/${agentId}/run`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: { action: "test", inputs: {} },
+    });
+    await page.waitForTimeout(2000);
+
+    // Get pending HITL items and decide one
+    const pendingResp = await page.request.get(`${BASE}/api/v1/approvals?status=pending`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const pendingData = await pendingResp.json();
+    const items = pendingData.items || [];
+    if (items.length > 0) {
+      await page.request.post(`${BASE}/api/v1/approvals/${items[0].id}/decide`, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        data: { decision: "approve", notes: "E2E test" },
+      });
+    }
+
+    // Navigate to Approvals and click Decided tab
+    await page.goto(`${BASE}/dashboard/approvals`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(2000);
+
+    await page.click('button:has-text("Decided")');
+    await page.waitForTimeout(1000);
+
+    // In Decided tab, there should be "Decision:" labels, NOT Approve/Reject/Defer buttons
+    const decidedSection = page.locator('.space-y-4');
+    const approveButtons = decidedSection.getByRole("button", { name: "Approve" });
+    const approveCount = await approveButtons.count();
+
+    // If there are decided items, buttons should NOT be visible
+    const bodyText = await page.textContent("body");
+    if (bodyText?.includes("Decision:")) {
+      expect(approveCount).toBe(0);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HITL-EXP-005: Expired Items Not in Pending
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("HITL-EXP-005: Expired HITL Filtering", () => {
+  test("Pending API does not return expired items", async ({ page }) => {
+    await loginAsCeo(page);
+    const token = await getToken(page);
+
+    const pendingResp = await page.request.get(`${BASE}/api/v1/approvals?status=pending`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(pendingResp.ok()).toBeTruthy();
+    const data = await pendingResp.json();
+    const items = data.items || [];
+    const now = new Date();
+
+    // None of the pending items should be expired
+    for (const item of items) {
+      if (item.expires_at) {
+        expect(new Date(item.expires_at).getTime()).toBeGreaterThan(now.getTime());
+      }
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WF-CONN-006: Email Trigger in Workflow UI
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
+  test("Workflow create page shows email_received trigger option", async ({ page }) => {
+    await loginAsCeo(page);
+
+    await page.goto(`${BASE}/dashboard/workflows/new`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    // Check dropdown has email_received option
+    const selectEl = page.locator('select').nth(2); // 3rd select = trigger type
+    const options = await selectEl.locator("option").allTextContents();
+    const hasEmail = options.some((o) => o.toLowerCase().includes("email"));
+    expect(hasEmail).toBeTruthy();
+  });
+
+  test("Workflow create page shows api_event trigger option", async ({ page }) => {
+    await loginAsCeo(page);
+
+    await page.goto(`${BASE}/dashboard/workflows/new`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const selectEl = page.locator('select').nth(2);
+    const options = await selectEl.locator("option").allTextContents();
+    const hasApiEvent = options.some((o) => o.toLowerCase().includes("api"));
+    expect(hasApiEvent).toBeTruthy();
+  });
+
+  test("'event' trigger type no longer present (replaced by api_event)", async ({ page }) => {
+    await loginAsCeo(page);
+
+    await page.goto(`${BASE}/dashboard/workflows/new`);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const selectEl = page.locator('select').nth(2);
+    const optionValues = await selectEl.locator("option").evaluateAll(
+      (opts) => opts.map((o: HTMLOptionElement) => o.value)
+    );
+    expect(optionValues).not.toContain("event");
+    expect(optionValues).toContain("api_event");
+    expect(optionValues).toContain("email_received");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Signup Flow
+// ═══════════════════════════════════════════════════════════════════════════
+
 test.describe("Signup Flow", () => {
   test("Email signup creates account and redirects to onboarding", async ({ page }) => {
     const ts = Date.now();
