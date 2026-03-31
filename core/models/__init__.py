@@ -1,6 +1,5 @@
 """ORM models for AgenticOrg."""
 
-from core.models.api_key import APIKey as APIKey
 from core.models.agent import Agent as Agent
 from core.models.agent import AgentCostLedger as AgentCostLedger
 from core.models.agent import AgentLifecycleEvent as AgentLifecycleEvent
@@ -8,6 +7,7 @@ from core.models.agent import AgentTeam as AgentTeam
 from core.models.agent import AgentTeamMember as AgentTeamMember
 from core.models.agent import AgentVersion as AgentVersion
 from core.models.agent import ShadowComparison as ShadowComparison
+from core.models.api_key import APIKey as APIKey
 from core.models.audit import AuditLog as AuditLog
 from core.models.base import BaseModel as BaseModel
 from core.models.base import TenantMixin as TenantMixin
