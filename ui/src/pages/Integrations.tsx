@@ -9,7 +9,7 @@ export default function Integrations() {
 
   useEffect(() => {
     Promise.allSettled([
-      fetch("/api/v1/a2a/.well-known/agent.json").then((r) => r.json()),
+      fetch("/api/v1/a2a/agent-card").then((r) => r.json()),
       fetch("/api/v1/mcp/tools").then((r) => r.json()),
     ]).then(([cardResult, toolsResult]) => {
       if (cardResult.status === "fulfilled") setAgentCard(cardResult.value);

@@ -33,6 +33,7 @@ _task_store: dict[str, dict[str, Any]] = {}
 
 
 @router.get("/.well-known/agent.json")
+@router.get("/agent-card")
 async def agent_card():
     """Return the A2A Agent Card for AgenticOrg.
 
