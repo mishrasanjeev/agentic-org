@@ -168,7 +168,7 @@ test.describe("SOP: A2A + MCP Integration", () => {
     expect(bodyText).toContain("Agent-to-Agent");
     expect(bodyText).toContain("Model Context Protocol");
     expect(bodyText).toContain("Grantex");
-    expect(bodyText).toContain("agent.json");
+    expect(bodyText).toContain("pip install agenticorg");
   });
 });
 
