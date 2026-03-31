@@ -394,7 +394,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         try:
             send_password_reset_email(user.email, reset_link)
         except Exception:
-            logger.exception("Password reset email failed for %s", email)
+            logger.exception("Password reset email failed for user")
 
     return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
 

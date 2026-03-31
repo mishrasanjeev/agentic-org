@@ -129,5 +129,5 @@ async def submit_demo_request(body: DemoRequest):
         "status": "received",
         "message": "We'll be in touch within 2 minutes.",
         "lead_id": lead_id,
-        "agent_status": agent_status,
+        "agent_triggered": agent_status is not None,
     }

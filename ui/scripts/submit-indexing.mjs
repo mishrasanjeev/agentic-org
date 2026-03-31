@@ -155,12 +155,10 @@ async function main() {
     await submitToGoogle(urls, token);
   } catch (e) {
     if (e.code === "ENOENT") {
-      console.log(
-        `\n⚠  Google Indexing skipped — key not found at ${keyFile}`,
-      );
-      console.log(`   Run setup: see comments at top of this script\n`);
+      console.log("\n⚠  Google Indexing skipped — service account key not found");
+      console.log("   Run setup: see comments at top of this script\n");
     } else {
-      console.log(`\n⚠  Google Indexing error: ${e.message}\n`);
+      console.log("\n⚠  Google Indexing error — check service account configuration\n");
     }
   }
 

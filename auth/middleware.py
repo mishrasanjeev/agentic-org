@@ -60,10 +60,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = auth_header[7:]
         try:
             claims = await validate_token(token)
-        except ValueError as e:
+        except ValueError:
             self._record_failure(client_ip)
             return JSONResponse(
-                status_code=401, content={"detail": f"Token validation failed: {e}"}
+                status_code=401, content={"detail": "Invalid or expired token"}
             )
 
         # Set request state

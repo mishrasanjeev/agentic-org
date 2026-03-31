@@ -45,7 +45,7 @@ def _token_redis_key(token: str) -> str:
     JWTs sharing the same header (e.g. every HS256 token starts with the
     same 36-char base64url header).  A hash of the full token is unique.
     """
-    digest = hashlib.sha256(token.encode()).hexdigest()
+    digest = hashlib.sha3_256(token.encode()).hexdigest()  # noqa: S324
     return f"token_blacklist:{digest}"
 
 

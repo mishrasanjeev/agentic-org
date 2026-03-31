@@ -185,7 +185,8 @@ async def process_lead_with_agent(
         sequence_step=payload.get("sequence_step", 0),
     )
     if "error" in result:
-        raise HTTPException(400, result["error"])
+        logger.error("sales_agent_error", lead_id=str(lead_id), error=result["error"])
+        raise HTTPException(400, "Sales agent processing failed")
     return result
 
 
@@ -764,15 +765,16 @@ async def process_inbox(
 
     try:
         from core.gmail_agent import get_recent_replies, mark_as_read, send_reply
-    except ImportError as e:
-        return {"error": f"Gmail agent not available: {e}"}
+    except ImportError:
+        logger.error("gmail_agent_import_failed")
+        return {"error": "Gmail agent module not available"}
 
     # Get recent replies (last 6 hours)
     try:
         replies = get_recent_replies(since_hours=6)
-    except Exception as e:
-        logger.error("inbox_fetch_failed", error=str(e))
-        return {"error": f"Failed to fetch inbox: {e}"}
+    except Exception:
+        logger.exception("inbox_fetch_failed")
+        return {"error": "Failed to fetch inbox"}
 
     results["replies_found"] = len(replies)
 
