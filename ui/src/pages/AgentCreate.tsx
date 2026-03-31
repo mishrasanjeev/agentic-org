@@ -304,6 +304,7 @@ export default function AgentCreate() {
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
                 <p>New agents start in <strong>Shadow Mode</strong>. They observe and produce outputs without taking actions. Promote to Active after validation.</p>
+                <p className="mt-2">The agent will auto-register on <strong>Grantex</strong> with a unique DID and scoped token for A2A/MCP external access.</p>
               </div>
             </>
           )}

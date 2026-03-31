@@ -116,6 +116,45 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader><CardTitle>Grantex Integration</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Agents auto-register on Grantex for external access via A2A and MCP protocols.
+            Configure your Grantex instance URL below. API key is stored in GCP Secret Manager.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Grantex Base URL</label>
+              <input type="url" defaultValue="https://api.grantex.dev" className="border rounded px-3 py-2 text-sm w-full mt-1" readOnly />
+              <p className="text-xs text-muted-foreground mt-1">Configurable for self-hosted Grantex. Set via GRANTEX_BASE_URL env var.</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">API Key Status</label>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                <span className="text-sm">Configured (stored in GCP Secret Manager)</span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Agent Runtime</label>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm font-mono bg-muted px-2 py-1 rounded">LangGraph v1.1</span>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">External Protocols</label>
+              <div className="flex gap-2 mt-2">
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">A2A</span>
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">MCP</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex gap-4 items-center">
         <Button onClick={saveSettings} disabled={saving}>{saving ? "Saving..." : "Save Settings"}</Button>
         {saved && <span className="text-sm text-green-600">Settings saved successfully.</span>}

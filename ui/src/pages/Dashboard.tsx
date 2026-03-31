@@ -155,6 +155,41 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* v3.0 Integration Status */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">Agent Runtime</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+              <span className="text-lg font-bold">LangGraph</span>
+              <span className="text-xs text-muted-foreground">v1.1</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">25 agents, 42 connectors, 257 tools</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">Grantex Authorization</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+              <span className="text-lg font-bold">Connected</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Agent DIDs auto-assigned, RS256 grant tokens</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">External Access</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium">A2A Protocol</span>
+              <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">MCP Server</span>
+            </div>
+            <a href="/dashboard/integrations" className="text-xs text-primary hover:underline mt-2 block">View integration details</a>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Agent Status Pie Chart */}

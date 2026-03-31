@@ -118,6 +118,15 @@ export default function AgentDetail() {
               <p className="text-xs text-muted-foreground mt-1">Reports to: <span className="font-medium text-foreground">{agent.reporting_to}</span></p>
             )}
             {agent.is_builtin && <Badge variant="outline" className="mt-1">Built-in</Badge>}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <Badge variant="secondary" className="text-[10px]">LangGraph</Badge>
+              {(agent as any).config?.grantex?.grantex_did && (
+                <Badge variant="outline" className="text-[10px] font-mono">{(agent as any).config.grantex.grantex_did}</Badge>
+              )}
+              {(agent as any).config?.grantex?.grantex_agent_id && (
+                <Badge variant="default" className="text-[10px]">Grantex Registered</Badge>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">

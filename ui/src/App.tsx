@@ -36,6 +36,7 @@ const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
 const Agents = lazyRetry(() => import("./pages/Agents"));
 const AgentCreate = lazyRetry(() => import("./pages/AgentCreate"));
 const SOPUpload = lazyRetry(() => import("./pages/SOPUpload"));
+const Integrations = lazyRetry(() => import("./pages/Integrations"));
 const AgentDetail = lazyRetry(() => import("./pages/AgentDetail"));
 const Workflows = lazyRetry(() => import("./pages/Workflows"));
 const WorkflowCreate = lazyRetry(() => import("./pages/WorkflowCreate"));
@@ -226,6 +227,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <Approvals />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/integrations"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <Integrations />
             </Layout>
           </ProtectedRoute>
         }
