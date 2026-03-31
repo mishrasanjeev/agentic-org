@@ -426,6 +426,7 @@ async def get_org_tree(
 
     agents_by_id: dict[str, dict] = {}
     for a in agents:
+        grantex_config = (a.config or {}).get("grantex", {})
         agents_by_id[str(a.id)] = {
             "id": str(a.id),
             "name": a.name,
@@ -438,6 +439,10 @@ async def get_org_tree(
             "org_level": a.org_level,
             "parent_agent_id": str(a.parent_agent_id) if a.parent_agent_id else None,
             "specialization": a.specialization,
+            "reporting_to": a.reporting_to,
+            "grantex_did": grantex_config.get("grantex_did", ""),
+            "grantex_agent_id": grantex_config.get("grantex_agent_id", ""),
+            "node_type": "agent",  # "agent" or "human" — configurable per org
             "children": [],
         }
 
@@ -450,6 +455,72 @@ async def get_org_tree(
             roots.append(node)
 
     return {"tree": roots, "flat_count": len(agents_by_id)}
+
+
+# ── POST /agents/{id}/delegate — Grantex delegation ────────────────────────
+@router.post("/agents/{agent_id}/delegate")
+async def delegate_to_agent(
+    agent_id: UUID,
+    body: dict | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Set up Grantex delegation from parent to child agent.
+
+    Creates a scoped grant where the parent delegates a subset of its
+    scopes to the child agent in the org hierarchy.
+    """
+    if body is None:
+        body = {}
+    tid = _uuid.UUID(tenant_id)
+
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        child = result.scalar_one_or_none()
+        if not child:
+            raise HTTPException(404, "Agent not found")
+        if not child.parent_agent_id:
+            raise HTTPException(400, "Agent has no parent — cannot set up delegation")
+
+        # Get parent's Grantex info
+        parent_result = await session.execute(
+            select(Agent).where(Agent.id == child.parent_agent_id, Agent.tenant_id == tid)
+        )
+        parent = parent_result.scalar_one_or_none()
+        if not parent:
+            raise HTTPException(404, "Parent agent not found")
+
+    parent_grantex = (parent.config or {}).get("grantex", {})
+    child_grantex = (child.config or {}).get("grantex", {})
+
+    if not parent_grantex.get("grantex_agent_id") or not child_grantex.get("grantex_agent_id"):
+        return {
+            "status": "skipped",
+            "reason": "Parent or child not registered on Grantex",
+        }
+
+    try:
+        from auth.grantex_registration import setup_delegation
+
+        child_scopes = child_grantex.get("grantex_scopes", [])
+        result = setup_delegation(
+            parent_grant_token=body.get("parent_grant_token", ""),
+            child_grantex_agent_id=child_grantex["grantex_agent_id"],
+            child_scopes=child_scopes,
+            expires_in=body.get("expires_in", "8h"),
+        )
+        return {
+            "status": "delegated",
+            "parent_agent": str(parent.id),
+            "child_agent": str(child.id),
+            "parent_did": parent_grantex.get("grantex_did", ""),
+            "child_did": child_grantex.get("grantex_did", ""),
+            "scopes_delegated": len(child_scopes),
+        }
+    except Exception:
+        logger.exception("delegation_failed")
+        return {"status": "failed", "reason": "Grantex delegation failed"}
 
 
 @router.post("/agents/import-csv")

@@ -18,6 +18,10 @@ interface OrgNode {
   org_level: number;
   parent_agent_id: string | null;
   specialization: string | null;
+  reporting_to?: string | null;
+  grantex_did?: string;
+  grantex_agent_id?: string;
+  node_type?: "agent" | "human";
   children: OrgNode[];
   isHuman?: boolean;
 }
@@ -245,7 +249,8 @@ function ListView({ nodes, onNavigate }: { nodes: OrgNode[]; onNavigate: (id: st
               {node.children.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({node.children.length} reports)</span>}
             </div>
             {!node.isHuman && <Badge variant="outline" className="text-[10px]">{humanize(node.domain)}</Badge>}
-            <Badge variant="secondary" className="text-[10px]">{node.isHuman ? "online" : node.status}</Badge>
+            {node.grantex_did && <Badge variant="outline" className="text-[9px] font-mono opacity-60">{node.grantex_did.slice(0, 25)}...</Badge>}
+            <Badge variant={node.node_type === "human" ? "default" : "secondary"} className="text-[10px]">{node.node_type === "human" ? "Human" : node.isHuman ? "online" : node.status}</Badge>
           </button>
         );
       })}
