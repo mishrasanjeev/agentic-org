@@ -35,6 +35,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - All form pages: extract and display API error details instead of generic messages
 - Settings/Workflows: user-facing error messages instead of console.error
 - Automated tests: 1,031 → **1,053** (761 unit + 22 negative + 19 E2E negative + 125 E2E + 126 security)
+- Python SDK (`pip install agenticorg`): client.agents.run(), client.sop.parse_text(), client.a2a.agent_card()
+- CLI: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop parse`, `agenticorg mcp tools`
+- Integrations page: replaced curl examples with SDK/CLI quickstart
 
 ## [2.2.0] - 2026-03-29
 

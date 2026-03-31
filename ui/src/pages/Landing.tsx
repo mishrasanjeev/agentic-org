@@ -852,7 +852,7 @@ export default function Landing() {
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
                 { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
-                { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Full audit trail on every action." },
+                { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK, CLI, or ChatGPT via MCP." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
                   <div className="text-center">

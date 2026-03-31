@@ -22,6 +22,7 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Password Reset**: Forgot-password + reset-password flow with JWT tokens, rate-limited, email-enumeration safe
 - **Connector Configuration**: Full detail/edit page for all 42 connectors — auth credentials, secret references, base URL, health checks
 - **Auto-Tool Assignment**: Agents auto-populated with relevant tools based on type (25 mappings) or domain (5 fallbacks)
+- **Python SDK + CLI**: `pip install agenticorg` — run agents, create from SOP, A2A/MCP access, all from 3 lines of Python or terminal
 
 ## Agents by Department
 

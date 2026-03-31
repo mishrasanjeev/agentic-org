@@ -218,6 +218,28 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | GET | /connectors/{id}/health | JWT | Connector health check |
 | GET | /connectors/{id} | JWT | Connector details |
 | PUT | /connectors/{id} | JWT | Update connector config |
+| GET | /a2a/agent-card | No | A2A agent discovery card |
+| POST | /a2a/tasks | JWT/Grantex | Execute A2A task |
+| GET | /mcp/tools | No | List MCP tools |
+| POST | /mcp/call | JWT/Grantex | Call MCP tool |
+| POST | /sop/upload | JWT | Upload and parse SOP document |
+| POST | /sop/parse-text | JWT | Parse SOP text |
+| POST | /sop/deploy | JWT | Deploy parsed SOP as agent |
+| POST | /agents/{id}/delegate | JWT | Grantex delegation setup |
+
+## Python SDK
+
+```bash
+pip install agenticorg
+```
+
+```python
+from agenticorg import AgenticOrg
+client = AgenticOrg(api_key="your-key")
+result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
+```
+
+See `sdk/README.md` for full documentation.
 
 ---
 
