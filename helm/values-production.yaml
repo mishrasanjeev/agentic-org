@@ -152,3 +152,10 @@ env:
   AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.88"
   AGENTICORG_LLM_PRIMARY: gemini-2.5-flash
   AGENTICORG_LLM_FALLBACK: gemini-2.5-flash-preview-05-20
+  GRANTEX_BASE_URL: https://api.grantex.dev
+
+# ── Secrets from GCP Secret Manager ─────────────────────────────────────────
+secretEnv:
+  GRANTEX_API_KEY:
+    secretName: grantex-api-key
+    version: latest
