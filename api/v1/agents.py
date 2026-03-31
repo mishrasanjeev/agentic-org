@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_user_domains
-from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
@@ -25,13 +24,6 @@ from core.schemas.api import (
     AgentCreate,
     AgentUpdate,
     PaginatedResponse,
-)
-from core.schemas.messages import (
-    HITLPolicy,
-    TargetAgent,
-    TaskAssignment,
-    TaskInput,
-    TaskMetadata,
 )
 
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
@@ -730,58 +722,35 @@ async def run_agent(
 
         agent_config = _agent_to_dict(agent_row)
 
-    # 2. Ensure all agent modules are registered
-    import core.agents  # noqa: F401 — triggers @AgentRegistry.register for all agents
-
-    # 3. Build tool gateway for connector access
-    tool_gw = None
+    # 2. Prepare execution config
     authorized_tools = agent_config.get("authorized_tools", [])
-    if authorized_tools:
-        from core.tool_gateway.gateway import ToolGateway
-
-        tool_gw = ToolGateway()
-
-    # 4. Instantiate agent from registry (supports both built-in and custom types)
-    agent_instance = AgentRegistry.create_from_config({
-        "id": agent_config["id"],
-        "tenant_id": tenant_id,
-        "agent_type": agent_config["agent_type"],
-        "authorized_tools": authorized_tools,
-        "prompt_variables": agent_config.get("prompt_variables", {}),
-        "hitl_condition": agent_config.get("hitl_condition", ""),
-        "output_schema": agent_config.get("output_schema"),
-        "system_prompt_text": agent_config.get("system_prompt_text"),
-        "llm_model": agent_config.get("llm_model"),
-        "cost_controls": agent_config.get("cost_controls"),
-        "tool_gateway": tool_gw,
-    })
-
-    # 4. Build TaskAssignment from user payload
     correlation_id = f"run_{_uuid.uuid4().hex[:12]}"
-    task_assignment = TaskAssignment(
-        message_id=f"msg_{_uuid.uuid4().hex[:12]}",
-        correlation_id=correlation_id,
-        workflow_run_id=payload.get("workflow_run_id", f"adhoc_{_uuid.uuid4().hex[:8]}"),
-        workflow_definition_id=payload.get("workflow_definition_id", "adhoc"),
-        step_id=payload.get("step_id", "step_0"),
-        step_index=payload.get("step_index", 0),
-        total_steps=payload.get("total_steps", 1),
-        target_agent=TargetAgent(
-            agent_id=agent_config["id"],
-            agent_type=agent_config["agent_type"],
-            agent_token="runtime",
-        ),
-        task=TaskInput(
-            action=payload.get("action", "process"),
-            inputs=payload.get("inputs", {}),
-            context=payload.get("context", {}),
-        ),
-        hitl_policy=HITLPolicy(
-            enabled=bool(agent_config.get("hitl_condition")),
-            threshold_expression=agent_config.get("hitl_condition", ""),
-        ),
-        metadata=TaskMetadata(priority=payload.get("priority", "normal")),
-    )
+
+    # Resolve system prompt — custom text or load from prompt file
+    system_prompt = agent_config.get("system_prompt_text", "")
+    if not system_prompt:
+        # Load from prompt file via LangGraph agent module
+        try:
+            import importlib
+
+            mod = importlib.import_module(
+                f"core.langgraph.agents.{agent_config['agent_type']}"
+            )
+            load_fn = getattr(mod, "load_prompt", None) or getattr(mod, "load_ap_processor_prompt", None)
+            if load_fn:
+                system_prompt = load_fn(agent_config.get("prompt_variables", {}))
+        except (ImportError, AttributeError):
+            system_prompt = (
+                f"You are a {agent_config['agent_type']} agent for the "
+                f"{agent_config.get('domain', 'ops')} domain. Process the task "
+                "and return JSON with status, confidence, and processing_trace."
+            )
+
+    # Get Grantex grant token if available (from request state or agent config)
+    grant_token = ""
+    grantex_config = agent_config.get("config", {}).get("grantex", {})
+    if grantex_config:
+        grant_token = grantex_config.get("grant_token", "")
 
     # 5a. Budget check (if cost controls configured)
     cost_controls = agent_config.get("cost_controls", {})
@@ -811,28 +780,38 @@ async def run_agent(
                     "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
                 }
 
-    # 5b. Execute
+    # 5b. Execute via LangGraph runner
+    from core.langgraph.runner import run_agent as langgraph_run
+
     try:
-        task_result = await agent_instance.execute(task_assignment)
+        lg_result = await langgraph_run(
+            agent_id=str(agent_id),
+            agent_type=agent_config["agent_type"],
+            domain=agent_config.get("domain", "ops"),
+            tenant_id=tenant_id,
+            system_prompt=system_prompt,
+            authorized_tools=authorized_tools,
+            task_input={
+                "action": payload.get("action", "process"),
+                "inputs": payload.get("inputs", {}),
+                "context": payload.get("context", {}),
+            },
+            llm_model=agent_config.get("llm_model", ""),
+            confidence_floor=float(agent_config.get("confidence_floor", 0.88)),
+            hitl_condition=agent_config.get("hitl_condition", ""),
+            grant_token=grant_token,
+        )
     except Exception as exc:
         logger.error("agent_run_error", agent_id=str(agent_id), error=str(exc))
-        raise HTTPException(500, f"Agent execution failed: {exc}") from exc
+        raise HTTPException(500, "Agent execution failed") from exc
 
-    # 5c. Track cost in ledger
-    if task_result.performance and task_result.performance.llm_cost_usd:
-        try:
-            async with get_tenant_session(tid) as session:
-                ledger_entry = AgentCostLedger(
-                    tenant_id=tid,
-                    agent_id=agent_id,
-                    period_date=datetime.now(UTC),
-                    token_count=task_result.performance.llm_tokens_used or 0,
-                    cost_usd=task_result.performance.llm_cost_usd,
-                    task_count=1,
-                )
-                session.add(ledger_entry)
-        except Exception as e:
-            logger.warning("cost_tracking_failed", agent_id=str(agent_id), error=str(e))
+    task_status = lg_result.get("status", "completed")
+    task_confidence = lg_result.get("confidence", 0.0)
+    task_output = lg_result.get("output", {})
+    task_trace = lg_result.get("reasoning_trace", [])
+    hitl_trigger = lg_result.get("hitl_trigger", "")
+    task_error = lg_result.get("error", "")
+    msg_id = f"msg_{_uuid.uuid4().hex[:12]}"
 
     # 6. Store result in audit log
     async with get_tenant_session(tid) as session:
@@ -843,47 +822,47 @@ async def run_agent(
             actor_id=str(agent_id),
             agent_id=agent_id,
             resource_type="task_result",
-            resource_id=task_result.message_id,
+            resource_id=msg_id,
             action="execute",
-            outcome=task_result.status,
+            outcome=task_status,
             details={
                 "correlation_id": correlation_id,
-                "confidence": task_result.confidence,
-                "reasoning_trace": task_result.reasoning_trace,
-                "performance": task_result.performance.model_dump(),
-                "has_hitl": task_result.hitl_request is not None,
+                "confidence": task_confidence,
+                "reasoning_trace": task_trace[:10],
+                "runtime": "langgraph",
+                "has_hitl": bool(hitl_trigger),
             },
         )
         session.add(audit_entry)
 
     # 6b. Create HITL queue entry if HITL was triggered
-    if task_result.hitl_request:
+    if hitl_trigger:
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
                 agent_id=agent_id,
                 workflow_run_id=None,
-                title=f"HITL: {agent_config['agent_type']} — {task_result.hitl_request.trigger_condition}",
-                trigger_type=task_result.hitl_request.trigger_type,
-                priority="high" if task_result.confidence < 0.7 else "normal",
+                title=f"HITL: {agent_config['agent_type']} — {hitl_trigger}",
+                trigger_type="confidence_below_floor",
+                priority="high" if task_confidence < 0.7 else "normal",
                 assignee_role=agent_config.get("domain", "admin"),
                 decision_options={
                     "options": ["approve", "reject", "override"],
-                    "context": task_result.output,
+                    "context": task_output,
                 },
                 context={
                     "correlation_id": correlation_id,
                     "agent_type": agent_config["agent_type"],
-                    "confidence": task_result.confidence,
-                    "reasoning_trace": task_result.reasoning_trace,
-                    "trigger": task_result.hitl_request.trigger_condition,
+                    "confidence": task_confidence,
+                    "reasoning_trace": task_trace,
+                    "trigger": hitl_trigger,
                 },
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
             session.add(hitl_entry)
 
-    # 6b. Increment shadow sample count and update accuracy if agent is in shadow mode
-    if agent_config.get("status") == "shadow" and task_result.status in ("completed", "hitl_triggered"):
+    # 6c. Increment shadow sample count if agent is in shadow mode
+    if agent_config.get("status") == "shadow" and task_status in ("completed", "hitl_triggered"):
         async with get_tenant_session(tid) as session:
             result = await session.execute(
                 select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
@@ -892,33 +871,28 @@ async def run_agent(
             if agent_to_update:
                 new_count = (agent_to_update.shadow_sample_count or 0) + 1
                 agent_to_update.shadow_sample_count = new_count
-
-                # Compute running shadow accuracy from confidence scores
-                # Use a weighted running average: blend existing accuracy with new sample confidence
                 current_accuracy = float(agent_to_update.shadow_accuracy_current or 0)
-                sample_score = task_result.confidence if task_result.confidence else 0.0
                 agent_to_update.shadow_accuracy_current = round(
-                    ((current_accuracy * (new_count - 1)) + sample_score) / new_count,
-                    3,
+                    ((current_accuracy * (new_count - 1)) + task_confidence) / new_count, 3,
                 )
-
                 await session.commit()
 
-    # 7. Return the real result
+    # 7. Return result
     response = {
-        "task_id": task_result.message_id,
+        "task_id": msg_id,
         "agent_id": str(agent_id),
         "correlation_id": correlation_id,
-        "status": task_result.status,
-        "output": task_result.output,
-        "confidence": task_result.confidence,
-        "reasoning_trace": task_result.reasoning_trace,
-        "performance": task_result.performance.model_dump(),
+        "status": task_status,
+        "output": task_output,
+        "confidence": task_confidence,
+        "reasoning_trace": task_trace,
+        "runtime": "langgraph",
+        "performance": {"total_latency_ms": 0, "llm_tokens_used": 0, "llm_cost_usd": 0},
     }
-    if task_result.hitl_request:
-        response["hitl_request"] = task_result.hitl_request.model_dump()
-    if task_result.error:
-        response["error"] = task_result.error
+    if hitl_trigger:
+        response["hitl_trigger"] = hitl_trigger
+    if task_error:
+        response["error"] = task_error
 
     return response
 
