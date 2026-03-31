@@ -1,0 +1,33 @@
+{
+  "name": "agenticorg-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for AgenticOrg — run AI agents, create from SOP, A2A/MCP access",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mishrasanjeev/agentic-org"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langgraph",
+    "grantex",
+    "enterprise",
+    "mcp",
+    "a2a"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.7.0"
+  }
+}
