@@ -60,6 +60,9 @@ const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 const Blog = lazyRetry(() => import("./pages/blog/Blog"));
 const BlogPost = lazyRetry(() => import("./pages/blog/BlogPost"));
 
+/* ── Integration workflow page ── */
+const IntegrationWorkflow = lazyRetry(() => import("./pages/IntegrationWorkflow"));
+
 /* ── Google Ads landing pages ── */
 const AdsLanding = lazyRetry(() => import("./pages/ads/AdsLanding"));
 
@@ -104,6 +107,9 @@ export default function App() {
       {/* Resource / SEO content pages */}
       <Route path="/resources" element={<Resources />} />
       <Route path="/resources/:slug" element={<ResourcePage />} />
+
+      {/* Integration workflow */}
+      <Route path="/integration-workflow" element={<IntegrationWorkflow />} />
 
       {/* Google Ads landing pages */}
       <Route path="/solutions/ai-invoice-processing" element={<AdsLanding />} />

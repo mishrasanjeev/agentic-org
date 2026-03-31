@@ -1,5 +1,6 @@
 """ORM models for AgenticOrg."""
 
+from core.models.api_key import APIKey as APIKey
 from core.models.agent import Agent as Agent
 from core.models.agent import AgentCostLedger as AgentCostLedger
 from core.models.agent import AgentLifecycleEvent as AgentLifecycleEvent

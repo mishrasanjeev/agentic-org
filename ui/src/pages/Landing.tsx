@@ -354,6 +354,7 @@ export default function Landing() {
             <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
             <Link to="/blog" className="text-slate-300 hover:text-white text-sm transition-colors">Blog</Link>
             <a href="#how-it-works" className="text-slate-300 hover:text-white text-sm transition-colors">Resources</a>
+            <a href="#developers" className="text-slate-300 hover:text-white text-sm transition-colors">Developers</a>
           </div>
 
           {/* Right CTAs */}
@@ -389,6 +390,7 @@ export default function Landing() {
             <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
             <Link to="/blog" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Blog</Link>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
+            <a href="#developers" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Developers</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
             <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
           </div>
@@ -1065,7 +1067,192 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 12. FINAL CTA                                                 */}
+      {/* 12. DEVELOPERS / SDK                                          */}
+      {/* ============================================================ */}
+      <section id="developers" className="py-24 bg-slate-900 scroll-mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
+                <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                <span className="text-slate-300 text-sm">Open-Source SDKs — Apache 2.0</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Build With AgenticOrg</h2>
+              <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
+                Python SDK, TypeScript SDK, CLI, and MCP Server. Run AI agents from your code, ChatGPT, Claude, or any MCP-compatible client.
+              </p>
+            </div>
+          </FadeIn>
+
+          {/* SDK Cards */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {[
+              {
+                title: "Python SDK",
+                badge: "PyPI",
+                install: "pip install agenticorg",
+                code: `from agenticorg import AgenticOrg
+
+client = AgenticOrg(api_key="ao_sk_...")
+result = client.agents.run(
+  "ap_processor",
+  inputs={"invoice_id": "INV-001"}
+)
+print(result.output)`,
+                link: "https://pypi.org/project/agenticorg/",
+                color: "from-yellow-500 to-yellow-600",
+              },
+              {
+                title: "TypeScript SDK",
+                badge: "npm",
+                install: "npm i agenticorg-sdk",
+                code: `import { AgenticOrg } from "agenticorg-sdk"
+
+const client = new AgenticOrg({
+  apiKey: "ao_sk_..."
+})
+const result = await client.agents.run(
+  "recon_agent",
+  { inputs: { bank_id: "SBI-001" } }
+)`,
+                link: "https://www.npmjs.com/package/agenticorg-sdk",
+                color: "from-blue-500 to-blue-600",
+              },
+              {
+                title: "CLI",
+                badge: "Terminal",
+                install: "pip install agenticorg",
+                code: `$ agenticorg agents list
+$ agenticorg agents run ap_processor \\
+    --input invoice_id=INV-001
+$ agenticorg sop deploy \\
+    --file onboarding.pdf`,
+                link: "https://github.com/mishrasanjeev/agentic-org",
+                color: "from-emerald-500 to-emerald-600",
+              },
+              {
+                title: "MCP Server",
+                badge: "ChatGPT / Claude",
+                install: "npx agenticorg-mcp-server",
+                code: `// claude_desktop_config.json
+{
+  "mcpServers": {
+    "agenticorg": {
+      "command": "npx",
+      "args": ["agenticorg-mcp-server"],
+      "env": {
+        "AGENTICORG_API_KEY": "ao_sk_..."
+      }
+    }
+  }
+}`,
+                link: "https://www.npmjs.com/package/agenticorg-mcp-server",
+                color: "from-purple-500 to-purple-600",
+              },
+            ].map((sdk, i) => (
+              <FadeIn key={sdk.title} delay={i * 100}>
+                <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden h-full flex flex-col">
+                  <div className="p-5 flex items-center justify-between border-b border-slate-700">
+                    <h3 className="font-bold text-white">{sdk.title}</h3>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full bg-gradient-to-r ${sdk.color} text-white`}>{sdk.badge}</span>
+                  </div>
+                  <div className="p-4 flex-1 flex flex-col">
+                    <div className="bg-slate-900 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+                      <span className="text-emerald-400 text-xs">$</span>
+                      <code className="text-slate-300 text-xs font-mono">{sdk.install}</code>
+                    </div>
+                    <pre className="bg-slate-950 rounded-lg px-4 py-3 text-xs text-slate-300 font-mono overflow-x-auto flex-1 leading-relaxed"><code>{sdk.code}</code></pre>
+                    <a
+                      href={sdk.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      View on {sdk.badge === "Terminal" ? "GitHub" : sdk.badge}
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  </div>
+                </div>
+              </FadeIn>
+            ))}
+          </div>
+
+          {/* Integration Protocols Row */}
+          <FadeIn>
+            <div className="grid md:grid-cols-3 gap-6 mb-12">
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </div>
+                <h3 className="font-bold text-white mb-2">A2A Protocol</h3>
+                <p className="text-sm text-slate-400">Google's Agent-to-Agent protocol. Your agents publish Agent Cards, discovered by external agents automatically.</p>
+              </div>
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                </div>
+                <h3 className="font-bold text-white mb-2">MCP (Model Context Protocol)</h3>
+                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 269 tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
+              </div>
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                </div>
+                <h3 className="font-bold text-white mb-2">Grantex Authorization</h3>
+                <p className="text-sm text-slate-400">Delegated auth with scoped grant tokens. Third-party apps get exactly the permissions they need, nothing more.</p>
+              </div>
+            </div>
+          </FadeIn>
+
+          {/* Integration Workflow Link */}
+          <FadeIn>
+            <div className="bg-gradient-to-r from-slate-800 to-slate-800/50 border border-slate-700 rounded-2xl p-8 mb-12">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-white mb-2">See It in Action: ChatGPT + Shopping Agent</h3>
+                  <p className="text-slate-400 text-sm">Full end-to-end workflow — user asks ChatGPT to buy earbuds, ChatGPT discovers AgenticOrg via MCP, launches a Shopping Agent, gets HITL approval, places the order. With sequence diagrams and architecture stack.</p>
+                </div>
+                <Link
+                  to="/integration-workflow"
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-purple-600 hover:to-pink-700 transition-all shadow-lg whitespace-nowrap"
+                >
+                  View Full Workflow
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                </Link>
+              </div>
+            </div>
+          </FadeIn>
+
+          {/* API Key CTA */}
+          <FadeIn>
+            <div className="text-center">
+              <p className="text-slate-400 mb-4">Get your API key from the dashboard to start building.</p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link
+                  to="/signup"
+                  className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                >
+                  Get API Key — Free
+                </Link>
+                <a
+                  href="https://github.com/mishrasanjeev/agentic-org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" /></svg>
+                  View on GitHub
+                </a>
+              </div>
+            </div>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* 13. FINAL CTA                                                 */}
       {/* ============================================================ */}
       <section className="py-24 bg-slate-900">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -1100,7 +1287,7 @@ export default function Landing() {
       {/* ============================================================ */}
       <footer className="bg-slate-950 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-8 mb-12">
             {/* Brand */}
             <div className="lg:col-span-1">
               <div className="flex items-center gap-2 mb-4">
@@ -1153,6 +1340,18 @@ export default function Landing() {
                     GitHub
                   </a>
                 </li>
+              </ul>
+            </div>
+
+            {/* Developers */}
+            <div>
+              <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Developers</h4>
+              <ul className="space-y-2">
+                <li><a href="#developers" className="text-slate-400 hover:text-white text-sm transition-colors">SDKs & APIs</a></li>
+                <li><a href="https://pypi.org/project/agenticorg/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white text-sm transition-colors">Python SDK (PyPI)</a></li>
+                <li><a href="https://www.npmjs.com/package/agenticorg-sdk" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white text-sm transition-colors">TypeScript SDK (npm)</a></li>
+                <li><a href="https://www.npmjs.com/package/agenticorg-mcp-server" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white text-sm transition-colors">MCP Server</a></li>
+                <li><Link to="/login" className="text-slate-400 hover:text-white text-sm transition-colors">API Keys</Link></li>
               </ul>
             </div>
 

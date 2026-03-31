@@ -10,6 +10,17 @@ interface FleetLimits {
   max_replicas_per_type: number;
 }
 
+interface ApiKeyRecord {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  status: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
 const DEFAULT_LIMITS: FleetLimits = {
   max_active_agents: 35,
   max_agents_per_domain: { finance: 20, hr: 20, marketing: 20, ops: 20, backoffice: 20 },
@@ -26,8 +37,18 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // API Keys state
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyExpiry, setNewKeyExpiry] = useState<string>("");
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [newKeySecret, setNewKeySecret] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchSettings();
+    fetchApiKeys();
   }, []);
 
   async function fetchSettings() {
@@ -37,6 +58,50 @@ export default function Settings() {
     } catch {
       // Use defaults
     }
+  }
+
+  async function fetchApiKeys() {
+    try {
+      const { data } = await api.get("/org/api-keys");
+      setApiKeys(data);
+    } catch {
+      // Ignore — table may not exist yet
+    }
+  }
+
+  async function createApiKey() {
+    if (!newKeyName.trim()) return;
+    setCreatingKey(true);
+    setKeyError(null);
+    setNewKeySecret(null);
+    try {
+      const payload: Record<string, unknown> = { name: newKeyName.trim() };
+      if (newKeyExpiry) payload.expires_days = parseInt(newKeyExpiry, 10);
+      const { data } = await api.post("/org/api-keys", payload);
+      setNewKeySecret(data.key);
+      setNewKeyName("");
+      setNewKeyExpiry("");
+      fetchApiKeys();
+    } catch (e: any) {
+      setKeyError(e?.response?.data?.detail || "Failed to create API key");
+    } finally {
+      setCreatingKey(false);
+    }
+  }
+
+  async function revokeApiKey(keyId: string) {
+    try {
+      await api.delete(`/org/api-keys/${keyId}`);
+      fetchApiKeys();
+    } catch {
+      // Ignore
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
   }
 
   async function saveSettings() {
@@ -111,6 +176,123 @@ export default function Settings() {
             <div>
               <label className="text-sm font-medium">Audit Retention (years)</label>
               <input type="number" value={auditRetention} onChange={(e) => setAuditRetention(Number(e.target.value))} min={1} max={10} className="border rounded px-3 py-2 text-sm w-full mt-1" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>API Keys</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Generate API keys for SDK, CLI, and MCP server access. Keys are shown only once — store them securely.
+          </p>
+
+          {/* New key secret banner */}
+          {newKeySecret && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-emerald-800 mb-2">API key created! Copy it now — it won't be shown again.</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-white border rounded px-3 py-2 text-xs font-mono text-slate-800 break-all">{newKeySecret}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(newKeySecret)}>
+                  {copiedKey ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Create new key */}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="text-sm font-medium">Key Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Production SDK, ChatGPT MCP"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                className="border rounded px-3 py-2 text-sm w-full mt-1"
+              />
+            </div>
+            <div className="w-40">
+              <label className="text-sm font-medium">Expires In</label>
+              <select value={newKeyExpiry} onChange={(e) => setNewKeyExpiry(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                <option value="">Never</option>
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="180">6 months</option>
+                <option value="365">1 year</option>
+              </select>
+            </div>
+            <Button onClick={createApiKey} disabled={creatingKey || !newKeyName.trim()}>
+              {creatingKey ? "Creating..." : "Generate Key"}
+            </Button>
+          </div>
+          {keyError && <p className="text-sm text-red-600">{keyError}</p>}
+
+          {/* Existing keys */}
+          {apiKeys.length > 0 && (
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium">Name</th>
+                    <th className="text-left px-4 py-2 font-medium">Key Prefix</th>
+                    <th className="text-left px-4 py-2 font-medium">Status</th>
+                    <th className="text-left px-4 py-2 font-medium">Last Used</th>
+                    <th className="text-left px-4 py-2 font-medium">Created</th>
+                    <th className="text-right px-4 py-2 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {apiKeys.map((k) => (
+                    <tr key={k.id} className="border-t">
+                      <td className="px-4 py-2 font-medium">{k.name}</td>
+                      <td className="px-4 py-2 font-mono text-xs">{k.prefix}...</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${k.status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${k.status === "active" ? "bg-green-500" : "bg-red-500"}`} />
+                          {k.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never"}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{new Date(k.created_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-right">
+                        {k.status === "active" && (
+                          <Button size="sm" variant="destructive" onClick={() => revokeApiKey(k.id)}>Revoke</Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {apiKeys.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">No API keys yet. Generate one to use with the Python SDK, TypeScript SDK, CLI, or MCP server.</p>
+          )}
+
+          {/* Usage examples */}
+          <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-medium">Quick Start</p>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Python SDK</p>
+                <pre className="bg-slate-900 text-slate-100 rounded px-3 py-2 text-xs overflow-x-auto"><code>{`pip install agenticorg
+from agenticorg import AgenticOrg
+client = AgenticOrg(api_key="ao_sk_...")`}</code></pre>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">TypeScript SDK</p>
+                <pre className="bg-slate-900 text-slate-100 rounded px-3 py-2 text-xs overflow-x-auto"><code>{`npm i agenticorg-sdk
+import { AgenticOrg } from "agenticorg-sdk"
+const c = new AgenticOrg({ apiKey: "ao_sk_..." })`}</code></pre>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">MCP Server</p>
+                <pre className="bg-slate-900 text-slate-100 rounded px-3 py-2 text-xs overflow-x-auto"><code>{`AGENTICORG_API_KEY=ao_sk_...
+npx agenticorg-mcp-server`}</code></pre>
+              </div>
             </div>
           </div>
         </CardContent>

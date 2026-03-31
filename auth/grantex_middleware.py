@@ -93,11 +93,86 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
 
         token = auth_header[7:]
 
-        # Dual-mode: detect token type
-        if _is_grantex_token(token):
+        # Triple-mode: detect token type
+        if token.startswith("ao_sk_"):
+            return await self._handle_api_key(request, call_next, token, client_ip)
+        elif _is_grantex_token(token):
             return await self._handle_grantex_token(request, call_next, token, client_ip)
         else:
             return await self._handle_legacy_token(request, call_next, token, client_ip)
+
+    async def _handle_api_key(
+        self, request: Request, call_next, token: str, client_ip: str
+    ) -> Response:
+        """Verify an API key (ao_sk_...) against the database."""
+        try:
+            import uuid
+            from datetime import datetime, timezone
+
+            import bcrypt as _bcrypt
+            from sqlalchemy import select, update
+
+            from core.database import async_session_factory
+            from core.models.api_key import APIKey
+
+            prefix = f"ao_sk_{token[6:12]}"
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(APIKey).where(
+                        APIKey.prefix == prefix,
+                        APIKey.status == "active",
+                    )
+                )
+                candidates = result.scalars().all()
+
+            matched_key = None
+            for candidate in candidates:
+                if _bcrypt.checkpw(token.encode(), candidate.key_hash.encode()):
+                    matched_key = candidate
+                    break
+
+            if not matched_key:
+                self._record_failure(client_ip)
+                return JSONResponse(
+                    status_code=401, content={"detail": "Invalid API key"}
+                )
+
+            # Check expiry
+            if matched_key.expires_at and matched_key.expires_at < datetime.now(timezone.utc):
+                return JSONResponse(
+                    status_code=401, content={"detail": "API key expired"}
+                )
+
+            # Update last_used_at
+            async with async_session_factory() as session:
+                await session.execute(
+                    update(APIKey)
+                    .where(APIKey.id == matched_key.id)
+                    .values(last_used_at=datetime.now(timezone.utc))
+                )
+                await session.commit()
+
+            # Set request state
+            request.state.claims = {
+                "sub": f"apikey:{matched_key.prefix}",
+                "agenticorg:tenant_id": str(matched_key.tenant_id),
+                "grantex:scopes": matched_key.scopes or [],
+            }
+            request.state.tenant_id = str(matched_key.tenant_id)
+            request.state.scopes = matched_key.scopes or []
+            request.state.agent_id = None
+            request.state.user_sub = f"apikey:{matched_key.prefix}"
+            request.state.auth_mode = "api_key"
+
+            return await call_next(request)
+
+        except Exception:
+            logger.exception("API key validation error")
+            self._record_failure(client_ip)
+            return JSONResponse(
+                status_code=401, content={"detail": "API key validation failed"}
+            )
 
     async def _handle_grantex_token(
         self, request: Request, call_next, token: str, client_ip: str

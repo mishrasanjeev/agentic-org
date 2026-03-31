@@ -12,6 +12,7 @@ from api.v1 import (
     a2a,
     agent_teams,
     agents,
+    api_keys,
     approvals,
     audit,
     compliance,
@@ -116,5 +117,6 @@ app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
 app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
 app.include_router(v1_org.router, prefix="/api/v1", tags=["Organization"])
+app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
