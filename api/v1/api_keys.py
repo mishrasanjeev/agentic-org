@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request
@@ -109,7 +108,7 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
     expires_at = None
     if body.expires_days:
         from datetime import timedelta
-        expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_days)
+        expires_at = datetime.now(UTC) + timedelta(days=body.expires_days)
 
     default_scopes = [
         "agents:read", "agents:run", "connectors:read",

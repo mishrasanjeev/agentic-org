@@ -106,8 +106,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """Verify an API key (ao_sk_...) against the database."""
         try:
-            import uuid
-            from datetime import datetime, timezone
+            from datetime import UTC, datetime
 
             import bcrypt as _bcrypt
             from sqlalchemy import select, update
@@ -139,7 +138,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 )
 
             # Check expiry
-            if matched_key.expires_at and matched_key.expires_at < datetime.now(timezone.utc):
+            if matched_key.expires_at and matched_key.expires_at < datetime.now(UTC):
                 return JSONResponse(
                     status_code=401, content={"detail": "API key expired"}
                 )
@@ -149,7 +148,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 await session.execute(
                     update(APIKey)
                     .where(APIKey.id == matched_key.id)
-                    .values(last_used_at=datetime.now(timezone.utc))
+                    .values(last_used_at=datetime.now(UTC))
                 )
                 await session.commit()
 
