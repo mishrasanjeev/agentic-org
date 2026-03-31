@@ -59,6 +59,9 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
         "/api/v1/org/accept-invite",
         "/api/v1/demo-request",
+        "/api/v1/a2a/.well-known/agent.json",  # A2A discovery (public)
+        "/api/v1/a2a/agents",  # A2A agent list (public)
+        "/api/v1/mcp/tools",  # MCP tool discovery (public)
         "/docs", "/openapi.json", "/redoc",
     }
 
