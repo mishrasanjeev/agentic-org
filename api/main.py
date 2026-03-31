@@ -29,7 +29,7 @@ from api.v1 import (
 from api.v1 import demo as v1_demo
 from api.v1 import org as v1_org
 from api.websocket.feed import router as ws_feed_router
-from auth.middleware import AuthMiddleware
+from auth.grantex_middleware import GrantexAuthMiddleware
 from core.config import settings
 
 
@@ -91,7 +91,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AuthMiddleware)
+app.add_middleware(GrantexAuthMiddleware)
 
 register_error_handlers(app)
 

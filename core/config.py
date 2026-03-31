@@ -65,6 +65,8 @@ class ExternalKeys(BaseSettings):
     grantex_client_id: str = ""
     grantex_client_secret: str = ""
     grantex_token_server: str = ""
+    grantex_api_key: str = ""  # Grantex SDK API key
+    grantex_base_url: str = "https://api.grantex.dev"  # Configurable for self-hosted
     langsmith_api_key: str = ""
     langsmith_project: str = "agenticorg-production"
     otel_exporter_otlp_endpoint: str = ""

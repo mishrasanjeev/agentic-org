@@ -329,11 +329,37 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
         )
         session.add(audit_entry)
 
+    # Auto-register on Grantex (non-blocking — failure doesn't block creation)
+    grantex_info = None
+    try:
+        from auth.grantex_registration import register_agent
+
+        grantex_info = register_agent(
+            name=agent.employee_name or agent.name,
+            agent_type=agent.agent_type,
+            domain=agent.domain,
+            authorized_tools=tools,
+        )
+        if grantex_info:
+            # Store Grantex metadata in agent config JSONB
+            async with get_tenant_session(tid) as session:
+                from sqlalchemy import update
+
+                await session.execute(
+                    update(Agent)
+                    .where(Agent.id == agent.id)
+                    .values(config={**agent.config, "grantex": grantex_info})
+                )
+    except Exception:
+        logger.warning("grantex_auto_registration_skipped", agent_id=str(agent.id))
+
     return {
         "agent_id": str(agent.id),
         "status": agent.status,
         "version": agent.version,
         "token_issued": True,
+        "grantex_registered": grantex_info is not None,
+        "grantex_did": grantex_info.get("grantex_did", "") if grantex_info else "",
     }
 
 
