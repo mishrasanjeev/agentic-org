@@ -126,7 +126,7 @@ def _make_agent(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestTcAgent007_ResumeToShadow:
+class TestTcAgent007ResumeToShadow:
     """Resuming a shadow agent that was paused must return it to shadow (not active).
 
     Resume should also be blocked when shadow accuracy is below the floor.
@@ -297,7 +297,7 @@ class TestTcAgent007_ResumeToShadow:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestTcAgent008_RetestEndpoint:
+class TestTcAgent008RetestEndpoint:
     """The /retest endpoint must reset shadow_sample_count and shadow_accuracy_current."""
 
     @pytest.mark.asyncio
@@ -387,7 +387,7 @@ class TestTcAgent008_RetestEndpoint:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestIntConn010_BaseUrlOverride:
+class TestIntConn010BaseUrlOverride:
     """BaseConnector must use config['base_url'] when provided."""
 
     def test_base_url_overridden_from_config(self):
@@ -472,7 +472,7 @@ class TestIntConn010_BaseUrlOverride:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestIntConn012_GmailConnectorTools:
+class TestIntConn012GmailConnectorTools:
     """The Gmail connector must expose the four expected tools."""
 
     EXPECTED_TOOLS = {"send_email", "read_inbox", "search_emails", "get_thread"}
@@ -523,7 +523,7 @@ class TestIntConn012_GmailConnectorTools:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestIntConn015_GetSecretGcp:
+class TestIntConn015GetSecretGcp:
     """_get_secret must resolve gcp:// secret_ref via GCP Secret Manager (mocked)."""
 
     def test_gcp_secret_ref_calls_secret_manager(self):
@@ -685,7 +685,7 @@ class TestIntConn015_GetSecretGcp:
                 "secret_ref": secret_ref,
                 "api_key": "fallback-on-error",
             })
-            value = instance._get_secret("api_key")
+            instance._get_secret("api_key")  # should not raise
 
         # _resolve_gcp_secret returns "" on error; _get_secret then falls to step 4
         # but "api_key" was already found at step 1 (direct config lookup) so
@@ -705,7 +705,7 @@ class TestIntConn015_GetSecretGcp:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestIntConn016_HealthEndpoint:
+class TestIntConn016HealthEndpoint:
     """GET /health must include connector health data in its response."""
 
     @pytest.mark.asyncio
@@ -812,7 +812,7 @@ class TestIntConn016_HealthEndpoint:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestIntConn017_InvalidAuthorizedTools:
+class TestIntConn017InvalidAuthorizedTools:
     """POST /agents with non-existent tools must return 422."""
 
     @pytest.mark.asyncio
@@ -863,7 +863,7 @@ class TestIntConn017_InvalidAuthorizedTools:
 
         with (
             patch("api.v1.agents._validate_authorized_tools", return_value=[]),
-            _patch_tenant_session_ctx("agents", session),
+            PatchTenantSessionCtx("agents", session),
         ):
             # We expect the function to proceed past validation.
             # It may raise later due to mocked DB, but not 422.
@@ -871,7 +871,7 @@ class TestIntConn017_InvalidAuthorizedTools:
                 await create_agent(body, TENANT_STR)
             except HTTPException as e:
                 assert e.status_code != 422, "Valid tools should not trigger 422"
-            except Exception:
+            except Exception:  # noqa: S110
                 pass  # Other errors from mocked DB are expected
 
     @pytest.mark.asyncio
@@ -891,7 +891,7 @@ class TestIntConn017_InvalidAuthorizedTools:
         with patch(
             "api.v1.agents._validate_authorized_tools",
             return_value=["fetch_bank_statement"],
-        ) as mock_validate:
+        ):
             # Even default tools get validated; if some are invalid -> 422
             with pytest.raises(HTTPException) as exc:
                 await create_agent(body, TENANT_STR)
@@ -899,7 +899,7 @@ class TestIntConn017_InvalidAuthorizedTools:
 
 
 # Context manager variant for cleaner test code
-class _patch_tenant_session_ctx:
+class PatchTenantSessionCtx:
     """Context manager form of _patch_tenant_session."""
 
     def __init__(self, module_path: str, mock_session):
@@ -921,7 +921,7 @@ class _patch_tenant_session_ctx:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestIntConn018_InvalidPromptToolRefs:
+class TestIntConn018InvalidPromptToolRefs:
     """POST /prompt-templates with invalid tool references must return 422."""
 
     @pytest.mark.asyncio
@@ -973,7 +973,7 @@ class TestIntConn018_InvalidPromptToolRefs:
                 assert "id" in resp or True
             except HTTPException as e:
                 assert e.status_code != 422
-            except Exception:
+            except Exception:  # noqa: S110
                 pass  # Mocked DB might cause other errors
             finally:
                 ctx.stop()
@@ -999,10 +999,10 @@ class TestIntConn018_InvalidPromptToolRefs:
             return_value=[],
         ):
             try:
-                resp = await create_prompt_template(body, TENANT_STR)
+                await create_prompt_template(body, TENANT_STR)
             except HTTPException as e:
                 assert e.status_code != 422
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
             finally:
                 ctx.stop()
@@ -1028,7 +1028,7 @@ class TestIntConn018_InvalidPromptToolRefs:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestUiReg006_SignupTermsConsent:
+class TestUiReg006SignupTermsConsent:
     """Signup validation — backend enforces required fields.
 
     The terms consent checkbox is enforced on the frontend (button disabled
