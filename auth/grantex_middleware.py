@@ -82,6 +82,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
             else:
                 del _blocked_ips[client_ip]
+                _failed_attempts.pop(client_ip, None)  # Clear stale failures when block expires
 
         # Extract token
         auth_header = request.headers.get("Authorization", "")
@@ -139,6 +140,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
 
             # Check expiry
             if matched_key.expires_at and matched_key.expires_at < datetime.now(UTC):
+                self._record_failure(client_ip)
                 return JSONResponse(
                     status_code=401, content={"detail": "API key expired"}
                 )
@@ -164,6 +166,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.user_sub = f"apikey:{matched_key.prefix}"
             request.state.auth_mode = "api_key"
 
+            self._clear_failures(client_ip)
             return await call_next(request)
 
         except Exception:
@@ -203,6 +206,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.grant_token = token
             request.state.auth_mode = "grantex"
 
+            self._clear_failures(client_ip)
             return await call_next(request)
 
         except Exception:
@@ -239,6 +243,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 content={"error": {"code": "E4004", "message": "Tenant mismatch"}},
             )
 
+        self._clear_failures(client_ip)
         return await call_next(request)
 
     def _record_failure(self, ip: str) -> None:
@@ -248,3 +253,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         _failed_attempts[ip].append(now)
         if len(_failed_attempts[ip]) >= MAX_FAILURES:
             _blocked_ips[ip] = now + BLOCK_DURATION
+
+    def _clear_failures(self, ip: str) -> None:
+        """Clear failure history for an IP after successful authentication."""
+        _failed_attempts.pop(ip, None)
