@@ -130,7 +130,7 @@ export default function IntegrationWorkflow() {
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </Link>
           <div className="flex items-center gap-4">
-            <Link to="/#developers" className="text-slate-300 hover:text-white text-sm">Developers</Link>
+            <a href="/#developers" className="text-slate-300 hover:text-white text-sm">Developers</a>
             <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all">Get API Key</Link>
           </div>
         </div>
@@ -316,12 +316,12 @@ export default function IntegrationWorkflow() {
             >
               Get API Key — Free
             </Link>
-            <Link
-              to="/#developers"
+            <a
+              href="/#developers"
               className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
             >
               View All SDKs
-            </Link>
+            </a>
           </div>
         </div>
       </section>
