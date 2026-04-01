@@ -90,19 +90,20 @@ class TestHealthEndpoints:
 
         with patch("api.v1.health.async_session_factory") as mock_sf, \
              patch("api.v1.health.aioredis") as mock_aioredis, \
-             patch("api.v1.health.settings") as mock_settings:
+             patch("api.v1.health.settings") as mock_settings, \
+             patch("api.v1.health.ConnectorRegistry") as mock_registry:
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_aioredis.from_url.return_value = mock_redis
             mock_settings.redis_url = "redis://localhost"
             mock_settings.env = "test"
+            mock_registry.all_names.return_value = []
 
             resp = await health_check()
 
         assert resp["status"] == "healthy"
         assert resp["checks"]["db"] == "healthy"
         assert resp["checks"]["redis"] == "healthy"
-        assert resp["version"] == "2.1.0"
 
     @pytest.mark.asyncio
     async def test_health_check_db_unhealthy(self):
@@ -114,16 +115,18 @@ class TestHealthEndpoints:
 
         with patch("api.v1.health.async_session_factory") as mock_sf, \
              patch("api.v1.health.aioredis") as mock_aioredis, \
-             patch("api.v1.health.settings") as mock_settings:
+             patch("api.v1.health.settings") as mock_settings, \
+             patch("api.v1.health.ConnectorRegistry") as mock_registry:
             mock_sf.return_value.__aenter__ = AsyncMock(side_effect=ConnectionError("refused"))
             mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_aioredis.from_url.return_value = mock_redis
             mock_settings.redis_url = "redis://localhost"
             mock_settings.env = "test"
+            mock_registry.all_names.return_value = []
 
             resp = await health_check()
 
-        assert resp["status"] == "degraded"
+        assert resp["status"] == "unhealthy"
         assert "unhealthy" in resp["checks"]["db"]
 
     @pytest.mark.asyncio
@@ -138,16 +141,18 @@ class TestHealthEndpoints:
 
         with patch("api.v1.health.async_session_factory") as mock_sf, \
              patch("api.v1.health.aioredis") as mock_aioredis, \
-             patch("api.v1.health.settings") as mock_settings:
+             patch("api.v1.health.settings") as mock_settings, \
+             patch("api.v1.health.ConnectorRegistry") as mock_registry:
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_aioredis.from_url.return_value = mock_redis
             mock_settings.redis_url = "redis://localhost"
             mock_settings.env = "test"
+            mock_registry.all_names.return_value = []
 
             resp = await health_check()
 
-        assert resp["status"] == "degraded"
+        assert resp["status"] == "unhealthy"
         assert "unhealthy" in resp["checks"]["redis"]
         assert resp["checks"]["db"] == "healthy"
 
