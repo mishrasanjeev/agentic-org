@@ -29,7 +29,7 @@ results.append(("A2A: 273 tools in desc", "273 tools" in c.get("description", ""
 r = requests.get(f"{BASE}/a2a/agents", timeout=10)
 ag = r.json().get("agents", [])
 results.append(("A2A: 25 agents", len(ag) == 25))
-domains = set(a.get("domain", "") for a in ag)
+domains = {a.get("domain", "") for a in ag}
 results.append(("A2A: 5 domains", domains == {"finance", "hr", "marketing", "ops", "backoffice"}))
 r = requests.get(f"{BASE}/mcp/tools", timeout=10)
 results.append(("MCP: Tools 200", r.status_code == 200))
@@ -96,7 +96,7 @@ results.append(("Pkg: PyPI exists", r.status_code == 200))
 
 # 9. GKE
 pods = subprocess.run(
-    ["kubectl", "get", "pods", "-n", "agenticorg", "--no-headers"],
+    ["kubectl", "get", "pods", "-n", "agenticorg", "--no-headers"],  # noqa: S607, S603
     capture_output=True, text=True,
 ).stdout
 running = sum(1 for line in pods.strip().split("\n") if "Running" in line)
