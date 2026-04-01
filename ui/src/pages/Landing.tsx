@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import ROICalculator from "../components/ROICalculator";
 import AgentActivityTicker from "../components/AgentActivityTicker";
@@ -321,6 +321,17 @@ function DemoModal({ onClose }: { onClose: () => void }) {
 export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
+  const location = useLocation();
+
+  // Scroll to hash anchor on navigation (e.g. /#developers from another page)
+  useEffect(() => {
+    if (location.hash) {
+      const el = document.querySelector(location.hash);
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: "smooth" }), 100);
+      }
+    }
+  }, [location.hash]);
 
   const closeMobile = useCallback(() => setMobileMenuOpen(false), []);
 
