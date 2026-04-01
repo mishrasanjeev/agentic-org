@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Environment
     env: str = "development"
     log_level: str = "INFO"
-    secret_key: str = Field(min_length=16)
+    secret_key: str = Field(default="dev-only-change-me", min_length=16)
 
     # Database
     db_url: str = "postgresql+asyncpg://agenticorg:agenticorg_dev@localhost:5432/agenticorg"
@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     default_hitl_threshold_inr: int = 500_000
     default_confidence_floor: float = 0.88
     max_agent_retries: int = 3
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> Settings:
+        """Prevent unsafe default secrets outside local/dev environments."""
+        if self.env.lower() in {"production", "staging"} and self.secret_key == "dev-only-change-me":
+            raise ValueError("AGENTICORG_SECRET_KEY must be set for staging/production environments")
+        return self
 
 
 class ExternalKeys(BaseSettings):
