@@ -12,11 +12,16 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select, update
 
+from api.deps import require_scope
 from core.database import async_session_factory
 from core.models.api_key import APIKey
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/org/api-keys", tags=["API Keys"])
+router = APIRouter(
+    prefix="/org/api-keys",
+    tags=["API Keys"],
+    dependencies=[require_scope("agenticorg:admin")],
+)
 
 
 # ---------------------------------------------------------------------------
