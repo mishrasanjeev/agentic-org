@@ -53,6 +53,10 @@ SYSTEM_AGENTS = [
     {"agent_type": "legal_ops", "domain": "backoffice", "confidence_floor": 0.900},
     {"agent_type": "risk_sentinel", "domain": "backoffice", "confidence_floor": 0.950},
     {"agent_type": "facilities_agent", "domain": "backoffice", "confidence_floor": 0.800},
+    # Comms
+    {"agent_type": "email_agent", "domain": "comms", "confidence_floor": 0.900},
+    {"agent_type": "notification_agent", "domain": "comms", "confidence_floor": 0.880},
+    {"agent_type": "chat_agent", "domain": "comms", "confidence_floor": 0.850},
 ]
 
 

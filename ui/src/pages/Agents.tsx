@@ -7,7 +7,7 @@ import KillSwitch from "@/components/KillSwitch";
 import api, { agentsApi } from "@/lib/api";
 import type { Agent } from "@/types";
 
-const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice"];
+const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice", "comms"];
 const STATUSES = ["all", "active", "shadow", "paused", "staging", "deprecated"];
 
 export default function Agents() {

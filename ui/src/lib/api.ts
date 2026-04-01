@@ -18,7 +18,14 @@ api.interceptors.response.use(
 );
 export function extractApiError(e: unknown, fallback = "An error occurred"): string {
   const detail = (e as any)?.response?.data?.detail;
-  return typeof detail === "string" ? detail : fallback;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    if (typeof detail.message === "string") return detail.message;
+    if (typeof detail.error === "string") {
+      return detail.message ? `${detail.error}: ${detail.message}` : detail.error;
+    }
+  }
+  return fallback;
 }
 export default api;
 export const agentsApi = {

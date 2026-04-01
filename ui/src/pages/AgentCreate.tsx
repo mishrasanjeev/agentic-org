@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api, { promptTemplatesApi, agentsApi } from "@/lib/api";
+import api, { extractApiError, promptTemplatesApi, agentsApi } from "@/lib/api";
 import type { Agent, PromptTemplate } from "@/types";
 
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
@@ -123,7 +123,7 @@ export default function AgentCreate() {
     if (step === 0) return employeeName.trim().length > 0;
     if (step === 1) return finalType.trim().length > 0;
     if (step === 2) return promptText.trim().length > 0;
-    if (step === 3) return true;
+    if (step === 3) return maxRetries >= 1 && llmModel.trim().length > 0;
     return true;
   }
 
@@ -155,7 +155,7 @@ export default function AgentCreate() {
       import("@/components/Analytics").then(m => m.trackEvent("agent_create", { agent_type: agentType, domain })).catch(() => {});
       navigate(`/dashboard/agents/${data.agent_id || ""}`);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Failed to create agent. Please try again.");
+      setError(extractApiError(e, "Failed to create agent. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -367,6 +367,13 @@ export default function AgentCreate() {
                   ))}
                 </select>
               </div>
+
+              {authorizedTools.length === 0 && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                  <p className="font-medium">No tools selected</p>
+                  <p className="text-xs mt-1">This agent won't be able to call any tools. Default tools will be assigned based on agent type, but you may want to explicitly select tools for better control.</p>
+                </div>
+              )}
 
               <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
                 <p>New agents start in <strong>Shadow Mode</strong>. They observe and produce outputs without taking actions. Promote to Active after validation.</p>

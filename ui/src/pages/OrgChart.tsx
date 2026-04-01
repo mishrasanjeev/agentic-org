@@ -26,7 +26,7 @@ interface OrgNode {
   isHuman?: boolean;
 }
 
-const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice"];
+const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice", "comms"];
 
 const STATUS_COLOR: Record<string, string> = {
   active: "bg-green-500",
@@ -42,6 +42,7 @@ const DOMAIN_BORDER: Record<string, string> = {
   marketing: "border-amber-500",
   ops: "border-blue-500",
   backoffice: "border-slate-400",
+  comms: "border-pink-500",
   all: "border-indigo-500",
 };
 
@@ -51,6 +52,7 @@ const DOMAIN_BG: Record<string, string> = {
   marketing: "bg-amber-50 dark:bg-amber-950/30",
   ops: "bg-blue-50 dark:bg-blue-950/30",
   backoffice: "bg-slate-50 dark:bg-slate-950/30",
+  comms: "bg-pink-50 dark:bg-pink-950/30",
   all: "bg-indigo-50 dark:bg-indigo-950/30",
 };
 
@@ -69,6 +71,7 @@ const DOMAIN_TO_ROLE: Record<string, string> = {
   marketing: "CMO",
   ops: "COO",
   backoffice: "Admin",
+  comms: "Comms Lead",
 };
 
 function humanize(s: string) {
@@ -409,6 +412,7 @@ export default function OrgChart() {
         <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-purple-500" /> HR</span>
         <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-amber-500" /> Marketing</span>
         <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-blue-500" /> Ops</span>
+        <span className="flex items-center gap-1"><span className="w-4 h-3 rounded border-2 border-pink-500" /> Comms</span>
       </div>
 
       {loading ? (
