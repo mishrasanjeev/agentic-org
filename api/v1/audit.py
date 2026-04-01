@@ -6,7 +6,7 @@ import uuid as _uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from api.deps import get_current_tenant, get_user_domains, get_user_role
 from core.database import get_tenant_session
@@ -57,12 +57,17 @@ async def query_audit(
         count_base = select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tid)
 
         # RBAC domain filtering — auditors see everything; domain roles see only their agents
+        # Also include entries with NULL agent_id (e.g. playground runs, system events)
         if user_domains is not None and user_role != "auditor":
             domain_agent_ids = (
                 select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
             )
-            base = base.where(AuditLog.agent_id.in_(domain_agent_ids))
-            count_base = count_base.where(AuditLog.agent_id.in_(domain_agent_ids))
+            domain_filter = or_(
+                AuditLog.agent_id.in_(domain_agent_ids),
+                AuditLog.agent_id.is_(None),
+            )
+            base = base.where(domain_filter)
+            count_base = count_base.where(domain_filter)
 
         if event_type:
             # Support partial matching: use ILIKE for substring search

@@ -19,10 +19,12 @@ from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, Agent
 from core.models.audit import AuditLog
 from core.models.hitl import HITLQueue
 from core.models.prompt_template import PromptEditHistory
+from core.models.tenant import Tenant
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
     AgentUpdate,
+    FleetLimits,
     PaginatedResponse,
 )
 
@@ -142,6 +144,16 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "create_ticket", "update_ticket",
         "create_issue", "get_sla_breach_status",
     ],
+    # Comms
+    "email_agent": [
+        "send_email", "read_inbox", "search_emails",
+    ],
+    "notification_agent": [
+        "send_email", "create_calendar_event", "slack_send_message",
+    ],
+    "chat_agent": [
+        "slack_send_message", "send_email", "read_inbox",
+    ],
 }
 
 _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
@@ -165,6 +177,10 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "backoffice": [
         "search_content_fulltext", "create_page",
         "search_issues", "get_access_log",
+    ],
+    "comms": [
+        "send_email", "read_inbox",
+        "slack_send_message", "create_calendar_event",
     ],
 }
 
@@ -252,6 +268,39 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
 @router.post("/agents", status_code=201)
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
+
+    # ── SET-008: Enforce shadow agent limit from fleet_limits ────────────
+    initial_status = body.initial_status or "shadow"
+    if initial_status == "shadow":
+        async with get_tenant_session(tid) as session:
+            # Load fleet limits from tenant settings
+            result = await session.execute(select(Tenant).where(Tenant.id == tid))
+            tenant = result.scalar_one_or_none()
+            stored_limits = (tenant.settings or {}).get("fleet_limits") if tenant else None
+            limits = FleetLimits(**stored_limits) if stored_limits else FleetLimits()
+
+            # Count existing shadow agents for this tenant
+            shadow_count_result = await session.execute(
+                select(func.count(Agent.id)).where(
+                    Agent.tenant_id == tid,
+                    Agent.status == "shadow",
+                )
+            )
+            shadow_count = shadow_count_result.scalar() or 0
+
+            if shadow_count >= limits.max_shadow_agents:
+                raise HTTPException(
+                    409,
+                    detail={
+                        "error": "shadow_limit_exceeded",
+                        "current_shadow_agents": shadow_count,
+                        "max_shadow_agents": limits.max_shadow_agents,
+                        "message": (
+                            f"Shadow agent limit reached ({shadow_count}/{limits.max_shadow_agents}). "
+                            f"Promote or retire existing shadow agents before creating new ones."
+                        ),
+                    },
+                )
 
     # Auto-populate authorized tools based on agent type / domain when none provided
     tools = body.authorized_tools

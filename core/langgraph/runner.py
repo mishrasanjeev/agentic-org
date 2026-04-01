@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.errors import GraphInterrupt
 
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.state import AgentState
@@ -140,6 +141,45 @@ async def run_agent(
                 "total_latency_ms": latency_ms,
                 "llm_tokens_used": tokens_used,
                 "llm_cost_usd": cost_usd,
+            },
+        }
+
+    except GraphInterrupt as gi:
+        # LangGraph interrupt() raises GraphInterrupt when HITL pauses the graph.
+        # Retrieve the latest checkpoint state so we can extract hitl_trigger,
+        # confidence, output, etc. that were set before the interrupt.
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        logger.info("langgraph_hitl_interrupted", agent_id=agent_id)
+
+        # Get the interrupted state from the checkpoint
+        try:
+            snapshot = compiled.get_state(config)
+            state_values = snapshot.values if snapshot else {}
+        except Exception:
+            state_values = {}
+
+        hitl_trigger = state_values.get("hitl_trigger", "")
+        # If we still don't have hitl_trigger, extract from the interrupt payload
+        if not hitl_trigger and gi.args:
+            for interruption in gi.args:
+                if isinstance(interruption, dict):
+                    hitl_trigger = interruption.get("hitl_trigger") or interruption.get("trigger", "")
+                    if hitl_trigger:
+                        break
+
+        return {
+            "status": state_values.get("status", "hitl_triggered"),
+            "output": state_values.get("output", {}),
+            "confidence": state_values.get("confidence", 0.0),
+            "reasoning_trace": state_values.get("reasoning_trace", []),
+            "tool_calls_log": state_values.get("tool_calls_log", []),
+            "hitl_trigger": hitl_trigger,
+            "error": "",
+            "thread_id": config["configurable"]["thread_id"],
+            "performance": {
+                "total_latency_ms": latency_ms,
+                "llm_tokens_used": 0,
+                "llm_cost_usd": 0,
             },
         }
 

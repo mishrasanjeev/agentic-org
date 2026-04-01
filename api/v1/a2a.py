@@ -190,6 +190,7 @@ _DOMAIN_MAP = {
     "support_triage": "ops", "vendor_manager": "ops", "contract_intelligence": "ops",
     "compliance_guard": "ops", "it_operations": "ops",
     "legal_ops": "backoffice", "risk_sentinel": "backoffice", "facilities_agent": "backoffice",
+    "email_agent": "comms", "notification_agent": "comms", "chat_agent": "comms",
 }
 
 

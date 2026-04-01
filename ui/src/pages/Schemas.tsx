@@ -255,15 +255,15 @@ export default function Schemas() {
       <div className="grid grid-cols-4 gap-2">
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">Total Schemas</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{schemas.length || DEFAULT_SCHEMAS.length}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{DEFAULT_SCHEMAS.length + schemas.length}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">Platform Default</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">18</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{DEFAULT_SCHEMAS.length}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">Custom</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{Math.max(0, schemas.length - 18)}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{schemas.length}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">Version</CardTitle></CardHeader>

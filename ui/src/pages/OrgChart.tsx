@@ -263,7 +263,7 @@ export default function OrgChart() {
   const navigate = useNavigate();
   const auth = useAuth();
   const [tree, setTree] = useState<OrgNode[]>([]);
-  const [flatCount, setFlatCount] = useState(0);
+  const [, setFlatCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [domain, setDomain] = useState("all");
   const [viewMode, setViewMode] = useState<"tree" | "list">("tree");
@@ -330,7 +330,7 @@ export default function OrgChart() {
         avatar_url: null,
         org_level: -2,
         parent_agent_id: null,
-        specialization: `${flatCount} AI agents across ${Object.keys(departments).length} departments`,
+        specialization: `${Object.values(departments).reduce((sum, agents) => sum + agents.length, 0)} AI agents across ${Object.keys(departments).length} departments`,
         children: cxoNodes,
         isHuman: true,
       };
@@ -360,6 +360,19 @@ export default function OrgChart() {
 
   const displayTree = buildUserTree();
 
+  // Count only real agents (exclude virtual CEO/CXO nodes)
+  function countRealAgents(nodes: OrgNode[]): number {
+    let count = 0;
+    for (const node of nodes) {
+      if (!node.isHuman && !node.id.startsWith("virtual-")) {
+        count++;
+      }
+      count += countRealAgents(node.children);
+    }
+    return count;
+  }
+  const realAgentCount = countRealAgents(displayTree);
+
   return (
     <div className="space-y-6">
       <style>{orgChartStyles}</style>
@@ -367,7 +380,7 @@ export default function OrgChart() {
         <div>
           <h2 className="text-2xl font-bold">Organization Chart</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {userName} ({roleInfo.title}) | {flatCount} AI agents reporting to you
+            {userName} ({roleInfo.title}) | {realAgentCount} AI agents reporting to you
           </p>
         </div>
         <div className="flex items-center gap-3">

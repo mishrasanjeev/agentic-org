@@ -93,7 +93,7 @@ async def _seed_agents(session: AsyncSession, tenant_id: uuid.UUID) -> None:
             system_prompt_ref=f"prompts/{agent_type}.prompt.txt",
             confidence_floor=agent_cfg["confidence_floor"],
             hitl_condition=f"confidence < {agent_cfg['confidence_floor']}",
-            status="active",
+            status="shadow",
             is_builtin=True,
             employee_name=name,
         )

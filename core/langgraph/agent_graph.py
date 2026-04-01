@@ -124,10 +124,13 @@ def build_agent_graph(
 
         trace.append(f"HITL triggered: {trigger}")
 
-        # LangGraph interrupt — pauses execution until human resumes
+        # LangGraph interrupt — pauses execution until human resumes.
+        # When interrupt() raises GraphInterrupt, the runner catches it and
+        # extracts hitl_trigger from the interrupt payload below.
         decision = interrupt({
             "type": "hitl_approval",
             "trigger": trigger,
+            "hitl_trigger": trigger,
             "confidence": confidence,
             "output": output,
             "agent_id": state.get("agent_id", ""),

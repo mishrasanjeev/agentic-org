@@ -36,6 +36,50 @@ def _connector_to_dict(conn: Connector) -> dict:
     }
 
 
+# ── GET /connectors/registry ────────────────────────────────────────────────
+@router.get("/connectors/registry")
+async def list_registry_connectors(category: str | None = None):
+    """Return available connectors from the code registry (not tenant-specific).
+
+    This provides a catalogue of all connectors that can be registered,
+    useful as a fallback when no tenant connectors exist yet.
+    """
+    import connectors  # noqa: F401, F811
+    from connectors.registry import ConnectorRegistry
+
+    if category:
+        classes = ConnectorRegistry.by_category(category)
+    else:
+        classes = [
+            ConnectorRegistry.get(name)
+            for name in ConnectorRegistry.all_names()
+            if ConnectorRegistry.get(name) is not None
+        ]
+
+    items = []
+    for cls in classes:
+        tools = []
+        if hasattr(cls, "tools") and cls.tools:
+            tools = [t if isinstance(t, str) else getattr(t, "name", str(t)) for t in cls.tools]
+        items.append({
+            "id": f"registry-{cls.name}",
+            "connector_id": f"registry-{cls.name}",
+            "name": cls.name,
+            "category": cls.category,
+            "description": getattr(cls, "description", "") or f"{cls.name} connector",
+            "base_url": cls.base_url,
+            "auth_type": cls.auth_type,
+            "tool_functions": tools,
+            "rate_limit_rpm": cls.rate_limit_rpm,
+            "timeout_ms": cls.timeout_ms,
+            "status": "available",
+            "health_check_at": None,
+            "created_at": None,
+        })
+
+    return {"items": items, "total": len(items)}
+
+
 # ── GET /connectors ─────────────────────────────────────────────────────────
 @router.get("/connectors")
 async def list_connectors(

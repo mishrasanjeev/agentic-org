@@ -26,7 +26,21 @@ export default function Connectors() {
       const raw = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       // API returns connector_id, map to id for consistency
       const items = raw.map((c: any) => ({ ...c, id: c.id || c.connector_id }));
-      setConnectors(items);
+
+      if (items.length > 0) {
+        setConnectors(items);
+      } else {
+        // Fallback: show available connectors from the code registry
+        // when no tenant connectors have been registered yet
+        try {
+          const { data: regData } = await api.get("/connectors/registry");
+          const regRaw = Array.isArray(regData) ? regData : Array.isArray(regData?.items) ? regData.items : [];
+          const regItems = regRaw.map((c: any) => ({ ...c, id: c.id || c.connector_id }));
+          setConnectors(regItems);
+        } catch {
+          setConnectors([]);
+        }
+      }
     } catch {
       setConnectors([]);
     } finally {

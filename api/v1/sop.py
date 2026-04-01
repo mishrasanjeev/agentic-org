@@ -143,6 +143,22 @@ async def deploy_sop_agent(
     # Build HITL condition expression
     hitl_expr = " OR ".join(hitl_conditions) if hitl_conditions else f"confidence < {confidence}"
 
+    # ── SOP-011: Filter SOP-parsed tool names to only those in the registry ──
+    # SOP parsing may produce tool names that don't exactly match the connector
+    # registry (e.g. descriptive names, aliases). Strip unrecognized tools so
+    # the downstream create_agent tool validation doesn't reject with 422.
+    if tools:
+        from api.v1.agents import _validate_authorized_tools
+
+        invalid_tools = _validate_authorized_tools(tools)
+        if invalid_tools:
+            _log.warning(
+                "sop_deploy_tools_filtered",
+                removed=invalid_tools,
+                original_count=len(tools),
+            )
+            tools = [t for t in tools if t not in set(invalid_tools)]
+
     # Create agent via existing API logic
     from api.v1.agents import create_agent
     from core.schemas.api import AgentCreate, HITLPolicyConfig, LLMConfig

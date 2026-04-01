@@ -16,6 +16,8 @@ const DOMAIN_COLORS: Record<string, string> = {
   hr: "#8b5cf6",
   marketing: "#f59e0b",
   ops: "#10b981",
+  backoffice: "#6366f1",
+  comms: "#ec4899",
 };
 
 const STATUS_COLORS: Record<string, string> = {

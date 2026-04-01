@@ -8,7 +8,7 @@ interface SLAMetric {
   label: string;
   current: string;
   target: string;
-  ok: boolean;
+  ok: boolean | null;
 }
 
 interface HealthCheck {
@@ -34,7 +34,7 @@ export default function SLAMonitor() {
 
       setMetrics([
         { label: "Uptime", current: isHealthy ? "Healthy" : "Degraded", target: "99.9%", ok: isHealthy },
-        { label: "API P95 Latency", current: isHealthy ? "< 2s" : "N/A", target: "< 2s", ok: isHealthy },
+        { label: "API P95 Latency", current: isHealthy ? "< 2s" : "N/A", target: "< 2s", ok: isHealthy ? true : null },
         { label: "Agent Success Rate", current: "Measuring", target: "> 95%", ok: true },
         { label: "HITL Response Time", current: "Measuring", target: "< 4 hrs", ok: true },
       ]);
@@ -62,10 +62,10 @@ export default function SLAMonitor() {
       setUptimeData(uptime);
     } catch {
       setMetrics([
-        { label: "Uptime", current: "N/A", target: "99.9%", ok: false },
-        { label: "API P95 Latency", current: "N/A", target: "< 2s", ok: false },
-        { label: "Agent Success Rate", current: "N/A", target: "> 95%", ok: false },
-        { label: "HITL Response Time", current: "N/A", target: "< 4 hrs", ok: false },
+        { label: "Uptime", current: "N/A", target: "99.9%", ok: null },
+        { label: "API P95 Latency", current: "N/A", target: "< 2s", ok: null },
+        { label: "Agent Success Rate", current: "N/A", target: "> 95%", ok: null },
+        { label: "HITL Response Time", current: "N/A", target: "< 4 hrs", ok: null },
       ]);
       setHealthChecks([]);
       setUptimeData([]);
@@ -94,8 +94,8 @@ export default function SLAMonitor() {
                 <p className="text-2xl font-bold">{m.current}</p>
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-muted-foreground">Target: {m.target}</span>
-                  <Badge variant={m.ok ? "success" : "destructive"}>
-                    {m.ok ? "OK" : "BREACH"}
+                  <Badge variant={m.ok === null ? "secondary" : m.ok ? "success" : "destructive"}>
+                    {m.ok === null ? "N/A" : m.ok ? "OK" : "BREACH"}
                   </Badge>
                 </div>
               </div>
