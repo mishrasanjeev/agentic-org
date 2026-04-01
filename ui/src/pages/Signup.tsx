@@ -65,7 +65,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await loginWithGoogle(credentialResponse.credential);
-      import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "google" }));
+      import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "google" })).catch(() => {});
       navigate("/onboarding");
     } catch (err: any) {
       setError(err.message || "Google signup failed");
@@ -97,7 +97,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await signup(orgName, name, email, password);
-      import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "email" }));
+      import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "email" })).catch(() => {});
       navigate("/onboarding");
     } catch (err: any) {
       const msg = err.message || "Signup failed";
@@ -281,12 +281,13 @@ export default function Signup() {
                 checked={agreedToTerms}
                 onChange={(e) => setAgreedToTerms(e.target.checked)}
                 className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/50"
+                aria-label="I agree to the Terms of Service and Privacy Policy"
               />
               <label htmlFor="agreeTerms" className="text-xs text-muted-foreground leading-relaxed">
                 I agree to the{" "}
-                <a href="mailto:sanjeev@agenticorg.ai?subject=Terms%20of%20Service" className="text-primary hover:underline">Terms of Service</a>
+                <a href="https://agenticorg.ai/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>
                 {" "}and{" "}
-                <a href="mailto:sanjeev@agenticorg.ai?subject=Privacy%20Policy" className="text-primary hover:underline">Privacy Policy</a>
+                <a href="https://agenticorg.ai/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>
               </label>
             </div>
 

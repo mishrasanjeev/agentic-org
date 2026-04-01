@@ -136,7 +136,10 @@ async def update_connector(
             raise HTTPException(404, "Connector not found")
 
         for field, value in body.model_dump(exclude_none=True).items():
-            setattr(connector, field, value)
+            if field not in ("id", "tenant_id"):  # prevent overwriting internal fields
+                setattr(connector, field, value)
+        await session.commit()
+        await session.refresh(connector)
 
     return _connector_to_dict(connector)
 

@@ -749,6 +749,13 @@ async def update_agent(
         if "prompt_variables" in update_data:
             agent.prompt_variables = update_data["prompt_variables"]
         if "authorized_tools" in update_data:
+            invalid = _validate_authorized_tools(update_data["authorized_tools"])
+            if invalid:
+                raise HTTPException(
+                    422,
+                    detail=f"Invalid authorized_tools: {', '.join(invalid)}. "
+                    "Use /mcp/tools to discover valid tool names.",
+                )
             agent.authorized_tools = update_data["authorized_tools"]
         if "hitl_policy" in update_data and update_data["hitl_policy"] is not None:
             agent.hitl_condition = update_data["hitl_policy"]["condition"]

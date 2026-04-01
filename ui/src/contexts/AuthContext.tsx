@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     import("@/components/Analytics").then(m => {
       m.trackEvent("login", { method: "email" });
       m.identifyUser({ user_id: loginUser.email, role: loginUser.role, tenant_id: loginUser.tenant_id });
-    });
+    }).catch(() => {});
   }, []);
 
   const signup = useCallback(async (orgName: string, name: string, email: string, password: string) => {

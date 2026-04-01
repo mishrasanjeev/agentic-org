@@ -193,7 +193,7 @@ interface ComparisonRow {
 
 const COMPARISON: ComparisonRow[] = [
   { feature: "AI Agents", free: "35", pro: "Unlimited", enterprise: "Unlimited" },
-  { feature: "Connectors", free: "20", pro: "42", enterprise: "42" },
+  { feature: "Connectors", free: "20", pro: "43", enterprise: "43" },
   { feature: "Tasks per day", free: "500", pro: "Unlimited", enterprise: "Unlimited" },
   { feature: "Shadow mode", free: true, pro: true, enterprise: true },
   { feature: "Custom workflows", free: false, pro: true, enterprise: true },

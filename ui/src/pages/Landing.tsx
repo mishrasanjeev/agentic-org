@@ -175,7 +175,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error("Request failed");
-      import("@/components/Analytics").then(m => m.trackEvent("demo_request", { company: form.company || "", role: form.role || "" }));
+      import("@/components/Analytics").then(m => m.trackEvent("demo_request", { company: form.company || "", role: form.role || "" })).catch(() => {});
       setDone(true);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -1382,8 +1382,8 @@ $ agenticorg sop deploy \\
               &copy; 2026 AgenticOrg &middot; Edumatica Pvt Ltd. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
-              <a href="mailto:sanjeev@agenticorg.ai" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
-              <a href="mailto:sanjeev@agenticorg.ai" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
+              <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
+              <a href="/terms" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
               <span className="text-sm text-slate-600">agenticorg.ai</span>
             </div>
           </div>
