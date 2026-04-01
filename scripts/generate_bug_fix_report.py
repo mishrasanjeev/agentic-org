@@ -1,6 +1,7 @@
 """Generate Bug Fix Summary Excel report."""
+
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 wb = openpyxl.Workbook()
 
