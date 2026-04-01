@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mishrasanjeev/agenticorg",
-  "description": "AgenticOrg MCP Server — run 25+ enterprise AI agents and 269 tools from ChatGPT, Claude, Cursor, or any MCP client. Agents process invoices, run payroll, launch campaigns, and resolve incidents with human-in-the-loop governance.",
+  "description": "Run 25+ enterprise AI agents and 269 tools with human-in-the-loop governance",
   "repository": {
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
