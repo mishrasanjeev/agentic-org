@@ -313,22 +313,27 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             _DOMAIN_DEFAULT_TOOLS.get(body.domain, []),
         )
 
-    # Validate that all authorized_tools actually exist in the tool registry
-    if tools:
-        invalid_tools = _validate_authorized_tools(tools)
-        if invalid_tools:
-            raise HTTPException(
-                422,
-                detail={
-                    "error": "invalid_authorized_tools",
-                    "invalid_tools": invalid_tools,
-                    "message": (
-                        f"The following tools do not exist in the connector registry: "
-                        f"{', '.join(invalid_tools)}. "
-                        f"Check tool names or register the required connectors first."
-                    ),
-                },
-            )
+    # Validate user-provided tools against the registry (skip for auto-populated)
+    if body.authorized_tools and tools:
+        try:
+            invalid_tools = _validate_authorized_tools(tools)
+            if invalid_tools:
+                raise HTTPException(
+                    422,
+                    detail={
+                        "error": "invalid_authorized_tools",
+                        "invalid_tools": invalid_tools,
+                        "message": (
+                            f"The following tools do not exist in the connector registry: "
+                            f"{', '.join(invalid_tools)}. "
+                            f"Check tool names or register the required connectors first."
+                        ),
+                    },
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            logger.warning("tool_validation_skipped", agent_type=body.agent_type)
 
     async with get_tenant_session(tid) as session:
         agent = Agent(
