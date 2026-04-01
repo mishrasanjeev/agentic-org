@@ -1,4 +1,4 @@
-"""Test all 42 connectors × all tool functions against the mock server.
+"""Test all 43 connectors × all tool functions against the mock server.
 
 Run: pytest tests/connector_harness/test_all_connectors.py -v
 """

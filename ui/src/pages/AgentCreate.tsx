@@ -57,6 +57,8 @@ export default function AgentCreate() {
   const [hitlCondition, setHitlCondition] = useState("confidence < 0.88");
   const [maxRetries, setMaxRetries] = useState(3);
   const [llmModel, setLlmModel] = useState("gemini-2.5-flash");
+  const [authorizedTools, setAuthorizedTools] = useState<string[]>([]);
+  const [availableTools, setAvailableTools] = useState<string[]>([]);
 
   // Load available parent agents when domain changes
   useEffect(() => {
@@ -65,6 +67,25 @@ export default function AgentCreate() {
       setAvailableParents(items);
     }).catch(() => setAvailableParents([]));
   }, [domain]);
+
+  // Load default tools when agent type changes
+  useEffect(() => {
+    api.get("/mcp/tools").then(({ data }) => {
+      const allTools = (data.tools || []).map((t: { name: string }) => t.name);
+      setAvailableTools(allTools);
+    }).catch(() => setAvailableTools([]));
+  }, []);
+
+  // Auto-assign default tools when agent type changes
+  useEffect(() => {
+    const type = useCustomType ? customType : agentType;
+    api.get(`/agents/default-tools/${type}`).then(({ data }) => {
+      setAuthorizedTools(data.tools || []);
+    }).catch(() => {
+      // Fallback: use first 5 tools from available
+      setAuthorizedTools(availableTools.slice(0, 5));
+    });
+  }, [agentType, useCustomType, customType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load templates when domain changes
   useEffect(() => {
@@ -129,6 +150,7 @@ export default function AgentCreate() {
         llm: { model: llmModel, fallback_model: "gemini-2.5-flash-preview-05-20" },
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
+        authorized_tools: authorizedTools.length > 0 ? authorizedTools : undefined,
       });
       import("@/components/Analytics").then(m => m.trackEvent("agent_create", { agent_type: agentType, domain }));
       navigate(`/dashboard/agents/${data.agent_id || ""}`);
@@ -303,6 +325,49 @@ export default function AgentCreate() {
                 <label className="text-sm font-medium">Max Retries</label>
                 <input type="number" min={1} max={10} value={maxRetries} onChange={(e) => setMaxRetries(Number(e.target.value))} className="border rounded px-3 py-2 text-sm w-24 mt-1" />
               </div>
+              {/* Authorized Tools */}
+              <div>
+                <label className="text-sm font-medium">Authorized Tools</label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Tools this agent can call. Auto-populated based on agent type — add or remove as needed.
+                </p>
+                {authorizedTools.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {authorizedTools.map((tool) => (
+                      <span key={tool} className="inline-flex items-center gap-1 bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-medium">
+                        {humanize(tool)}
+                        <button
+                          type="button"
+                          onClick={() => setAuthorizedTools(authorizedTools.filter((t) => t !== tool))}
+                          className="ml-1 text-primary/60 hover:text-primary"
+                          aria-label={`Remove ${tool}`}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-600 mb-2">No tools selected. Default tools will be assigned based on agent type.</p>
+                )}
+                <select
+                  onChange={(e) => {
+                    const tool = e.target.value;
+                    if (tool && !authorizedTools.includes(tool)) {
+                      setAuthorizedTools([...authorizedTools, tool]);
+                    }
+                    e.target.value = "";
+                  }}
+                  className="border rounded px-3 py-2 text-sm w-full"
+                  defaultValue=""
+                >
+                  <option value="">+ Add a tool...</option>
+                  {availableTools.filter((t) => !authorizedTools.includes(t)).map((t) => (
+                    <option key={t} value={t}>{humanize(t)}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
                 <p>New agents start in <strong>Shadow Mode</strong>. They observe and produce outputs without taking actions. Promote to Active after validation.</p>
                 <p className="mt-2">The agent will auto-register on <strong>Grantex</strong> with a unique DID and scoped token for A2A/MCP external access.</p>
@@ -344,6 +409,18 @@ export default function AgentCreate() {
                   <div className="col-span-2"><span className="text-muted-foreground">Routing:</span> {Object.entries(routingFilter).map(([k, v]) => `${k}=${v}`).join(", ")}</div>
                 )}
               </div>
+
+              {/* Authorized Tools Preview */}
+              {authorizedTools.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-1">Authorized Tools ({authorizedTools.length})</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {authorizedTools.map((t) => (
+                      <Badge key={t} variant="outline" className="text-xs">{humanize(t)}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <p className="text-sm font-medium mb-1">Prompt Preview ({promptText.length} chars)</p>

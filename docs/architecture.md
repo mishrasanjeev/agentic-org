@@ -503,7 +503,7 @@ sequenceDiagram
 
 ## Connector Framework
 
-All 42 connectors extend `BaseConnector` with:
+All 43 connectors extend `BaseConnector` with:
 - `_register_tools()` -- declares available tool functions
 - `_authenticate()` -- obtains credentials via `_get_secret()`
 - Circuit breaker (Redis-backed, 3-state: closed/open/half-open)

@@ -210,7 +210,7 @@ export const BLOG_POSTS: BlogPost[] = [
       "Trigger: email_received (subject contains 'invoice'). Step 1: AP Processor extracts invoice fields. Step 2: Tax Compliance validates GSTIN. Step 3: Recon Agent matches against PO. Step 4: HITL approval for amounts > 5L. Step 5: Oracle Fusion posts the journal entry.",
       "Total time: 11 seconds for a standard invoice. Zero manual data entry. Full audit trail.",
       "## Connector Configuration",
-      "All 42 connectors can now be fully configured from the UI — including authentication credentials, secret references, base URLs, and health checks. The new Connector Detail page lets admins update auth tokens, rotate secrets, and verify connectivity without touching code or config files.",
+      "All 43 connectors can now be fully configured from the UI — including authentication credentials, secret references, base URLs, and health checks. The new Connector Detail page lets admins update auth tokens, rotate secrets, and verify connectivity without touching code or config files.",
     ],
   },
 ];

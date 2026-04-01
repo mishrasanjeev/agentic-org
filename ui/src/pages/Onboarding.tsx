@@ -226,7 +226,7 @@ export default function Onboarding() {
 
               <div className="rounded-lg border border-border p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-3">
-                  AgenticOrg supports 42+ connectors for ERP, CRM, HRIS, and more.
+                  AgenticOrg supports 43+ connectors for ERP, CRM, HRIS, and more.
                 </p>
                 <button
                   onClick={() => navigate("/dashboard/connectors")}

@@ -9,7 +9,7 @@
 - **Workflow engine executes real agents** (was stub, now runs LLM + tools)
 - Virtual Employee System (names, personas, specializations)
 - No-code Agent Creator wizard
-- 42 enterprise connectors with 269 tools
+- 43 enterprise connectors with 273 tools
 - 27 prompt templates with audit trail
 - HITL governance with configurable thresholds
 - Per-agent LLM selection (Gemini/Claude/GPT-4o)
@@ -22,7 +22,7 @@
 
 ## Previous (v2.1) — Shipped 2026-03-21
 
-- Initial platform with 24 agents, workflow engine, 42 connectors
+- Initial platform with 24 agents, workflow engine, 43 connectors
 - Shadow deployment with 6 quality gates
 - Full PostgreSQL DDL, RLS, CI/CD pipeline
 

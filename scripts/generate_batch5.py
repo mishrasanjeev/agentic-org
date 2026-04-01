@@ -1251,7 +1251,7 @@ w(
 ## [2.0.0] - 2026-03-21
 ### Added
 - 24 specialist agents + NEXUS orchestrator
-- 42 typed connectors (PineLabs Plural for payments)
+- 43 typed connectors (PineLabs Plural for payments, Gmail)
 - Workflow engine with 9 step types
 - Full PostgreSQL DDL with RLS and partitioning
 - Shadow mode, agent lifecycle, cost ledger

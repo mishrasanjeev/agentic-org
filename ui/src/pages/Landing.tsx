@@ -329,7 +329,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. 42 connectors (269 tools), human-in-the-loop governance, no-code builder. Start free." />
+        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. 43 connectors (273 tools), human-in-the-loop governance, no-code builder. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -423,7 +423,7 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">Now Live &mdash; 42 Connectors, 269 Tools &mdash; Agents That Execute Real API Calls</span>
+              <span className="text-slate-300 text-sm">Now Live &mdash; 43 Connectors, 273 Tools &mdash; Agents That Execute Real API Calls</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -853,7 +853,7 @@ export default function Landing() {
             <div className="grid md:grid-cols-3 gap-12">
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "42 connectors with 269 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
+                { num: "2", title: "Connect your systems", desc: "43 connectors with 273 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK, CLI, or ChatGPT via MCP." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
@@ -1194,7 +1194,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">MCP (Model Context Protocol)</h3>
-                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 269 tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
+                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 273 tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
               </div>
               <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
@@ -1261,7 +1261,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              25 agents that act. 42 connectors. 269 tools. 1,031 tests passing. Free to start.
+              25 agents that act. 43 connectors. 273 tools. 1,031 tests passing. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

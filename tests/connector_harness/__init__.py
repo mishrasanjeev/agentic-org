@@ -1,1 +1,1 @@
-"""Connector test harness — mock server + tests for all 42 connectors."""
+"""Connector test harness — mock server + tests for all 43 connectors."""

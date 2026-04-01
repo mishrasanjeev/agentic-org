@@ -249,7 +249,7 @@ ${pricingLines}
 
 - **Python SDK**: \`pip install agenticorg\` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
 - **TypeScript SDK**: \`npm i agenticorg-sdk\` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: \`npx agenticorg-mcp-server\` — expose 25+ agents and 269 tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **MCP Server**: \`npx agenticorg-mcp-server\` — expose 25+ agents and 273 tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
 - **CLI**: \`agenticorg agents list\`, \`agenticorg agents run\`, \`agenticorg sop deploy\`
 - **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use \`ao_sk_\` prefix, bcrypt-hashed, scoped, revocable
 - **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at \`/api/v1/a2a/agent-card\`
@@ -504,7 +504,7 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 
 ### Integration Protocols
 - **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at \`/api/v1/a2a/agent-card\`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. 269 tools exposed via stdio transport
+- **MCP (Model Context Protocol)**: Anthropic's protocol. 273 tools exposed via stdio transport
 - **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
 
 ---

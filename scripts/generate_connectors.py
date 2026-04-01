@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate all 42 connector implementations."""
+"""Generate all 43 connector implementations."""
 
 import os
 import textwrap

@@ -27,6 +27,23 @@ print(result["status"])      # "completed"
 print(result["confidence"])  # 0.95
 print(result["output"])      # {...structured result...}
 
+# Create an agent directly
+agent = client.agents.create(
+    name="Invoice Validator — GST Specialist",
+    agent_type="invoice_validator_gst",
+    domain="finance",
+    llm_model="claude-3-5-sonnet-20241022",
+    confidence_floor=0.90,
+    hitl_condition="total > 500000 OR einvoice_failed==true",
+    authorized_tools=[
+        "oracle_fusion:read:purchase_order",
+        "gstn_api:read:validate_gstin",
+    ],
+    initial_status="shadow",
+)
+print(agent["agent_id"])     # new agent UUID
+print(agent["status"])       # "shadow"
+
 # Create agent from SOP
 draft = client.sop.parse_text("""
 Step 1: Receive invoice from vendor

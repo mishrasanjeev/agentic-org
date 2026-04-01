@@ -1,6 +1,6 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 25 pre-built agents that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub) — not just generate text. 42 connectors, 269 tools, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — 25 pre-built agents that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub) — not just generate text. 43 connectors, 273 tools, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -23,7 +23,7 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 |--------|-------|
 | Pre-built Agents | 25 across 5 domains |
 | Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
-| Enterprise Connectors | 42 connectors, **269 tools** |
+| Enterprise Connectors | 43 connectors, **273 tools** |
 | Live Connectors (verified) | GitHub (9 tools), Jira (11 tools), HubSpot (13 tools) |
 | Prompt Templates | 27 production-tested |
 | Automated Tests | **1,031** (unit + security + connector + synthetic + functional) |
@@ -70,7 +70,7 @@ App Dashboard (agents, workflows, approvals, audit, sales pipeline)
 FastAPI Backend
     ├── Agent Registry → LLM Router (Gemini 2.5 Flash)
     │       ↓ tool_calls                    ↑ synthesis
-    │   Tool Gateway → 42 Connectors (269 tools)
+    │   Tool Gateway → 43 Connectors (273 tools)
     │       ├── Jira (11 tools) ← verified, creates real tickets
     │       ├── HubSpot (13 tools) ← verified, reads real CRM
     │       ├── GitHub (9 tools) ← verified, reads real repos
@@ -128,7 +128,7 @@ Configurable confidence floors, trigger conditions, escalation chains, and timeo
 ### Sales Agent
 Automated lead qualification, personalized email outreach, follow-up sequences (Day 1/3/7/14), Gmail inbox monitoring, and pipeline dashboard. Demo request form → instant personalized response.
 
-### 42 Enterprise Connectors
+### 43 Enterprise Connectors
 Finance: Oracle Fusion, SAP, Tally, GSTN, Stripe, QuickBooks, Zoho Books, Banking AA, Income Tax India, Pine Labs
 HR: Darwinbox, Okta, Greenhouse, LinkedIn Talent, DocuSign, Keka, Zoom, EPFO
 Marketing: Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch
@@ -255,7 +255,7 @@ pytest tests/unit/
 # Security tests (84 tests)
 pytest tests/security/
 
-# Connector harness — all 42 connectors (174 tests)
+# Connector harness — all 43 connectors (174 tests)
 pytest tests/connector_harness/
 
 # Synthetic data — invoice/resume/contract flows (15 tests)
@@ -272,7 +272,7 @@ python tests/test_production_connectors.py
 |-------|-------|---------------|
 | Unit | 739 | Agents, registry, schemas, routing, prompts, RBAC, workflows |
 | Security | 84 | Auth bypass, token exploits, alg:none, HITL bypass, PII |
-| Connector harness | 174 | 42 connectors × all 269 tools |
+| Connector harness | 174 | 43 connectors × all 273 tools |
 | Synthetic data | 15 | Invoice OCR → match, resume screening, contract analysis |
 | Ops/Marketing functional | 13 | End-to-end workflow scenarios |
 | Production E2E | 125 | Fresh org signup → 62 agents → workflows → HITL → audit → RBAC |
@@ -297,7 +297,7 @@ agenticorg/
 │   ├── tool_gateway/       # Scope enforcement, rate limiting, PII masking, audit
 │   ├── gmail_agent.py      # Gmail API integration (inbox monitor, send replies)
 │   └── email.py            # SMTP email sending
-├── connectors/             # 42 enterprise connectors
+├── connectors/             # 43 enterprise connectors
 │   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA...
 │   ├── hr/                 # Darwinbox, Okta, Greenhouse, EPFO, Zoom...
 │   ├── marketing/          # Salesforce, HubSpot, Google Ads, Ahrefs...
@@ -313,7 +313,7 @@ agenticorg/
 ├── tests/
 │   ├── unit/               # 739 unit tests
 │   ├── security/           # 84 security tests
-│   ├── connector_harness/  # 174 connector tests (42 connectors × tools)
+│   ├── connector_harness/  # 174 connector tests (43 connectors × tools)
 │   ├── synthetic_data/     # Invoice, resume, contract test data
 │   └── e2e/                # Playwright browser tests
 ├── migrations/             # 8 PostgreSQL DDL files

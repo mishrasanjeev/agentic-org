@@ -7,7 +7,7 @@
  *   - Discover and run AI agents (AP Processor, Recon, Payroll, etc.)
  *   - Parse SOPs and deploy new agents
  *   - List available agent skills via A2A
- *   - Call any of the 269 connector tools directly
+ *   - Call any of the 273 connector tools directly
  *
  * Usage:
  *   AGENTICORG_API_KEY=your-key npx agenticorg-mcp-server
@@ -64,7 +64,7 @@ async function apiPost(path: string, body: unknown): Promise<unknown> {
 const server = new McpServer({
   name: "agenticorg",
   version: "0.1.0",
-  description: "AgenticOrg — run enterprise AI agents, 25+ agents, 42 connectors, 269 tools",
+  description: "AgenticOrg — run enterprise AI agents, 25+ agents, 43 connectors, 273 tools",
 });
 
 // ── Tool: list_agents ───────────────────────────────────────────────────
@@ -159,7 +159,7 @@ server.tool(
 
 server.tool(
   "list_connectors",
-  "List all 42 available connectors (SAP, Oracle, Jira, HubSpot, GSTN, Darwinbox, etc.) and their status.",
+  "List all 43 available connectors (SAP, Oracle, Jira, HubSpot, GSTN, Darwinbox, etc.) and their status.",
   async () => {
     const data = await apiGet("/api/v1/connectors");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -188,7 +188,7 @@ server.tool(
 
 server.tool(
   "list_mcp_tools",
-  "List all 269 available MCP tools across 42 connectors. Each tool has a name, description, and input schema.",
+  "List all 273 available MCP tools across 43 connectors. Each tool has a name, description, and input schema.",
   async () => {
     const data = await apiGet("/api/v1/mcp/tools");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };

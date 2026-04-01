@@ -112,7 +112,7 @@ async def make_connector(name: str, mock_url: str):
 
 
 def get_all_connector_names() -> list[str]:
-    """Return sorted list of all 42 registered connector names."""
+    """Return sorted list of all 43 registered connector names."""
     import connectors  # noqa: F401
     from connectors.registry import ConnectorRegistry
     return sorted(ConnectorRegistry.all_names())

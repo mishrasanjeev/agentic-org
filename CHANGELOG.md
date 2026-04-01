@@ -69,7 +69,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ### Metrics
 - Automated tests: 353 → **1,031** (pytest) + 125 production E2E
 - Production E2E: **125/125 (100%)** — all 21 sections, all demo users, full lifecycle
-- Connector tools: 42 connectors × **269 total tools**
+- Connector tools: 43 connectors × **273 total tools**
 - Real API verified: GitHub (9), Jira (11), HubSpot (13) — 14 Jira tickets created on production
 
 ## [2.1.0] - 2026-03-21
@@ -99,7 +99,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ### Added — Initial Platform
 - 24 specialist agents + NEXUS orchestrator
-- 42 typed connectors (PineLabs Plural for payments)
+- 43 typed connectors (PineLabs Plural for payments, Gmail)
 - Workflow engine with 9 step types
 - Full PostgreSQL DDL with pgvector, RLS, and time-range partitioning (6 migrations)
 - 18 JSON Schema data templates

@@ -60,7 +60,7 @@ AgenticOrg is an **AI virtual employee platform** for enterprises. Instead of hi
                        │
           ┌────────────┼────────────┐
           ▼            ▼            ▼
-     PostgreSQL     Redis      42 Connectors
+     PostgreSQL     Redis      43 Connectors
      (Cloud SQL)   (Cache)    (SAP, Oracle, GSTN,
                               Darwinbox, Slack...)
 ```

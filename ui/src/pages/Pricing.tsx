@@ -148,7 +148,7 @@ const TIERS = [
     ctaLink: "demo",
     features: [
       "Unlimited AI agents",
-      "42 connectors",
+      "43 connectors",
       "Unlimited tasks",
       "Email support",
       "Custom workflows",
@@ -168,7 +168,7 @@ const TIERS = [
     ctaLink: "demo",
     features: [
       "Unlimited AI agents",
-      "42 connectors",
+      "43 connectors",
       "Unlimited everything",
       "Dedicated support",
       "99.9% SLA guarantee",
@@ -227,7 +227,7 @@ const FAQS = [
   },
   {
     q: "What connectors are included?",
-    a: "Free includes 20 core connectors (Oracle, SAP, Salesforce, Slack, GSTN, and more). Pro and Enterprise include all 42 connectors (Darwinbox, Stripe, HubSpot, EPFO, Jira, and more). Enterprise adds custom integrations.",
+    a: "Free includes 20 core connectors (Oracle, SAP, Salesforce, Slack, GSTN, and more). Pro and Enterprise include all 43 connectors (Darwinbox, Stripe, HubSpot, EPFO, Jira, and more). Enterprise adds custom integrations.",
   },
   {
     q: "Is my data secure?",
@@ -337,7 +337,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Start free with 35 agents. Scale to unlimited agents and 42 connectors as your team grows.
+            Start free with 35 agents. Scale to unlimited agents and 43 connectors as your team grows.
             No hidden fees. Cancel anytime.
           </p>
         </div>
@@ -479,7 +479,7 @@ export default function Pricing() {
             Ready to automate your enterprise?
           </h2>
           <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Start free with 35 agents and 20 connectors. Upgrade to Pro for 42 connectors and unlimited tasks.
+            Start free with 35 agents and 20 connectors. Upgrade to Pro for 43 connectors and unlimited tasks.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

@@ -1,17 +1,17 @@
-# @agenticorg/sdk
+# agenticorg-sdk
 
 TypeScript SDK for AgenticOrg — run AI agents, create from SOP, A2A/MCP access.
 
 ## Install
 
 ```bash
-npm install @agenticorg/sdk
+npm install agenticorg-sdk
 ```
 
 ## Quickstart
 
 ```typescript
-import { AgenticOrg } from "@agenticorg/sdk";
+import { AgenticOrg } from "agenticorg-sdk";
 
 const client = new AgenticOrg({ apiKey: "your-key" });
 

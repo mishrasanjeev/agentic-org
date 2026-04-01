@@ -91,3 +91,4 @@ test-results/
 
 # Temp build files
 cloudbuild-ui.yaml
+mcp-server/.mcpregistry_*

@@ -1029,7 +1029,7 @@ def gen_connector_framework():
 
 
     class BaseConnector(abc.ABC):
-        """Base class for all 42 connectors."""
+        """Base class for all 43 connectors."""
 
         name: str = ""
         category: str = ""
