@@ -1,6 +1,6 @@
 {
   "name": "agenticorg-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "mcpName": "io.github.mishrasanjeev/agenticorg",
   "description": "MCP server for AgenticOrg — expose 25+ AI agents and 269 tools to ChatGPT, Claude, and any MCP client",
   "main": "dist/index.js",
