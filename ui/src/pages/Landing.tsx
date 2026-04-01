@@ -595,7 +595,7 @@ export default function Landing() {
                 <BrowserFrame
                   src="/screenshots/agents.webp"
                   title="app.agenticorg.ai/dashboard/agents"
-                  alt="Agent fleet management view showing 24 AI agents across Finance, HR, Marketing, and Ops"
+                  alt="Agent fleet management view showing 25 AI agents across Finance, HR, Marketing, and Ops"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
