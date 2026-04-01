@@ -30,6 +30,7 @@ const staticPages = [
   { loc: "/pricing", priority: "0.9", changefreq: "monthly" },
   { loc: "/playground", priority: "0.9", changefreq: "weekly" },
   { loc: "/evals", priority: "0.9", changefreq: "weekly" },
+  { loc: "/integration-workflow", priority: "0.9", changefreq: "monthly" },
   { loc: "/blog", priority: "0.8", changefreq: "weekly" },
   { loc: "/resources", priority: "0.8", changefreq: "weekly" },
 ];

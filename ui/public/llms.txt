@@ -18,11 +18,6 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
-- **Workflow Triggers**: 5 types — manual, schedule, webhook, email_received (inbox keyword matching), api_event (event-type routing)
-- **Password Reset**: Forgot-password + reset-password flow with JWT tokens, rate-limited, email-enumeration safe
-- **Connector Configuration**: Full detail/edit page for all 42 connectors — auth credentials, secret references, base URL, health checks
-- **Auto-Tool Assignment**: Agents auto-populated with relevant tools based on type (25 mappings) or domain (5 fallbacks)
-- **Python SDK + CLI**: `pip install agenticorg` — run agents, create from SOP, A2A/MCP access, all from 3 lines of Python or terminal
 
 ## Agents by Department
 
@@ -71,12 +66,24 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
 - Pro ($499/month): Unlimited AI agents, 42 connectors, Unlimited tasks
 - Enterprise (Custom): Unlimited AI agents, 42 connectors, Unlimited everything
 
+## Developer SDKs & Integration
+
+- **Python SDK**: `pip install agenticorg` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
+- **TypeScript SDK**: `npm i agenticorg-sdk` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
+- **MCP Server**: `npx agenticorg-mcp-server` — expose 25+ agents and 269 tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop deploy`
+- **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use `ao_sk_` prefix, bcrypt-hashed, scoped, revocable
+- **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at `/api/v1/a2a/agent-card`
+- **MCP Protocol**: Anthropic Model Context Protocol — 10 tools for agent management and connector access
+- **Grantex Authorization**: Delegated auth with scoped grant tokens for third-party agent access
+
 ## Links
 
 - Website: https://agenticorg.ai
 - Playground (try live): https://agenticorg.ai/playground
 - Pricing: https://agenticorg.ai/pricing
 - Evaluation Matrix: https://agenticorg.ai/evals
+- Integration Workflow: https://agenticorg.ai/integration-workflow
 - Blog: https://agenticorg.ai/blog
   - AI Invoice Processing for Indian Enterprises: GSTN, 3-Way Matching, and Beyond: https://agenticorg.ai/blog/ai-invoice-processing-india
   - AI Virtual Employees vs RPA Bots: Why the Enterprise is Moving Beyond Robotic Process Automation: https://agenticorg.ai/blog/virtual-employee-vs-rpa
@@ -84,6 +91,7 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
   - Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates: https://agenticorg.ai/blog/hitl-governance-enterprise-ai
   - Mirror Your Company Org Chart with AI Virtual Employees: https://agenticorg.ai/blog/org-chart-ai-virtual-employees
   - No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes: https://agenticorg.ai/blog/no-code-ai-agent-builder
+  - Email-Triggered Workflows: Automate Finance Operations from Your Inbox: https://agenticorg.ai/blog/email-triggered-workflows
 - Resources: https://agenticorg.ai/resources
   - What Are AI Agents for Enterprise?: https://agenticorg.ai/resources/what-are-ai-agents-for-enterprise
   - AI Agents vs RPA: Why Enterprises Are Moving Beyond Robotic Process Automation: https://agenticorg.ai/resources/ai-agents-vs-rpa
@@ -112,3 +120,6 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
   - Darwinbox + AI: Supercharge Your HRMS with Intelligent Agents: https://agenticorg.ai/resources/darwinbox-ai-integration
   - Tally + AI: Automate Accounting with AI Agents: https://agenticorg.ai/resources/tally-ai-integration
 - GitHub: https://github.com/mishrasanjeev/agentic-org
+- Python SDK (PyPI): https://pypi.org/project/agenticorg/
+- TypeScript SDK (npm): https://www.npmjs.com/package/agenticorg-sdk
+- MCP Server (npm): https://www.npmjs.com/package/agenticorg-mcp-server

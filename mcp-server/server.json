@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mishrasanjeev/agenticorg",
+  "description": "AgenticOrg MCP Server — run 25+ enterprise AI agents and 269 tools from ChatGPT, Claude, Cursor, or any MCP client. Agents process invoices, run payroll, launch campaigns, and resolve incidents with human-in-the-loop governance.",
+  "repository": {
+    "url": "https://github.com/mishrasanjeev/agentic-org",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "agenticorg-mcp-server",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "tools": [
+    { "name": "list_agents", "description": "List all available AI agents, optionally filter by domain" },
+    { "name": "run_agent", "description": "Run an AI agent by type (ap_processor, recon_agent, payroll_agent, etc.)" },
+    { "name": "get_agent_details", "description": "Get full details of a specific agent by ID" },
+    { "name": "create_agent_from_sop", "description": "Parse an SOP document and create a new AI agent from it" },
+    { "name": "deploy_agent", "description": "Deploy an agent configuration to make it live" },
+    { "name": "list_connectors", "description": "List all 42 connectors (SAP, Oracle, Jira, HubSpot, GSTN, etc.)" },
+    { "name": "call_connector_tool", "description": "Call any of 269 connector tools directly" },
+    { "name": "list_mcp_tools", "description": "Discover all 269 available MCP tools across 42 connectors" },
+    { "name": "discover_agents_a2a", "description": "Discover agent skills via A2A protocol" },
+    { "name": "get_agent_card", "description": "Get the public A2A Agent Card" }
+  ],
+  "environmentVariables": [
+    {
+      "name": "AGENTICORG_API_KEY",
+      "description": "API key from your AgenticOrg dashboard (Settings → API Keys)",
+      "required": true
+    },
+    {
+      "name": "AGENTICORG_BASE_URL",
+      "description": "Custom base URL (default: https://app.agenticorg.ai)",
+      "required": false
+    }
+  ]
+}

@@ -11,11 +11,12 @@ It handles:
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
 import structlog
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 from core.langgraph.agent_graph import build_agent_graph
@@ -108,8 +109,24 @@ async def run_agent(
     }
 
     # Execute the graph
+    t0 = time.perf_counter()
     try:
         result = await compiled.ainvoke(initial_state, config=config)
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+
+        # Extract token usage from AI messages
+        tokens_used = 0
+        for msg in result.get("messages", []):
+            if isinstance(msg, AIMessage):
+                usage = getattr(msg, "usage_metadata", None)
+                if usage:
+                    tokens_used += getattr(usage, "total_tokens", 0) or (
+                        (getattr(usage, "input_tokens", 0) or 0)
+                        + (getattr(usage, "output_tokens", 0) or 0)
+                    )
+
+        # Estimate cost (Gemini 2.5 Flash pricing: $0.15/1M input, $0.60/1M output)
+        cost_usd = round(tokens_used * 0.000375 / 1000, 6) if tokens_used else 0
 
         return {
             "status": result.get("status", "completed"),
@@ -119,9 +136,15 @@ async def run_agent(
             "tool_calls_log": result.get("tool_calls_log", []),
             "hitl_trigger": result.get("hitl_trigger", ""),
             "error": result.get("error", ""),
+            "performance": {
+                "total_latency_ms": latency_ms,
+                "llm_tokens_used": tokens_used,
+                "llm_cost_usd": cost_usd,
+            },
         }
 
     except Exception as e:
+        latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.error("langgraph_agent_failed", agent_id=agent_id, error=str(e))
         return {
             "status": "failed",
@@ -131,6 +154,11 @@ async def run_agent(
             "tool_calls_log": [],
             "hitl_trigger": "",
             "error": str(e),
+            "performance": {
+                "total_latency_ms": latency_ms,
+                "llm_tokens_used": 0,
+                "llm_cost_usd": 0,
+            },
         }
 
 

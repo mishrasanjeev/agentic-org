@@ -882,6 +882,7 @@ async def run_agent(
     task_trace = lg_result.get("reasoning_trace", [])
     hitl_trigger = lg_result.get("hitl_trigger", "")
     task_error = lg_result.get("error", "")
+    perf = lg_result.get("performance", {})
     msg_id = f"msg_{_uuid.uuid4().hex[:12]}"
 
     # 6. Store result in audit log
@@ -948,6 +949,37 @@ async def run_agent(
                 )
                 await session.commit()
 
+    # 6d. Record cost in ledger (upsert — unique on tenant+agent+date)
+    cost_usd = perf.get("llm_cost_usd", 0)
+    tokens_used = perf.get("llm_tokens_used", 0)
+    if cost_usd > 0 or tokens_used > 0:
+        try:
+            today = datetime.now(UTC).date()
+            async with get_tenant_session(tid) as session:
+                existing = await session.execute(
+                    select(AgentCostLedger).where(
+                        AgentCostLedger.agent_id == agent_id,
+                        AgentCostLedger.tenant_id == tid,
+                        AgentCostLedger.period_date == today,
+                    )
+                )
+                ledger = existing.scalar_one_or_none()
+                if ledger:
+                    ledger.token_count = (ledger.token_count or 0) + tokens_used
+                    ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
+                    ledger.task_count = (ledger.task_count or 0) + 1
+                else:
+                    session.add(AgentCostLedger(
+                        agent_id=agent_id,
+                        tenant_id=tid,
+                        cost_usd=cost_usd,
+                        token_count=tokens_used,
+                        task_count=1,
+                        period_date=today,
+                    ))
+        except Exception:
+            logger.warning("cost_ledger_write_failed", agent_id=str(agent_id))
+
     # 7. Return result
     response = {
         "task_id": msg_id,
@@ -958,7 +990,11 @@ async def run_agent(
         "confidence": task_confidence,
         "reasoning_trace": task_trace,
         "runtime": "langgraph",
-        "performance": {"total_latency_ms": 0, "llm_tokens_used": 0, "llm_cost_usd": 0},
+        "performance": {
+            "total_latency_ms": perf.get("total_latency_ms", 0),
+            "llm_tokens_used": perf.get("llm_tokens_used", 0),
+            "llm_cost_usd": perf.get("llm_cost_usd", 0),
+        },
     }
     if hitl_trigger:
         response["hitl_trigger"] = hitl_trigger

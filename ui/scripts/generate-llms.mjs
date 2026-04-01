@@ -245,17 +245,32 @@ AgenticOrg is built for Indian enterprise with native connectors for: ${indiaCon
 
 ${pricingLines}
 
+## Developer SDKs & Integration
+
+- **Python SDK**: \`pip install agenticorg\` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
+- **TypeScript SDK**: \`npm i agenticorg-sdk\` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
+- **MCP Server**: \`npx agenticorg-mcp-server\` — expose 25+ agents and 269 tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **CLI**: \`agenticorg agents list\`, \`agenticorg agents run\`, \`agenticorg sop deploy\`
+- **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use \`ao_sk_\` prefix, bcrypt-hashed, scoped, revocable
+- **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at \`/api/v1/a2a/agent-card\`
+- **MCP Protocol**: Anthropic Model Context Protocol — 10 tools for agent management and connector access
+- **Grantex Authorization**: Delegated auth with scoped grant tokens for third-party agent access
+
 ## Links
 
 - Website: ${SITE}
 - Playground (try live): ${SITE}/playground
 - Pricing: ${SITE}/pricing
 - Evaluation Matrix: ${SITE}/evals
+- Integration Workflow: ${SITE}/integration-workflow
 - Blog: ${SITE}/blog
 ${blogs.map((b) => `  - ${b.title}: ${SITE}/blog/${b.slug}`).join("\n")}
 - Resources: ${SITE}/resources
 ${resources.map((r) => `  - ${r.title}: ${SITE}/resources/${r.slug}`).join("\n")}
 - GitHub: https://github.com/mishrasanjeev/agentic-org
+- Python SDK (PyPI): https://pypi.org/project/agenticorg/
+- TypeScript SDK (npm): https://www.npmjs.com/package/agenticorg-sdk
+- MCP Server (npm): https://www.npmjs.com/package/agenticorg-mcp-server
 `;
 }
 
@@ -460,11 +475,49 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 
 ---
 
+## Developer SDKs & Integration
+
+### Python SDK (PyPI)
+- Install: \`pip install agenticorg\`
+- Usage: \`from agenticorg import AgenticOrg; client = AgenticOrg(api_key="ao_sk_...")\`
+- Features: Run agents, parse SOPs, A2A discovery, MCP tool calls, CLI
+- Package: https://pypi.org/project/agenticorg/
+
+### TypeScript SDK (npm)
+- Install: \`npm i agenticorg-sdk\`
+- Usage: \`import { AgenticOrg } from "agenticorg-sdk"; const client = new AgenticOrg({ apiKey: "ao_sk_..." })\`
+- Features: Agents, SOPs, A2A, MCP — full TypeScript types
+- Package: https://www.npmjs.com/package/agenticorg-sdk
+
+### MCP Server (npm)
+- Install: \`npx agenticorg-mcp-server\`
+- Exposes 10 tools: list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, call_connector_tool, list_mcp_tools, discover_agents_a2a, get_agent_card
+- Works with ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client
+- Package: https://www.npmjs.com/package/agenticorg-mcp-server
+
+### API Keys
+- Generate from dashboard: Settings > API Keys
+- Format: \`ao_sk_{40 hex chars}\` — bcrypt-hashed, scoped, revocable
+- Scopes: agents:read, agents:run, connectors:read, mcp:read, mcp:call, a2a:read
+- Max 10 active keys per organization
+- Auth: \`Authorization: Bearer ao_sk_...\`
+
+### Integration Protocols
+- **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at \`/api/v1/a2a/agent-card\`
+- **MCP (Model Context Protocol)**: Anthropic's protocol. 269 tools exposed via stdio transport
+- **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
+
+---
+
 ## Contact
 
 - Website: ${SITE}
 - Book a demo: ${SITE} (click "Book a Demo")
+- Integration Workflow: ${SITE}/integration-workflow
 - GitHub: https://github.com/mishrasanjeev/agentic-org
+- Python SDK: https://pypi.org/project/agenticorg/
+- TypeScript SDK: https://www.npmjs.com/package/agenticorg-sdk
+- MCP Server: https://www.npmjs.com/package/agenticorg-mcp-server
 `;
 }
 

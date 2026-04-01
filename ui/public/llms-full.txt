@@ -242,65 +242,6 @@ Every agent has configurable HITL conditions. When triggered, the agent stops ex
 5. Agent resumes or stops based on decision
 6. Full decision audit trail with timestamp, decision, notes
 
-### Approval Queue Features
-- **Decided Tab**: Shows decision badge (Approved/Rejected/Deferred) with timestamp — no action buttons
-- **Expired Filtering**: Expired HITL items automatically hidden from Pending queue
-- **Priority Filtering**: Filter by critical/high/normal/low across both tabs
-
----
-
-## Workflow Trigger Types
-
-Workflows can be triggered by 5 different event sources:
-
-| Trigger | Description | Config Example |
-|---------|-------------|---------------|
-| manual | User clicks "Run Now" | No config needed |
-| schedule | Cron-based recurring execution | `{"cron": "0 9 * * MON"}` |
-| webhook | External HTTP POST triggers workflow | `{"path": "/webhooks/invoice"}` |
-| email_received | Inbox keyword matching triggers workflow | `{"filter": {"subject_contains": ["invoice", "payment"]}}` |
-| api_event | Event-type routing from internal systems | `{"event_type": "lead.qualified"}` |
-
----
-
-## Authentication & Account Recovery
-
-### Login Methods
-- Email/password with bcrypt hashing (SOC-2 compliant)
-- Google OAuth (Sign In With Google)
-- Organization invites with JWT tokens (24-hour expiry)
-
-### Password Reset Flow
-1. User clicks "Forgot Password?" on login page
-2. Submits email → API sends reset link (1-hour JWT token)
-3. User clicks link → enters new password on reset page
-4. Token is single-use (blacklisted after reset)
-5. Rate-limited: 3 requests per email per hour
-6. Email-enumeration safe: same response for valid/invalid emails
-
----
-
-## Connector Configuration
-
-All 42 connectors can be fully configured from the UI:
-
-- **Register**: Name, category, base URL, auth type, credentials, secret reference
-- **Detail View**: Full connector info with health check button
-- **Edit**: Update auth credentials, secret references, base URL, rate limits
-- **Auth Types**: OAuth2, API Key, Basic Auth, Bolt Bot Token (Slack), Certificate, None
-- **Secret References**: GCP Secret Manager URIs for runtime credential resolution
-- **Health Checks**: Per-connector health monitoring with status badges
-
----
-
-## Auto-Tool Assignment
-
-When creating an agent without specifying tools, the platform auto-assigns relevant tools:
-
-- **By Agent Type** (25 mappings): e.g., `ap_processor` gets `fetch_bank_statement`, `create_charge`, `initiate_neft`
-- **By Domain** (5 fallbacks): e.g., `finance` gets `fetch_bank_statement`, `get_account_balance`, `generate_financial_report`
-- **Slack Integration**: Support and ops agents (support_triage, it_operations, compliance_guard) get `send_message` and `post_formatted_alert`
-
 ---
 
 ## Shadow Mode & Quality Gates
@@ -405,6 +346,7 @@ All 6 gates must pass for promotion.
 - [Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
 - [Mirror Your Company Org Chart with AI Virtual Employees](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
 - [No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes](https://agenticorg.ai/blog/no-code-ai-agent-builder)
+- [Email-Triggered Workflows: Automate Finance Operations from Your Inbox](https://agenticorg.ai/blog/email-triggered-workflows)
 
 ## Resources
 
@@ -437,8 +379,46 @@ All 6 gates must pass for promotion.
 
 ---
 
+## Developer SDKs & Integration
+
+### Python SDK (PyPI)
+- Install: `pip install agenticorg`
+- Usage: `from agenticorg import AgenticOrg; client = AgenticOrg(api_key="ao_sk_...")`
+- Features: Run agents, parse SOPs, A2A discovery, MCP tool calls, CLI
+- Package: https://pypi.org/project/agenticorg/
+
+### TypeScript SDK (npm)
+- Install: `npm i agenticorg-sdk`
+- Usage: `import { AgenticOrg } from "agenticorg-sdk"; const client = new AgenticOrg({ apiKey: "ao_sk_..." })`
+- Features: Agents, SOPs, A2A, MCP — full TypeScript types
+- Package: https://www.npmjs.com/package/agenticorg-sdk
+
+### MCP Server (npm)
+- Install: `npx agenticorg-mcp-server`
+- Exposes 10 tools: list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, call_connector_tool, list_mcp_tools, discover_agents_a2a, get_agent_card
+- Works with ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client
+- Package: https://www.npmjs.com/package/agenticorg-mcp-server
+
+### API Keys
+- Generate from dashboard: Settings > API Keys
+- Format: `ao_sk_{40 hex chars}` — bcrypt-hashed, scoped, revocable
+- Scopes: agents:read, agents:run, connectors:read, mcp:read, mcp:call, a2a:read
+- Max 10 active keys per organization
+- Auth: `Authorization: Bearer ao_sk_...`
+
+### Integration Protocols
+- **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at `/api/v1/a2a/agent-card`
+- **MCP (Model Context Protocol)**: Anthropic's protocol. 269 tools exposed via stdio transport
+- **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
+
+---
+
 ## Contact
 
 - Website: https://agenticorg.ai
 - Book a demo: https://agenticorg.ai (click "Book a Demo")
+- Integration Workflow: https://agenticorg.ai/integration-workflow
 - GitHub: https://github.com/mishrasanjeev/agentic-org
+- Python SDK: https://pypi.org/project/agenticorg/
+- TypeScript SDK: https://www.npmjs.com/package/agenticorg-sdk
+- MCP Server: https://www.npmjs.com/package/agenticorg-mcp-server
