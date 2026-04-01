@@ -1,4 +1,4 @@
-"""Connector layer — 42 typed adapters, auto-loaded and registered."""
+"""Connector layer — 43 typed adapters (273 tools), auto-loaded and registered."""
 
 from connectors.comms import github_connector as _  # noqa: F401, F811
 from connectors.comms import gmail as _  # noqa: F401, F811

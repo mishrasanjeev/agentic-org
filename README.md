@@ -1,13 +1,16 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 25 pre-built agents that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub) — not just generate text. 43 connectors, 273 tools, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — 25 pre-built agents (28 total skills across 6 domains) that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub) — not just generate text. 43 connectors, 273 tools, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-green.svg)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Tests-1031_passing-brightgreen.svg)](tests/)
-[![E2E](https://img.shields.io/badge/E2E-125%2F125_production-brightgreen.svg)](tests/e2e_full_production_test.py)
+[![Tests](https://img.shields.io/badge/Tests-1196%2B_passing-brightgreen.svg)](tests/)
+[![E2E](https://img.shields.io/badge/E2E-148%2F148_production-brightgreen.svg)](tests/e2e_full_production_test.py)
+[![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
+[![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
+[![Version](https://img.shields.io/badge/Version-2.3.0-green.svg)](CHANGELOG.md)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -21,15 +24,17 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 
 | Metric | Value |
 |--------|-------|
-| Pre-built Agents | 25 across 5 domains |
+| Pre-built Agents | 25 across 6 domains (28 total skills incl. 3 comms agent types) |
 | Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
 | Enterprise Connectors | 43 connectors, **273 tools** |
 | Live Connectors (verified) | GitHub (9 tools), Jira (11 tools), HubSpot (13 tools) |
 | Prompt Templates | 27 production-tested |
-| Automated Tests | **1,031** (unit + security + connector + synthetic + functional) |
-| Production E2E | **125/125 pass (100%)** against live deployment |
+| Automated Tests | **1,196+** (821 unit, 86 security, 174 connector harness, 55 regression, 62 integration, 370+ Playwright E2E) |
+| Production E2E | **148/148 pass (100%)** against live deployment |
+| SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
 | LLM | Gemini 2.5 Flash (primary), Claude/GPT-4o fallback |
 | Deployment | GKE Autopilot, ~$95/month |
+| Version | **2.3.0** |
 
 ### What It Does
 
@@ -63,9 +68,9 @@ Verified on production: agents have created **14 real Jira tickets**, read **Hub
 ## Architecture
 
 ```
-Landing Page (animations, interactive demo, blog, SEO)
+Landing Page (animations, interactive demo, blog, SEO, developer section)
     ↓
-App Dashboard (agents, workflows, approvals, audit, sales pipeline)
+App Dashboard (agents, workflows, approvals, audit, sales pipeline, integrations)
     ↓
 FastAPI Backend
     ├── Agent Registry → LLM Router (Gemini 2.5 Flash)
@@ -75,14 +80,21 @@ FastAPI Backend
     │       ├── HubSpot (13 tools) ← verified, reads real CRM
     │       ├── GitHub (9 tools) ← verified, reads real repos
     │       └── SAP, Oracle, GSTN, Darwinbox, Slack, Stripe...
+    ├── LangGraph Runtime → GraphInterrupt HITL → Shadow Mode
     ├── Workflow Engine → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
+    ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
+    ├── MCP Server → 273 tools exposed to Claude/Cursor/ChatGPT
+    ├── API Key Manager → ao_sk_ keys → SDK/CLI/MCP auth
+    ├── SOP Parser → Upload SOPs → Deploy as agents
     └── Sales Agent → Gmail API → Email Sequences
     ↓
-PostgreSQL (Cloud SQL) + Redis + GCS
+SDKs: Python (PyPI) | TypeScript (npm) | MCP Server | CLI
+    ↓
+PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 ```
 
-### Agent Domains
+### Agent Domains (6 Domains)
 
 | Domain | Agents | Key Agents |
 |--------|--------|-----------|
@@ -91,8 +103,11 @@ PostgreSQL (Cloud SQL) + Redis + GCS
 | **Marketing** | 5 | Content Factory, Campaign Pilot, SEO Strategist, CRM Intelligence, Brand Monitor |
 | **Operations** | 5 | Support Triage, Contract Intelligence, Compliance Guard, IT Operations, Vendor Manager |
 | **Back Office** | 3 | Risk Sentinel, Legal Ops, Facilities Agent |
+| **Comms** | 3 | Ops Commander (Jira triage), DevOps Scout (GitHub + Jira health), Slack Notifier |
 | **Sales** | 1 | Automated sales agent (qualification, email sequences, pipeline) |
 | **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
+
+> **25 pre-built agent types + 3 comms agent skills = 28 total agent skills available.**
 
 ---
 
@@ -115,7 +130,7 @@ Visual tree hierarchy per department. Each agent has an `org_level` field (e.g.,
 27 production-tested templates with `{{variable}}` substitution. Built-in templates are read-only — clone to customize. Full prompt audit trail with edit history. Prompt lock on active agents.
 
 ### Human-in-the-Loop (HITL)
-Configurable confidence floors, trigger conditions, escalation chains, and timeout rules. Every HITL decision logged in audit trail. Agents cannot bypass their own gates.
+Configurable confidence floors, trigger conditions, escalation chains, and timeout rules. Every HITL decision logged in audit trail. Agents cannot bypass their own gates. LangGraph-based HITL uses `GraphInterrupt` for pause/resume — the agent graph pauses at the approval node and resumes only after human decision.
 
 ### RBAC
 - **CEO/Admin**: Full access, all domains
@@ -128,12 +143,12 @@ Configurable confidence floors, trigger conditions, escalation chains, and timeo
 ### Sales Agent
 Automated lead qualification, personalized email outreach, follow-up sequences (Day 1/3/7/14), Gmail inbox monitoring, and pipeline dashboard. Demo request form → instant personalized response.
 
-### 43 Enterprise Connectors
-Finance: Oracle Fusion, SAP, Tally, GSTN, Stripe, QuickBooks, Zoho Books, Banking AA, Income Tax India, Pine Labs
-HR: Darwinbox, Okta, Greenhouse, LinkedIn Talent, DocuSign, Keka, Zoom, EPFO
-Marketing: Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch
-Ops: Jira, ServiceNow, Zendesk, PagerDuty, Confluence, Sanctions API, MCA Portal
-Comms: Slack, GitHub, SendGrid, GCS, Google Calendar, Twilio, WhatsApp, LangSmith
+### 43 Enterprise Connectors (273 Tools)
+Finance (10): Oracle Fusion, SAP, Tally, GSTN, Stripe, QuickBooks, Zoho Books, Banking AA, Income Tax India, Pine Labs
+HR (8): Darwinbox, Okta, Greenhouse, LinkedIn Talent, DocuSign, Keka, Zoom, EPFO
+Marketing (9): Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch
+Ops (7): Jira, ServiceNow, Zendesk, PagerDuty, Confluence, Sanctions API, MCA Portal
+Comms (9): Slack, GitHub, Gmail, SendGrid, GCS, Google Calendar, Twilio, WhatsApp, LangSmith
 
 ---
 
@@ -197,13 +212,13 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | POST | /auth/reset-password | No | Reset password with token |
 | POST | /demo-request | No | Demo form → lead + sales agent |
 | GET | /agents | JWT | List agents (RBAC filtered) |
-| POST | /agents | JWT | Create agent |
+| POST | /agents | JWT | Create agent (tools auto-populated by type/domain) |
 | POST | /agents/{id}/run | JWT | Execute agent |
 | PATCH | /agents/{id} | JWT | Update (prompt lock on active) |
 | GET | /agents/org-tree | JWT | Org chart tree (department hierarchy) |
 | POST | /agents/import-csv | JWT | Bulk import agents via CSV |
 | POST | /agents/{id}/clone | JWT | Clone with persona |
-| POST | /agents/{id}/promote | JWT | Shadow → Active |
+| POST | /agents/{id}/promote | JWT | Shadow → Active (shadow limit enforcement) |
 | GET | /agents/{id}/prompt-history | JWT | Prompt audit trail |
 | GET | /prompt-templates | JWT | List templates |
 | POST | /prompt-templates | JWT | Create template |
@@ -214,20 +229,26 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | GET | /workflows | JWT | List workflows |
 | GET | /approvals | JWT | HITL approval queue |
 | GET | /audit | JWT | Audit log |
-| GET | /connectors | JWT | List connectors |
+| GET | /connectors | JWT | List 43 connectors |
+| GET | /connectors/registry | JWT | Connector registry (all registered connectors + tool counts) |
 | GET | /connectors/{id}/health | JWT | Connector health check |
 | GET | /connectors/{id} | JWT | Connector details |
 | PUT | /connectors/{id} | JWT | Update connector config |
+| POST | /org/api-keys | Admin | Generate API key (ao_sk_ prefix) |
+| GET | /org/api-keys | Admin | List API keys |
+| DELETE | /org/api-keys/{id} | Admin | Revoke API key |
 | GET | /a2a/agent-card | No | A2A agent discovery card |
 | POST | /a2a/tasks | JWT/Grantex | Execute A2A task |
-| GET | /mcp/tools | No | List MCP tools |
+| GET | /mcp/tools | No | List MCP tools (273 tools) |
 | POST | /mcp/call | JWT/Grantex | Call MCP tool |
 | POST | /sop/upload | JWT | Upload and parse SOP document |
 | POST | /sop/parse-text | JWT | Parse SOP text |
 | POST | /sop/deploy | JWT | Deploy parsed SOP as agent |
 | POST | /agents/{id}/delegate | JWT | Grantex delegation setup |
 
-## Python SDK
+## SDKs, CLI & MCP Server
+
+### Python SDK
 
 ```bash
 pip install agenticorg
@@ -235,24 +256,106 @@ pip install agenticorg
 
 ```python
 from agenticorg import AgenticOrg
-client = AgenticOrg(api_key="your-key")
+
+client = AgenticOrg(api_key="ao_sk_your_key_here")
 result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
+agents = client.agents.list()
+sop = client.sop.parse_text("When invoice > 5L, require CFO approval")
+card = client.a2a.agent_card()
 ```
 
-See `sdk/README.md` for full documentation.
+### TypeScript SDK
+
+```bash
+npm install agenticorg-sdk
+```
+
+```typescript
+import { AgenticOrg } from "agenticorg-sdk";
+
+const client = new AgenticOrg({ apiKey: "ao_sk_your_key_here" });
+const result = await client.agents.run("ap_processor", { inputs: { invoice_id: "INV-001" } });
+const agents = await client.agents.list();
+```
+
+### MCP Server
+
+Any MCP-compatible client (Claude Desktop, Cursor, ChatGPT) can use AgenticOrg agents and tools:
+
+```bash
+AGENTICORG_API_KEY=ao_sk_... npx agenticorg-mcp-server
+```
+
+Or add to your MCP client config:
+```json
+{
+  "mcpServers": {
+    "agenticorg": {
+      "command": "npx",
+      "args": ["agenticorg-mcp-server"],
+      "env": { "AGENTICORG_API_KEY": "ao_sk_..." }
+    }
+  }
+}
+```
+
+### CLI
+
+```bash
+pip install agenticorg
+
+agenticorg agents list
+agenticorg agents run ap_processor --input '{"invoice_id": "INV-001"}'
+agenticorg sop parse "When invoice > 5L, require CFO approval"
+agenticorg mcp tools
+```
+
+See `sdk/README.md` and `mcp-server/README.md` for full documentation.
+
+---
+
+## API Keys
+
+API keys provide programmatic access for SDKs, CLI, and MCP integrations.
+
+- **Prefix**: All keys use the `ao_sk_` prefix (e.g., `ao_sk_a1b2c3...`)
+- **Generation**: Admin users generate keys from **Settings > API Keys** in the app, or via `POST /api/v1/org/api-keys`
+- **Admin-only**: API key endpoints require the `agenticorg:admin` scope
+- **Security**: Keys are bcrypt-hashed at rest; the full key is shown only once at creation
+- **Revocation**: Keys can be revoked instantly from Settings or via `DELETE /api/v1/org/api-keys/{id}`
+
+---
+
+## Integration Protocols
+
+### A2A (Agent-to-Agent)
+AgenticOrg implements Google's A2A protocol for cross-platform agent discovery and task execution:
+- `GET /a2a/agent-card` — public agent discovery card (no auth required)
+- `POST /a2a/tasks` — execute tasks via A2A protocol (JWT or Grantex auth)
+
+### MCP (Model Context Protocol)
+Full MCP server exposing all 273 connector tools to any MCP-compatible client:
+- `GET /mcp/tools` — list all available MCP tools (no auth required)
+- `POST /mcp/call` — call any MCP tool (JWT or Grantex auth)
+
+### Grantex Authorization
+OAuth2-based authorization with delegated scopes:
+- `POST /agents/{id}/delegate` — set up Grantex delegation for agent-to-agent trust
+- Scope hierarchy enforced: child agents cannot elevate parent scopes
+- Token pool with automatic refresh at 50% TTL
+
+### Integration Workflow Page
+The `/integration-workflow` page provides a visual guide for connecting external systems, with SDK/CLI quickstart examples and protocol documentation.
 
 ---
 
 ## Testing
 
 ```bash
-# All automated tests (1,053 tests)
-pytest tests/ --ignore=tests/e2e --ignore=tests/integration
-
-# Unit tests (761 tests)
+# Unit tests (821 tests)
 pytest tests/unit/
 
-# Security tests (84 tests)
+# Security tests (86 tests)
 pytest tests/security/
 
 # Connector harness — all 43 connectors (174 tests)
@@ -261,8 +364,17 @@ pytest tests/connector_harness/
 # Synthetic data — invoice/resume/contract flows (15 tests)
 pytest tests/synthetic_data/
 
-# Full production E2E — 125 checks against live deployment
+# Regression tests (55 tests)
+pytest tests/regression/
+
+# Integration tests (62 tests)
+pytest tests/integration/
+
+# Full production E2E — 148 checks against live deployment
 python tests/e2e_full_production_test.py
+
+# Playwright E2E — 370+ browser tests across 14 spec files
+npx playwright test
 
 # Production connector test — real Jira/HubSpot/GitHub API calls
 python tests/test_production_connectors.py
@@ -270,14 +382,16 @@ python tests/test_production_connectors.py
 
 | Suite | Tests | What It Covers |
 |-------|-------|---------------|
-| Unit | 739 | Agents, registry, schemas, routing, prompts, RBAC, workflows |
-| Security | 84 | Auth bypass, token exploits, alg:none, HITL bypass, PII |
+| Unit | 821 | Agents, registry, schemas, routing, prompts, RBAC, workflows, LangGraph, SOP, A2A/MCP, negative cases |
+| Security | 86 | Auth bypass, token exploits, alg:none, HITL bypass, PII, agent scaling |
 | Connector harness | 174 | 43 connectors × all 273 tools |
 | Synthetic data | 15 | Invoice OCR → match, resume screening, contract analysis |
-| Ops/Marketing functional | 13 | End-to-end workflow scenarios |
-| Production E2E | 125 | Fresh org signup → 62 agents → workflows → HITL → audit → RBAC |
-| Production connectors | 17 | Real API calls to Jira, HubSpot, GitHub |
-| **Total** | **1,167** | **125/125 production E2E at 100%** |
+| Regression | 55 | March 2026 bug fixes (40) + April 2026 PR fixes (15) |
+| Integration | 62 | API integration (43) + virtual employee API (19) |
+| Production E2E | 148 | Fresh org signup → agents → workflows → HITL → audit → RBAC → connectors |
+| Production audit | 48 | Final production test (23) + new features production (25) |
+| Playwright E2E | 370+ | 12 spec files (ui/e2e) + 2 spec files (ui/tests): flows, login, onboarding, landing, SOP, negative cases, regression |
+| **Total** | **1,196+** | **148/148 production E2E at 100%** |
 
 ---
 
@@ -285,38 +399,47 @@ python tests/test_production_connectors.py
 
 ```
 agenticorg/
-├── api/v1/                 # FastAPI endpoints (agents, auth, sales, templates, connectors)
+├── api/v1/                 # FastAPI endpoints (agents, auth, sales, templates, connectors, api-keys, sop, a2a, mcp)
 ├── core/
 │   ├── agents/             # 25 agent types + 27 prompt templates
 │   │   ├── prompts/        # Production system prompts
 │   │   ├── registry.py     # Agent registry (built-in + custom type fallback)
 │   │   └── base.py         # BaseAgent: LLM reasoning → tool calling → HITL
+│   ├── langgraph/          # LangGraph agent graph, runner, Grantex auth, LLM factory
 │   ├── orchestrator/       # NEXUS: task routing, smart routing, state machine
 │   ├── llm/                # LLM router (Gemini primary, Claude/GPT-4o fallback)
-│   ├── models/             # SQLAlchemy ORM (agents, workflows, HITL, leads, templates)
+│   ├── models/             # SQLAlchemy ORM (agents, workflows, HITL, leads, templates, api_keys)
 │   ├── tool_gateway/       # Scope enforcement, rate limiting, PII masking, audit
 │   ├── gmail_agent.py      # Gmail API integration (inbox monitor, send replies)
 │   └── email.py            # SMTP email sending
-├── connectors/             # 43 enterprise connectors
-│   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA...
-│   ├── hr/                 # Darwinbox, Okta, Greenhouse, EPFO, Zoom...
-│   ├── marketing/          # Salesforce, HubSpot, Google Ads, Ahrefs...
-│   ├── ops/                # Jira, Zendesk, ServiceNow, PagerDuty...
-│   ├── comms/              # Slack, GitHub, SendGrid, GCS, Twilio...
+├── connectors/             # 43 enterprise connectors (273 tools)
+│   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA... (10)
+│   ├── hr/                 # Darwinbox, Okta, Greenhouse, EPFO, Zoom... (8)
+│   ├── marketing/          # Salesforce, HubSpot, Google Ads, Ahrefs... (9)
+│   ├── ops/                # Jira, Zendesk, ServiceNow, PagerDuty... (7)
+│   ├── comms/              # Slack, GitHub, Gmail, SendGrid, GCS, Twilio... (9)
 │   └── framework/          # BaseConnector, auth adapters, circuit breaker
+├── auth/                   # Grantex middleware, registration
 ├── workflows/              # Workflow engine, triggers, conditions
+├── sdk/                    # Python SDK (pip install agenticorg) + CLI
+├── sdk-ts/                 # TypeScript SDK (npm i agenticorg-sdk)
+├── mcp-server/             # MCP Server (npx agenticorg-mcp-server)
 ├── ui/src/
-│   ├── pages/              # Landing, Dashboard, Agents, Sales, Blog, Resources, Ads
+│   ├── pages/              # Landing, Dashboard, Agents, Sales, Blog, Resources, Integrations, IntegrationWorkflow, ConnectorCreate, ConnectorDetail, Settings
 │   ├── components/         # AgentCard, ActivityTicker, InteractiveDemo, SocialProof
-│   └── pages/blog/         # 5 SEO blog articles
+│   ├── pages/blog/         # 5 SEO blog articles
 │   └── pages/resources/    # 26 SEO content pages across 7 topic clusters
 ├── tests/
-│   ├── unit/               # 739 unit tests
-│   ├── security/           # 84 security tests
+│   ├── unit/               # 821 unit tests
+│   ├── security/           # 86 security tests
 │   ├── connector_harness/  # 174 connector tests (43 connectors × tools)
+│   ├── regression/         # 55 regression tests (March + April 2026)
+│   ├── integration/        # 62 integration tests
 │   ├── synthetic_data/     # Invoice, resume, contract test data
 │   └── e2e/                # Playwright browser tests
-├── migrations/             # 8 PostgreSQL DDL files
+├── ui/e2e/                 # 12 Playwright spec files (255 tests)
+├── ui/tests/               # 2 Playwright spec files (115 tests)
+├── migrations/             # PostgreSQL DDL files
 ├── helm/                   # Kubernetes Helm charts
 ├── docs/                   # PRD, architecture, QA test plan
 └── scripts/                # Seed data, deployment helpers
@@ -343,8 +466,8 @@ agenticorg/
 | Plan | Price | Agents | Connectors | Tasks |
 |------|-------|--------|-----------|-------|
 | Free | $0 | 35 | 20 | 500/day |
-| Pro | $499/mo | Unlimited | 42 | Unlimited |
-| Enterprise | Custom | Unlimited | 42 | Unlimited + SLA |
+| Pro | $499/mo | Unlimited | 43 | Unlimited |
+| Enterprise | Custom | Unlimited | 43 | Unlimited + SLA |
 
 ---
 
@@ -365,11 +488,16 @@ Built for Indian enterprise — not retrofitted:
 | Feature | Implementation |
 |---------|---------------|
 | Tenant isolation | PostgreSQL RLS, Redis key namespacing, GCS prefix isolation |
-| HITL governance | Configurable thresholds, prompt lock on active agents, escalation chains |
+| HITL governance | Configurable thresholds, prompt lock on active agents, escalation chains, GraphInterrupt |
 | Audit trail | Every agent action logged, 7-year WORM retention, HMAC signed |
 | PII masking | Default-on masking of email, phone, Aadhaar, PAN, bank accounts |
 | SOC-2 ready | Password policy (bcrypt 12), token blacklist, rate limiting, HSTS, CSP |
 | Prompt audit | Every prompt edit logged with user, timestamp, before/after, reason |
+| API key security | `ao_sk_` prefix, bcrypt-hashed at rest, admin-only endpoints, instant revocation |
+| Secret management | GCP Secret Manager integration for connector credentials (`secret_ref` field) |
+| Auth failure tracking | IP-based failure tracking, auto-block on threshold, auth failure clearing on success |
+| Shadow limit enforcement | Agents must pass shadow quality gates before promotion to active |
+| Tool validation | Tool scope enforcement — agents cannot call tools outside their authorized scope |
 
 ---
 
@@ -378,9 +506,14 @@ Built for Indian enterprise — not retrofitted:
 | Document | Description |
 |----------|-------------|
 | [PRD](docs/PRD.md) | Complete product requirements (7 pages) |
+| [API Reference](docs/api-reference.md) | Full API docs with Mermaid diagrams |
 | [QA Test Plan](tests/QA_MANUAL_TEST_PLAN.md) | 65 manual test cases with steps |
 | [QA Test Cases](tests/QA_TEST_CASES.md) | 70 automated test results |
 | [Architecture](docs/architecture.md) | 8-layer system design |
+| [Python SDK](sdk/README.md) | Python SDK + CLI documentation |
+| [MCP Server](mcp-server/README.md) | MCP Server setup and usage |
+| [Changelog](CHANGELOG.md) | Version history and release notes |
+| [Roadmap](ROADMAP.md) | Current status and future plans |
 
 ---
 

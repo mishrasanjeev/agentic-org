@@ -27,7 +27,7 @@ const SITE = "https://agenticorg.ai";
 function parseAgents() {
   const agentsDir = join(REPO_ROOT, "core/agents");
   const agents = [];
-  const domains = ["finance", "hr", "marketing", "ops", "backoffice"];
+  const domains = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
 
   for (const domain of domains) {
     const domainDir = join(agentsDir, domain);
@@ -182,6 +182,7 @@ const DOMAIN_ROLES = {
   marketing: "CMO",
   ops: "COO",
   backoffice: "COO",
+  comms: "CTO",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -209,11 +210,11 @@ function generateLlmsTxt(agents, connectors, pricing, blogs, resources) {
 
   return `# AgenticOrg — AI Virtual Employees for Enterprise
 
-> AgenticOrg lets you create AI virtual employees or deploy ${agents.length} pre-built agents across Finance, HR, Marketing, and Operations — with human-in-the-loop governance on every critical decision.
+> AgenticOrg lets you create AI virtual employees or deploy ${agents.length} pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy ${agents.length} pre-built agents that automate back-office operations across ${Object.keys(agentsByDomain).length} departments: ${Object.keys(agentsByDomain).map((d) => DOMAIN_LABELS[d] || d).join(", ")}. Each agent connects to ${connectors.length} enterprise systems (${totalTools} tools) and executes domain-specific tasks with human approval on every critical decision.
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy ${agents.length} pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to ${connectors.length} enterprise systems (${totalTools} tools) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
@@ -227,6 +228,8 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
+- **Shadow Limit Enforcement**: Agents in shadow mode have configurable sample limits, accuracy floors, and 6 quality gates that must all pass before promotion to production
+- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf)
 
 ## Agents by Department
 
@@ -315,7 +318,7 @@ function generateLlmsFullTxt(agents, connectors, pricing, blogs, resources) {
 
   return `# AgenticOrg — Complete Product Documentation for LLMs
 
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy ${agents.length} pre-built agents across Finance, HR, Marketing, and Operations. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to ${connectors.length} enterprise systems (${totalTools} tools). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy ${agents.length} pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to ${connectors.length} enterprise systems (${totalTools} tools). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
 
 ## Product Overview
 
@@ -414,6 +417,15 @@ Before promoting an agent to production, it runs in "shadow mode" — processing
 
 All 6 gates must pass for promotion.
 
+### Shadow Limit Enforcement
+Shadow agents have configurable limits: minimum sample count (default 100), accuracy floor (default 0.95), and maximum shadow duration. If an agent exceeds shadow_max_runs without passing all 6 gates, it is automatically paused and flagged for review. This prevents indefinite shadow execution and ensures agents are either promoted or retired.
+
+---
+
+## MCP Registry
+
+AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name \`agenticorg-mcp-server\`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 10 tools and ${totalTools} connector tools via stdio transport.
+
 ---
 
 ## Role-Based Access Control
@@ -504,7 +516,7 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 
 ### Integration Protocols
 - **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at \`/api/v1/a2a/agent-card\`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. 273 tools exposed via stdio transport
+- **MCP (Model Context Protocol)**: Anthropic's protocol. ${totalTools} tools exposed via stdio transport. Listed in official MCP Registry
 - **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
 
 ---

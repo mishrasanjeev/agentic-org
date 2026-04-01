@@ -1,10 +1,10 @@
 # AgenticOrg — AI Virtual Employees for Enterprise
 
-> AgenticOrg lets you create AI virtual employees or deploy 25 pre-built agents across Finance, HR, Marketing, and Operations — with human-in-the-loop governance on every critical decision.
+> AgenticOrg lets you create AI virtual employees or deploy 25 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 25 pre-built agents that automate back-office operations across 5 departments: Finance, HR, Marketing, Operations, Back Office. Each agent connects to 43 enterprise systems (273 tools) and executes domain-specific tasks with human approval on every critical decision.
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 25 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 43 enterprise systems (273 tools) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
@@ -18,6 +18,8 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
+- **Shadow Limit Enforcement**: Agents in shadow mode have configurable sample limits, accuracy floors, and 6 quality gates that must all pass before promotion to production
+- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf)
 
 ## Agents by Department
 

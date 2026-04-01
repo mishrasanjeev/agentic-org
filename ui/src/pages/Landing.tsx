@@ -340,7 +340,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. 43 connectors (273 tools), human-in-the-loop governance, no-code builder. Start free." />
+        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents across 6 domains, 43 connectors (273 tools), SDK/MCP/API access. Create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. Human-in-the-loop governance, no-code builder. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -497,7 +497,7 @@ export default function Landing() {
               <p className="text-sm text-slate-500 mt-1">Pre-built AI Agents</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">42</div>
+              <div className="text-3xl font-extrabold text-slate-900">43</div>
               <p className="text-sm text-slate-500 mt-1">Enterprise Connectors</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
@@ -583,7 +583,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                25 pre-built agents that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. Not chatbots. Virtual employees.
+                25 pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 43 connectors (273 tools), SDK/MCP/API access. Not chatbots. Virtual employees.
               </p>
             </div>
           </FadeIn>
@@ -865,7 +865,7 @@ export default function Landing() {
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
                 { num: "2", title: "Connect your systems", desc: "43 connectors with 273 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
-                { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK, CLI, or ChatGPT via MCP." },
+                { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK (pip install agenticorg), TypeScript SDK (npm i agenticorg-sdk), CLI, or ChatGPT/Claude via MCP Server." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
                   <div className="text-center">

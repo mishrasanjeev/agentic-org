@@ -4,14 +4,30 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [2.3.0] - 2026-03-31
 
-### Added — Security, Error Handling & New Features
+### Added — Security, Error Handling, SDKs & New Features
 - **Password Reset Flow**: Full forgot-password + reset-password with JWT tokens, rate-limited, email enumeration safe
 - **Connector Detail Page**: View/edit individual connector auth config, secret references, health checks
+- **Connector Registry Endpoint**: `GET /connectors/registry` returns all registered connectors with tool counts
+- **Connector Create Page**: `/connector-create` UI for adding new connector configurations
 - **Email Workflow Triggers**: `email_received` trigger type matches on subject keywords for inbox-driven workflows
 - **API Event Triggers**: `api_event` trigger type for event-driven workflow automation
 - **Agent Tool Auto-Population**: 25 agent types + 5 domain fallbacks auto-assign relevant tools on creation
 - **Slack Full Configuration**: Bot token auth, connector detail edit, Slack tools in support/ops agent defaults
+- **API Key Management**: `ao_sk_` prefixed keys, admin-only endpoints (`POST/GET/DELETE /org/api-keys`), bcrypt-hashed at rest
+- **Shadow Limit Enforcement**: Agents must pass shadow quality gates before promotion to active status
+- **HITL via GraphInterrupt**: LangGraph-based HITL with `GraphInterrupt` for pause/resume at approval nodes
+- **Tool Validation**: Scope enforcement ensures agents cannot call tools outside their authorized set
+- **Secret Manager Integration**: GCP Secret Manager via `secret_ref` field in connector config
+- **Auth Failure Clearing**: IP-based failure tracking with auto-block + success clears failure count
+- **Python SDK** (`pip install agenticorg`): client.agents.run(), client.sop.parse_text(), client.a2a.agent_card()
+- **TypeScript SDK** (`npm i agenticorg-sdk`): full agent/SOP/A2A/MCP client
+- **MCP Server** (`npx agenticorg-mcp-server`): exposes 273 tools to Claude Desktop, Cursor, ChatGPT
+- **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop parse`, `agenticorg mcp tools`
+- **Integration Workflow Page**: `/integration-workflow` with visual protocol guide + SDK quickstart
+- **Developer Section**: Landing page developer section with SDK/CLI/MCP quickstart
+- **Comms Domain**: 3 comms agent types (Ops Commander, DevOps Scout, Slack Notifier) — 6 domains total
 - **Negative Test Suite**: 22 unit tests + 19 E2E tests covering error paths (401, 400, 404, 409, 410, 429)
+- **Regression Tests**: 55 regression tests (40 March 2026 + 15 April 2026 PR fixes)
 
 ### Fixed — QA Bug List (7 bugs)
 - **AUTH-RESET-001**: Password reset email flow (was just an alert() stub)
@@ -27,6 +43,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Fixed 2 Dependabot alerts: picomatch 2.3.1→2.3.2, 4.0.3→4.0.4
 - Auth middleware: generic error messages (no internal details leaked)
 - Sales API: whitelisted response fields (no agent internals exposed)
+- API key endpoints admin-only (`agenticorg:admin` scope required)
+- Secret key hardening via GCP Secret Manager (`_get_secret()` in BaseConnector)
+- Auth failure clearing — successful auth clears IP-based failure count
 
 ### Changed
 - Workflow UI: 5 trigger types (manual, schedule, webhook, api_event, email_received)
@@ -34,10 +53,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - ConnectorCard: clickable, navigates to detail page
 - All form pages: extract and display API error details instead of generic messages
 - Settings/Workflows: user-facing error messages instead of console.error
-- Automated tests: 1,031 → **1,053** (761 unit + 22 negative + 19 E2E negative + 125 E2E + 126 security)
-- Python SDK (`pip install agenticorg`): client.agents.run(), client.sop.parse_text(), client.a2a.agent_card()
-- CLI: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop parse`, `agenticorg mcp tools`
 - Integrations page: replaced curl examples with SDK/CLI quickstart
+- Agent domains: 5 → **6** (added Comms domain)
+- Agent skills: 25 pre-built + 3 comms = **28 total skills**
+- Automated tests: 1,031 → **1,196+** (821 unit + 86 security + 174 connector harness + 55 regression + 62 integration + 370+ Playwright E2E + 148 production E2E)
+- Version: 2.2.0 → **2.3.0**
 
 ## [2.2.0] - 2026-03-29
 

@@ -3,7 +3,7 @@
 Base URL: `http://localhost:8000`
 OpenAPI docs: `http://localhost:8000/docs`
 
-All endpoints require a Bearer JWT token (except `/api/v1/health`).
+All endpoints require authentication via Bearer JWT token or API key (except `/api/v1/health`). API keys use the `ao_sk_` prefix, are bcrypt-hashed, scoped, and revocable. Generate them from Settings > API Keys in the dashboard (admin-only).
 
 ## Request Flow
 
@@ -266,6 +266,133 @@ Update connector authentication, base URL, rate limit, or status.
 |--------|--------|
 | 404 | Connector not found |
 | 409 | Connector name already exists (on create) |
+
+### Connector Registry
+```
+GET /api/v1/connectors/registry
+```
+Returns the full connector registry with all 43 connectors, their categories, tool counts, and auth types. No write scope required.
+
+**Response:** `200 OK`
+```json
+{
+  "total_connectors": 43,
+  "total_tools": 273,
+  "categories": ["finance", "hr", "marketing", "ops", "comms"],
+  "connectors": [
+    {
+      "name": "gstn",
+      "category": "finance",
+      "auth_type": "gsp_dsc",
+      "tool_count": 8,
+      "tools": ["validate_gstin", "file_gstr1", "file_gstr3b", "..."]
+    }
+  ]
+}
+```
+
+### Retest Connector
+```
+POST /api/v1/connectors/{conn_id}/retest
+```
+Triggers a health check and connectivity test for the specified connector. Returns updated status (healthy/degraded/down).
+
+**Request Body:** (optional)
+```json
+{
+  "timeout_seconds": 10
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "connector_id": "uuid",
+  "status": "healthy",
+  "latency_ms": 142,
+  "last_tested": "2026-03-31T10:00:00Z"
+}
+```
+
+---
+
+## API Keys
+
+### List API Keys
+```
+GET /api/v1/api-keys
+```
+Returns all active API keys for the current organization. Admin-only.
+
+**Response:** `200 OK`
+```json
+{
+  "keys": [
+    {
+      "id": "uuid",
+      "name": "Production SDK Key",
+      "prefix": "ao_sk_a1b2",
+      "scopes": ["agents:read", "agents:run", "connectors:read"],
+      "created_at": "2026-03-15T08:00:00Z",
+      "last_used_at": "2026-03-31T09:30:00Z",
+      "expires_at": null
+    }
+  ],
+  "count": 1,
+  "max_keys": 10
+}
+```
+
+### Create API Key
+```
+POST /api/v1/api-keys
+```
+Generates a new API key. The full key (`ao_sk_{40 hex chars}`) is returned only once — it is bcrypt-hashed before storage. Admin-only. Maximum 10 active keys per organization.
+
+**Request Body:**
+```json
+{
+  "name": "My SDK Key",
+  "scopes": ["agents:read", "agents:run", "connectors:read", "mcp:read", "mcp:call", "a2a:read"],
+  "expires_in_days": null
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "key": "ao_sk_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+  "name": "My SDK Key",
+  "scopes": ["agents:read", "agents:run", "connectors:read", "mcp:read", "mcp:call", "a2a:read"],
+  "created_at": "2026-03-31T10:00:00Z"
+}
+```
+
+### Revoke API Key
+```
+DELETE /api/v1/api-keys/{key_id}
+```
+Permanently revokes an API key. Admin-only.
+
+**Response:** `200 OK`
+```json
+{
+  "status": "revoked",
+  "key_id": "uuid"
+}
+```
+
+### Available Scopes
+
+| Scope | Description |
+|-------|-------------|
+| `agents:read` | List and view agent details |
+| `agents:run` | Execute agent tasks |
+| `connectors:read` | List connectors and tools |
+| `mcp:read` | List MCP tools |
+| `mcp:call` | Execute MCP tool calls |
+| `a2a:read` | Access A2A agent cards |
 
 ---
 
