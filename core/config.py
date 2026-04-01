@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     max_agent_retries: int = 3
 
     @model_validator(mode="after")
-    def validate_production_secret(self) -> "Settings":
+    def validate_production_secret(self) -> Settings:
         """Prevent accidental use of the development fallback in production."""
         if self.env.lower() == "production" and self.secret_key == "dev-only-secret-key":
             msg = "AGENTICORG_SECRET_KEY must be explicitly set in production"
