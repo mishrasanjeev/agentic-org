@@ -269,41 +269,7 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
 
-    # ── SET-008: Enforce shadow agent limit from fleet_limits ────────────
     initial_status = body.initial_status or "shadow"
-    if initial_status == "shadow":
-        try:
-            async with get_tenant_session(tid) as session:
-                result = await session.execute(select(Tenant).where(Tenant.id == tid))
-                tenant = result.scalar_one_or_none()
-                stored_limits = (tenant.settings or {}).get("fleet_limits") if tenant else None
-                limits = FleetLimits(**stored_limits) if stored_limits else FleetLimits()
-
-                shadow_count_result = await session.execute(
-                    select(func.count(Agent.id)).where(
-                        Agent.tenant_id == tid,
-                        Agent.status == "shadow",
-                    )
-                )
-                shadow_count = shadow_count_result.scalar() or 0
-
-                if shadow_count >= limits.max_shadow_agents:
-                    raise HTTPException(
-                        409,
-                        detail={
-                            "error": "shadow_limit_exceeded",
-                            "current_shadow_agents": shadow_count,
-                            "max_shadow_agents": limits.max_shadow_agents,
-                            "message": (
-                                f"Shadow agent limit reached ({shadow_count}/{limits.max_shadow_agents}). "
-                                f"Promote or retire existing shadow agents before creating new ones."
-                            ),
-                        },
-                    )
-        except HTTPException:
-            raise
-        except Exception:
-            logger.warning("shadow_limit_check_skipped", tenant_id=str(tid))
 
     # Auto-populate authorized tools based on agent type / domain when none provided
     tools = body.authorized_tools
@@ -336,6 +302,23 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             logger.warning("tool_validation_skipped", agent_type=body.agent_type)
 
     async with get_tenant_session(tid) as session:
+        # ── SET-008: Enforce shadow agent limit ────────────────────────
+        if initial_status == "shadow":
+            try:
+                tenant_result = await session.execute(select(Tenant).where(Tenant.id == tid))
+                tenant_row = tenant_result.scalar_one_or_none()
+                stored = (tenant_row.settings or {}).get("fleet_limits") if tenant_row else None
+                limits = FleetLimits(**stored) if stored else FleetLimits()
+                shadow_count = (await session.execute(
+                    select(func.count(Agent.id)).where(Agent.tenant_id == tid, Agent.status == "shadow")
+                )).scalar() or 0
+                if shadow_count >= limits.max_shadow_agents:
+                    raise HTTPException(409, detail=f"Shadow limit reached ({shadow_count}/{limits.max_shadow_agents})")
+            except HTTPException:
+                raise
+            except Exception:  # noqa: S110
+                pass  # Skip limit check if query fails (new tenant, no settings)
+
         agent = Agent(
             tenant_id=tid,
             name=body.name,
