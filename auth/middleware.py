@@ -65,6 +65,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=401, content={"detail": "Invalid or expired token"}
             )
+        self._clear_failures(client_ip)
 
         # Set request state
         tenant_id = extract_tenant_id(claims)
@@ -92,3 +93,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         _failed_attempts[ip].append(now)
         if len(_failed_attempts[ip]) >= MAX_FAILURES:
             _blocked_ips[ip] = now + BLOCK_DURATION
+
+    def _clear_failures(self, ip: str) -> None:
+        _failed_attempts.pop(ip, None)

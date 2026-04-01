@@ -798,6 +798,24 @@ class TestAuthMiddleware:
             call_next.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_successful_auth_clears_prior_failures(self):
+        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
+        _failed_attempts.clear()
+        _blocked_ips.clear()
+        client_ip = "10.0.0.51"
+        _failed_attempts[client_ip] = [time.time() - 10, time.time() - 5]
+
+        middleware = AuthMiddleware(app=MagicMock())
+        mock_claims = {"sub": "u@t.io", "agenticorg:tenant_id": TENANT_ID, "grantex:scopes": []}
+        request = self._make_request(auth_header="Bearer token", client_ip=client_ip)
+        call_next = AsyncMock(return_value=MagicMock(status_code=200))
+
+        with patch("auth.middleware.validate_token", new_callable=AsyncMock, return_value=mock_claims):
+            await middleware.dispatch(request, call_next)
+            assert client_ip not in _failed_attempts
+            call_next.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_tenant_mismatch_returns_403(self):
         from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
         _failed_attempts.clear()
