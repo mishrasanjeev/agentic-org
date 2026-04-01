@@ -99,6 +99,18 @@ class TestSECDATA002:
         with pytest.raises(ValidationError):
             Settings(secret_key="short")
 
+    def test_development_default_secret_key_exists(self):
+        """SEC-DATA-002: Development config should load without requiring env vars."""
+        s = Settings()
+        assert len(s.secret_key) >= 16
+
+    def test_production_rejects_default_secret_key(self):
+        """SEC-DATA-002: Production must not run with the development fallback key."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Settings(env="production")
+
     def test_audit_signature_uses_hmac_sha256(self):
         """SEC-DATA-002: Audit log entries must be signed with HMAC-SHA256,
         providing integrity protection for data at rest.
