@@ -1,9 +1,9 @@
 # AgenticOrg — End-to-End Manual Test Plan
 
-**Version:** 2.1.1
-**Last Updated:** 2026-03-27
+**Version:** 2.2.0
+**Last Updated:** 2026-04-01
 **Production URL:** https://app.agenticorg.ai
-**Total Test Cases:** 526
+**Total Test Cases:** 574 (508 existing + 66 new regression)
 
 ## Demo Credentials
 
@@ -4194,7 +4194,7 @@ TDS Analyst,tax_compliance,finance,TDS Analyst,VP Tax,1
 | 55 | Smart Escalation | TC-ESC-001 to TC-ESC-010 | 10 | Critical |
 | 56 | **Org Chart E2E Integration** | TC-E2E-ORG-001 to TC-E2E-ORG-018 | **18** | **Critical** |
 
-**Total: 508 test cases**
+**Total: 574 test cases**
 
 ### Breakdown by Category:
 - **Functional Flows (Modules 1-27):** 195 cases
@@ -4202,9 +4202,292 @@ TDS Analyst,tax_compliance,finance,TDS Analyst,VP Tax,1
 - **UI Interaction Testing (Modules 39-52):** 179 cases
 - **Org Chart / CSV / Escalation (Modules 53-55):** 38 cases
 - **Org Chart E2E Integration (Module 56):** 18 cases
+- **March 2026 Bug Regression (Modules 57-63):** 66 cases
 
 ### Recommended Execution Order:
-1. **Critical first (176 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compat, Org Chart Hierarchy, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL, Org Chart Tree Visualization, CSV Bulk Import, Smart Escalation, Org Chart E2E Integration
+1. **Critical first (210 cases):** Authentication, Agent Execution, Cross-Cutting (RBAC/security), API Health, Backward Compat, Org Chart Hierarchy, LLM Selection, Budget Enforcement, Smart Routing, Prompt Lock, Confidence & HITL, Org Chart Tree/CSV/Escalation, **March 2026 Regression (ALL)**
 2. **High priority (222 cases):** Landing Page, Agent Fleet, Agent Creation + UI, Agent Detail UI, Prompt Templates + UI, Sales Pipeline (all), Email, Demo Request, Performance, Negative/Edge, Persona, Gmail, Agent Clone, Playground UI, Login UI
-3. **Medium (121 cases):** Dashboard + UI, Workflows + UI, Approvals + UI, Connectors + UI, Audit, Compliance, Settings + UI, Onboarding, Signup UI, Pricing UI, Landing UI
+3. **Medium (142 cases):** Dashboard + UI, Workflows + UI, Approvals + UI, Connectors + UI, Audit, Compliance, Settings + UI, Onboarding, Signup UI, Pricing UI, Landing UI
+
+---
+
+## Module 57: March 2026 Bug Regression — Login & Signup UI
+
+### TC-REG-LOGIN-001: Login page divider is visible and styled
+**Bug Ref:** UI-LOGIN-001
+**Steps:**
+1. Open https://agenticorg.ai/login
+2. Observe the divider between Google sign-in and email form
+
+**Expected Result:** Divider shows "OR SIGN IN WITH EMAIL" in uppercase, centered, with visible 2px border line on both sides. Font is medium weight with letter spacing.
+
+---
+
+### TC-REG-SIGNUP-002: Signup page OR divider styled consistently
+**Bug Ref:** UI-REG-002
+**Steps:**
+1. Open https://agenticorg.ai/signup
+2. Scroll to the OR divider between form and Google signup
+
+**Expected Result:** "OR" text is uppercase, centered, font-medium, with 2px border line. Visually identical to login page divider.
+
+---
+
+### TC-REG-SIGNUP-003: Signup fields do not auto-fill
+**Bug Ref:** UI-REG-003
+**Steps:**
+1. Open https://agenticorg.ai/signup in a fresh incognito window
+2. Observe all form fields
+
+**Expected Result:** All fields are empty. Email field has `autoComplete="off"`. Password fields have `autoComplete="new-password"`. Browser should not pre-fill any values.
+
+---
+
+### TC-REG-SIGNUP-004: Password show/hide toggle on Signup
+**Bug Ref:** UI-AUTH-004
+**Steps:**
+1. Open https://agenticorg.ai/signup
+2. Type a password in the Password field
+3. Click the eye icon next to the password field
+4. Type in the Confirm Password field
+5. Click the eye icon next to it
+
+**Expected Result:** Both password fields have eye icons. Clicking toggles between showing and hiding the password text. Icon changes between open-eye and crossed-eye.
+
+---
+
+### TC-REG-SIGNUP-005: Terms & Conditions checkbox blocks signup
+**Bug Ref:** UI-REG-006
+**Steps:**
+1. Open https://agenticorg.ai/signup
+2. Fill in all fields (org name, name, email, password, confirm password)
+3. Do NOT check the "I agree to Terms of Service and Privacy Policy" checkbox
+4. Try to click "Create account"
+
+**Expected Result:** Submit button is disabled (grayed out) when checkbox is unchecked. After checking the checkbox, button becomes active. Links to Terms and Privacy Policy are clickable.
+
+---
+
+### TC-REG-SIGNUP-006: Signup end-to-end with terms consent
+**Steps:**
+1. Open https://agenticorg.ai/signup
+2. Fill: Org = "QA Test", Name = "QA Tester", Email = unique email, Password = "Test@1234", Confirm = "Test@1234"
+3. Check the Terms checkbox
+4. Click "Create account"
+
+**Expected Result:** Account created successfully. Redirected to onboarding. Terms checkbox was required before submit.
+
+---
+
+## Module 58: March 2026 Bug Regression — Agent Management
+
+### TC-REG-AGENT-007: Comms domain in agent creation
+**Bug Ref:** UI-CONFIG-009
+**Steps:**
+1. Login as CEO/Admin
+2. Go to Agents > Create Agent
+3. Open the Domain dropdown
+
+**Expected Result:** Dropdown shows 6 options: Finance, HR, Marketing, Ops, Backoffice, **Comms**. Selecting "Comms" shows agent types: email_agent, notification_agent, chat_agent.
+
+---
+
+### TC-REG-AGENT-008: Shadow agent resumes to shadow (not active)
+**Bug Ref:** TC_AGENT-007
+**Steps:**
+1. Create an agent (starts in shadow mode)
+2. Click Kill Switch / Pause button
+3. Verify agent status = "paused"
+4. Click Resume / Unpause
+5. Check agent status
+
+**Expected Result:** Agent returns to "shadow" status, NOT "active". To go active, user must use the Promote button which validates accuracy.
+
+---
+
+### TC-REG-AGENT-009: Shadow agent retest resets counters
+**Bug Ref:** TC_AGENT-008
+**Steps:**
+1. Navigate to a shadow agent that has run some samples
+2. Note the current sample count and accuracy
+3. Click Retest (or call POST /agents/{id}/retest via API)
+4. Check sample count and accuracy
+
+**Expected Result:** sample_count resets to 0. accuracy resets to null. Agent remains in shadow mode. A lifecycle event is recorded.
+
+---
+
+### TC-REG-AGENT-010: Authorized tools auto-populated and validated
+**Bug Ref:** AGENT-CONFIG-005, INT-CONN-017
+**Steps:**
+1. Create a new agent with domain = "finance", type = "ap_processor"
+2. Leave authorized_tools empty
+3. Submit
+4. Open the agent's Configure tab
+
+**Expected Result:** Tools are auto-populated based on agent type (e.g., fetch_bank_statement, create_charge). Invalid tool names are rejected with 422 error.
+
+---
+
+## Module 59: March 2026 Bug Regression — Connector Architecture
+
+### TC-REG-CONN-011: Connector base_url override
+**Bug Ref:** INT-CONN-010
+**Steps:**
+1. Register a connector with a custom base_url
+2. Verify the connector config shows the custom URL
+3. Execute an agent that uses this connector
+
+**Expected Result:** Runtime uses the configured base_url, not the hardcoded default.
+
+---
+
+### TC-REG-CONN-012: Gmail connector available
+**Bug Ref:** INT-CONN-012
+**Steps:**
+1. Go to Connectors page
+2. Search for "Gmail" or filter by Comms category
+3. Check available tools
+
+**Expected Result:** Gmail connector exists with 4 tools: send_email, read_inbox, search_emails, get_thread. Total connectors = 43.
+
+---
+
+### TC-REG-CONN-013: Multi-auth connector UI
+**Bug Ref:** INT-CONN-014
+**Steps:**
+1. Go to Register Connector
+2. Select Auth Type = "OAuth2"
+3. Observe credential fields
+
+**Expected Result:** Three fields appear: Client ID, Client Secret, Refresh Token. Switching to "API Key" shows only API Key field. Switching to "Basic" shows Username/Password.
+
+---
+
+### TC-REG-CONN-014: Health check includes connectors
+**Bug Ref:** INT-CONN-016
+**Steps:**
+1. Call GET /api/v1/health
+
+**Expected Result:** Response includes `connectors` section with `registered`, `healthy`, `unhealthy` counts and per-connector `details`. Overall status reflects connector health.
+
+---
+
+### TC-REG-CONN-015: Prompt tool reference validation
+**Bug Ref:** INT-CONN-018
+**Steps:**
+1. Create a prompt template with text containing `{{tool:fake_nonexistent_tool}}`
+2. Submit
+
+**Expected Result:** Returns 422 error with message listing "fake_nonexistent_tool" as invalid. Templates with valid or no tool references save successfully.
+
+---
+
+## Module 60: March 2026 Bug Regression — API Key System (NEW)
+
+### TC-REG-APIKEY-001: Generate API key from Settings
+**Steps:**
+1. Login as admin
+2. Go to Settings
+3. In API Keys section, enter name "Test Key"
+4. Click "Generate Key"
+
+**Expected Result:** Key is generated with `ao_sk_` prefix. Full key shown ONCE. Key appears in the table with "active" status.
+
+---
+
+### TC-REG-APIKEY-002: Authenticate with API key
+**Steps:**
+1. Copy the generated API key
+2. Call GET /api/v1/agents with header `Authorization: Bearer ao_sk_...`
+
+**Expected Result:** Returns agent list (200 OK). Same response as JWT auth.
+
+---
+
+### TC-REG-APIKEY-003: Revoke API key
+**Steps:**
+1. In Settings > API Keys, click "Revoke" on a key
+2. Try to use the revoked key for API calls
+
+**Expected Result:** Key status changes to "revoked". API calls with revoked key return 401.
+
+---
+
+## Module 61: March 2026 Bug Regression — SDK & MCP Integration (NEW)
+
+### TC-REG-SDK-001: Developers section on landing page
+**Steps:**
+1. Open https://agenticorg.ai
+2. Click "Developers" in the navbar
+3. Scroll to the Developers section
+
+**Expected Result:** Section shows 4 SDK cards (Python, TypeScript, CLI, MCP Server) with install commands and code examples. 3 protocol cards (A2A, MCP, Grantex). "View Full Workflow" link to /integration-workflow.
+
+---
+
+### TC-REG-SDK-002: Integration workflow page
+**Steps:**
+1. Open https://agenticorg.ai/integration-workflow
+2. Click through the 8 workflow steps
+
+**Expected Result:** Page shows architecture stack, 8 interactive steps (User -> ChatGPT -> MCP -> Auth -> Agent -> HITL -> Approve -> Result), sequence diagram, and key takeaways.
+
+---
+
+### TC-REG-SDK-003: MCP server on npm
+**Steps:**
+1. Visit https://www.npmjs.com/package/agenticorg-mcp-server
+2. Check version and description
+
+**Expected Result:** Package exists, v0.1.1, description mentions AI agents and MCP.
+
+---
+
+### TC-REG-SDK-004: MCP Registry listing
+**Steps:**
+1. Search for "agenticorg" on https://registry.modelcontextprotocol.io
+
+**Expected Result:** Server "io.github.mishrasanjeev/agenticorg" is listed with 10 tools.
+
+---
+
+## Module 62: March 2026 Bug Regression — SEO & Content (NEW)
+
+### TC-REG-SEO-001: Sitemap includes new pages
+**Steps:**
+1. Open https://agenticorg.ai/sitemap.xml
+
+**Expected Result:** Contains /integration-workflow URL. Total 40+ URLs.
+
+---
+
+### TC-REG-SEO-002: llms.txt includes SDK section
+**Steps:**
+1. Open https://agenticorg.ai/llms.txt
+
+**Expected Result:** Contains "Developer SDKs & Integration" section with Python SDK, TypeScript SDK, MCP Server, CLI, API Keys documentation.
+
+---
+
+## Module 63: March 2026 Bug Regression — LLM Cost Tracking (NEW)
+
+### TC-REG-LLM-001: Agent run returns performance metrics
+**Steps:**
+1. Run an agent via POST /agents/{id}/run
+2. Check the response
+
+**Expected Result:** Response includes `performance` object with `total_latency_ms` (non-zero), `llm_tokens_used`, and `llm_cost_usd`. Previously returned zeros.
+
+---
+
+| # | Module | Test IDs | Count | Priority |
+|---|--------|----------|-------|----------|
+| 57 | Login & Signup UI Regression | TC-REG-LOGIN-001 to TC-REG-SIGNUP-006 | 6 | Critical |
+| 58 | Agent Management Regression | TC-REG-AGENT-007 to TC-REG-AGENT-010 | 4 | Critical |
+| 59 | Connector Architecture Regression | TC-REG-CONN-011 to TC-REG-CONN-015 | 5 | Critical |
+| 60 | API Key System | TC-REG-APIKEY-001 to TC-REG-APIKEY-003 | 3 | Critical |
+| 61 | SDK & MCP Integration | TC-REG-SDK-001 to TC-REG-SDK-004 | 4 | High |
+| 62 | SEO & Content | TC-REG-SEO-001 to TC-REG-SEO-002 | 2 | Medium |
+| 63 | LLM Cost Tracking | TC-REG-LLM-001 | 1 | High |
 4. **Low (7 cases):** Schemas, Agent Teams, Config, WebSocket
