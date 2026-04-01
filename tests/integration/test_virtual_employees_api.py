@@ -152,6 +152,7 @@ class TestPromptLock:
             "shadow_min_samples": 0,
             "shadow_accuracy_floor": 0.0,
         })
+        assert resp.status_code == 201, f"Agent creation failed: {resp.status_code} {resp.text}"
         agent_id = resp.json()["agent_id"]
         return agent_id
 
