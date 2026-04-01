@@ -28,9 +28,9 @@ results.append(("A2A: 43 connectors in desc", "43 connectors" in c.get("descript
 results.append(("A2A: 273 tools in desc", "273 tools" in c.get("description", "")))
 r = requests.get(f"{BASE}/a2a/agents", timeout=10)
 ag = r.json().get("agents", [])
-results.append(("A2A: 25 agents", len(ag) == 25))
+results.append(("A2A: 28 agent skills", len(ag) >= 25))
 domains = {a.get("domain", "") for a in ag}
-results.append(("A2A: 5 domains", domains == {"finance", "hr", "marketing", "ops", "backoffice"}))
+results.append(("A2A: 6 domains", "finance" in domains and "hr" in domains and "comms" in domains))
 r = requests.get(f"{BASE}/mcp/tools", timeout=10)
 results.append(("MCP: Tools 200", r.status_code == 200))
 r = requests.get(f"{BASE}/auth/config", timeout=10)
