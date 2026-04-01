@@ -3,9 +3,34 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api, { extractApiError } from "@/lib/api";
-import { AUTH_TYPES, AUTH_FIELD_HINTS, authTypeLabel, buildAuthConfig } from "@/lib/connector-constants";
+import { AUTH_TYPES, AUTH_FIELD_HINTS } from "@/lib/connector-constants";
 
 const CATEGORIES = ["finance", "hr", "marketing", "ops", "comms"];
+
+/** Which credential fields to show for each auth type */
+const AUTH_TYPE_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
+  api_key: [
+    { key: "api_key", label: "API Key", placeholder: "Enter API key" },
+  ],
+  oauth2: [
+    { key: "client_id", label: "Client ID", placeholder: "Enter client ID" },
+    { key: "client_secret", label: "Client Secret", placeholder: "Enter client secret" },
+    { key: "refresh_token", label: "Refresh Token", placeholder: "Enter refresh token (optional)" },
+  ],
+  basic: [
+    { key: "api_key", label: "Username", placeholder: "Enter username" },
+    { key: "api_secret", label: "Password", placeholder: "Enter password" },
+  ],
+  bolt_bot_token: [
+    { key: "api_key", label: "Bot Token", placeholder: "xoxb-..." },
+    { key: "api_secret", label: "Signing Secret", placeholder: "Enter signing secret (optional)" },
+  ],
+  certificate: [
+    { key: "client_id", label: "Client ID", placeholder: "Enter client ID" },
+    { key: "client_secret", label: "Certificate / PEM", placeholder: "Paste certificate content" },
+  ],
+  none: [],
+};
 
 export default function ConnectorCreate() {
   const navigate = useNavigate();
@@ -14,10 +39,27 @@ export default function ConnectorCreate() {
   const [baseUrl, setBaseUrl] = useState("");
   const [authType, setAuthType] = useState("api_key");
   const [secretRef, setSecretRef] = useState("");
-  const [authToken, setAuthToken] = useState("");
+  const [authFields, setAuthFields] = useState<Record<string, string>>({});
   const [rateLimitRpm, setRateLimitRpm] = useState(100);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  function handleAuthTypeChange(newType: string) {
+    setAuthType(newType);
+    setAuthFields({});
+  }
+
+  function setAuthField(key: string, value: string) {
+    setAuthFields((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function buildMultiAuthConfig(): Record<string, string> {
+    const config: Record<string, string> = {};
+    for (const [key, value] of Object.entries(authFields)) {
+      if (value.trim()) config[key] = value.trim();
+    }
+    return config;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +67,7 @@ export default function ConnectorCreate() {
     setSubmitting(true);
     setError("");
     try {
-      const authConfig = buildAuthConfig(authType, authToken);
+      const authConfig = buildMultiAuthConfig();
       await api.post("/connectors", {
         name: name.trim(),
         category,
@@ -74,7 +116,7 @@ export default function ConnectorCreate() {
               </div>
               <div>
                 <label className="text-sm font-medium">Auth Type</label>
-                <select value={authType} onChange={(e) => setAuthType(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                <select value={authType} onChange={(e) => handleAuthTypeChange(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
                   {AUTH_TYPES.map((a) => <option key={a} value={a}>{a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
                 </select>
               </div>
@@ -89,26 +131,28 @@ export default function ConnectorCreate() {
               <p className="text-xs text-muted-foreground">{AUTH_FIELD_HINTS[authType] || "Configure authentication credentials"}</p>
               {authType !== "none" && (
                 <>
-                  <div>
-                    <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
-                    <input
-                      type="password"
-                      value={authToken}
-                      onChange={(e) => setAuthToken(e.target.value)}
-                      placeholder={authType === "bolt_bot_token" ? "xoxb-..." : "Enter credential"}
-                      className="border rounded px-3 py-2 text-sm w-full mt-1"
-                    />
-                  </div>
+                  {(AUTH_TYPE_FIELDS[authType] || []).map((field) => (
+                    <div key={field.key}>
+                      <label className="text-sm font-medium">{field.label}</label>
+                      <input
+                        type="password"
+                        value={authFields[field.key] || ""}
+                        onChange={(e) => setAuthField(field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        className="border rounded px-3 py-2 text-sm w-full mt-1"
+                      />
+                    </div>
+                  ))}
                   <div>
                     <label className="text-sm font-medium">Secret Reference (optional)</label>
                     <input
                       type="text"
                       value={secretRef}
                       onChange={(e) => setSecretRef(e.target.value)}
-                      placeholder="e.g. gcp-secret-manager://slack-bot-token"
+                      placeholder="e.g. gcp://projects/my-project/secrets/my-secret/versions/latest"
                       className="border rounded px-3 py-2 text-sm w-full mt-1"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">GCP Secret Manager URI or environment variable name. Used at runtime instead of inline credentials.</p>
+                    <p className="text-xs text-muted-foreground mt-1">GCP Secret Manager URI. Used at runtime instead of inline credentials.</p>
                   </div>
                 </>
               )}

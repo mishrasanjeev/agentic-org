@@ -16,6 +16,9 @@ export default function Signup() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   useEffect(() => {
     fetch("/api/v1/auth/config")
@@ -150,7 +153,7 @@ export default function Signup() {
           )}
 
           {/* Signup form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
               <label htmlFor="orgName" className="block text-sm font-medium text-foreground mb-1.5">
                 Organization Name
@@ -159,6 +162,7 @@ export default function Signup() {
                 id="orgName"
                 type="text"
                 required
+                autoComplete="organization"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 placeholder="Acme Corp"
@@ -174,6 +178,7 @@ export default function Signup() {
                 id="name"
                 type="text"
                 required
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Jane Doe"
@@ -189,6 +194,7 @@ export default function Signup() {
                 id="signupEmail"
                 type="email"
                 required
+                autoComplete="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
@@ -200,15 +206,31 @@ export default function Signup() {
               <label htmlFor="signupPassword" className="block text-sm font-medium text-foreground mb-1.5">
                 Password
               </label>
-              <input
-                id="signupPassword"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min 8 chars, uppercase + number/symbol"
-                className={inputClass("password")}
-              />
+              <div className="relative">
+                <input
+                  id="signupPassword"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min 8 chars, uppercase + number/symbol"
+                  className={`${inputClass("password")} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  )}
+                </button>
+              </div>
               {fieldErrors.password && <p className="mt-1 text-xs text-red-500">{fieldErrors.password}</p>}
               {password && !fieldErrors.password && (
                 <p className="mt-1 text-xs text-emerald-500">Password strength: Good</p>
@@ -218,15 +240,31 @@ export default function Signup() {
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1.5">
                 Confirm Password
               </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter your password"
-                className={inputClass("confirmPassword")}
-              />
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className={`${inputClass("confirmPassword")} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  )}
+                </button>
+              </div>
               {fieldErrors.confirmPassword && (
                 <p className="mt-1 text-xs text-red-500">{fieldErrors.confirmPassword}</p>
               )}
@@ -234,9 +272,27 @@ export default function Signup() {
                 <p className="mt-1 text-xs text-emerald-500">Passwords match</p>
               )}
             </div>
+
+            {/* Terms & Conditions consent */}
+            <div className="flex items-start gap-2">
+              <input
+                id="agreeTerms"
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/50"
+              />
+              <label htmlFor="agreeTerms" className="text-xs text-muted-foreground leading-relaxed">
+                I agree to the{" "}
+                <a href="mailto:sanjeev@agenticorg.ai?subject=Terms%20of%20Service" className="text-primary hover:underline">Terms of Service</a>
+                {" "}and{" "}
+                <a href="mailto:sanjeev@agenticorg.ai?subject=Privacy%20Policy" className="text-primary hover:underline">Privacy Policy</a>
+              </label>
+            </div>
+
             <button
               type="submit"
-              disabled={loading || Object.keys(fieldErrors).length > 0}
+              disabled={loading || Object.keys(fieldErrors).length > 0 || !agreedToTerms}
               className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? "Creating account..." : "Create account"}
@@ -246,9 +302,9 @@ export default function Signup() {
           {/* Google signup */}
           {googleClientId && (
             <div className="mt-4">
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-                <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or</span></div>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t-2 border-border" /></div>
+                <div className="relative flex justify-center"><span className="bg-card px-4 text-sm font-medium text-muted-foreground uppercase tracking-wide">Or</span></div>
               </div>
               <div className="flex justify-center">
                 <GoogleLogin

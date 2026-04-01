@@ -609,12 +609,12 @@ class TestFullPipeline:
         assert pause_resp.status_code == 200
         assert pause_resp.json()["status"] == "paused"
 
-        # Resume
+        # Resume — agent was created in shadow, so it resumes back to shadow
         resume_resp = await client.post(f"/api/v1/agents/{agent_id}/resume", headers=auth_headers)
         assert resume_resp.status_code == 200
-        assert resume_resp.json()["status"] == "active"
+        assert resume_resp.json()["status"] == "shadow"
 
-        # Promote (may return 409 if agent state doesn't allow promotion)
+        # Promote (may return 409 if shadow accuracy checks not met)
         promote_resp = await client.post(f"/api/v1/agents/{agent_id}/promote", headers=auth_headers)
         assert promote_resp.status_code in (200, 409)
 

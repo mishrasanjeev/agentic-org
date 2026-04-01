@@ -3,12 +3,32 @@
 from __future__ import annotations
 
 import abc
+import re
 from typing import Any
 
 import httpx
 import structlog
 
 logger = structlog.get_logger()
+
+# Lazy-loaded Secret Manager client (one per process)
+_sm_client = None
+
+
+def _get_sm_client():
+    """Lazily initialise the Google Cloud Secret Manager client."""
+    global _sm_client
+    if _sm_client is None:
+        from google.cloud import secretmanager  # noqa: F811
+
+        _sm_client = secretmanager.SecretManagerServiceClient()
+    return _sm_client
+
+
+# Pattern: gcp://projects/{project}/secrets/{name}/versions/{version}
+_GCP_SECRET_RE = re.compile(
+    r"^gcp://projects/(?P<project>[^/]+)/secrets/(?P<secret>[^/]+)/versions/(?P<version>[^/]+)$"
+)
 
 
 class BaseConnector(abc.ABC):
@@ -23,6 +43,9 @@ class BaseConnector(abc.ABC):
 
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
+        # Allow config to override the class-level base_url at runtime
+        if "base_url" in self.config and self.config["base_url"]:
+            self.base_url = self.config["base_url"]
         self._client: httpx.AsyncClient | None = None
         self._auth_headers: dict[str, str] = {}
         self._tool_registry: dict[str, Any] = {}
@@ -65,20 +88,86 @@ class BaseConnector(abc.ABC):
         return await handler(**params)
 
     def _get_secret(self, key: str) -> str:
-        """Retrieve a secret from config or secret_ref. Never hardcode credentials."""
-        secret_ref = self.config.get("secret_ref", "")
-        # Check config-provided credentials first (injected by platform at runtime)
+        """Retrieve a secret from config, GCP Secret Manager, or fallback.
+
+        Resolution order:
+        1. Directly in config (e.g., injected by platform at runtime).
+        2. Environment-style key in config (e.g., DARWINBOX_API_KEY).
+        3. GCP Secret Manager via ``secret_ref`` or per-key ``secret_ref_{key}``.
+           Supported format: ``gcp://projects/{project}/secrets/{name}/versions/latest``
+        4. Generic fallback to config["api_key"] / config["access_token"].
+        """
+        # 1. Direct config lookup
         if key in self.config:
             return self.config[key]
-        # Check environment-style key (e.g., DARWINBOX_API_KEY)
+
+        # 2. Environment-style key
         env_key = f"{self.name.upper()}_{key.upper()}"
         if env_key in self.config:
             return self.config[env_key]
-        # In production, this would call Google Secret Manager / Vault / K8s secrets
-        # using secret_ref as the path: e.g., "agenticorg/prod/connectors/darwinbox/credentials"
+
+        # 3. GCP Secret Manager — per-key ref takes priority over global ref
+        per_key_ref = self.config.get(f"secret_ref_{key}", "")
+        global_ref = self.config.get("secret_ref", "")
+        secret_ref = per_key_ref or global_ref
+
         if secret_ref:
-            logger.debug("secret_lookup", ref=secret_ref, key=key)
+            value = self._resolve_gcp_secret(secret_ref, key)
+            if value:
+                return value
+
+        # 4. Generic fallback
         return self.config.get("api_key", "") or self.config.get("access_token", "")
+
+    @staticmethod
+    def _resolve_gcp_secret(secret_ref: str, key: str) -> str:
+        """Resolve a secret from Google Cloud Secret Manager.
+
+        Args:
+            secret_ref: A URI like ``gcp://projects/my-proj/secrets/my-secret/versions/latest``
+                        or a plain Secret Manager resource name.
+            key: The credential key being looked up (used for structured JSON secrets).
+
+        Returns:
+            The secret payload as a string, or empty string on failure.
+        """
+        match = _GCP_SECRET_RE.match(secret_ref)
+        if not match:
+            # Not a recognised GCP secret URI — skip
+            logger.debug("secret_ref_not_gcp", ref=secret_ref, key=key)
+            return ""
+
+        resource_name = (
+            f"projects/{match.group('project')}"
+            f"/secrets/{match.group('secret')}"
+            f"/versions/{match.group('version')}"
+        )
+
+        try:
+            client = _get_sm_client()
+            response = client.access_secret_version(request={"name": resource_name})
+            payload = response.payload.data.decode("UTF-8")
+
+            # If the payload is JSON, try to extract the specific key
+            import json
+
+            try:
+                data = json.loads(payload)
+                if isinstance(data, dict) and key in data:
+                    return data[key]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            # Return raw payload (single-value secret)
+            return payload
+        except Exception as exc:
+            logger.error(
+                "secret_manager_fetch_failed",
+                ref=secret_ref,
+                key=key,
+                error=str(exc),
+            )
+            return ""
 
     @abc.abstractmethod
     async def _authenticate(self) -> None:

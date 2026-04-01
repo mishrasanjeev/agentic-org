@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import api, { promptTemplatesApi, agentsApi } from "@/lib/api";
 import type { Agent, PromptTemplate } from "@/types";
 
-const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
+const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
 const AGENT_TYPES: Record<string, string[]> = {
   finance: ["ap_processor", "ar_collections", "recon_agent", "tax_compliance", "close_agent", "fpa_agent"],
   hr: ["talent_acquisition", "onboarding_agent", "payroll_engine", "performance_coach", "ld_coordinator", "offboarding_agent"],
   marketing: ["content_factory", "campaign_pilot", "seo_strategist", "crm_intelligence", "brand_monitor"],
   ops: ["support_triage", "vendor_manager", "contract_intelligence", "compliance_guard", "it_operations"],
   backoffice: ["legal_ops", "risk_sentinel", "facilities_agent"],
+  comms: ["email_agent", "notification_agent", "chat_agent"],
 };
 
 const STEPS = ["Persona", "Role", "Prompt", "Behavior", "Review"];

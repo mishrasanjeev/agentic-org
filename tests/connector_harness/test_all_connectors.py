@@ -72,10 +72,10 @@ class TestConnectorToolExecution:
 class TestConnectorRegistry:
     """Test the registry itself."""
 
-    def test_42_connectors_registered(self):
-        """All 42 connectors are registered."""
+    def test_43_connectors_registered(self):
+        """All 43 connectors are registered (42 original + Gmail)."""
         names = get_all_connector_names()
-        assert len(names) == 42, f"Expected 42 connectors, got {len(names)}: {names}"
+        assert len(names) == 43, f"Expected 43 connectors, got {len(names)}: {names}"
 
     def test_all_categories_present(self):
         """All 5 categories have connectors."""

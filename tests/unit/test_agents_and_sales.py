@@ -855,20 +855,81 @@ class TestPauseAgent:
 
 class TestResumeAgent:
     @pytest.mark.asyncio
-    async def test_resume_paused_agent(self, mock_session, tenant_id):
+    async def test_resume_paused_agent_from_active(self, mock_session, tenant_id):
+        """Agent paused from active resumes back to active."""
         from api.v1.agents import resume_agent
 
         aid = uuid.uuid4()
         agent = make_mock_agent(id=aid, status="paused")
-        exec_result = MagicMock()
-        exec_result.scalar_one_or_none.return_value = agent
-        mock_session.execute = AsyncMock(return_value=exec_result)
+
+        # First execute returns the agent, second returns the lifecycle event
+        agent_result = MagicMock()
+        agent_result.scalar_one_or_none.return_value = agent
+        pause_event = MagicMock()
+        pause_event.from_status = "active"
+        event_result = MagicMock()
+        event_result.scalar_one_or_none.return_value = pause_event
+        mock_session.execute = AsyncMock(side_effect=[agent_result, event_result])
 
         with patch("api.v1.agents.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await resume_agent(agent_id=aid, tenant_id=tenant_id)
 
         assert result["status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_resume_paused_agent_from_shadow(self, mock_session, tenant_id):
+        """TC_AGENT-007: Agent paused from shadow resumes back to shadow, not active."""
+        from api.v1.agents import resume_agent
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(id=aid, status="paused")
+
+        agent_result = MagicMock()
+        agent_result.scalar_one_or_none.return_value = agent
+        pause_event = MagicMock()
+        pause_event.from_status = "shadow"
+        event_result = MagicMock()
+        event_result.scalar_one_or_none.return_value = pause_event
+        mock_session.execute = AsyncMock(side_effect=[agent_result, event_result])
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            result = await resume_agent(agent_id=aid, tenant_id=tenant_id)
+
+        assert result["status"] == "shadow"
+
+    @pytest.mark.asyncio
+    async def test_resume_shadow_agent_blocked_if_accuracy_below_floor(
+        self, mock_session, tenant_id
+    ):
+        """TC_AGENT-007: Resume from shadow is blocked when accuracy is below floor."""
+        from api.v1.agents import resume_agent
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(
+            id=aid,
+            status="paused",
+            shadow_min_samples=10,
+            shadow_accuracy_current=Decimal("0.800"),
+            shadow_accuracy_floor=Decimal("0.950"),
+        )
+
+        agent_result = MagicMock()
+        agent_result.scalar_one_or_none.return_value = agent
+        pause_event = MagicMock()
+        pause_event.from_status = "shadow"
+        event_result = MagicMock()
+        event_result.scalar_one_or_none.return_value = pause_event
+        mock_session.execute = AsyncMock(side_effect=[agent_result, event_result])
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await resume_agent(agent_id=aid, tenant_id=tenant_id)
+
+        assert exc_info.value.status_code == 409
+        assert "below floor" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
     async def test_resume_active_agent_rejected(self, mock_session, tenant_id):
@@ -899,6 +960,67 @@ class TestResumeAgent:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             with pytest.raises(HTTPException) as exc_info:
                 await resume_agent(agent_id=uuid.uuid4(), tenant_id=tenant_id)
+
+        assert exc_info.value.status_code == 404
+
+
+class TestRetestAgent:
+    @pytest.mark.asyncio
+    async def test_retest_shadow_agent(self, mock_session, tenant_id):
+        """TC_AGENT-008: Retest resets shadow counters."""
+        from api.v1.agents import retest_agent
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(
+            id=aid,
+            status="shadow",
+            shadow_sample_count=15,
+            shadow_accuracy_current=Decimal("0.920"),
+        )
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = agent
+        mock_session.execute = AsyncMock(return_value=exec_result)
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            result = await retest_agent(agent_id=aid, tenant_id=tenant_id)
+
+        assert result["retest"] is True
+        assert result["shadow_sample_count"] == 0
+        assert result["shadow_accuracy_current"] is None
+        assert result["previous_sample_count"] == 15
+        assert result["previous_accuracy"] == 0.920
+
+    @pytest.mark.asyncio
+    async def test_retest_non_shadow_agent_rejected(self, mock_session, tenant_id):
+        """TC_AGENT-008: Retest is only allowed for shadow agents."""
+        from api.v1.agents import retest_agent
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(id=aid, status="active")
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = agent
+        mock_session.execute = AsyncMock(return_value=exec_result)
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await retest_agent(agent_id=aid, tenant_id=tenant_id)
+
+        assert exc_info.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_retest_agent_not_found(self, mock_session, tenant_id):
+        from api.v1.agents import retest_agent
+
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=exec_result)
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await retest_agent(agent_id=uuid.uuid4(), tenant_id=tenant_id)
 
         assert exc_info.value.status_code == 404
 

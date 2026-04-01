@@ -176,7 +176,7 @@ router = APIRouter()
 _LIFECYCLE_FSM: dict[str, list[str]] = {
     "shadow": ["active", "paused", "retired"],
     "active": ["paused", "retired"],
-    "paused": ["active", "retired"],
+    "paused": ["active", "shadow", "retired"],
     "retired": [],
 }
 
@@ -237,6 +237,17 @@ def _agent_to_dict(agent: Agent) -> dict:
     }
 
 
+def _validate_authorized_tools(tools: list[str]) -> list[str]:
+    """Validate that every tool in the list exists in the connector tool_index.
+
+    Returns a list of invalid tool names. Empty list means all tools are valid.
+    """
+    from core.langgraph.tool_adapter import _build_tool_index
+
+    index = _build_tool_index()
+    return [t for t in tools if t not in index]
+
+
 # ── POST /agents ─────────────────────────────────────────────────────────────
 @router.post("/agents", status_code=201)
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
@@ -249,6 +260,23 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             body.agent_type,
             _DOMAIN_DEFAULT_TOOLS.get(body.domain, []),
         )
+
+    # Validate that all authorized_tools actually exist in the tool registry
+    if tools:
+        invalid_tools = _validate_authorized_tools(tools)
+        if invalid_tools:
+            raise HTTPException(
+                422,
+                detail={
+                    "error": "invalid_authorized_tools",
+                    "invalid_tools": invalid_tools,
+                    "message": (
+                        f"The following tools do not exist in the connector registry: "
+                        f"{', '.join(invalid_tools)}. "
+                        f"Check tool names or register the required connectors first."
+                    ),
+                },
+            )
 
     async with get_tenant_session(tid) as session:
         agent = Agent(
@@ -1057,19 +1085,49 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
                 409, f"Cannot resume agent in '{agent.status}' status; must be paused"
             )
 
-        agent.status = "active"
+        # TC_AGENT-007: Look up the status the agent was in before it was paused
+        # so we resume to the correct state (shadow agents must not bypass checks)
+        prev_event_result = await session.execute(
+            select(AgentLifecycleEvent)
+            .where(
+                AgentLifecycleEvent.agent_id == agent_id,
+                AgentLifecycleEvent.to_status == "paused",
+            )
+            .order_by(AgentLifecycleEvent.created_at.desc())
+            .limit(1)
+        )
+        pause_event = prev_event_result.scalar_one_or_none()
+        resume_to = pause_event.from_status if pause_event else "active"
+
+        # If the agent was in shadow mode before pausing, resume back to shadow
+        # — it must go through the promote endpoint to reach active
+        if resume_to == "shadow":
+            # Re-validate that shadow accuracy hasn't degraded below floor
+            if (
+                agent.shadow_min_samples > 0
+                and agent.shadow_accuracy_current is not None
+                and agent.shadow_accuracy_current < agent.shadow_accuracy_floor
+            ):
+                raise HTTPException(
+                    409,
+                    f"Shadow accuracy {agent.shadow_accuracy_current} is below "
+                    f"floor {agent.shadow_accuracy_floor}; "
+                    f"use /agents/{agent_id}/retest to re-evaluate",
+                )
+
+        agent.status = resume_to
 
         event = AgentLifecycleEvent(
             tenant_id=tid,
             agent_id=agent.id,
             from_status="paused",
-            to_status="active",
+            to_status=resume_to,
             triggered_by="api",
-            reason="Agent resumed via API",
+            reason=f"Agent resumed via API to '{resume_to}'",
         )
         session.add(event)
 
-    return {"id": str(agent_id), "status": "active"}
+    return {"id": str(agent_id), "status": resume_to}
 
 
 # ── POST /agents/{id}/promote ────────────────────────────────────────────────
@@ -1128,6 +1186,56 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         session.add(event)
 
     return {"id": str(agent_id), "promoted": True, "from": old_status, "to": new_status}
+
+
+# ── POST /agents/{id}/retest ─────────────────────────────────────────────────
+@router.post("/agents/{agent_id}/retest")
+async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+    """TC_AGENT-008: Reset shadow counters so users can re-evaluate a shadow agent."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        if agent.status != "shadow":
+            raise HTTPException(
+                409,
+                f"Cannot retest agent in '{agent.status}' status; must be in shadow mode",
+            )
+
+        old_sample_count = agent.shadow_sample_count
+        old_accuracy = (
+            float(agent.shadow_accuracy_current)
+            if agent.shadow_accuracy_current is not None
+            else None
+        )
+
+        agent.shadow_sample_count = 0
+        agent.shadow_accuracy_current = None
+
+        event = AgentLifecycleEvent(
+            tenant_id=tid,
+            agent_id=agent.id,
+            from_status="shadow",
+            to_status="shadow",
+            triggered_by="api",
+            reason="Shadow counters reset for re-evaluation",
+            shadow_accuracy=old_accuracy,
+            shadow_samples=old_sample_count,
+        )
+        session.add(event)
+
+    return {
+        "id": str(agent_id),
+        "retest": True,
+        "shadow_sample_count": 0,
+        "shadow_accuracy_current": None,
+        "previous_sample_count": old_sample_count,
+        "previous_accuracy": old_accuracy,
+    }
 
 
 # ── POST /agents/{id}/rollback ───────────────────────────────────────────────

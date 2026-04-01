@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid as _uuid
 from uuid import UUID
 
@@ -17,6 +18,39 @@ from core.schemas.api import PromptTemplateCreate, PromptTemplateUpdate
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+# Regex to find tool references in prompt templates.
+# Matches patterns like: {{tool:send_email}}, {{tools.send_email}},
+# {tool:send_email}, use_tool(send_email), @tool(send_email)
+_TOOL_REF_PATTERNS = [
+    re.compile(r"\{\{?tools?[.:]\s*(\w+)\s*\}?\}"),  # {{tool:name}} or {{tools.name}}
+    re.compile(r"@tool\(\s*(\w+)\s*\)"),               # @tool(name)
+    re.compile(r"use_tool\(\s*['\"]?(\w+)['\"]?\s*\)"), # use_tool(name) or use_tool('name')
+]
+
+
+def _extract_tool_references(template_text: str) -> list[str]:
+    """Extract all connector tool references from a prompt template."""
+    refs: set[str] = set()
+    for pattern in _TOOL_REF_PATTERNS:
+        for match in pattern.finditer(template_text):
+            refs.add(match.group(1))
+    return sorted(refs)
+
+
+def _validate_tool_references(template_text: str) -> list[str]:
+    """Validate that tool references in a prompt template exist in the registry.
+
+    Returns a list of invalid tool names (empty if all are valid).
+    """
+    refs = _extract_tool_references(template_text)
+    if not refs:
+        return []
+
+    from core.langgraph.tool_adapter import _build_tool_index
+
+    index = _build_tool_index()
+    return [ref for ref in refs if ref not in index]
 
 
 def _template_to_dict(t: PromptTemplate) -> dict:
@@ -92,6 +126,22 @@ async def create_prompt_template(
     body: PromptTemplateCreate,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    # Validate that any connector tool references in the template actually exist
+    invalid_refs = _validate_tool_references(body.template_text)
+    if invalid_refs:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "invalid_tool_references",
+                "invalid_tools": invalid_refs,
+                "message": (
+                    f"Prompt template references tools that do not exist in the "
+                    f"connector registry: {', '.join(invalid_refs)}. "
+                    f"Register the required connectors or fix the template."
+                ),
+            },
+        )
+
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         template = PromptTemplate(
@@ -132,6 +182,24 @@ async def update_prompt_template(
             )
 
         update_data = body.model_dump(exclude_unset=True)
+
+        # Validate tool references in updated template_text
+        if "template_text" in update_data and update_data["template_text"]:
+            invalid_refs = _validate_tool_references(update_data["template_text"])
+            if invalid_refs:
+                raise HTTPException(
+                    422,
+                    detail={
+                        "error": "invalid_tool_references",
+                        "invalid_tools": invalid_refs,
+                        "message": (
+                            f"Updated template references tools that do not exist in the "
+                            f"connector registry: {', '.join(invalid_refs)}. "
+                            f"Register the required connectors or fix the template."
+                        ),
+                    },
+                )
+
         if "name" in update_data:
             template.name = update_data["name"]
         if "template_text" in update_data:
