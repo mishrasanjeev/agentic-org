@@ -287,7 +287,7 @@ class TestConfigEndpoints:
 
         # Defaults from FleetLimits model
         assert resp["max_active_agents"] == 35
-        assert resp["max_shadow_agents"] == 10
+        assert resp["max_shadow_agents"] == 50
 
     @pytest.mark.asyncio
     async def test_get_fleet_limits_tenant_not_found(self, tenant_id, mock_session):
