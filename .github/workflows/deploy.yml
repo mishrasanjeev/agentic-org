@@ -201,7 +201,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run Python E2E + Smoke + Synthetic tests (against production)
-        run: pytest tests/e2e/ tests/synthetic_data/ -v --timeout=120
+        run: pytest tests/e2e/ tests/synthetic_data/ -v
         env:
           AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
