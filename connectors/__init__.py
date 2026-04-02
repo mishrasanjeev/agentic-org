@@ -1,4 +1,4 @@
-"""Connector layer — 43 typed adapters (320+ tools), auto-loaded and registered."""
+"""Connector layer — 46 typed adapters (332+ tools), auto-loaded and registered."""
 
 from connectors.comms import github_connector as _  # noqa: F401, F811
 from connectors.comms import gmail as _  # noqa: F401, F811
@@ -40,12 +40,14 @@ from connectors.hr import linkedin_talent as _  # noqa: F401, F811
 from connectors.hr import okta as _  # noqa: F401, F811
 from connectors.hr import zoom as _  # noqa: F401, F811
 from connectors.marketing import ahrefs as _  # noqa: F401, F811
+from connectors.marketing import bombora as _  # noqa: F401, F811
 from connectors.marketing import brandwatch as _  # noqa: F401, F811
 from connectors.marketing import buffer as _  # noqa: F401, F811
+from connectors.marketing import g2 as _  # noqa: F401, F811
 from connectors.marketing import ga4 as _  # noqa: F401, F811
 from connectors.marketing import google_ads as _  # noqa: F401, F811
 
-# Marketing connectors (9)
+# Marketing connectors (12)
 from connectors.marketing import hubspot as _  # noqa: F401, F811
 from connectors.marketing import linkedin_ads as _  # noqa: F401, F811
 from connectors.marketing import mailchimp as _  # noqa: F401, F811
@@ -53,6 +55,7 @@ from connectors.marketing import meta_ads as _  # noqa: F401, F811
 from connectors.marketing import mixpanel as _  # noqa: F401, F811
 from connectors.marketing import moengage as _  # noqa: F401, F811
 from connectors.marketing import salesforce as _  # noqa: F401, F811
+from connectors.marketing import trustradius as _  # noqa: F401, F811
 from connectors.marketing import wordpress as _  # noqa: F401, F811
 from connectors.ops import confluence as _  # noqa: F401, F811
 

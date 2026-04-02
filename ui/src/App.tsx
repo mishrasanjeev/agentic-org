@@ -60,6 +60,9 @@ const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
 const CMODashboard = lazyRetry(() => import("./pages/CMODashboard"));
 
+/* ── ABM Dashboard ── */
+const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
+
 /* ── Report Schedules ── */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
 
@@ -150,6 +153,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cmo"]}>
             <Layout>
               <CMODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/abm"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cmo"]}>
+            <Layout>
+              <ABMDashboard />
             </Layout>
           </ProtectedRoute>
         }

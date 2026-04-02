@@ -1,0 +1,138 @@
+name: ABM Campaign Workflow
+version: "1.0"
+domain: marketing
+description: >
+  End-to-end Account-Based Marketing workflow.  Identifies target accounts
+  from Salesforce, enriches them with intent data from Bombora + G2 +
+  TrustRadius, tiers accounts by composite intent score, launches LinkedIn
+  campaigns for Tier 1 (with CMO approval), starts email nurture for Tier 2,
+  and measures account-level engagement across all channels.
+
+trigger:
+  type: schedule
+  cron: "0 8 * * 1"
+  description: "Runs every Monday at 08:00 UTC to refresh ABM pipeline"
+
+timeout_hours: 48
+
+steps:
+  - id: identify_targets
+    name: Identify Target Accounts
+    type: agent
+    agent_type: abm
+    action: query_target_accounts
+    inputs:
+      source: salesforce
+      filters:
+        min_revenue_usd: 1000000
+        industries: ["saas", "fintech", "enterprise_software"]
+        regions: ["north_america", "europe", "india"]
+      limit: 500
+
+  - id: enrich_with_intent
+    name: Enrich with Intent Data
+    type: agent
+    agent_type: abm
+    action: aggregate_intent
+    depends_on: [identify_targets]
+    inputs:
+      domains: "{{identify_targets.domains}}"
+      providers:
+        - bombora
+        - g2
+        - trustradius
+      batch_size: 100
+
+  - id: score_and_tier
+    name: Score & Tier Accounts
+    type: condition
+    depends_on: [enrich_with_intent]
+    rules:
+      - expression: "enrich_with_intent.composite_score >= 80"
+        label: "Tier 1 — High Intent"
+        path: launch_linkedin_tier1
+      - expression: "enrich_with_intent.composite_score >= 40"
+        label: "Tier 2 — Medium Intent"
+        path: email_nurture_tier2
+      - expression: "enrich_with_intent.composite_score < 40"
+        label: "Tier 3 — Low Intent (monitor only)"
+        path: measure_engagement
+
+  - id: launch_linkedin_tier1
+    name: Launch LinkedIn Ads — Tier 1
+    type: agent
+    agent_type: campaign_pilot
+    action: create_linkedin_campaign
+    depends_on: [score_and_tier]
+    inputs:
+      tier: 1
+      accounts: "{{score_and_tier.tier1_accounts}}"
+      campaign_type: sponsored_content
+      budget_per_account_usd: 500
+      audience_targeting:
+        job_titles: ["VP", "Director", "Head of"]
+        company_size: "200+"
+      creative:
+        headline: "See how {{account.company_name}} peers are modernizing operations"
+        cta: "Learn More"
+
+  - id: cmo_approval
+    name: CMO Approval — Tier 1 Creative
+    type: human_in_loop
+    depends_on: [launch_linkedin_tier1]
+    assignee_role: cmo
+    description: "Review and approve Tier 1 LinkedIn campaign creative before activation"
+    decision_options:
+      - approve
+      - revise
+      - reject
+    timeout_hours: 24
+    escalation:
+      after_hours: 12
+      notify: ["#marketing-leadership"]
+
+  - id: email_nurture_tier2
+    name: Email Nurture — Tier 2
+    type: agent
+    agent_type: email_marketing
+    action: start_nurture_sequence
+    depends_on: [score_and_tier]
+    inputs:
+      tier: 2
+      accounts: "{{score_and_tier.tier2_accounts}}"
+      sequence_name: abm_tier2_nurture
+      emails:
+        - delay_hours: 0
+          template: abm_intro
+          subject: "How {{account.industry}} leaders are driving 3x pipeline"
+        - delay_hours: 72
+          template: abm_case_study
+          subject: "Case study: {{account.industry}} transformation"
+        - delay_hours: 168
+          template: abm_cta
+          subject: "Ready to see it in action?"
+
+  - id: measure_engagement
+    name: Measure Account-Level Engagement
+    type: agent
+    agent_type: abm
+    action: aggregate_engagement
+    depends_on: [cmo_approval, email_nurture_tier2]
+    inputs:
+      accounts: "{{identify_targets.all_accounts}}"
+      channels:
+        - linkedin_ads
+        - email
+        - website_visits
+        - content_downloads
+      lookback_days: 14
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#abm-ops"
+      message: "ABM campaign workflow completed. {{measure_engagement.total_engaged}} accounts engaged, {{measure_engagement.tier1_activated}} Tier 1 campaigns live."
+  on_failure:
+    - channel: slack
+      target: "#marketing-ops"
+      message: "ABM campaign workflow FAILED at step {{failed_step}}. Error: {{error}}"

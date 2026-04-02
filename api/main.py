@@ -11,6 +11,7 @@ from api.error_handlers import register_error_handlers
 from api.v1 import (
     a2a,
     aa_callback,
+    abm,
     agent_teams,
     agents,
     api_keys,
@@ -135,6 +136,7 @@ app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregat
 app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])
 app.include_router(push.router, prefix="/api/v1", tags=["Push Notifications"])
 app.include_router(report_schedules.router, prefix="/api/v1", tags=["Report Schedules"])
+app.include_router(abm.router, prefix="/api/v1", tags=["ABM"])
 app.include_router(webhooks.router, prefix="/api/v1", tags=["Webhooks"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

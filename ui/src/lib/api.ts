@@ -78,3 +78,18 @@ export const companiesApi = {
   create: (data: any) => api.post("/companies", data),
   get: (id: string) => api.get(`/companies/${id}`),
 };
+
+// ABM (Account-Based Marketing)
+export const abmApi = {
+  listAccounts: (params?: Record<string, string>) => api.get("/abm/accounts", { params }),
+  getAccount: (id: string) => api.get(`/abm/accounts/${id}`),
+  createAccount: (data: any) => api.post("/abm/accounts", data),
+  getIntent: (id: string) => api.get(`/abm/accounts/${id}/intent`),
+  launchCampaign: (id: string, data: any) => api.post(`/abm/accounts/${id}/campaign`, data),
+  dashboard: () => api.get("/abm/dashboard"),
+  uploadCsv: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/abm/accounts/upload", fd);
+  },
+};
