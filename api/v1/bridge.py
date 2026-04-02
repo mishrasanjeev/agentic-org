@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from auth.dependencies import get_current_tenant
+from api.deps import get_current_tenant
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
