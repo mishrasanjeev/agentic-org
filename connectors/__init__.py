@@ -15,8 +15,8 @@ from connectors.comms import whatsapp as _  # noqa: F401, F811
 from connectors.comms import youtube as _  # noqa: F401, F811
 from connectors.finance import banking_aa as _  # noqa: F401, F811
 from connectors.finance import gstn as _  # noqa: F401, F811
-from connectors.finance import netsuite as _  # noqa: F401, F811
 from connectors.finance import income_tax_india as _  # noqa: F401, F811
+from connectors.finance import netsuite as _  # noqa: F401, F811
 
 # Import all connector modules so their classes are loaded into memory.
 # The _auto_register() call at the bottom registers them all with ConnectorRegistry.
@@ -44,16 +44,16 @@ from connectors.marketing import brandwatch as _  # noqa: F401, F811
 from connectors.marketing import buffer as _  # noqa: F401, F811
 from connectors.marketing import ga4 as _  # noqa: F401, F811
 from connectors.marketing import google_ads as _  # noqa: F401, F811
-from connectors.marketing import mailchimp as _  # noqa: F401, F811
-from connectors.marketing import moengage as _  # noqa: F401, F811
-from connectors.marketing import wordpress as _  # noqa: F401, F811
 
 # Marketing connectors (9)
 from connectors.marketing import hubspot as _  # noqa: F401, F811
 from connectors.marketing import linkedin_ads as _  # noqa: F401, F811
+from connectors.marketing import mailchimp as _  # noqa: F401, F811
 from connectors.marketing import meta_ads as _  # noqa: F401, F811
 from connectors.marketing import mixpanel as _  # noqa: F401, F811
+from connectors.marketing import moengage as _  # noqa: F401, F811
 from connectors.marketing import salesforce as _  # noqa: F401, F811
+from connectors.marketing import wordpress as _  # noqa: F401, F811
 from connectors.ops import confluence as _  # noqa: F401, F811
 
 # Ops connectors (7)

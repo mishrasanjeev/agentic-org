@@ -1,3 +1,4 @@
+# ruff: noqa: S608 — SOQL is sent to Salesforce API, not a SQL database
 """Salesforce connector — marketing/CRM.
 
 Integrates with Salesforce REST API v60.0 for CRM operations.
@@ -122,5 +123,8 @@ class SalesforceConnector(BaseConnector):
         stage_filter = ""
         if params.get("stage"):
             stage_filter = f" WHERE StageName='{params['stage']}'"
-        soql = f"SELECT Id,Name,Amount,StageName,CloseDate,AccountId FROM Opportunity{stage_filter} ORDER BY CloseDate DESC LIMIT {limit}"
+        soql = (
+            f"SELECT Id,Name,Amount,StageName,CloseDate,AccountId"
+            f" FROM Opportunity{stage_filter} ORDER BY CloseDate DESC LIMIT {limit}"  # noqa: S608
+        )
         return await self._get("/query", {"q": soql})

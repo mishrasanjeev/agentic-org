@@ -72,7 +72,11 @@ class S3Connector(BaseConnector):
         resp = await self._client.post(
             f"https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o",
             params={"uploadType": "media", "name": object_name},
-            content=params.get("content", "").encode("utf-8") if isinstance(params.get("content"), str) else params.get("content", b""),
+            content=(
+                params.get("content", "").encode("utf-8")
+                if isinstance(params.get("content"), str)
+                else params.get("content", b"")
+            ),
             headers={**self._auth_headers, "Content-Type": content_type},
         )
         resp.raise_for_status()

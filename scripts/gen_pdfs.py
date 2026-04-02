@@ -38,7 +38,7 @@ class PDF(FPDF):
     def bullet(self, text):
         self.set_font("Helvetica", "", 10)
         self.set_text_color(30, 30, 30)
-        x = self.get_x()
+        self.get_x()
         self.cell(6, 5.5, "-")
         self.multi_cell(0, 5.5, text)
         self.ln(1)
@@ -54,7 +54,7 @@ class PDF(FPDF):
     def table_row(self, cells, widths, bold=False):
         self.set_font("Helvetica", "B" if bold else "", 9)
         h = 7
-        for i, (cell, w) in enumerate(zip(cells, widths)):
+        for i, (cell, w) in enumerate(zip(cells, widths, strict=False)):
             if bold:
                 self.set_fill_color(31, 78, 121)
                 self.set_text_color(255, 255, 255)

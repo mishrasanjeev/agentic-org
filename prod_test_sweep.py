@@ -3,10 +3,10 @@ Comprehensive Production Test Sweep for AgenticOrg Platform
 Tests all public, auth-required, frontend, SEO, external, and edge-case endpoints.
 """
 
-import requests
-import json
 import sys
 import time
+
+import requests
 
 BASE_API = "https://app.agenticorg.ai/api/v1"
 BASE_SITE = "https://agenticorg.ai"
@@ -75,7 +75,7 @@ else:
         d = r.json()
         alive = d.get("status") in ("alive", "ok", "healthy") or r.status_code == 200
         record(2, "GET /health/liveness", alive, "" if alive else f"status={r.status_code}, body={r.text[:200]}")
-    except:
+    except Exception:
         alive = r.status_code == 200
         record(2, "GET /health/liveness", alive, "" if alive else f"status={r.status_code}")
 
@@ -324,7 +324,7 @@ else:
             # mcpName could be in latest version's package.json or top-level
             text = r.text
             has_mcp = "mcpName" in text
-        except:
+        except Exception:  # noqa: S110
             pass
     record(35, "npm agenticorg-mcp-server (mcpName)", ok and has_mcp,
            "" if (ok and has_mcp) else f"status={r.status_code}, mcpName={'found' if has_mcp else 'NOT found'}")

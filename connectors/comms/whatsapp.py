@@ -105,4 +105,8 @@ class WhatsappConnector(BaseConnector):
 
     async def get_business_profile(self, **params) -> dict[str, Any]:
         """Get WhatsApp Business profile."""
-        return await self._get(f"/{self._phone_number_id}/whatsapp_business_profile", {"fields": "about,address,description,email,websites"})
+        fields = "about,address,description,email,websites"
+        return await self._get(
+            f"/{self._phone_number_id}/whatsapp_business_profile",
+            {"fields": fields},
+        )

@@ -97,7 +97,10 @@ class ServicenowConnector(BaseConnector):
         """
         if params.get("sys_id"):
             return await self._get(f"/table/cmdb_ci/{params['sys_id']}")
-        return await self._get("/table/cmdb_ci", {"sysparm_query": f"name={params.get('name', '')}", "sysparm_limit": "10"})
+        return await self._get(
+            "/table/cmdb_ci",
+            {"sysparm_query": f"name={params.get('name', '')}", "sysparm_limit": "10"},
+        )
 
     async def check_sla_status(self, **params) -> dict[str, Any]:
         """Check SLA status for a task.

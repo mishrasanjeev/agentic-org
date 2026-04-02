@@ -16,7 +16,7 @@ class TestA2AAgentCard:
         assert card["protocol"] == "a2a/1.0"
         assert card["capabilities"]["tasks"] is True
         assert card["authentication"]["scheme"] == "grantex"
-        assert len(card["skills"]) == 36  # 27 original + 3 comms + 4 CFO + 4 CMO = 36 total agents (minus chat_agent counted in original)
+        assert len(card["skills"]) == 36  # 28 original + 8 new = 36
 
     @pytest.mark.asyncio
     async def test_agent_card_skills_have_required_fields(self):

@@ -58,7 +58,10 @@ class PagerdutyConnector(BaseConnector):
         if params.get("body"):
             incident["body"] = {"type": "incident_body", "details": params["body"]}
         if params.get("escalation_policy_id"):
-            incident["escalation_policy"] = {"id": params["escalation_policy_id"], "type": "escalation_policy_reference"}
+            incident["escalation_policy"] = {
+                "id": params["escalation_policy_id"],
+                "type": "escalation_policy_reference",
+            }
         return await self._post("/incidents", {"incident": incident})
 
     async def acknowledge_incident(self, **params) -> dict[str, Any]:

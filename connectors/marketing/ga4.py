@@ -67,7 +67,10 @@ class GA4Connector(BaseConnector):
                 dimension_filter (optional dict), order_bys (optional list).
         """
         body: dict[str, Any] = {
-            "dateRanges": [{"startDate": params.get("start_date", "7daysAgo"), "endDate": params.get("end_date", "today")}],
+            "dateRanges": [{
+                "startDate": params.get("start_date", "7daysAgo"),
+                "endDate": params.get("end_date", "today"),
+            }],
             "dimensions": [{"name": d} for d in params.get("dimensions", ["date"])],
             "metrics": [{"name": m} for m in params.get("metrics", ["sessions", "totalUsers"])],
             "limit": str(params.get("limit", 100)),
@@ -104,7 +107,10 @@ class GA4Connector(BaseConnector):
             dimensions.append("date")
 
         body: dict[str, Any] = {
-            "dateRanges": [{"startDate": params.get("start_date", "28daysAgo"), "endDate": params.get("end_date", "today")}],
+            "dateRanges": [{
+                "startDate": params.get("start_date", "28daysAgo"),
+                "endDate": params.get("end_date", "today"),
+            }],
             "dimensions": [{"name": d} for d in dimensions],
             "metrics": [{"name": "conversions"}, {"name": "eventCount"}, {"name": "totalRevenue"}],
         }
@@ -126,9 +132,15 @@ class GA4Connector(BaseConnector):
         return await self._post(
             f"/properties/{self._property_id}:runReport",
             {
-                "dateRanges": [{"startDate": params.get("start_date", "28daysAgo"), "endDate": params.get("end_date", "today")}],
+                "dateRanges": [{
+                "startDate": params.get("start_date", "28daysAgo"),
+                "endDate": params.get("end_date", "today"),
+            }],
                 "dimensions": [{"name": "sessionSource"}, {"name": "sessionMedium"}, {"name": "sessionCampaignName"}],
-                "metrics": [{"name": "sessions"}, {"name": "totalUsers"}, {"name": "newUsers"}, {"name": "bounceRate"}, {"name": "averageSessionDuration"}],
+                "metrics": [
+                    {"name": "sessions"}, {"name": "totalUsers"}, {"name": "newUsers"},
+                    {"name": "bounceRate"}, {"name": "averageSessionDuration"},
+                ],
                 "limit": str(params.get("limit", 50)),
                 "orderBys": [{"metric": {"metricName": "sessions"}, "desc": True}],
             },
@@ -142,9 +154,15 @@ class GA4Connector(BaseConnector):
         return await self._post(
             f"/properties/{self._property_id}:runReport",
             {
-                "dateRanges": [{"startDate": params.get("start_date", "28daysAgo"), "endDate": params.get("end_date", "today")}],
+                "dateRanges": [{
+                "startDate": params.get("start_date", "28daysAgo"),
+                "endDate": params.get("end_date", "today"),
+            }],
                 "dimensions": [{"name": "pagePath"}, {"name": "pageTitle"}],
-                "metrics": [{"name": "screenPageViews"}, {"name": "totalUsers"}, {"name": "bounceRate"}, {"name": "averageSessionDuration"}],
+                "metrics": [
+                    {"name": "screenPageViews"}, {"name": "totalUsers"},
+                    {"name": "bounceRate"}, {"name": "averageSessionDuration"},
+                ],
                 "limit": str(params.get("limit", 50)),
                 "orderBys": [{"metric": {"metricName": "screenPageViews"}, "desc": True}],
             },

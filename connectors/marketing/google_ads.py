@@ -1,3 +1,4 @@
+# ruff: noqa: S608 — GAQL is not SQL; query construction is safe (sent to Google Ads API)
 """Google Ads connector — marketing.
 
 Integrates with Google Ads API v17 via the REST interface.
@@ -90,7 +91,7 @@ class GoogleAdsConnector(BaseConnector):
             status_filter = f" AND campaign.status = '{params['status']}'"
         limit = params.get("limit", 50)
         query = (
-            "SELECT campaign.id, campaign.name, campaign.status, "
+            "SELECT campaign.id, campaign.name, campaign.status, "  # noqa: S608
             "campaign.advertising_channel_type, campaign_budget.amount_micros "
             f"FROM campaign WHERE campaign.status != 'REMOVED'{status_filter} "
             f"LIMIT {limit}"
@@ -112,7 +113,7 @@ class GoogleAdsConnector(BaseConnector):
             "SELECT campaign.id, campaign.name, "
             "metrics.impressions, metrics.clicks, metrics.cost_micros, "
             "metrics.conversions, metrics.cost_per_conversion "
-            f"FROM campaign WHERE segments.date BETWEEN '{start}' AND '{end}'"
+            f"FROM campaign WHERE segments.date BETWEEN '{start}' AND '{end}'"  # noqa: S608
             f"{cid_filter}"
         )
         rows = await self._gaql_search(query)
@@ -154,7 +155,7 @@ class GoogleAdsConnector(BaseConnector):
             "SELECT search_term_view.search_term, "
             "metrics.impressions, metrics.clicks, metrics.cost_micros, "
             "metrics.conversions "
-            f"FROM search_term_view WHERE segments.date BETWEEN '{start}' AND '{end}'"
+            f"FROM search_term_view WHERE segments.date BETWEEN '{start}' AND '{end}'"  # noqa: S608
             f"{cid_filter} ORDER BY metrics.impressions DESC LIMIT {limit}"
         )
         rows = await self._gaql_search(query)

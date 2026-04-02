@@ -41,7 +41,10 @@ class MixpanelConnector(BaseConnector):
     async def health_check(self) -> dict[str, Any]:
         try:
             # Lightweight check — get a single event count
-            await self._get("/events", {"event": '["$mp_web_page_view"]', "type": "general", "unit": "day", "interval": 1})
+            await self._get(
+                "/events",
+                {"event": '["$mp_web_page_view"]', "type": "general", "unit": "day", "interval": 1},
+            )
             return {"status": "healthy"}
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
@@ -67,7 +70,7 @@ class MixpanelConnector(BaseConnector):
         """Run a JQL (JavaScript Query Language) script.
 
         Params: script (required — JQL JavaScript string).
-        Example: script='function main() { return Events({from_date:"2026-01-01", to_date:"2026-01-31"}).groupBy(["name"], mixpanel.reducer.count()) }'
+        Example: script='function main() { return Events({...}).groupBy(["name"], mixpanel.reducer.count()) }'
         """
         return await self._post("/jql", params)
 

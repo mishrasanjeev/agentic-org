@@ -1,6 +1,6 @@
 """Generate QA Bug Summary Excel report."""
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 wb = openpyxl.Workbook()
