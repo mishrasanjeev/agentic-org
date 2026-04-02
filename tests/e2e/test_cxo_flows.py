@@ -111,12 +111,14 @@ class TestCFOJourney:
         assert schedule["id"] in schedule_ids
 
     def test_company_switcher_lists_companies(self, client):
-        """Company switcher returns list of companies for CA firm use case."""
+        """Company switcher returns list after creating companies."""
+        # Create companies first (new tenants start empty for isolation)
+        client.post("/api/v1/companies", json={"name": "Test Corp A", "industry": "IT"})
+        client.post("/api/v1/companies", json={"name": "Test Corp B", "industry": "Finance"})
         resp = client.get("/api/v1/companies")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        # Demo data should be seeded
         assert len(data) >= 2
 
     def test_ap_processor_has_pinelabs_payment_tools(self):

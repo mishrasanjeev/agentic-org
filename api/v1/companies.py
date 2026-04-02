@@ -80,8 +80,7 @@ class CompanyOut(BaseModel):
 def _tenant_store(tenant_id: str) -> dict[str, dict]:
     """Return (or create) the company dict for a tenant."""
     if tenant_id not in _companies:
-        # For new tenants, copy demo data so UI works out of the box
-        _companies[tenant_id] = dict(_companies.get(_DEMO_TENANT, {}))
+        _companies[tenant_id] = {}
     return _companies[tenant_id]
 
 
