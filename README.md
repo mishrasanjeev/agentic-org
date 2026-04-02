@@ -1,6 +1,6 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 25 pre-built agents (28 total skills across 6 domains) that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub) — not just generate text. 43 connectors, 273 tools, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — 35 pre-built agents across 6 domains that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. 51 connectors, 320+ tools, CFO/CMO dashboards, NL Query (Cmd+K), multi-company support, scheduled reports, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -10,7 +10,7 @@
 [![E2E](https://img.shields.io/badge/E2E-148%2F148_production-brightgreen.svg)](tests/e2e_full_production_test.py)
 [![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
 [![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
-[![Version](https://img.shields.io/badge/Version-2.3.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.1.0-green.svg)](CHANGELOG.md)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -24,28 +24,37 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 
 | Metric | Value |
 |--------|-------|
-| Pre-built Agents | 25 across 6 domains (28 total skills incl. 3 comms agent types) |
+| Pre-built Agents | **35** across 6 domains |
 | Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
-| Enterprise Connectors | 43 connectors, **273 tools** |
-| Live Connectors (verified) | GitHub (9 tools), Jira (11 tools), HubSpot (13 tools) |
+| Enterprise Connectors | **51 connectors, 320+ tools** — ALL with real API endpoints |
+| Dashboards | CFO Dashboard + CMO Dashboard (role-specific KPI views) |
+| NL Query | Cmd+K search bar + slide-out chat panel with agent attribution |
+| Multi-Company | Company switcher for CA firms managing multiple client entities |
+| Scheduled Reports | Celery beat --> PDF/Excel --> email/Slack/WhatsApp delivery |
+| Workflow Templates | **11** production-ready templates |
 | Prompt Templates | 27 production-tested |
 | Automated Tests | **1,196+** (821 unit, 86 security, 174 connector harness, 55 regression, 62 integration, 370+ Playwright E2E) |
 | Production E2E | **148/148 pass (100%)** against live deployment |
 | SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
 | LLM | Gemini 2.5 Flash (primary), Claude/GPT-4o fallback |
 | Deployment | GKE Autopilot, ~$95/month |
-| Version | **2.3.0** |
+| Version | **3.1.0** |
 
 ### What It Does
 
 | Before | After |
 |--------|-------|
-| 5-day month-end close | **1 day** with AP + Recon + Close agents |
-| Manual invoice processing | **11 seconds** per invoice (OCR → GSTIN → 3-way match → GL) |
+| 5-day month-end close | **1.5 days** with AP + Recon + Close + Treasury agents |
+| Manual invoice processing | **11 seconds** per invoice (OCR --> GSTIN --> 3-way match --> GL) |
 | 40% ticket mis-routing | **88% auto-classification** accuracy |
 | 2-week employee onboarding | **4 hours** (Darwinbox + Slack + email auto-provisioned) |
 | Manual bank reconciliation | **99.7% auto-match** rate, done by 6 AM daily |
 | Zero payroll errors | PF, ESI, TDS computed automatically |
+| CFO drowning in reports | **CFO Dashboard**: Cash Runway, DSO, DPO, AR/AP Aging at a glance |
+| CMO guessing ROI | **CMO Dashboard**: CAC, ROAS by Channel, MQL/SQL pipeline in real time |
+| "Ask the analyst" queries | **NL Query**: Cmd+K --> "What's my cash position?" --> instant answer |
+| CA firm juggling 20 clients | **Multi-company switcher**: one login, all client entities |
+| Manual report emails | **Scheduled Reports**: Celery --> PDF/Excel --> email/Slack/WhatsApp |
 
 ### Agents That Act, Not Just Talk
 
@@ -69,49 +78,118 @@ Verified on production: agents have created **14 real Jira tickets**, read **Hub
 
 ```
 Landing Page (animations, interactive demo, blog, SEO, developer section)
-    ↓
-App Dashboard (agents, workflows, approvals, audit, sales pipeline, integrations)
-    ↓
+    |
+App Dashboard
+    ├── CFO Dashboard (/dashboard/cfo) — Cash Runway, Burn Rate, DSO, DPO, AR/AP Aging
+    ├── CMO Dashboard (/dashboard/cmo) — CAC, MQLs, SQLs, Pipeline, ROAS by Channel
+    ├── NL Query (Cmd+K search bar + slide-out chat panel)
+    ├── Multi-Company Switcher (CA firms managing multiple clients)
+    ├── Agent Fleet, Workflows, Approvals, Audit, Sales Pipeline, Integrations
+    └── Report Scheduler (create, manage, toggle, run-now scheduled reports)
+    |
 FastAPI Backend
-    ├── Agent Registry → LLM Router (Gemini 2.5 Flash)
+    ├── Agent Registry (35 agents) → LLM Router (Gemini 2.5 Flash)
     │       ↓ tool_calls                    ↑ synthesis
-    │   Tool Gateway → 43 Connectors (273 tools)
+    │   Tool Gateway → 51 Connectors (320+ tools)
     │       ├── Jira (11 tools) ← verified, creates real tickets
     │       ├── HubSpot (13 tools) ← verified, reads real CRM
     │       ├── GitHub (9 tools) ← verified, reads real repos
-    │       └── SAP, Oracle, GSTN, Darwinbox, Slack, Stripe...
+    │       ├── GSTN (8 tools) ← real Adaequare 2-step auth + DSC signing
+    │       ├── Tally (7 tools) ← XML/TDL protocol + bridge for on-premise
+    │       ├── Banking AA (5 tools) ← RBI-compliant consent flow
+    │       └── GA4, MoEngage, NetSuite, WordPress, Twitter/X, YouTube, Mailchimp...
+    ├── NL Query Engine → Agent attribution → Chat history
+    ├── Scheduled Report Engine → Celery beat → PDF/Excel → email/Slack/WhatsApp
     ├── LangGraph Runtime → GraphInterrupt HITL → Shadow Mode
-    ├── Workflow Engine → real agent execution → HITL Queue
+    ├── Workflow Engine (11 templates) → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
     ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
-    ├── MCP Server → 273 tools exposed to Claude/Cursor/ChatGPT
+    ├── MCP Server → 320+ tools exposed to Claude/Cursor/ChatGPT
     ├── API Key Manager → ao_sk_ keys → SDK/CLI/MCP auth
     ├── SOP Parser → Upload SOPs → Deploy as agents
     └── Sales Agent → Gmail API → Email Sequences
-    ↓
+    |
 SDKs: Python (PyPI) | TypeScript (npm) | MCP Server | CLI
-    ↓
+    |
 PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 ```
 
-### Agent Domains (6 Domains)
+### Agent Domains (6 Domains, 35 Agents)
 
 | Domain | Agents | Key Agents |
 |--------|--------|-----------|
-| **Finance** | 6 | AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A |
+| **Finance** | 10 | AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A, Treasury, Expense Manager, Rev Rec (ASC 606), Fixed Assets |
 | **HR** | 6 | Talent Acquisition, Onboarding, Payroll Engine, Performance Coach, L&D, Offboarding |
-| **Marketing** | 5 | Content Factory, Campaign Pilot, SEO Strategist, CRM Intelligence, Brand Monitor |
+| **Marketing** | 9 | Content Factory, Campaign Pilot, SEO Strategist, CRM Intelligence, Brand Monitor, Email Marketing, Social Media, ABM, Competitive Intel |
 | **Operations** | 5 | Support Triage, Contract Intelligence, Compliance Guard, IT Operations, Vendor Manager |
 | **Back Office** | 3 | Risk Sentinel, Legal Ops, Facilities Agent |
 | **Comms** | 3 | Ops Commander (Jira triage), DevOps Scout (GitHub + Jira health), Slack Notifier |
 | **Sales** | 1 | Automated sales agent (qualification, email sequences, pipeline) |
 | **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
 
-> **25 pre-built agent types + 3 comms agent skills = 28 total agent skills available.**
+> **35 pre-built agents across 6 domains. 51 connectors with 320+ tools. All endpoints real.**
 
 ---
 
 ## Core Features
+
+### CFO Dashboard (`/dashboard/cfo`)
+Role-specific KPI view for finance leaders. Real-time metrics powered by finance agents:
+- **Cash Runway** — months of cash remaining at current burn rate
+- **Burn Rate** — monthly cash outflow trend
+- **DSO / DPO** — Days Sales Outstanding and Days Payable Outstanding
+- **AR/AP Aging** — receivables and payables bucketed by 30/60/90/120+ days
+- **P&L Summary** — revenue, COGS, gross margin, EBITDA
+- **Bank Balances** — aggregated from all connected bank accounts via AA
+- **Tax Calendar** — upcoming GST/TDS/advance tax deadlines with status
+
+### CMO Dashboard (`/dashboard/cmo`)
+Role-specific KPI view for marketing leaders. Real-time metrics powered by marketing agents:
+- **CAC** — Customer Acquisition Cost by channel
+- **MQLs / SQLs** — Marketing and Sales Qualified Leads pipeline
+- **Pipeline Value** — total opportunity value by stage
+- **ROAS by Channel** — Return on Ad Spend for Google, Meta, LinkedIn
+- **Email Performance** — open rate, CTR, unsubscribe, deliverability
+- **Brand Sentiment** — positive/negative/neutral trend from social monitoring
+- **Content Performance** — top pages by traffic, engagement, conversions
+
+### NL Query Interface
+Natural language search across all your business data:
+- **Cmd+K Search Bar** — global shortcut opens search from any page
+- **Slide-out Chat Panel** — full conversational interface with agent attribution
+- **Agent Attribution** — every answer shows which agent(s) provided the data
+- **Example Queries**: "What's my cash position?", "Show me AP aging over 90 days", "How did Google Ads perform last week?", "What's our DSO this quarter?"
+
+### Multi-Company Support
+Built for CA firms and holding companies managing multiple entities:
+- **Company Switcher** — dropdown in the top nav to switch between client entities
+- **Isolated Data** — each company has its own agents, connectors, workflows, and audit trail
+- **Cross-Company Reporting** — consolidated views across all managed entities
+- **RBAC per Company** — different roles and permissions for each entity
+
+### Scheduled Report Engine
+Automated report generation and delivery:
+- **Celery Beat Scheduler** — cron-based scheduling for any report
+- **Output Formats** — PDF and Excel with branded templates
+- **Delivery Channels** — email, Slack, and WhatsApp
+- **Report Scheduler UI** — create, manage, toggle on/off, and run-now from the dashboard
+- **Pre-built Schedules** — daily cash report, weekly P&L, monthly close package, weekly marketing digest
+
+### Workflow Templates (11 Pre-built)
+Production-ready workflow templates that combine multiple agents:
+| Template | Domain | Description |
+|----------|--------|-------------|
+| `invoice_to_pay_v3` | Finance | OCR --> GSTIN --> 3-way match --> payment execution |
+| `month_end_close` | Finance | Trial balance --> adjustments --> reconciliation --> close |
+| `daily_treasury` | Finance | Cash position --> sweep --> forecast --> report |
+| `tax_calendar` | Finance | Deadline tracking --> filing prep --> DSC signing |
+| `campaign_launch` | Marketing | Brief --> content --> review --> publish --> monitor |
+| `content_pipeline` | Marketing | Ideation --> draft --> SEO --> approval --> publish |
+| `lead_nurture` | Marketing | Scoring --> segmentation --> drip --> handoff to sales |
+| `weekly_marketing_report` | Marketing | Collect metrics --> build report --> deliver |
+| `incident_response` | Ops | Triage --> Jira ticket --> assign --> monitor --> resolve |
+| `lead_to_revenue` | Sales | Qualify --> outreach --> follow-up --> close |
+| `weekly_devops_health` | Ops | GitHub + Jira metrics --> health score --> report |
 
 ### Virtual Employee System
 Each agent is a virtual employee with persona, specialization, and routing:
@@ -143,12 +221,14 @@ Configurable confidence floors, trigger conditions, escalation chains, and timeo
 ### Sales Agent
 Automated lead qualification, personalized email outreach, follow-up sequences (Day 1/3/7/14), Gmail inbox monitoring, and pipeline dashboard. Demo request form → instant personalized response.
 
-### 43 Enterprise Connectors (273 Tools)
-Finance (10): Oracle Fusion, SAP, Tally, GSTN, Stripe, QuickBooks, Zoho Books, Banking AA, Income Tax India, Pine Labs
+### 51 Enterprise Connectors (320+ Tools) — All Real API Endpoints
+Finance (11): Oracle Fusion, SAP, Tally (XML/TDL + bridge), GSTN (Adaequare 2-step + DSC), Stripe, QuickBooks, Zoho Books, Banking AA (RBI consent), Income Tax India, Pine Labs (Plural), NetSuite
 HR (8): Darwinbox, Okta, Greenhouse, LinkedIn Talent, DocuSign, Keka, Zoom, EPFO
-Marketing (9): Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch
+Marketing (16): Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch, GA4, MoEngage, WordPress, Twitter/X, YouTube, Mailchimp, Semrush
 Ops (7): Jira, ServiceNow, Zendesk, PagerDuty, Confluence, Sanctions API, MCA Portal
 Comms (9): Slack, GitHub, Gmail, SendGrid, GCS, Google Calendar, Twilio, WhatsApp, LangSmith
+
+> Every connector uses real API endpoints from official documentation. Zero stubs. The Tally connector uses native XML/TDL protocol with a bridge agent for on-premise instances. Banking AA follows RBI-compliant consent flow. GSTN uses Adaequare's 2-step authentication with DSC signing for filing.
 
 ---
 
@@ -229,7 +309,19 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | GET | /workflows | JWT | List workflows |
 | GET | /approvals | JWT | HITL approval queue |
 | GET | /audit | JWT | Audit log |
-| GET | /connectors | JWT | List 43 connectors |
+| GET | /kpis/cfo | JWT | CFO dashboard KPIs |
+| GET | /kpis/cmo | JWT | CMO dashboard KPIs |
+| POST | /chat/query | JWT | NL Query (natural language question) |
+| GET | /chat/history | JWT | Chat history for current user |
+| GET | /companies | JWT | List companies (multi-company) |
+| POST | /companies | JWT | Create company entity |
+| PATCH | /companies/{id} | JWT | Update company entity |
+| GET | /report-schedules | JWT | List scheduled reports |
+| POST | /report-schedules | JWT | Create scheduled report |
+| PATCH | /report-schedules/{id} | JWT | Update scheduled report |
+| POST | /report-schedules/{id}/run-now | JWT | Trigger immediate report run |
+| DELETE | /report-schedules/{id} | JWT | Delete scheduled report |
+| GET | /connectors | JWT | List 51 connectors |
 | GET | /connectors/registry | JWT | Connector registry (all registered connectors + tool counts) |
 | GET | /connectors/{id}/health | JWT | Connector health check |
 | GET | /connectors/{id} | JWT | Connector details |
@@ -239,7 +331,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | DELETE | /org/api-keys/{id} | Admin | Revoke API key |
 | GET | /a2a/agent-card | No | A2A agent discovery card |
 | POST | /a2a/tasks | JWT/Grantex | Execute A2A task |
-| GET | /mcp/tools | No | List MCP tools (273 tools) |
+| GET | /mcp/tools | No | List MCP tools (320+ tools) |
 | POST | /mcp/call | JWT/Grantex | Call MCP tool |
 | POST | /sop/upload | JWT | Upload and parse SOP document |
 | POST | /sop/parse-text | JWT | Parse SOP text |
@@ -334,7 +426,7 @@ AgenticOrg implements Google's A2A protocol for cross-platform agent discovery a
 - `POST /a2a/tasks` — execute tasks via A2A protocol (JWT or Grantex auth)
 
 ### MCP (Model Context Protocol)
-Full MCP server exposing all 273 connector tools to any MCP-compatible client:
+Full MCP server exposing all 320+ connector tools to any MCP-compatible client:
 - `GET /mcp/tools` — list all available MCP tools (no auth required)
 - `POST /mcp/call` — call any MCP tool (JWT or Grantex auth)
 
@@ -358,7 +450,7 @@ pytest tests/unit/
 # Security tests (86 tests)
 pytest tests/security/
 
-# Connector harness — all 43 connectors (174 tests)
+# Connector harness — all 51 connectors (174+ tests)
 pytest tests/connector_harness/
 
 # Synthetic data — invoice/resume/contract flows (15 tests)
@@ -384,7 +476,7 @@ python tests/test_production_connectors.py
 |-------|-------|---------------|
 | Unit | 821 | Agents, registry, schemas, routing, prompts, RBAC, workflows, LangGraph, SOP, A2A/MCP, negative cases |
 | Security | 86 | Auth bypass, token exploits, alg:none, HITL bypass, PII, agent scaling |
-| Connector harness | 174 | 43 connectors × all 273 tools |
+| Connector harness | 174+ | 51 connectors × all 320+ tools |
 | Synthetic data | 15 | Invoice OCR → match, resume screening, contract analysis |
 | Regression | 55 | March 2026 bug fixes (40) + April 2026 PR fixes (15) |
 | Integration | 62 | API integration (43) + virtual employee API (19) |
@@ -401,7 +493,7 @@ python tests/test_production_connectors.py
 agenticorg/
 ├── api/v1/                 # FastAPI endpoints (agents, auth, sales, templates, connectors, api-keys, sop, a2a, mcp)
 ├── core/
-│   ├── agents/             # 25 agent types + 27 prompt templates
+│   ├── agents/             # 35 agent types + 27 prompt templates
 │   │   ├── prompts/        # Production system prompts
 │   │   ├── registry.py     # Agent registry (built-in + custom type fallback)
 │   │   └── base.py         # BaseAgent: LLM reasoning → tool calling → HITL
@@ -412,10 +504,10 @@ agenticorg/
 │   ├── tool_gateway/       # Scope enforcement, rate limiting, PII masking, audit
 │   ├── gmail_agent.py      # Gmail API integration (inbox monitor, send replies)
 │   └── email.py            # SMTP email sending
-├── connectors/             # 43 enterprise connectors (273 tools)
-│   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA... (10)
+├── connectors/             # 51 enterprise connectors (320+ tools)
+│   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA, NetSuite... (11)
 │   ├── hr/                 # Darwinbox, Okta, Greenhouse, EPFO, Zoom... (8)
-│   ├── marketing/          # Salesforce, HubSpot, Google Ads, Ahrefs... (9)
+│   ├── marketing/          # Salesforce, HubSpot, Google Ads, GA4, MoEngage, YouTube... (16)
 │   ├── ops/                # Jira, Zendesk, ServiceNow, PagerDuty... (7)
 │   ├── comms/              # Slack, GitHub, Gmail, SendGrid, GCS, Twilio... (9)
 │   └── framework/          # BaseConnector, auth adapters, circuit breaker
@@ -427,7 +519,7 @@ agenticorg/
 ├── ui/src/
 │   ├── pages/              # Landing, Dashboard, Agents, Sales, Blog, Resources, Integrations, IntegrationWorkflow, ConnectorCreate, ConnectorDetail, Settings
 │   ├── components/         # AgentCard, ActivityTicker, InteractiveDemo, SocialProof
-│   ├── pages/blog/         # 5 SEO blog articles
+│   ├── pages/blog/         # 8 SEO blog articles
 │   └── pages/resources/    # 26 SEO content pages across 7 topic clusters
 ├── tests/
 │   ├── unit/               # 821 unit tests
@@ -452,7 +544,7 @@ agenticorg/
 | Asset | URL | Status |
 |-------|-----|--------|
 | Landing page | https://agenticorg.ai | 39 URLs in sitemap |
-| Blog (5 articles) | /blog | Invoice processing, RPA vs AI, reconciliation, HITL, no-code |
+| Blog (8 articles) | /blog | Invoice processing, RPA vs AI, reconciliation, HITL, no-code, month-end close, ROI measurement, CFO story |
 | Resources (26 pages) | /resources | 7 topic clusters, FAQ schemas, internal linking |
 | llms.txt | /llms.txt | 4.6KB product summary for AI crawlers |
 | llms-full.txt | /llms-full.txt | 18.7KB complete documentation |
@@ -466,8 +558,8 @@ agenticorg/
 | Plan | Price | Agents | Connectors | Tasks |
 |------|-------|--------|-----------|-------|
 | Free | $0 | 35 | 20 | 500/day |
-| Pro | $499/mo | Unlimited | 43 | Unlimited |
-| Enterprise | Custom | Unlimited | 43 | Unlimited + SLA |
+| Pro | $499/mo | Unlimited | 51 | Unlimited |
+| Enterprise | Custom | Unlimited | 51 | Unlimited + SLA |
 
 ---
 
@@ -478,8 +570,8 @@ Built for Indian enterprise — not retrofitted:
 - **EPFO** — ECR filing, UAN verification, passbook download
 - **Income Tax India** — TDS 26Q/24Q, Form 16A, 26AS credit check
 - **Darwinbox** — HRMS (payroll, attendance, performance, onboarding)
-- **Tally Prime** — Accounting (vouchers, trial balance, GST reports)
-- **Banking AA** — RBI-compliant Account Aggregator framework
+- **Tally Prime** — Native XML/TDL protocol + bridge agent for on-premise tunneling (vouchers, trial balance, GST reports)
+- **Banking AA** — RBI-compliant Account Aggregator consent flow (read-only: statements, balances, transactions)
 
 ---
 
@@ -507,6 +599,9 @@ Built for Indian enterprise — not retrofitted:
 |----------|-------------|
 | [PRD](docs/PRD.md) | Complete product requirements (7 pages) |
 | [API Reference](docs/api-reference.md) | Full API docs with Mermaid diagrams |
+| [CFO Guide](docs/cfo_guide.md) | CFO user guide — dashboard, agents, NL query, reports |
+| [CMO Guide](docs/cmo_guide.md) | CMO user guide — dashboard, agents, NL query, campaigns |
+| [CA Firm Setup](docs/ca_firm_setup_guide.md) | End-to-end CA firm deployment guide |
 | [QA Test Plan](tests/QA_MANUAL_TEST_PLAN.md) | 65 manual test cases with steps |
 | [QA Test Cases](tests/QA_TEST_CASES.md) | 70 automated test results |
 | [Architecture](docs/architecture.md) | 8-layer system design |

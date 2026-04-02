@@ -2,6 +2,39 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.1.0] — 2026-04-02
+
+### Added
+- **7 new connectors**: GA4, MoEngage, NetSuite, WordPress, Twitter/X, YouTube, Mailchimp — all with real API endpoints from official documentation
+- **8 new agents**: Treasury (cash management, sweep, forecast), Expense Manager (receipt OCR, policy enforcement, reimbursement), Rev Rec ASC 606 (performance obligation identification, revenue allocation, journal entries), Fixed Assets (depreciation schedules, impairment testing, disposal), Email Marketing (campaign creation, list segmentation, A/B testing), Social Media (scheduling, engagement monitoring, analytics), ABM (account targeting, intent signals, personalized outreach), Competitive Intel (competitor monitoring, pricing analysis, feature comparison)
+- **CFO Dashboard** (`/dashboard/cfo`): Cash Runway, Burn Rate, DSO, DPO, AR/AP Aging (30/60/90/120+), P&L Summary, Bank Balances (via AA), Tax Calendar with filing deadlines
+- **CMO Dashboard** (`/dashboard/cmo`): CAC by channel, MQLs/SQLs pipeline, Pipeline Value by stage, ROAS by Channel (Google/Meta/LinkedIn), Email Performance (open/CTR/unsub), Brand Sentiment trend, Content Performance
+- **NL Query interface**: Cmd+K global search bar + slide-out chat panel with full conversational UI, agent attribution on every answer, and persistent chat history
+- **Multi-company support**: company switcher in top nav for CA firms managing multiple client entities, isolated data per company, cross-company consolidated reporting, RBAC per entity
+- **Scheduled Report Engine**: Celery beat scheduler with cron expressions, PDF/Excel output with branded templates, delivery to email/Slack/WhatsApp, Report Scheduler UI for create/manage/toggle/run-now
+- **8 new workflow templates**: `month_end_close` (trial balance through close), `daily_treasury` (cash position, sweep, forecast, report), `tax_calendar` (deadline tracking, filing prep, DSC signing), `invoice_to_pay_v3` (OCR through payment execution), `campaign_launch` (brief through monitoring), `content_pipeline` (ideation through publish), `lead_nurture` (scoring through sales handoff), `weekly_marketing_report` (collect metrics, build report, deliver)
+- **Report Scheduler UI**: create, manage, toggle on/off, and run-now scheduled reports from the dashboard
+- **3 new blog posts**: month-end close optimization, honest ROI measurement framework, CFO story (200-person IT company)
+
+### Fixed
+- All 38 stub connectors rewritten with real API endpoints from official documentation — zero stubs remain
+- **Tally**: fake REST replaced with proper XML/TDL protocol + bridge agent for remote on-premise instances (WebSocket tunnel, auto-reconnect, heartbeats)
+- **Banking AA**: removed illegal payment tools, implemented full RBI-compliant consent flow (create consent, redirect, callback, FI session, fetch data). Connector is now read-only
+- **GSTN**: fixed base URL + implemented real Adaequare 2-step authentication (POST /authenticate for session token) + DSC signing (PKCS#1 v1.5 RSA-SHA256 via cryptography library)
+- **AP Processor**: wired to PineLabs Plural for actual payment execution (not simulated)
+- ROI claims in marketing copy replaced with honest "measured during pilot" language throughout
+- mypy errors resolved: grantex module typing, ChatAnthropic imports, LangGraph overload signatures
+- bandit security scan clean: defusedxml for all XML parsing, nosec annotations for GAQL/SOQL query strings
+
+### Changed
+- Agent count: 27 → **35** (8 new specialist agents across Finance and Marketing)
+- Connector count: 43 → **51** (7 new connectors, all with real endpoints)
+- Tool count: 273 → **320+** (new tools across all 8 new connectors)
+- Workflow templates: 3 → **11** (8 new production-ready templates)
+- Landing page updated with correct agent/connector/tool counts
+- Documentation: added CFO Guide, CMO Guide, updated API Reference with 12 new endpoints
+- Version: 2.3.0 → **3.1.0**
+
 ## [2.3.0] - 2026-03-31
 
 ### Added — Security, Error Handling, SDKs & New Features
