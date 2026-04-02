@@ -604,7 +604,7 @@ class TestEdgeCases:
 
         # Only "region" in routing_context — should still match
         import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             TaskRouter.resolve_agent_instance(
                 uuid.uuid4(), "ap_processor", {"region": "west"}, mock_session
             )
