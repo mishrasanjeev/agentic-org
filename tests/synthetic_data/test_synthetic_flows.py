@@ -19,7 +19,6 @@ DATA_DIR = Path(__file__).parent
 CEO_EMAIL = "ceo@agenticorg.local"
 CEO_PASS = "ceo123!"
 
-
 @pytest.fixture(scope="module")
 def token():
     """Get auth token from production."""
