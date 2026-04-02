@@ -32,9 +32,8 @@ class TestConnectorToolExecution:
                 assert isinstance(result, dict), (
                     f"{connector_name}.{tool_name} returned {type(result).__name__}, expected dict"
                 )
-            except (KeyError, ValueError, TypeError) as e:
-                # Missing required params — expected when calling with {}
-                pass
+            except (KeyError, ValueError, TypeError):
+                pass  # Missing required params — expected when calling with {}
             except RuntimeError as e:
                 if "not connected" in str(e).lower():
                     pass  # Connector not connected — expected in harness
