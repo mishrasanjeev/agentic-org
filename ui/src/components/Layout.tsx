@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 const NLQueryBar = lazy(() => import("./NLQueryBar"));
 const ChatPanel = lazy(() => import("./ChatPanel"));
 const CompanySwitcher = lazy(() => import("./CompanySwitcher"));
+const NotificationBell = lazy(() => import("./NotificationBell"));
 
 const ALL_NAV = [
   { path: "/dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
@@ -165,7 +166,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Suspense fallback={null}>
               <NLQueryBar onOpenChat={() => setChatOpen(true)} />
             </Suspense>
-            <HITLBadge count={0} />
+            <Suspense fallback={null}>
+              <NotificationBell />
+            </Suspense>
+            <HITLBadge />
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>

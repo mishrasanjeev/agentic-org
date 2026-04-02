@@ -85,6 +85,9 @@ class ExternalKeys(BaseSettings):
     hitl_notification_email: str = ""
     pinelabs_plural_api_key: str = ""
     pinelabs_plural_api_secret: str = ""
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_contact_email: str = "mailto:push@agenticorg.ai"
 
 
 settings = Settings()

@@ -27,6 +27,7 @@ from api.v1 import (
     kpis,
     mcp,
     prompt_templates,
+    push,
     report_schedules,
     sales,
     schemas,
@@ -131,6 +132,7 @@ app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregator"])
 app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])
+app.include_router(push.router, prefix="/api/v1", tags=["Push Notifications"])
 app.include_router(report_schedules.router, prefix="/api/v1", tags=["Report Schedules"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

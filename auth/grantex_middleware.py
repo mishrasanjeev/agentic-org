@@ -63,6 +63,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/a2a/agent-card",  # A2A discovery alias (nginx-safe)
         "/api/v1/a2a/agents",  # A2A agent list (public)
         "/api/v1/mcp/tools",  # MCP tool discovery (public)
+        "/api/v1/push/vapid-key",  # VAPID public key (browser needs before login)
         "/docs", "/openapi.json", "/redoc",
     }
 
