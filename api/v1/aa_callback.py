@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from api.deps import get_current_tenant
 from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_tenant
 from connectors.finance.aa_consent_types import AACallbackPayload
 
 logger = structlog.get_logger()
