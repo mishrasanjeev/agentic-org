@@ -1,7 +1,7 @@
 # AgenticOrg — Manual QA Test Plan
 
-**Version**: 2.1.0
-**Date**: 2026-03-25
+**Version**: 3.1.0
+**Date**: 2026-04-02
 **Environment**: https://app.agenticorg.ai
 **Landing**: https://agenticorg.ai
 
@@ -237,3 +237,127 @@ Severity: [Critical/High/Medium/Low]
 |--------|------|-----------------|-------------------|-----------|
 | | | | | |
 | | | | | |
+
+---
+
+## v3.1.0 Test Cases (Added 2026-04-02)
+
+### SECTION G: CFO Dashboard (/dashboard/cfo)
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| G1 | Page loads for CFO role | Login as CFO (cfo@agenticorg.local). Navigate to /dashboard/cfo | Page loads with title "Finance Dashboard". No console errors | | |
+| G2 | Cash Runway card shows number + unit | On /dashboard/cfo, locate "Cash Runway" KPI card | Card displays a numeric value followed by "months" unit (e.g., "8.2 months") | | |
+| G3 | Burn Rate card shows INR amount with trend | On /dashboard/cfo, locate "Burn Rate" KPI card | Card shows amount in INR format (e.g., "INR 12,50,000") with a trend arrow (up/down) indicating direction | | |
+| G4 | DSO card shows days value | On /dashboard/cfo, locate "DSO" (Days Sales Outstanding) KPI card | Card shows a numeric value in days (e.g., "42 days") | | |
+| G5 | DPO card shows days value | On /dashboard/cfo, locate "DPO" (Days Payable Outstanding) KPI card | Card shows a numeric value in days (e.g., "35 days") | | |
+| G6 | AR Aging chart renders with 4 bars | On /dashboard/cfo, scroll to "AR Aging" chart | Bar chart renders with exactly 4 bars labeled: 0-30, 31-60, 61-90, 90+ days. Each bar has a visible value | | |
+| G7 | AP Aging chart renders with 4 bars | On /dashboard/cfo, scroll to "AP Aging" chart | Bar chart renders with exactly 4 bars labeled: 0-30, 31-60, 61-90, 90+ days. Each bar has a visible value | | |
+| G8 | P&L table shows all rows | On /dashboard/cfo, scroll to "P&L" (Profit & Loss) table | Table shows rows for: Revenue, COGS, Gross Margin, OPEX, Net Income. Each row has a numeric value | | |
+| G9 | Bank Balances section | On /dashboard/cfo, scroll to "Bank Balances" section | Section lists account names (e.g., "HDFC Current A/c") with corresponding balance amounts in INR | | |
+| G10 | Tax Calendar shows upcoming filings | On /dashboard/cfo, scroll to "Tax Calendar" section | Shows upcoming filing dates (e.g., GST, TDS) with status badges (e.g., "Due", "Filed", "Overdue") | | |
+| G11 | Loading state | Navigate to /dashboard/cfo. Observe before data loads (throttle network to Slow 3G in DevTools) | Spinner or skeleton placeholders are visible while data is loading. No flash of empty content | | |
+| G12 | Error state | Navigate to /dashboard/cfo. Disconnect network (DevTools > Network > Offline) after page load begins | Page shows a user-friendly error message (e.g., "Failed to load data"). No white screen or crash | | |
+| G13 | Empty state — new tenant | Login as CFO for a newly created tenant with no financial data | Page shows "No data yet" or similar empty state message. No crash or broken layout | | |
+| G14 | CMO role cannot access CFO dashboard | Login as CMO (cmo@agenticorg.local). Navigate to /dashboard/cfo | User is redirected away or sees a 403 Forbidden message. CFO data is NOT displayed | | |
+| G15 | Responsive layout on mobile | Navigate to /dashboard/cfo. Resize browser to 375px width (or use DevTools mobile emulation) | KPI cards stack vertically in a single column. Charts resize to fit viewport. No horizontal scrollbar | | |
+
+### SECTION H: CMO Dashboard (/dashboard/cmo)
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| H1 | Page loads for CMO role | Login as CMO (cmo@agenticorg.local). Navigate to /dashboard/cmo | Page loads with title "Marketing Dashboard". No console errors | | |
+| H2 | CAC card shows currency value | On /dashboard/cmo, locate "CAC" (Customer Acquisition Cost) KPI card | Card displays a currency amount (e.g., "INR 2,450") | | |
+| H3 | MQLs card shows count | On /dashboard/cmo, locate "MQLs" (Marketing Qualified Leads) KPI card | Card shows a numeric count (e.g., "342") | | |
+| H4 | SQLs card shows count | On /dashboard/cmo, locate "SQLs" (Sales Qualified Leads) KPI card | Card shows a numeric count (e.g., "87") | | |
+| H5 | Pipeline card shows value | On /dashboard/cmo, locate "Pipeline" KPI card | Card shows a currency value representing pipeline total (e.g., "INR 1.2 Cr") | | |
+| H6 | ROAS chart renders | On /dashboard/cmo, scroll to "ROAS" (Return on Ad Spend) chart | Chart renders with labeled axes. Shows ROAS data by channel or time period. Values are visible | | |
+| H7 | Email Performance section | On /dashboard/cmo, scroll to "Email Performance" section | Shows email metrics: open rate, click rate, bounce rate, unsubscribes. Each with numeric values | | |
+| H8 | Social Engagement section | On /dashboard/cmo, scroll to "Social Engagement" section | Shows engagement metrics across social platforms (e.g., likes, shares, comments, followers) | | |
+| H9 | Website Traffic section | On /dashboard/cmo, scroll to "Website Traffic" section | Shows traffic metrics: sessions, page views, bounce rate, avg. session duration | | |
+| H10 | Top Content section | On /dashboard/cmo, scroll to "Top Content" section | Lists top-performing content pieces with titles, views, and engagement scores | | |
+| H11 | Brand Sentiment section | On /dashboard/cmo, scroll to "Brand Sentiment" section | Shows sentiment indicator (positive/neutral/negative) with a score or chart | | |
+| H12 | Loading state | Navigate to /dashboard/cmo. Observe before data loads (throttle network to Slow 3G in DevTools) | Spinner or skeleton placeholders are visible while data is loading. No flash of empty content | | |
+| H13 | Error state | Navigate to /dashboard/cmo. Disconnect network (DevTools > Network > Offline) after page load begins | Page shows a user-friendly error message. No white screen or crash | | |
+| H14 | Empty state — new tenant | Login as CMO for a newly created tenant with no marketing data | Page shows "No data yet" or similar empty state message. No crash or broken layout | | |
+| H15 | Responsive layout on mobile | Navigate to /dashboard/cmo. Resize browser to 375px width | KPI cards stack vertically. Charts resize to fit viewport. No horizontal scrollbar | | |
+
+### SECTION I: NL Query Interface
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| I1 | Cmd+K opens search bar (Mac) | On any dashboard page (Mac), press Cmd+K | Search bar / command palette opens with a text input field focused and ready for typing | | |
+| I2 | Ctrl+K opens search bar (Windows) | On any dashboard page (Windows), press Ctrl+K | Search bar / command palette opens with a text input field focused and ready for typing | | |
+| I3 | Finance domain query | Open search bar. Type "What's my cash position?" and press Enter | Response appears showing a finance-domain answer. Agent name is displayed (e.g., "FPA Agent"). Response contains cash/balance data | | |
+| I4 | Marketing domain query | Open search bar. Type "How did Google Ads perform?" and press Enter | Response appears showing a marketing-domain answer. Agent name is displayed (e.g., "Paid Ads Agent"). Response contains ad performance data | | |
+| I5 | Empty query — no submit | Open search bar. Leave input empty and press Enter | Nothing is submitted. No API call is made. Search bar remains open or shows a hint to type a query | | |
+| I6 | Long query (>1000 chars) | Open search bar. Paste a query exceeding 1000 characters and press Enter | Application does not crash. Query is either truncated gracefully or handled with an appropriate message | | |
+| I7 | Special characters / XSS | Open search bar. Type `<script>alert('xss')</script>` and press Enter. Also try `'; DROP TABLE agents; --` | Input is sanitized. No script execution. No XSS alert. Query is treated as plain text. No SQL injection | | |
+| I8 | "Open Chat" button | After receiving a query response, click the "Open Chat" button | A slide-out chat panel opens on the right side of the screen | | |
+| I9 | Chat panel — multi-turn conversation | In the chat panel, send multiple messages in sequence | Each response shows agent attribution (agent name) and a confidence score. Conversation history is preserved | | |
+| I10 | Chat panel — close button | In the open chat panel, click the X (close) button | Chat panel closes. Main dashboard content is fully visible again | | |
+| I11 | Chat panel — Enter key sends message | In the chat panel, type a message and press Enter | Message is sent. Response appears below. No need to click a Send button | | |
+| I12 | Escape key closes search dropdown | Open search bar with Ctrl+K / Cmd+K. Press Escape | Search bar / dropdown closes. Focus returns to the main page | | |
+
+### SECTION J: Company Switcher (Multi-Company)
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| J1 | Header shows company name | Login as any user. Look at the page header / top bar | Current company name is displayed (e.g., "Acme Corp"). If no company, shows "No company" or similar placeholder | | |
+| J2 | Dropdown lists all companies | Click the company name in the header to open the dropdown | Dropdown shows all companies associated with the current tenant. Each listed with its name | | |
+| J3 | Switch company — data refreshes | Select a different company from the dropdown | Page data refreshes to show KPIs and agents for the selected company. URL or context updates accordingly | | |
+| J4 | Single company — no dropdown | Login as a user whose tenant has only one company | Company name is shown in the header but there is no dropdown arrow or switcher. Just a static label | | |
+| J5 | Create new company via API | Send POST /companies with a valid company name via API (e.g., curl or Postman). Then refresh the dashboard | New company appears in the company switcher dropdown | | |
+| J6 | Company ID persists after reload | Switch to a specific company. Reload the page (F5) | After reload, the same company is still selected. Check localStorage for persisted company_id | | |
+
+### SECTION K: Report Scheduler (/dashboard/report-schedules)
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| K1 | Page loads with empty state | Navigate to /dashboard/report-schedules (no schedules created yet) | Page shows "No scheduled reports yet" or equivalent empty state message | | |
+| K2 | "+ New Schedule" opens form | Click the "+ New Schedule" button | A create form or modal opens with fields for configuring a new report schedule | | |
+| K3 | Report type dropdown | In the create form, click the report type dropdown | All 6 report types are listed and selectable | | |
+| K4 | Schedule frequency presets | In the create form, click the schedule frequency dropdown | Options include: Daily, Weekly, Monthly presets. Each is selectable | | |
+| K5 | Format selection | In the create form, select the output format | Options include: PDF, Excel, Both. Each is selectable | | |
+| K6 | Email recipient field | In the create form, enter an email address in the recipient field | Email is accepted. Validation shows error for invalid email format | | |
+| K7 | Slack channel field | In the create form, enter a Slack channel name (e.g., #finance-reports) | Channel name is accepted in the field | | |
+| K8 | WhatsApp number field | In the create form, enter a WhatsApp number (e.g., +91-9876543210) | Phone number is accepted in the field | | |
+| K9 | Create schedule — appears in list | Fill all required fields and click Create / Save | Schedule is created successfully. It appears in the schedule list with correct report type, frequency, format, and recipients | | |
+| K10 | Toggle active/inactive | In the schedule list, toggle the active/inactive switch for a schedule | Badge changes between "Active" and "Inactive". Schedule status is updated | | |
+| K11 | "Run Now" triggers generation | Click the "Run Now" button next to a schedule | Button shows loading state. Report generation is triggered immediately. Success confirmation shown | | |
+| K12 | Delete schedule | Click the delete button next to a schedule | Confirmation prompt appears. After confirming, schedule is removed from the list | | |
+| K13 | Multiple schedules display | Create 3+ schedules with different configurations | All schedules are listed with correct details (type, frequency, format, recipients, status) | | |
+| K14 | Responsive layout | Navigate to /dashboard/report-schedules on a 375px viewport | Form fields stack vertically. Schedule list adapts to narrow width. No horizontal scrollbar | | |
+
+### SECTION L: Updated Landing Page
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| L1 | Hero stats show updated numbers | Open https://agenticorg.ai. Look at the hero section stats | Stats show "35 agents", "51 connectors", "320+ tools" | | |
+| L2 | Role cards show updated agent counts | Scroll to the role/domain cards section | Cards show updated counts: 10 finance agents, 9 marketing agents, and correct counts for other domains | | |
+| L3 | CA Firm case study section visible | Scroll down the landing page to the section before the Final CTA | A CA Firm case study section is visible with heading, summary, and call-to-action link | | |
+| L4 | Case study link works | Click "Read the full case study" link in the CA Firm section | Navigates to /blog/ca-firm-ai-agent-end-to-end. Blog post loads with full content | | |
+| L5 | Blog nav link works | Click "Blog" in the top navigation bar | Navigates to /blog. Page shows 8+ blog posts listed with titles, dates, and category badges | | |
+| L6 | New blog posts load correctly | On /blog, click each of the 4 newest blog posts | Each post loads fully with title, content, images (if any), and proper formatting. No 404 errors | | |
+| L7 | Pricing page shows 51 connectors | Navigate to /pricing | Pricing page mentions "51 connectors" in the feature list or comparison table | | |
+| L8 | Meta description matches | View page source of landing page. Search for meta description tag | Meta description contains "35 pre-built agents" | | |
+
+### SECTION M: SEO & Indexing
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| M1 | Sitemap includes new blog URLs | Open https://agenticorg.ai/sitemap.xml | Sitemap contains URLs for all 4 new blog posts. Each URL has a valid <lastmod> date | | |
+| M2 | llms.txt shows updated numbers | Open https://agenticorg.ai/llms.txt | Content mentions "35 agents", "51 connectors", and "320+ tools" | | |
+| M3 | llms-full.txt shows updated numbers | Open https://agenticorg.ai/llms-full.txt | Content mentions "35 agents", "51 connectors", and "320+ tools" | | |
+| M4 | robots.txt allows /blog/* | Open https://agenticorg.ai/robots.txt | robots.txt contains Allow rule for /blog/* or does not disallow /blog/ paths | | |
+| M5 | New blog posts have proper meta tags | Open each of the 4 new blog posts. View page source | Each post has a unique <title> tag and a <meta name="description"> tag with relevant content | | |
+
+### SECTION N: Cross-Feature Integration
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| N1 | CFO report schedule end-to-end | Login as CFO. Navigate to /dashboard/report-schedules. Create a new schedule (e.g., Monthly P&L, PDF, email). Verify it appears in the list. Click "Run Now" | Schedule is created and listed. "Run Now" triggers report generation. Success confirmation appears. Report is generated (PDF) | | |
+| N2 | CMO approves content via HITL | Login as CMO. Navigate to Approvals page. Find a pending content approval from a marketing agent. Approve it | Content approval status changes to "Approved". Agent execution continues with the approved content | | |
+| N3 | NL query to chat from CFO dashboard | Login as CFO. Navigate to /dashboard/cfo. Press Ctrl+K. Type "What's my cash position?". View the response. Click "Open Chat". Send a follow-up message (e.g., "Break it down by account") | Finance agent responds to the initial query with cash data. Chat panel opens. Follow-up message receives a contextual multi-turn response with agent attribution and confidence score | | |
+| N4 | Company switch updates all contexts | Login as CEO. Switch company via the header dropdown. Navigate to /dashboard/cfo. Then open NL query (Ctrl+K) and ask a question | CFO dashboard KPIs update to reflect the switched company's data. NL query response is contextualized to the new company | | |
+| N5 | New company — empty state everywhere | Login as CEO. Create a new company via POST /companies API. Switch to the new company in the dropdown. Visit /dashboard/cfo, /dashboard/cmo, and /dashboard/report-schedules | CFO dashboard shows empty state ("No data yet"). CMO dashboard shows empty state. Report schedules page shows "No scheduled reports yet". No crashes or broken layouts | | |
