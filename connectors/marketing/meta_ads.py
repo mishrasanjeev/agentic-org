@@ -1,8 +1,12 @@
-"""Meta Ads connector — marketing."""
+"""Meta Ads connector — marketing.
+
+Integrates with Meta Marketing API v21.0 (Facebook/Instagram Ads).
+Uses the Graph API pattern: GET/POST /{object_id}?fields=...
+"""
 
 from __future__ import annotations
 
-import httpx
+from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
 
@@ -14,46 +18,80 @@ class MetaAdsConnector(BaseConnector):
     base_url = "https://graph.facebook.com/v21.0"
     rate_limit_rpm = 200
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        super().__init__(config)
+        self._ad_account_id = self.config.get("ad_account_id", "")
+
     def _register_tools(self):
-        self._tool_registry["get_campaign_performance"] = self.get_campaign_performance
-        self._tool_registry["reallocate_ad_budget"] = self.reallocate_ad_budget
-        self._tool_registry["create_lookalike_audience"] = self.create_lookalike_audience
-        self._tool_registry["pause_ad_set"] = self.pause_ad_set
-        self._tool_registry["get_reach_and_frequency_data"] = self.get_reach_and_frequency_data
+        self._tool_registry["get_campaign_insights"] = self.get_campaign_insights
+        self._tool_registry["update_campaign_budget"] = self.update_campaign_budget
+        self._tool_registry["create_custom_audience"] = self.create_custom_audience
+        self._tool_registry["update_adset_status"] = self.update_adset_status
+        self._tool_registry["get_ad_account_info"] = self.get_ad_account_info
 
     async def _authenticate(self):
-        client_id = self._get_secret("client_id")
-        client_secret = self._get_secret("client_secret")
-        token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                },
-            )
-            resp.raise_for_status()
-            token = resp.json()["access_token"]
-        self._auth_headers = {"Authorization": f"Bearer {token}"}
+        access_token = self._get_secret("access_token")
+        self._auth_headers = {"Authorization": f"Bearer {access_token}"}
 
-    async def get_campaign_performance(self, **params):
-        """Execute get_campaign_performance on meta_ads."""
-        return await self._post("/get/campaign/performance", params)
+    async def health_check(self) -> dict[str, Any]:
+        try:
+            result = await self._get("/me", {"fields": "id,name"})
+            return {"status": "healthy", "name": result.get("name", "")}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
 
-    async def reallocate_ad_budget(self, **params):
-        """Execute reallocate_ad_budget on meta_ads."""
-        return await self._post("/reallocate/ad/budget", params)
+    async def get_campaign_insights(self, **params) -> dict[str, Any]:
+        """Get campaign performance insights.
 
-    async def create_lookalike_audience(self, **params):
-        """Execute create_lookalike_audience on meta_ads."""
-        return await self._post("/create/lookalike/audience", params)
+        Params: time_range (dict with since/until YYYY-MM-DD),
+                campaign_id (optional — all campaigns if omitted),
+                fields (optional, default: impressions,clicks,spend,actions).
+        """
+        fields = params.get(
+            "fields",
+            "campaign_name,impressions,clicks,spend,actions,cost_per_action_type,ctr,cpc",
+        )
+        time_range = params.get("time_range", {})
+        query: dict[str, Any] = {"fields": fields}
+        if time_range:
+            query["time_range"] = time_range
 
-    async def pause_ad_set(self, **params):
-        """Execute pause_ad_set on meta_ads."""
-        return await self._post("/pause/ad/set", params)
+        if params.get("campaign_id"):
+            return await self._get(f"/{params['campaign_id']}/insights", query)
+        return await self._get(f"/act_{self._ad_account_id}/insights", query)
 
-    async def get_reach_and_frequency_data(self, **params):
-        """Execute get_reach_and_frequency_data on meta_ads."""
-        return await self._post("/get/reach/and/frequency/data", params)
+    async def update_campaign_budget(self, **params) -> dict[str, Any]:
+        """Update a campaign's daily or lifetime budget.
+
+        Params: campaign_id (required), daily_budget (in cents) or
+                lifetime_budget (in cents).
+        """
+        campaign_id = params.pop("campaign_id")
+        return await self._post(f"/{campaign_id}", params)
+
+    async def create_custom_audience(self, **params) -> dict[str, Any]:
+        """Create a Custom Audience for targeting.
+
+        Params: name (required), description, subtype (CUSTOM, LOOKALIKE, WEBSITE),
+                customer_file_source (optional for CUSTOM type).
+        """
+        return await self._post(f"/act_{self._ad_account_id}/customaudiences", params)
+
+    async def update_adset_status(self, **params) -> dict[str, Any]:
+        """Pause or activate an ad set.
+
+        Params: adset_id (required), status (ACTIVE or PAUSED).
+        """
+        adset_id = params.pop("adset_id")
+        return await self._post(f"/{adset_id}", {"status": params.get("status", "PAUSED")})
+
+    async def get_ad_account_info(self, **params) -> dict[str, Any]:
+        """Get ad account info including spend limits and balance.
+
+        Params: fields (optional).
+        """
+        fields = params.get(
+            "fields",
+            "name,account_status,amount_spent,balance,currency,spend_cap",
+        )
+        return await self._get(f"/act_{self._ad_account_id}", {"fields": fields})

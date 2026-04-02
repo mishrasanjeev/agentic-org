@@ -22,7 +22,7 @@ class TestConnectorErrorHandling:
             timeout=10.0,
         )
         with pytest.raises(httpx.HTTPStatusError):
-            await connector.execute_tool("create_charge", {"amount": 1000})
+            await connector.execute_tool("create_payment_intent", {"amount": 1000, "currency": "usd"})
 
     async def test_http_429_raises(self, mock_server_url):
         """HTTP 429 rate limit from external service raises an error."""

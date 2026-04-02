@@ -31,16 +31,16 @@ from core.schemas.api import (
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     # Finance
     "ap_processor": [
-        "fetch_bank_statement", "create_charge",
+        "fetch_bank_statement", "create_payment_intent",
         "create_payout", "get_settlement_report",
     ],
     "ar_collections": [
-        "create_payment_link", "list_contacts", "create_charge",
-        "get_account_balance", "send_transactional_email",
+        "create_payment_link", "list_contacts", "create_payment_intent",
+        "get_balance", "send_email",
     ],
     "recon_agent": [
         "fetch_bank_statement", "get_transaction_list",
-        "check_account_balance", "generate_financial_report",
+        "check_account_balance", "list_invoices",
     ],
     "tax_compliance": [
         "file_26q_return", "file_24q_return",
@@ -48,11 +48,11 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "pay_tax_challan", "download_form_16a",
     ],
     "close_agent": [
-        "generate_financial_report", "fetch_bank_statement",
-        "get_account_balance", "search_content_fulltext",
+        "list_invoices", "fetch_bank_statement",
+        "get_balance", "search_content_fulltext",
     ],
     "fpa_agent": [
-        "generate_financial_report", "get_account_balance",
+        "list_invoices", "get_balance",
         "get_campaign_performance_metrics", "get_project_metrics",
     ],
     # HR
@@ -108,7 +108,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "support_triage": [
         "create_ticket", "update_ticket", "escalate_to_group",
         "get_sla_breach_status", "get_csat_score", "apply_macro",
-        "send_message", "post_formatted_alert",
+        "send_message", "post_alert",
     ],
     "vendor_manager": [
         "search_issues", "create_issue", "add_comment",
@@ -127,7 +127,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "create_incident", "trigger_alert_with_context",
         "acknowledge_incident", "manage_on_call_schedule",
         "run_automated_runbook", "send_message",
-        "post_formatted_alert",
+        "post_alert",
     ],
     # Backoffice
     "legal_ops": [
@@ -158,8 +158,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
 
 _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "finance": [
-        "fetch_bank_statement", "create_charge",
-        "get_account_balance", "generate_financial_report",
+        "fetch_bank_statement", "create_payment_intent",
+        "get_balance", "list_invoices",
     ],
     "hr": [
         "get_employee", "create_employee",

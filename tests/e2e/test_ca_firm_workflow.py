@@ -91,21 +91,37 @@ class TestCAFirmWorkflowE2E:
         from connectors.finance.zoho_books import ZohoBooksConnector
 
         connector = ZohoBooksConnector(config={"api_key": "test-key"})
+        # Zoho Books API wraps response as {"code": 0, "invoice": {...}}
         mock_resp = {
+            "code": 0,
+            "message": "success",
             "invoice": {
                 "invoice_id": sample_invoice["invoice_id"],
                 "total": sample_invoice["total"],
                 "status": "sent",
-            }
+            },
+        }
+        invoice_params = {
+            "customer_id": sample_invoice["vendor_id"],
+            "line_items": [
+                {
+                    "item_id": "item-001",
+                    "rate": sample_invoice["taxable_value"],
+                    "quantity": 1,
+                }
+            ],
+            "date": sample_invoice["date"],
+            "gst_treatment": "business_gst",
+            "place_of_supply": "29",
         }
         with (
             patch.object(connector, "_authenticate", new_callable=AsyncMock),
             patch.object(connector, "_post", new_callable=AsyncMock, return_value=mock_resp),
         ):
             await connector.connect()
-            result = await connector.create_invoice(**sample_invoice)
-            assert result["invoice"]["invoice_id"] == "INV-2026-0042"
-            assert result["invoice"]["total"] == 118000
+            result = await connector.create_invoice(**invoice_params)
+            assert result["invoice_id"] == "INV-2026-0042"
+            assert result["total"] == 118000
 
     # ---------------------------------------------------------------------------
     # Step 2: Bank reconciliation (Banking AA — read-only)

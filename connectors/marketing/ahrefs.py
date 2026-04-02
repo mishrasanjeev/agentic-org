@@ -1,6 +1,12 @@
-"""Ahrefs connector — marketing."""
+"""Ahrefs connector — marketing.
+
+Integrates with Ahrefs API v3 for SEO analytics — domain ratings,
+backlink analysis, keyword research, content gaps, and site audits.
+"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
 
@@ -13,34 +19,62 @@ class AhrefsConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def _register_tools(self):
-        self._tool_registry["get_keyword_ranking_history"] = self.get_keyword_ranking_history
-        self._tool_registry["identify_content_gaps_vs_competitor"] = (
-            self.identify_content_gaps_vs_competitor
-        )
-        self._tool_registry["get_backlink_profile"] = self.get_backlink_profile
         self._tool_registry["get_domain_rating"] = self.get_domain_rating
-        self._tool_registry["export_crawl_issues"] = self.export_crawl_issues
+        self._tool_registry["get_backlinks"] = self.get_backlinks
+        self._tool_registry["get_organic_keywords"] = self.get_organic_keywords
+        self._tool_registry["get_content_gap"] = self.get_content_gap
+        self._tool_registry["get_site_audit"] = self.get_site_audit
 
     async def _authenticate(self):
-        api_key = self._get_secret("api_key")
-        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
+        api_token = self._get_secret("api_token")
+        self._auth_headers = {"Authorization": f"Bearer {api_token}"}
 
-    async def get_keyword_ranking_history(self, **params):
-        """Execute get_keyword_ranking_history on ahrefs."""
-        return await self._post("/get/keyword/ranking/history", params)
+    async def health_check(self) -> dict[str, Any]:
+        try:
+            await self._get("/site-explorer/domain-rating", {"target": "ahrefs.com"})
+            return {"status": "healthy"}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
 
-    async def identify_content_gaps_vs_competitor(self, **params):
-        """Execute identify_content_gaps_vs_competitor on ahrefs."""
-        return await self._post("/identify/content/gaps/vs/competitor", params)
+    async def get_domain_rating(self, **params) -> dict[str, Any]:
+        """Get domain rating and authority metrics.
 
-    async def get_backlink_profile(self, **params):
-        """Execute get_backlink_profile on ahrefs."""
-        return await self._post("/get/backlink/profile", params)
+        Params: target (required — domain like "example.com").
+        """
+        return await self._get("/site-explorer/domain-rating", params)
 
-    async def get_domain_rating(self, **params):
-        """Execute get_domain_rating on ahrefs."""
-        return await self._post("/get/domain/rating", params)
+    async def get_backlinks(self, **params) -> dict[str, Any]:
+        """Get backlink profile for a domain or URL.
 
-    async def export_crawl_issues(self, **params):
-        """Execute export_crawl_issues on ahrefs."""
-        return await self._post("/export/crawl/issues", params)
+        Params: target (required), mode (domain/prefix/exact/subdomains),
+                limit (default 50), order_by (ahrefs_rank/domain_rating).
+        """
+        params.setdefault("mode", "domain")
+        params.setdefault("limit", 50)
+        return await self._get("/site-explorer/backlinks", params)
+
+    async def get_organic_keywords(self, **params) -> dict[str, Any]:
+        """Get organic keyword rankings for a domain.
+
+        Params: target (required), country (2-letter code, default "in"),
+                limit (default 50), order_by (volume/position/traffic).
+        """
+        params.setdefault("country", "in")
+        params.setdefault("limit", 50)
+        return await self._get("/site-explorer/organic-keywords", params)
+
+    async def get_content_gap(self, **params) -> dict[str, Any]:
+        """Find content gaps vs competitors.
+
+        Params: target (required — your domain),
+                competitors (required — list of competitor domains),
+                country (default "in"), limit (default 50).
+        """
+        return await self._get("/content-explorer/overview", params)
+
+    async def get_site_audit(self, **params) -> dict[str, Any]:
+        """Get site audit crawl issues.
+
+        Params: target (required — domain to audit).
+        """
+        return await self._get("/site-audit/crawl-issues", params)

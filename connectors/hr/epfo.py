@@ -1,4 +1,12 @@
-"""Epfo connector — hr."""
+"""EPFO connector — HR / Compliance.
+
+Integrates with EPFO Unified Portal for PF compliance operations.
+Note: EPFO does not expose a public REST API. This connector is
+designed for bridge-style integration via DSC-authenticated portal
+sessions. In production, requires a headless browser bridge or
+EPFO's employer API (when available). Paths are portal-specific
+and will be implemented via the bridge pattern.
+"""
 
 from __future__ import annotations
 

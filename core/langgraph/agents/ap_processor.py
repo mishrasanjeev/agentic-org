@@ -16,7 +16,7 @@ from core.langgraph.runner import run_agent
 # Default tools for AP Processor (same as _AGENT_TYPE_DEFAULT_TOOLS)
 AP_PROCESSOR_TOOLS = [
     "fetch_bank_statement",
-    "create_charge",
+    "create_payment_intent",
     "create_payout",
     "get_settlement_report",
 ]

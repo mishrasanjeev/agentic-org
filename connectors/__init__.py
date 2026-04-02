@@ -7,12 +7,15 @@ from connectors.comms import langsmith_connector as _  # noqa: F401, F811
 from connectors.comms import s3 as _  # noqa: F401, F811
 from connectors.comms import sendgrid as _  # noqa: F401, F811
 
-# Comms connectors (8)
+# Comms connectors (11)
 from connectors.comms import slack as _  # noqa: F401, F811
 from connectors.comms import twilio as _  # noqa: F401, F811
+from connectors.comms import twitter as _  # noqa: F401, F811
 from connectors.comms import whatsapp as _  # noqa: F401, F811
+from connectors.comms import youtube as _  # noqa: F401, F811
 from connectors.finance import banking_aa as _  # noqa: F401, F811
 from connectors.finance import gstn as _  # noqa: F401, F811
+from connectors.finance import netsuite as _  # noqa: F401, F811
 from connectors.finance import income_tax_india as _  # noqa: F401, F811
 
 # Import all connector modules so their classes are loaded into memory.
@@ -39,7 +42,11 @@ from connectors.hr import zoom as _  # noqa: F401, F811
 from connectors.marketing import ahrefs as _  # noqa: F401, F811
 from connectors.marketing import brandwatch as _  # noqa: F401, F811
 from connectors.marketing import buffer as _  # noqa: F401, F811
+from connectors.marketing import ga4 as _  # noqa: F401, F811
 from connectors.marketing import google_ads as _  # noqa: F401, F811
+from connectors.marketing import mailchimp as _  # noqa: F401, F811
+from connectors.marketing import moengage as _  # noqa: F401, F811
+from connectors.marketing import wordpress as _  # noqa: F401, F811
 
 # Marketing connectors (9)
 from connectors.marketing import hubspot as _  # noqa: F401, F811

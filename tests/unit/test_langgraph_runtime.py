@@ -92,10 +92,10 @@ class TestToolAdapter:
     def test_build_tools_for_agent_returns_langchain_tools(self):
         from core.langgraph.tool_adapter import build_tools_for_agent
 
-        tools = build_tools_for_agent(["fetch_bank_statement", "create_charge"])
+        tools = build_tools_for_agent(["fetch_bank_statement", "create_payment_intent"])
         assert len(tools) == 2
         assert tools[0].name == "fetch_bank_statement"
-        assert tools[1].name == "create_charge"
+        assert tools[1].name == "create_payment_intent"
 
     def test_build_tools_for_agent_skips_unknown(self):
         from core.langgraph.tool_adapter import build_tools_for_agent
@@ -264,7 +264,7 @@ class TestApProcessor:
         from core.langgraph.agents.ap_processor import AP_PROCESSOR_TOOLS
 
         assert "fetch_bank_statement" in AP_PROCESSOR_TOOLS
-        assert "create_charge" in AP_PROCESSOR_TOOLS
+        assert "create_payment_intent" in AP_PROCESSOR_TOOLS
         assert "initiate_neft" not in AP_PROCESSOR_TOOLS  # AA is read-only
         assert len(AP_PROCESSOR_TOOLS) == 4
 

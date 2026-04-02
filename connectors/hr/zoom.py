@@ -1,6 +1,12 @@
-"""Zoom connector — hr."""
+"""Zoom connector — HR / Meetings.
+
+Integrates with Zoom REST API v2 for meeting management,
+recording access, attendance reports, and transcript retrieval.
+"""
 
 from __future__ import annotations
+
+from typing import Any
 
 import httpx
 
@@ -25,40 +31,78 @@ class ZoomConnector(BaseConnector):
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
         client_secret = self._get_secret("client_secret")
-        token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
+        account_id = self._get_secret("account_id")
+
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                token_url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                },
+                "https://zoom.us/oauth/token",
+                params={"grant_type": "account_credentials", "account_id": account_id},
+                auth=(client_id, client_secret),
             )
             resp.raise_for_status()
             token = resp.json()["access_token"]
+
         self._auth_headers = {"Authorization": f"Bearer {token}"}
 
-    async def create_meeting(self, **params):
-        """Execute create_meeting on zoom."""
-        return await self._post("/create/meeting", params)
+    async def health_check(self) -> dict[str, Any]:
+        try:
+            result = await self._get("/users/me")
+            return {"status": "healthy", "email": result.get("email", "")}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
 
-    async def get_recording(self, **params):
-        """Execute get_recording on zoom."""
-        return await self._post("/get/recording", params)
+    async def create_meeting(self, **params) -> dict[str, Any]:
+        """Create a Zoom meeting.
 
-    async def cancel_meeting(self, **params):
-        """Execute cancel_meeting on zoom."""
-        return await self._post("/cancel/meeting", params)
+        Params: topic (required), type (1=instant, 2=scheduled),
+                start_time (ISO8601 for scheduled), duration (minutes),
+                timezone, agenda, user_id (default "me").
+        """
+        user_id = params.pop("user_id", "me")
+        return await self._post(f"/users/{user_id}/meetings", params)
 
-    async def get_attendance_report(self, **params):
-        """Execute get_attendance_report on zoom."""
-        return await self._post("/get/attendance/report", params)
+    async def get_recording(self, **params) -> dict[str, Any]:
+        """Get cloud recordings for a meeting.
 
-    async def add_panelist(self, **params):
-        """Execute add_panelist on zoom."""
-        return await self._post("/add/panelist", params)
+        Params: meeting_id (required).
+        """
+        meeting_id = params["meeting_id"]
+        return await self._get(f"/meetings/{meeting_id}/recordings")
 
-    async def get_transcript(self, **params):
-        """Execute get_transcript on zoom."""
-        return await self._post("/get/transcript", params)
+    async def cancel_meeting(self, **params) -> dict[str, Any]:
+        """Cancel/delete a scheduled meeting.
+
+        Params: meeting_id (required).
+        """
+        meeting_id = params["meeting_id"]
+        return await self._delete(f"/meetings/{meeting_id}")
+
+    async def get_attendance_report(self, **params) -> dict[str, Any]:
+        """Get participant attendance for a past meeting.
+
+        Params: meeting_id (required), page_size (default 30).
+        """
+        meeting_id = params.pop("meeting_id")
+        params.setdefault("page_size", 30)
+        return await self._get(f"/past_meetings/{meeting_id}/participants", params)
+
+    async def add_panelist(self, **params) -> dict[str, Any]:
+        """Add panelists to a webinar.
+
+        Params: webinar_id (required), panelists (list of {name, email}).
+        """
+        webinar_id = params.pop("webinar_id")
+        return await self._post(f"/webinars/{webinar_id}/panelists", {"panelists": params.get("panelists", [])})
+
+    async def get_transcript(self, **params) -> dict[str, Any]:
+        """Get meeting transcript (if audio transcript is enabled).
+
+        Params: meeting_id (required).
+        """
+        meeting_id = params["meeting_id"]
+        recordings = await self._get(f"/meetings/{meeting_id}/recordings")
+        transcript_files = [
+            f for f in recordings.get("recording_files", [])
+            if f.get("file_type") == "TRANSCRIPT"
+        ]
+        return {"meeting_id": meeting_id, "transcripts": transcript_files}

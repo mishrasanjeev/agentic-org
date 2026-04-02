@@ -190,6 +190,36 @@ class BaseConnector(abc.ABC):
         resp.raise_for_status()
         return resp.json()
 
+    async def _post_form(self, path: str, data: dict | None = None) -> dict[str, Any]:
+        """POST with form-encoded body (application/x-www-form-urlencoded).
+
+        Required by APIs like Stripe that reject JSON bodies.
+        """
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.post(path, data=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _odata_get(self, path: str, params: dict | None = None) -> dict[str, Any]:
+        """GET for OData APIs (SAP S/4HANA, Dynamics 365).
+
+        Adds $format=json and unwraps OData response envelope.
+        """
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        params = params or {}
+        params.setdefault("$format", "json")
+        resp = await self._client.get(path, params=params)
+        resp.raise_for_status()
+        body = resp.json()
+        # OData wraps results in d.results (v2) or value (v4)
+        if "d" in body:
+            return body["d"].get("results", body["d"]) if isinstance(body["d"], dict) else body["d"]
+        if "value" in body:
+            return body["value"] if isinstance(body["value"], list) else body
+        return body
+
     async def _post_xml(self, xml_body: str) -> Element:
         """POST an XML body and return the parsed XML response.
 

@@ -77,7 +77,7 @@ def build_tools_for_agent(
     """Build LangChain tools from an agent's authorized_tools list.
 
     Each tool name in authorized_tools (e.g., "fetch_bank_statement",
-    "create_charge") is matched to a connector and wrapped as a
+    "create_payment_intent") is matched to a connector and wrapped as a
     LangChain StructuredTool.
 
     Returns a list of callable LangChain tools ready for LangGraph.

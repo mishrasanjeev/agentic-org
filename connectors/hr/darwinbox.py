@@ -1,6 +1,13 @@
-"""Darwinbox connector — hr."""
+"""Darwinbox connector — HR.
+
+Integrates with Darwinbox HRMS API for employee management,
+payroll, attendance, leave, and org structure.
+Note: Darwinbox uses POST for ALL operations including reads.
+"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
 
@@ -9,7 +16,7 @@ class DarwinboxConnector(BaseConnector):
     name = "darwinbox"
     category = "hr"
     auth_type = "api_key_oauth2"
-    base_url = "https://org.darwinbox.in/api"
+    base_url = "https://org.darwinbox.in/api/v1"
     rate_limit_rpm = 200
 
     def _register_tools(self):
@@ -17,7 +24,7 @@ class DarwinboxConnector(BaseConnector):
         self._tool_registry["create_employee"] = self.create_employee
         self._tool_registry["run_payroll"] = self.run_payroll
         self._tool_registry["get_attendance"] = self.get_attendance
-        self._tool_registry["post_leave"] = self.post_leave
+        self._tool_registry["apply_leave"] = self.apply_leave
         self._tool_registry["get_org_chart"] = self.get_org_chart
         self._tool_registry["update_performance"] = self.update_performance
         self._tool_registry["terminate_employee"] = self.terminate_employee
@@ -26,44 +33,89 @@ class DarwinboxConnector(BaseConnector):
 
     async def _authenticate(self):
         api_key = self._get_secret("api_key")
-        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
+        api_secret = self._get_secret("api_secret")
+        self._auth_headers = {
+            "Authorization": f"Bearer {api_key}",
+            "X-API-Secret": api_secret,
+            "Content-Type": "application/json",
+        }
 
-    async def get_employee(self, **params):
-        """Execute get_employee on darwinbox."""
-        return await self._post("/get/employee", params)
+    async def health_check(self) -> dict[str, Any]:
+        try:
+            await self._post("/employees/getEmployee", {"employee_id": "test"})
+            return {"status": "healthy"}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
 
-    async def create_employee(self, **params):
-        """Execute create_employee on darwinbox."""
-        return await self._post("/create/employee", params)
+    # Note: Darwinbox uses POST for reads — this is by design, not a mistake
+    async def get_employee(self, **params) -> dict[str, Any]:
+        """Get employee details (Darwinbox uses POST for reads).
 
-    async def run_payroll(self, **params):
-        """Execute run_payroll on darwinbox."""
-        return await self._post("/run/payroll", params)
+        Params: employee_id (required).
+        """
+        return await self._post("/employees/getEmployee", params)
 
-    async def get_attendance(self, **params):
-        """Execute get_attendance on darwinbox."""
-        return await self._post("/get/attendance", params)
+    async def create_employee(self, **params) -> dict[str, Any]:
+        """Create a new employee record.
 
-    async def post_leave(self, **params):
-        """Execute post_leave on darwinbox."""
-        return await self._post("/post/leave", params)
+        Params: first_name, last_name, email, date_of_joining, department,
+                designation, reporting_manager_id, employment_type.
+        """
+        return await self._post("/employees/create", params)
 
-    async def get_org_chart(self, **params):
-        """Execute get_org_chart on darwinbox."""
-        return await self._post("/get/org/chart", params)
+    async def run_payroll(self, **params) -> dict[str, Any]:
+        """Trigger payroll processing for a month.
 
-    async def update_performance(self, **params):
-        """Execute update_performance on darwinbox."""
-        return await self._post("/update/performance", params)
+        Params: month (MM), year (YYYY), department (optional).
+        """
+        return await self._post("/payroll/run", params)
 
-    async def terminate_employee(self, **params):
-        """Execute terminate_employee on darwinbox."""
-        return await self._post("/terminate/employee", params)
+    async def get_attendance(self, **params) -> dict[str, Any]:
+        """Get attendance records (POST-based read).
 
-    async def transfer_employee(self, **params):
-        """Execute transfer_employee on darwinbox."""
-        return await self._post("/transfer/employee", params)
+        Params: employee_id (required), from_date (YYYY-MM-DD), to_date.
+        """
+        return await self._post("/attendance/getAttendance", params)
 
-    async def get_payslip(self, **params):
-        """Execute get_payslip on darwinbox."""
-        return await self._post("/get/payslip", params)
+    async def apply_leave(self, **params) -> dict[str, Any]:
+        """Apply for leave on behalf of an employee.
+
+        Params: employee_id, leave_type, from_date, to_date, reason.
+        """
+        return await self._post("/leave/apply", params)
+
+    async def get_org_chart(self, **params) -> dict[str, Any]:
+        """Get organizational hierarchy (POST-based read).
+
+        Params: department (optional), level (optional).
+        """
+        return await self._post("/org/hierarchy", params)
+
+    async def update_performance(self, **params) -> dict[str, Any]:
+        """Update performance goal/rating.
+
+        Params: employee_id, goal_id, rating, comments.
+        """
+        return await self._post("/performance/updateGoal", params)
+
+    async def terminate_employee(self, **params) -> dict[str, Any]:
+        """Terminate an employee.
+
+        Params: employee_id, last_working_date, reason, notice_period_days.
+        """
+        return await self._post("/employees/terminate", params)
+
+    async def transfer_employee(self, **params) -> dict[str, Any]:
+        """Transfer an employee to a new department/location.
+
+        Params: employee_id, new_department, new_designation,
+                new_reporting_manager_id, effective_date.
+        """
+        return await self._post("/employees/transfer", params)
+
+    async def get_payslip(self, **params) -> dict[str, Any]:
+        """Get payslip for an employee (POST-based read).
+
+        Params: employee_id, month (MM), year (YYYY).
+        """
+        return await self._post("/payroll/getPayslip", params)

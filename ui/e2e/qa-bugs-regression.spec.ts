@@ -812,7 +812,7 @@ test.describe("CONN-SLACK-007: Slack Connector Config", () => {
     });
     const agent = await detailResp.json();
     expect(agent.authorized_tools).toContain("send_message");
-    expect(agent.authorized_tools).toContain("post_formatted_alert");
+    expect(agent.authorized_tools).toContain("post_alert");
   });
 });
 
