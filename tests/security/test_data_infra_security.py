@@ -104,10 +104,12 @@ class TestSECDATA002:
         s = Settings()
         assert len(s.secret_key) >= 16
 
-    def test_production_rejects_default_secret_key(self):
+    def test_production_rejects_default_secret_key(self, monkeypatch):
         """SEC-DATA-002: Production must not run with the development fallback key."""
         from pydantic import ValidationError
 
+        # Unset secret key to simulate clean production startup
+        monkeypatch.delenv("AGENTICORG_SECRET_KEY", raising=False)
         with pytest.raises(ValidationError):
             Settings(env="production")
 

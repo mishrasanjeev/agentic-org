@@ -36,6 +36,6 @@ class TestConnectorErrorHandling:
 
     async def test_connection_refused_raises(self):
         """Connection to non-existent server raises an error."""
-        connector = await make_connector("slack", "http://127.0.0.1:1")
-        with pytest.raises((httpx.ConnectError, httpx.TransportError, OSError, Exception)):
-            await connector.execute_tool("send_message", {"text": "test"})
+        connector = await make_connector("stripe", "http://127.0.0.1:1")
+        with pytest.raises((httpx.ConnectError, httpx.TransportError, OSError, RuntimeError, Exception)):
+            await connector.execute_tool("get_balance")
