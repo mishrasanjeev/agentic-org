@@ -20,7 +20,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 #  WAIT STEP
 # ═══════════════════════════════════════════════════════════════════════════
@@ -574,7 +573,7 @@ class TestPushSender:
             yield
 
     def test_save_subscription_stores_in_memory(self):
-        from core.push.sender import save_subscription, _memory_store
+        from core.push.sender import _memory_store, save_subscription
 
         sub = {
             "endpoint": "https://push.example.com/sub1",
@@ -617,7 +616,6 @@ class TestPushSender:
 
     def test_410_gone_removes_stale_subscription(self):
         from core.push.sender import (
-            _memory_store,
             save_subscription,
             send_push_notification,
         )
@@ -764,8 +762,9 @@ class TestABMApi:
 
     @pytest.fixture
     def client(self, app):
-        from api.deps import get_current_tenant
         from fastapi.testclient import TestClient
+
+        from api.deps import get_current_tenant
 
         test_tenant = f"test-abm-{uuid.uuid4().hex[:8]}"
         app.dependency_overrides[get_current_tenant] = lambda: test_tenant
