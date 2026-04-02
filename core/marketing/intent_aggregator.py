@@ -75,9 +75,12 @@ class IntentAggregator:
         g2_task = self._fetch_g2(domain, g2_config or {})
         tr_task = self._fetch_trustradius(domain, trustradius_config or {})
 
-        bombora_result, g2_result, tr_result = await asyncio.gather(
+        results: list[Any] = await asyncio.gather(
             bombora_task, g2_task, tr_task, return_exceptions=True
         )
+        bombora_result: Any = results[0]
+        g2_result: Any = results[1]
+        tr_result: Any = results[2]
 
         bombora_score = self._extract_score(bombora_result, "bombora")
         g2_score = self._extract_score(g2_result, "g2")
