@@ -233,7 +233,7 @@ CONNECTORS = [
         "gstn",
         "finance",
         "gsp_dsc",
-        "https://gsp.adaequare.com/gsp/authenticate",
+        "https://gsp.adaequare.com/gsp",
         50,
         [
             "fetch_gstr2a",
@@ -255,12 +255,8 @@ CONNECTORS = [
         100,
         [
             "fetch_bank_statement",
-            "initiate_neft",
-            "initiate_rtgs",
             "check_account_balance",
-            "add_beneficiary",
             "get_transaction_list",
-            "cancel_payment",
         ],
     ),
     (
@@ -299,8 +295,8 @@ CONNECTORS = [
         "connectors/finance/tally.py",
         "tally",
         "finance",
-        "tdl_rest",
-        "http://localhost:9000/tally",
+        "tdl_xml",
+        "http://localhost:9000",
         60,
         [
             "post_voucher",

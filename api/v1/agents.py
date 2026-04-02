@@ -31,7 +31,7 @@ from core.schemas.api import (
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     # Finance
     "ap_processor": [
-        "fetch_bank_statement", "create_charge", "initiate_neft",
+        "fetch_bank_statement", "create_charge",
         "create_payout", "get_settlement_report",
     ],
     "ar_collections": [

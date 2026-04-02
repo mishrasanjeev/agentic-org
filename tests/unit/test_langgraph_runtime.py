@@ -265,7 +265,8 @@ class TestApProcessor:
 
         assert "fetch_bank_statement" in AP_PROCESSOR_TOOLS
         assert "create_charge" in AP_PROCESSOR_TOOLS
-        assert len(AP_PROCESSOR_TOOLS) == 5
+        assert "initiate_neft" not in AP_PROCESSOR_TOOLS  # AA is read-only
+        assert len(AP_PROCESSOR_TOOLS) == 4
 
 
 # ═══════════════════════════════════════════════════════════════════════════

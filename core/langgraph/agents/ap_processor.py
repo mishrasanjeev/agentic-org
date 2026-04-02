@@ -17,7 +17,6 @@ from core.langgraph.runner import run_agent
 AP_PROCESSOR_TOOLS = [
     "fetch_bank_statement",
     "create_charge",
-    "initiate_neft",
     "create_payout",
     "get_settlement_report",
 ]

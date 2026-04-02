@@ -10,11 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.error_handlers import register_error_handlers
 from api.v1 import (
     a2a,
+    aa_callback,
     agent_teams,
     agents,
     api_keys,
     approvals,
     audit,
+    bridge,
     compliance,
     config,
     connectors,
@@ -34,6 +36,7 @@ from api.v1 import demo as v1_demo
 from api.v1 import org as v1_org
 from api.websocket.feed import router as ws_feed_router
 from auth.grantex_middleware import GrantexAuthMiddleware
+from bridge.server_handler import router as ws_bridge_router
 from core.config import settings
 
 
@@ -119,4 +122,7 @@ app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
 app.include_router(v1_org.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
+app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregator"])
+app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
+app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

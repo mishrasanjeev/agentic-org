@@ -5,6 +5,8 @@ from __future__ import annotations
 import abc
 import re
 from typing import Any
+from xml.etree.ElementTree import Element
+from xml.etree.ElementTree import fromstring as xml_fromstring  # noqa: S314
 
 import httpx
 import structlog
@@ -187,6 +189,22 @@ class BaseConnector(abc.ABC):
         resp = await self._client.post(path, json=data)
         resp.raise_for_status()
         return resp.json()
+
+    async def _post_xml(self, xml_body: str) -> Element:
+        """POST an XML body and return the parsed XML response.
+
+        Used by connectors that speak XML over HTTP (e.g. Tally TDL).
+        Posts to the base_url root with Content-Type: application/xml.
+        """
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.post(
+            "",
+            content=xml_body.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+        )
+        resp.raise_for_status()
+        return xml_fromstring(resp.text)  # noqa: S314
 
     async def _put(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:

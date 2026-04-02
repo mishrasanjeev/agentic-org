@@ -1263,6 +1263,49 @@ $ agenticorg sop deploy \\
       </section>
 
       {/* ============================================================ */}
+      {/* 12b. FEATURED: CA FIRM END-TO-END CASE STUDY                  */}
+      {/* ============================================================ */}
+      <section className="py-20 bg-gradient-to-b from-slate-950 to-slate-900">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-12">
+              <span className="inline-block px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-medium tracking-wide uppercase mb-4">Case Study</span>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                CA Firm Goes Live in 8 Days
+              </h2>
+              <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+                End-to-end automation: Invoice processing, bank reconciliation, GST filing, and Tally sync — all running on AI agents.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-4 gap-6 mb-10">
+              {[
+                { stage: "1", title: "Invoice", desc: "Create invoices in Zoho Books with GSTIN validation and HSN codes", connector: "Zoho Books" },
+                { stage: "2", title: "Bank Reconcile", desc: "Fetch statements via Account Aggregator, auto-match at 99.7% accuracy", connector: "Finvu AA" },
+                { stage: "3", title: "GST Filing", desc: "Push GSTR-1/3B to GSTN via Adaequare GSP with DSC digital signing", connector: "GSTN" },
+                { stage: "4", title: "Tally Sync", desc: "Post vouchers to Tally Prime via XML/TDL protocol through local bridge", connector: "Tally Bridge" },
+              ].map((s) => (
+                <div key={s.stage} className="relative bg-slate-800/50 border border-slate-700 rounded-xl p-6 hover:border-blue-500/50 transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm font-bold mb-3">{s.stage}</div>
+                  <h3 className="text-white font-semibold text-lg mb-2">{s.title}</h3>
+                  <p className="text-slate-400 text-sm mb-3">{s.desc}</p>
+                  <span className="inline-block px-2 py-0.5 rounded bg-slate-700/50 text-slate-300 text-xs">{s.connector}</span>
+                </div>
+              ))}
+            </div>
+            <div className="text-center">
+              <Link
+                to="/blog/ca-firm-ai-agent-end-to-end"
+                className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium transition-colors"
+              >
+                Read the full case study
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            </div>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
       {/* 13. FINAL CTA                                                 */}
       {/* ============================================================ */}
       <section className="py-24 bg-slate-900">
