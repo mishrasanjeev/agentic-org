@@ -205,8 +205,13 @@ def build_agent_graph(
 # --- Helper functions ---
 
 
-def _parse_json_output(content: str) -> dict[str, Any]:
+def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
     """Parse JSON from LLM output, handling markdown code blocks."""
+    # Handle list content (multiple messages) — join into single string
+    if isinstance(content, list):
+        content = "\n".join(str(item) for item in content)
+    if not isinstance(content, str):
+        content = str(content)
     text = content.strip()
     if text.startswith("```"):
         lines = text.split("\n")
