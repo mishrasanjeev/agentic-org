@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
 
+const NLQueryBar = lazy(() => import("./NLQueryBar"));
+const ChatPanel = lazy(() => import("./ChatPanel"));
+const CompanySwitcher = lazy(() => import("./CompanySwitcher"));
+
 const ALL_NAV = [
   { path: "/dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/cfo", label: "Finance Dashboard", roles: ["admin", "cfo"] },
+  { path: "/dashboard/cmo", label: "Marketing Dashboard", roles: ["admin", "cmo"] },
   { path: "/dashboard/observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/agents", label: "Agents", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/org-chart", label: "Org Chart", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
@@ -35,6 +41,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const auth = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const handleLogout = () => {
     auth.logout();
@@ -149,12 +156,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <span className="text-sm text-muted-foreground hidden sm:inline">Enterprise Agent Swarm Platform</span>
+            <Suspense fallback={null}>
+              <CompanySwitcher />
+            </Suspense>
           </div>
-          <HITLBadge count={0} />
+          <div className="flex items-center gap-3">
+            <Suspense fallback={null}>
+              <NLQueryBar onOpenChat={() => setChatOpen(true)} />
+            </Suspense>
+            <HITLBadge count={0} />
+          </div>
         </header>
         <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
       </div>
+
+      {/* Chat slide-out panel */}
+      <Suspense fallback={null}>
+        <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+      </Suspense>
     </div>
   );
 }

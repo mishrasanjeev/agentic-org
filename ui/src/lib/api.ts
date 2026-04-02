@@ -59,3 +59,22 @@ export const approvalsApi = {
   decide: (id: string, decision: string, notes: string) => api.post(`/approvals/${id}/decide`, { decision, notes }),
 };
 export const auditApi = { query: (params: any) => api.get("/audit", { params }) };
+
+// KPI Dashboards
+export const kpisApi = {
+  cfo: (companyId?: string) => api.get("/kpis/cfo", { params: companyId ? { company_id: companyId } : {} }),
+  cmo: (companyId?: string) => api.get("/kpis/cmo", { params: companyId ? { company_id: companyId } : {} }),
+};
+
+// NL Query Chat
+export const chatApi = {
+  query: (query: string, companyId?: string) => api.post("/chat/query", { query, company_id: companyId }),
+  history: () => api.get("/chat/history"),
+};
+
+// Multi-Company
+export const companiesApi = {
+  list: () => api.get("/companies"),
+  create: (data: any) => api.post("/companies", data),
+  get: (id: string) => api.get(`/companies/${id}`),
+};

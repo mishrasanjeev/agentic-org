@@ -17,11 +17,14 @@ from api.v1 import (
     approvals,
     audit,
     bridge,
+    chat,
+    companies,
     compliance,
     config,
     connectors,
     evals,
     health,
+    kpis,
     mcp,
     prompt_templates,
     sales,
@@ -122,6 +125,9 @@ app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
 app.include_router(v1_org.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
+app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
+app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
+app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregator"])
 app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])

@@ -56,6 +56,10 @@ const PromptTemplates = lazyRetry(() => import("./pages/PromptTemplates"));
 const SalesPipeline = lazyRetry(() => import("./pages/SalesPipeline"));
 const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 
+/* ── Role-specific dashboards ── */
+const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
+const CMODashboard = lazyRetry(() => import("./pages/CMODashboard"));
+
 /* ── Blog / Content pages ── */
 const Blog = lazyRetry(() => import("./pages/blog/Blog"));
 const BlogPost = lazyRetry(() => import("./pages/blog/BlogPost"));
@@ -123,6 +127,26 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/cfo"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo"]}>
+            <Layout>
+              <CFODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/cmo"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cmo"]}>
+            <Layout>
+              <CMODashboard />
             </Layout>
           </ProtectedRoute>
         }

@@ -34,3 +34,53 @@ export interface WorkflowRun { id: string; workflow_def_id: string; status: stri
 export interface HITLItem { id: string; title: string; trigger_type: string; priority: string; status: string; assignee_role: string; context: any; expires_at: string; decision?: string; decision_at?: string; decision_notes?: string; }
 export interface Connector { id: string; name: string; category: string; status: string; auth_type: string; rate_limit_rpm: number; base_url?: string; description?: string; secret_ref?: string; tool_functions?: any[]; timeout_ms?: number; created_at?: string; }
 export interface AuditEntry { id: string; event_type: string; actor_type: string; action: string; outcome: string; created_at: string; }
+
+// CFO Dashboard KPIs
+export interface CFOKPIs {
+  cash_runway_months: number;
+  burn_rate: number;
+  dso_days: number;
+  dpo_days: number;
+  ar_aging: { bucket: string; amount: number }[];
+  ap_aging: { bucket: string; amount: number }[];
+  monthly_pl: { label: string; amount: number; change_pct: number }[];
+  bank_balances: { account: string; balance: number; currency: string }[];
+  pending_approvals: number;
+  tax_calendar: { filing: string; due_date: string; status: string }[];
+}
+
+// CMO Dashboard KPIs
+export interface CMOKPIs {
+  cac: number;
+  mqls: number;
+  sqls: number;
+  pipeline_value: number;
+  roas_by_channel: { channel: string; roas: number; spend: number }[];
+  email_performance: { metric: string; value: number }[];
+  social_engagement: { platform: string; engagement: number; followers: number }[];
+  website_traffic: { date: string; sessions: number; users: number }[];
+  content_top_pages: { path: string; title: string; views: number }[];
+  brand_sentiment: number;
+  pending_content_approvals: number;
+}
+
+// Company (multi-tenant)
+export interface Company {
+  id: string;
+  name: string;
+  gstin?: string;
+  industry?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// Chat message
+export interface ChatMessage {
+  id: string;
+  role: "user" | "agent";
+  content: string;
+  agent?: string;
+  domain?: string;
+  confidence?: number;
+  timestamp: string;
+}
