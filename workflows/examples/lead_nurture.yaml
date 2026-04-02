@@ -1,0 +1,102 @@
+name: Lead Nurture Sequence
+version: "1.0"
+domain: marketing
+description: >
+  Event-triggered lead nurture workflow. When a new MQL is identified,
+  CRM Intelligence scores the lead, Email Marketing sends a nurture
+  sequence, and after 3 days the lead is re-scored. High-scoring leads
+  are passed to sales.
+
+trigger:
+  type: api_event
+  event_type: new_mql
+  description: "Triggered when CRM Intelligence identifies a new MQL"
+
+timeout_hours: 240
+
+steps:
+  - id: score_lead
+    name: Score & Classify Lead
+    type: agent
+    agent_type: crm_intelligence
+    action: score_lead
+    inputs:
+      contact_id: "{{trigger.contact_id}}"
+      source: "{{trigger.source}}"
+
+  - id: check_score
+    name: Check Lead Score
+    type: condition
+    depends_on: [score_lead]
+    expression: "score_lead.score >= 80"
+    true_path: fast_track_to_sales
+    false_path: nurture_sequence
+
+  - id: fast_track_to_sales
+    name: Fast Track — Notify Sales
+    type: notify
+    depends_on: [check_score]
+    channel: slack
+    target: "#sales-leads"
+    message: "HOT LEAD: {{score_lead.contact_name}} (Score: {{score_lead.score}}) from {{trigger.source}}. Contact immediately."
+
+  - id: nurture_sequence
+    name: Send Nurture Email Sequence
+    type: agent
+    agent_type: email_marketing
+    action: start_nurture_sequence
+    depends_on: [check_score]
+    inputs:
+      contact_id: "{{trigger.contact_id}}"
+      sequence_name: "mql_nurture_7day"
+      email_1_delay_hours: 0
+      email_2_delay_hours: 48
+      email_3_delay_hours: 120
+
+  - id: wait_period
+    name: Wait for Nurture Completion
+    type: wait
+    depends_on: [nurture_sequence]
+    duration_hours: 72
+
+  - id: rescore_lead
+    name: Re-Score After Nurture
+    type: agent
+    agent_type: crm_intelligence
+    action: score_lead
+    depends_on: [wait_period]
+    inputs:
+      contact_id: "{{trigger.contact_id}}"
+      include_engagement: true
+
+  - id: check_conversion
+    name: Check If Converted
+    type: condition
+    depends_on: [rescore_lead]
+    expression: "rescore_lead.score >= 70"
+    true_path: notify_sales
+    false_path: continue_nurture
+
+  - id: notify_sales
+    name: Notify Sales — Qualified Lead
+    type: notify
+    depends_on: [check_conversion]
+    channel: slack
+    target: "#sales-leads"
+    message: "QUALIFIED LEAD: {{rescore_lead.contact_name}} (Score: {{rescore_lead.score}}) completed nurture sequence. Ready for outreach."
+
+  - id: continue_nurture
+    name: Add to Long-Term Nurture
+    type: agent
+    agent_type: email_marketing
+    action: add_to_drip
+    depends_on: [check_conversion]
+    inputs:
+      contact_id: "{{trigger.contact_id}}"
+      drip_name: "long_term_nurture"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#marketing-ops"
+      message: "Lead nurture workflow completed for {{score_lead.contact_name}}"

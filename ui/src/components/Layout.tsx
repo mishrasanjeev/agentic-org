@@ -22,6 +22,7 @@ const ALL_NAV = [
   { path: "/dashboard/integrations", label: "A2A / MCP", roles: ["admin"] },
   { path: "/dashboard/sales", label: "Sales Pipeline", roles: ["admin"] },
   { path: "/dashboard/schemas", label: "Schemas", roles: ["admin"] },
+  { path: "/dashboard/report-schedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo"] },
   { path: "/dashboard/audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/sla", label: "SLA Monitor", roles: ["admin"] },
   { path: "/dashboard/settings", label: "Settings", roles: ["admin"] },

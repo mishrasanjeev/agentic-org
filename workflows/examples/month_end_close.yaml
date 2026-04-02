@@ -1,0 +1,112 @@
+name: Month-End Close
+version: "1.0"
+domain: finance
+description: >
+  Automated month-end close workflow for CFO. Runs on the last business day
+  of each month. Coordinates FP&A, Recon, Close, and Tax agents in sequence
+  with mandatory CFO sign-off before finalizing.
+
+trigger:
+  type: schedule
+  cron: "0 18 28-31 * *"
+  timezone: Asia/Kolkata
+  description: "Last business day of month at 6 PM IST"
+
+timeout_hours: 72
+
+steps:
+  - id: gather_trial_balance
+    name: Gather Trial Balance
+    type: agent
+    agent_type: fpa_agent
+    action: generate_trial_balance
+    inputs:
+      period: "{{current_month}}"
+      company_id: "{{company_id}}"
+
+  - id: reconcile_bank
+    name: Bank Reconciliation
+    type: agent
+    agent_type: recon_agent
+    action: full_reconciliation
+    depends_on: [gather_trial_balance]
+    inputs:
+      period: "{{current_month}}"
+
+  - id: check_breaks
+    name: Check Reconciliation Breaks
+    type: condition
+    depends_on: [reconcile_bank]
+    expression: "reconcile_bank.break_count == 0"
+    true_path: post_adjustments
+    false_path: hitl_recon_breaks
+
+  - id: hitl_recon_breaks
+    name: CFO Review — Reconciliation Breaks
+    type: human_in_loop
+    depends_on: [reconcile_bank]
+    assignee: cfo
+    decision_options: [approve_with_breaks, investigate, reject]
+    context:
+      summary: "{{reconcile_bank.break_count}} reconciliation breaks totaling {{reconcile_bank.break_total}}"
+
+  - id: post_adjustments
+    name: Post Adjusting Entries
+    type: agent
+    agent_type: close_agent
+    action: post_adjustments
+    depends_on: [check_breaks]
+    inputs:
+      period: "{{current_month}}"
+      include_accruals: true
+      include_depreciation: true
+      include_prepaid_amortization: true
+
+  - id: validate_tax
+    name: Validate GST & TDS
+    type: agent
+    agent_type: tax_compliance
+    action: validate_period
+    depends_on: [post_adjustments]
+    inputs:
+      period: "{{current_month}}"
+
+  - id: generate_close_package
+    name: Generate Close Package
+    type: agent
+    agent_type: close_agent
+    action: generate_close_package
+    depends_on: [validate_tax]
+    inputs:
+      include_pl: true
+      include_bs: true
+      include_cf: true
+      include_variance_commentary: true
+
+  - id: cfo_signoff
+    name: CFO Sign-Off
+    type: human_in_loop
+    depends_on: [generate_close_package]
+    assignee: cfo
+    decision_options: [approve, request_changes, reject]
+    context:
+      summary: "Month-end close package for {{current_month}} ready for review"
+      attachments: ["{{generate_close_package.report_url}}"]
+
+  - id: notify_team
+    name: Notify Finance Team
+    type: notify
+    depends_on: [cfo_signoff]
+    channel: slack
+    target: "#finance-team"
+    message: "Month-end close for {{current_month}} has been signed off by CFO."
+
+notifications:
+  on_complete:
+    - channel: email
+      to: "{{cfo_email}}"
+      subject: "Month-End Close Complete — {{current_month}}"
+  on_timeout:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "ALERT: Month-end close workflow timed out after 72 hours"

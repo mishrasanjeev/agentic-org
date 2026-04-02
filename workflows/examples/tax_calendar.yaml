@@ -1,0 +1,77 @@
+name: Tax Filing Calendar
+version: "1.0"
+domain: finance
+description: >
+  Monthly tax compliance check. Runs on the 1st of each month to review
+  upcoming filing deadlines, auto-generate filing packages for deadlines
+  within 7 days, and escalate overdue items.
+
+trigger:
+  type: schedule
+  cron: "0 9 1 * *"
+  timezone: Asia/Kolkata
+  description: "1st of every month at 9 AM IST"
+
+timeout_hours: 4
+
+steps:
+  - id: check_deadlines
+    name: Check Upcoming Deadlines
+    type: agent
+    agent_type: tax_compliance
+    action: check_filing_calendar
+    inputs:
+      company_id: "{{company_id}}"
+      lookahead_days: 30
+
+  - id: check_overdue
+    name: Check for Overdue Filings
+    type: condition
+    depends_on: [check_deadlines]
+    expression: "check_deadlines.overdue_count > 0"
+    true_path: escalate_overdue
+    false_path: prepare_upcoming
+
+  - id: escalate_overdue
+    name: Escalate Overdue Filings
+    type: human_in_loop
+    depends_on: [check_overdue]
+    assignee: cfo
+    decision_options: [acknowledge, delegate, file_now]
+    context:
+      summary: "{{check_deadlines.overdue_count}} overdue filings requiring immediate attention"
+      details: "{{check_deadlines.overdue_items}}"
+
+  - id: prepare_upcoming
+    name: Prepare Upcoming Filing Packages
+    type: agent
+    agent_type: tax_compliance
+    action: prepare_filing_packages
+    depends_on: [check_deadlines]
+    inputs:
+      deadline_within_days: 7
+
+  - id: compliance_review
+    name: Compliance Officer Review
+    type: human_in_loop
+    depends_on: [prepare_upcoming]
+    assignee: cfo
+    decision_options: [approve_all, review_individual, defer]
+    context:
+      summary: "{{prepare_upcoming.package_count}} filing packages prepared for the coming week"
+
+  - id: notify_team
+    name: Notify Finance Team
+    type: notify
+    depends_on: [check_deadlines]
+    channel: slack
+    target: "#finance-team"
+    message: >
+      Tax Calendar Update: {{check_deadlines.upcoming_count}} filings due this month.
+      Next deadline: {{check_deadlines.next_deadline_name}} on {{check_deadlines.next_deadline_date}}.
+
+notifications:
+  on_complete:
+    - channel: email
+      to: "{{cfo_email}}"
+      subject: "Tax Calendar — {{current_month}} Filing Overview"

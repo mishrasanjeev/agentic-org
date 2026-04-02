@@ -1,0 +1,82 @@
+name: Weekly Content Pipeline
+version: "1.0"
+domain: marketing
+description: >
+  Weekly content pipeline. Every Monday, SEO Strategist identifies keyword
+  gaps, Competitive Intel benchmarks vs competitors, Content Factory
+  generates the content calendar, and CMO approves before publishing.
+
+trigger:
+  type: schedule
+  cron: "0 9 * * 1"
+  timezone: Asia/Kolkata
+  description: "Every Monday at 9 AM IST"
+
+timeout_hours: 120
+
+steps:
+  - id: seo_gaps
+    name: Identify SEO Content Gaps
+    type: agent
+    agent_type: seo_strategist
+    action: identify_content_gaps
+    inputs:
+      company_id: "{{company_id}}"
+      competitors: "{{competitor_domains}}"
+
+  - id: competitive_context
+    name: Competitive Benchmarking
+    type: agent
+    agent_type: competitive_intel
+    action: weekly_benchmark
+    depends_on: [seo_gaps]
+    inputs:
+      domain: "{{primary_domain}}"
+      competitors: "{{competitor_domains}}"
+
+  - id: content_calendar
+    name: Generate Content Calendar
+    type: agent
+    agent_type: content_factory
+    action: generate_weekly_calendar
+    depends_on: [seo_gaps, competitive_context]
+    inputs:
+      keyword_gaps: "{{seo_gaps.gaps}}"
+      competitive_insights: "{{competitive_context.insights}}"
+      brand_guidelines: true
+
+  - id: cmo_approval
+    name: CMO Approves Content Calendar
+    type: human_in_loop
+    depends_on: [content_calendar]
+    assignee: cmo
+    decision_options: [approve, modify, reject]
+    context:
+      summary: "Weekly content calendar with {{content_calendar.post_count}} planned posts"
+      calendar: "{{content_calendar.output}}"
+      seo_gaps: "{{seo_gaps.top_gaps}}"
+
+  - id: publish_blog
+    name: Publish Blog Posts
+    type: agent
+    agent_type: content_factory
+    action: publish_to_wordpress
+    depends_on: [cmo_approval]
+    inputs:
+      posts: "{{content_calendar.blog_posts}}"
+      status: draft
+
+  - id: schedule_social
+    name: Schedule Social Promotion
+    type: agent
+    agent_type: social_media
+    action: schedule_content_promotion
+    depends_on: [cmo_approval]
+    inputs:
+      content: "{{content_calendar.social_posts}}"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#content-team"
+      message: "Weekly content pipeline complete. {{content_calendar.post_count}} posts scheduled."

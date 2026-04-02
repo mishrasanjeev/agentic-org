@@ -1,0 +1,77 @@
+name: Weekly Marketing Performance Report
+version: "1.0"
+domain: marketing
+description: >
+  Weekly marketing performance report. Every Monday at 9 AM, aggregates
+  campaign metrics across all channels, adds competitive context, generates
+  a PDF report, and delivers to the CMO via email and Slack.
+
+trigger:
+  type: schedule
+  cron: "0 9 * * 1"
+  timezone: Asia/Kolkata
+  description: "Every Monday at 9 AM IST"
+
+timeout_hours: 2
+
+steps:
+  - id: aggregate_metrics
+    name: Aggregate Cross-Channel Metrics
+    type: agent
+    agent_type: campaign_pilot
+    action: aggregate_weekly_metrics
+    inputs:
+      company_id: "{{company_id}}"
+      channels: [google_ads, meta_ads, linkedin_ads, organic, email]
+      period: last_7_days
+
+  - id: competitive_context
+    name: Add Competitive Context
+    type: agent
+    agent_type: competitive_intel
+    action: weekly_market_snapshot
+    depends_on: [aggregate_metrics]
+    inputs:
+      domain: "{{primary_domain}}"
+      competitors: "{{competitor_domains}}"
+
+  - id: generate_report
+    name: Generate Performance Report
+    type: agent
+    agent_type: campaign_pilot
+    action: generate_weekly_report
+    depends_on: [aggregate_metrics, competitive_context]
+    inputs:
+      metrics: "{{aggregate_metrics.output}}"
+      competitive: "{{competitive_context.output}}"
+      format: pdf
+      include_recommendations: true
+
+  - id: deliver_report
+    name: Deliver to CMO
+    type: parallel
+    depends_on: [generate_report]
+    wait_for: all
+    sub_steps:
+      - id: email_cmo
+        type: notify
+        channel: email
+        to: "{{cmo_email}}"
+        subject: "Weekly Marketing Report — Week of {{today}}"
+        attachment: "{{generate_report.report_pdf}}"
+      - id: slack_summary
+        type: notify
+        channel: slack
+        target: "#marketing-leadership"
+        message: >
+          Weekly Marketing Report:
+          - Total Spend: {{aggregate_metrics.total_spend}}
+          - MQLs: {{aggregate_metrics.mqls}} ({{aggregate_metrics.mql_change}}% WoW)
+          - Pipeline: {{aggregate_metrics.pipeline_value}}
+          - Best Channel: {{aggregate_metrics.best_channel}} (ROAS {{aggregate_metrics.best_roas}})
+
+notifications:
+  on_failure:
+    - channel: slack
+      target: "#marketing-ops"
+      message: "Weekly marketing report generation failed. Manual report needed."

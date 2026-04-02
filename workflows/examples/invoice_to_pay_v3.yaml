@@ -1,0 +1,136 @@
+name: Invoice to Payment (Full Cycle)
+version: "3.0"
+domain: finance
+description: >
+  Complete invoice-to-payment cycle. Extends v2 with PineLabs Plural
+  payment execution and vendor WhatsApp notification. Covers: invoice
+  extraction, validation, 3-way matching, HITL approval, payment
+  execution, and vendor notification.
+
+trigger:
+  type: email_received
+  filter:
+    subject_contains: ["invoice", "bill", "payment request"]
+
+timeout_hours: 48
+
+steps:
+  - id: extract
+    name: Extract Invoice Data
+    type: agent
+    agent_type: ap_processor
+    action: extract_invoice
+    inputs:
+      source: "{{trigger.email_body}}"
+      attachments: "{{trigger.attachments}}"
+
+  - id: validate
+    name: Validate GSTIN & Duplicates
+    type: parallel
+    depends_on: [extract]
+    wait_for: all
+    sub_steps:
+      - id: validate_gstin
+        type: agent
+        agent_type: ap_processor
+        action: validate_gstin
+        inputs:
+          gstin: "{{extract.gstin}}"
+      - id: check_duplicate
+        type: agent
+        agent_type: ap_processor
+        action: check_duplicate
+        inputs:
+          invoice_id: "{{extract.invoice_id}}"
+          vendor_id: "{{extract.vendor_id}}"
+          amount: "{{extract.total}}"
+
+  - id: three_way_match
+    name: 3-Way Match (PO + GRN + Invoice)
+    type: agent
+    agent_type: ap_processor
+    action: three_way_match
+    depends_on: [validate]
+    inputs:
+      invoice_id: "{{extract.invoice_id}}"
+      po_number: "{{extract.po_number}}"
+
+  - id: amount_gate
+    name: Check Amount Threshold
+    type: condition
+    depends_on: [three_way_match]
+    expression: "extract.total > {{ap_hitl_threshold}} OR three_way_match.match_delta > 0.02"
+    true_path: hitl_approval
+    false_path: execute_payment
+
+  - id: hitl_approval
+    name: CFO Approval Required
+    type: human_in_loop
+    depends_on: [amount_gate]
+    assignee: cfo
+    decision_options: [approve, reject, hold]
+    context:
+      summary: "Invoice {{extract.invoice_id}} from {{extract.vendor_name}} for {{extract.total}}"
+      match_result: "{{three_way_match.result}}"
+      gstin_valid: "{{validate_gstin.is_valid}}"
+
+  - id: execute_payment
+    name: Execute Payment via PineLabs
+    type: agent
+    agent_type: ap_processor
+    action: execute_payment
+    depends_on: [amount_gate, hitl_approval]
+    inputs:
+      vendor_bank_details: "{{extract.bank_details}}"
+      amount: "{{extract.total}}"
+      currency: "INR"
+      reference: "{{extract.invoice_id}}"
+
+  - id: post_gl
+    name: Post to General Ledger
+    type: agent
+    agent_type: ap_processor
+    action: post_journal_entry
+    depends_on: [execute_payment]
+    inputs:
+      invoice_id: "{{extract.invoice_id}}"
+      idempotency_key: "gl_{{extract.invoice_id}}"
+
+  - id: sync_tally
+    name: Sync Voucher to Tally
+    type: agent
+    agent_type: ap_processor
+    action: post_voucher
+    depends_on: [post_gl]
+    inputs:
+      voucher_type: Payment
+      amount: "{{extract.total}}"
+      vendor: "{{extract.vendor_name}}"
+
+  - id: notify_vendor
+    name: Notify Vendor
+    type: parallel
+    depends_on: [execute_payment]
+    wait_for: any
+    sub_steps:
+      - id: email_vendor
+        type: notify
+        channel: email
+        to: "{{extract.vendor_email}}"
+        subject: "Payment Processed — {{extract.invoice_id}}"
+        message: "Payment of {{extract.total}} for invoice {{extract.invoice_id}} has been processed."
+      - id: whatsapp_vendor
+        type: notify
+        channel: whatsapp
+        to: "{{extract.vendor_phone}}"
+        message: "Payment of {{extract.total}} for invoice {{extract.invoice_id}} has been processed via PineLabs. Reference: {{execute_payment.transaction_id}}"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#ap-processed"
+      message: "Invoice {{extract.invoice_id}} processed and paid. Amount: {{extract.total}}"
+  on_timeout:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "Invoice workflow timed out for {{extract.invoice_id}}. Manual intervention needed."

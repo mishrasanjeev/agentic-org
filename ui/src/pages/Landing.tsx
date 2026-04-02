@@ -98,9 +98,9 @@ const ROLE_CARDS = [
     role: "CFO",
     gradient: "from-emerald-500 to-teal-600",
     pain: "Close the books in 1 day, not 5",
-    description: "6 finance agents handle AP, AR, Bank Reconciliation (99.7% match rate), Tax Filing, Month-end Close, and FP&A forecasting.",
-    agents: ["Accounts Payable", "Accounts Receivable", "Reconciliation", "Tax Filing", "Month-end Close", "FP&A"],
-    metric: "\u20B969,800/month saved on early-payment discounts alone",
+    description: "10 finance agents handle AP, AR, Treasury, Expense Management, Bank Reconciliation, Tax Filing, Rev Rec, Fixed Assets, Month-end Close, and FP&A.",
+    agents: ["Accounts Payable", "Accounts Receivable", "Treasury", "Reconciliation", "Tax Filing", "Month-end Close", "FP&A", "Expense Mgmt", "Rev Rec", "Fixed Assets"],
+    metric: "Shadow mode measures exact ROI with your real data before go-live",
   },
   {
     role: "CHRO",
@@ -340,7 +340,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents across 6 domains, 43 connectors (273 tools), SDK/MCP/API access. Create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. Human-in-the-loop governance, no-code builder. Start free." />
+        <meta name="description" content="AI agents that reason AND act — 25 pre-built agents across 6 domains, 51 connectors (320+ tools), SDK/MCP/API access. Create Jira tickets, read HubSpot CRM, query GitHub repos via real API calls. Human-in-the-loop governance, no-code builder. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -583,7 +583,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                25 pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 43 connectors (273 tools), SDK/MCP/API access. Not chatbots. Virtual employees.
+                25 pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 51 connectors (320+ tools), SDK/MCP/API access. Not chatbots. Virtual employees.
               </p>
             </div>
           </FadeIn>
@@ -864,7 +864,7 @@ export default function Landing() {
             <div className="grid md:grid-cols-3 gap-12">
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 25 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "43 connectors with 273 tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
+                { num: "2", title: "Connect your systems", desc: "51 connectors with 320+ tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK (pip install agenticorg), TypeScript SDK (npm i agenticorg-sdk), CLI, or ChatGPT/Claude via MCP Server." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
@@ -1205,7 +1205,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">MCP (Model Context Protocol)</h3>
-                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 273 tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
+                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 320+ tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
               </div>
               <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
@@ -1280,7 +1280,7 @@ $ agenticorg sop deploy \\
             <div className="grid md:grid-cols-4 gap-6 mb-10">
               {[
                 { stage: "1", title: "Invoice", desc: "Create invoices in Zoho Books with GSTIN validation and HSN codes", connector: "Zoho Books" },
-                { stage: "2", title: "Bank Reconcile", desc: "Fetch statements via Account Aggregator, auto-match at 99.7% accuracy", connector: "Finvu AA" },
+                { stage: "2", title: "Bank Reconcile", desc: "Fetch statements via Account Aggregator, auto-match with high accuracy", connector: "Finvu AA" },
                 { stage: "3", title: "GST Filing", desc: "Push GSTR-1/3B to GSTN via Adaequare GSP with DSC digital signing", connector: "GSTN" },
                 { stage: "4", title: "Tally Sync", desc: "Post vouchers to Tally Prime via XML/TDL protocol through local bridge", connector: "Tally Bridge" },
               ].map((s) => (
@@ -1315,7 +1315,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              25 agents that act. 43 connectors. 273 tools. 1,031 tests passing. Free to start.
+              35 agents that act. 51 connectors. 320+ tools. 855+ tests passing. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

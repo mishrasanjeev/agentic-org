@@ -1,0 +1,116 @@
+name: Campaign Launch
+version: "1.0"
+domain: marketing
+description: >
+  End-to-end campaign launch workflow. Campaign Pilot creates the plan,
+  Content Factory generates assets, CMO approves, then executes across
+  channels. CMO approval is mandatory at every publishing gate.
+
+trigger:
+  type: manual
+  description: "Triggered manually when CMO decides to launch a new campaign"
+
+timeout_hours: 168
+
+steps:
+  - id: campaign_plan
+    name: Create Campaign Plan
+    type: agent
+    agent_type: campaign_pilot
+    action: create_plan
+    inputs:
+      campaign_name: "{{campaign_name}}"
+      objective: "{{objective}}"
+      budget: "{{budget}}"
+      target_audience: "{{target_audience}}"
+      channels: "{{channels}}"
+      start_date: "{{start_date}}"
+      end_date: "{{end_date}}"
+
+  - id: cmo_plan_approval
+    name: CMO Approves Campaign Plan
+    type: human_in_loop
+    depends_on: [campaign_plan]
+    assignee: cmo
+    decision_options: [approve, revise, reject]
+    context:
+      summary: "Campaign plan for '{{campaign_name}}' — Budget: {{budget}}, Channels: {{channels}}"
+      plan: "{{campaign_plan.output}}"
+
+  - id: generate_content
+    name: Generate Campaign Content
+    type: agent
+    agent_type: content_factory
+    action: generate_campaign_assets
+    depends_on: [cmo_plan_approval]
+    inputs:
+      campaign_name: "{{campaign_name}}"
+      channels: "{{channels}}"
+      brand_guidelines: true
+
+  - id: cmo_content_approval
+    name: CMO Approves Content
+    type: human_in_loop
+    depends_on: [generate_content]
+    assignee: cmo
+    decision_options: [approve_all, approve_with_edits, reject]
+    context:
+      summary: "Campaign content ready for review — {{generate_content.asset_count}} assets"
+      assets: "{{generate_content.assets}}"
+
+  - id: setup_ads
+    name: Setup Ad Campaigns
+    type: parallel
+    depends_on: [cmo_content_approval]
+    wait_for: all
+    sub_steps:
+      - id: google_ads
+        type: agent
+        agent_type: campaign_pilot
+        action: setup_google_campaign
+        inputs:
+          budget: "{{campaign_plan.google_budget}}"
+          content: "{{generate_content.google_assets}}"
+      - id: meta_ads
+        type: agent
+        agent_type: campaign_pilot
+        action: setup_meta_campaign
+        inputs:
+          budget: "{{campaign_plan.meta_budget}}"
+          content: "{{generate_content.meta_assets}}"
+
+  - id: schedule_social
+    name: Schedule Social Posts
+    type: agent
+    agent_type: social_media
+    action: schedule_campaign_posts
+    depends_on: [cmo_content_approval]
+    inputs:
+      content: "{{generate_content.social_assets}}"
+      schedule: "{{campaign_plan.social_schedule}}"
+
+  - id: cmo_go_live
+    name: CMO Final Go/No-Go
+    type: human_in_loop
+    depends_on: [setup_ads, schedule_social]
+    assignee: cmo
+    decision_options: [go_live, delay, cancel]
+    context:
+      summary: "All campaign assets ready. Ad campaigns configured. Social posts scheduled. Ready to go live?"
+
+  - id: activate
+    name: Activate Campaign
+    type: agent
+    agent_type: campaign_pilot
+    action: activate_campaign
+    depends_on: [cmo_go_live]
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#marketing-team"
+      message: "Campaign '{{campaign_name}}' is LIVE across all channels."
+  on_timeout:
+    - channel: email
+      to: "{{cmo_email}}"
+      subject: "Campaign '{{campaign_name}}' — Workflow Timed Out"

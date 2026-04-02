@@ -1,0 +1,76 @@
+name: Daily Treasury Report
+version: "1.0"
+domain: finance
+description: >
+  Daily cash position aggregation and alert workflow. Runs every weekday
+  at 8 AM. Treasury agent aggregates balances across all bank accounts,
+  checks for low-cash alerts, and delivers a report to the CFO.
+
+trigger:
+  type: schedule
+  cron: "0 8 * * 1-5"
+  timezone: Asia/Kolkata
+  description: "Every weekday at 8 AM IST"
+
+timeout_hours: 1
+
+steps:
+  - id: aggregate_cash
+    name: Aggregate Cash Position
+    type: agent
+    agent_type: treasury
+    action: aggregate_cash_position
+    inputs:
+      company_id: "{{company_id}}"
+      include_fd: true
+      include_fx: true
+
+  - id: check_low_cash
+    name: Check Low Cash Alert
+    type: condition
+    depends_on: [aggregate_cash]
+    expression: "aggregate_cash.total_cash_inr < {{cash_alert_threshold}}"
+    true_path: alert_low_cash
+    false_path: generate_report
+
+  - id: alert_low_cash
+    name: Alert — Low Cash
+    type: notify
+    depends_on: [check_low_cash]
+    channel: slack
+    target: "#finance-alerts"
+    message: "URGENT: Cash position ({{aggregate_cash.total_cash_inr}}) below threshold ({{cash_alert_threshold}}). Immediate attention needed."
+
+  - id: generate_report
+    name: Generate Treasury Report
+    type: agent
+    agent_type: treasury
+    action: generate_daily_report
+    depends_on: [aggregate_cash]
+    inputs:
+      include_forecast: true
+      forecast_days: 7
+
+  - id: deliver_to_cfo
+    name: Deliver to CFO
+    type: parallel
+    depends_on: [generate_report]
+    wait_for: all
+    sub_steps:
+      - id: email_cfo
+        type: notify
+        channel: email
+        to: "{{cfo_email}}"
+        subject: "Daily Treasury Report — {{today}}"
+        attachment: "{{generate_report.report_pdf}}"
+      - id: slack_cfo
+        type: notify
+        channel: slack
+        target: "#cfo-reports"
+        message: "Daily Treasury Report ready: Cash position ₹{{aggregate_cash.total_cash_inr}} across {{aggregate_cash.account_count}} accounts."
+
+notifications:
+  on_failure:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "Daily treasury workflow failed. Manual cash position check needed."
