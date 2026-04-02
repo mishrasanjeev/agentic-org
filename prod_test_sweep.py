@@ -11,7 +11,7 @@ import requests
 BASE_API = "https://app.agenticorg.ai/api/v1"
 BASE_SITE = "https://agenticorg.ai"
 
-results = []
+results: list[tuple[int, str, str, str]] = []
 total_start = time.time()
 
 
@@ -273,10 +273,10 @@ else:
     has_connectors = any(f"{n} connectors" in r.text for n in range(40, 50)) or "connectors" in r.text.lower()
     checks["connectors count"] = has_connectors
 
-    failed = [k for k, v in checks.items() if not v]
-    ok = r.status_code == 200 and len(failed) == 0
+    missing_checks = [k for k, v in checks.items() if not v]
+    ok = r.status_code == 200 and len(missing_checks) == 0
     record(31, "llms.txt content checks", ok,
-           "" if ok else f"missing: {failed}, status={r.status_code}")
+           "" if ok else f"missing: {missing_checks}, status={r.status_code}")
 
 # 32. llms-full.txt
 r = safe_get(f"{BASE_SITE}/llms-full.txt")

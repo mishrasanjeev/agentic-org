@@ -87,7 +87,7 @@ def verify_grant_scopes(
     granted = set(getattr(result, "scopes", []))
     missing = [s for s in required_scopes if s not in granted]
     if missing:
-        raise GrantexApiError(f"Missing required scopes: {missing}")
+        raise GrantexApiError(f"Missing required scopes: {missing}")  # type: ignore[call-arg]
 
     return {
         "grant_id": getattr(result, "grant_id", ""),
@@ -140,7 +140,7 @@ async def debit_budget(
     client = get_grantex_client()
     from grantex._types import DebitBudgetParams
 
-    result = client.budgets.debit(DebitBudgetParams(
+    result = client.budgets.debit(DebitBudgetParams(  # type: ignore[call-arg]
         grant_id=grant_id,
         amount=amount,
         currency=currency,
@@ -165,7 +165,7 @@ async def log_audit_entry(
         client = get_grantex_client()
         from grantex._types import LogAuditParams
 
-        client.audit.log(LogAuditParams(
+        client.audit.log(LogAuditParams(  # type: ignore[call-arg]
             action=action,
             resource_type=resource_type or "agent_execution",
             resource_id=resource_id or agent_id,

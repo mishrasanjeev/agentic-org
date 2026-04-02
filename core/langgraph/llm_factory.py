@@ -39,7 +39,7 @@ def create_chat_model(
     if "claude" in resolved:
         from langchain_anthropic import ChatAnthropic
 
-        return ChatAnthropic(
+        return ChatAnthropic(  # type: ignore[call-arg]
             model_name=resolved,
             temperature=temperature,
             max_tokens=max_tokens,

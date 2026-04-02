@@ -112,7 +112,7 @@ async def run_agent(
     # Execute the graph
     t0 = time.perf_counter()
     try:
-        result = await compiled.ainvoke(initial_state, config=config)
+        result = await compiled.ainvoke(initial_state, config=config)  # type: ignore[call-overload]
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
         # Extract token usage from AI messages
@@ -233,7 +233,7 @@ async def resume_agent(
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
-        result = await compiled.ainvoke(
+        result = await compiled.ainvoke(  # type: ignore[call-overload]
             Command(resume=decision),
             config=config,
         )
