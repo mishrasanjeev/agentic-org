@@ -200,6 +200,15 @@ jobs:
       - name: Install Python deps
         run: pip install -e ".[dev]"
 
+      - name: Wait for production to stabilize after deploy
+        run: |
+          for i in $(seq 1 12); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "https://app.agenticorg.ai/api/v1/health" || true)
+            if [ "$STATUS" = "200" ]; then echo "Production healthy"; break; fi
+            echo "Attempt $i: HTTP $STATUS — waiting 10s..."
+            sleep 10
+          done
+
       - name: Run Python E2E + Smoke + Synthetic tests (against production)
         run: pytest tests/e2e/ tests/synthetic_data/ -v
         env:
