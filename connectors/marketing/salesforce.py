@@ -125,6 +125,6 @@ class SalesforceConnector(BaseConnector):
             stage_filter = f" WHERE StageName='{params['stage']}'"
         soql = (
             f"SELECT Id,Name,Amount,StageName,CloseDate,AccountId"
-            f" FROM Opportunity{stage_filter} ORDER BY CloseDate DESC LIMIT {limit}"  # noqa: S608
+            f" FROM Opportunity{stage_filter} ORDER BY CloseDate DESC LIMIT {limit}"  # noqa: S608  # nosec B608
         )
         return await self._get("/query", {"q": soql})
