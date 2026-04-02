@@ -167,7 +167,7 @@ export default function Dashboard() {
               <span className="text-lg font-bold">LangGraph</span>
               <span className="text-xs text-muted-foreground">v1.1</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">35 agents, 51 connectors, 320+ tools</p>
+            <p className="text-xs text-muted-foreground mt-1">35 agents, 54 connectors, 340+ tools</p>
           </CardContent>
         </Card>
         <Card>

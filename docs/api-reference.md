@@ -271,13 +271,13 @@ Update connector authentication, base URL, rate limit, or status.
 ```
 GET /api/v1/connectors/registry
 ```
-Returns the full connector registry with all 51 connectors, their categories, tool counts, and auth types. No write scope required.
+Returns the full connector registry with all 54 connectors, their categories, tool counts, and auth types. No write scope required.
 
 **Response:** `200 OK`
 ```json
 {
-  "total_connectors": 51,
-  "total_tools": 320,
+  "total_connectors": 54,
+  "total_tools": 340,
   "categories": ["finance", "hr", "marketing", "ops", "comms"],
   "connectors": [
     {
@@ -1187,4 +1187,238 @@ sequenceDiagram
 
     UI->>WS: Close connection
     WS-->>UI: Connection closed
+```
+
+---
+
+## Email Webhooks (Tier 1)
+
+### SendGrid Webhook
+```
+POST /api/v1/webhooks/email/sendgrid
+```
+Receives SendGrid event webhooks (open, click, bounce, unsubscribe). Events are stored and linked to drip sequences for behavior-triggered progression.
+
+**Request Body:** (SendGrid event batch format)
+```json
+[
+  {
+    "email": "lead@company.com",
+    "event": "open",
+    "timestamp": 1712000000,
+    "sg_message_id": "abc123"
+  }
+]
+```
+
+**Response:** `200 OK`
+
+### Mailchimp Webhook
+```
+POST /api/v1/webhooks/email/mailchimp
+```
+Receives Mailchimp webhook events (subscribe, unsubscribe, campaign open, click).
+
+### MoEngage Webhook
+```
+POST /api/v1/webhooks/email/moengage
+```
+Receives MoEngage engagement events (email open, click, push delivered).
+
+---
+
+## Push Notifications (Tier 1)
+
+### Subscribe to Push
+```
+POST /api/v1/push/subscribe
+```
+Registers a browser push subscription for the current user. Uses VAPID protocol.
+
+**Request Body:**
+```json
+{
+  "subscription": {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/...",
+    "keys": {
+      "p256dh": "...",
+      "auth": "..."
+    }
+  }
+}
+```
+
+**Response:** `201 Created`
+
+### Unsubscribe from Push
+```
+POST /api/v1/push/unsubscribe
+```
+Removes the push subscription for the current user.
+
+**Response:** `200 OK`
+
+### Get VAPID Key
+```
+GET /api/v1/push/vapid-key
+```
+Returns the server's VAPID public key for push subscription.
+
+**Response:** `200 OK`
+```json
+{
+  "vapid_public_key": "BN..."
+}
+```
+
+### Test Push
+```
+POST /api/v1/push/test
+```
+Sends a test push notification to the current user's registered subscription. Requires an active subscription.
+
+**Response:** `200 OK`
+
+---
+
+## ABM — Account-Based Marketing (Tier 1)
+
+### List Target Accounts
+```
+GET /api/v1/abm/accounts
+```
+Returns all target accounts with intent scores.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `tier` | string | No | Filter by tier: `tier_1`, `tier_2`, `tier_3` |
+| `min_intent` | number | No | Minimum blended intent score (0-100) |
+| `limit` | integer | No | Default: 50 |
+| `offset` | integer | No | Default: 0 |
+
+**Response:** `200 OK`
+```json
+{
+  "accounts": [
+    {
+      "id": "uuid",
+      "company": "Acme Corp",
+      "domain": "acme.com",
+      "tier": "tier_1",
+      "intent_score": 78,
+      "intent_sources": {
+        "bombora": 82,
+        "g2": 75,
+        "trustradius": 72
+      },
+      "last_updated": "2026-04-02T10:00:00Z"
+    }
+  ],
+  "count": 42
+}
+```
+
+### Add Target Account
+```
+POST /api/v1/abm/accounts
+```
+Adds a single target account.
+
+**Request Body:**
+```json
+{
+  "company": "Beta Industries",
+  "domain": "beta.com",
+  "tier": "tier_2"
+}
+```
+
+**Response:** `201 Created`
+
+### Bulk Upload Accounts
+```
+POST /api/v1/abm/accounts/upload
+```
+Upload a CSV of target accounts. Columns: `company`, `domain`, `tier`.
+
+**Request:** `multipart/form-data` with `file` field containing the CSV.
+
+**Response:** `200 OK`
+```json
+{
+  "imported": 150,
+  "duplicates_skipped": 3,
+  "errors": 0
+}
+```
+
+### Get Account Intent
+```
+GET /api/v1/abm/accounts/{id}/intent
+```
+Returns detailed intent data for a specific account with per-source breakdown.
+
+**Response:** `200 OK`
+```json
+{
+  "account_id": "uuid",
+  "company": "Acme Corp",
+  "blended_score": 78,
+  "weights": {"bombora": 0.4, "g2": 0.3, "trustradius": 0.3},
+  "sources": {
+    "bombora": {"score": 82, "topics": ["AI automation", "enterprise software"], "surge": true},
+    "g2": {"score": 75, "categories": ["AI agents", "workflow automation"], "comparison_active": true},
+    "trustradius": {"score": 72, "reviews_viewed": 5, "last_activity": "2026-04-01"}
+  },
+  "trend": "rising",
+  "last_updated": "2026-04-02T10:00:00Z"
+}
+```
+
+### Launch Campaign for Account
+```
+POST /api/v1/abm/accounts/{id}/campaign
+```
+Launches a personalized outreach campaign for the specified account.
+
+**Request Body:**
+```json
+{
+  "template": "abm_campaign",
+  "channels": ["email", "linkedin"],
+  "message_variant": "high_intent"
+}
+```
+
+**Response:** `202 Accepted`
+```json
+{
+  "campaign_id": "uuid",
+  "account_id": "uuid",
+  "status": "launching",
+  "channels": ["email", "linkedin"]
+}
+```
+
+### ABM Dashboard Summary
+```
+GET /api/v1/abm/dashboard
+```
+Returns summary data for the ABM dashboard — total accounts, tier breakdown, average intent, top accounts.
+
+**Response:** `200 OK`
+```json
+{
+  "total_accounts": 150,
+  "by_tier": {"tier_1": 25, "tier_2": 60, "tier_3": 65},
+  "avg_intent_score": 52,
+  "top_accounts": [
+    {"company": "Acme Corp", "intent_score": 92, "tier": "tier_1"},
+    {"company": "Beta Industries", "intent_score": 87, "tier": "tier_1"}
+  ],
+  "intent_distribution": {"high": 30, "medium": 55, "low": 65},
+  "updated_at": "2026-04-02T10:00:00Z"
+}
 ```

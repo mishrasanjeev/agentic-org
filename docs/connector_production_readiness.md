@@ -1,4 +1,4 @@
-# Connector Production Readiness Guide — All 42 Connectors
+# Connector Production Readiness Guide — All 54 Connectors
 
 ## Overview
 
@@ -91,10 +91,13 @@ This document categorizes every connector by production readiness and lists exac
 | **Ahrefs** | READY | API token from ahrefs.com → Account → API. Paid plan required (Lite+). Rate-limited. |
 | **Brandwatch** | SANDBOX FIRST | OAuth2. Contact Brandwatch for API access — enterprise sales process. **Action needed:** Confirm endpoint patterns — API is not publicly documented for all features. |
 | **Mixpanel** | READY | API key + secret from mixpanel.com → Settings → Project Settings. Service account for server-side. |
+| **Bombora** | SANDBOX FIRST | API key from Bombora. Surge intent data for B2B accounts. Contact Bombora sales for API access. Real paths: `/surge/companies`, `/surge/topics`. |
+| **G2** | SANDBOX FIRST | API token from G2 developer portal. Buyer intent signals + product reviews. Real paths: `/intent-signals`, `/products/{slug}/reviews`. |
+| **TrustRadius** | SANDBOX FIRST | Bearer token from TrustRadius. Buyer intent + comparison traffic. Real paths: `/intent/buyer-activity`, `/products/{id}/reviews`. |
 
 ### Marketing Summary
 - **Ready now:** 6 (HubSpot, Google Ads, Meta Ads, Buffer, Ahrefs, Mixpanel)
-- **Sandbox first:** 2 (Salesforce, Brandwatch)
+- **Sandbox first:** 5 (Salesforce, Brandwatch, Bombora, G2, TrustRadius)
 - **Blocked:** 1 (LinkedIn Ads — partner approval)
 - **Total marketing tools:** 53
 

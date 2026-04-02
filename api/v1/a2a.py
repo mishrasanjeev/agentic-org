@@ -46,7 +46,7 @@ async def agent_card():
     return {
         "name": "AgenticOrg Agent Platform",
         "description": "Enterprise AI agents for Finance, HR, Marketing, and Operations. "
-        "35 agents, 51 connectors, 320+ tools. HITL governance on every critical decision.",
+        "35 agents, 54 connectors, 340+ tools. HITL governance on every critical decision.",
         "url": f"{base_url}/api/v1/a2a",
         "version": "3.0.0",
         "protocol": "a2a/1.0",

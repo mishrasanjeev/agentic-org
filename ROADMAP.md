@@ -8,7 +8,7 @@
 - **3 pre-built workflows**: Incident Response, Lead-to-Revenue, Weekly DevOps Health Report
 - **Workflow engine executes real agents** (was stub, now runs LLM + tools)
 - **Python SDK** (`pip install agenticorg`) + **TypeScript SDK** (`npm i agenticorg-sdk`)
-- **MCP Server** (`npx agenticorg-mcp-server`) — 320+ tools exposed to Claude Desktop, Cursor, ChatGPT
+- **MCP Server** (`npx agenticorg-mcp-server`) — 340+ tools exposed to Claude Desktop, Cursor, ChatGPT
 - **CLI** — `agenticorg agents list/run`, `agenticorg sop parse`, `agenticorg mcp tools`
 - **API Key Management** — `ao_sk_` prefix, admin-only, bcrypt-hashed
 - **A2A Protocol** — agent discovery card + cross-platform task execution
@@ -21,7 +21,7 @@
 - **Auth Failure Clearing** — IP-based tracking with auto-block + success clearing
 - Virtual Employee System (names, personas, specializations)
 - No-code Agent Creator wizard
-- 43 enterprise connectors with 320+ tools
+- 43 enterprise connectors with 340+ tools
 - 27 prompt templates with audit trail
 - HITL governance with configurable thresholds
 - Per-agent LLM selection (Gemini/Claude/GPT-4o)
@@ -44,7 +44,7 @@
 
 ## Previous (v2.1) — Shipped 2026-03-21
 
-- Initial platform with 24 agents, workflow engine, 51 connectors
+- Initial platform with 24 agents, workflow engine, 54 connectors
 - Shadow deployment with 6 quality gates
 - Full PostgreSQL DDL, RLS, CI/CD pipeline
 

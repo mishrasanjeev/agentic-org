@@ -2,15 +2,15 @@
 
 ## Overview
 
-AgenticOrg gives CMOs a unified command center for marketing operations. Instead of toggling between Google Ads, HubSpot, social platforms, email tools, and analytics dashboards, you get 9 specialized AI agents that handle content creation, campaign management, SEO, CRM intelligence, brand monitoring, email marketing, social media, account-based marketing, and competitive intelligence — all with mandatory human approval on every publishing decision.
+AgenticOrg gives CMOs a unified command center for marketing operations. Instead of toggling between Google Ads, HubSpot, social platforms, email tools, and analytics dashboards, you get 9 specialized AI agents that handle content creation, campaign management, A/B testing, email drip sequences, SEO, CRM intelligence, brand monitoring, email marketing, social media, account-based marketing with intent data, and competitive intelligence — all with mandatory human approval on every publishing decision. Web push notifications let you approve or reject agent decisions with a single tap from your browser.
 
-This guide covers everything a CMO needs: the marketing dashboard, each marketing agent, natural language querying, report scheduling, workflow templates, and the approval gates that keep your brand safe.
+This guide covers everything a CMO needs: the marketing dashboard, each marketing agent, A/B testing, email drip sequences, ABM with intent data, web push HITL, natural language querying, report scheduling, workflow templates, and the approval gates that keep your brand safe.
 
 ---
 
 ## Marketing Dashboard (`/dashboard/cmo`)
 
-The CMO Dashboard is your real-time marketing command center. It aggregates data from all 9 marketing agents and 16 connected marketing platforms into a single view. Access it at `/dashboard/cmo` or by selecting "CMO Dashboard" from the sidebar.
+The CMO Dashboard is your real-time marketing command center. It aggregates data from all 9 marketing agents and 19 connected marketing platforms into a single view. Access it at `/dashboard/cmo` or by selecting "CMO Dashboard" from the sidebar.
 
 ### KPI Cards
 
@@ -99,13 +99,13 @@ The dashboard respects RBAC: only users with CMO or CEO roles can access `/dashb
 **Connected systems**: Buffer, Twitter/X, YouTube, MoEngage.
 
 ### 8. ABM Agent (Account-Based Marketing)
-**What it does**: Account-based marketing — target account identification, intent signal monitoring, and personalized outreach.
+**What it does**: Account-based marketing — target account identification, intent signal monitoring, and personalized outreach. Now powered by real intent data from Bombora, G2, and TrustRadius.
 
-**Key capabilities**: Target account list management (ICP scoring). Intent signal monitoring (website visits, content downloads, ad engagement). Account-level engagement scoring. Personalized content recommendations per account. Multi-touch attribution at the account level. ABM campaign orchestration.
+**Key capabilities**: Target account list management (ICP scoring). **Intent data aggregation** — Bombora (40% weight), G2 (30%), TrustRadius (30%) for account-level buying signals. Account-level engagement scoring. Personalized content recommendations per account. Multi-touch attribution at the account level. ABM campaign orchestration. **CSV upload** for target account lists. **Intent heatmap** visualization.
 
 **HITL triggers**: Target account list changes. High-intent account alerts (immediate outreach recommended). Budget allocation to specific accounts.
 
-**Connected systems**: HubSpot/Salesforce (CRM), GA4 (intent signals), LinkedIn Ads (account targeting).
+**Connected systems**: HubSpot/Salesforce (CRM), Bombora (intent data), G2 (buyer intent), TrustRadius (review + intent), GA4 (intent signals), LinkedIn Ads (account targeting).
 
 ### 9. Competitive Intel Agent
 **What it does**: Competitive intelligence — competitor monitoring, pricing analysis, feature comparison, and market positioning.
@@ -259,6 +259,110 @@ Navigate to **Reports > Scheduled Reports** to set up automated marketing report
 Marketing content directly represents your brand to the public. Unlike finance operations (where an agent processes internal data), marketing agents create externally visible assets. A poorly worded social post, an email with incorrect pricing, or an ad targeting the wrong audience can cause immediate brand damage. The mandatory CMO approval gate ensures no AI-generated content reaches the public without human review.
 
 Agents will never bypass this gate, regardless of confidence score. Even at 99% confidence, the agent creates an approval request and waits.
+
+---
+
+## A/B Testing Workflow
+
+AgenticOrg supports automated A/B testing for email campaigns and ad creatives.
+
+### How It Works
+1. **Create Variants**: Use the `ab_test_campaign` workflow template. Define Variant A and Variant B (different subject lines, content, or CTAs)
+2. **Run Test**: The system sends each variant to a configurable test audience (default: 20% of total list, split 50/50)
+3. **Auto-Winner Selection**: After the test period (configurable — default 24 hours), the system automatically selects the winner based on open rate or CTR
+4. **CMO Override**: Before the winner is sent to the remaining audience, a HITL approval is created. The CMO can approve the auto-selected winner OR override and pick the other variant
+5. **Send to Remaining**: After approval, the winning variant is sent to the remaining 80% of the audience
+6. **Reporting**: Full A/B test metrics are available — variant performance, sample size, statistical confidence
+
+### HITL Gates
+- CMO approval required before sending winner to remaining audience
+- CMO can override auto-winner selection at any time
+- All override decisions are logged in the audit trail
+
+---
+
+## Email Drip Sequences
+
+Behavior-triggered email sequences that nurture leads based on their engagement.
+
+### Creating a Drip Sequence
+Use the `email_drip_sequence` workflow template:
+1. Define email steps (e.g., Welcome, Follow-up, Last Chance)
+2. Set time delays between steps (minutes, hours, or days)
+3. Configure behavior triggers: what happens when a recipient opens, clicks, or ignores an email
+4. Set re-engagement rules for non-openers
+
+### Behavior Triggers
+| Trigger | Action |
+|---------|--------|
+| Email opened | Move to next step immediately (or after configured delay) |
+| Link clicked | Tag lead, update score, trigger next sequence |
+| No open after X hours | Send re-engagement variant |
+| Drip completed | Rescore lead, hand off to sales if qualified |
+
+### Wait-for-Event Steps
+The `lead_nurture` workflow template now includes `wait_for_event` steps — the workflow pauses until a specific event occurs (email opened, link clicked, form submitted). This replaces the old time-only delays with event-driven progression.
+
+### Email Webhooks
+Real-time tracking via SendGrid, Mailchimp, and MoEngage webhooks:
+- `POST /webhooks/email/sendgrid` — open/click/bounce events
+- `POST /webhooks/email/mailchimp` — open/click/unsubscribe events
+- `POST /webhooks/email/moengage` — engagement events
+
+All events are stored and linked to the drip sequence, updating lead scores and triggering next steps automatically.
+
+---
+
+## ABM with Intent Data
+
+The ABM Dashboard (`/dashboard/abm`) provides a unified view of target accounts and their buying intent.
+
+### Intent Data Sources
+| Source | Weight | What It Provides |
+|--------|--------|-----------------|
+| **Bombora** | 40% | Topic-level intent surges, company-level buying signals |
+| **G2** | 30% | Product category research, comparison activity, review engagement |
+| **TrustRadius** | 30% | Product research signals, review views, buyer intent indicators |
+
+### ABM Workflow
+1. **Upload Target Accounts**: CSV upload with company name, domain, and tier (POST /abm/accounts/upload)
+2. **View Intent Scores**: Dashboard shows blended intent scores per account with per-source breakdown
+3. **Intent Heatmap**: Visual heatmap showing intent levels (low/medium/high) across accounts over time
+4. **Filter by Tier**: Focus on Tier 1 (enterprise), Tier 2 (mid-market), or Tier 3 (SMB) accounts
+5. **Launch Campaign**: Select accounts and launch a personalized outreach campaign with one click
+
+### ABM API Endpoints
+- `GET /abm/accounts` — list all target accounts with intent scores
+- `POST /abm/accounts` — add a target account
+- `POST /abm/accounts/upload` — bulk CSV upload
+- `GET /abm/accounts/{id}/intent` — per-account intent breakdown
+- `POST /abm/accounts/{id}/campaign` — launch campaign for account
+- `GET /abm/dashboard` — dashboard summary data
+
+---
+
+## Web Push for Marketing Approvals
+
+Enable browser push notifications to approve or reject marketing decisions without opening the dashboard.
+
+### Setup
+1. Click the bell icon in the dashboard header
+2. Allow push notifications when prompted by the browser
+3. Notifications are sent for all HITL items in your approval queue
+
+### One-Tap Decisions
+When a marketing agent needs CMO approval (campaign launch, email send, content publish), you receive a push notification with:
+- Agent name and action summary
+- **Approve** button — one tap to approve
+- **Reject** button — one tap to reject
+
+Every push decision is logged in the WORM-compliant audit trail with timestamp, decision, and "push_notification" as the source.
+
+### Push API Endpoints
+- `POST /push/subscribe` — register browser for push notifications
+- `POST /push/unsubscribe` — remove push subscription
+- `GET /push/vapid-key` — get the VAPID public key for subscription
+- `POST /push/test` — send a test notification
 
 ---
 

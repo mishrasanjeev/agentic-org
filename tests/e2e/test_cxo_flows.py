@@ -314,7 +314,7 @@ class TestCrossDomainIntegration:
             )
 
     def test_workflow_templates_exist(self):
-        """All 11 workflow templates are present."""
+        """All 15 workflow templates are present."""
         from pathlib import Path
         workflows_dir = Path(__file__).resolve().parent.parent.parent / "workflows" / "examples"
         yamls = list(workflows_dir.glob("*.yaml"))

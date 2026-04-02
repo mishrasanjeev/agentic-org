@@ -1,6 +1,6 @@
 """Test all workflow YAML templates parse and validate.
 
-Covers all 11 workflow template files in workflows/examples/:
+Covers all 15 workflow template files in workflows/examples/:
   3 existing + 8 new workflows.
 """
 
@@ -58,7 +58,7 @@ def _collect_all_step_ids(steps: list) -> set[str]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 1. Discovery — verify all 11 workflows exist
+# 1. Discovery — verify all 15 workflows exist
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -70,7 +70,7 @@ class TestWorkflowDiscovery:
 
     def test_expected_workflow_count(self):
         assert len(_ALL_WORKFLOWS) >= 11, (
-            f"Expected at least 11 workflow files, found {len(_ALL_WORKFLOWS)}"
+            f"Expected at least 15 workflow files, found {len(_ALL_WORKFLOWS)}"
         )
 
     @pytest.mark.parametrize("filename", _EXPECTED_WORKFLOW_FILES)

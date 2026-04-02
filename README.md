@@ -1,16 +1,16 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 35 pre-built agents across 6 domains that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. 51 connectors, 320+ tools, CFO/CMO dashboards, NL Query (Cmd+K), multi-company support, scheduled reports, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — 35 pre-built agents across 6 domains that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. 54 connectors, 340+ tools, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-green.svg)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Tests-1196%2B_passing-brightgreen.svg)](tests/)
-[![E2E](https://img.shields.io/badge/E2E-148%2F148_production-brightgreen.svg)](tests/e2e_full_production_test.py)
+[![Tests](https://img.shields.io/badge/Tests-1633%2B_passing-brightgreen.svg)](tests/)
+[![E2E](https://img.shields.io/badge/E2E-17_Playwright_specs-brightgreen.svg)](ui/e2e/)
 [![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
 [![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
-[![Version](https://img.shields.io/badge/Version-3.1.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.2.0-green.svg)](CHANGELOG.md)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -26,19 +26,19 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 |--------|-------|
 | Pre-built Agents | **35** across 6 domains |
 | Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
-| Enterprise Connectors | **51 connectors, 320+ tools** — ALL with real API endpoints |
+| Enterprise Connectors | **54 connectors, 340+ tools** — ALL with real API endpoints |
 | Dashboards | CFO Dashboard + CMO Dashboard (role-specific KPI views) |
 | NL Query | Cmd+K search bar + slide-out chat panel with agent attribution |
 | Multi-Company | Company switcher for CA firms managing multiple client entities |
 | Scheduled Reports | Celery beat --> PDF/Excel --> email/Slack/WhatsApp delivery |
-| Workflow Templates | **11** production-ready templates |
+| Workflow Templates | **15** production-ready templates |
 | Prompt Templates | 27 production-tested |
-| Automated Tests | **1,196+** (821 unit, 86 security, 174 connector harness, 55 regression, 62 integration, 370+ Playwright E2E) |
-| Production E2E | **148/148 pass (100%)** against live deployment |
+| Automated Tests | **1,633** backend + **93** frontend vitest + **17** Playwright E2E spec files |
+| CI E2E | Enabled against production |
 | SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
 | LLM | Gemini 2.5 Flash (primary), Claude/GPT-4o fallback |
 | Deployment | GKE Autopilot, ~$95/month |
-| Version | **3.1.0** |
+| Version | **3.2.0** |
 
 ### What It Does
 
@@ -90,21 +90,22 @@ App Dashboard
 FastAPI Backend
     ├── Agent Registry (35 agents) → LLM Router (Gemini 2.5 Flash)
     │       ↓ tool_calls                    ↑ synthesis
-    │   Tool Gateway → 51 Connectors (320+ tools)
+    │   Tool Gateway → 54 Connectors (340+ tools)
     │       ├── Jira (11 tools) ← verified, creates real tickets
     │       ├── HubSpot (13 tools) ← verified, reads real CRM
     │       ├── GitHub (9 tools) ← verified, reads real repos
     │       ├── GSTN (8 tools) ← real Adaequare 2-step auth + DSC signing
     │       ├── Tally (7 tools) ← XML/TDL protocol + bridge for on-premise
     │       ├── Banking AA (5 tools) ← RBI-compliant consent flow
+    │       ├── Bombora, G2, TrustRadius ← intent data (weighted 40/30/30)
     │       └── GA4, MoEngage, NetSuite, WordPress, Twitter/X, YouTube, Mailchimp...
     ├── NL Query Engine → Agent attribution → Chat history
     ├── Scheduled Report Engine → Celery beat → PDF/Excel → email/Slack/WhatsApp
     ├── LangGraph Runtime → GraphInterrupt HITL → Shadow Mode
-    ├── Workflow Engine (11 templates) → real agent execution → HITL Queue
+    ├── Workflow Engine (15 templates) → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
     ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
-    ├── MCP Server → 320+ tools exposed to Claude/Cursor/ChatGPT
+    ├── MCP Server → 340+ tools exposed to Claude/Cursor/ChatGPT
     ├── API Key Manager → ao_sk_ keys → SDK/CLI/MCP auth
     ├── SOP Parser → Upload SOPs → Deploy as agents
     └── Sales Agent → Gmail API → Email Sequences
@@ -127,7 +128,7 @@ PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 | **Sales** | 1 | Automated sales agent (qualification, email sequences, pipeline) |
 | **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
 
-> **35 pre-built agents across 6 domains. 51 connectors with 320+ tools. All endpoints real.**
+> **35 pre-built agents across 6 domains. 54 connectors with 340+ tools. All endpoints real.**
 
 ---
 
@@ -175,7 +176,7 @@ Automated report generation and delivery:
 - **Report Scheduler UI** — create, manage, toggle on/off, and run-now from the dashboard
 - **Pre-built Schedules** — daily cash report, weekly P&L, monthly close package, weekly marketing digest
 
-### Workflow Templates (11 Pre-built)
+### Workflow Templates (15 Pre-built)
 Production-ready workflow templates that combine multiple agents:
 | Template | Domain | Description |
 |----------|--------|-------------|
@@ -185,8 +186,11 @@ Production-ready workflow templates that combine multiple agents:
 | `tax_calendar` | Finance | Deadline tracking --> filing prep --> DSC signing |
 | `campaign_launch` | Marketing | Brief --> content --> review --> publish --> monitor |
 | `content_pipeline` | Marketing | Ideation --> draft --> SEO --> approval --> publish |
-| `lead_nurture` | Marketing | Scoring --> segmentation --> drip --> handoff to sales |
+| `lead_nurture` | Marketing | Scoring --> segmentation --> drip --> wait_for_event --> handoff to sales |
 | `weekly_marketing_report` | Marketing | Collect metrics --> build report --> deliver |
+| `email_drip_sequence` | Marketing | Behavior-triggered email sequences (open/click/time delays) |
+| `ab_test_campaign` | Marketing | Create variants --> run test --> auto-winner selection --> CMO override --> send winner |
+| `abm_campaign` | Marketing | CSV upload targets --> intent scoring (Bombora/G2/TrustRadius) --> personalized outreach |
 | `incident_response` | Ops | Triage --> Jira ticket --> assign --> monitor --> resolve |
 | `lead_to_revenue` | Sales | Qualify --> outreach --> follow-up --> close |
 | `weekly_devops_health` | Ops | GitHub + Jira metrics --> health score --> report |
@@ -221,14 +225,27 @@ Configurable confidence floors, trigger conditions, escalation chains, and timeo
 ### Sales Agent
 Automated lead qualification, personalized email outreach, follow-up sequences (Day 1/3/7/14), Gmail inbox monitoring, and pipeline dashboard. Demo request form → instant personalized response.
 
-### 51 Enterprise Connectors (320+ Tools) — All Real API Endpoints
+### 54 Enterprise Connectors (340+ Tools) — All Real API Endpoints
 Finance (11): Oracle Fusion, SAP, Tally (XML/TDL + bridge), GSTN (Adaequare 2-step + DSC), Stripe, QuickBooks, Zoho Books, Banking AA (RBI consent), Income Tax India, Pine Labs (Plural), NetSuite
 HR (8): Darwinbox, Okta, Greenhouse, LinkedIn Talent, DocuSign, Keka, Zoom, EPFO
-Marketing (16): Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch, GA4, MoEngage, WordPress, Twitter/X, YouTube, Mailchimp, Semrush
+Marketing (19): Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch, GA4, MoEngage, WordPress, Twitter/X, YouTube, Mailchimp, Semrush, Bombora, G2, TrustRadius
 Ops (7): Jira, ServiceNow, Zendesk, PagerDuty, Confluence, Sanctions API, MCA Portal
 Comms (9): Slack, GitHub, Gmail, SendGrid, GCS, Google Calendar, Twilio, WhatsApp, LangSmith
 
 > Every connector uses real API endpoints from official documentation. Zero stubs. The Tally connector uses native XML/TDL protocol with a bridge agent for on-premise instances. Banking AA follows RBI-compliant consent flow. GSTN uses Adaequare's 2-step authentication with DSC signing for filing.
+
+### Tier 1: Marketing Automation (v3.2.0)
+
+| Feature | What It Does |
+|---------|-------------|
+| **Web Push Notifications** | One-tap approve/reject HITL decisions from browser push notifications — no need to open the dashboard |
+| **Email Drip Engine** | Behavior-triggered email sequences with open/click/time-delay steps and automatic re-engagement for non-openers |
+| **A/B Testing** | Create campaign variants, auto-select winners by open rate or CTR, with CMO override before sending to remaining audience |
+| **Email Webhooks** | Real-time SendGrid, Mailchimp, and MoEngage open/click tracking via inbound webhooks |
+| **Intent Data** | Bombora + G2 + TrustRadius aggregation with weighted scoring (40/30/30) for account-level buying signals |
+| **ABM Dashboard** | Target account management with intent heatmap, CSV upload, tier filtering, and one-click campaign launch |
+| **Wait Step** | Real time delays in workflows (was stub) — supports minutes, hours, and day-based delays |
+| **Wait-for-Event** | Pause workflow execution until a specific event occurs (email opened, link clicked, form submitted) |
 
 ---
 
@@ -321,7 +338,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | PATCH | /report-schedules/{id} | JWT | Update scheduled report |
 | POST | /report-schedules/{id}/run-now | JWT | Trigger immediate report run |
 | DELETE | /report-schedules/{id} | JWT | Delete scheduled report |
-| GET | /connectors | JWT | List 51 connectors |
+| GET | /connectors | JWT | List 54 connectors |
 | GET | /connectors/registry | JWT | Connector registry (all registered connectors + tool counts) |
 | GET | /connectors/{id}/health | JWT | Connector health check |
 | GET | /connectors/{id} | JWT | Connector details |
@@ -331,7 +348,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | DELETE | /org/api-keys/{id} | Admin | Revoke API key |
 | GET | /a2a/agent-card | No | A2A agent discovery card |
 | POST | /a2a/tasks | JWT/Grantex | Execute A2A task |
-| GET | /mcp/tools | No | List MCP tools (320+ tools) |
+| GET | /mcp/tools | No | List MCP tools (340+ tools) |
 | POST | /mcp/call | JWT/Grantex | Call MCP tool |
 | POST | /sop/upload | JWT | Upload and parse SOP document |
 | POST | /sop/parse-text | JWT | Parse SOP text |
@@ -426,7 +443,7 @@ AgenticOrg implements Google's A2A protocol for cross-platform agent discovery a
 - `POST /a2a/tasks` — execute tasks via A2A protocol (JWT or Grantex auth)
 
 ### MCP (Model Context Protocol)
-Full MCP server exposing all 320+ connector tools to any MCP-compatible client:
+Full MCP server exposing all 340+ connector tools to any MCP-compatible client:
 - `GET /mcp/tools` — list all available MCP tools (no auth required)
 - `POST /mcp/call` — call any MCP tool (JWT or Grantex auth)
 
@@ -444,28 +461,13 @@ The `/integration-workflow` page provides a visual guide for connecting external
 ## Testing
 
 ```bash
-# Unit tests (821 tests)
-pytest tests/unit/
+# Backend tests (1633 total)
+pytest tests/
 
-# Security tests (86 tests)
-pytest tests/security/
+# Frontend vitest (93 tests)
+cd ui && npx vitest run
 
-# Connector harness — all 51 connectors (174+ tests)
-pytest tests/connector_harness/
-
-# Synthetic data — invoice/resume/contract flows (15 tests)
-pytest tests/synthetic_data/
-
-# Regression tests (55 tests)
-pytest tests/regression/
-
-# Integration tests (62 tests)
-pytest tests/integration/
-
-# Full production E2E — 148 checks against live deployment
-python tests/e2e_full_production_test.py
-
-# Playwright E2E — 370+ browser tests across 14 spec files
+# Playwright E2E — 17 spec files, CI runs against production
 npx playwright test
 
 # Production connector test — real Jira/HubSpot/GitHub API calls
@@ -474,16 +476,10 @@ python tests/test_production_connectors.py
 
 | Suite | Tests | What It Covers |
 |-------|-------|---------------|
-| Unit | 821 | Agents, registry, schemas, routing, prompts, RBAC, workflows, LangGraph, SOP, A2A/MCP, negative cases |
-| Security | 86 | Auth bypass, token exploits, alg:none, HITL bypass, PII, agent scaling |
-| Connector harness | 174+ | 51 connectors × all 320+ tools |
-| Synthetic data | 15 | Invoice OCR → match, resume screening, contract analysis |
-| Regression | 55 | March 2026 bug fixes (40) + April 2026 PR fixes (15) |
-| Integration | 62 | API integration (43) + virtual employee API (19) |
-| Production E2E | 148 | Fresh org signup → agents → workflows → HITL → audit → RBAC → connectors |
-| Production audit | 48 | Final production test (23) + new features production (25) |
-| Playwright E2E | 370+ | 12 spec files (ui/e2e) + 2 spec files (ui/tests): flows, login, onboarding, landing, SOP, negative cases, regression |
-| **Total** | **1,196+** | **148/148 production E2E at 100%** |
+| Backend (pytest) | **1,633** | Unit, security, connector harness (54 connectors × 340+ tools), synthetic data, regression, integration |
+| Frontend (vitest) | **93** | Component tests, hooks, utilities |
+| Playwright E2E | **17 spec files** | Full browser flows: login, onboarding, agents, workflows, approvals, landing, SOP, dashboards, ABM, drip, A/B, push |
+| CI E2E | Enabled | Runs against production on every merge to main |
 
 ---
 
@@ -504,10 +500,10 @@ agenticorg/
 │   ├── tool_gateway/       # Scope enforcement, rate limiting, PII masking, audit
 │   ├── gmail_agent.py      # Gmail API integration (inbox monitor, send replies)
 │   └── email.py            # SMTP email sending
-├── connectors/             # 51 enterprise connectors (320+ tools)
+├── connectors/             # 54 enterprise connectors (340+ tools)
 │   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA, NetSuite... (11)
 │   ├── hr/                 # Darwinbox, Okta, Greenhouse, EPFO, Zoom... (8)
-│   ├── marketing/          # Salesforce, HubSpot, Google Ads, GA4, MoEngage, YouTube... (16)
+│   ├── marketing/          # Salesforce, HubSpot, Google Ads, GA4, MoEngage, Bombora, G2, TrustRadius... (19)
 │   ├── ops/                # Jira, Zendesk, ServiceNow, PagerDuty... (7)
 │   ├── comms/              # Slack, GitHub, Gmail, SendGrid, GCS, Twilio... (9)
 │   └── framework/          # BaseConnector, auth adapters, circuit breaker
@@ -522,15 +518,15 @@ agenticorg/
 │   ├── pages/blog/         # 8 SEO blog articles
 │   └── pages/resources/    # 26 SEO content pages across 7 topic clusters
 ├── tests/
-│   ├── unit/               # 821 unit tests
-│   ├── security/           # 86 security tests
-│   ├── connector_harness/  # 174 connector tests (51 connectors × tools)
-│   ├── regression/         # 55 regression tests (March + April 2026)
-│   ├── integration/        # 62 integration tests
+│   ├── unit/               # Unit tests
+│   ├── security/           # Security tests
+│   ├── connector_harness/  # Connector tests (54 connectors × tools)
+│   ├── regression/         # Regression tests
+│   ├── integration/        # Integration tests
 │   ├── synthetic_data/     # Invoice, resume, contract test data
 │   └── e2e/                # Playwright browser tests
-├── ui/e2e/                 # 12 Playwright spec files (255 tests)
-├── ui/tests/               # 2 Playwright spec files (115 tests)
+├── ui/e2e/                 # 17 Playwright E2E spec files
+├── ui/tests/               # 93 vitest component tests
 ├── migrations/             # PostgreSQL DDL files
 ├── helm/                   # Kubernetes Helm charts
 ├── docs/                   # PRD, architecture, QA test plan
@@ -558,8 +554,8 @@ agenticorg/
 | Plan | Price | Agents | Connectors | Tasks |
 |------|-------|--------|-----------|-------|
 | Free | $0 | 35 | 20 | 500/day |
-| Pro | $499/mo | Unlimited | 51 | Unlimited |
-| Enterprise | Custom | Unlimited | 51 | Unlimited + SLA |
+| Pro | $499/mo | Unlimited | 54 | Unlimited |
+| Enterprise | Custom | Unlimited | 54 | Unlimited + SLA |
 
 ---
 

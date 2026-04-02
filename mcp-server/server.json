@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mishrasanjeev/agenticorg",
-  "description": "Run 35 enterprise AI agents and 320+ tools with human-in-the-loop governance",
+  "description": "Run 35 enterprise AI agents and 340+ tools with human-in-the-loop governance",
   "repository": {
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
@@ -23,9 +23,9 @@
     { "name": "get_agent_details", "description": "Get full details of a specific agent by ID" },
     { "name": "create_agent_from_sop", "description": "Parse an SOP document and create a new AI agent from it" },
     { "name": "deploy_agent", "description": "Deploy an agent configuration to make it live" },
-    { "name": "list_connectors", "description": "List all 51 connectors (SAP, Oracle, Jira, HubSpot, GSTN, etc.)" },
-    { "name": "call_connector_tool", "description": "Call any of 273 connector tools directly" },
-    { "name": "list_mcp_tools", "description": "Discover all 273 available MCP tools across 51 connectors" },
+    { "name": "list_connectors", "description": "List all 54 connectors (SAP, Oracle, Jira, HubSpot, GSTN, Bombora, G2, TrustRadius, etc.)" },
+    { "name": "call_connector_tool", "description": "Call any of 340+ connector tools directly" },
+    { "name": "list_mcp_tools", "description": "Discover all 340+ available MCP tools across 54 connectors" },
     { "name": "discover_agents_a2a", "description": "Discover agent skills via A2A protocol" },
     { "name": "get_agent_card", "description": "Get the public A2A Agent Card" }
   ],

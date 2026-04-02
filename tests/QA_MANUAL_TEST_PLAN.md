@@ -1,6 +1,6 @@
 # AgenticOrg — Manual QA Test Plan
 
-**Version**: 3.1.0
+**Version**: 3.2.0
 **Date**: 2026-04-02
 **Environment**: https://app.agenticorg.ai
 **Landing**: https://agenticorg.ai
@@ -114,7 +114,7 @@ FLOW 4: CFO Logs In → Sees Only Finance
 | C6 | Approvals page | Click "Approvals" | HITL approval queue — shows pending approvals (if any) | | |
 | C7 | Audit page | Click "Audit Log" | List of audit events with: event type, actor, action, outcome, timestamp | | |
 | C8 | Observatory | Click "Observatory" | Real-time agent monitoring with traces and metrics | | |
-| C9 | Connectors | Click "Connectors" | List of 51 connectors with status | | |
+| C9 | Connectors | Click "Connectors" | List of 54 connectors with status | | |
 | C10 | Settings | Click "Settings" | Admin settings page | | |
 | C11 | Prompt Templates | Click "Prompt Templates" | 27 templates listed. Built-in badge shown. Click to expand and see template text | | |
 | C12 | Sales Pipeline | Click "Sales Pipeline" | Pipeline dashboard: funnel bar, metrics cards, lead table | | |
@@ -240,6 +240,66 @@ Severity: [Critical/High/Medium/Low]
 
 ---
 
+## v3.2.0 Test Cases — Tier 1: Marketing Automation
+
+### SECTION O: Web Push Notifications
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| O1 | Push permission request | Login as CEO. Navigate to Settings or bell icon. Enable push notifications | Browser shows native push permission dialog. After "Allow", subscription is created via POST /push/subscribe | | |
+| O2 | Receive push notification | Trigger a HITL approval (e.g., run an agent with low confidence). Wait for push | Browser notification appears with agent name, action summary, and approve/reject buttons | | |
+| O3 | One-tap approve via push | Click "Approve" on the push notification | HITL item is approved. Notification dismisses. Dashboard shows "Approved" status on the item | | |
+| O4 | One-tap reject via push | Trigger another HITL item. Click "Reject" on the push notification | HITL item is rejected. Audit log shows rejection with "push_notification" as the source | | |
+| O5 | Notification bell dropdown | Click the bell icon in the dashboard header | Dropdown shows recent notifications with timestamps, agent names, and status badges | | |
+| O6 | Push toggle off/on | Go to Settings. Toggle push notifications OFF. Trigger a HITL item | No push notification received. Toggle back ON — next HITL item sends a push | | |
+| O7 | VAPID key endpoint | Call GET /push/vapid-key | Returns a valid VAPID public key string | | |
+| O8 | Test push endpoint | Call POST /push/test with a valid subscription | Test notification is received in the browser | | |
+
+### SECTION P: A/B Testing
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| P1 | Create A/B campaign | Login as CMO. Navigate to Workflows. Create new workflow from `ab_test_campaign` template. Define variant A and variant B (different subject lines) | Workflow created with two variants. Status: "running" | | |
+| P2 | Auto-winner selection | Wait for test period to complete (or simulate). Check workflow status | System automatically selects winner based on open rate or CTR. Winner variant is marked | | |
+| P3 | CMO override | Before auto-send, navigate to Approvals. Find the A/B test approval item. Click "Override" and select the other variant | Override is accepted. The CMO-selected variant is now the winner. Audit log records the override | | |
+| P4 | Send winner to remaining | After winner is selected (auto or override), confirm the send step | Winner variant is sent to the remaining audience (those not in the test group). Email metrics update | | |
+| P5 | A/B test metrics | Navigate to the campaign detail page | Shows: Variant A open rate, Variant B open rate, winner, sample size, confidence level | | |
+
+### SECTION Q: Email Drip Sequences
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| Q1 | Create drip sequence | Login as CMO. Navigate to Workflows. Create from `email_drip_sequence` template. Define 3 steps: Welcome (immediate), Follow-up (2 days), Last chance (5 days) | Workflow created with 3 email steps and time delays. Status: active | | |
+| Q2 | Behavior trigger on open | Enroll a test lead. Simulate email open (via webhook). Check next step trigger | After open event, the next drip step is triggered based on the "on_open" condition | | |
+| Q3 | Time delay works | Enroll a test lead. Check the second step | Second step is scheduled for 2 days after enrollment. Status shows "waiting" with countdown | | |
+| Q4 | Re-engage non-openers | After the initial email, a lead does not open for 24 hours | Re-engagement email variant is automatically sent. Audit log shows "re-engage_non_opener" action | | |
+| Q5 | Rescore after drip | A lead completes the full drip sequence (3 steps). Check lead score | Lead score is updated based on engagement (opens, clicks). Score change is visible in CRM Intelligence | | |
+| Q6 | Wait-for-event step | In the lead_nurture workflow, check the wait_for_event step | Workflow pauses at the wait step. When the target event (email opened/clicked) occurs, workflow resumes | | |
+
+### SECTION R: ABM Dashboard
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| R1 | Access ABM dashboard | Login as CMO. Navigate to /dashboard/abm | ABM dashboard loads with target accounts table, intent heatmap, and summary stats | | |
+| R2 | Upload CSV of target accounts | Click "Upload Accounts" button. Select a CSV file with columns: company, domain, tier. Upload | Accounts are imported. Table shows new accounts with default intent score of 0 | | |
+| R3 | View intent scores | Click on a target account row | Detail panel shows intent scores from Bombora (40% weight), G2 (30%), TrustRadius (30%), and blended score | | |
+| R4 | Launch campaign from ABM | Select one or more accounts. Click "Launch Campaign" | Campaign creation form opens pre-populated with selected accounts. Submit creates a personalized outreach workflow | | |
+| R5 | Filter by tier | Use the tier filter dropdown. Select "Tier 1" | Only Tier 1 accounts are shown in the table | | |
+| R6 | Intent heatmap | Scroll to the intent heatmap section | Heatmap shows account intent levels (low/medium/high) color-coded across time periods | | |
+| R7 | ABM API endpoints | Call GET /abm/accounts, POST /abm/accounts, GET /abm/dashboard | All endpoints return valid JSON responses with correct data | | |
+
+### SECTION S: Email Webhooks
+
+| # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
+|---|-----------|-------|-----------------|-----------|-------|
+| S1 | SendGrid open tracking | Send a test email via SendGrid connector. Simulate an open event by calling POST /webhooks/email/sendgrid with open payload | Event is stored. The email's open count increments. Event appears in the audit log | | |
+| S2 | Mailchimp click tracking | Send a test email via Mailchimp connector. Simulate a click event by calling POST /webhooks/email/mailchimp with click payload | Event is stored. The email's click count increments. Drip sequence reacts if configured | | |
+| S3 | MoEngage event tracking | Call POST /webhooks/email/moengage with a sample event payload | Event is stored and linked to the corresponding contact/lead | | |
+| S4 | Verify events stored | After sending webhook events, query the events via API or check the audit log | All webhook events are persisted with: timestamp, event_type, email_id, recipient, metadata | | |
+| S5 | Webhook auth validation | Call POST /webhooks/email/sendgrid without proper auth headers | Returns 401 or 403. Event is NOT stored | | |
+
+---
+
 ## v3.1.0 Test Cases (Added 2026-04-02)
 
 ### SECTION G: CFO Dashboard (/dashboard/cfo)
@@ -333,13 +393,13 @@ Severity: [Critical/High/Medium/Low]
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| L1 | Hero stats show updated numbers | Open https://agenticorg.ai. Look at the hero section stats | Stats show "35 agents", "51 connectors", "320+ tools" | | |
+| L1 | Hero stats show updated numbers | Open https://agenticorg.ai. Look at the hero section stats | Stats show "35 agents", "54 connectors", "340+ tools" | | |
 | L2 | Role cards show updated agent counts | Scroll to the role/domain cards section | Cards show updated counts: 10 finance agents, 9 marketing agents, and correct counts for other domains | | |
 | L3 | CA Firm case study section visible | Scroll down the landing page to the section before the Final CTA | A CA Firm case study section is visible with heading, summary, and call-to-action link | | |
 | L4 | Case study link works | Click "Read the full case study" link in the CA Firm section | Navigates to /blog/ca-firm-ai-agent-end-to-end. Blog post loads with full content | | |
 | L5 | Blog nav link works | Click "Blog" in the top navigation bar | Navigates to /blog. Page shows 8+ blog posts listed with titles, dates, and category badges | | |
 | L6 | New blog posts load correctly | On /blog, click each of the 4 newest blog posts | Each post loads fully with title, content, images (if any), and proper formatting. No 404 errors | | |
-| L7 | Pricing page shows 51 connectors | Navigate to /pricing | Pricing page mentions "51 connectors" in the feature list or comparison table | | |
+| L7 | Pricing page shows 54 connectors | Navigate to /pricing | Pricing page mentions "54 connectors" in the feature list or comparison table | | |
 | L8 | Meta description matches | View page source of landing page. Search for meta description tag | Meta description contains "35 pre-built agents" | | |
 
 ### SECTION M: SEO & Indexing
@@ -347,8 +407,8 @@ Severity: [Critical/High/Medium/Low]
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
 | M1 | Sitemap includes new blog URLs | Open https://agenticorg.ai/sitemap.xml | Sitemap contains URLs for all 4 new blog posts. Each URL has a valid <lastmod> date | | |
-| M2 | llms.txt shows updated numbers | Open https://agenticorg.ai/llms.txt | Content mentions "35 agents", "51 connectors", and "320+ tools" | | |
-| M3 | llms-full.txt shows updated numbers | Open https://agenticorg.ai/llms-full.txt | Content mentions "35 agents", "51 connectors", and "320+ tools" | | |
+| M2 | llms.txt shows updated numbers | Open https://agenticorg.ai/llms.txt | Content mentions "35 agents", "54 connectors", and "340+ tools" | | |
+| M3 | llms-full.txt shows updated numbers | Open https://agenticorg.ai/llms-full.txt | Content mentions "35 agents", "54 connectors", and "340+ tools" | | |
 | M4 | robots.txt allows /blog/* | Open https://agenticorg.ai/robots.txt | robots.txt contains Allow rule for /blog/* or does not disallow /blog/ paths | | |
 | M5 | New blog posts have proper meta tags | Open each of the 4 new blog posts. View page source | Each post has a unique <title> tag and a <meta name="description"> tag with relevant content | | |
 

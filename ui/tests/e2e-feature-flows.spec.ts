@@ -786,8 +786,8 @@ test.describe("Flow 7: Public Pages Accessibility", () => {
     await expect(page.locator("text=$499").first()).toBeVisible();
     await expect(page.locator("text=Custom").first()).toBeVisible();
 
-    // Verify "51 connectors" appears (Pro and Enterprise both have it)
-    const connectorMentions = page.locator("text=51 connectors");
+    // Verify "54 connectors" appears (Pro and Enterprise both have it)
+    const connectorMentions = page.locator("text=54 connectors");
     expect(await connectorMentions.count()).toBeGreaterThanOrEqual(2);
   });
 

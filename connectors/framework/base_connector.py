@@ -34,7 +34,7 @@ _GCP_SECRET_RE = re.compile(
 
 
 class BaseConnector(abc.ABC):
-    """Base class for all 51 connectors."""
+    """Base class for all 54 connectors."""
 
     name: str = ""
     category: str = ""

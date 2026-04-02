@@ -114,9 +114,9 @@ const ROLE_CARDS = [
     role: "CMO",
     gradient: "from-purple-500 to-pink-600",
     pain: "Launch campaigns while you sleep",
-    description: "5 marketing agents run Campaign Management, Content Generation, SEO Optimization, CRM Nurturing, and Brand Monitoring.",
-    agents: ["Campaign Mgmt", "Content Gen", "SEO", "CRM Nurture", "Brand Monitor"],
-    metric: "3.2x ROI on automated multi-channel campaigns",
+    description: "9 marketing agents run Campaign Management, A/B Testing, Email Drip Sequences, ABM with Intent Data (Bombora/G2/TrustRadius), Content Generation, SEO Optimization, CRM Nurturing, Brand Monitoring, and Competitive Intel.",
+    agents: ["Campaign Mgmt", "A/B Testing", "Email Drip", "ABM + Intent", "Content Gen", "SEO", "CRM Nurture", "Brand Monitor", "Competitive Intel"],
+    metric: "A/B auto-winner selection + CMO override on multi-channel campaigns",
   },
   {
     role: "COO",
@@ -340,7 +340,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — 35 pre-built agents across 6 domains, 51 connectors (320+ tools), CFO/CMO dashboards, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
+        <meta name="description" content="AI agents that reason AND act — 35 pre-built agents across 6 domains, 54 connectors (340+ tools), CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -434,7 +434,7 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">Now Live &mdash; 43 Connectors, 273 Tools &mdash; Agents That Execute Real API Calls</span>
+              <span className="text-slate-300 text-sm">Now Live &mdash; 54 Connectors, 340+ Tools &mdash; Agents That Execute Real API Calls</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -493,11 +493,11 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">25</div>
+              <div className="text-3xl font-extrabold text-slate-900">35</div>
               <p className="text-sm text-slate-500 mt-1">Pre-built AI Agents</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">43</div>
+              <div className="text-3xl font-extrabold text-slate-900">54</div>
               <p className="text-sm text-slate-500 mt-1">Enterprise Connectors</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
@@ -583,7 +583,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                35 pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 51 connectors (320+ tools), SDK/MCP/API access. Not chatbots. Virtual employees.
+                35 pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 54 connectors (340+ tools), A/B testing, email drip, ABM with intent data, SDK/MCP/API access. Not chatbots. Virtual employees.
               </p>
             </div>
           </FadeIn>
@@ -864,7 +864,7 @@ export default function Landing() {
             <div className="grid md:grid-cols-3 gap-12">
               {[
                 { num: "1", title: "Create or pick your agents", desc: "Choose from 35 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "51 connectors with 320+ tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
+                { num: "2", title: "Connect your systems", desc: "54 connectors with 340+ tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK (pip install agenticorg), TypeScript SDK (npm i agenticorg-sdk), CLI, or ChatGPT/Claude via MCP Server." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
@@ -1205,7 +1205,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">MCP (Model Context Protocol)</h3>
-                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 320+ tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
+                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 340+ tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
               </div>
               <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
@@ -1315,7 +1315,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              35 agents that act. 51 connectors. 320+ tools. 855+ tests passing. Free to start.
+              35 agents that act. 54 connectors. 340+ tools. 855+ tests passing. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

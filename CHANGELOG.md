@@ -2,6 +2,32 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.2.0] — 2026-04-02
+
+### Added — Tier 1: Marketing Automation
+- **Web Push Notifications**: One-tap approve/reject HITL decisions from browser push notifications (ServiceWorker + VAPID). Notification bell dropdown in dashboard header. Push permission toggle per user
+- **Email Drip Engine**: Behavior-triggered email sequences — trigger on open, click, or time delay. Re-engage non-openers. Rescore leads after drip completion. New `email_drip_sequence` workflow template
+- **A/B Testing**: Create campaign variants, auto-select winners by open rate or CTR, CMO override before sending to remaining audience. New `ab_test_campaign` workflow template
+- **Email Webhooks**: SendGrid, Mailchimp, and MoEngage open/click tracking via inbound webhooks (`POST /webhooks/email/{provider}`). Events stored and linked to drip sequences
+- **Intent Data Aggregation**: Bombora + G2 + TrustRadius connectors with weighted scoring (40/30/30) for account-level buying signals
+- **ABM Dashboard** (`/dashboard/abm`): Target account management, intent heatmap, CSV upload, tier filtering, and one-click campaign launch. Endpoints: `GET/POST /abm/accounts`, `POST /abm/accounts/upload`, `GET /abm/accounts/{id}/intent`, `POST /abm/accounts/{id}/campaign`, `GET /abm/dashboard`
+- **Wait Step**: Real time delays in workflows (was stub) — supports minutes, hours, and day-based delays
+- **Wait-for-Event Step**: Pause workflow until email opened, link clicked, or form submitted. Used in `lead_nurture` template
+- **3 new connectors**: Bombora (intent data API), G2 (buyer intent signals), TrustRadius (review + intent data)
+- **4 new workflow templates**: `email_drip_sequence`, `ab_test_campaign`, `abm_campaign`, plus `lead_nurture` now has `wait_for_event` steps
+- **Push notification endpoints**: `POST /push/subscribe`, `POST /push/unsubscribe`, `GET /push/vapid-key`, `POST /push/test`
+
+### Changed
+- Connector count: 51 → **54** (3 new intent data connectors)
+- Tool count: 320+ → **340+** (12 new tools across Bombora, G2, TrustRadius)
+- Workflow templates: 11 → **15** (4 new marketing automation templates)
+- Marketing connector group: 16 → **19** (added Bombora, G2, TrustRadius)
+- Backend tests: 1,196+ → **1,633**
+- Frontend vitest: **93** tests
+- Playwright E2E: 14 → **17** spec files
+- CI E2E now runs against production on every merge to main
+- Version: 3.1.0 → **3.2.0**
+
 ## [3.1.0] — 2026-04-02
 
 ### Added
@@ -54,7 +80,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - **Auth Failure Clearing**: IP-based failure tracking with auto-block + success clears failure count
 - **Python SDK** (`pip install agenticorg`): client.agents.run(), client.sop.parse_text(), client.a2a.agent_card()
 - **TypeScript SDK** (`npm i agenticorg-sdk`): full agent/SOP/A2A/MCP client
-- **MCP Server** (`npx agenticorg-mcp-server`): exposes 320+ tools to Claude Desktop, Cursor, ChatGPT
+- **MCP Server** (`npx agenticorg-mcp-server`): exposes 340+ tools to Claude Desktop, Cursor, ChatGPT
 - **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop parse`, `agenticorg mcp tools`
 - **Integration Workflow Page**: `/integration-workflow` with visual protocol guide + SDK quickstart
 - **Developer Section**: Landing page developer section with SDK/CLI/MCP quickstart
@@ -122,7 +148,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ### Metrics
 - Automated tests: 353 → **1,031** (pytest) + 125 production E2E
 - Production E2E: **125/125 (100%)** — all 21 sections, all demo users, full lifecycle
-- Connector tools: 51 connectors × **273 total tools**
+- Connector tools: 54 connectors × **273 total tools**
 - Real API verified: GitHub (9), Jira (11), HubSpot (13) — 14 Jira tickets created on production
 
 ## [2.1.0] - 2026-03-21

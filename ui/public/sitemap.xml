@@ -240,6 +240,13 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+  <!-- ABM Dashboard (Tier 1) -->
+  <url>
+    <loc>https://agenticorg.ai/dashboard/abm</loc>
+    <lastmod>2026-04-02</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
   <!-- New blog posts (April 2026) -->
   <url>
     <loc>https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end</loc>

@@ -266,7 +266,7 @@ else:
     checks = {
         "Developer SDKs": "Developer SDK" in r.text or "developer sdk" in r.text.lower() or "SDK" in r.text,
     }
-    # Check for tool count mentioning ~320+ tools (allow some variance)
+    # Check for tool count mentioning ~340+ tools (allow some variance)
     has_tools = any(f"{n} tools" in r.text for n in range(260, 290)) or "tools" in r.text.lower()
     checks["tools count"] = has_tools
     # Check for connector count ~43

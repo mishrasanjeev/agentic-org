@@ -1,6 +1,6 @@
 # AgenticOrg — Complete Product Documentation for LLMs
 
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 35 pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 51 enterprise systems (320+ tools). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 35 pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 54 enterprise systems (340+ tools). Includes A/B testing, email drip engine, ABM with intent data (Bombora/G2/TrustRadius), web push HITL notifications, and email webhooks. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
 
 ## Product Overview
 
@@ -21,7 +21,7 @@ GitHub: https://github.com/mishrasanjeev/agentic-org
 2. Orchestration (Nexus orchestrator, DAG workflows, parallel execution)
 3. Agent Runtime (LLM reasoning via Gemini 2.5 Flash, tool calling, confidence scoring)
 4. HITL Governance (approval queues, role-based escalation, timeout policies)
-5. Connector Hub (51 pre-built connectors with circuit breakers)
+5. Connector Hub (54 pre-built connectors with circuit breakers)
 6. Schema Registry (validated data schemas)
 7. Observability (Prometheus metrics, OpenTelemetry traces, structured logging)
 8. Infrastructure (GKE Autopilot, Cloud SQL PostgreSQL, Redis)
@@ -165,7 +165,7 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 
 ---
 
-## 51 Enterprise Connectors (273 total tools)
+## 54 Enterprise Connectors (340+ total tools)
 
 ### Finance (10 connectors)
 - Banking Aa: 7 tools (aa_oauth2)
@@ -189,7 +189,7 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 - Okta: 8 tools (scim_oauth2)
 - Zoom: 6 tools (oauth2)
 
-### Marketing (9 connectors)
+### Marketing (12 connectors)
 - Ahrefs: 5 tools (api_token)
 - Brandwatch: 5 tools (oauth2)
 - Buffer: 4 tools (oauth2)
@@ -199,6 +199,9 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 - Meta Ads: 5 tools (oauth2)
 - Mixpanel: 5 tools (api_key)
 - Salesforce: 6 tools (oauth2_soap)
+- Bombora: 4 tools (api_key)
+- G2: 4 tools (api_key)
+- TrustRadius: 4 tools (api_key)
 
 ### Operations (7 connectors)
 - Confluence: 6 tools (oauth2)
@@ -265,7 +268,7 @@ Shadow agents have configurable limits: minimum sample count (default 100), accu
 
 ## MCP Registry
 
-AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name `agenticorg-mcp-server`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 10 tools and 320+ connector tools via stdio transport.
+AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name `agenticorg-mcp-server`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 10 tools and 340+ connector tools via stdio transport.
 
 ---
 
@@ -295,7 +298,7 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 
 ### Pro ($499/month)
 - Unlimited AI agents
-- 51 connectors
+- 54 connectors
 - Unlimited tasks
 - Email support
 - Custom workflows
@@ -306,7 +309,7 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 
 ### Enterprise (Custom)
 - Unlimited AI agents
-- 51 connectors
+- 54 connectors
 - Unlimited everything
 - Dedicated support
 - 99.9% SLA guarantee
@@ -418,7 +421,7 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 
 ### Integration Protocols
 - **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at `/api/v1/a2a/agent-card`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. 320+ tools exposed via stdio transport. Listed in official MCP Registry
+- **MCP (Model Context Protocol)**: Anthropic's protocol. 340+ tools exposed via stdio transport. Listed in official MCP Registry
 - **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
 
 ---
