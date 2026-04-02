@@ -51,6 +51,9 @@ class MailchimpConnector(BaseConnector):
         self._tool_registry["add_list_member"] = self.add_list_member
         self._tool_registry["search_members"] = self.search_members
         self._tool_registry["create_template"] = self.create_template
+        self._tool_registry["create_ab_campaign"] = self.create_ab_campaign
+        self._tool_registry["get_ab_results"] = self.get_ab_results
+        self._tool_registry["send_winner"] = self.send_winner
 
     # ── Authentication ─────────────────────────────────────────────────
 
@@ -348,3 +351,104 @@ class MailchimpConnector(BaseConnector):
             "type": data.get("type", ""),
             "date_created": data.get("date_created", ""),
         }
+
+    # ── A/B Testing ───────────────────────────────────────────────────
+
+    async def create_ab_campaign(self, **params) -> dict[str, Any]:
+        """Create a variate (A/B test) campaign via Mailchimp.
+
+        Required: list_id, subject_a, subject_b, from_name.
+        Optional: test_size (1-100, default 50), winner_criteria
+                  (opens/clicks/total_revenue, default "opens"),
+                  wait_time (minutes before auto-winner, default 60).
+        """
+        list_id = params.get("list_id")
+        if not list_id:
+            return {"error": "list_id is required"}
+        subject_a = params.get("subject_a")
+        subject_b = params.get("subject_b")
+        if not subject_a or not subject_b:
+            return {"error": "subject_a and subject_b are required"}
+        from_name = params.get("from_name")
+        if not from_name:
+            return {"error": "from_name is required"}
+
+        test_size = params.get("test_size", 50)
+        winner_criteria = params.get("winner_criteria", "opens")
+        wait_time = params.get("wait_time", 60)
+
+        body: dict[str, Any] = {
+            "type": "variate",
+            "recipients": {"list_id": list_id},
+            "variate_settings": {
+                "winner_criteria": winner_criteria,
+                "wait_time": wait_time,
+                "test_size": test_size,
+                "subject_lines": [subject_a, subject_b],
+            },
+            "settings": {
+                "from_name": from_name,
+                "reply_to": from_name,
+            },
+        }
+
+        data = await self._post("/campaigns", body)
+        return {
+            "campaign_id": data.get("id"),
+            "type": data.get("type"),
+            "status": data.get("status"),
+            "variate_settings": data.get("variate_settings", {}),
+        }
+
+    async def get_ab_results(self, **params) -> dict[str, Any]:
+        """Get A/B split test results from campaign report.
+
+        Required: campaign_id.
+        Returns the ab_split section with per-variant performance.
+        """
+        campaign_id = params.get("campaign_id")
+        if not campaign_id:
+            return {"error": "campaign_id is required"}
+
+        data = await self._get(f"/reports/{campaign_id}")
+        ab_split = data.get("ab_split", {})
+        return {
+            "campaign_id": data.get("id", campaign_id),
+            "subject_line": data.get("subject_line", ""),
+            "emails_sent": data.get("emails_sent", 0),
+            "ab_split": ab_split,
+            "opens": {
+                "total": data.get("opens", {}).get("opens_total", 0),
+                "unique": data.get("opens", {}).get("unique_opens", 0),
+                "rate": data.get("opens", {}).get("open_rate", 0),
+            },
+            "clicks": {
+                "total": data.get("clicks", {}).get("clicks_total", 0),
+                "unique": data.get("clicks", {}).get("unique_clicks", 0),
+                "rate": data.get("clicks", {}).get("click_rate", 0),
+            },
+        }
+
+    async def send_winner(self, **params) -> dict[str, Any]:
+        """Send the winning variant to the remaining audience.
+
+        Required: campaign_id.
+        Optional: winning_criteria_id (if overriding auto-winner).
+
+        Triggers send for the full campaign (Mailchimp auto-sends to remainder).
+        """
+        campaign_id = params.get("campaign_id")
+        if not campaign_id:
+            return {"error": "campaign_id is required"}
+
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.post(
+            f"/campaigns/{campaign_id}/actions/send",
+            json={},
+        )
+        resp.raise_for_status()
+
+        if resp.status_code == 204:
+            return {"status": "sent", "campaign_id": campaign_id}
+        return resp.json()

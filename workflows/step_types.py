@@ -1,8 +1,9 @@
-"""All 9 workflow step type implementations."""
+"""All 11 workflow step type implementations."""
 
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from workflows.condition_evaluator import evaluate_condition
@@ -20,6 +21,7 @@ async def execute_step(step: dict, state: dict) -> dict[str, Any]:
         "notify": _execute_notify,
         "sub_workflow": _execute_sub_workflow,
         "wait": _execute_wait,
+        "wait_for_event": _execute_wait_for_event,
     }
     handler = handlers.get(step_type, _execute_agent)
     return await handler(step, state)
@@ -252,4 +254,109 @@ async def _execute_sub_workflow(step: dict, state: dict) -> dict[str, Any]:
 
 
 async def _execute_wait(step, state):
-    return {"step_id": step["id"], "type": "wait", "status": "completed"}
+    """Wait/delay step — pauses workflow for a specified duration.
+
+    Config options:
+        duration_hours, duration_minutes, duration_seconds — relative delay
+        until — ISO8601 datetime to wait until (absolute)
+
+    The workflow engine detects ``waiting_delay`` status and schedules
+    a Celery task to resume after the delay.
+    """
+    now = datetime.now(UTC)
+    resume_at = None
+
+    if step.get("until"):
+        resume_at = datetime.fromisoformat(step["until"].replace("Z", "+00:00"))
+    else:
+        hours = step.get("duration_hours", 0)
+        minutes = step.get("duration_minutes", 0)
+        seconds = step.get("duration_seconds", 0)
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        if total_seconds > 0:
+            resume_at = now + timedelta(seconds=total_seconds)
+
+    if resume_at is None or resume_at <= now:
+        # No delay or already past — complete immediately
+        return {"step_id": step["id"], "type": "wait", "status": "completed"}
+
+    # Schedule Celery task to resume after delay
+    try:
+        from core.tasks.workflow_tasks import resume_workflow_wait
+
+        run_id = state.get("id", "")
+        resume_workflow_wait.apply_async(
+            args=[run_id, step["id"]],
+            eta=resume_at,
+        )
+    except Exception:  # noqa: S110
+        pass  # Celery unavailable — step completes on next poll
+
+    return {
+        "step_id": step["id"],
+        "type": "wait",
+        "status": "waiting_delay",
+        "resume_at": resume_at.isoformat(),
+    }
+
+
+async def _execute_wait_for_event(step, state):
+    """Wait for an external event (email open, click, webhook, etc.).
+
+    Config:
+        event_type — e.g. "email.opened", "email.clicked", "webhook.received"
+        timeout_hours — how long to wait before giving up (default 48)
+        match — dict of fields to match against incoming events
+
+    The workflow engine detects ``waiting_event`` status. When a matching
+    event arrives via the webhook listener, it resumes the workflow.
+    If timeout expires, the step completes with status "timed_out".
+    """
+    event_type = step.get("event_type", "")
+    timeout_hours = step.get("timeout_hours", 48)
+    match_criteria = step.get("match", {})
+    run_id = state.get("id", "")
+    timeout_at = datetime.now(UTC) + timedelta(hours=timeout_hours)
+
+    # Register event listener in Redis (if available)
+    try:
+        import json as _json
+
+        import redis.asyncio as aioredis
+
+        from core.config import settings
+
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        listener_key = f"wfwait_event:{event_type}:{run_id}:{step['id']}"
+        await r.set(
+            listener_key,
+            _json.dumps({
+                "run_id": run_id,
+                "step_id": step["id"],
+                "match": match_criteria,
+                "timeout_at": timeout_at.isoformat(),
+            }),
+            ex=int(timeout_hours * 3600) + 60,
+        )
+        await r.aclose()
+    except Exception:  # noqa: S110
+        pass  # Redis unavailable — event will time out
+
+    # Schedule timeout
+    try:
+        from core.tasks.workflow_tasks import timeout_workflow_event
+
+        timeout_workflow_event.apply_async(
+            args=[run_id, step["id"]],
+            eta=timeout_at,
+        )
+    except Exception:  # noqa: S110
+        pass  # Celery unavailable — event will not auto-timeout
+
+    return {
+        "step_id": step["id"],
+        "type": "wait_for_event",
+        "status": "waiting_event",
+        "event_type": event_type,
+        "timeout_at": timeout_at.isoformat(),
+    }

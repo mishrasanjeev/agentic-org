@@ -1,0 +1,102 @@
+name: Email Drip Sequence (Behavior-Triggered)
+version: "1.0"
+domain: marketing
+description: >
+  7-step behavior-triggered email drip sequence. Sends a welcome email,
+  waits for open events, and branches into engaged vs re-engage paths.
+  After a 72-hour nurture window the lead is re-scored by CRM Intelligence.
+
+trigger:
+  type: api_event
+  event_type: new_subscriber
+  description: "Triggered when a new subscriber is added to the marketing list"
+
+timeout_hours: 240
+
+steps:
+  - id: send_welcome_email
+    name: Send Welcome Email
+    type: agent
+    agent_type: email_marketing
+    action: send_email
+    inputs:
+      template: "welcome_series_1"
+      to: "{{trigger.email}}"
+      subject: "Welcome to {{trigger.company_name}} — here's what to expect"
+      personalization:
+        first_name: "{{trigger.first_name}}"
+        signup_source: "{{trigger.source}}"
+
+  - id: wait_for_open
+    name: Wait for Email Open
+    type: wait_for_event
+    depends_on: [send_welcome_email]
+    event_type: email.opened
+    match:
+      email: "{{trigger.email}}"
+    timeout_hours: 48
+    timeout_path: send_re_engage
+
+  - id: check_opened
+    name: Check If Subscriber Opened
+    type: condition
+    depends_on: [wait_for_open]
+    expression: "wait_for_open.status != 'timed_out'"
+    true_path: send_engaged_follow_up
+    false_path: send_re_engage
+
+  - id: send_engaged_follow_up
+    name: Send Engaged Follow-Up (Opened)
+    type: agent
+    agent_type: email_marketing
+    action: send_email
+    depends_on: [check_opened]
+    inputs:
+      template: "welcome_series_2_engaged"
+      to: "{{trigger.email}}"
+      subject: "You're in! Here are 3 things to try first"
+      personalization:
+        first_name: "{{trigger.first_name}}"
+        opened_welcome: true
+
+  - id: send_re_engage
+    name: Send Re-Engage Email (Did Not Open)
+    type: agent
+    agent_type: email_marketing
+    action: send_email
+    depends_on: [check_opened]
+    inputs:
+      template: "welcome_series_2_reengage"
+      to: "{{trigger.email}}"
+      subject: "Did you miss this? Your quick-start guide inside"
+      personalization:
+        first_name: "{{trigger.first_name}}"
+        opened_welcome: false
+
+  - id: wait_72h
+    name: Wait 72 Hours for Engagement
+    type: wait
+    depends_on: [send_engaged_follow_up, send_re_engage]
+    duration_hours: 72
+
+  - id: rescore_lead
+    name: Re-Score Lead After Drip
+    type: agent
+    agent_type: crm_intelligence
+    action: score_lead
+    depends_on: [wait_72h]
+    inputs:
+      contact_id: "{{trigger.contact_id}}"
+      email: "{{trigger.email}}"
+      include_engagement: true
+      scoring_context: "post_welcome_drip"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#marketing-ops"
+      message: "Drip sequence completed for {{trigger.email}} — final score: {{rescore_lead.score}}"
+  on_error:
+    - channel: slack
+      target: "#marketing-ops"
+      message: "Drip sequence FAILED for {{trigger.email}} at step {{error.step_id}}: {{error.message}}"

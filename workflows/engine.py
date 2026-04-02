@@ -143,6 +143,23 @@ class WorkflowEngine:
                 logger.info("workflow_waiting_hitl", run_id=run_id, step_id=step_id)
                 return {"status": "waiting_hitl", "step_results": state["step_results"]}
 
+            # ---- handle wait/delay pause ----
+            if result.get("status") == "waiting_delay":
+                state["status"] = "waiting_delay"
+                state["waiting_step_id"] = step_id
+                await self.state_store.save(state)
+                logger.info("workflow_waiting_delay", run_id=run_id, step_id=step_id, resume_at=result.get("resume_at"))
+                return {"status": "waiting_delay", "step_results": state["step_results"]}
+
+            # ---- handle event wait pause ----
+            if result.get("status") == "waiting_event":
+                state["status"] = "waiting_event"
+                state["waiting_step_id"] = step_id
+                await self.state_store.save(state)
+                evt = result.get("event_type")
+                logger.info("workflow_waiting_event", run_id=run_id, step_id=step_id, event_type=evt)
+                return {"status": "waiting_event", "step_results": state["step_results"]}
+
             # ---- checkpoint ----
             await self.state_store.save(state)
             logger.debug("step_checkpointed", run_id=run_id, step_id=step_id)
@@ -268,6 +285,51 @@ class WorkflowEngine:
         logger.info("workflow_hitl_resumed", run_id=run_id, step_id=waiting_step_id)
 
         # Continue executing remaining steps.
+        return await self.execute(run_id)
+
+    async def resume_from_wait(self, run_id: str, step_result: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Resume a workflow paused at a wait/delay step."""
+        state = await self.state_store.load(run_id)
+        if not state:
+            return {"error": "Run not found"}
+        if state["status"] not in ("waiting_delay", "waiting_event"):
+            return {"error": f"Run is not waiting, current status: {state['status']}"}
+
+        waiting_step_id = state.get("waiting_step_id")
+        if not waiting_step_id:
+            return {"error": "No waiting step recorded"}
+
+        state["step_results"][waiting_step_id] = {
+            "output": step_result or {},
+            "status": "completed",
+        }
+        state["steps_completed"] = len(state["step_results"])
+        state["status"] = "running"
+        state.pop("waiting_step_id", None)
+        await self.state_store.save(state)
+
+        logger.info("workflow_wait_resumed", run_id=run_id, step_id=waiting_step_id)
+        return await self.execute(run_id)
+
+    async def resume_from_event(self, run_id: str, event_data: dict[str, Any]) -> dict[str, Any]:
+        """Resume a workflow paused at a wait_for_event step."""
+        return await self.resume_from_wait(run_id, step_result={"event": event_data, "status": "event_received"})
+
+    async def timeout_event_wait(self, run_id: str, step_id: str) -> dict[str, Any]:
+        """Handle timeout for a wait_for_event step."""
+        state = await self.state_store.load(run_id)
+        if not state:
+            return {"error": "Run not found"}
+        if state["status"] != "waiting_event" or state.get("waiting_step_id") != step_id:
+            return {"error": "Step is no longer waiting"}
+
+        state["step_results"][step_id] = {"status": "timed_out", "output": {}}
+        state["steps_completed"] = len(state["step_results"])
+        state["status"] = "running"
+        state.pop("waiting_step_id", None)
+        await self.state_store.save(state)
+
+        logger.info("workflow_event_timed_out", run_id=run_id, step_id=step_id)
         return await self.execute(run_id)
 
     async def cancel(self, run_id: str) -> None:

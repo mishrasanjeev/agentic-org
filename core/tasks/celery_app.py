@@ -41,6 +41,7 @@ app.conf.update(
         "core.tasks.report_tasks.generate_report": {"queue": "reports"},
         "core.tasks.report_tasks.deliver_report": {"queue": "delivery"},
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
+        "core.tasks.workflow_tasks.*": {"queue": "workflows"},
     },
 )
 

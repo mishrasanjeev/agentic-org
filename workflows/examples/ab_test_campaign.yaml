@@ -1,0 +1,161 @@
+name: A/B Test Campaign with Auto-Winner
+version: "1.0"
+domain: marketing
+description: >
+  8-step A/B test workflow. Creates two email variants, splits the audience,
+  sends both variants to test segments, waits for results, auto-selects a
+  winner, offers CMO override via human-in-the-loop, then sends the winner
+  to the remaining audience.
+
+trigger:
+  type: manual
+  description: "Manually triggered A/B test campaign"
+
+timeout_hours: 168
+
+inputs:
+  campaign_name: {type: string, required: true}
+  list_id: {type: string, required: true}
+  subject_a: {type: string, required: true}
+  subject_b: {type: string, required: true}
+  content_html_a: {type: string, required: true}
+  content_html_b: {type: string, required: true}
+  test_size_pct: {type: number, default: 20}
+  ab_wait_hours: {type: number, default: 24}
+  winning_metric: {type: string, default: "open_rate"}
+
+steps:
+  - id: create_variants
+    name: Create A/B Test Variants
+    type: agent
+    agent_type: email_marketing
+    action: create_ab_test
+    inputs:
+      campaign_id: "{{inputs.campaign_name}}"
+      variants:
+        - id: variant_a
+          subject: "{{inputs.subject_a}}"
+          content_html: "{{inputs.content_html_a}}"
+        - id: variant_b
+          subject: "{{inputs.subject_b}}"
+          content_html: "{{inputs.content_html_b}}"
+      test_size_pct: "{{inputs.test_size_pct}}"
+      winning_metric: "{{inputs.winning_metric}}"
+      auto_send_winner: true
+      auto_wait_hours: "{{inputs.ab_wait_hours}}"
+
+  - id: split_audience
+    name: Split Audience into Test Segments
+    type: agent
+    agent_type: email_marketing
+    action: segment_list
+    depends_on: [create_variants]
+    inputs:
+      list_id: "{{inputs.list_id}}"
+      test_size_pct: "{{inputs.test_size_pct}}"
+      segments:
+        - name: "segment_a"
+          pct: 50
+        - name: "segment_b"
+          pct: 50
+        - name: "segment_remainder"
+          pct: 0
+          remainder: true
+
+  - id: send_variant_a
+    name: Send Variant A to Segment A
+    type: agent
+    agent_type: email_marketing
+    action: send_to_segment
+    depends_on: [split_audience]
+    inputs:
+      test_id: "{{create_variants.test_id}}"
+      variant_id: "variant_a"
+      segment_id: "{{split_audience.segments.segment_a.id}}"
+      subject: "{{inputs.subject_a}}"
+      content_html: "{{inputs.content_html_a}}"
+
+  - id: send_variant_b
+    name: Send Variant B to Segment B
+    type: agent
+    agent_type: email_marketing
+    action: send_to_segment
+    depends_on: [split_audience]
+    inputs:
+      test_id: "{{create_variants.test_id}}"
+      variant_id: "variant_b"
+      segment_id: "{{split_audience.segments.segment_b.id}}"
+      subject: "{{inputs.subject_b}}"
+      content_html: "{{inputs.content_html_b}}"
+
+  - id: wait_for_results
+    name: Wait for A/B Test Results
+    type: wait
+    depends_on: [send_variant_a, send_variant_b]
+    duration_hours: "{{inputs.ab_wait_hours}}"
+
+  - id: auto_select_winner
+    name: Auto-Select Winning Variant
+    type: agent
+    agent_type: email_marketing
+    action: check_winner
+    depends_on: [wait_for_results]
+    inputs:
+      test_id: "{{create_variants.test_id}}"
+
+  - id: cmo_override
+    name: CMO Override Decision
+    type: human_in_loop
+    depends_on: [auto_select_winner]
+    assignee: cmo
+    timeout_hours: 24
+    decision_options: [use_auto_winner, override_variant_a, override_variant_b, cancel]
+    prompt: >
+      A/B Test Results for "{{inputs.campaign_name}}":
+      - Variant A ("{{inputs.subject_a}}"): {{auto_select_winner.winner_rate}} rate
+      - Variant B ("{{inputs.subject_b}}"): {{auto_select_winner.runner_up_rate}} rate
+      - Auto-winner: {{auto_select_winner.winner_variant_id}} ({{auto_select_winner.confidence}} confidence)
+
+      Choose an action:
+    options:
+      - id: use_auto
+        label: "Use Auto-Selected Winner"
+        action: proceed
+      - id: override_a
+        label: "Override — Send Variant A"
+        action: override
+        override_variant: variant_a
+      - id: override_b
+        label: "Override — Send Variant B"
+        action: override
+        override_variant: variant_b
+      - id: cancel
+        label: "Cancel — Do Not Send"
+        action: abort
+    default_on_timeout: use_auto
+
+  - id: send_winner_to_remaining
+    name: Send Winner to Remaining Audience
+    type: agent
+    agent_type: email_marketing
+    action: send_winner
+    depends_on: [cmo_override]
+    condition: "cmo_override.choice != 'cancel'"
+    inputs:
+      test_id: "{{create_variants.test_id}}"
+      winner_override: "{{cmo_override.override_variant}}"
+      segment_id: "{{split_audience.segments.segment_remainder.id}}"
+      list_id: "{{inputs.list_id}}"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#marketing-ops"
+      message: >
+        A/B Test "{{inputs.campaign_name}}" finalized.
+        Winner: {{send_winner_to_remaining.winner_id}}
+        ({{auto_select_winner.confidence}} confidence, CMO override: {{cmo_override.was_override}})
+  on_error:
+    - channel: slack
+      target: "#marketing-ops"
+      message: "A/B Test workflow FAILED at step {{error.step_id}}: {{error.message}}"

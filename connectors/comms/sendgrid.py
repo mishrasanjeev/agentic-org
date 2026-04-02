@@ -24,6 +24,8 @@ class SendgridConnector(BaseConnector):
         self._tool_registry["get_stats"] = self.get_stats
         self._tool_registry["get_bounces"] = self.get_bounces
         self._tool_registry["validate_email"] = self.validate_email
+        self._tool_registry["send_email_with_tracking"] = self.send_email_with_tracking
+        self._tool_registry["get_email_activity"] = self.get_email_activity
 
     async def _authenticate(self):
         api_key = self._get_secret("api_key")
@@ -259,4 +261,128 @@ class SendgridConnector(BaseConnector):
             "host": result.get("host", ""),
             "has_mx_record": result.get("checks", {}).get("domain", {}).get("has_mx_or_a_record"),
             "is_suspected_role": result.get("checks", {}).get("additional", {}).get("is_suspected_role_address"),
+        }
+
+    # ── Send Email with Tracking ──────────────────────────────────────
+
+    async def send_email_with_tracking(self, **params) -> dict[str, Any]:
+        """Send an email with open and click tracking enabled.
+
+        Same parameters as send_email, plus:
+        Optional params:
+            categories: list of category tags for grouping analytics
+        Automatically injects tracking_settings for open and click tracking.
+        """
+        to = params.get("to", "")
+        from_email = params.get("from_email", "")
+        subject = params.get("subject", "")
+        if not to or not from_email:
+            return {"error": "to and from_email are required"}
+
+        # Normalize recipients to list
+        to_list = to if isinstance(to, list) else [to]
+        to_addresses = [{"email": addr} for addr in to_list]
+
+        personalization: dict[str, Any] = {"to": to_addresses}
+        if params.get("cc"):
+            cc = params["cc"] if isinstance(params["cc"], list) else [params["cc"]]
+            personalization["cc"] = [{"email": addr} for addr in cc]
+        if params.get("bcc"):
+            bcc = params["bcc"] if isinstance(params["bcc"], list) else [params["bcc"]]
+            personalization["bcc"] = [{"email": addr} for addr in bcc]
+        if params.get("dynamic_template_data"):
+            personalization["dynamic_template_data"] = params["dynamic_template_data"]
+
+        from_obj: dict[str, Any] = {"email": from_email}
+        if params.get("from_name"):
+            from_obj["name"] = params["from_name"]
+
+        body: dict[str, Any] = {
+            "personalizations": [personalization],
+            "from": from_obj,
+            "tracking_settings": {
+                "open_tracking": {"enable": True},
+                "click_tracking": {"enable": True, "enable_text": True},
+            },
+        }
+
+        if params.get("template_id"):
+            body["template_id"] = params["template_id"]
+        else:
+            if not subject:
+                return {"error": "subject is required when not using a template"}
+            body["subject"] = subject
+            html = params.get("html_content", params.get("html", ""))
+            text = params.get("text", "")
+            if html:
+                body["content"] = [{"type": "text/html", "value": html}]
+            elif text:
+                body["content"] = [{"type": "text/plain", "value": text}]
+            else:
+                return {"error": "html_content or text is required when not using a template"}
+
+        if params.get("reply_to"):
+            body["reply_to"] = {"email": params["reply_to"]}
+
+        # Add categories for analytics grouping
+        categories = params.get("categories", [])
+        if categories:
+            if isinstance(categories, str):
+                categories = [categories]
+            body["categories"] = categories
+
+        # SendGrid returns 202 Accepted with empty body for mail/send
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.post("/mail/send", json=body)
+        resp.raise_for_status()
+
+        return {
+            "status": "accepted",
+            "status_code": resp.status_code,
+            "message_id": resp.headers.get("X-Message-Id", ""),
+            "tracking": {"open_tracking": True, "click_tracking": True},
+        }
+
+    # ── Get Email Activity ────────────────────────────────────────────
+
+    async def get_email_activity(self, **params) -> dict[str, Any]:
+        """Retrieve email activity / message history for a recipient.
+
+        Required params:
+            email: Recipient email to look up
+        Optional params:
+            limit: Max results (default 10, max 1000)
+        """
+        email = params.get("email", "")
+        if not email:
+            return {"error": "email is required"}
+
+        limit = params.get("limit", 10)
+
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.get(
+            "/messages",
+            params={"query": f"to_email={email}", "limit": limit},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        messages = data.get("messages", [])
+        return {
+            "email": email,
+            "messages": [
+                {
+                    "msg_id": m.get("msg_id", ""),
+                    "from_email": m.get("from_email", ""),
+                    "subject": m.get("subject", ""),
+                    "status": m.get("status", ""),
+                    "opens_count": m.get("opens_count", 0),
+                    "clicks_count": m.get("clicks_count", 0),
+                    "last_event_time": m.get("last_event_time", ""),
+                }
+                for m in messages
+            ],
+            "count": len(messages),
         }
