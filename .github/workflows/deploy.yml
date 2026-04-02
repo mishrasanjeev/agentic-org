@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -e ".[dev]"
-      - run: pytest tests/unit/ --cov=. --cov-report=xml
+      - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
       - uses: codecov/codecov-action@v4
@@ -51,11 +51,12 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -e ".[dev]"
-      - run: pytest tests/integration/
+      - run: pytest tests/integration/ tests/regression/ tests/e2e/ tests/synthetic_data/ -v
         env:
           AGENTICORG_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
           AGENTICORG_REDIS_URL: redis://localhost:6379/0
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
+          AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
 
   security-scan:
     needs: lint
