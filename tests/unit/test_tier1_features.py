@@ -40,7 +40,7 @@ class TestWaitStep:
     def _run(self, step: dict, state: dict | None = None) -> dict:
         from workflows.step_types import execute_step
 
-        return asyncio.get_event_loop().run_until_complete(
+        return asyncio.run(
             execute_step(step, state or {"id": "run-1"})
         )
 
@@ -111,7 +111,7 @@ class TestWaitForEvent:
     def _run(self, step: dict, state: dict | None = None) -> dict:
         from workflows.step_types import execute_step
 
-        return asyncio.get_event_loop().run_until_complete(
+        return asyncio.run(
             execute_step(step, state or {"id": "run-42"})
         )
 
@@ -480,7 +480,7 @@ class TestIntentAggregator:
         from core.marketing.intent_aggregator import IntentAggregator
 
         agg = IntentAggregator()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             agg.aggregate_intent("acme.com")
         )
         assert result["domain"] == "acme.com"
@@ -494,7 +494,7 @@ class TestIntentAggregator:
         from core.marketing.intent_aggregator import IntentAggregator
 
         agg = IntentAggregator()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             agg.aggregate_intent("test.com")
         )
         # Bombora=80, G2=60, TR=50
@@ -505,7 +505,7 @@ class TestIntentAggregator:
         from core.marketing.intent_aggregator import IntentAggregator
 
         agg = IntentAggregator()
-        results = asyncio.get_event_loop().run_until_complete(
+        results = asyncio.run(
             agg.batch_aggregate(
                 ["a.com", "b.com", "c.com"],
                 configs={"bombora": {}, "g2": {}, "trustradius": {}},
@@ -523,7 +523,7 @@ class TestIntentAggregator:
             side_effect=Exception("Bombora API down")
         )
         agg = IntentAggregator()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             agg.aggregate_intent("failing.com")
         )
         # Should not crash, just have Bombora at 0
@@ -535,7 +535,7 @@ class TestIntentAggregator:
         from core.marketing.intent_aggregator import IntentAggregator
 
         agg = IntentAggregator()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             agg.aggregate_intent("topics.com")
         )
         # Should include Cloud (Bombora), CRM (G2), Analytics (TR)
@@ -547,7 +547,7 @@ class TestIntentAggregator:
         from core.marketing.intent_aggregator import IntentAggregator
 
         agg = IntentAggregator()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             agg.aggregate_intent("ts.com")
         )
         # Should parse as ISO datetime without error
@@ -579,7 +579,7 @@ class TestPushSender:
             "endpoint": "https://push.example.com/sub1",
             "keys": {"p256dh": "abc", "auth": "xyz"},
         }
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             save_subscription("tenant-1", sub)
         )
         assert len(_memory_store.get("tenant-1", set())) == 1
@@ -588,7 +588,7 @@ class TestPushSender:
         from core.push.sender import send_push_notification
 
         with patch("core.push.sender.get_vapid_keys", return_value=("pub", "priv")):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 send_push_notification("empty-tenant", "Test", "Body")
             )
         assert result["sent"] == 0
@@ -597,18 +597,15 @@ class TestPushSender:
     def test_send_push_sends_to_all_subscriptions(self):
         from core.push.sender import save_subscription, send_push_notification
 
-        loop = asyncio.get_event_loop()
         for i in range(3):
-            loop.run_until_complete(
-                save_subscription("tenant-multi", {
-                    "endpoint": f"https://push.example.com/sub{i}",
-                    "keys": {"p256dh": f"key{i}", "auth": f"auth{i}"},
-                })
-            )
+            asyncio.run(save_subscription("tenant-multi", {
+                "endpoint": f"https://push.example.com/sub{i}",
+                "keys": {"p256dh": f"key{i}", "auth": f"auth{i}"},
+            }))
 
         with patch("core.push.sender.get_vapid_keys", return_value=("pub", "priv")):
-            with patch("core.push.sender.webpush") as mock_push:
-                result = loop.run_until_complete(
+            with patch("pywebpush.webpush") as mock_push:
+                result = asyncio.run(
                     send_push_notification("tenant-multi", "Title", "Body")
                 )
         assert mock_push.call_count == 3
@@ -620,13 +617,10 @@ class TestPushSender:
             send_push_notification,
         )
 
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(
-            save_subscription("tenant-stale", {
-                "endpoint": "https://push.example.com/stale",
-                "keys": {"p256dh": "k", "auth": "a"},
-            })
-        )
+        asyncio.run(save_subscription("tenant-stale", {
+            "endpoint": "https://push.example.com/stale",
+            "keys": {"p256dh": "k", "auth": "a"},
+        }))
 
         # Simulate 410 Gone from push service
         from pywebpush import WebPushException
@@ -638,8 +632,8 @@ class TestPushSender:
         exc.response = mock_response
 
         with patch("core.push.sender.get_vapid_keys", return_value=("pub", "priv")):
-            with patch("core.push.sender.webpush", side_effect=exc):
-                result = loop.run_until_complete(
+            with patch("pywebpush.webpush", side_effect=exc):
+                result = asyncio.run(
                     send_push_notification("tenant-stale", "Title", "Body")
                 )
         assert result["stale_removed"] == 1
@@ -652,16 +646,14 @@ class TestPushSender:
             save_subscription,
         )
 
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(
-            save_subscription("tenant-rm", {
-                "endpoint": "https://push.example.com/to-remove",
-                "keys": {"p256dh": "k", "auth": "a"},
-            })
+        asyncio.run(save_subscription("tenant-rm", {
+            "endpoint": "https://push.example.com/to-remove",
+            "keys": {"p256dh": "k", "auth": "a"},
+        })
         )
         assert len(_memory_store.get("tenant-rm", set())) == 1
 
-        loop.run_until_complete(
+        asyncio.run(
             remove_subscription("tenant-rm", "https://push.example.com/to-remove")
         )
         assert len(_memory_store.get("tenant-rm", set())) == 0

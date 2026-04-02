@@ -69,6 +69,8 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
 
     EXEMPT_PREFIXES = (
         "/api/v1/evals",
+        "/api/v1/webhooks/",
+        "/api/v1/aa/consent/callback",
     )
 
     async def dispatch(self, request: Request, call_next) -> Response:
