@@ -33,6 +33,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "ap_processor": [
         "fetch_bank_statement", "create_payment_intent",
         "create_payout", "get_settlement_report",
+        "create_order", "check_order_status",
     ],
     "ar_collections": [
         "create_payment_link", "list_contacts", "create_payment_intent",
@@ -54,6 +55,22 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "fpa_agent": [
         "list_invoices", "get_balance",
         "get_campaign_performance_metrics", "get_project_metrics",
+    ],
+    "treasury": [
+        "check_account_balance", "fetch_bank_statement",
+        "get_balance", "get_balance_sheet", "get_cash_position",
+    ],
+    "expense_manager": [
+        "record_expense", "create_ap_invoice",
+        "check_order_status", "list_invoices", "get_profit_loss",
+    ],
+    "rev_rec": [
+        "query", "create_invoice", "post_journal_entry",
+        "get_trial_balance", "list_invoices",
+    ],
+    "fixed_assets": [
+        "post_journal_entry", "record_expense",
+        "get_trial_balance", "get_balance_sheet", "create_ap_invoice",
     ],
     # HR
     "talent_acquisition": [
@@ -103,6 +120,22 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "brand_monitor": [
         "get_post_analytics", "get_campaign_performance",
         "schedule_social_post", "search_contacts",
+    ],
+    "email_marketing": [
+        "send_email", "create_campaign", "send_campaign",
+        "get_campaign_report", "add_list_member", "get_campaign_stats",
+    ],
+    "social_media": [
+        "create_tweet", "create_update", "get_post_analytics",
+        "list_channel_videos", "get_campaign_insights",
+    ],
+    "abm": [
+        "query", "search_contacts", "get_analytics",
+        "get_campaign_performance", "create_campaign",
+    ],
+    "competitive_intel": [
+        "get_domain_rating", "get_organic_keywords",
+        "get_mentions", "get_share_of_voice", "get_backlinks",
     ],
     # Ops
     "support_triage": [

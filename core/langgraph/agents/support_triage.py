@@ -1,6 +1,14 @@
 """Support Triage agent -- LangGraph implementation."""
 
-from __future__ import annotationsimport osfrom typing import Anyfrom core.langgraph.agent_graph import build_agent_graphfrom core.langgraph.runner import run_agentDEFAULT_TOOLS = [
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from core.langgraph.agent_graph import build_agent_graph
+from core.langgraph.runner import run_agent
+
+DEFAULT_TOOLS = [
     'create_ticket',
     'update_ticket',
     'escalate_to_group',

@@ -265,8 +265,10 @@ class TestApProcessor:
 
         assert "fetch_bank_statement" in AP_PROCESSOR_TOOLS
         assert "create_payment_intent" in AP_PROCESSOR_TOOLS
+        assert "create_order" in AP_PROCESSOR_TOOLS  # PineLabs payment execution
+        assert "check_order_status" in AP_PROCESSOR_TOOLS  # PineLabs payment verification
         assert "initiate_neft" not in AP_PROCESSOR_TOOLS  # AA is read-only
-        assert len(AP_PROCESSOR_TOOLS) == 4
+        assert len(AP_PROCESSOR_TOOLS) == 6
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -183,10 +183,12 @@ async def get_task(task_id: str):
 _DOMAIN_MAP = {
     "ap_processor": "finance", "ar_collections": "finance", "recon_agent": "finance",
     "tax_compliance": "finance", "close_agent": "finance", "fpa_agent": "finance",
+    "treasury": "finance", "expense_manager": "finance", "rev_rec": "finance", "fixed_assets": "finance",
     "talent_acquisition": "hr", "onboarding_agent": "hr", "payroll_engine": "hr",
     "performance_coach": "hr", "ld_coordinator": "hr", "offboarding_agent": "hr",
     "content_factory": "marketing", "campaign_pilot": "marketing",
     "seo_strategist": "marketing", "crm_intelligence": "marketing", "brand_monitor": "marketing",
+    "email_marketing": "marketing", "social_media": "marketing", "abm": "marketing", "competitive_intel": "marketing",
     "support_triage": "ops", "vendor_manager": "ops", "contract_intelligence": "ops",
     "compliance_guard": "ops", "it_operations": "ops",
     "legal_ops": "backoffice", "risk_sentinel": "backoffice", "facilities_agent": "backoffice",

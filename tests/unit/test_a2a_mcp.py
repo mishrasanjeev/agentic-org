@@ -16,7 +16,7 @@ class TestA2AAgentCard:
         assert card["protocol"] == "a2a/1.0"
         assert card["capabilities"]["tasks"] is True
         assert card["authentication"]["scheme"] == "grantex"
-        assert len(card["skills"]) == 28  # 25 original + 3 comms (email, notification, chat)
+        assert len(card["skills"]) == 36  # 27 original + 3 comms + 4 CFO + 4 CMO = 36 total agents (minus chat_agent counted in original)
 
     @pytest.mark.asyncio
     async def test_agent_card_skills_have_required_fields(self):
@@ -35,7 +35,7 @@ class TestA2AAgentCard:
         from api.v1.a2a import list_available_agents
 
         result = await list_available_agents()
-        assert len(result["agents"]) == 28
+        assert len(result["agents"]) == 36
 
 
 class TestA2ATask:
@@ -67,7 +67,7 @@ class TestMCPTools:
         from api.v1.mcp import list_tools
 
         result = await list_tools()
-        assert len(result["tools"]) == 28
+        assert len(result["tools"]) == 36  # 28 original + 8 new agents
 
     @pytest.mark.asyncio
     async def test_tool_names_prefixed(self):

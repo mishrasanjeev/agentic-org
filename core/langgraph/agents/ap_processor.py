@@ -19,6 +19,8 @@ AP_PROCESSOR_TOOLS = [
     "create_payment_intent",
     "create_payout",
     "get_settlement_report",
+    "create_order",         # PineLabs Plural — execute payment
+    "check_order_status",   # PineLabs Plural — verify payment
 ]
 
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "agents", "prompts")
