@@ -27,7 +27,7 @@ log = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_REPORTS_DIR = Path(os.getenv("AGENTICORG_REPORTS_DIR", "/tmp/agenticorg_reports"))  # noqa: S108
+_REPORTS_DIR = Path(os.getenv("AGENTICORG_REPORTS_DIR", "/tmp/agenticorg_reports"))  # noqa: S108  # nosec B108
 _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
