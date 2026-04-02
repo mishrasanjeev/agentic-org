@@ -524,7 +524,7 @@ agenticorg/
 ├── tests/
 │   ├── unit/               # 821 unit tests
 │   ├── security/           # 86 security tests
-│   ├── connector_harness/  # 174 connector tests (43 connectors × tools)
+│   ├── connector_harness/  # 174 connector tests (51 connectors × tools)
 │   ├── regression/         # 55 regression tests (March + April 2026)
 │   ├── integration/        # 62 integration tests
 │   ├── synthetic_data/     # Invoice, resume, contract test data

@@ -7,8 +7,8 @@ packages = ["core", "api", "auth", "connectors", "workflows", "scaling", "observ
 
 [project]
 name = "agenticorg"
-version = "3.0.0"
-description = "AI Virtual Employee Platform — LangGraph agents, 43 connectors (273 tools), Grantex authorization, HITL governance"
+version = "3.1.0"
+description = "AI Virtual Employee Platform — 35 LangGraph agents, 51 connectors (320+ tools), CFO/CMO dashboards, NL Query, HITL governance"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"

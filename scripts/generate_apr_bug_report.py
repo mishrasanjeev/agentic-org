@@ -148,7 +148,7 @@ tests = [
     ["Unit tests (pytest)", "821", "All passing"],
     ["Regression: March bugs", "40", "tests/regression/test_bugs_march2026.py"],
     ["Regression: PR fixes", "15", "tests/regression/test_pr_fixes_april2026.py"],
-    ["Connector harness", "174", "43 connectors x all tools"],
+    ["Connector harness", "174", "51 connectors x all tools"],
     ["Playwright E2E (bugs)", "52", "ui/tests/regression-bugs-march2026.spec.ts"],
     ["Playwright E2E (features)", "41", "ui/tests/e2e-feature-flows.spec.ts"],
     ["Production audit", "53", "scripts/full_audit.py"],

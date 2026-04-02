@@ -35,7 +35,7 @@
 | Bug ID | Summary | Fix Applied | Files Changed |
 |--------|---------|-------------|---------------|
 | INT-CONN-010 | base_url ignored at runtime | `BaseConnector.__init__` now checks `config.get("base_url")` and overrides class-level default when provided | `connectors/framework/base_connector.py` |
-| INT-CONN-011 | Not generic for custom connectors | Inherent limitation — all 43 connectors are registered imports. Custom connector API would need a plugin system (future roadmap). Documented as known limitation. | N/A |
+| INT-CONN-011 | Not generic for custom connectors | Inherent limitation — all 51 connectors are registered imports. Custom connector API would need a plugin system (future roadmap). Documented as known limitation. | N/A |
 | INT-CONN-012 | Gmail connector missing | Created `GmailConnector` with 4 tools: `send_email`, `read_inbox`, `search_emails`, `get_thread`. Uses Gmail API v1 endpoints. Supports OAuth2 refresh. Total connectors: 43. | `connectors/comms/gmail.py`, `connectors/__init__.py` |
 | INT-CONN-013 | Finance connectors are stubs | Known limitation — Stripe/Oracle/QB use placeholder endpoints. Requires real API credentials per tenant. Documented as credential-dependent. | N/A (requires real credentials) |
 | INT-CONN-014 | UI only one secret field | Multi-auth UI: `AUTH_TYPE_FIELDS` mapping renders appropriate fields per auth type. OAuth2 shows client_id/client_secret/refresh_token. Basic shows username/password. | `ui/src/pages/ConnectorCreate.tsx` |
@@ -59,7 +59,7 @@
 | `tests/regression/test_bugs_march2026.py` | pytest unit | 40 | TC-007, TC-008, CONN-010, CONN-012, CONN-015, CONN-016, CONN-017, CONN-018, REG-006 |
 | `ui/tests/regression-bugs-march2026.spec.ts` | Playwright E2E | 52 | All 22 bugs (UI + API) |
 | `tests/unit/test_agents_and_sales.py` | pytest unit | Updated | TC-007, TC-008 |
-| `tests/connector_harness/test_all_connectors.py` | pytest harness | Updated | CONN-012 (43 connectors) |
+| `tests/connector_harness/test_all_connectors.py` | pytest harness | Updated | CONN-012 (51 connectors) |
 
 ### Production Verification Results
 

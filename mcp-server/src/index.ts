@@ -64,7 +64,7 @@ async function apiPost(path: string, body: unknown): Promise<unknown> {
 const server = new McpServer({
   name: "agenticorg",
   version: "0.1.0",
-  description: "AgenticOrg — run enterprise AI agents, 25+ agents, 43 connectors, 273 tools",
+  description: "AgenticOrg — run enterprise AI agents, 35 agents, 51 connectors, 320+ tools",
 });
 
 // ── Tool: list_agents ───────────────────────────────────────────────────
@@ -188,7 +188,7 @@ server.tool(
 
 server.tool(
   "list_mcp_tools",
-  "List all 273 available MCP tools across 43 connectors. Each tool has a name, description, and input schema.",
+  "List all 273 available MCP tools across 51 connectors. Each tool has a name, description, and input schema.",
   async () => {
     const data = await apiGet("/api/v1/mcp/tools");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };

@@ -118,20 +118,20 @@ else:
     except Exception as e:
         record(5, "GET /a2a/agent-card", False, f"status={r.status_code}, error: {e}")
 
-# 6. GET /a2a/agents — expect 25 agents
+# 6. GET /a2a/agents — expect 35 agents
 r = safe_get(f"{BASE_API}/a2a/agents")
 if isinstance(r, tuple):
-    record(6, "GET /a2a/agents (25 agents)", False, f"Request failed: {r[1]}")
+    record(6, "GET /a2a/agents (35 agents)", False, f"Request failed: {r[1]}")
 else:
     try:
         d = r.json()
         agents_list = d if isinstance(d, list) else d.get("agents", d.get("data", []))
         count = len(agents_list) if isinstance(agents_list, list) else 0
         ok = r.status_code == 200 and count >= 25
-        record(6, "GET /a2a/agents (25 agents)", ok,
+        record(6, "GET /a2a/agents (35 agents)", ok,
                "" if ok else f"status={r.status_code}, agent_count={count}")
     except Exception as e:
-        record(6, "GET /a2a/agents (25 agents)", False, f"status={r.status_code}, error: {e}")
+        record(6, "GET /a2a/agents (35 agents)", False, f"status={r.status_code}, error: {e}")
 
 # 7. GET /mcp/tools
 r = safe_get(f"{BASE_API}/mcp/tools")
@@ -266,7 +266,7 @@ else:
     checks = {
         "Developer SDKs": "Developer SDK" in r.text or "developer sdk" in r.text.lower() or "SDK" in r.text,
     }
-    # Check for tool count mentioning ~273 tools (allow some variance)
+    # Check for tool count mentioning ~320+ tools (allow some variance)
     has_tools = any(f"{n} tools" in r.text for n in range(260, 290)) or "tools" in r.text.lower()
     checks["tools count"] = has_tools
     # Check for connector count ~43

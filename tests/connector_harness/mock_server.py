@@ -1,4 +1,4 @@
-"""Mock server for all 43 connectors — catches all HTTP requests and returns realistic JSON."""
+"""Mock server for all 51 connectors — catches all HTTP requests and returns realistic JSON."""
 
 from __future__ import annotations
 

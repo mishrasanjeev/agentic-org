@@ -114,7 +114,7 @@ FLOW 4: CFO Logs In → Sees Only Finance
 | C6 | Approvals page | Click "Approvals" | HITL approval queue — shows pending approvals (if any) | | |
 | C7 | Audit page | Click "Audit Log" | List of audit events with: event type, actor, action, outcome, timestamp | | |
 | C8 | Observatory | Click "Observatory" | Real-time agent monitoring with traces and metrics | | |
-| C9 | Connectors | Click "Connectors" | List of 43 connectors with status | | |
+| C9 | Connectors | Click "Connectors" | List of 51 connectors with status | | |
 | C10 | Settings | Click "Settings" | Admin settings page | | |
 | C11 | Prompt Templates | Click "Prompt Templates" | 27 templates listed. Built-in badge shown. Click to expand and see template text | | |
 | C12 | Sales Pipeline | Click "Sales Pipeline" | Pipeline dashboard: funnel bar, metrics cards, lead table | | |

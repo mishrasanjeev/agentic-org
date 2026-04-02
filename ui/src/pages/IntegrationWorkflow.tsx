@@ -109,7 +109,7 @@ const ARCHITECTURE_LAYERS = [
   { label: "Auth Layer", desc: "API Key (ao_sk_) / Grantex Token / JWT", color: "bg-orange-100 border-orange-300 text-orange-800" },
   { label: "Agent Runtime", desc: "LangGraph executor + Gemini LLM", color: "bg-red-100 border-red-300 text-red-800" },
   { label: "HITL Gateway", desc: "Human approval via Slack / Email / Dashboard", color: "bg-yellow-100 border-yellow-300 text-yellow-800" },
-  { label: "Connectors", desc: "43 connectors, 273 tools (Amazon, Jira, SAP...)", color: "bg-indigo-100 border-indigo-300 text-indigo-800" },
+  { label: "Connectors", desc: "51 connectors, 320+ tools (Amazon, Jira, SAP...)", color: "bg-indigo-100 border-indigo-300 text-indigo-800" },
 ];
 
 export default function IntegrationWorkflow() {

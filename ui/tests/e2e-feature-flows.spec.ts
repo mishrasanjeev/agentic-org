@@ -786,8 +786,8 @@ test.describe("Flow 7: Public Pages Accessibility", () => {
     await expect(page.locator("text=$499").first()).toBeVisible();
     await expect(page.locator("text=Custom").first()).toBeVisible();
 
-    // Verify "43 connectors" appears (Pro and Enterprise both have it)
-    const connectorMentions = page.locator("text=43 connectors");
+    // Verify "51 connectors" appears (Pro and Enterprise both have it)
+    const connectorMentions = page.locator("text=51 connectors");
     expect(await connectorMentions.count()).toBeGreaterThanOrEqual(2);
   });
 
@@ -866,7 +866,7 @@ test.describe("Flow 8: API Endpoint Validation", () => {
     expect(body.connectors).toBe(43);
   });
 
-  test("GET /api/v1/a2a/agents — returns 25+ agents", async ({ page }) => {
+  test("GET /api/v1/a2a/agents — returns 35 agents", async ({ page }) => {
     const response = await page.request.get(`${APP}/api/v1/a2a/agents`);
     expect(response.status()).toBe(200);
 

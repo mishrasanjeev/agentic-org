@@ -1,4 +1,4 @@
-"""Test all 43 connectors × all tool functions against the mock server.
+"""Test all 51 connectors × all tool functions against the mock server.
 
 Run: pytest tests/connector_harness/test_all_connectors.py -v
 """
@@ -73,9 +73,9 @@ class TestConnectorRegistry:
     """Test the registry itself."""
 
     def test_43_connectors_registered(self):
-        """All 43 connectors are registered (42 original + Gmail)."""
+        """All 51 connectors are registered (42 original + Gmail)."""
         names = get_all_connector_names()
-        assert len(names) == 43, f"Expected 43 connectors, got {len(names)}: {names}"
+        assert len(names) == 43, f"Expected 51 connectors, got {len(names)}: {names}"
 
     def test_all_categories_present(self):
         """All 5 categories have connectors."""

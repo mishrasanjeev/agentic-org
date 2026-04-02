@@ -246,7 +246,7 @@ graph LR
     subgraph OpenSource["AgenticOrg Pricing"]
         O1["Apache 2.0 = Free"]
         O2["24 agents: INR 0"]
-        O3["43 connectors: INR 0"]
+        O3["51 connectors: INR 0"]
         O4["Infra: < INR 10L/year"]
         O5["Total: < INR 10L/year"]
     end

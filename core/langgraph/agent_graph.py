@@ -6,7 +6,7 @@ Builds a compiled StateGraph for any agent type:
 
 The graph supports:
   - Multi-model LLM (Gemini/Claude/GPT via LangChain)
-  - Tool calling via 43 connectors wrapped as LangChain tools
+  - Tool calling via 51 connectors wrapped as LangChain tools
   - HITL interruption via LangGraph interrupt()
   - Checkpointed state for pause/resume
   - Confidence scoring and escalation

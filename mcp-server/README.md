@@ -1,6 +1,6 @@
 # agenticorg-mcp-server
 
-MCP (Model Context Protocol) server for [AgenticOrg](https://agenticorg.ai) — expose 25+ enterprise AI agents and 273 tools to any MCP-compatible client.
+MCP (Model Context Protocol) server for [AgenticOrg](https://agenticorg.ai) — expose 35 enterprise AI agents and 320+ tools to any MCP-compatible client.
 
 ## Quick Start
 
@@ -50,7 +50,7 @@ Add to your MCP client configuration:
 | `get_agent_details` | Get full agent config and capabilities |
 | `create_agent_from_sop` | Parse SOP text → create new agent |
 | `deploy_agent` | Deploy an agent configuration |
-| `list_connectors` | List all 43 connectors and status |
+| `list_connectors` | List all 51 connectors and status |
 | `call_connector_tool` | Call any of 273 connector tools |
 | `list_mcp_tools` | Discover all available tools |
 | `discover_agents_a2a` | A2A protocol agent discovery |

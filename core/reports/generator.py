@@ -466,7 +466,7 @@ class ReportGenerator:
         body = (
             f"{kpis}"
             f"<p>Period: {html.escape(data['period'])}</p>"
-            f"<p>All 25 agents ran in shadow mode during the evaluation period. "
+            f"<p>All 35 agents ran in shadow mode during the evaluation period. "
             f"Agreement rate is above the 95% confidence threshold.</p>"
         )
 

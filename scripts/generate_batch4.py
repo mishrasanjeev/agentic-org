@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AgenticOrg",
-    description="Enterprise Agent Swarm Platform — 25 agents, 43 connectors",
+    description="Enterprise Agent Swarm Platform — 35 agents, 51 connectors",
     version="2.0.0",
     lifespan=lifespan,
 )

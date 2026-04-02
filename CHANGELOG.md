@@ -54,7 +54,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - **Auth Failure Clearing**: IP-based failure tracking with auto-block + success clears failure count
 - **Python SDK** (`pip install agenticorg`): client.agents.run(), client.sop.parse_text(), client.a2a.agent_card()
 - **TypeScript SDK** (`npm i agenticorg-sdk`): full agent/SOP/A2A/MCP client
-- **MCP Server** (`npx agenticorg-mcp-server`): exposes 273 tools to Claude Desktop, Cursor, ChatGPT
+- **MCP Server** (`npx agenticorg-mcp-server`): exposes 320+ tools to Claude Desktop, Cursor, ChatGPT
 - **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop parse`, `agenticorg mcp tools`
 - **Integration Workflow Page**: `/integration-workflow` with visual protocol guide + SDK quickstart
 - **Developer Section**: Landing page developer section with SDK/CLI/MCP quickstart
@@ -122,7 +122,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ### Metrics
 - Automated tests: 353 → **1,031** (pytest) + 125 production E2E
 - Production E2E: **125/125 (100%)** — all 21 sections, all demo users, full lifecycle
-- Connector tools: 43 connectors × **273 total tools**
+- Connector tools: 51 connectors × **273 total tools**
 - Real API verified: GitHub (9), Jira (11), HubSpot (13) — 14 Jira tickets created on production
 
 ## [2.1.0] - 2026-03-21

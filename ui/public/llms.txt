@@ -1,17 +1,17 @@
 # AgenticOrg — AI Virtual Employees for Enterprise
 
-> AgenticOrg lets you create AI virtual employees or deploy 25 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
+> AgenticOrg lets you create AI virtual employees or deploy 35 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 25 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 43 enterprise systems (273 tools) and executes domain-specific tasks with human approval on every critical decision.
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 35 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 51 enterprise systems (320+ tools) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
 - **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
 - **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
 - **25 Pre-Built AI Agents**: Ap Processor, Ar Collections, Close Agent, Fpa Agent, Recon Agent, Tax Compliance, Ld Coordinator, Offboarding Agent, Onboarding Agent, Payroll Engine, Performance Coach, Talent Acquisition, Brand Monitor, Campaign Pilot, Content Factory, Crm Intelligence, Seo Strategist, Compliance Guard, Contract Intelligence, It Operations, Support Triage, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
-- **43 Enterprise Connectors (273 tools)**: Banking Aa (7 tools), Gstn (8 tools), Income Tax India (7 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (6 tools), Tally (6 tools), Zoho Books (6 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Brandwatch (5 tools), Buffer (4 tools), Google Ads (5 tools), Hubspot (13 tools), Linkedin Ads (4 tools), Meta Ads (5 tools), Mixpanel (5 tools), Salesforce (6 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (9 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), Object Storage (6 tools), Sendgrid (5 tools), Slack (6 tools), Twilio (5 tools), Whatsapp (5 tools)
+- **51 Enterprise Connectors (320+ tools)**: Banking Aa (7 tools), Gstn (8 tools), Income Tax India (7 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (6 tools), Tally (6 tools), Zoho Books (6 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Brandwatch (5 tools), Buffer (4 tools), Google Ads (5 tools), Hubspot (13 tools), Linkedin Ads (4 tools), Meta Ads (5 tools), Mixpanel (5 tools), Salesforce (6 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (9 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), Object Storage (6 tools), Sendgrid (5 tools), Slack (6 tools), Twilio (5 tools), Whatsapp (5 tools)
 - **Agents That Act**: Agents don't just generate text — they call real external APIs via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back
 - **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
 - **Shadow Mode**: Test agents against real data before promoting to production
@@ -65,14 +65,14 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
 ## Pricing
 
 - Free ($0/month): 35 AI agents, 20 connectors, 500 tasks/day
-- Pro ($499/month): Unlimited AI agents, 43 connectors, Unlimited tasks
-- Enterprise (Custom): Unlimited AI agents, 43 connectors, Unlimited everything
+- Pro ($499/month): Unlimited AI agents, 51 connectors, Unlimited tasks
+- Enterprise (Custom): Unlimited AI agents, 51 connectors, Unlimited everything
 
 ## Developer SDKs & Integration
 
 - **Python SDK**: `pip install agenticorg` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
 - **TypeScript SDK**: `npm i agenticorg-sdk` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: `npx agenticorg-mcp-server` — expose 25+ agents and 273 tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **MCP Server**: `npx agenticorg-mcp-server` — expose 35 agents and 320+ tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
 - **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop deploy`
 - **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use `ao_sk_` prefix, bcrypt-hashed, scoped, revocable
 - **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at `/api/v1/a2a/agent-card`
