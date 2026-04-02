@@ -62,6 +62,7 @@ dependencies = [
     "celery[redis]>=5.4.0",
     "pgvector>=0.3.6",
     "jsonschema>=4.23.0",
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]

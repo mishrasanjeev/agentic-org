@@ -15,9 +15,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 from xml.etree.ElementTree import Element, SubElement, tostring
-from xml.etree.ElementTree import fromstring as xml_fromstring  # noqa: S314
 
 import structlog
+from defusedxml.ElementTree import fromstring as xml_fromstring
 
 from connectors.framework.base_connector import BaseConnector
 
@@ -168,7 +168,7 @@ class TallyConnector(BaseConnector):
         if not xml_response:
             raise RuntimeError("Tally bridge returned empty response")
 
-        elem = xml_fromstring(xml_response)  # noqa: S314
+        elem = xml_fromstring(xml_response)
         return _xml_to_dict(elem)
 
     async def post_voucher(self, **params) -> dict[str, Any]:

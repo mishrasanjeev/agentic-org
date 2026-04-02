@@ -6,10 +6,10 @@ import abc
 import re
 from typing import Any
 from xml.etree.ElementTree import Element
-from xml.etree.ElementTree import fromstring as xml_fromstring  # noqa: S314
 
 import httpx
 import structlog
+from defusedxml.ElementTree import fromstring as xml_fromstring
 
 logger = structlog.get_logger()
 
@@ -204,7 +204,7 @@ class BaseConnector(abc.ABC):
             headers={"Content-Type": "application/xml"},
         )
         resp.raise_for_status()
-        return xml_fromstring(resp.text)  # noqa: S314
+        return xml_fromstring(resp.text)
 
     async def _put(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:
