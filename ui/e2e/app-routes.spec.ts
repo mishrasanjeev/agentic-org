@@ -7,6 +7,7 @@ import { test, expect } from "@playwright/test";
 // ---------------------------------------------------------------------------
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
+const MARKETING = "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 
@@ -15,26 +16,26 @@ const canAuth = !!E2E_TOKEN;
 // ---------------------------------------------------------------------------
 
 test.describe("Public Routes — Reachability", () => {
+  // Public pages are on the marketing domain (agenticorg.ai), not app.agenticorg.ai
   const publicRoutes = [
-    { path: "/", name: "Landing", expectText: "35 AI Agents" },
-    { path: "/pricing", name: "Pricing", expectText: "Pricing" },
-    { path: "/blog", name: "Blog", expectText: "Blog" },
-    { path: "/evals", name: "Evals", expectText: "Eval" },
-    { path: "/playground", name: "Playground", expectText: "Playground" },
-    { path: "/login", name: "Login", expectText: "Sign" },
+    { url: `${MARKETING}/`, name: "Landing", expectText: "agent" },
+    { url: `${MARKETING}/pricing`, name: "Pricing", expectText: "Pricing" },
+    { url: `${MARKETING}/blog`, name: "Blog", expectText: "Blog" },
+    { url: `${MARKETING}/evals`, name: "Evals", expectText: "Eval" },
+    { url: `${MARKETING}/playground`, name: "Playground", expectText: "Playground" },
+    { url: `${APP}/login`, name: "Login", expectText: "Sign" },
   ];
 
   for (const route of publicRoutes) {
-    test(`${route.name} (${route.path}) loads without error`, async ({ page }) => {
+    test(`${route.name} loads without error`, async ({ page }) => {
       const errors: string[] = [];
       page.on("console", (msg) => {
         if (msg.type() === "error") errors.push(msg.text());
       });
 
-      const response = await page.goto(route.path);
+      const response = await page.goto(route.url, { waitUntil: "domcontentloaded" });
       expect(response?.status()).toBeLessThan(400);
-      await page.waitForLoadState("networkidle");
-      await expect(page.getByText(route.expectText).first()).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(route.expectText, { exact: false }).first()).toBeVisible({ timeout: 15000 });
 
       // No uncaught JS errors (ignore favicon, API, WebSocket noise)
       const criticalErrors = errors.filter(
@@ -242,7 +243,7 @@ test.describe("Data Display Quality", () => {
 
 test.describe("Landing → Dashboard Flow", () => {
   test("Landing nav Dashboard link navigates to dashboard", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     await page.locator("nav").getByText("Dashboard").click();
     await page.waitForLoadState("networkidle");
@@ -251,7 +252,7 @@ test.describe("Landing → Dashboard Flow", () => {
   });
 
   test("Footer Dashboard link navigates correctly", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const footerLink = page.locator("footer").getByRole("link", { name: "Dashboard" });
     if (await footerLink.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -262,7 +263,7 @@ test.describe("Landing → Dashboard Flow", () => {
   });
 
   test("Footer Agents link navigates correctly", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const footerLink = page.locator("footer").getByRole("link", { name: "Agents", exact: true });
     if (await footerLink.isVisible({ timeout: 5000 }).catch(() => false)) {

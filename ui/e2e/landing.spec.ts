@@ -12,7 +12,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Landing Page — Core Rendering", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
   });
 
@@ -58,7 +58,7 @@ test.describe("Landing Page — Core Rendering", () => {
 
 test.describe("Landing Page — Sections", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
   });
 
@@ -127,7 +127,7 @@ test.describe("Landing Page — Sections", () => {
 
 test.describe("Landing Page — Navigation", () => {
   test("Sign In link navigates to login", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const signIn = page.locator("nav").getByText("Sign In").first();
     await signIn.click();
@@ -136,7 +136,7 @@ test.describe("Landing Page — Navigation", () => {
   });
 
   test("Pricing nav link works", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const pricingLink = page.locator("nav").getByText("Pricing").first();
     await pricingLink.click();
@@ -146,7 +146,7 @@ test.describe("Landing Page — Navigation", () => {
   });
 
   test("Blog nav link works", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const blogLink = page.locator("nav").getByText("Blog").first();
     await blogLink.click();
@@ -155,7 +155,7 @@ test.describe("Landing Page — Navigation", () => {
   });
 
   test("Playground nav link works", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const playgroundLink = page.locator("nav").getByText("Playground").first();
     await playgroundLink.click();
@@ -172,7 +172,7 @@ test.describe("Landing Page — Mobile", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
   test("hero headline readable on mobile", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     await expect(
       page.getByText("Your Back Office Runs Itself.").first()
@@ -180,7 +180,7 @@ test.describe("Landing Page — Mobile", () => {
   });
 
   test("mobile menu toggle works", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
 
     const menuButton = page.locator('button[aria-label="Toggle navigation menu"]');
@@ -192,7 +192,7 @@ test.describe("Landing Page — Mobile", () => {
   });
 
   test("footer is visible on mobile", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     const footer = page.locator("footer");
     await footer.scrollIntoViewIfNeeded();
@@ -208,7 +208,7 @@ test.describe("Landing Page — Tablet", () => {
   test.use({ viewport: { width: 768, height: 1024 } });
 
   test("hero renders on tablet viewport", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     await expect(
       page.getByText("Your Back Office Runs Itself.").first()
@@ -216,7 +216,7 @@ test.describe("Landing Page — Tablet", () => {
   });
 
   test("stats bar shows metrics on tablet", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     await expect(page.getByText("35").first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("54").first()).toBeVisible({ timeout: 10000 });
@@ -229,7 +229,7 @@ test.describe("Landing Page — Tablet", () => {
 
 test.describe("Landing Page — SEO", () => {
   test("meta tags are present", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("https://agenticorg.ai/");
 
     const canonical = page.locator('link[rel="canonical"]');
     await expect(canonical).toHaveAttribute("href", /https:\/\/agenticorg\.ai/);

@@ -10,6 +10,7 @@
 import { test, expect, Page } from "@playwright/test";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
+const MARKETING = "https://agenticorg.ai";
 const HAS_AUTH = Boolean(process.env.E2E_TOKEN);
 
 // ── Helper: authenticate via stored token cookie ──────────────────────
