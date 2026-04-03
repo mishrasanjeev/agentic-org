@@ -101,10 +101,11 @@ test.describe("CORS", () => {
         Origin: "https://evil-site.example.com",
         "Access-Control-Request-Method": "GET",
       },
+      timeout: 30000,
     });
-    // Should return 200, 204, or 405 (method not allowed for OPTIONS)
-    // Some servers return 307 redirect or other codes -- accept anything that isn't 500
-    expect(resp.status()).not.toBe(500);
+    // GCP/Nginx may handle OPTIONS differently -- accept any non-5xx status
+    const status = resp.status();
+    expect(status).toBeLessThan(500);
     const allowOrigin = resp.headers()["access-control-allow-origin"];
     // If CORS is set, it should NOT be wildcard for API endpoints
     // or should be our own domain

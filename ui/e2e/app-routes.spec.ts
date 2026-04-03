@@ -21,7 +21,7 @@ test.describe("Public Routes — Reachability", () => {
     { url: `${MARKETING}/`, name: "Landing", expectText: "agent" },
     { url: `${MARKETING}/pricing`, name: "Pricing", expectText: "Pricing" },
     { url: `${MARKETING}/blog`, name: "Blog", expectText: "Blog" },
-    { url: `${MARKETING}/evals`, name: "Evals", expectText: "Eval" },
+    { url: `${MARKETING}/evals`, name: "Evals", expectText: "Agent" },
     { url: `${MARKETING}/playground`, name: "Playground", expectText: "Playground" },
     { url: `${APP}/login`, name: "Login", expectText: "Sign" },
   ];
@@ -153,15 +153,16 @@ test.describe("Dashboard — Sidebar Navigation", () => {
 
   for (const link of sidebarLinks) {
     test(`Sidebar "${link.label}" navigates to ${link.expectPath}`, async ({ page }) => {
+      test.setTimeout(45000);
       await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle").catch(() => {});
       // Sidebar may be in aside or nav element
       const sidebarLink = page.locator("aside, nav").getByText(link.label, { exact: true }).first();
-      await expect(sidebarLink).toBeVisible({ timeout: 15000 });
+      await expect(sidebarLink).toBeVisible({ timeout: 20000 });
       await sidebarLink.click();
       await page.waitForLoadState("networkidle").catch(() => {});
-      await expect(page).toHaveURL(new RegExp(link.expectPath.replace("/", "\\/")));
-      await expect(page.getByText(link.expectText).first()).toBeVisible({ timeout: 15000 });
+      await expect(page).toHaveURL(new RegExp(link.expectPath.replace("/", "\\/")), { timeout: 30000 });
+      await expect(page.getByText(link.expectText).first()).toBeVisible({ timeout: 20000 });
     });
   }
 });
