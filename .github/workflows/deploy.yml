@@ -225,8 +225,8 @@ jobs:
       - name: Install Playwright
         run: cd ui && npm ci && npx playwright install --with-deps chromium
 
-      - name: Run Playwright E2E tests
-        run: cd ui && npx playwright test --project chromium
+      - name: Run Playwright E2E tests (production-safe specs only)
+        run: cd ui && npx playwright test e2e/production-full.spec.ts e2e/integration-production.spec.ts e2e/security-tests.spec.ts --project chromium
         env:
           BASE_URL: https://app.agenticorg.ai
 
