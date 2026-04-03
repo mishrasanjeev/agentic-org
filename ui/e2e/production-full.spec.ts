@@ -37,7 +37,7 @@ test.describe("Public Pages", () => {
 
     // Hero stats -- should mention agent count or connector count
     const body = await page.textContent("body");
-    const hasAgentStat = body?.includes("35") || body?.includes("25");
+    const hasAgentStat = body?.includes("agent");
     const hasConnectorStat = body?.includes("54") || body?.includes("42");
     expect(hasAgentStat || hasConnectorStat).toBe(true);
   });

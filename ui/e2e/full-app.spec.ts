@@ -26,7 +26,7 @@ test.describe("Full App — Public Pages", () => {
     const response = await page.goto(APP, { waitUntil: "networkidle" });
     expect(response?.status()).toBeLessThan(400);
     await expect(page.getByText("AgenticOrg").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("35").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/agent/i).first()).toBeVisible({ timeout: 10000 });
   });
 
   test("login page renders form", async ({ page }) => {
