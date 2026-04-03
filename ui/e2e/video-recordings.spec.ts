@@ -1,203 +1,156 @@
 /**
- * Playwright recordings for demo videos — one per script.
- * Run: cd ui && npx playwright test e2e/video-recordings.spec.ts --config=playwright-demo.config.ts --headed
- * Output: video/recordings/
+ * Video Page Flows — Production E2E Tests
+ *
+ * Converted from video-recording scripts to functional tests.
+ * Tests that each page the demo videos would show actually loads.
+ * Auth-gated pages skip when E2E_TOKEN is not set.
  */
-import { test, Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
-const APP = "https://app.agenticorg.ai";
-const PAUSE = 3000;
-const LONG = 5000;
-const OBSERVATORY_WAIT = 10000;
+const E2E_TOKEN = process.env.E2E_TOKEN || "";
+const canAuth = !!E2E_TOKEN;
 
-async function login(page: Page, email: string, password: string) {
-  await page.goto(`${APP}/login`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1000);
-  await page.fill('input[type="email"]', email);
-  await page.fill('input[type="password"]', password);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
-  await page.waitForTimeout(PAUSE);
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// Public: Landing page (all demo videos start here)
+// ═══════════════════════════════════════════════════════════════════════════
 
-async function smoothScroll(page: Page, distance: number, duration: number) {
-  await page.evaluate(([d, t]) => {
-    return new Promise<void>((resolve) => {
-      const start = window.scrollY;
-      const startTime = Date.now();
-      function step() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / t, 1);
-        const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
-        window.scrollTo(0, start + d * ease);
-        if (progress < 1) requestAnimationFrame(step);
-        else resolve();
-      }
-      step();
+test.describe("Video Flows: Landing Page", () => {
+  test("landing page loads and renders hero", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText("AgenticOrg", {
+      timeout: 15000,
     });
-  }, [distance, duration]);
-}
+  });
 
-// ═══════════════════════════════════════════════════════════
-// VIDEO 1: Platform Overview (CEO)
-// ═══════════════════════════════════════════════════════════
-test("01 — Platform Overview", async ({ page }) => {
-  test.setTimeout(180_000);
-
-  // Scene 1: Landing page
-  await page.goto(APP, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
-  await smoothScroll(page, 800, 2000);
-  await page.waitForTimeout(PAUSE);
-  await smoothScroll(page, 800, 2000);
-  await page.waitForTimeout(PAUSE);
-
-  // Scene 2: Login as CEO → Dashboard
-  await login(page, "ceo@agenticorg.local", "ceo123!");
-  await page.waitForTimeout(LONG);
-  await smoothScroll(page, 400, 1500);
-  await page.waitForTimeout(PAUSE);
-
-  // Scene 3: Observatory
-  await page.click('a[href="/dashboard/observatory"]');
-  await page.waitForTimeout(OBSERVATORY_WAIT);
-
-  // Scene 4: Approvals
-  await page.click('a[href="/dashboard/approvals"]');
-  await page.waitForTimeout(LONG);
-
-  // Scene 5: Connectors → Workflows
-  await page.click('a[href="/dashboard/connectors"]');
-  await page.waitForTimeout(PAUSE);
-  await page.click('a[href="/dashboard/workflows"]');
-  await page.waitForTimeout(PAUSE);
-
-  // Scene 6: Audit → back to landing
-  await page.click('a[href="/dashboard/audit"]');
-  await page.waitForTimeout(PAUSE);
-  await page.goto(APP, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
+  test("landing page is scrollable without errors", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => window.scrollTo({ top: 1600, behavior: "smooth" }));
+    // Page should remain intact after scroll
+    await expect(page.locator("body")).toBeVisible();
+  });
 });
 
-// ═══════════════════════════════════════════════════════════
-// VIDEO 2: CFO — Finance
-// ═══════════════════════════════════════════════════════════
-test("02 — CFO Finance", async ({ page }) => {
-  test.setTimeout(180_000);
+// ═══════════════════════════════════════════════════════════════════════════
+// Auth-gated: Platform Overview (Video 1 — CEO)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // Login as CFO
-  await login(page, "cfo@agenticorg.local", "cfo123!");
-  await page.waitForTimeout(LONG);
+test.describe("Video Flows: Platform Overview (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
-  // Agents page — 6 finance agents
-  await page.click('a[href="/dashboard/agents"]');
-  await page.waitForTimeout(LONG);
-  await smoothScroll(page, 300, 1500);
-  await page.waitForTimeout(PAUSE);
+  test("dashboard loads", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Observatory — AP Processor traces
-  await page.click('a[href="/dashboard/observatory"]');
-  await page.waitForTimeout(OBSERVATORY_WAIT);
+  test("observatory page loads", async ({ page }) => {
+    await page.goto("/dashboard/observatory", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Approvals — 3 pending CFO items
-  await page.click('a[href="/dashboard/approvals"]');
-  await page.waitForTimeout(LONG);
+  test("approvals page loads", async ({ page }) => {
+    await page.goto("/dashboard/approvals", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Click into Recon Agent detail
-  await page.click('a[href="/dashboard/agents"]');
-  await page.waitForTimeout(PAUSE);
-  const reconAgent = page.getByText("Reconciliation Agent").first();
-  if (await reconAgent.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await reconAgent.click();
-    await page.waitForTimeout(LONG);
-  }
+  test("connectors page loads", async ({ page }) => {
+    await page.goto("/dashboard/connectors", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
+
+  test("workflows page loads", async ({ page }) => {
+    await page.goto("/dashboard/workflows", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
+
+  test("audit page loads", async ({ page }) => {
+    await page.goto("/dashboard/audit", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 });
 
-// ═══════════════════════════════════════════════════════════
-// VIDEO 3: CHRO — HR
-// ═══════════════════════════════════════════════════════════
-test("03 — CHRO HR", async ({ page }) => {
-  test.setTimeout(180_000);
+// ═══════════════════════════════════════════════════════════════════════════
+// Auth-gated: CFO Finance pages (Video 2)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  await login(page, "chro@agenticorg.local", "chro123!");
-  await page.waitForTimeout(LONG);
+test.describe("Video Flows: CFO Finance (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
-  // Agents — 6 HR agents
-  await page.click('a[href="/dashboard/agents"]');
-  await page.waitForTimeout(LONG);
-  await smoothScroll(page, 300, 1500);
-  await page.waitForTimeout(PAUSE);
+  test("agents page loads with agent content", async ({ page }) => {
+    await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Observatory
-  await page.click('a[href="/dashboard/observatory"]');
-  await page.waitForTimeout(OBSERVATORY_WAIT);
-
-  // Approvals — 2 pending
-  await page.click('a[href="/dashboard/approvals"]');
-  await page.waitForTimeout(LONG);
-
-  // Audit log
-  await page.click('a[href="/dashboard/audit"]');
-  await page.waitForTimeout(LONG);
+  test("observatory page loads for finance tracing", async ({ page }) => {
+    await page.goto("/dashboard/observatory", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 });
 
-// ═══════════════════════════════════════════════════════════
-// VIDEO 4: CMO — Marketing
-// ═══════════════════════════════════════════════════════════
-test("04 — CMO Marketing", async ({ page }) => {
-  test.setTimeout(180_000);
+// ═══════════════════════════════════════════════════════════════════════════
+// Auth-gated: CHRO HR pages (Video 3)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  await login(page, "cmo@agenticorg.local", "cmo123!");
-  await page.waitForTimeout(LONG);
+test.describe("Video Flows: CHRO HR (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
-  // Agents — 5 marketing agents
-  await page.click('a[href="/dashboard/agents"]');
-  await page.waitForTimeout(LONG);
+  test("agents page loads", async ({ page }) => {
+    await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Observatory
-  await page.click('a[href="/dashboard/observatory"]');
-  await page.waitForTimeout(OBSERVATORY_WAIT);
-
-  // Approvals — 1 pending
-  await page.click('a[href="/dashboard/approvals"]');
-  await page.waitForTimeout(LONG);
-
-  // Agent detail — Brand Monitor
-  await page.click('a[href="/dashboard/agents"]');
-  await page.waitForTimeout(PAUSE);
-  const brandAgent = page.getByText("Brand Monitor").first();
-  if (await brandAgent.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await brandAgent.click();
-    await page.waitForTimeout(LONG);
-  }
+  test("audit page loads", async ({ page }) => {
+    await page.goto("/dashboard/audit", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 });
 
-// ═══════════════════════════════════════════════════════════
-// VIDEO 5: COO — Operations
-// ═══════════════════════════════════════════════════════════
-test("05 — COO Operations", async ({ page }) => {
-  test.setTimeout(180_000);
+// ═══════════════════════════════════════════════════════════════════════════
+// Auth-gated: CMO Marketing pages (Video 4)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  await login(page, "coo@agenticorg.local", "coo123!");
-  await page.waitForTimeout(LONG);
+test.describe("Video Flows: CMO Marketing (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
-  // Agents — 5 ops agents
-  await page.click('a[href="/dashboard/agents"]');
-  await page.waitForTimeout(LONG);
+  test("agents page loads for marketing agents", async ({ page }) => {
+    await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
+});
 
-  // Observatory — incident response
-  await page.click('a[href="/dashboard/observatory"]');
-  await page.waitForTimeout(OBSERVATORY_WAIT);
+// ═══════════════════════════════════════════════════════════════════════════
+// Auth-gated: COO Operations pages (Video 5)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // Approvals — 1 pending
-  await page.click('a[href="/dashboard/approvals"]');
-  await page.waitForTimeout(LONG);
+test.describe("Video Flows: COO Operations (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
-  // Audit log
-  await page.click('a[href="/dashboard/audit"]');
-  await page.waitForTimeout(LONG);
+  test("agents page loads for ops agents", async ({ page }) => {
+    await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Connectors
-  await page.click('a[href="/dashboard/connectors"]');
-  await page.waitForTimeout(PAUSE);
+  test("connectors page loads", async ({ page }) => {
+    await page.goto("/dashboard/connectors", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 });

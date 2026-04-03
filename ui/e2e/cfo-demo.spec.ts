@@ -1,208 +1,111 @@
 /**
- * AgenticOrg — CFO Demo Recording
+ * CFO Demo Flow — Production E2E Tests
  *
- * Records a cinematic walkthrough of the live app for CFO presentation.
- * Run:  npx playwright test video/cfo-demo.spec.ts --headed
- * Output: video/recordings/
+ * Tests the CFO demo journey against production:
+ * - Landing page loads
+ * - Navigation to login
+ * - Dashboard pages load (auth-gated)
  */
 import { test, expect } from "@playwright/test";
 
-const APP = "https://app.agenticorg.ai";
+const E2E_TOKEN = process.env.E2E_TOKEN || "";
+const canAuth = !!E2E_TOKEN;
 
-// Slow, deliberate pace so viewers can follow
-const PAUSE = 2500; // pause on each screen
-const SHORT = 1500;
-const LONG = 4000;
+// ═══════════════════════════════════════════════════════════════════════════
+// Public pages — no auth needed
+// ═══════════════════════════════════════════════════════════════════════════
 
-test.use({
-  viewport: { width: 1920, height: 1080 },
-  video: { mode: "on", size: { width: 1920, height: 1080 } },
-  launchOptions: { slowMo: 300 },
-  colorScheme: "light",
+test.describe("CFO Demo: Public Pages", () => {
+  test("landing page loads with hero content", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText("AgenticOrg", {
+      timeout: 15000,
+    });
+  });
+
+  test("landing page is scrollable", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => window.scrollTo({ top: 600, behavior: "smooth" }));
+    await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("can navigate to login page from landing", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const loginLink = page.locator('a[href*="login"], button:has-text("Login"), a:has-text("Login"), a:has-text("Sign in")').first();
+    if (await loginLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await loginLink.click();
+      await page.waitForURL(/\/login/, { timeout: 10000 });
+      expect(page.url()).toContain("/login");
+    } else {
+      // Navigate directly
+      await page.goto("/login", { waitUntil: "domcontentloaded" });
+      expect(page.url()).toContain("/login");
+    }
+  });
+
+  test("login page renders email and password fields", async ({ page }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+
+    await expect(page.locator('input[type="email"], input[placeholder*="email" i]').first()).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator('input[type="password"]').first()).toBeVisible();
+    await expect(page.locator('button[type="submit"]').first()).toBeVisible();
+  });
 });
 
-test("CFO Demo — AgenticOrg Finance Agents in Action", async ({ page }) => {
-  test.setTimeout(180_000); // 3 min max
+// ═══════════════════════════════════════════════════════════════════════════
+// Auth-gated dashboard pages
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // ─── Scene 1: Landing Page ─────────────────────────────
-  await page.goto(APP, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
+test.describe("CFO Demo: Dashboard (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
-  // Scroll through the landing page slowly
-  await smoothScroll(page, 600, 1500);
-  await page.waitForTimeout(PAUSE);
-  await smoothScroll(page, 600, 1500);
-  await page.waitForTimeout(PAUSE);
-  await smoothScroll(page, 800, 1500);
-  await page.waitForTimeout(SHORT);
+  test("agent fleet page loads", async ({ page }) => {
+    await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+    // Page should show agent-related content
+    const bodyText = await page.textContent("body");
+    expect(bodyText!.length).toBeGreaterThan(0);
+  });
 
-  // Scroll back to top
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-  await page.waitForTimeout(SHORT);
+  test("approvals page loads", async ({ page }) => {
+    await page.goto("/dashboard/approvals", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // ─── Scene 2: Navigate to Dashboard — Agent Fleet ──────
-  await page.goto(`${APP}/dashboard/agents`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
+  test("workflows page loads", async ({ page }) => {
+    await page.goto("/dashboard/workflows", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Hover over agent cards to show interactivity
-  const agentCards = page.locator('[class*="card"], [class*="Card"]').first();
-  if (await agentCards.isVisible()) {
-    await agentCards.hover();
-    await page.waitForTimeout(SHORT);
-  }
+  test("connectors page loads", async ({ page }) => {
+    await page.goto("/dashboard/connectors", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Click on the first finance agent if visible
-  const financeAgent = page.getByText(/ap.processor|recon|tax.compliance|ar.collection|close.agent|fpa/i).first();
-  if (await financeAgent.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await financeAgent.click();
-    await page.waitForTimeout(LONG);
+  test("schema registry page loads", async ({ page }) => {
+    await page.goto("/dashboard/schemas", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-    // Show agent detail — metrics, config, shadow mode
-    const tabs = page.locator('[role="tab"], button:has-text("Config"), button:has-text("Shadow"), button:has-text("Cost")');
-    for (let i = 0; i < await tabs.count() && i < 4; i++) {
-      const tab = tabs.nth(i);
-      if (await tab.isVisible()) {
-        await tab.click();
-        await page.waitForTimeout(PAUSE);
-      }
-    }
-  }
+  test("audit log page loads", async ({ page }) => {
+    await page.goto("/dashboard/audit", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // ─── Scene 3: Approval Queue (HITL) ───────────────────
-  await page.goto(`${APP}/dashboard/approvals`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
+  test("create agent page loads", async ({ page }) => {
+    await page.goto("/dashboard/agents/new", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 
-  // Show pending approvals
-  const pendingTab = page.getByText(/pending/i).first();
-  if (await pendingTab.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await pendingTab.click();
-    await page.waitForTimeout(PAUSE);
-  }
-
-  // Show decided tab
-  const decidedTab = page.getByText(/decided/i).first();
-  if (await decidedTab.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await decidedTab.click();
-    await page.waitForTimeout(PAUSE);
-  }
-
-  // Try clicking an approval card to show detail
-  const approvalCard = page.locator('[class*="card"], [class*="Card"]').first();
-  if (await approvalCard.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await approvalCard.hover();
-    await page.waitForTimeout(SHORT);
-  }
-
-  // ─── Scene 4: Workflows ────────────────────────────────
-  await page.goto(`${APP}/dashboard/workflows`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
-
-  // Show workflow list
-  await smoothScroll(page, 400, 1000);
-  await page.waitForTimeout(PAUSE);
-
-  // Click on a workflow if available
-  const viewBtn = page.getByText(/view|details/i).first();
-  if (await viewBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await viewBtn.click();
-    await page.waitForTimeout(LONG);
-  }
-
-  // ─── Scene 5: Connectors ──────────────────────────────
-  await page.goto(`${APP}/dashboard/connectors`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
-
-  // Filter to finance connectors
-  const categoryFilter = page.locator("select, [role='combobox']").first();
-  if (await categoryFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await categoryFilter.click();
-    await page.waitForTimeout(SHORT);
-    const financeOpt = page.getByText(/finance/i).first();
-    if (await financeOpt.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await financeOpt.click();
-      await page.waitForTimeout(PAUSE);
-    }
-  }
-
-  // Scroll through connectors
-  await smoothScroll(page, 500, 1200);
-  await page.waitForTimeout(PAUSE);
-
-  // ─── Scene 6: Schema Registry ─────────────────────────
-  await page.goto(`${APP}/dashboard/schemas`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(PAUSE);
-  await smoothScroll(page, 400, 1000);
-  await page.waitForTimeout(SHORT);
-
-  // ─── Scene 7: Audit Log ───────────────────────────────
-  await page.goto(`${APP}/dashboard/audit`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
-
-  // Scroll through audit entries
-  await smoothScroll(page, 500, 1200);
-  await page.waitForTimeout(PAUSE);
-
-  // ─── Scene 8: Create Agent Flow ───────────────────────
-  await page.goto(`${APP}/dashboard/agents/new`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(PAUSE);
-
-  // Fill in agent creation form if fields exist
-  const nameInput = page.locator('input[name="name"], input[placeholder*="name" i]').first();
-  if (await nameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await nameInput.click();
-    await nameInput.fill("invoice-processor-v2");
-    await page.waitForTimeout(SHORT);
-  }
-
-  const domainSelect = page.locator('select[name="domain"], [name="domain"]').first();
-  if (await domainSelect.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await domainSelect.selectOption({ label: "Finance" }).catch(() => {});
-    await page.waitForTimeout(SHORT);
-  }
-
-  await page.waitForTimeout(PAUSE);
-
-  // ─── Scene 9: Create Workflow Flow ────────────────────
-  await page.goto(`${APP}/dashboard/workflows/new`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(PAUSE);
-
-  const wfName = page.locator('input[name="name"], input[placeholder*="name" i]').first();
-  if (await wfName.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await wfName.click();
-    await wfName.fill("invoice-processing-pipeline");
-    await page.waitForTimeout(SHORT);
-  }
-
-  await page.waitForTimeout(PAUSE);
-
-  // ─── Scene 10: Back to Landing — final shot ───────────
-  await page.goto(APP, { waitUntil: "networkidle" });
-  await page.waitForTimeout(LONG);
-
-  // Final pause on hero
-  await page.waitForTimeout(PAUSE);
+  test("create workflow page loads", async ({ page }) => {
+    await page.goto("/dashboard/workflows/new", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toBeEmpty();
+  });
 });
-
-/** Smooth scroll helper */
-async function smoothScroll(page: any, distance: number, duration: number) {
-  await page.evaluate(
-    ([d, t]: [number, number]) => {
-      return new Promise<void>((resolve) => {
-        const start = window.scrollY;
-        const startTime = Date.now();
-        function step() {
-          const elapsed = Date.now() - startTime;
-          const progress = Math.min(elapsed / t, 1);
-          const ease = progress < 0.5
-            ? 2 * progress * progress
-            : -1 + (4 - 2 * progress) * progress;
-          window.scrollTo(0, start + d * ease);
-          if (progress < 1) requestAnimationFrame(step);
-          else resolve();
-        }
-        step();
-      });
-    },
-    [distance, duration]
-  );
-}

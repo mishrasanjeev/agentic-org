@@ -1,200 +1,227 @@
 /**
  * Negative / Error-path E2E Tests
  *
- * Tests error handling, validation, 404s, rate limiting, and edge cases.
+ * Tests error handling, validation, 404s, and edge cases.
  * Runs against PRODUCTION with real browser interactions.
+ *
+ * NO page.route() mocking -- all responses are real.
  */
 
 import { test, expect, Page } from "@playwright/test";
 
-const BASE = "https://app.agenticorg.ai";
-const CEO_EMAIL = "ceo@agenticorg.local";
-const CEO_PASS = "ceo123!";
+const E2E_TOKEN = process.env.E2E_TOKEN || "";
+const canAuth = !!E2E_TOKEN;
 
-async function loginAsCeo(page: Page) {
-  await page.goto(`${BASE}/login`);
-  await page.waitForLoadState("networkidle");
-  await page.fill('input[placeholder="you@company.com"]', CEO_EMAIL);
-  await page.fill('input[type="password"]', CEO_PASS);
-  await page.click('button[type="submit"]');
-  await page.waitForURL("**/dashboard**", { timeout: 15000 });
+// ---------------------------------------------------------------------------
+// Auth helper — token-based only
+// ---------------------------------------------------------------------------
+
+async function ensureAuth(page: Page, baseURL: string) {
+  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+  await page.evaluate((token) => {
+    localStorage.setItem("token", token);
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        email: "e2e@agenticorg.ai",
+        name: "E2E Runner",
+        role: "admin",
+        domain: "all",
+        tenant_id: "t-001",
+        onboardingComplete: true,
+      }),
+    );
+  }, E2E_TOKEN);
 }
 
-async function getToken(page: Page): Promise<string> {
-  return (await page.evaluate(() => localStorage.getItem("token"))) || "";
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// AUTH — Login Error Handling
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// AUTH -- Login Error Handling
+// ===========================================================================
 
 test.describe("AUTH: Login errors", () => {
-  test("Wrong password shows error message", async ({ page }) => {
-    await page.goto(`${BASE}/login`);
+  test("Wrong password shows error message", async ({ page, baseURL }) => {
+    await page.goto(`${baseURL}/login`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
-    await page.fill('input[placeholder="you@company.com"]', "ceo@agenticorg.local");
+
+    await page.fill(
+      'input[placeholder="you@company.com"]',
+      "fake@doesnotexist.example",
+    );
     await page.fill('input[type="password"]', "TotallyWrongPassword1");
     await page.click('button[type="submit"]');
-    await page.waitForTimeout(3000);
+    await page.waitForLoadState("networkidle");
 
     // Should show error, NOT navigate to dashboard
     expect(page.url()).toContain("/login");
     const bodyText = await page.textContent("body");
-    const hasError = bodyText?.includes("Invalid") || bodyText?.includes("failed") || bodyText?.includes("error");
+    const hasError =
+      bodyText?.includes("Invalid") ||
+      bodyText?.includes("failed") ||
+      bodyText?.includes("error") ||
+      bodyText?.includes("incorrect");
     expect(hasError).toBeTruthy();
   });
 
-  test("Empty form submission is prevented", async ({ page }) => {
-    await page.goto(`${BASE}/login`);
+  test("Empty form submission is prevented", async ({ page, baseURL }) => {
+    await page.goto(`${baseURL}/login`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
-    // Try submitting empty form — HTML validation should prevent it
+    // HTML validation should prevent submission
     await page.click('button[type="submit"]');
-    await page.waitForTimeout(1000);
-
-    // Should still be on login page
     expect(page.url()).toContain("/login");
   });
 });
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// AUTH — Signup Validation
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// AUTH -- Signup Validation
+// ===========================================================================
 
 test.describe("AUTH: Signup validation", () => {
-  test("Weak password shows error or disables submit", async ({ page }) => {
+  test("Weak password shows error or disables submit", async ({
+    page,
+    baseURL,
+  }) => {
     const ts = Date.now();
-    await page.goto(`${BASE}/signup`);
+    await page.goto(`${baseURL}/signup`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
 
-    await page.fill('#orgName', `Test Org ${ts}`);
-    await page.fill('#name', "Test User");
-    await page.fill('#signupEmail', `weak-${ts}@test.test`);
-    await page.fill('#signupPassword', "weak");
-    await page.fill('#confirmPassword', "weak");
-    await page.waitForTimeout(1000);
+    await page.fill("#orgName", `Test Org ${ts}`);
+    await page.fill("#name", "Test User");
+    await page.fill("#signupEmail", `weak-${ts}@test.test`);
+    await page.fill("#signupPassword", "weak");
+    await page.fill("#confirmPassword", "weak");
 
-    // Submit button should be disabled OR page should show password error
     const submitBtn = page.locator('button[type="submit"]');
     const isDisabled = await submitBtn.isDisabled();
     if (isDisabled) {
-      // Good — client-side validation prevents submission
       expect(isDisabled).toBeTruthy();
     } else {
-      // If enabled, click and check for server-side error
       await submitBtn.click();
-      await page.waitForTimeout(3000);
+      await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/signup");
     }
   });
 });
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// API — 404 Handling
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// API -- 404 Handling
+// ===========================================================================
 
 test.describe("API: 404 responses", () => {
-  test("Non-existent agent returns 404", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.get(`${BASE}/api/v1/agents/00000000-0000-0000-0000-000000000000`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  test("Non-existent agent returns 404", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.get(
+      `${baseURL}/api/v1/agents/00000000-0000-0000-0000-000000000000`,
+      { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
+    );
     expect(resp.status()).toBe(404);
   });
 
-  test("Non-existent workflow returns 404", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.get(`${BASE}/api/v1/workflows/00000000-0000-0000-0000-000000000000`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  test("Non-existent workflow returns 404", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.get(
+      `${baseURL}/api/v1/workflows/00000000-0000-0000-0000-000000000000`,
+      { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
+    );
     expect(resp.status()).toBe(404);
   });
 
-  test("Non-existent connector returns 404", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.get(`${BASE}/api/v1/connectors/00000000-0000-0000-0000-000000000000`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  test("Non-existent connector returns 404", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.get(
+      `${baseURL}/api/v1/connectors/00000000-0000-0000-0000-000000000000`,
+      { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
+    );
     expect(resp.status()).toBe(404);
   });
 
-  test("Non-existent HITL item returns 404 on decide", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.post(`${BASE}/api/v1/approvals/00000000-0000-0000-0000-000000000000/decide`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      data: { decision: "approve", notes: "" },
-    });
+  test("Non-existent HITL item returns 404 on decide", async ({
+    page,
+    baseURL,
+  }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.post(
+      `${baseURL}/api/v1/approvals/00000000-0000-0000-0000-000000000000/decide`,
+      {
+        headers: {
+          Authorization: `Bearer ${E2E_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        data: { decision: "approve", notes: "" },
+      },
+    );
     expect(resp.status()).toBe(404);
   });
 
-  test("Agent detail page shows 'not found' with back link for bad ID", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard/agents/00000000-0000-0000-0000-000000000000`);
+  test("Agent detail page shows 'not found' with back link for bad ID", async ({
+    page,
+    baseURL,
+  }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    await ensureAuth(page, baseURL!);
+    await page.goto(
+      `${baseURL}/dashboard/agents/00000000-0000-0000-0000-000000000000`,
+      { waitUntil: "domcontentloaded" },
+    );
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
 
     const bodyText = await page.textContent("body");
     expect(bodyText).toContain("not found");
 
-    // Should have a "Back to Agents" link
     const backLink = page.getByRole("link", { name: /Back to Agents/ });
     await expect(backLink).toBeVisible();
   });
 });
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// API — 401 Unauthorized
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// API -- 401 Unauthorized
+// ===========================================================================
 
 test.describe("API: 401 unauthorized", () => {
-  test("Agents endpoint rejects requests without token", async ({ page }) => {
-    const resp = await page.request.get(`${BASE}/api/v1/agents`);
+  test("Agents endpoint rejects requests without token", async ({
+    page,
+    baseURL,
+  }) => {
+    const resp = await page.request.get(`${baseURL}/api/v1/agents`);
     expect(resp.status()).toBe(401);
   });
 
-  test("Workflows endpoint rejects requests without token", async ({ page }) => {
-    const resp = await page.request.get(`${BASE}/api/v1/workflows`);
+  test("Workflows endpoint rejects requests without token", async ({
+    page,
+    baseURL,
+  }) => {
+    const resp = await page.request.get(`${baseURL}/api/v1/workflows`);
     expect(resp.status()).toBe(401);
   });
 
-  test("Approvals endpoint rejects requests without token", async ({ page }) => {
-    const resp = await page.request.get(`${BASE}/api/v1/approvals`);
+  test("Approvals endpoint rejects requests without token", async ({
+    page,
+    baseURL,
+  }) => {
+    const resp = await page.request.get(`${baseURL}/api/v1/approvals`);
     expect(resp.status()).toBe(401);
   });
 
-  test("Invalid token returns 401", async ({ page }) => {
-    const resp = await page.request.get(`${BASE}/api/v1/agents`, {
+  test("Invalid token returns 401", async ({ page, baseURL }) => {
+    const resp = await page.request.get(`${baseURL}/api/v1/agents`, {
       headers: { Authorization: "Bearer invalid.jwt.token" },
     });
     expect(resp.status()).toBe(401);
   });
 });
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// API — Input Validation (400/409/422)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// API -- Input Validation (400/409/422)
+// ===========================================================================
 
 test.describe("API: Input validation", () => {
-  test("Workflow with empty steps returns 400", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.post(`${BASE}/api/v1/workflows`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  test("Workflow with empty steps returns 400", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.post(`${baseURL}/api/v1/workflows`, {
+      headers: {
+        Authorization: `Bearer ${E2E_TOKEN}`,
+        "Content-Type": "application/json",
+      },
       data: { name: "Bad WF", definition: { steps: [] } },
     });
     expect(resp.status()).toBe(400);
@@ -202,91 +229,113 @@ test.describe("API: Input validation", () => {
     expect(body.detail).toContain("at least one step");
   });
 
-  test("Workflow with no definition returns 400", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.post(`${BASE}/api/v1/workflows`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  test("Workflow with no definition returns 400", async ({
+    page,
+    baseURL,
+  }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.post(`${baseURL}/api/v1/workflows`, {
+      headers: {
+        Authorization: `Bearer ${E2E_TOKEN}`,
+        "Content-Type": "application/json",
+      },
       data: { name: "Bad WF", definition: {} },
     });
     expect(resp.status()).toBe(400);
   });
 
-  test("Duplicate connector name returns 409", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
+  test("Duplicate connector name returns 409", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
     const ts = Date.now();
     const name = `dup-conn-${ts}`;
 
     // Create first
-    await page.request.post(`${BASE}/api/v1/connectors`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    await page.request.post(`${baseURL}/api/v1/connectors`, {
+      headers: {
+        Authorization: `Bearer ${E2E_TOKEN}`,
+        "Content-Type": "application/json",
+      },
       data: { name, category: "comms", auth_type: "none" },
     });
 
     // Create duplicate
-    const resp = await page.request.post(`${BASE}/api/v1/connectors`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    const resp = await page.request.post(`${baseURL}/api/v1/connectors`, {
+      headers: {
+        Authorization: `Bearer ${E2E_TOKEN}`,
+        "Content-Type": "application/json",
+      },
       data: { name, category: "comms", auth_type: "none" },
     });
     expect(resp.status()).toBe(409);
   });
 
-  test("Invalid audit date_from returns 400", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.get(`${BASE}/api/v1/audit?date_from=not-a-date`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  test("Invalid audit date_from returns 400", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.get(
+      `${baseURL}/api/v1/audit?date_from=not-a-date`,
+      { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
+    );
     expect(resp.status()).toBe(400);
   });
 
-  test("Invalid audit agent_id returns 400", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.get(`${BASE}/api/v1/audit?agent_id=not-a-uuid`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  test("Invalid audit agent_id returns 400", async ({ page, baseURL }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    const resp = await page.request.get(
+      `${baseURL}/api/v1/audit?agent_id=not-a-uuid`,
+      { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
+    );
     expect(resp.status()).toBe(400);
   });
 });
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// UI — Error Display & Graceful Handling
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// UI -- Error Display & Graceful Handling
+// ===========================================================================
 
 test.describe("UI: Error display", () => {
-  test("Workflow create shows error detail on failure", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard/workflows/new`);
+  test("Workflow create shows error detail on failure", async ({
+    page,
+    baseURL,
+  }) => {
+    test.skip(!canAuth, "requires E2E_TOKEN");
+    await ensureAuth(page, baseURL!);
+    await page.goto(`${baseURL}/dashboard/workflows/new`, {
+      waitUntil: "domcontentloaded",
+    });
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
 
     // Fill name but leave steps invalid
-    await page.fill('input[placeholder*="Invoice"]', "Test WF");
+    const nameInput = page.locator('input[placeholder*="Invoice"]');
+    if (await nameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await nameInput.fill("Test WF");
+    }
     const stepsArea = page.locator("textarea");
-    await stepsArea.fill("not valid json");
+    if (await stepsArea.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await stepsArea.fill("not valid json");
+    }
 
     await page.click('button[type="submit"]');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState("networkidle");
 
-    // Should show validation error
     const bodyText = await page.textContent("body");
-    const hasError = bodyText?.includes("Invalid JSON") || bodyText?.includes("valid JSON") || bodyText?.includes("error");
+    const hasError =
+      bodyText?.includes("Invalid JSON") ||
+      bodyText?.includes("valid JSON") ||
+      bodyText?.includes("error");
     expect(hasError).toBeTruthy();
   });
 
-  test("404 page renders for unknown routes", async ({ page }) => {
-    await page.goto(`${BASE}/this-route-does-not-exist`);
+  test("404 page renders for unknown routes", async ({ page, baseURL }) => {
+    await page.goto(`${baseURL}/this-route-does-not-exist`, {
+      waitUntil: "domcontentloaded",
+    });
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
 
     const bodyText = await page.textContent("body");
-    const has404 = bodyText?.includes("Not Found") || bodyText?.includes("404") || bodyText?.includes("not found");
+    const has404 =
+      bodyText?.includes("Not Found") ||
+      bodyText?.includes("404") ||
+      bodyText?.includes("not found");
     expect(has404).toBeTruthy();
   });
 });

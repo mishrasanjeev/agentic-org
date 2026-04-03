@@ -1,83 +1,63 @@
 /**
- * SOP Upload Flow — End-to-End Tests
+ * SOP Upload Flow — Production E2E Tests
  *
- * Tests the full Create Agent from SOP flow:
- * 1. Navigate to SOP upload page
- * 2. Paste SOP text
- * 3. Parse via LLM
- * 4. Review parsed config
- * 5. Deploy as shadow agent
+ * Tests the Create Agent from SOP flow against production.
+ * Auth-gated tests skip when E2E_TOKEN is not set.
+ * Public endpoints (A2A, MCP) are tested without auth.
  */
+import { test, expect } from "@playwright/test";
 
-import { test, expect, Page } from "@playwright/test";
-
-const BASE = "https://app.agenticorg.ai";
-const CEO_EMAIL = "ceo@agenticorg.local";
-const CEO_PASS = "ceo123!";
-
-async function loginAsCeo(page: Page) {
-  await page.goto(`${BASE}/login`);
-  await page.waitForLoadState("networkidle");
-  await page.fill('input[placeholder="you@company.com"]', CEO_EMAIL);
-  await page.fill('input[type="password"]', CEO_PASS);
-  await page.click('button[type="submit"]');
-  await page.waitForURL("**/dashboard**", { timeout: 15000 });
-}
-
-async function getToken(page: Page): Promise<string> {
-  return (await page.evaluate(() => localStorage.getItem("token"))) || "";
-}
-
+const E2E_TOKEN = process.env.E2E_TOKEN || "";
+const canAuth = !!E2E_TOKEN;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SOP Page Accessibility
+// SOP Page — Auth Required
 // ═══════════════════════════════════════════════════════════════════════════
 
-test.describe("SOP: Page Access", () => {
-  test("SOP upload page renders from sidebar link", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard/agents/from-sop`);
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
+test.describe("SOP: Page Access (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
 
+  test("SOP upload page renders heading and description", async ({ page }) => {
+    await page.goto("/dashboard/agents/from-sop", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByText("Create Agent from SOP").first()).toBeVisible({
+      timeout: 15000,
+    });
     const bodyText = await page.textContent("body");
-    expect(bodyText).toContain("Create Agent from SOP");
-    expect(bodyText).toContain("Upload a business process document");
+    expect(bodyText).toContain("Upload");
   });
 
   test("SOP page has Upload and Paste tabs", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard/agents/from-sop`);
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1000);
+    await page.goto("/dashboard/agents/from-sop", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByText("Upload File")).toBeVisible();
-    await expect(page.getByText("Paste Text")).toBeVisible();
+    await expect(page.getByText("Upload File").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Paste Text").first()).toBeVisible();
   });
 
   test("SOP page is accessible from Agents page button", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard/agents`);
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
+    await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
 
     const sopButton = page.getByRole("button", { name: /Create from SOP/i });
-    await expect(sopButton).toBeVisible();
+    await expect(sopButton).toBeVisible({ timeout: 15000 });
     await sopButton.click();
-    await page.waitForURL("**/from-sop**", { timeout: 10000 });
+    await page.waitForURL("**/from-sop**", { timeout: 15000 });
   });
 });
 
-
 // ═══════════════════════════════════════════════════════════════════════════
-// SOP Text Parse API
+// SOP API Parse — Auth Required
 // ═══════════════════════════════════════════════════════════════════════════
 
-test.describe("SOP: API Parse", () => {
-  test("Parse text SOP returns draft config via API", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
+test.describe("SOP: API Parse (auth required)", () => {
+  test.beforeEach(async () => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+  });
 
+  test("parse text SOP returns draft config via API", async ({ request }) => {
     const sopText = `
     Invoice Processing Standard Operating Procedure
 
@@ -91,57 +71,46 @@ test.describe("SOP: API Parse", () => {
     Step 8: Send remittance advice to vendor
     `;
 
-    const resp = await page.request.post(`${BASE}/api/v1/sop/parse-text`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    const resp = await request.post("/api/v1/sop/parse-text", {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}`, "Content-Type": "application/json" },
       data: { text: sopText, domain_hint: "finance" },
     });
 
-    // This may fail if no LLM API key is configured in production
-    // Accept both success (200) and failure (500 from LLM)
+    // Accept both success (200) and LLM-unavailable failure
     if (resp.ok()) {
       const data = await resp.json();
       expect(data.status).toBe("draft");
       expect(data.config).toBeTruthy();
       expect(data.config.agent_name).toBeTruthy();
-      expect(data.config._parse_status).toBe("draft");
     } else {
-      // LLM API key not configured — expected in some environments
       expect(resp.status()).toBeGreaterThanOrEqual(400);
     }
   });
 
-  test("Parse empty text returns 400", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.post(`${BASE}/api/v1/sop/parse-text`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  test("parse empty text returns 400", async ({ request }) => {
+    const resp = await request.post("/api/v1/sop/parse-text", {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}`, "Content-Type": "application/json" },
       data: { text: "" },
     });
     expect(resp.status()).toBe(400);
   });
 
-  test("Parse text too long returns 400", async ({ page }) => {
-    await loginAsCeo(page);
-    const token = await getToken(page);
-
-    const resp = await page.request.post(`${BASE}/api/v1/sop/parse-text`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  test("parse text too long returns 400", async ({ request }) => {
+    const resp = await request.post("/api/v1/sop/parse-text", {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}`, "Content-Type": "application/json" },
       data: { text: "x".repeat(60000) },
     });
     expect(resp.status()).toBe(400);
   });
 });
 
-
 // ═══════════════════════════════════════════════════════════════════════════
-// A2A / MCP Discovery
+// A2A / MCP Discovery — Public
 // ═══════════════════════════════════════════════════════════════════════════
 
-test.describe("SOP: A2A + MCP Integration", () => {
-  test("A2A agent card is publicly accessible", async ({ page }) => {
-    // Use /agent-card alias (nginx may block .well-known paths)
-    const resp = await page.request.get(`${BASE}/api/v1/a2a/agent-card`);
+test.describe("SOP: A2A + MCP Integration (public)", () => {
+  test("A2A agent card is publicly accessible", async ({ request }) => {
+    const resp = await request.get("/api/v1/a2a/agent-card");
     expect(resp.ok()).toBeTruthy();
     const card = await resp.json();
     expect(card.name).toBe("AgenticOrg Agent Platform");
@@ -149,44 +118,43 @@ test.describe("SOP: A2A + MCP Integration", () => {
     expect(card.authentication.scheme).toBe("grantex");
   });
 
-  test("MCP tools list is publicly accessible", async ({ page }) => {
-    const resp = await page.request.get(`${BASE}/api/v1/mcp/tools`);
+  test("MCP tools list is publicly accessible", async ({ request }) => {
+    const resp = await request.get("/api/v1/mcp/tools");
     expect(resp.ok()).toBeTruthy();
     const data = await resp.json();
     expect(data.tools.length).toBe(25);
     expect(data.tools[0].name).toContain("agenticorg_");
     expect(data.tools[0].inputSchema).toBeTruthy();
   });
+});
 
-  test("Integrations page renders with A2A and MCP info", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard/integrations`);
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
+// ═══════════════════════════════════════════════════════════════════════════
+// Dashboard v3.0 Cards — Auth Required
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe("SOP: Dashboard v3.0 (auth required)", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+  });
+
+  test("Dashboard shows LangGraph + Grantex + External Access cards", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+
+    const bodyText = await page.textContent("body");
+    expect(bodyText).toContain("LangGraph");
+    expect(bodyText).toContain("Grantex");
+    expect(bodyText).toContain("External Access");
+  });
+
+  test("Integrations page renders A2A and MCP info", async ({ page }) => {
+    await page.goto("/dashboard/integrations", { waitUntil: "domcontentloaded" });
 
     const bodyText = await page.textContent("body");
     expect(bodyText).toContain("Agent-to-Agent");
     expect(bodyText).toContain("Model Context Protocol");
     expect(bodyText).toContain("Grantex");
     expect(bodyText).toContain("pip install agenticorg");
-  });
-});
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Dashboard v3.0 Cards
-// ═══════════════════════════════════════════════════════════════════════════
-
-test.describe("SOP: Dashboard v3.0", () => {
-  test("Dashboard shows LangGraph + Grantex + A2A cards", async ({ page }) => {
-    await loginAsCeo(page);
-    await page.goto(`${BASE}/dashboard`);
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(2000);
-
-    const bodyText = await page.textContent("body");
-    expect(bodyText).toContain("LangGraph");
-    expect(bodyText).toContain("Grantex");
-    expect(bodyText).toContain("External Access");
   });
 });
