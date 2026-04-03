@@ -175,7 +175,7 @@ async def _seed_agents(session: AsyncSession, tenant_id: uuid.UUID) -> None:
 
         name = _humanise(agent_type)
         # Normalize tool names: strip any scope prefixes like "oracle_fusion:read:"
-        raw_tools = _AGENT_TYPE_DEFAULT_TOOLS.get(agent_type, [])
+        raw_tools = list(_AGENT_TYPE_DEFAULT_TOOLS.get(str(agent_type)) or [])
         tools = normalize_tool_names(raw_tools)
 
         agent = Agent(
