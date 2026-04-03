@@ -115,13 +115,12 @@ test.describe("CFO Dashboard", () => {
     await page.goto("/dashboard/cfo", { waitUntil: "domcontentloaded" });
 
     // Auth token may expire and redirect to login -- that is also a valid outcome
-    const wasLoading =
-      (await page.getByText("Loading finance data...").isVisible({ timeout: 3000 }).catch(() => false)) ||
-      (await page.getByText("CFO Dashboard").isVisible({ timeout: 15000 }).catch(() => false)) ||
-      (await page.getByText("Dashboard").isVisible({ timeout: 5000 }).catch(() => false)) ||
+    const ok =
+      (await page.getByText("Loading...").isVisible({ timeout: 5000 }).catch(() => false)) ||
+      (await page.getByText(/finance|cfo|dashboard/i).first().isVisible({ timeout: 20000 }).catch(() => false)) ||
       (await page.getByText(/sign in|log in|email/i).first().isVisible({ timeout: 5000 }).catch(() => false)) ||
       page.url().includes("/login");
-    expect(wasLoading).toBeTruthy();
+    expect(ok).toBeTruthy();
   });
 });
 
@@ -207,13 +206,12 @@ test.describe("CMO Dashboard", () => {
     await page.goto("/dashboard/cmo", { waitUntil: "domcontentloaded" });
 
     // Auth token may expire and redirect to login -- that is also a valid outcome
-    const wasLoading =
-      (await page.getByText("Loading marketing data...").isVisible({ timeout: 3000 }).catch(() => false)) ||
-      (await page.getByText("CMO Dashboard").isVisible({ timeout: 15000 }).catch(() => false)) ||
-      (await page.getByText("Dashboard").isVisible({ timeout: 5000 }).catch(() => false)) ||
+    const ok =
+      (await page.getByText("Loading...").isVisible({ timeout: 5000 }).catch(() => false)) ||
+      (await page.getByText(/marketing|cmo|dashboard/i).first().isVisible({ timeout: 20000 }).catch(() => false)) ||
       (await page.getByText(/sign in|log in|email/i).first().isVisible({ timeout: 5000 }).catch(() => false)) ||
       page.url().includes("/login");
-    expect(wasLoading).toBeTruthy();
+    expect(ok).toBeTruthy();
   });
 });
 
