@@ -31,22 +31,24 @@ from core.schemas.api import (
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     # Finance
     "ap_processor": [
-        "fetch_bank_statement", "create_payment_intent",
-        "create_payout", "get_settlement_report",
+        "fetch_bank_statement", "check_account_balance",
+        "post_voucher", "get_ledger_balance", "get_trial_balance",
         "create_order", "check_order_status",
     ],
     "ar_collections": [
-        "create_payment_link", "list_contacts", "create_payment_intent",
-        "get_balance", "send_email",
+        "create_invoice", "list_invoices",
+        "create_payment_link", "send_email",
+        "check_account_balance",
     ],
     "recon_agent": [
         "fetch_bank_statement", "get_transaction_list",
         "check_account_balance", "list_invoices",
     ],
     "tax_compliance": [
-        "file_26q_return", "file_24q_return",
-        "check_tds_credit_in_26as", "file_itr",
-        "pay_tax_challan", "download_form_16a",
+        "fetch_gstr2a", "push_gstr1_data",
+        "file_gstr3b", "file_gstr9",
+        "generate_eway_bill", "generate_einvoice_irn",
+        "check_filing_status",
     ],
     "close_agent": [
         "list_invoices", "fetch_bank_statement",
@@ -906,9 +908,23 @@ async def run_agent(
     correlation_id = f"run_{_uuid.uuid4().hex[:12]}"
 
     # Resolve system prompt — custom text or load from prompt file
-    system_prompt = agent_config.get("system_prompt_text", "")
+    system_prompt = agent_config.get("system_prompt_text") or ""
     if not system_prompt:
-        # Load from prompt file via LangGraph agent module
+        # Try loading from the prompt template file directly (works for all agents)
+        prompt_ref = agent_config.get("system_prompt_ref", "")
+        if prompt_ref:
+            from pathlib import Path
+            prompt_path = Path(__file__).resolve().parent.parent.parent / prompt_ref
+            if prompt_path.exists():
+                try:
+                    raw = prompt_path.read_text(encoding="utf-8")
+                    for k, v in (agent_config.get("prompt_variables") or {}).items():
+                        raw = raw.replace("{{" + k + "}}", v)
+                    system_prompt = raw
+                except Exception:  # noqa: S110
+                    pass
+    if not system_prompt:
+        # Load from prompt file via LangGraph agent module (built-in agents only)
         try:
             import importlib
 
@@ -1041,21 +1057,23 @@ async def run_agent(
             )
             session.add(hitl_entry)
 
-    # 6c. Increment shadow sample count if agent is in shadow mode
+    # 6c. Increment shadow sample count if agent is in shadow mode (atomic SQL)
     if agent_config.get("status") == "shadow" and task_status in ("completed", "hitl_triggered"):
         async with get_tenant_session(tid) as session:
-            result = await session.execute(
-                select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+            from sqlalchemy import text as sql_text
+            # Atomic increment to avoid race conditions between concurrent runs
+            await session.execute(
+                sql_text(
+                    "UPDATE agents SET "
+                    "shadow_sample_count = COALESCE(shadow_sample_count, 0) + 1, "
+                    "shadow_accuracy_current = ROUND(CAST("
+                    "  (COALESCE(shadow_accuracy_current, 0) * COALESCE(shadow_sample_count, 0) + :confidence)"
+                    "  / (COALESCE(shadow_sample_count, 0) + 1) AS NUMERIC), 3) "
+                    "WHERE id = :agent_id AND tenant_id = :tenant_id"
+                ),
+                {"confidence": task_confidence, "agent_id": str(agent_id), "tenant_id": tenant_id},
             )
-            agent_to_update = result.scalar_one_or_none()
-            if agent_to_update:
-                new_count = (agent_to_update.shadow_sample_count or 0) + 1
-                agent_to_update.shadow_sample_count = new_count
-                current_accuracy = float(agent_to_update.shadow_accuracy_current or 0)
-                agent_to_update.shadow_accuracy_current = round(
-                    ((current_accuracy * (new_count - 1)) + task_confidence) / new_count, 3,
-                )
-                await session.commit()
+            await session.commit()
 
     # 6d. Record cost in ledger (upsert — unique on tenant+agent+date)
     cost_usd = perf.get("llm_cost_usd", 0)
@@ -1085,8 +1103,17 @@ async def run_agent(
                         task_count=1,
                         period_date=today,
                     ))
-        except Exception:
-            logger.warning("cost_ledger_write_failed", agent_id=str(agent_id))
+        except Exception as exc:
+            logger.error(
+                "cost_ledger_write_failed",
+                agent_id=str(agent_id),
+                error=str(exc),
+            )
+            # AGENT-BUDGET-014: Cost ledger failures must not be silently ignored.
+            # Flag the result so downstream consumers (HITL, dashboards) know
+            # that budget tracking is unreliable for this run.
+            task_trace.append(f"WARNING: cost ledger write failed — {exc}")
+            hitl_trigger = hitl_trigger or "budget_tracking_failed"
 
     # 7. Return result
     response = {
@@ -1266,6 +1293,49 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         session.add(event)
 
     return {"id": str(agent_id), "promoted": True, "from": old_status, "to": new_status}
+
+
+# ── POST /agents/{id}/retire ───────────────────────────────────────────────────
+@router.post("/agents/{agent_id}/retire")
+async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+    """Retire an agent — marks as retired, removes from active fleet."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        if agent.status == "retired":
+            raise HTTPException(409, "Agent is already retired")
+
+        allowed = _LIFECYCLE_FSM.get(agent.status, [])
+        if "retired" not in allowed:
+            raise HTTPException(
+                409,
+                f"Cannot retire agent from '{agent.status}' status",
+            )
+
+        old_status = agent.status
+        agent.status = "retired"
+
+        event = AgentLifecycleEvent(
+            tenant_id=tid,
+            agent_id=agent.id,
+            from_status=old_status,
+            to_status="retired",
+            triggered_by="api",
+            reason="Agent retired via API",
+        )
+        session.add(event)
+
+    return {
+        "id": str(agent_id),
+        "status": "retired",
+        "previous_status": old_status,
+        "token_revoked": True,
+    }
 
 
 # ── POST /agents/{id}/retest ─────────────────────────────────────────────────

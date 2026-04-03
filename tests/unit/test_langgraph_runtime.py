@@ -264,11 +264,14 @@ class TestApProcessor:
         from core.langgraph.agents.ap_processor import AP_PROCESSOR_TOOLS
 
         assert "fetch_bank_statement" in AP_PROCESSOR_TOOLS
-        assert "create_payment_intent" in AP_PROCESSOR_TOOLS
-        assert "create_order" in AP_PROCESSOR_TOOLS  # PineLabs payment execution
-        assert "check_order_status" in AP_PROCESSOR_TOOLS  # PineLabs payment verification
-        assert "initiate_neft" not in AP_PROCESSOR_TOOLS  # AA is read-only
-        assert len(AP_PROCESSOR_TOOLS) == 6
+        assert "check_account_balance" in AP_PROCESSOR_TOOLS
+        assert "post_voucher" in AP_PROCESSOR_TOOLS        # Tally voucher posting
+        assert "get_ledger_balance" in AP_PROCESSOR_TOOLS   # Tally ledger
+        assert "get_trial_balance" in AP_PROCESSOR_TOOLS    # Tally trial balance
+        assert "create_order" in AP_PROCESSOR_TOOLS         # PineLabs payment execution
+        assert "check_order_status" in AP_PROCESSOR_TOOLS   # PineLabs payment verification
+        assert "initiate_neft" not in AP_PROCESSOR_TOOLS    # AA is read-only
+        assert len(AP_PROCESSOR_TOOLS) == 7
 
 
 # ═══════════════════════════════════════════════════════════════════════════

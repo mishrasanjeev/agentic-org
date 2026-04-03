@@ -84,6 +84,7 @@ def build_agent_graph(
         """Extract structured output and compute confidence from the last AI message."""
         messages = state["messages"]
         trace = list(state.get("reasoning_trace") or [])
+        tool_calls_log = state.get("tool_calls_log") or []
 
         # Find the last AI message
         last_ai = None
@@ -103,6 +104,34 @@ def build_agent_graph(
         content = last_ai.content or ""
         output = _parse_json_output(content)
         confidence = _extract_confidence(output)
+
+        # AGE-SAFETY-09: Don't trust LLM self-reported confidence blindly.
+        # If any tool call failed or output is incomplete, cap confidence to
+        # force HITL review.
+        any_tool_failed = any(
+            (isinstance(entry, dict) and entry.get("status") == "error")
+            for entry in tool_calls_log
+        )
+        # Also check for error indicators in tool messages
+        from langchain_core.messages import ToolMessage
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                msg_content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                if "error" in msg_content.lower() or "failed" in msg_content.lower():
+                    any_tool_failed = True
+                    break
+
+        output_incomplete = (
+            not output
+            or output.get("status") == "error"
+            or output.get("raw_output") is not None  # JSON parse failed
+        )
+
+        if any_tool_failed or output_incomplete:
+            confidence = min(confidence, 0.5)
+            reason = "tool_call_failed" if any_tool_failed else "output_incomplete"
+            trace.append(f"Confidence capped to 0.5 ({reason}) — forcing HITL review")
+
         trace.append(f"Confidence: {confidence:.3f}")
 
         return {

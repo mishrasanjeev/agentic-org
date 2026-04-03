@@ -16,9 +16,10 @@ from core.langgraph.runner import run_agent
 # Default tools for AP Processor (same as _AGENT_TYPE_DEFAULT_TOOLS)
 AP_PROCESSOR_TOOLS = [
     "fetch_bank_statement",
-    "create_payment_intent",
-    "create_payout",
-    "get_settlement_report",
+    "check_account_balance",
+    "post_voucher",
+    "get_ledger_balance",
+    "get_trial_balance",
     "create_order",         # PineLabs Plural — execute payment
     "check_order_status",   # PineLabs Plural — verify payment
 ]

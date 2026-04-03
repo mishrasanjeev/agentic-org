@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models.agent import Agent
+from core.models.connector import Connector
 from core.models.prompt_template import PromptTemplate
 
 logger = logging.getLogger(__name__)
@@ -59,22 +60,107 @@ SYSTEM_AGENTS = [
     {"agent_type": "chat_agent", "domain": "comms", "confidence_floor": 0.850},
 ]
 
+# Default connectors seeded for every new tenant (no secrets — just registry entries)
+SEED_CONNECTORS = [
+    {
+        "name": "tally", "category": "finance", "auth_type": "bridge",
+        "description": "Tally ERP via local bridge agent",
+        "tool_functions": ["post_voucher", "get_ledger_balance", "get_trial_balance"],
+    },
+    {
+        "name": "zoho_books", "category": "finance", "auth_type": "oauth2",
+        "description": "Zoho Books accounting",
+        "tool_functions": ["create_invoice", "list_invoices", "record_expense", "get_balance_sheet"],
+    },
+    {
+        "name": "gstn", "category": "finance", "auth_type": "api_key",
+        "description": "India GST Network — GSTR filing",
+        "tool_functions": ["fetch_gstr2a", "push_gstr1_data", "file_gstr3b", "check_filing_status"],
+    },
+    {
+        "name": "banking_aa", "category": "finance", "auth_type": "oauth2",
+        "description": "Banking Account Aggregator — read-only",
+        "tool_functions": ["fetch_bank_statement", "check_account_balance"],
+    },
+    {
+        "name": "stripe", "category": "finance", "auth_type": "api_key",
+        "description": "Stripe payments",
+        "tool_functions": ["create_payment_intent", "create_payout"],
+    },
+    {
+        "name": "pinelabs_plural", "category": "finance", "auth_type": "api_key",
+        "description": "PineLabs Plural — India payments",
+        "tool_functions": ["create_order", "check_order_status"],
+    },
+]
+
 
 def _humanise(agent_type: str) -> str:
     return agent_type.replace("_", " ").title()
 
 
+def _strip_scope_prefix(tool_name: str) -> str:
+    """Strip connector scope prefix from tool names.
+
+    Converts scoped names like ``"oracle_fusion:read:get_gl_balance"``
+    to plain function names like ``"get_gl_balance"``.  Names without a
+    colon are returned unchanged.
+    """
+    if ":" in tool_name:
+        return tool_name.rsplit(":", 1)[-1]
+    return tool_name
+
+
+def normalize_tool_names(tools: list[str]) -> list[str]:
+    """Normalize a list of tool names by stripping scope prefixes."""
+    return [_strip_scope_prefix(t) for t in tools]
+
+
 async def seed_tenant_defaults(session: AsyncSession, tenant_id: uuid.UUID) -> None:
-    """Seed built-in agents and prompt templates for a new tenant.
+    """Seed built-in agents, connectors, and prompt templates for a new tenant.
 
     Idempotent — checks for existence before inserting.
     """
+    await _seed_connectors(session, tenant_id)
     await _seed_agents(session, tenant_id)
     await _seed_prompt_templates(session, tenant_id)
     logger.info("Seeded defaults for tenant %s", tenant_id)
 
 
+async def _seed_connectors(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Seed default connector registry entries for a new tenant."""
+    for cfg in SEED_CONNECTORS:
+        existing = await session.execute(
+            select(Connector.id).where(
+                Connector.tenant_id == tenant_id,
+                Connector.name == cfg["name"],
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            continue
+
+        connector = Connector(
+            tenant_id=tenant_id,
+            name=cfg["name"],
+            category=cfg["category"],
+            auth_type=cfg["auth_type"],
+            description=cfg.get("description", ""),
+            tool_functions=cfg.get("tool_functions", []),
+            status="active",
+        )
+        session.add(connector)
+
+    await session.flush()
+    logger.info("Seeded %d connectors for tenant %s", len(SEED_CONNECTORS), tenant_id)
+
+
 async def _seed_agents(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    # Import default tool mapping so seeded agents get correct tools
+    try:
+        from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
+    except ImportError:
+        _AGENT_TYPE_DEFAULT_TOOLS = {}  # type: ignore[assignment]  # noqa: N806
+
     for agent_cfg in SYSTEM_AGENTS:
         agent_type = agent_cfg["agent_type"]
 
@@ -88,6 +174,10 @@ async def _seed_agents(session: AsyncSession, tenant_id: uuid.UUID) -> None:
             continue
 
         name = _humanise(agent_type)
+        # Normalize tool names: strip any scope prefixes like "oracle_fusion:read:"
+        raw_tools = _AGENT_TYPE_DEFAULT_TOOLS.get(agent_type, [])
+        tools = normalize_tool_names(raw_tools)
+
         agent = Agent(
             tenant_id=tenant_id,
             name=name,
@@ -100,6 +190,7 @@ async def _seed_agents(session: AsyncSession, tenant_id: uuid.UUID) -> None:
             status="shadow",
             is_builtin=True,
             employee_name=name,
+            authorized_tools=tools,
         )
         session.add(agent)
 

@@ -119,12 +119,32 @@ async def run_agent(
         tokens_used = 0
         for msg in result.get("messages", []):
             if isinstance(msg, AIMessage):
+                # LangChain standard: usage_metadata (works for OpenAI, Anthropic)
                 usage = getattr(msg, "usage_metadata", None)
                 if usage:
-                    tokens_used += getattr(usage, "total_tokens", 0) or (
-                        (getattr(usage, "input_tokens", 0) or 0)
-                        + (getattr(usage, "output_tokens", 0) or 0)
-                    )
+                    # usage_metadata can be a dict or object depending on provider
+                    if isinstance(usage, dict):
+                        total = usage.get("total_tokens", 0) or (
+                            (usage.get("input_tokens", 0) or 0)
+                            + (usage.get("output_tokens", 0) or 0)
+                        )
+                    else:
+                        total = getattr(usage, "total_tokens", 0) or (
+                            (getattr(usage, "input_tokens", 0) or 0)
+                            + (getattr(usage, "output_tokens", 0) or 0)
+                        )
+                    tokens_used += total
+                    continue
+                # Gemini/Google GenAI: response_metadata carries token counts
+                resp_meta = getattr(msg, "response_metadata", None) or {}
+                if isinstance(resp_meta, dict):
+                    usage_meta = resp_meta.get("usage_metadata") or resp_meta.get("token_usage") or {}
+                    if isinstance(usage_meta, dict):
+                        total = usage_meta.get("total_token_count", 0) or usage_meta.get("total_tokens", 0) or (
+                            (usage_meta.get("prompt_token_count", 0) or usage_meta.get("input_tokens", 0) or 0)
+                            + (usage_meta.get("candidates_token_count", 0) or usage_meta.get("output_tokens", 0) or 0)
+                        )
+                        tokens_used += total
 
         # Estimate cost (Gemini 2.5 Flash pricing: $0.15/1M input, $0.60/1M output)
         cost_usd = round(tokens_used * 0.000375 / 1000, 6) if tokens_used else 0

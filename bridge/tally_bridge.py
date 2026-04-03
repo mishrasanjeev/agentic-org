@@ -122,7 +122,11 @@ class TallyBridge:
             "token": self.bridge_token,
         }))
 
-        resp = json.loads(await self._ws.recv())
+        try:
+            resp = json.loads(await self._ws.recv())
+        except json.JSONDecodeError as exc:
+            logger.error("bridge_auth_response_malformed_json", error=str(exc))
+            raise RuntimeError(f"Bridge auth response is not valid JSON: {exc}") from exc
         if resp.get("type") != "auth_ok":
             raise RuntimeError(f"Bridge auth failed: {resp}")
 
@@ -132,7 +136,11 @@ class TallyBridge:
         """Listen for incoming requests from the cloud and process them."""
         assert self._ws is not None
         async for raw in self._ws:
-            msg = json.loads(raw)
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                logger.error("bridge_malformed_json", error=str(exc), raw=str(raw)[:200])
+                continue
             msg_type = msg.get("type", msg.get("method", ""))
 
             if msg_type == "post_xml":
