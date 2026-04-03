@@ -211,6 +211,9 @@ jobs:
 
       - name: Run Python E2E tests (against production)
         run: pytest tests/e2e/ -v
+        env:
+          AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
+          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
 
       - name: Run Synthetic Agent Quality tests (non-blocking — tests LLM behavior)
         run: pytest tests/synthetic_data/ -v || echo "::warning::Synthetic agent tests failed — LLM behavior issue, not code bug"
