@@ -222,6 +222,15 @@ jobs:
           AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
 
+      - name: Get fresh E2E auth token
+        id: auth
+        run: |
+          TOKEN=$(curl -sf -X POST "https://app.agenticorg.ai/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ceo@agenticorg.local","password":"ceo123!"}' \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
       - name: Install Playwright
         run: cd ui && npm ci && npx playwright install --with-deps chromium
 
@@ -229,7 +238,7 @@ jobs:
         run: cd ui && npx playwright test --project chromium
         env:
           BASE_URL: https://app.agenticorg.ai
-          E2E_TOKEN: ${{ secrets.AGENTICORG_E2E_TOKEN }}
+          E2E_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Upload Playwright report
         if: always()
