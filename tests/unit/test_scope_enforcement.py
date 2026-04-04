@@ -413,6 +413,9 @@ class TestManifestLoading:
 
     def test_manifest_loading_custom_json_file(self, tmp_path):
         """Custom JSON manifest loads from directory."""
+        import importlib
+        import os
+
         from core.langgraph.grantex_auth import _load_all_manifests
 
         # Create a custom manifest JSON file in the tmp directory
@@ -423,12 +426,28 @@ class TestManifestLoading:
 
         mock_client = MagicMock()
 
-        with (
-            patch("core.langgraph.grantex_auth.importlib.import_module", side_effect=ImportError("no module")),
-            patch.dict("os.environ", {"GRANTEX_MANIFESTS_DIR": str(tmp_path)}),
-            patch("os.path.isdir", return_value=True),
-        ):
-            _load_all_manifests(mock_client)
+        _real_import = importlib.import_module
+        _real_isdir = os.path.isdir
+
+        def _selective_import(name):
+            """Fail only grantex.manifests.* imports, let everything else through."""
+            if name.startswith("grantex.manifests."):
+                raise ImportError(f"test: {name}")
+            return _real_import(name)
+
+        old_env = os.environ.get("GRANTEX_MANIFESTS_DIR")
+        os.environ["GRANTEX_MANIFESTS_DIR"] = str(tmp_path)
+        try:
+            with (
+                patch.object(importlib, "import_module", side_effect=_selective_import),
+                patch("os.path.isdir", side_effect=lambda p: True if p == str(tmp_path) else _real_isdir(p)),
+            ):
+                _load_all_manifests(mock_client)
+        finally:
+            if old_env is None:
+                os.environ.pop("GRANTEX_MANIFESTS_DIR", None)
+            else:
+                os.environ["GRANTEX_MANIFESTS_DIR"] = old_env
 
         # Pre-built manifests all failed (ImportError), but custom dir loading was called
         mock_client.load_manifests_from_dir.assert_called_once_with(str(tmp_path))
