@@ -66,7 +66,7 @@ class TestE2ETokenAuthToToolExecution:
         mock_client = MagicMock()
         mock_client.enforce.return_value = _mock_enforce_result(True)
 
-        with patch("core.tool_gateway.gateway.get_grantex_client", return_value=mock_client):
+        with patch("core.langgraph.grantex_auth.get_grantex_client", return_value=mock_client):
             result = await gateway.execute(
                 tenant_id="tenant-e2e-001",
                 agent_id="agent-e2e-001",
@@ -119,7 +119,7 @@ class TestE2EScopeDenied:
             False, "scope 'read' insufficient for 'write' on process_refund"
         )
 
-        with patch("core.tool_gateway.gateway.get_grantex_client", return_value=mock_client):
+        with patch("core.langgraph.grantex_auth.get_grantex_client", return_value=mock_client):
             result = await gateway.execute(
                 tenant_id="tenant-e2e-002",
                 agent_id="agent-e2e-002",
