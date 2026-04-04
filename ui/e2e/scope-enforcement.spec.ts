@@ -77,7 +77,7 @@ test.describe("Scope Enforcement — UI", () => {
 
   test("test_agent_detail_shows_enforcement_log", async ({ page }) => {
     // Navigate to agents list first
-    await page.goto(`${APP}/agents`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${APP}/dashboard/agents`, { waitUntil: "domcontentloaded" });
     await expect(
       page.getByText(/agent/i).first()
     ).toBeVisible({ timeout: 15000 });
