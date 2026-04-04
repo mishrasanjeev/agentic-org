@@ -424,7 +424,7 @@ class TestManifestLoading:
         mock_client = MagicMock()
 
         with (
-            patch("importlib.import_module", side_effect=ImportError("no module")),
+            patch("core.langgraph.grantex_auth.importlib.import_module", side_effect=ImportError("no module")),
             patch.dict("os.environ", {"GRANTEX_MANIFESTS_DIR": str(tmp_path)}),
             patch("os.path.isdir", return_value=True),
         ):
@@ -525,7 +525,7 @@ class TestGatewayEnforcement:
             False, "scope 'read' cannot execute WRITE tool process_refund"
         )
 
-        with patch("core.tool_gateway.gateway.get_grantex_client", return_value=mock_client):
+        with patch("core.langgraph.grantex_auth.get_grantex_client", return_value=mock_client):
             result = await gateway.execute(
                 tenant_id="t1",
                 agent_id="a1",
