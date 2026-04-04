@@ -26,7 +26,7 @@ from langgraph.types import interrupt
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import create_chat_model
 from core.langgraph.state import AgentState
-from core.langgraph.tool_adapter import build_tools_for_agent, _build_tool_index
+from core.langgraph.tool_adapter import _build_tool_index, build_tools_for_agent
 
 logger = structlog.get_logger()
 

@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -39,7 +38,7 @@ def _build_fake_tool_index() -> dict[str, tuple[str, str]]:
 
 def _make_agent_state(
     tool_calls: list[dict],
-    grant_token: str = "grantex-integration-token",
+    grant_token: str = "grantex-integration-token",  # noqa: S107
     agent_id: str = "agent-int-001",
     domain: str = "sales",
 ) -> dict:

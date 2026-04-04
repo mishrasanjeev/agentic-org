@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 
 BASE_URL = os.getenv("AGENTICORG_E2E_BASE_URL", "http://localhost:8000")
