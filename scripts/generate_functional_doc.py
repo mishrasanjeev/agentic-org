@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import datetime
 import os
-from fpdf import FPDF
 
+from fpdf import FPDF
 
 # -- Constants ----------------------------------------------------------------
 
 VERSION = "3.3.0"
-DATE = datetime.date.today().strftime("%Y-%m-%d")
+DATE = datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
 DOC_TITLE = f"AgenticOrg Functional Specification v{VERSION}"
 
 
@@ -242,7 +242,6 @@ class FuncSpecPdf(FPDF):
             total_fixed_w += w
         # Last col wraps
         last_val, last_w = cols[-1]
-        x_last = self.get_x()
         self.multi_cell(last_w, 6, last_val, border=1, fill=True)
         y_end = self.get_y()
         row_h = y_end - y_start
