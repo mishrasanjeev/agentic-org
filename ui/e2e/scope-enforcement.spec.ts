@@ -174,16 +174,16 @@ test.describe("Scope Enforcement — UI", () => {
       const filterCount = await filterControls.count();
 
       if (filterCount > 0) {
-        // Try to filter by denied only
-        const deniedFilter = page.locator(
-          'button:has-text("Denied"), option:has-text("Denied"), ' +
-          '[data-testid="filter-denied"], label:has-text("Denied")'
-        );
-
-        const deniedCount = await deniedFilter.count();
-        if (deniedCount > 0) {
-          await deniedFilter.first().click();
-          await page.waitForTimeout(1000);
+        // Try to filter by denied only — use selectOption for <select> elements
+        const selectFilters = page.locator('select');
+        const selectCount = await selectFilters.count();
+        for (let i = 0; i < selectCount; i++) {
+          const options = await selectFilters.nth(i).locator('option').allTextContents();
+          if (options.some(o => /denied/i.test(o))) {
+            await selectFilters.nth(i).selectOption({ label: options.find(o => /denied/i.test(o))! });
+            await page.waitForTimeout(1000);
+            break;
+          }
         }
       }
 
