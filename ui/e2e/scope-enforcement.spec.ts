@@ -39,11 +39,11 @@ test.describe("Scope Enforcement — UI", () => {
   // -----------------------------------------------------------------------
 
   test("test_agent_create_shows_scope_badges", async ({ page }) => {
-    await page.goto(`${APP}/agents/create`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${APP}/dashboard/agents/new`, { waitUntil: "domcontentloaded" });
 
-    // Wait for the page to fully load
+    // Wait for the page to fully load — heading says "Create Virtual Employee"
     await expect(
-      page.getByText(/create|new|agent/i).first()
+      page.getByText(/create virtual employee|step 1|persona/i).first()
     ).toBeVisible({ timeout: 15000 });
 
     // The tools section should show permission badges (READ, WRITE, ADMIN, DELETE)
