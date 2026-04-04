@@ -7,7 +7,7 @@ and agent creation with Grantex DID registration.
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -58,7 +58,7 @@ class TestE2ETokenAuthToToolExecution:
 
         # Register a mock connector that returns success
         mock_connector = MagicMock()
-        mock_connector.execute_tool = MagicMock(
+        mock_connector.execute_tool = AsyncMock(
             return_value={"id": "contact-123", "name": "Test Contact", "email": "test@example.com"}
         )
         gateway.register_connector("salesforce", mock_connector)
