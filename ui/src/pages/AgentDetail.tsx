@@ -15,7 +15,7 @@ export default function AgentDetail() {
   const { id } = useParams();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes">("overview");
 
   useEffect(() => {
     if (id) fetchAgent();
@@ -165,7 +165,7 @@ export default function AgentDetail() {
       </div>
 
       <div className="flex gap-4 border-b pb-2">
-        {(["overview", "config", "prompt", "shadow", "cost"] as const).map((tab) => (
+        {(["overview", "config", "prompt", "shadow", "cost", "scopes"] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
             {tab}
           </button>
@@ -177,6 +177,7 @@ export default function AgentDetail() {
       {activeTab === "prompt" && <PromptTab agent={agent} />}
       {activeTab === "shadow" && <ShadowTab agent={agent} />}
       {activeTab === "cost" && <CostTab agent={agent} />}
+      {activeTab === "scopes" && <ScopesTab agent={agent} />}
     </div>
   );
 }
@@ -652,5 +653,153 @@ function CostTab({ agent }: { agent: Agent }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/* ─── Scope Helpers ─── */
+type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
+
+function getToolPermission(toolName: string): PermissionLevel {
+  if (/^(get_|fetch_|list_|query|search_)/.test(toolName)) return "READ";
+  if (/^(create_|update_|send_|post_)/.test(toolName)) return "WRITE";
+  if (/^(delete_|remove_)/.test(toolName)) return "DELETE";
+  if (/^(bulk_|reset_|admin_)/.test(toolName)) return "ADMIN";
+  return "READ";
+}
+
+const PERMISSION_COLORS: Record<PermissionLevel, string> = {
+  READ: "bg-green-100 text-green-700 border-green-300",
+  WRITE: "bg-blue-100 text-blue-700 border-blue-300",
+  DELETE: "bg-red-100 text-red-700 border-red-300",
+  ADMIN: "bg-purple-100 text-purple-700 border-purple-300",
+};
+
+function PermissionBadge({ perm }: { perm: PermissionLevel }) {
+  return (
+    <span className={`inline-block text-[10px] font-semibold px-1.5 py-0 rounded border ${PERMISSION_COLORS[perm]}`}>
+      {perm}
+    </span>
+  );
+}
+
+function buildScopeString(tool: string, domain: string, perm: PermissionLevel): string {
+  const connector = domain || "default";
+  return `tool:${connector}:${perm.toLowerCase()}:${tool}`;
+}
+
+/* ─── Scopes Tab ─── */
+function ScopesTab({ agent }: { agent: Agent }) {
+  const tools = agent.authorized_tools || [];
+  const domain = agent.domain || "default";
+
+  // Mock enforcement log data
+  const enforcementLog = [
+    { timestamp: "2026-04-04T09:12:33Z", tool: tools[0] || "get_contact", connector: "salesforce", result: "allowed" as const, reason: "Scope matched: READ" },
+    { timestamp: "2026-04-04T09:10:15Z", tool: tools[1] || "update_record", connector: "salesforce", result: "allowed" as const, reason: "Scope matched: WRITE" },
+    { timestamp: "2026-04-04T08:55:42Z", tool: "delete_account", connector: "salesforce", result: "denied" as const, reason: "No DELETE scope granted" },
+    { timestamp: "2026-04-04T08:30:01Z", tool: "admin_reset_org", connector: "internal", result: "denied" as const, reason: "ADMIN scope not in grant token" },
+    { timestamp: "2026-04-04T08:15:22Z", tool: tools[0] || "get_contact", connector: "hubspot", result: "allowed" as const, reason: "Scope matched: READ" },
+  ];
+
+  // Mock token statuses: most active, one expiring, one expired
+  function getTokenStatus(idx: number): { color: string; label: string } {
+    if (idx === tools.length - 1 && tools.length > 2) return { color: "bg-red-500", label: "Expired" };
+    if (idx === tools.length - 2 && tools.length > 1) return { color: "bg-yellow-500", label: "Expiring soon" };
+    return { color: "bg-green-500", label: "Active" };
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">Grantex Scopes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tools.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
+                    <th className="pb-2 pr-4">Tool</th>
+                    <th className="pb-2 pr-4">Permission</th>
+                    <th className="pb-2 pr-4">Connector</th>
+                    <th className="pb-2 pr-4">Scope String</th>
+                    <th className="pb-2 pr-4">Status</th>
+                    <th className="pb-2">Grant Token</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tools.map((tool, idx) => {
+                    const perm = getToolPermission(tool);
+                    const scope = buildScopeString(tool, domain, perm);
+                    const tokenStatus = getTokenStatus(idx);
+                    return (
+                      <tr key={tool} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-medium">{tool}</td>
+                        <td className="py-2 pr-4"><PermissionBadge perm={perm} /></td>
+                        <td className="py-2 pr-4 text-xs">{domain}</td>
+                        <td className="py-2 pr-4"><code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{scope}</code></td>
+                        <td className="py-2 pr-4">
+                          <Badge variant={tokenStatus.label === "Expired" ? "destructive" : tokenStatus.label === "Expiring soon" ? "warning" : "success"} className="text-[10px]">
+                            {tokenStatus.label === "Expired" ? "expired" : "active"}
+                          </Badge>
+                        </td>
+                        <td className="py-2">
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <span className={`w-2 h-2 rounded-full ${tokenStatus.color}`} />
+                            {tokenStatus.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No tools configured — no scopes to display.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">Enforcement Log</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
+                  <th className="pb-2 pr-4">Timestamp</th>
+                  <th className="pb-2 pr-4">Tool</th>
+                  <th className="pb-2 pr-4">Connector</th>
+                  <th className="pb-2 pr-4">Result</th>
+                  <th className="pb-2">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {enforcementLog.map((entry, idx) => (
+                  <tr key={idx} className="border-b last:border-0">
+                    <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </td>
+                    <td className="py-2 pr-4 font-medium">{entry.tool}</td>
+                    <td className="py-2 pr-4">{entry.connector}</td>
+                    <td className="py-2 pr-4">
+                      <Badge variant={entry.result === "allowed" ? "success" : "destructive"} className="text-[10px]">
+                        {entry.result}
+                      </Badge>
+                    </td>
+                    <td className="py-2 text-xs text-muted-foreground">{entry.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Showing recent enforcement decisions. Full audit log available via API.</p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

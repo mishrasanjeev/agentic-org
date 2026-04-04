@@ -16,6 +16,7 @@ We will acknowledge receipt within **48 hours** and provide a fix timeline withi
 
 | Version | Supported |
 |---------|-----------|
+| 3.x     | Yes       |
 | 2.x     | Yes       |
 | 1.x     | No        |
 
@@ -25,7 +26,11 @@ AgenticOrg implements defense-in-depth across all layers:
 
 ### Authentication & Authorization
 - **OAuth2/Grantex** with RS256 JWT tokens (60-minute TTL)
-- **Per-agent token scoping**: `tool:{connector}:{read|write}:{resource}[:capped:{N}]`
+- **Manifest-based scope enforcement** (v3.3.0+): `grantex.enforce()` validates JWT offline via cached JWKS and checks tool permissions against 53 pre-built manifests — <1ms per tool call after JWKS warm-up
+- **Permission hierarchy**: `admin > delete > write > read` — enforced by Grantex SDK manifests, not keyword guessing
+- **Dual-path enforcement**: LangGraph agents pass through `validate_scopes` graph node; API-direct calls enforce via ToolGateway — both use `grantex.enforce()`
+- **Per-agent token scoping**: `tool:{connector}:{read|write|delete|admin}:{resource}[:capped:{N}]`
+- **Offline vs online verification**: `enforce()` uses cached JWKS (offline, <1ms); `verify_grant_scopes()` calls POST /v1/tokens/verify (online, ~300ms) — only used for initial auth, never in hot path
 - **Token Pool** with Redis-backed caching and pub/sub revocation (<2s propagation)
 - **OPA policy engine** for fine-grained access control
 - **Rate limiting** with token bucket algorithm (per-tenant, per-connector)

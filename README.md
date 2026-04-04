@@ -447,11 +447,18 @@ Full MCP server exposing all 340+ connector tools to any MCP-compatible client:
 - `GET /mcp/tools` — list all available MCP tools (no auth required)
 - `POST /mcp/call` — call any MCP tool (JWT or Grantex auth)
 
-### Grantex Authorization
-OAuth2-based authorization with delegated scopes:
+### Grantex Authorization & Scope Enforcement
+OAuth2-based authorization with manifest-based scope enforcement (Grantex SDK v0.3.3+):
+- **Manifest-based permissions**: 53 pre-built tool manifests define exact permission levels (READ/WRITE/DELETE/ADMIN) for every connector tool — no keyword guessing
+- **`grantex.enforce()`**: Offline JWT verification + manifest permission check in <1ms per tool call (JWKS cached after first call)
+- **Permission hierarchy**: `admin > delete > write > read` — write scope covers read, admin covers everything
+- **LangGraph enforcement**: `validate_scopes` graph node checks every tool call before execution
+- **ToolGateway enforcement**: API-direct tool calls also use `grantex.enforce()` as primary enforcement
 - `POST /agents/{id}/delegate` — set up Grantex delegation for agent-to-agent trust
 - Scope hierarchy enforced: child agents cannot elevate parent scopes
 - Token pool with automatic refresh at 50% TTL
+- Custom manifests: place JSON/YAML files in `GRANTEX_MANIFESTS_DIR` for custom connectors
+- **Environment variables**: `GRANTEX_API_KEY` (required), `GRANTEX_BASE_URL` (optional), `GRANTEX_MANIFESTS_DIR` (optional)
 
 ### Integration Workflow Page
 The `/integration-workflow` page provides a visual guide for connecting external systems, with SDK/CLI quickstart examples and protocol documentation.
@@ -461,7 +468,7 @@ The `/integration-workflow` page provides a visual guide for connecting external
 ## Testing
 
 ```bash
-# Backend tests (1633 total)
+# Backend tests (1662 total)
 pytest tests/
 
 # Frontend vitest (93 tests)

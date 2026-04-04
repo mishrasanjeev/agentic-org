@@ -42,7 +42,7 @@ graph TB
 
     subgraph L4["<b>L4: Tool Gateway</b>"]
         direction LR
-        Scope["Scope Enforcement"]
+        Scope["Grantex enforce()<br/><i>manifest-based</i>"]
         RateLimit["Token Bucket<br/>Rate Limiting"]
         Idemp["Idempotency"]
         PII["PII Masking"]
@@ -93,6 +93,36 @@ graph TB
     style L2 fill:#f1f8e9,stroke:#33691e,stroke-width:2px
     style L1 fill:#fafafa,stroke:#424242,stroke-width:2px
 ```
+
+---
+
+## Scope Enforcement Flow (v3.3.0+)
+
+The LangGraph agent graph now includes a `validate_scopes` node that enforces Grantex scopes before tool execution:
+
+```
+START → reason → [has tool_calls?]
+                  │ yes                    │ no
+            validate_scopes → [scopes OK?] → evaluate → [HITL?] → END
+                                │ yes
+                          execute_tools → reason (loop)
+                                │ no (denied)
+                              evaluate → END (with error)
+```
+
+**Key components:**
+- **`validate_tool_scopes()`** (`core/langgraph/agent_graph.py`): Graph node that calls `grantex.enforce()` for every pending tool call
+- **`get_grantex_client()`** (`core/langgraph/grantex_auth.py`): Lazy singleton with 53 pre-loaded manifests
+- **`grantex.enforce()`**: Offline JWT verification via cached JWKS + manifest permission check (<1ms)
+- **ToolGateway** (`core/tool_gateway/gateway.py`): Second enforcement layer for API-direct path
+
+**Permission hierarchy** (from Grantex manifests): `admin > delete > write > read`
+
+**Offline vs online verification:**
+| Method | Latency | When |
+|--------|---------|------|
+| `grantex.enforce()` | <1ms (JWKS cached) | Every tool call (hot path) |
+| `verify_grant_scopes()` | ~300ms (HTTP POST) | Initial auth only (middleware) |
 
 ---
 

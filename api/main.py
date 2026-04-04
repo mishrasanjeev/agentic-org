@@ -73,6 +73,16 @@ async def lifespan(app: FastAPI):
 
         logging.getLogger(__name__).debug("Blacklist cleanup skipped: %s", exc)
 
+    # Pre-warm Grantex JWKS cache so first real enforce() call is <1ms
+    try:
+        from core.langgraph.grantex_auth import get_grantex_client
+
+        grantex = get_grantex_client()
+        # Dummy enforce() — will fail on token validation but triggers JWKS fetch (~300ms)
+        grantex.enforce(grant_token="warmup", connector="salesforce", tool="get_contact")
+    except Exception:
+        pass  # Expected to fail — we only care about the JWKS fetch side effect
+
     yield
     from core.database import close_db
 
@@ -84,7 +94,7 @@ _is_production = settings.env == "production"
 app = FastAPI(
     title="AgenticOrg",
     description="AI Virtual Employee Platform — 35 agents, 54 connectors (340+ tools)",
-    version="3.2.0",
+    version="3.3.0",
     lifespan=lifespan,
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",

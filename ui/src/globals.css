@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shimmer animation for release banner gradient border */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%; --foreground: 222 84% 5%;

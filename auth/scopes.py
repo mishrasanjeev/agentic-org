@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 
 
@@ -44,8 +45,20 @@ def check_scope(
 ) -> tuple[bool, str]:
     """Check if granted scopes allow the requested operation.
 
+    .. deprecated::
+        Use ``grantex.enforce()`` instead for manifest-based enforcement.
+        This function is retained as a fallback for legacy HS256 tokens
+        that do not go through Grantex authentication.
+
+    Scope format: tool:{connector}:{permission}:{resource}[:capped:{N}]
+
     Returns (allowed: bool, reason: str).
     """
+    warnings.warn(
+        "check_scope() is deprecated. Use grantex.enforce() for manifest-based enforcement.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     for scope_str in granted_scopes:
         parsed = parse_scope(scope_str)
         if not parsed:

@@ -1,6 +1,27 @@
 # AgenticOrg Roadmap
 
-## Current (v2.3) — Shipped 2026-03-31
+## Current (v3.3.0) — Shipped 2026-04-04
+
+### Scope Enforcement Fix (Security)
+- **Manifest-based scope enforcement**: Replaced keyword-guessing `check_scope()` with Grantex SDK `grantex.enforce()` — offline JWT + manifest permission check in <1ms
+- **`validate_scopes` graph node**: LangGraph agents now enforce scopes before every tool call (was: no enforcement in LangGraph path)
+- **53 pre-built Grantex manifests**: Permission levels (READ/WRITE/DELETE/ADMIN) for all connector tools
+- **ToolGateway Grantex integration**: API-direct path also uses `grantex.enforce()`
+- **Scope Dashboard** (`/dashboard/scopes`) + **Enforce Audit Log** (`/dashboard/enforce-audit`)
+- **Permission badges in AgentCreate**: Visual permission indicators + destructive tool warnings
+- **Scopes tab in AgentDetail**: Resolved scopes, token status, enforcement log
+- **Org chart scope narrowing**: Visual delegation chain with scope reduction indicators
+- **29 new tests**: 18 unit + 4 integration + 3 E2E + 4 UI Playwright
+- **`check_scope()` deprecated**: Legacy fallback retained for HS256 tokens
+
+## Previous (v3.2.0) — Shipped 2026-04-02
+
+### Tier 1: Marketing Automation
+- Web Push Notifications, Email Drip Engine, A/B Testing, ABM Dashboard
+- 3 new connectors (Bombora, G2, TrustRadius), 4 workflow templates
+- 54 connectors, 340+ tools, 1,633 tests
+
+## Previous (v2.3) — Shipped 2026-03-31
 
 - 25 pre-built AI agents across **6 domains** (28 total skills incl. 3 comms agent types)
 - **Agent-to-Connector Bridge** — agents reason with LLM then execute real API calls via tool_calls

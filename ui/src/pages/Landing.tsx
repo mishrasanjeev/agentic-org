@@ -487,6 +487,37 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* 2b. VERSION RELEASE BANNER                                    */}
+      {/* ============================================================ */}
+      <section className="relative bg-slate-900 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <div className="max-w-5xl mx-auto">
+          <Link
+            to="/how-grantex-works"
+            className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
+          >
+            <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
+              {/* Version badge */}
+              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse">
+                <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                v3.3.0
+              </span>
+
+              {/* Description */}
+              <p className="text-sm text-slate-300 text-center sm:text-left leading-snug">
+                <span className="font-semibold text-white">Scope Enforcement Fix</span>
+                {" "}&mdash; Manifest-based security for all 53 connectors. Every agent tool call verified in &lt;1&thinsp;ms.
+              </p>
+
+              {/* CTA */}
+              <span className="shrink-0 text-sm font-semibold text-blue-400 group-hover:text-blue-300 transition-colors whitespace-nowrap">
+                See What&apos;s New&nbsp;&rarr;
+              </span>
+            </div>
+          </Link>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
       {/* 3. LOGO BAR                                                   */}
       {/* ============================================================ */}
       <section className="py-10 bg-white border-b border-slate-100">
@@ -1211,8 +1242,11 @@ $ agenticorg sop deploy \\
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
                   <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 </div>
-                <h3 className="font-bold text-white mb-2">Grantex Authorization</h3>
-                <p className="text-sm text-slate-400">Delegated auth with scoped grant tokens. Third-party apps get exactly the permissions they need, nothing more.</p>
+                <h3 className="font-bold text-white mb-2">Grantex Scope Enforcement</h3>
+                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against 53 connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read.</p>
+                <Link to="/how-grantex-works" className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 font-medium mt-2 transition-colors">
+                  Learn how it works <span aria-hidden="true">&rarr;</span>
+                </Link>
               </div>
             </div>
           </FadeIn>

@@ -22,6 +22,8 @@ interface OrgNode {
   grantex_did?: string;
   grantex_agent_id?: string;
   node_type?: "agent" | "human";
+  authorized_tools?: string[];
+  parent_scopes?: string[];
   children: OrgNode[];
   isHuman?: boolean;
 }
@@ -76,6 +78,24 @@ const DOMAIN_TO_ROLE: Record<string, string> = {
 
 function humanize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
+
+function getToolPermission(toolName: string): PermissionLevel {
+  if (/^(get_|fetch_|list_|query|search_)/.test(toolName)) return "READ";
+  if (/^(create_|update_|send_|post_)/.test(toolName)) return "WRITE";
+  if (/^(delete_|remove_)/.test(toolName)) return "DELETE";
+  if (/^(bulk_|reset_|admin_)/.test(toolName)) return "ADMIN";
+  return "READ";
+}
+
+function getMaxPermission(tools: string[]): PermissionLevel {
+  const order: PermissionLevel[] = ["ADMIN", "DELETE", "WRITE", "READ"];
+  for (const level of order) {
+    if (tools.some((t) => getToolPermission(t) === level)) return level;
+  }
+  return "READ";
 }
 
 /* ═══ Org Chart CSS ═══ */
@@ -180,6 +200,16 @@ function NodeCard({ node, onClick, childCount, collapsed, onToggle }: {
             <Badge className="text-[9px] px-1.5 py-0 bg-muted text-muted-foreground border-0">{node.children.length} reports</Badge>
           )}
         </div>
+        {!isHuman && node.authorized_tools && node.authorized_tools.length > 0 && (
+          <div className="flex items-center gap-1 mt-1.5">
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">{node.authorized_tools.length} tools</Badge>
+            {node.parent_scopes && node.authorized_tools.length < node.parent_scopes.length && (
+              <span className="inline-flex items-center gap-0.5 text-[9px] text-orange-600 font-medium" title="Scope narrowed from parent">
+                <span className="text-[10px]">&#9660;</span> narrowed
+              </span>
+            )}
+          </div>
+        )}
       </button>
       {childCount > 0 && onToggle && (
         <button
@@ -195,12 +225,31 @@ function NodeCard({ node, onClick, childCount, collapsed, onToggle }: {
 }
 
 /* ─── Recursive Tree Node ─── */
-function TreeNode({ node, onNavigate, depth }: { node: OrgNode; onNavigate: (id: string) => void; depth: number }) {
+function ScopeNarrowLabel({ parent, child }: { parent: OrgNode; child: OrgNode }) {
+  const parentTools = parent.authorized_tools || [];
+  const childTools = child.authorized_tools || [];
+  if (parentTools.length === 0 || childTools.length === 0) return null;
+  if (childTools.length >= parentTools.length) return null;
+
+  const parentMax = getMaxPermission(parentTools);
+  const childMax = getMaxPermission(childTools);
+
+  return (
+    <div className="flex justify-center my-0.5">
+      <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700 font-medium">
+        scope: {parentMax.toLowerCase()} &#8594; {childMax.toLowerCase()}
+      </span>
+    </div>
+  );
+}
+
+function TreeNode({ node, onNavigate, depth, parentNode }: { node: OrgNode; onNavigate: (id: string) => void; depth: number; parentNode?: OrgNode }) {
   const [collapsed, setCollapsed] = useState(depth >= 3);
   const hasChildren = node.children.length > 0;
 
   return (
     <li>
+      {parentNode && <ScopeNarrowLabel parent={parentNode} child={node} />}
       <NodeCard
         node={node}
         onClick={() => { if (!node.isHuman) onNavigate(node.id); }}
@@ -211,7 +260,7 @@ function TreeNode({ node, onNavigate, depth }: { node: OrgNode; onNavigate: (id:
       {hasChildren && !collapsed && (
         <ul>
           {node.children.map((child) => (
-            <TreeNode key={child.id} node={child} onNavigate={onNavigate} depth={depth + 1} />
+            <TreeNode key={child.id} node={child} onNavigate={onNavigate} depth={depth + 1} parentNode={node} />
           ))}
         </ul>
       )}

@@ -7,7 +7,7 @@ packages = ["core", "api", "auth", "connectors", "workflows", "scaling", "observ
 
 [project]
 name = "agenticorg"
-version = "3.2.0"
+version = "3.3.0"
 description = "AI Virtual Employee Platform — 35 LangGraph agents, 54 connectors (340+ tools), CFO/CMO/ABM dashboards, NL Query, HITL governance, A/B testing, email drip engine"
 readme = "README.md"
 license = "Apache-2.0"
@@ -52,7 +52,7 @@ dependencies = [
     "langchain-anthropic>=0.3.0",
     "langchain-openai>=0.3.0",
     "langgraph-checkpoint-postgres>=2.0.0",
-    "grantex>=0.2.5",
+    "grantex>=0.3.3",
     "langsmith>=0.2.0",
     "pypdf>=5.0.0",
     "pyyaml>=6.0.2",

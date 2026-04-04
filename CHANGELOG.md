@@ -2,6 +2,34 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.3.0] — 2026-04-04
+
+### Added — Scope Enforcement Fix (Grantex SDK v0.3.3)
+- **Manifest-based scope enforcement**: Replaced keyword-based permission guessing (`check_scope()`) with Grantex SDK `grantex.enforce()` — offline JWT verification + manifest permission lookup in <1ms per tool call
+- **`validate_scopes` graph node**: New LangGraph node between `should_use_tools` and `execute_tools` that enforces Grantex scopes on every tool call. Graph flow: `reason → validate_scopes → execute_tools` (was: `reason → execute_tools`)
+- **53 pre-built Grantex manifests**: All connector tool permissions loaded at startup from `grantex.manifests.*` — no manual permission mapping needed
+- **Custom manifest support**: Load additional manifests from `GRANTEX_MANIFESTS_DIR` directory (JSON/YAML)
+- **JWKS cache warm-up**: Dummy `enforce()` call at FastAPI startup pre-warms the JWKS cache (~300ms) so first real tool call is <1ms
+- **Scope Dashboard** (`/dashboard/scopes`): New page showing all agents' scope coverage, permission levels, denial rates, and aggregate stats
+- **Enforce Audit Log** (`/dashboard/enforce-audit`): Real-time feed of all `enforce()` decisions with filters (denied only, by agent, by connector), CSV export, pagination
+- **Permission badges in AgentCreate**: Tool selector shows READ/WRITE/DELETE/ADMIN permission badges; yellow warning banner for destructive (DELETE/ADMIN) tools
+- **Scopes tab in AgentDetail**: New tab showing resolved Grantex scopes, permission levels, grant token status (active/expiring/expired), and enforcement log
+- **Org chart scope narrowing**: Visual indicators showing scope reduction in delegation chains (e.g., "write → read")
+- **ToolGateway Grantex integration**: `execute()` now accepts `grant_token` parameter and uses `grantex.enforce()` as primary enforcement; legacy `check_scope()` retained as fallback for HS256 tokens
+
+### Changed
+- **Grantex SDK**: 0.2.5 → **0.3.3** (adds `enforce()`, `load_manifests()`, `load_manifests_from_dir()`, 53 pre-built manifests)
+- **`check_scope()` deprecated**: `auth/scopes.py` now emits `DeprecationWarning` — use `grantex.enforce()` instead
+- **Permission hierarchy**: Enforcement now uses Grantex's manifest-defined hierarchy (`admin > delete > write > read`) instead of keyword-guessing (`process_refund` was misclassified as "read")
+- **Security**: LangGraph agents can no longer bypass scope restrictions — `grant_token` is verified at graph level before any tool executes
+- Backend tests: 1,633 → **1,662** (29 new scope enforcement tests: 18 unit + 4 integration + 3 E2E + 4 UI)
+- Version: 3.2.0 → **3.3.0**
+
+### Fixed
+- **Critical security fix**: LangGraph tool execution path (`ToolNode → _execute_connector_tool()`) now enforces Grantex scopes — previously, `grant_token` in `AgentState` was never read during tool execution
+- **`process_refund` misclassification**: Keyword-based `check_scope()` classified `process_refund` as "read" (no write keyword match); manifest-based enforcement correctly identifies it as WRITE
+- **Revoked token bypass**: Revoked grant tokens now fail JWT verification at `validate_scopes` node — previously, tools were built from a static list and ignored token revocation
+
 ## [3.2.0] — 2026-04-02
 
 ### Added — Tier 1: Marketing Automation

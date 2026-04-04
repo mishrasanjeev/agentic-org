@@ -10,11 +10,12 @@ Handles:
 
 from __future__ import annotations
 
+import importlib
 import os
 from typing import Any
 
 import structlog
-from grantex import Grantex
+from grantex import Grantex, ToolManifest
 from grantex._errors import GrantexApiError, GrantexError
 from grantex._types import Agent as GrantexAgent
 
@@ -25,7 +26,7 @@ _grantex_client: Grantex | None = None
 
 
 def get_grantex_client() -> Grantex:
-    """Get or create the Grantex client singleton."""
+    """Lazy singleton Grantex client with all manifests pre-loaded."""
     global _grantex_client
     if _grantex_client is None:
         api_key = os.getenv("GRANTEX_API_KEY", "")
@@ -35,7 +36,90 @@ def get_grantex_client() -> Grantex:
                 "GRANTEX_API_KEY is required. Set it in environment or .env file."
             )
         _grantex_client = Grantex(api_key=api_key, base_url=base_url)
+
+        # Load all pre-built manifests
+        _load_all_manifests(_grantex_client)
+
     return _grantex_client
+
+
+def _load_all_manifests(client: Grantex) -> None:
+    """Load all 53 pre-built Grantex manifests + any custom manifests from disk."""
+
+    # All 53 pre-built manifest module paths (shipped with grantex>=0.3.3)
+    manifest_modules = [
+        "grantex.manifests.ahrefs",
+        "grantex.manifests.banking_aa",
+        "grantex.manifests.bombora",
+        "grantex.manifests.brandwatch",
+        "grantex.manifests.buffer",
+        "grantex.manifests.confluence",
+        "grantex.manifests.darwinbox",
+        "grantex.manifests.docusign",
+        "grantex.manifests.epfo",
+        "grantex.manifests.g2",
+        "grantex.manifests.ga4",
+        "grantex.manifests.github",
+        "grantex.manifests.gmail",
+        "grantex.manifests.google_ads",
+        "grantex.manifests.google_calendar",
+        "grantex.manifests.greenhouse",
+        "grantex.manifests.gstn",
+        "grantex.manifests.hubspot",
+        "grantex.manifests.income_tax_india",
+        "grantex.manifests.jira",
+        "grantex.manifests.keka",
+        "grantex.manifests.langsmith",
+        "grantex.manifests.linkedin_ads",
+        "grantex.manifests.linkedin_talent",
+        "grantex.manifests.mailchimp",
+        "grantex.manifests.mca_portal",
+        "grantex.manifests.meta_ads",
+        "grantex.manifests.mixpanel",
+        "grantex.manifests.moengage",
+        "grantex.manifests.netsuite",
+        "grantex.manifests.okta",
+        "grantex.manifests.oracle_fusion",
+        "grantex.manifests.pagerduty",
+        "grantex.manifests.pinelabs_plural",
+        "grantex.manifests.quickbooks",
+        "grantex.manifests.s3",
+        "grantex.manifests.salesforce",
+        "grantex.manifests.sanctions_api",
+        "grantex.manifests.sap",
+        "grantex.manifests.sendgrid",
+        "grantex.manifests.servicenow",
+        "grantex.manifests.slack",
+        "grantex.manifests.stripe",
+        "grantex.manifests.tally",
+        "grantex.manifests.trustradius",
+        "grantex.manifests.twilio",
+        "grantex.manifests.twitter",
+        "grantex.manifests.whatsapp",
+        "grantex.manifests.wordpress",
+        "grantex.manifests.youtube",
+        "grantex.manifests.zendesk",
+        "grantex.manifests.zoho_books",
+        "grantex.manifests.zoom",
+    ]
+
+    manifests: list[ToolManifest] = []
+    for mod_path in manifest_modules:
+        try:
+            mod = importlib.import_module(mod_path)
+            manifests.append(mod.manifest)
+        except ImportError:
+            logger.debug("manifest_not_found", module=mod_path)
+
+    if manifests:
+        client.load_manifests(manifests)
+        logger.info("grantex_manifests_loaded", count=len(manifests))
+
+    # Also load any custom manifests from a directory
+    manifests_dir = os.environ.get("GRANTEX_MANIFESTS_DIR", "./manifests")
+    if os.path.isdir(manifests_dir):
+        client.load_manifests_from_dir(manifests_dir)
+        logger.info("grantex_custom_manifests_loaded", dir=manifests_dir)
 
 
 async def register_agent_on_grantex(

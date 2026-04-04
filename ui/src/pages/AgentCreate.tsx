@@ -22,6 +22,32 @@ function humanize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
+
+function getToolPermission(toolName: string): PermissionLevel {
+  if (/^(get_|fetch_|list_|query|search_)/.test(toolName)) return "READ";
+  if (/^(create_|update_|send_|post_)/.test(toolName)) return "WRITE";
+  if (/^(delete_|remove_)/.test(toolName)) return "DELETE";
+  if (/^(bulk_|reset_|admin_)/.test(toolName)) return "ADMIN";
+  return "READ";
+}
+
+const PERMISSION_COLORS: Record<PermissionLevel, string> = {
+  READ: "bg-green-100 text-green-700 border-green-300",
+  WRITE: "bg-blue-100 text-blue-700 border-blue-300",
+  DELETE: "bg-red-100 text-red-700 border-red-300",
+  ADMIN: "bg-purple-100 text-purple-700 border-purple-300",
+};
+
+function PermissionBadge({ tool }: { tool: string }) {
+  const perm = getToolPermission(tool);
+  return (
+    <span className={`inline-block text-[10px] font-semibold px-1.5 py-0 rounded border ml-1 ${PERMISSION_COLORS[perm]}`}>
+      {perm}
+    </span>
+  );
+}
+
 export default function AgentCreate() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -332,20 +358,35 @@ export default function AgentCreate() {
                   Tools this agent can call. Auto-populated based on agent type — add or remove as needed.
                 </p>
                 {authorizedTools.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {authorizedTools.map((tool) => (
-                      <span key={tool} className="inline-flex items-center gap-1 bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-medium">
-                        {humanize(tool)}
-                        <button
-                          type="button"
-                          onClick={() => setAuthorizedTools(authorizedTools.filter((t) => t !== tool))}
-                          className="ml-1 text-primary/60 hover:text-primary"
-                          aria-label={`Remove ${tool}`}
-                        >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
+                  <div className="space-y-2 mb-2">
+                    <div className="flex flex-wrap gap-2">
+                      {authorizedTools.map((tool) => (
+                        <span key={tool} className="inline-flex items-center gap-1 bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-medium">
+                          {humanize(tool)}
+                          <PermissionBadge tool={tool} />
+                          <span className="text-[9px] text-muted-foreground ml-1 font-mono">
+                            tool:{domain}:{getToolPermission(tool).toLowerCase()}:{tool}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setAuthorizedTools(authorizedTools.filter((t) => t !== tool))}
+                            className="ml-1 text-primary/60 hover:text-primary"
+                            aria-label={`Remove ${tool}`}
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    {/* Minimal scope set summary */}
+                    <div className="bg-muted/40 rounded p-2">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Minimal Scope Set ({[...new Set(authorizedTools.map((t) => `tool:${domain}:${getToolPermission(t).toLowerCase()}:*`))].length} scopes)</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[...new Set(authorizedTools.map((t) => `tool:${domain}:${getToolPermission(t).toLowerCase()}:*`))].map((scope) => (
+                          <code key={scope} className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono">{scope}</code>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-amber-600 mb-2">No tools selected. Default tools will be assigned based on agent type.</p>
@@ -372,6 +413,25 @@ export default function AgentCreate() {
                 <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
                   <p className="font-medium">No tools selected</p>
                   <p className="text-xs mt-1">This agent won't be able to call any tools. Default tools will be assigned based on agent type, but you may want to explicitly select tools for better control.</p>
+                </div>
+              )}
+
+              {authorizedTools.some((t) => getToolPermission(t) === "DELETE" || getToolPermission(t) === "ADMIN") && (
+                <div className="rounded-lg bg-yellow-50 border border-yellow-300 px-4 py-3 text-sm text-yellow-800">
+                  <p className="font-medium">Elevated permissions detected</p>
+                  <p className="text-xs mt-1">
+                    This agent has tools with <strong>DELETE</strong> or <strong>ADMIN</strong> permission levels.
+                    These scopes allow destructive or privileged operations. Ensure this is intentional and review carefully before deploying.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {authorizedTools
+                      .filter((t) => getToolPermission(t) === "DELETE" || getToolPermission(t) === "ADMIN")
+                      .map((t) => (
+                        <span key={t} className="inline-flex items-center gap-1 text-xs">
+                          {humanize(t)} <PermissionBadge tool={t} />
+                        </span>
+                      ))}
+                  </div>
                 </div>
               )}
 
@@ -423,7 +483,9 @@ export default function AgentCreate() {
                   <p className="text-sm font-medium mb-1">Authorized Tools ({authorizedTools.length})</p>
                   <div className="flex flex-wrap gap-1.5">
                     {authorizedTools.map((t) => (
-                      <Badge key={t} variant="outline" className="text-xs">{humanize(t)}</Badge>
+                      <Badge key={t} variant="outline" className="text-xs inline-flex items-center gap-1">
+                        {humanize(t)} <PermissionBadge tool={t} />
+                      </Badge>
                     ))}
                   </div>
                 </div>

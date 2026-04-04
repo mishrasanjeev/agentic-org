@@ -25,6 +25,8 @@ const ALL_NAV = [
   { path: "/dashboard/sales", label: "Sales Pipeline", roles: ["admin"] },
   { path: "/dashboard/schemas", label: "Schemas", roles: ["admin"] },
   { path: "/dashboard/report-schedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo"] },
+  { path: "/dashboard/scopes", label: "Scope Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/enforce-audit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/sla", label: "SLA Monitor", roles: ["admin"] },
   { path: "/dashboard/settings", label: "Settings", roles: ["admin"] },

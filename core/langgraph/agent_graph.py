@@ -23,11 +23,72 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
+from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import create_chat_model
 from core.langgraph.state import AgentState
-from core.langgraph.tool_adapter import build_tools_for_agent
+from core.langgraph.tool_adapter import build_tools_for_agent, _build_tool_index
 
 logger = structlog.get_logger()
+
+
+async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
+    """Enforce Grantex scopes before tool execution.
+
+    Uses grantex.enforce() which:
+    1. Verifies the grant token JWT offline (JWKS cached, <1ms)
+    2. Looks up the tool's required permission from loaded manifests
+    3. Checks if the granted scope level covers the required permission
+
+    No online API calls — enforce() validates the JWT signature locally
+    using the cached JWKS key set.
+    """
+    messages = state["messages"]
+    grant_token = state.get("grant_token", "")
+    if not grant_token:
+        return {}  # No Grantex token — legacy auth mode, no-op
+
+    last_ai = messages[-1]
+    if not isinstance(last_ai, AIMessage) or not last_ai.tool_calls:
+        return {}
+
+    grantex = get_grantex_client()
+
+    # _build_tool_index() returns dict[str, tuple[str, str]]
+    # where each value is (connector_name, description)
+    index = _build_tool_index()
+
+    for tc in last_ai.tool_calls:
+        tool_name = tc["name"]
+
+        # Resolve connector name from tool index
+        match = index.get(tool_name)
+        connector_name = match[0] if match else "unknown"
+
+        # One call — Grantex handles JWT verification + manifest lookup + permission check
+        result = grantex.enforce(
+            grant_token=grant_token,
+            connector=connector_name,
+            tool=tool_name,
+        )
+
+        if not result.allowed:
+            logger.warning(
+                "scope_enforcement_denied",
+                agent_id=state.get("agent_id"),
+                tool=tool_name,
+                connector=connector_name,
+                reason=result.reason,
+            )
+            return {
+                "messages": [AIMessage(
+                    content=f"Access denied: {result.reason}. "
+                    f"Tool '{tool_name}' on '{connector_name}' is not permitted by your current authorization."
+                )],
+                "status": "failed",
+                "error": f"Scope denied: {result.reason}",
+            }
+
+    return {}  # All tool calls approved
 
 
 def build_agent_graph(
@@ -211,10 +272,23 @@ def build_agent_graph(
     graph.add_node("evaluate", evaluate)
     graph.add_node("hitl_gate", hitl_gate)
 
+    # --- Scope validation routing ---
+
+    def scopes_passed(state: AgentState) -> str:
+        """Route to execute_tools if scopes OK, else to evaluate (with error)."""
+        if state.get("status") == "failed":
+            return "evaluate"  # skip tools, go to evaluate which will surface the error
+        return "execute_tools"
+
     graph.add_edge(START, "reason")
 
     if tools:
+        graph.add_node("validate_scopes", validate_tool_scopes)
         graph.add_conditional_edges("reason", should_use_tools, {
+            "execute_tools": "validate_scopes",
+            "evaluate": "evaluate",
+        })
+        graph.add_conditional_edges("validate_scopes", scopes_passed, {
             "execute_tools": "execute_tools",
             "evaluate": "evaluate",
         })

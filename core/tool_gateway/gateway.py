@@ -44,22 +44,45 @@ class ToolGateway:
         params: dict[str, Any],
         idempotency_key: str | None = None,
         amount: float | None = None,
+        grant_token: str | None = None,
     ) -> dict[str, Any]:
         """Execute a tool call through the gateway pipeline."""
         start_time = time.monotonic()
 
-        # 1. Validate scope (skip if no scopes configured)
-        resource = tool_name.split("_", 1)[-1] if "_" in tool_name else tool_name
-        permission = (
-            "write"
-            if any(
-                w in tool_name
-                for w in ("create", "post", "update", "delete", "send", "file", "initiate", "queue")
-            )
-            else "read"
-        )
+        # 1. Validate scope via Grantex enforce (manifest-based, offline JWT verification)
+        effective_token = grant_token or getattr(self, "_current_grant_token", None)
+        if effective_token:
+            from core.langgraph.grantex_auth import get_grantex_client
 
-        if agent_scopes:
+            grantex = get_grantex_client()
+            result = grantex.enforce(
+                grant_token=effective_token,
+                connector=connector_name,
+                tool=tool_name,
+                amount=amount,
+            )
+            if not result.allowed:
+                if self.audit:
+                    await self.audit.log(
+                        tenant_id=tenant_id,
+                        agent_id=agent_id,
+                        tool_name=tool_name,
+                        action="scope_denied",
+                        outcome="blocked",
+                        details={"reason": result.reason},
+                    )
+                return {"error": {"code": "E1007", "message": f"scope_denied: {result.reason}"}}
+        elif agent_scopes:
+            # Legacy fallback for HS256 tokens without Grantex
+            resource = tool_name.split("_", 1)[-1] if "_" in tool_name else tool_name
+            permission = (
+                "write"
+                if any(
+                    w in tool_name
+                    for w in ("create", "post", "update", "delete", "send", "file", "initiate", "queue")
+                )
+                else "read"
+            )
             allowed, reason = check_scope(agent_scopes, connector_name, permission, resource, amount)
             if not allowed:
                 if "cap_exceeded" in reason:

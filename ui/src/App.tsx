@@ -66,6 +66,10 @@ const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
 /* ── Report Schedules ── */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
 
+/* ── Scope Enforcement ── */
+const ScopeDashboard = lazyRetry(() => import("./pages/ScopeDashboard"));
+const EnforceAuditLog = lazyRetry(() => import("./pages/EnforceAuditLog"));
+
 /* ── Blog / Content pages ── */
 const Blog = lazyRetry(() => import("./pages/blog/Blog"));
 const BlogPost = lazyRetry(() => import("./pages/blog/BlogPost"));
@@ -79,6 +83,9 @@ const AdsLanding = lazyRetry(() => import("./pages/ads/AdsLanding"));
 /* ── Resource / SEO content pages ── */
 const Resources = lazyRetry(() => import("./pages/resources/Resources"));
 const ResourcePage = lazyRetry(() => import("./pages/resources/ResourcePage"));
+
+/* ── Explainer pages ── */
+const HowGrantexWorks = lazyRetry(() => import("./pages/HowGrantexWorks"));
 
 /* ── Loading fallback ── */
 function PageLoader() {
@@ -120,6 +127,9 @@ export default function App() {
 
       {/* Integration workflow */}
       <Route path="/integration-workflow" element={<IntegrationWorkflow />} />
+
+      {/* Explainer pages */}
+      <Route path="/how-grantex-works" element={<HowGrantexWorks />} />
 
       {/* Google Ads landing pages */}
       <Route path="/solutions/ai-invoice-processing" element={<AdsLanding />} />
@@ -183,6 +193,26 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
             <Layout>
               <Observatory />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/scopes"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+            <Layout>
+              <ScopeDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/enforce-audit"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+            <Layout>
+              <EnforceAuditLog />
             </Layout>
           </ProtectedRoute>
         }
