@@ -119,7 +119,7 @@ test.describe("Scope Enforcement — UI", () => {
 
   test("test_scope_dashboard_renders", async ({ page }) => {
     // Navigate to scope dashboard
-    const response = await page.goto(`${APP}/scope-dashboard`, {
+    const response = await page.goto(`${APP}/dashboard/scopes`, {
       waitUntil: "domcontentloaded",
     });
 
@@ -154,7 +154,7 @@ test.describe("Scope Enforcement — UI", () => {
 
   test("test_enforce_audit_log_filters", async ({ page }) => {
     // Navigate to enforce audit log
-    const response = await page.goto(`${APP}/enforce-audit-log`, {
+    const response = await page.goto(`${APP}/dashboard/enforce-audit`, {
       waitUntil: "domcontentloaded",
     });
 
