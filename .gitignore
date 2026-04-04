@@ -65,6 +65,9 @@ ui/.next/
 *.pid.lock
 .nyc_output
 docker-compose.override.yml
+
+# Generated PDFs (QA plans, product guides, functional docs)
+docs/*.pdf
 *.pem
 *.key
 secrets/
