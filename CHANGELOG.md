@@ -2,6 +2,42 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [4.0.0] — 2026-04-05
+
+### Added — Project Apex (22 Features)
+- **1000+ Integrations**: Composio SDK (MIT) connector expansion layer alongside 54 native connectors
+- **Smart LLM Routing**: RouteLLM multi-model routing across 3 tiers (85% cost savings)
+- **Pre-LLM PII Redaction**: Microsoft Presidio anonymizes Aadhaar, PAN, GSTIN, UPI before data reaches LLM
+- **NL Workflow Builder**: Describe business processes in English, auto-generates workflow
+- **Persona Builder**: Describe the employee you need, auto-generates full agent config
+- **Explainable AI**: Plain-English decision explanations with Flesch-Kincaid readability scoring
+- **Self-Improving Agents**: Feedback loop with thumbs up/down, automatic prompt refinement
+- **Dynamic Re-planning**: Workflows adapt when steps fail — LLM generates alternative plan
+- **Voice Agents**: LiveKit + Pipecat foundation with Whisper local STT, SIP telephony
+- **Browser RPA**: Playwright-based automation for legacy web portals (EPFO, MCA, Income Tax)
+- **Multi-Language**: Hindi (HI) + English (EN) with language picker in header
+- **Content Safety**: PII leakage + toxicity + duplicate detection on generated content
+- **Air-Gapped Deployment**: Ollama (CPU) + vLLM (GPU) local LLM, zero internet required
+- **Hosted Tier**: Stripe (global) + PineLabs Plural (India) billing with Free/Pro/Enterprise plans
+- **Microsoft 365**: Teams bot + Outlook/SharePoint/OneDrive via Composio
+- **Multi-Agent Collaboration**: Parallel agent execution with merge/vote/first_complete aggregation
+- **Support Deflection Agent**: 60%+ auto-resolution with RAG knowledge base + FAQ matching
+- **Industry Packs**: Healthcare, Legal, Insurance, Manufacturing — one-click install
+- **SOC2/ISO 27001**: 10-point compliance control framework with evidence package API
+- **Enterprise Onboarding**: 4-week guided deployment playbook with milestone tracking
+- **Real-Time CDC**: Webhook + polling change data capture with workflow triggers
+- **Billing Portal**: Usage meters, plan management, invoice history, India INR pricing toggle
+
+### Changed
+- Agents: 35 → 50+ (industry packs + support deflection + voice)
+- Tools: 54 → 1000+ (Composio MIT integration)
+- Workflows: 15 → 20+ (NL-generated + adaptive replanning)
+- Dependencies: composio-core, routellm, presidio-analyzer, presidio-anonymizer (all optional [v4] group)
+- UI: react-i18next for multi-language, Billing page, enhanced Onboarding
+- Backend tests: 1,662 → 1,931+ (269 new tests across 22 features)
+- Playwright E2E: 342 → 345+
+- Version: 3.3.0 → 4.0.0
+
 ## [3.3.0] — 2026-04-04
 
 ### Added — Scope Enforcement Fix (Grantex SDK v0.3.3)

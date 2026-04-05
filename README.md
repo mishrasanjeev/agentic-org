@@ -1,16 +1,16 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 35 pre-built agents across 6 domains that reason AND act. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. 54 connectors, 340+ tools, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — 50+ LangGraph agents, 1000+ integrations (via Composio), 54 native connectors, 340+ native tools. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. Voice agents, RAG knowledge base, smart LLM routing, industry packs, PII redaction, browser RPA, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-green.svg)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Tests-1633%2B_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-1931%2B_passing-brightgreen.svg)](tests/)
 [![E2E](https://img.shields.io/badge/E2E-17_Playwright_specs-brightgreen.svg)](ui/e2e/)
 [![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
 [![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
-[![Version](https://img.shields.io/badge/Version-3.2.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.0.0-green.svg)](CHANGELOG.md)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -24,21 +24,21 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 
 | Metric | Value |
 |--------|-------|
-| Pre-built Agents | **35** across 6 domains |
+| Pre-built Agents | **50+** across 6 domains + 4 industry packs |
 | Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
-| Enterprise Connectors | **54 connectors, 340+ tools** — ALL with real API endpoints |
+| Enterprise Connectors | **1000+ integrations** (via Composio) + **54 native connectors, 340+ native tools** — ALL with real API endpoints |
 | Dashboards | CFO Dashboard + CMO Dashboard (role-specific KPI views) |
 | NL Query | Cmd+K search bar + slide-out chat panel with agent attribution |
 | Multi-Company | Company switcher for CA firms managing multiple client entities |
 | Scheduled Reports | Celery beat --> PDF/Excel --> email/Slack/WhatsApp delivery |
-| Workflow Templates | **15** production-ready templates |
+| Workflow Templates | **20+** production-ready templates |
 | Prompt Templates | 27 production-tested |
-| Automated Tests | **1,633** backend + **93** frontend vitest + **17** Playwright E2E spec files |
+| Automated Tests | **1,931+** backend + **93** frontend vitest + **17** Playwright E2E spec files |
 | CI E2E | Enabled against production |
 | SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
-| LLM | Gemini 2.5 Flash (primary), Claude/GPT-4o fallback |
+| LLM | Smart routing via RouteLLM: Gemini Flash (free) / Gemini Pro / Claude/GPT-4o. Air-gapped: Ollama/vLLM |
 | Deployment | GKE Autopilot, ~$95/month |
-| Version | **3.2.0** |
+| Version | **4.0.0** |
 
 ### What It Does
 
@@ -88,9 +88,9 @@ App Dashboard
     └── Report Scheduler (create, manage, toggle, run-now scheduled reports)
     |
 FastAPI Backend
-    ├── Agent Registry (35 agents) → LLM Router (Gemini 2.5 Flash)
+    ├── Agent Registry (50+ agents) → Smart LLM Router (RouteLLM)
     │       ↓ tool_calls                    ↑ synthesis
-    │   Tool Gateway → 54 Connectors (340+ tools)
+    │   Tool Gateway → 1000+ Integrations (Composio) + 54 Native Connectors (340+ tools)
     │       ├── Jira (11 tools) ← verified, creates real tickets
     │       ├── HubSpot (13 tools) ← verified, reads real CRM
     │       ├── GitHub (9 tools) ← verified, reads real repos
@@ -102,9 +102,14 @@ FastAPI Backend
     ├── NL Query Engine → Agent attribution → Chat history
     ├── Scheduled Report Engine → Celery beat → PDF/Excel → email/Slack/WhatsApp
     ├── LangGraph Runtime → GraphInterrupt HITL → Shadow Mode
-    ├── Workflow Engine (15 templates) → real agent execution → HITL Queue
+    ├── Workflow Engine (20+ templates) → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
     ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
+    ├── RAGFlow Engine → Document ingestion → Semantic search → Agent retrieval
+    ├── LiveKit + Pipecat → Voice agents → STT/TTS → SIP telephony
+    ├── RouteLLM → Smart model routing → 3-tier cost optimization
+    ├── Presidio → Pre-LLM PII redaction → Aadhaar/PAN/GSTIN scrubbing
+    ├── Composio → 1000+ tool marketplace → OAuth bridge
     ├── MCP Server → 340+ tools exposed to Claude/Cursor/ChatGPT
     ├── API Key Manager → ao_sk_ keys → SDK/CLI/MCP auth
     ├── SOP Parser → Upload SOPs → Deploy as agents
@@ -115,7 +120,7 @@ SDKs: Python (PyPI) | TypeScript (npm) | MCP Server | CLI
 PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 ```
 
-### Agent Domains (6 Domains, 35 Agents)
+### Agent Domains (6 Domains, 50+ Agents)
 
 | Domain | Agents | Key Agents |
 |--------|--------|-----------|
@@ -126,9 +131,10 @@ PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 | **Back Office** | 3 | Risk Sentinel, Legal Ops, Facilities Agent |
 | **Comms** | 3 | Ops Commander (Jira triage), DevOps Scout (GitHub + Jira health), Slack Notifier |
 | **Sales** | 1 | Automated sales agent (qualification, email sequences, pipeline) |
+| **Industry Packs** | 16 | Healthcare (4), Legal (4), Insurance (4), Manufacturing (4) — one-click install |
 | **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
 
-> **35 pre-built agents across 6 domains. 54 connectors with 340+ tools. All endpoints real.**
+> **50+ pre-built agents across 6 domains + 4 industry packs. 1000+ integrations (Composio) + 54 native connectors with 340+ tools. All endpoints real.**
 
 ---
 
@@ -460,6 +466,42 @@ OAuth2-based authorization with manifest-based scope enforcement (Grantex SDK v0
 - Custom manifests: place JSON/YAML files in `GRANTEX_MANIFESTS_DIR` for custom connectors
 - **Environment variables**: `GRANTEX_API_KEY` (required), `GRANTEX_BASE_URL` (optional), `GRANTEX_MANIFESTS_DIR` (optional)
 
+### v4.0.0 Environment Variables
+```
+COMPOSIO_API_KEY              — 1000+ tool integrations (optional)
+AGENTICORG_LLM_ROUTING        — auto | tier1 | tier2 | tier3 | disabled
+AGENTICORG_LLM_MODE           — cloud | local | auto
+AGENTICORG_PII_REDACTION_MODE — before_llm | logs_only | disabled
+RAGFLOW_API_URL               — RAGFlow instance URL for knowledge base
+RAGFLOW_API_KEY               — RAGFlow API key
+LIVEKIT_URL                   — LiveKit server URL for voice agents
+LIVEKIT_API_KEY               — LiveKit API key
+LIVEKIT_API_SECRET            — LiveKit API secret
+STRIPE_SECRET_KEY             — Stripe billing key (hosted tier)
+STRIPE_WEBHOOK_SECRET         — Stripe webhook signing secret
+```
+
+### Knowledge Base (RAG)
+Upload company documents (PDF, Word, Excel) and agents query them via semantic search. Powered by RAGFlow (Apache 2.0). Agents use `knowledge_base_search` tool automatically.
+
+### Voice Agents
+Real-time voice AI with telephony support. Default STT: Whisper (local, Apache 2.0). Default TTS: Piper (local, MIT). Configurable SIP provider (Twilio/Vonage). Powered by LiveKit (Apache 2.0) + Pipecat (BSD-2).
+
+### Smart LLM Routing
+Automatic multi-model routing via RouteLLM (Apache 2.0). Three tiers: Economy (Gemini Flash, free), Standard (Gemini Pro), Premium (Claude/GPT-4o). Reduces costs by 85% while maintaining accuracy. Air-gapped mode routes to Ollama/vLLM.
+
+### Pre-LLM PII Redaction
+Microsoft Presidio (MIT) scrubs sensitive data before it reaches the LLM. Custom India recognizers: Aadhaar, PAN, GSTIN, UPI. Configurable: `AGENTICORG_PII_REDACTION_MODE=before_llm|logs_only|disabled`.
+
+### Industry Packs
+Pre-built agent bundles: Healthcare (4 agents, HIPAA-aware), Legal (4 agents), Insurance (4 agents), Manufacturing (4 agents). One-click install via `POST /packs/{name}/install`.
+
+### Browser RPA
+Playwright-based automation for legacy web portals without APIs. Pre-built scripts for Indian government portals (EPFO, MCA, Income Tax). Sandboxed Docker execution with screenshot audit trail.
+
+### Billing & Hosted Tier
+Self-hosted is free forever. Hosted tier: Free (3 agents) / Pro ($49/mo) / Enterprise ($299/mo). India pricing: Free / Rs 999/mo / Rs 4999/mo. Stripe (global) + PineLabs Plural (India).
+
 ### Integration Workflow Page
 The `/integration-workflow` page provides a visual guide for connecting external systems, with SDK/CLI quickstart examples and protocol documentation.
 
@@ -468,7 +510,7 @@ The `/integration-workflow` page provides a visual guide for connecting external
 ## Testing
 
 ```bash
-# Backend tests (1662 total)
+# Backend tests (1931+ total)
 pytest tests/
 
 # Frontend vitest (93 tests)
@@ -483,7 +525,7 @@ python tests/test_production_connectors.py
 
 | Suite | Tests | What It Covers |
 |-------|-------|---------------|
-| Backend (pytest) | **1,633** | Unit, security, connector harness (54 connectors × 340+ tools), synthetic data, regression, integration |
+| Backend (pytest) | **1,931+** | Unit, security, connector harness (54 connectors × 340+ tools), synthetic data, regression, integration, voice, RAG, RPA, packs |
 | Frontend (vitest) | **93** | Component tests, hooks, utilities |
 | Playwright E2E | **17 spec files** | Full browser flows: login, onboarding, agents, workflows, approvals, landing, SOP, dashboards, ABM, drip, A/B, push |
 | CI E2E | Enabled | Runs against production on every merge to main |
@@ -496,7 +538,7 @@ python tests/test_production_connectors.py
 agenticorg/
 ├── api/v1/                 # FastAPI endpoints (agents, auth, sales, templates, connectors, api-keys, sop, a2a, mcp)
 ├── core/
-│   ├── agents/             # 35 agent types + 27 prompt templates
+│   ├── agents/             # 50+ agent types + 27 prompt templates
 │   │   ├── prompts/        # Production system prompts
 │   │   ├── registry.py     # Agent registry (built-in + custom type fallback)
 │   │   └── base.py         # BaseAgent: LLM reasoning → tool calling → HITL
@@ -549,7 +591,7 @@ agenticorg/
 | Landing page | https://agenticorg.ai | 39 URLs in sitemap |
 | Blog (8 articles) | /blog | Invoice processing, RPA vs AI, reconciliation, HITL, no-code, month-end close, ROI measurement, CFO story |
 | Resources (26 pages) | /resources | 7 topic clusters, FAQ schemas, internal linking |
-| llms.txt | /llms.txt | 4.6KB product summary for AI crawlers |
+| llms.txt | /llms.txt | v4.0.0 product summary for AI crawlers |
 | llms-full.txt | /llms-full.txt | 18.7KB complete documentation |
 | JSON-LD | 7 schemas | Organization, Product, FAQ, Breadcrumb, SoftwareCompany, WebSite, SoftwareApplication |
 | AI crawlers | robots.txt | GPTBot, ClaudeBot, PerplexityBot, ChatGPT-User, OAI-SearchBot, cohere-ai, Applebot-Extended |
@@ -558,11 +600,16 @@ agenticorg/
 
 ## Pricing
 
-| Plan | Price | Agents | Connectors | Tasks |
-|------|-------|--------|-----------|-------|
-| Free | $0 | 35 | 20 | 500/day |
-| Pro | $499/mo | Unlimited | 54 | Unlimited |
-| Enterprise | Custom | Unlimited | 54 | Unlimited + SLA |
+**Self-hosted is free forever** — all agents, all connectors, unlimited tasks.
+
+| Plan | Price | Agents | Integrations | Tasks |
+|------|-------|--------|-------------|-------|
+| Free (self-hosted) | $0 | 50+ | 1000+ | Unlimited |
+| Free (hosted) | $0 | 3 | 20 | 500/day |
+| Pro (hosted) | $49/mo (Rs 999/mo India) | Unlimited | 1000+ | Unlimited |
+| Enterprise (hosted) | $299/mo (Rs 4999/mo India) | Unlimited | 1000+ | Unlimited + SLA |
+
+Payments: Stripe (global) + PineLabs Plural (India: NEFT/RTGS/IMPS/UPI).
 
 ---
 

@@ -499,13 +499,13 @@ export default function Landing() {
               {/* Version badge */}
               <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse">
                 <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                v3.3.0
+                v4.0.0
               </span>
 
               {/* Description */}
               <p className="text-sm text-slate-300 text-center sm:text-left leading-snug">
-                <span className="font-semibold text-white">Scope Enforcement Fix</span>
-                {" "}&mdash; Manifest-based security for all 53 connectors. Every agent tool call verified in &lt;1&thinsp;ms.
+                <span className="font-semibold text-white">Project Apex</span>
+                {" "}&mdash; 1000+ Integrations, Voice Agents, Knowledge Base, Smart LLM Routing, and Industry Packs
               </p>
 
               {/* CTA */}
@@ -522,18 +522,22 @@ export default function Landing() {
       {/* ============================================================ */}
       <section className="py-10 bg-white border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">35</div>
+              <div className="text-3xl font-extrabold text-slate-900">50+</div>
               <p className="text-sm text-slate-500 mt-1">Pre-built AI Agents</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">54</div>
-              <p className="text-sm text-slate-500 mt-1">Enterprise Connectors</p>
+              <div className="text-3xl font-extrabold text-slate-900">1000+</div>
+              <p className="text-sm text-slate-500 mt-1">Connectors &amp; Tools</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-emerald-600">84%</div>
-              <p className="text-sm text-slate-500 mt-1">Code Test Coverage</p>
+              <div className="text-3xl font-extrabold text-slate-900">20+</div>
+              <p className="text-sm text-slate-500 mt-1">Workflows</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="text-3xl font-extrabold text-emerald-600">4</div>
+              <p className="text-sm text-slate-500 mt-1">Industry Packs</p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
               <div className="text-3xl font-extrabold text-blue-600">100%</div>
@@ -1243,7 +1247,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">Grantex Scope Enforcement</h3>
-                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against 53 connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read.</p>
+                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against 53 connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read. Now with 1000+ tool manifests, voice agent security, and PII redaction before LLM.</p>
                 <Link to="/how-grantex-works" className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 font-medium mt-2 transition-colors">
                   Learn how it works <span aria-hidden="true">&rarr;</span>
                 </Link>

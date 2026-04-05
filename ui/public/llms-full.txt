@@ -1,6 +1,6 @@
-# AgenticOrg — Complete Product Documentation for LLMs
+# AgenticOrg v4.0.0 — Complete Product Documentation for LLMs
 
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 35 pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 54 enterprise systems (340+ tools). Includes A/B testing, email drip engine, ABM with intent data (Bombora/G2/TrustRadius), web push HITL notifications, and email webhooks. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 50+ pre-built agents across 6 domains + 4 industry packs: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 1000+ integrations (via Composio) plus 54 native enterprise connectors (340+ native tools). v4.0.0 adds: voice agents (LiveKit + Pipecat), RAG knowledge base (RAGFlow), smart LLM routing (RouteLLM, 85% cost savings), pre-LLM PII redaction (Presidio), browser RPA (Playwright), industry packs (Healthcare/Legal/Insurance/Manufacturing), air-gapped deployment (Ollama/vLLM), and hosted billing tier. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
 
 ## Product Overview
 
