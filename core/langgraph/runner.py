@@ -20,6 +20,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphInterrupt
 
+from core.explainer import generate_explanation
+from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.state import AgentState
 from core.pii.redactor import PIIRedactor
@@ -69,9 +71,46 @@ async def run_agent(
         Dict with: status, output, confidence, reasoning_trace,
         tool_calls_log, hitl_trigger, error.
     """
+    # --- Step 1: Load prompt amendments (self-improving agents) ---
+    prompt_amendments: list[str] = []
+    try:
+        import uuid as _uuid_mod
+
+        from core.database import get_tenant_session as _get_session
+
+        if tenant_id:
+            _tid = _uuid_mod.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            async with _get_session(_tid) as _sess:
+                from sqlalchemy import text as _sql_text
+
+                _row = await _sess.execute(
+                    _sql_text(
+                        "SELECT prompt_amendments FROM agents WHERE id = :aid AND tenant_id = :tid"
+                    ),
+                    {"aid": agent_id, "tid": str(_tid)},
+                )
+                _result = _row.fetchone()
+                if _result and _result[0]:
+                    import json as _json_mod
+
+                    raw = _result[0]
+                    if isinstance(raw, str):
+                        raw = _json_mod.loads(raw)
+                    if isinstance(raw, list):
+                        prompt_amendments = [str(a) for a in raw]
+    except Exception:
+        logger.debug("prompt_amendments_load_skipped", agent_id=agent_id)
+
+    # Prepend learned rules to system prompt
+    amended_prompt = system_prompt
+    if prompt_amendments:
+        amendments_block = format_amendments_for_prompt(prompt_amendments)
+        amended_prompt = amendments_block + system_prompt
+        logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
+
     # Build the graph
     graph = build_agent_graph(
-        system_prompt=system_prompt,
+        system_prompt=amended_prompt,
         authorized_tools=authorized_tools,
         llm_model=llm_model,
         confidence_floor=confidence_floor,
@@ -95,7 +134,7 @@ async def run_agent(
 
     initial_state: AgentState = {
         "messages": [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=amended_prompt),
             HumanMessage(content=user_message),
         ],
         "agent_id": agent_id,
@@ -184,14 +223,30 @@ async def run_agent(
                 ]
             logger.info("pii_deanonymized_after_llm", entities=len(pii_token_map), agent_id=agent_id)
 
+        # --- Step 8: Generate explanation (skip for hitl_triggered) ---
+        run_status = result.get("status", "completed")
+        explanation: dict[str, Any] = {}
+        if run_status in ("completed", "failed"):
+            try:
+                trace = result.get("reasoning_trace", [])
+                out = result.get("output", {})
+                tools = [
+                    tc.get("tool", "") for tc in result.get("tool_calls_log", [])
+                    if isinstance(tc, dict) and tc.get("tool")
+                ]
+                explanation = await generate_explanation(trace, out, tools)
+            except Exception as exc:
+                logger.warning("explanation_generation_failed", error=str(exc))
+
         return {
-            "status": result.get("status", "completed"),
+            "status": run_status,
             "output": result.get("output", {}),
             "confidence": result.get("confidence", 0.0),
             "reasoning_trace": result.get("reasoning_trace", []),
             "tool_calls_log": result.get("tool_calls_log", []),
             "hitl_trigger": result.get("hitl_trigger", ""),
             "error": result.get("error", ""),
+            "explanation": explanation,
             "performance": {
                 "total_latency_ms": latency_ms,
                 "llm_tokens_used": tokens_used,
@@ -241,14 +296,24 @@ async def run_agent(
     except Exception as e:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.error("langgraph_agent_failed", agent_id=agent_id, error=str(e))
+
+        # Generate explanation for failed runs too
+        fail_trace = [f"Agent execution failed: {type(e).__name__}"]
+        fail_explanation: dict[str, Any] = {}
+        try:
+            fail_explanation = await generate_explanation(fail_trace, {}, [])
+        except Exception:
+            logger.debug("fail_explanation_skipped", agent_id=agent_id)
+
         return {
             "status": "failed",
             "output": {},
             "confidence": 0.0,
-            "reasoning_trace": [f"Agent execution failed: {type(e).__name__}"],
+            "reasoning_trace": fail_trace,
             "tool_calls_log": [],
             "hitl_trigger": "",
             "error": str(e),
+            "explanation": fail_explanation,
             "performance": {
                 "total_latency_ms": latency_ms,
                 "llm_tokens_used": 0,

@@ -8,6 +8,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +19,24 @@ from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigg
 
 router = APIRouter()
 _log = structlog.get_logger()
+
+
+# ── NL-to-Workflow schemas ──────────────────────────────────────────────────
+
+
+class WorkflowGenerateRequest(BaseModel):
+    """Request body for POST /workflows/generate."""
+
+    description: str = Field(
+        ...,
+        min_length=5,
+        max_length=2000,
+        description="Plain English description of the workflow to generate",
+    )
+    deploy: bool = Field(
+        default=False,
+        description="If true, automatically create and activate the workflow",
+    )
 
 
 def _wf_to_dict(wf: WorkflowDefinition) -> dict:
@@ -70,6 +89,59 @@ def _run_to_dict(run: WorkflowRun, include_steps: bool = False) -> dict:
     if include_steps:
         d["steps"] = [_step_to_dict(s) for s in (run.steps or [])]
     return d
+
+
+# ── POST /workflows/generate ─────────────────────────────────────────────────
+@router.post("/workflows/generate")
+async def generate_workflow_endpoint(
+    body: WorkflowGenerateRequest,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Generate a workflow from a plain English description using LLM.
+
+    Optionally deploys the workflow immediately if ``deploy`` is True.
+    Returns the generated definition, deployment status, and workflow ID.
+    """
+    from core.workflow_generator import generate_workflow
+
+    try:
+        definition = await generate_workflow(body.description, tenant_id)
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from None
+
+    workflow_id: str | None = None
+    deployed = False
+
+    if body.deploy:
+        tid = _uuid.UUID(tenant_id)
+        async with get_tenant_session(tid) as session:
+            wf = WorkflowDefinition(
+                tenant_id=tid,
+                name=definition.get("name", "Generated Workflow"),
+                version=definition.get("version", "1.0"),
+                description=definition.get("description", ""),
+                domain=definition.get("domain", "ops"),
+                definition=definition,
+                trigger_type=definition.get("trigger_type", "manual"),
+                trigger_config=definition.get("trigger_config", {}),
+                is_active=True,
+            )
+            session.add(wf)
+            await session.flush()
+            workflow_id = str(wf.id)
+            deployed = True
+
+        _log.info(
+            "workflow_generated_and_deployed",
+            workflow_id=workflow_id,
+            tenant_id=tenant_id,
+        )
+
+    return {
+        "workflow": definition,
+        "deployed": deployed,
+        "workflow_id": workflow_id,
+    }
 
 
 # ── GET /workflows ───────────────────────────────────────────────────────────

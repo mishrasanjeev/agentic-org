@@ -15,7 +15,7 @@ export default function AgentDetail() {
   const { id } = useParams();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes" | "learning">("overview");
 
   useEffect(() => {
     if (id) fetchAgent();
@@ -165,7 +165,7 @@ export default function AgentDetail() {
       </div>
 
       <div className="flex gap-4 border-b pb-2">
-        {(["overview", "config", "prompt", "shadow", "cost", "scopes"] as const).map((tab) => (
+        {(["overview", "config", "prompt", "shadow", "cost", "scopes", "learning"] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
             {tab}
           </button>
@@ -178,6 +178,7 @@ export default function AgentDetail() {
       {activeTab === "shadow" && <ShadowTab agent={agent} />}
       {activeTab === "cost" && <CostTab agent={agent} />}
       {activeTab === "scopes" && <ScopesTab agent={agent} />}
+      {activeTab === "learning" && <LearningTab agent={agent} />}
     </div>
   );
 }
@@ -289,12 +290,336 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
             )}
           </div>
         </div>
+
+        {/* Explainer Panel + Feedback (PRD v4 Section 6 & 8) */}
+        <ExplainerPanel agentId={agent.id} />
       </CardContent>
     </Card>
   );
 }
 
-/* ─── Config Tab ─── */
+/* ─── Explainer Panel (collapsible "Why did the agent do this?") ─── */
+function ExplainerPanel({ agentId }: { agentId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [explanation, setExplanation] = useState<{
+    bullets?: string[];
+    confidence?: number;
+    tools_cited?: string[];
+    readability_grade?: number;
+  } | null>(null);
+  const [runResult, setRunResult] = useState<{ task_id?: string; status?: string } | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctionText, setCorrectionText] = useState("");
+
+  // Load the latest run result when expanded
+  useEffect(() => {
+    if (!expanded) return;
+    // Fetch last run explanation from the API
+    api.get(`/agents/${agentId}/feedback?limit=1`).catch(() => {});
+  }, [expanded, agentId]);
+
+  // Accept explanation data from a run result (mock or real)
+  function loadExplanation(data: any) {
+    if (data?.explanation) {
+      setExplanation(data.explanation);
+      setRunResult({ task_id: data.task_id, status: data.status });
+    }
+  }
+
+  async function sendFeedback(type: string) {
+    if (!runResult?.task_id) return;
+    try {
+      await api.post(`/agents/${agentId}/feedback`, {
+        run_id: runResult.task_id,
+        feedback_type: type,
+        text: type === "correction" ? correctionText : "",
+        corrected_output: type === "correction" ? { corrected_text: correctionText } : undefined,
+      });
+      setFeedbackSent(type);
+      if (type === "correction") {
+        setCorrecting(false);
+        setCorrectionText("");
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="pt-2 border-t" data-testid="explainer-panel">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 text-sm font-medium text-primary hover:underline w-full text-left"
+      >
+        <span className={`transition-transform ${expanded ? "rotate-90" : ""}`}>&#9656;</span>
+        Why did the agent do this?
+      </button>
+
+      {expanded && (
+        <div className="mt-3 bg-muted/30 rounded-lg p-4 space-y-3">
+          {explanation && explanation.bullets ? (
+            <>
+              <ul className="list-disc list-inside text-sm space-y-1">
+                {explanation.bullets.map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+
+              {/* Confidence bar */}
+              {explanation.confidence != null && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Confidence</span>
+                    <span>{(explanation.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${explanation.confidence * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Tools used */}
+              {explanation.tools_cited && explanation.tools_cited.length > 0 && (
+                <div>
+                  <span className="text-xs text-muted-foreground">Tools used:</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {explanation.tools_cited.map((t) => (
+                      <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Readability */}
+              {explanation.readability_grade != null && (
+                <p className="text-xs text-muted-foreground">
+                  Readability grade: {explanation.readability_grade.toFixed(1)} (Flesch-Kincaid)
+                </p>
+              )}
+
+              {/* Feedback buttons */}
+              <div className="flex items-center gap-3 pt-2 border-t">
+                <span className="text-xs text-muted-foreground">Was this helpful?</span>
+                <button
+                  onClick={() => sendFeedback("thumbs_up")}
+                  className={`text-lg hover:scale-110 transition-transform ${feedbackSent === "thumbs_up" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
+                  title="Thumbs up"
+                  disabled={feedbackSent !== null}
+                >
+                  &#128077;
+                </button>
+                <button
+                  onClick={() => sendFeedback("thumbs_down")}
+                  className={`text-lg hover:scale-110 transition-transform ${feedbackSent === "thumbs_down" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
+                  title="Thumbs down"
+                  disabled={feedbackSent !== null}
+                >
+                  &#128078;
+                </button>
+                {!correcting && (
+                  <button
+                    onClick={() => setCorrecting(true)}
+                    className="text-xs text-primary hover:underline ml-2"
+                    disabled={feedbackSent !== null}
+                  >
+                    Correct this
+                  </button>
+                )}
+                {feedbackSent && (
+                  <span className="text-xs text-green-600 ml-2">Feedback recorded</span>
+                )}
+              </div>
+
+              {/* Correction text area */}
+              {correcting && (
+                <div className="space-y-2">
+                  <textarea
+                    value={correctionText}
+                    onChange={(e) => setCorrectionText(e.target.value)}
+                    placeholder="What should the correct output be?"
+                    className="w-full border rounded px-3 py-2 text-sm min-h-[80px]"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => sendFeedback("correction")} disabled={!correctionText.trim()}>
+                      Submit Correction
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => { setCorrecting(false); setCorrectionText(""); }}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Run the agent to see an explanation of its decisions.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Learning Tab (Feedback + Amendments) ─── */
+function LearningTab({ agent }: { agent: Agent }) {
+  const [feedback, setFeedback] = useState<any[]>([]);
+  const [amendments, setAmendments] = useState<string[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<{ amendment?: string; reason?: string; confidence?: number } | null>(null);
+  const [loadingFeedback, setLoadingFeedback] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, [agent.id]);
+
+  async function loadData() {
+    setLoadingFeedback(true);
+    try {
+      const [fbResp, amResp] = await Promise.all([
+        api.get(`/agents/${agent.id}/feedback?limit=50`),
+        api.get(`/agents/${agent.id}/amendments`),
+      ]);
+      setFeedback(fbResp.data?.feedback || []);
+      setAmendments(amResp.data?.amendments || []);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingFeedback(false);
+    }
+  }
+
+  async function triggerAnalysis() {
+    setAnalyzing(true);
+    setAnalysisResult(null);
+    try {
+      const resp = await api.post(`/agents/${agent.id}/feedback/analyze`);
+      setAnalysisResult(resp.data);
+    } catch {
+      setAnalysisResult({ amendment: "", reason: "Analysis failed", confidence: 0 });
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function applyAmendment(amendment: string) {
+    try {
+      // Apply by updating the agent's prompt_amendments via the API
+      const current = [...amendments, amendment];
+      await api.patch(`/agents/${agent.id}`, { prompt_amendments: current });
+      setAmendments(current);
+      setAnalysisResult(null);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const feedbackTypeColors: Record<string, string> = {
+    thumbs_up: "bg-green-100 text-green-700",
+    thumbs_down: "bg-red-100 text-red-700",
+    correction: "bg-blue-100 text-blue-700",
+    hitl_reject: "bg-yellow-100 text-yellow-700",
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Active Amendments */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-sm font-semibold">Learned Rules (Amendments)</CardTitle>
+            <Button variant="outline" size="sm" onClick={triggerAnalysis} disabled={analyzing}>
+              {analyzing ? "Analyzing..." : "Analyze Feedback"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {amendments.length > 0 ? (
+            <div className="space-y-2">
+              {amendments.map((a, idx) => (
+                <div key={idx} className="flex items-start justify-between bg-muted/40 rounded px-3 py-2">
+                  <span className="text-sm flex-1">{a}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-2 text-xs"
+                    onClick={() => setAmendments(amendments.filter((_, i) => i !== idx))}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No learned rules yet. Submit feedback and run analysis to generate amendments.</p>
+          )}
+
+          {/* Analysis result */}
+          {analysisResult && analysisResult.amendment && (
+            <div className="border border-primary/30 rounded-lg p-3 bg-primary/5 space-y-2">
+              <p className="text-sm font-medium">Suggested Amendment:</p>
+              <p className="text-sm">{analysisResult.amendment}</p>
+              <p className="text-xs text-muted-foreground">Reason: {analysisResult.reason}</p>
+              {analysisResult.confidence != null && (
+                <p className="text-xs text-muted-foreground">Confidence: {(analysisResult.confidence * 100).toFixed(0)}%</p>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => applyAmendment(analysisResult.amendment!)}>
+                  Apply
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setAnalysisResult(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
+          {analysisResult && !analysisResult.amendment && analysisResult.reason && (
+            <p className="text-sm text-muted-foreground">{analysisResult.reason}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Feedback Timeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">Feedback Timeline</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingFeedback ? (
+            <p className="text-sm text-muted-foreground">Loading feedback...</p>
+          ) : feedback.length > 0 ? (
+            <div className="space-y-2">
+              {feedback.map((entry, idx) => (
+                <div key={idx} className="flex items-start gap-3 border-b last:border-0 pb-2">
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${feedbackTypeColors[entry.feedback_type] || "bg-gray-100 text-gray-700"}`}>
+                    {entry.feedback_type?.replace(/_/g, " ")}
+                  </span>
+                  <div className="flex-1">
+                    {entry.text && <p className="text-sm">{entry.text}</p>}
+                    {entry.corrected_output && (
+                      <p className="text-xs text-muted-foreground mt-1">Corrected: {typeof entry.corrected_output === "string" ? entry.corrected_output : JSON.stringify(entry.corrected_output)}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {entry.created_at ? new Date(entry.created_at).toLocaleString() : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No feedback submitted yet.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ──�� Config Tab ─── */
 function ConfigTab({ agent }: { agent: Agent }) {
   const configRows: Array<{ label: string; value: string }> = [
     { label: "LLM Model", value: agent.llm_model || "Not specified" },

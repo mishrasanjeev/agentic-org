@@ -285,6 +285,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "system_prompt_text": agent.system_prompt_text,
         "reporting_to": agent.reporting_to,
         "org_level": agent.org_level,
+        "prompt_amendments": agent.prompt_amendments if hasattr(agent, "prompt_amendments") else [],
     }
 
 
@@ -730,6 +731,121 @@ async def import_agents_csv(
     }
 
 
+# ── POST /agents/generate (Conversational Agent Creator) ─────────────────────
+
+
+@router.post("/agents/generate")
+async def generate_agent(
+    body: dict,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Generate agent config from a natural-language description.
+
+    Body: ``{"description": str, "deploy": bool}``
+
+    Returns a preview of the generated agent configuration. If ``deploy``
+    is True, also creates the agent in shadow mode using the top suggestion.
+    """
+    from core.agent_generator import generate_agent_config
+
+    description = body.get("description", "")
+    deploy = body.get("deploy", False)
+
+    if not description or len(description) < 10:
+        raise HTTPException(
+            422, detail="Description must be at least 10 characters.",
+        )
+
+    try:
+        result = await generate_agent_config(description)
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+
+    suggestions = result.get("suggestions", [])
+    if not suggestions:
+        raise HTTPException(
+            422,
+            detail="Could not generate agent configuration from that description.",
+        )
+
+    created_agent = None
+
+    # If deploy requested, create the top suggestion as a shadow agent
+    if deploy and suggestions:
+        top = suggestions[0]
+        tid = _uuid.UUID(tenant_id)
+
+        # Build tools list
+        tools = top.get("suggested_tools", [])
+        if not tools:
+            tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
+                top.get("agent_type", ""),
+                _DOMAIN_DEFAULT_TOOLS.get(top.get("domain", ""), []),
+            )
+
+        async with get_tenant_session(tid) as session:
+            agent = Agent(
+                tenant_id=tid,
+                name=top.get("employee_name", "Generated Agent"),
+                employee_name=top.get("employee_name", "Generated Agent"),
+                agent_type=top.get("agent_type", ""),
+                domain=top.get("domain", ""),
+                designation=top.get("designation"),
+                specialization=top.get("specialization"),
+                system_prompt_ref="",
+                system_prompt_text=top.get("system_prompt", ""),
+                prompt_variables={},
+                llm_model="gemini-2.5-flash",
+                llm_fallback="gemini-2.5-flash-preview-05-20",
+                llm_config={
+                    "model": "gemini-2.5-flash",
+                    "fallback_model": "gemini-2.5-flash-preview-05-20",
+                },
+                confidence_floor=Decimal(str(top.get("confidence_floor", 0.88))),
+                hitl_condition=top.get("hitl_condition", "confidence < 0.88"),
+                max_retries=3,
+                authorized_tools=tools,
+                status="shadow",
+                version="1.0.0",
+                cost_controls={},
+                scaling={},
+            )
+            session.add(agent)
+            await session.flush()
+
+            # Audit log
+            audit_entry = AuditLog(
+                tenant_id=tid,
+                event_type="agent.generate_deploy",
+                actor_type="user",
+                actor_id=str(tid),
+                agent_id=agent.id,
+                resource_type="agent",
+                resource_id=str(agent.id),
+                action=(
+                    f"Generated and deployed agent '{agent.name}' "
+                    f"({agent.agent_type}) from NL description"
+                ),
+                outcome="success",
+            )
+            session.add(audit_entry)
+
+            created_agent = {
+                "agent_id": str(agent.id),
+                "name": agent.name,
+                "status": "shadow",
+                "agent_type": agent.agent_type,
+                "domain": agent.domain,
+            }
+
+    return {
+        "suggestions": suggestions,
+        "deployed": created_agent,
+        "llm_model": result.get("llm_model"),
+        "tokens_used": result.get("tokens_used"),
+    }
+
+
 # ── GET /agents/{id} ────────────────────────────────────────────────────────
 @router.get("/agents/{agent_id}")
 async def get_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
@@ -1125,6 +1241,7 @@ async def run_agent(
         "confidence": task_confidence,
         "reasoning_trace": task_trace,
         "runtime": "langgraph",
+        "explanation": lg_result.get("explanation", {}),
         "performance": {
             "total_latency_ms": perf.get("total_latency_ms", 0),
             "llm_tokens_used": perf.get("llm_tokens_used", 0),
@@ -1625,4 +1742,113 @@ async def get_agent_budget(
         "monthly_tasks": monthly_tasks,
         "daily_token_budget": daily_budget,
         "warnings": warnings,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FEEDBACK LOOP — Self-Improving Agents (PRD v4 Section 8)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+# ── POST /agents/{id}/feedback ──────────────────────────────────────────────
+@router.post("/agents/{agent_id}/feedback")
+async def submit_agent_feedback(
+    agent_id: UUID,
+    body: dict | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Submit feedback (thumbs up/down, correction, HITL reject) for an agent run."""
+    if body is None:
+        body = {}
+
+    from core.feedback.collector import submit_feedback
+
+    run_id = body.get("run_id", "")
+    feedback_type = body.get("feedback_type", "")
+    text = body.get("text", "")
+    corrected_output = body.get("corrected_output")
+
+    if not feedback_type:
+        raise HTTPException(400, "feedback_type is required")
+    if not run_id:
+        raise HTTPException(400, "run_id is required")
+
+    result = await submit_feedback(
+        agent_id=str(agent_id),
+        run_id=run_id,
+        feedback_type=feedback_type,
+        text=text,
+        corrected_output=corrected_output,
+        tenant_id=tenant_id,
+    )
+
+    if result.get("status") == "error":
+        raise HTTPException(422, result.get("message", "Invalid feedback"))
+
+    return result
+
+
+# ── GET /agents/{id}/feedback ───────────────────────────────────────────────
+@router.get("/agents/{agent_id}/feedback")
+async def list_agent_feedback(
+    agent_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """List feedback entries for an agent (paginated)."""
+    from core.feedback.collector import list_feedback
+
+    entries = await list_feedback(
+        agent_id=str(agent_id),
+        tenant_id=tenant_id,
+        limit=min(limit, 100),
+        offset=max(offset, 0),
+    )
+    return {"agent_id": str(agent_id), "feedback": entries, "count": len(entries)}
+
+
+# ── POST /agents/{id}/feedback/analyze ──────────────────────────────────────
+@router.post("/agents/{agent_id}/feedback/analyze")
+async def analyze_agent_feedback(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Trigger feedback analysis to generate prompt amendment suggestions."""
+    from core.feedback.analyzer import analyze_feedback
+
+    result = await analyze_feedback(
+        agent_id=str(agent_id),
+        tenant_id=tenant_id,
+    )
+    return {"agent_id": str(agent_id), **result}
+
+
+# ── GET /agents/{id}/amendments ─────────────────────────────────────────────
+@router.get("/agents/{agent_id}/amendments")
+async def list_agent_amendments(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """List current prompt amendments (learned rules) for an agent."""
+    tid = _uuid.UUID(tenant_id)
+    amendments: list[str] = []
+
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        # prompt_amendments is a JSONB list on the agent record
+        raw = getattr(agent, "prompt_amendments", None) or []
+        if isinstance(raw, list):
+            amendments = [str(a) for a in raw]
+
+    return {
+        "agent_id": str(agent_id),
+        "amendments": amendments,
+        "count": len(amendments),
     }

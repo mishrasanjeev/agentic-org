@@ -87,6 +87,7 @@ class Agent(BaseModel):
     system_prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     reporting_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
     org_level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    prompt_amendments: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )
