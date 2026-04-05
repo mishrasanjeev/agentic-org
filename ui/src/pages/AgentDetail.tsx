@@ -312,11 +312,22 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
   const [correcting, setCorrecting] = useState(false);
   const [correctionText, setCorrectionText] = useState("");
 
-  // Load the latest run result when expanded
+  // Load the latest run explanation when expanded
   useEffect(() => {
     if (!expanded) return;
-    // Fetch last run explanation from the API
-    api.get(`/agents/${agentId}/feedback?limit=1`).catch(() => {});
+    api.get(`/agents/${agentId}/feedback?limit=1`).then(({ data }) => {
+      const items = Array.isArray(data) ? data : data?.items || [];
+      if (items.length > 0) {
+        setRunResult({ task_id: items[0].run_id, status: "completed" });
+      }
+    }).catch(() => {});
+    // Load mock explanation until real API is wired
+    setExplanation({
+      bullets: ["Agent processed the request using configured tools", "Confidence was above threshold", "No HITL trigger conditions met"],
+      confidence: 0.92,
+      tools_cited: ["get_contact", "query"],
+      readability_grade: 7.5,
+    });
   }, [expanded, agentId]);
 
   async function sendFeedback(type: string) {
