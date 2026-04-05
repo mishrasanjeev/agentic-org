@@ -812,6 +812,13 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
     });
     await page.waitForLoadState("networkidle");
 
+    // Switch to template tab (NL description tab may be default in v4.0.0)
+    const templateTab = page.getByText(/use template|template/i).first();
+    if (await templateTab.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await templateTab.click();
+      await page.waitForTimeout(500);
+    }
+
     const triggerLabel = page.locator('label:has-text("Trigger Type")');
     const triggerSelect = triggerLabel.locator("..").locator("select");
     const options = await triggerSelect
@@ -835,6 +842,12 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
     });
     await page.waitForLoadState("networkidle");
 
+    const templateTab = page.getByText(/use template|template/i).first();
+    if (await templateTab.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await templateTab.click();
+      await page.waitForTimeout(500);
+    }
+
     const triggerLabel = page.locator('label:has-text("Trigger Type")');
     const triggerSelect = triggerLabel.locator("..").locator("select");
     const options = await triggerSelect
@@ -857,6 +870,12 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle");
+
+    const templateTab = page.getByText(/use template|template/i).first();
+    if (await templateTab.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await templateTab.click();
+      await page.waitForTimeout(500);
+    }
 
     const triggerLabel = page.locator('label:has-text("Trigger Type")');
     const triggerSelect = triggerLabel.locator("..").locator("select");

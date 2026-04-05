@@ -258,7 +258,7 @@ test.describe("Connectors — Production Flow", () => {
   test("category filter works", async ({ page }) => {
     await page.goto("/dashboard/connectors");
     await page.waitForLoadState("networkidle");
-    const selectEl = page.locator("select").first();
+    const selectEl = page.locator("main select").first();
     if (await selectEl.isVisible({ timeout: 5000 }).catch(() => false)) {
       await selectEl.selectOption("finance");
       await page.waitForLoadState("networkidle");
