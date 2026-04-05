@@ -40,7 +40,7 @@ class TestFAQAutoAnswer:
     def test_faq_auto_answer(self):
         agent = _make_agent()
         task = _make_task("How do I reset my password?")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         assert result["status"] == "auto_resolved"
         assert result["source"] == "faq"
@@ -50,7 +50,7 @@ class TestFAQAutoAnswer:
     def test_billing_faq_auto_answer(self):
         agent = _make_agent()
         task = _make_task("How do I upgrade my plan? billing question")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         assert result["status"] == "auto_resolved"
         assert result["source"] == "faq"
@@ -74,7 +74,7 @@ class TestKBLookupResolvesQuery:
         agent = _make_agent(tool_gateway=mock_gateway)
         # Query that won't match any FAQ intent well
         task = _make_task("How do I set up SAML SSO for my organization?")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         # Should either resolve via KB or escalate; if KB confidence >= 0.7, it resolves
         if result["status"] == "auto_resolved":
@@ -92,7 +92,7 @@ class TestLowConfidenceEscalates:
         agent = _make_agent()
         # Completely unrelated query — won't match any FAQ intent
         task = _make_task("xyzzy foobar quantum entanglement soup recipe")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         assert result["status"] == "escalated"
         assert result["source"] == "escalation"
@@ -102,7 +102,7 @@ class TestLowConfidenceEscalates:
     def test_low_confidence_includes_reason(self):
         agent = _make_agent()
         task = _make_task("something completely unknown and random 12345")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         assert result["status"] == "escalated"
         assert len(result["escalation_reason"]) > 0
@@ -118,11 +118,11 @@ class TestDeflectionRateCalculated:
         # Run 3 FAQ queries (should be auto-resolved)
         for q in ["reset my password", "upgrade my plan billing", "how to export data csv"]:
             task = _make_task(q)
-            asyncio.get_event_loop().run_until_complete(agent.execute(task))
+            asyncio.run(agent.execute(task))
 
         # Run 1 unknown query (should escalate)
         task = _make_task("xyzzy nonsense query 999")
-        asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        asyncio.run(agent.execute(task))
 
         # 3 resolved out of 4 = 75%
         assert agent._total_queries == 4
@@ -136,7 +136,7 @@ class TestDeflectionRateCalculated:
     def test_deflection_rate_in_response(self):
         agent = _make_agent()
         task = _make_task("How do I reset my password?")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
         assert "deflection_rate" in result
         assert result["deflection_rate"] == pytest.approx(100.0)
 
@@ -147,7 +147,7 @@ class TestUnknownIssueCreatesTicket:
     def test_unknown_issue_creates_ticket(self):
         agent = _make_agent()
         task = _make_task("My custom integration with XYZ legacy system is broken in a unique way")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         # Should escalate since it's an unknown issue
         assert result["status"] == "escalated"
@@ -159,7 +159,7 @@ class TestUnknownIssueCreatesTicket:
     def test_escalated_response_has_all_required_fields(self):
         agent = _make_agent()
         task = _make_task("Something broke and I don't know what it is 98765")
-        result = asyncio.get_event_loop().run_until_complete(agent.execute(task))
+        result = asyncio.run(agent.execute(task))
 
         assert result["status"] == "escalated"
         required_fields = ["status", "confidence", "source", "processing_trace", "deflection_rate", "escalation_reason"]
