@@ -319,14 +319,6 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
     api.get(`/agents/${agentId}/feedback?limit=1`).catch(() => {});
   }, [expanded, agentId]);
 
-  // Accept explanation data from a run result (mock or real)
-  function loadExplanation(data: any) {
-    if (data?.explanation) {
-      setExplanation(data.explanation);
-      setRunResult({ task_id: data.task_id, status: data.status });
-    }
-  }
-
   async function sendFeedback(type: string) {
     if (!runResult?.task_id) return;
     try {
