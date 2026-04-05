@@ -92,8 +92,11 @@ else:
     except Exception as e:
         record(3, "GET /auth/config", False, f"status={r.status_code}, error: {e}")
 
-# 4. GET /a2a/.well-known/agent.json
+# 4. GET /a2a/.well-known/agent.json (or /a2a/agent-card fallback)
 r = safe_get(f"{BASE_API}/a2a/.well-known/agent.json")
+if isinstance(r, tuple) or (hasattr(r, "status_code") and r.status_code != 200):
+    # Fallback to /a2a/agent-card (same handler, different path)
+    r = safe_get(f"{BASE_API}/a2a/agent-card")
 if isinstance(r, tuple):
     record(4, "GET /a2a/.well-known/agent.json", False, f"Request failed: {r[1]}")
 else:
