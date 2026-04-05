@@ -340,7 +340,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — 35 pre-built agents across 6 domains, 54 connectors (340+ tools), CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
+        <meta name="description" content="AI agents that reason AND act — 50+ pre-built agents across 6 domains, 54 native connectors + 1000+ via Composio (340+ native tools), CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -492,7 +492,7 @@ export default function Landing() {
       <section className="relative bg-slate-900 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-5xl mx-auto">
           <Link
-            to="/how-grantex-works"
+            to="/pricing"
             className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
           >
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
@@ -618,7 +618,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                35 pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 54 connectors (340+ tools), A/B testing, email drip, ABM with intent data, SDK/MCP/API access. Not chatbots. Virtual employees.
+                50+ pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 54 native connectors + 1000+ via Composio (340+ native tools), A/B testing, email drip, ABM with intent data, SDK/MCP/API access. Not chatbots. Virtual employees.
               </p>
             </div>
           </FadeIn>
@@ -630,11 +630,11 @@ export default function Landing() {
                 <BrowserFrame
                   src="/screenshots/agents.webp"
                   title="app.agenticorg.ai/dashboard/agents"
-                  alt="Agent fleet management view showing 25 AI agents across Finance, HR, Marketing, and Ops"
+                  alt="Agent fleet management view showing 50+ AI agents across Finance, HR, Marketing, and Ops"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  35 pre-built agents across Finance, HR, Marketing, Ops, and Back Office &mdash; each connected to real tools (Jira, HubSpot, GitHub). Create custom virtual employees with names, personas, and tool access.
+                  50+ pre-built agents across Finance, HR, Marketing, Ops, and Back Office &mdash; each connected to real tools (Jira, HubSpot, GitHub). Create custom virtual employees with names, personas, and tool access.
                 </p>
               </div>
             </FadeIn>
@@ -898,7 +898,7 @@ export default function Landing() {
 
             <div className="grid md:grid-cols-3 gap-12">
               {[
-                { num: "1", title: "Create or pick your agents", desc: "Choose from 35 pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
+                { num: "1", title: "Create or pick your agents", desc: "Choose from 50+ pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
                 { num: "2", title: "Connect your systems", desc: "54 connectors with 340+ tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK (pip install agenticorg), TypeScript SDK (npm i agenticorg-sdk), CLI, or ChatGPT/Claude via MCP Server." },
               ].map((step, i) => (
@@ -932,7 +932,7 @@ export default function Landing() {
               <div className="grid md:grid-cols-3 gap-6 text-center">
                 <div>
                   <div className="text-2xl font-bold text-slate-900">Free</div>
-                  <p className="text-sm text-slate-500 mt-1">35 agents, 20 connectors, 500 tasks/day</p>
+                  <p className="text-sm text-slate-500 mt-1">50+ agents, 20 connectors, 500 tasks/day</p>
                   <Link to="/signup" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Start Free →</Link>
                 </div>
                 <div className="border-x border-slate-200 px-6">
@@ -1353,7 +1353,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              35 agents that act. 54 connectors. 340+ tools. 855+ tests passing. Free to start.
+              50+ agents that act. 1000+ integrations. 340+ native tools. 855+ tests passing. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

@@ -129,7 +129,7 @@ const TIERS = [
     cta: "Start Free",
     ctaLink: "/login",
     features: [
-      "35 AI agents",
+      "50+ AI agents",
       "20 connectors",
       "500 tasks/day",
       "Community support",
@@ -286,7 +286,7 @@ export default function Pricing() {
     <div className="min-h-screen bg-white">
       <Helmet>
         <title>Pricing | AgenticOrg</title>
-        <meta name="description" content="Simple, transparent pricing for AgenticOrg. Start free with 35 agents, scale with Pro, go all-in with Enterprise." />
+        <meta name="description" content="Simple, transparent pricing for AgenticOrg. Start free with 50+ agents, scale with Pro, go all-in with Enterprise." />
         <link rel="canonical" href="https://agenticorg.ai/pricing" />
       </Helmet>
 
@@ -337,7 +337,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Start free with 35 agents. Scale to unlimited agents and 54 connectors as your team grows.
+            Start free with 50+ agents. Scale to unlimited agents and 1000+ integrations as your team grows.
             No hidden fees. Cancel anytime.
           </p>
         </div>
@@ -479,7 +479,7 @@ export default function Pricing() {
             Ready to automate your enterprise?
           </h2>
           <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Start free with 35 agents and 20 connectors. Upgrade to Pro for 54 connectors and unlimited tasks.
+            Start free with 50+ agents and 20 connectors. Upgrade to Pro for 1000+ integrations and unlimited tasks.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

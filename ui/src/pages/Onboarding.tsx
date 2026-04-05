@@ -169,7 +169,7 @@ export default function Onboarding() {
   };
 
   const GETTING_STARTED_STEPS = [
-    { icon: "1", title: "Explore your AI agents", desc: "35 pre-built agents are ready across Finance, HR, Marketing, Operations, and Back Office.", link: "/dashboard/agents" },
+    { icon: "1", title: "Explore your AI agents", desc: "50+ pre-built agents are ready across Finance, HR, Marketing, Operations, and Back Office.", link: "/dashboard/agents" },
     { icon: "2", title: "Try the Playground", desc: "Run agents with sample data to see how they work — no configuration needed.", link: "/playground" },
     { icon: "3", title: "Set up Connectors", desc: "Connect your ERP, CRM, HRIS, and other tools to power your agents with real data.", link: "/dashboard/connectors" },
     { icon: "4", title: "Create Workflows", desc: "Chain agents together into automated workflows with human-in-the-loop approval gates.", link: "/dashboard/workflows" },

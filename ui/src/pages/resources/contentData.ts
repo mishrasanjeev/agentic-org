@@ -422,7 +422,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     heroStat: { value: "5 min", label: "To create a custom AI agent" },
     sections: [
       { heading: "Why No-Code Matters", body: "Traditional AI deployment: 6 months of development, ML engineers, infrastructure setup. No-code agent creation: 5 minutes, business user, guided wizard. The difference is the difference between building a house and moving into one." },
-      { heading: "The 5-Step Wizard", body: "Step 1 — Persona: Name your AI employee, set their designation and specialization\nStep 2 — Role: Choose from 25 agent types or create a custom one\nStep 3 — Prompt: Select from 26 templates or write custom instructions\nStep 4 — Behavior: Set confidence floor, HITL conditions, retry policy\nStep 5 — Review & Deploy: Launch in shadow mode for safe testing" },
+      { heading: "The 5-Step Wizard", body: "Step 1 — Persona: Name your AI employee, set their designation and specialization\nStep 2 — Role: Choose from 50+ agent types or create a custom one\nStep 3 — Prompt: Select from 26 templates or write custom instructions\nStep 4 — Behavior: Set confidence floor, HITL conditions, retry policy\nStep 5 — Review & Deploy: Launch in shadow mode for safe testing" },
       { heading: "Multiple Agents, Same Role", body: "Create 3 AP Processors: Priya handles domestic invoices in Mumbai, Arjun handles import invoices in Delhi, Maya handles subsidiary accounts. Smart routing sends each invoice to the right agent." },
     ],
     faqs: [

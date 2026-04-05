@@ -45,7 +45,7 @@ test.describe("Landing Page — Core Rendering", () => {
   });
 
   test("stats bar shows current platform metrics", async ({ page }) => {
-    // Updated metrics: 35 agents, 54 connectors, 340+ tools
+    // Updated metrics: 50+ agents, 1000+ integrations, 340+ tools
     await expect(page.getByText(/agent/i).first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/connector/i).first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/340/).first()).toBeVisible({ timeout: 10000 });

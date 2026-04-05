@@ -10,7 +10,7 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 
 - **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
 - **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
-- **50+ Pre-Built AI Agents**: Includes 35 core agents + 16 industry pack agents (Healthcare 4, Legal 4, Insurance 4, Manufacturing 4) + voice/support deflection agents
+- **50+ Pre-Built AI Agents**: Includes 50+ agents across Finance, HR, Marketing, Ops, Back Office, Comms + industry packs (Healthcare, Legal, Insurance, Manufacturing) + voice/support deflection agents
 - **1000+ Integrations** (via Composio, MIT) + **54 Native Connectors (340+ native tools)**:
 - **Knowledge Base (RAG)**: Upload PDF/Word/Excel, agents query via semantic search. Powered by RAGFlow (Apache 2.0)
 - **Voice Agents**: Real-time voice AI with STT (Whisper) + TTS (Piper) + SIP telephony. Powered by LiveKit (Apache 2.0) + Pipecat (BSD-2)

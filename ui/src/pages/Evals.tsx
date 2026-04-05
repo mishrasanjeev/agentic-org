@@ -287,7 +287,7 @@ export default function Evals() {
     <div className="min-h-screen bg-white">
       <Helmet>
         <title>Evaluation Matrix — AgenticOrg | 22 Agents Scored Across 6 Dimensions</title>
-        <meta name="description" content="Published evaluation scorecard for AgenticOrg's 25 AI agents. Quality, safety, performance, reliability, security, and cost metrics." />
+        <meta name="description" content="Published evaluation scorecard for AgenticOrg's 50+ AI agents. Quality, safety, performance, reliability, security, and cost metrics." />
         <link rel="canonical" href="https://agenticorg.ai/evals" />
       </Helmet>
       {/* ---- Header ---- */}

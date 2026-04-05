@@ -118,20 +118,20 @@ else:
     except Exception as e:
         record(5, "GET /a2a/agent-card", False, f"status={r.status_code}, error: {e}")
 
-# 6. GET /a2a/agents — expect 35 agents
+# 6. GET /a2a/agents — expect 50+ agents
 r = safe_get(f"{BASE_API}/a2a/agents")
 if isinstance(r, tuple):
-    record(6, "GET /a2a/agents (35 agents)", False, f"Request failed: {r[1]}")
+    record(6, "GET /a2a/agents (50+ agents)", False, f"Request failed: {r[1]}")
 else:
     try:
         d = r.json()
         agents_list = d if isinstance(d, list) else d.get("agents", d.get("data", []))
         count = len(agents_list) if isinstance(agents_list, list) else 0
         ok = r.status_code == 200 and count >= 25
-        record(6, "GET /a2a/agents (35 agents)", ok,
+        record(6, "GET /a2a/agents (50+ agents)", ok,
                "" if ok else f"status={r.status_code}, agent_count={count}")
     except Exception as e:
-        record(6, "GET /a2a/agents (35 agents)", False, f"status={r.status_code}, error: {e}")
+        record(6, "GET /a2a/agents (50+ agents)", False, f"status={r.status_code}, error: {e}")
 
 # 7. GET /mcp/tools
 r = safe_get(f"{BASE_API}/mcp/tools")

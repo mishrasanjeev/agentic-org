@@ -1,4 +1,4 @@
-"""Agent layer — auto-load all 25 agent modules so @AgentRegistry.register fires."""
+"""Agent layer — auto-load all 50+ agent modules so @AgentRegistry.register fires."""
 
 # Finance agents
 # Backoffice agents

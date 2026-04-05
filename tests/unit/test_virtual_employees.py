@@ -503,7 +503,7 @@ class TestAgentModel:
 
 
 class TestBackwardCompatibility:
-    """Ensure existing 25 built-in agents still work."""
+    """Ensure existing 50+ built-in agents still work."""
 
     def test_all_builtin_agents_registered(self):
         import core.agents  # noqa: F401

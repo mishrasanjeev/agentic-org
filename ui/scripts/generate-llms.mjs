@@ -252,7 +252,7 @@ ${pricingLines}
 
 - **Python SDK**: \`pip install agenticorg\` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
 - **TypeScript SDK**: \`npm i agenticorg-sdk\` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: \`npx agenticorg-mcp-server\` — expose 25+ agents and 273 tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **MCP Server**: \`npx agenticorg-mcp-server\` — expose 50+ agents and 340+ native tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
 - **CLI**: \`agenticorg agents list\`, \`agenticorg agents run\`, \`agenticorg sop deploy\`
 - **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use \`ao_sk_\` prefix, bcrypt-hashed, scoped, revocable
 - **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at \`/api/v1/a2a/agent-card\`

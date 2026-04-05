@@ -288,7 +288,7 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 ## Pricing
 
 ### Free ($0/month)
-- 35 AI agents
+- 50+ AI agents
 - 20 connectors
 - 500 tasks/day
 - Community support

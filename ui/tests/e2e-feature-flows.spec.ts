@@ -866,7 +866,7 @@ test.describe("Flow 8: API Endpoint Validation", () => {
     expect(body.connectors).toBe(43);
   });
 
-  test("GET /api/v1/a2a/agents — returns 35 agents", async ({ page }) => {
+  test("GET /api/v1/a2a/agents — returns 50+ agents", async ({ page }) => {
     const response = await page.request.get(`${APP}/api/v1/a2a/agents`);
     expect(response.status()).toBe(200);
 

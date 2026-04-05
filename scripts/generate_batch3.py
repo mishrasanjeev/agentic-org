@@ -26,7 +26,7 @@ w("core/agents/backoffice/__init__.py", '"""Back office agents."""\n')
 w(
     "core/agents/base.py",
     '''
-"""Base agent class — all 35 agents extend this."""
+"""Base agent class — all 50+ agents extend this."""
 from __future__ import annotations
 
 import abc
