@@ -58,7 +58,7 @@ test.describe("Agents — Production Flow", () => {
   test("domain filter dropdown works", async ({ page }) => {
     await page.goto("/dashboard/agents");
     await page.waitForLoadState("networkidle");
-    const selectEl = page.locator("select").first();
+    const selectEl = page.locator("main select").first();
     if (await selectEl.isVisible({ timeout: 5000 }).catch(() => false)) {
       await selectEl.selectOption("finance");
       await page.waitForLoadState("networkidle");
@@ -225,7 +225,7 @@ test.describe("Approvals — Production Flow", () => {
   test("priority filter dropdown works", async ({ page }) => {
     await page.goto("/dashboard/approvals");
     await page.waitForLoadState("networkidle");
-    const selectEl = page.locator("select").first();
+    const selectEl = page.locator("main select").first();
     if (await selectEl.isVisible({ timeout: 5000 }).catch(() => false)) {
       await selectEl.selectOption("critical");
       await page.waitForLoadState("networkidle");

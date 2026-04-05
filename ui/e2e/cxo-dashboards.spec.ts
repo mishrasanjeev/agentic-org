@@ -422,7 +422,7 @@ test.describe("Report Scheduler", () => {
 
     await page.getByText("+ New Schedule").click();
 
-    const selects = page.locator("select");
+    const selects = page.locator("main select");
     await selects.nth(0).selectOption("pnl_report");
     await selects.nth(1).selectOption("monthly");
     await selects.nth(2).selectOption("excel");

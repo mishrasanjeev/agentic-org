@@ -304,6 +304,12 @@ test.describe("UI: Error display", () => {
     });
     await page.waitForLoadState("networkidle");
 
+    // Switch to template tab (NL description tab may be default)
+    const templateTab = page.getByText(/use template|template/i).first();
+    if (await templateTab.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await templateTab.click();
+    }
+
     // Fill name but leave steps invalid
     const nameInput = page.locator('input[placeholder*="Invoice"]');
     if (await nameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
