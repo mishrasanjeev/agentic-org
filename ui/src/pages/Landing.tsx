@@ -434,7 +434,7 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">Now Live &mdash; 54 Connectors, 340+ Tools &mdash; Agents That Execute Real API Calls</span>
+              <span className="text-slate-300 text-sm">v4.0.0 &mdash; 1000+ Integrations, 50+ AI Agents, Voice, Knowledge Base, Industry Packs</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
