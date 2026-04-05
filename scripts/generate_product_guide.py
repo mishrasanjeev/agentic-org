@@ -211,7 +211,7 @@ def build_guide() -> GuidePdf:
     toc = [
         ("1", "What is AgenticOrg?"),
         ("2", "How It Works - The Big Picture"),
-        ("3", "The 6 Domains & 35 AI Agents"),
+        ("3", "The 6 Domains & 50+ AI Agents"),
         ("4", "54 Connectors & 340+ Tools"),
         ("5", "Workflow Engine - Automating Business Processes"),
         ("6", "Security & Grantex Scope Enforcement"),
@@ -403,7 +403,7 @@ def build_guide() -> GuidePdf:
     # 3. DOMAINS & AGENTS
     # ═══════════════════════════════════════════════════════════════════════
     pdf.add_page()
-    pdf.section_title("3", "The 6 Domains & 35 AI Agents")
+    pdf.section_title("3", "The 6 Domains & 50+ AI Agents")
     pdf.body(
         "AgenticOrg organizes agents into 6 business domains. Each agent has a name, "
         "personality, specific tools, and knows exactly what it's allowed to do."

@@ -292,7 +292,7 @@ def sec01_product_overview(pdf: FuncSpecPdf) -> None:
 
     pdf.sub_title("1.1  Platform at a Glance")
     stats = [
-        "35 AI Agents spanning Finance, HR, Marketing, Operations, and Sales",
+        "50+ AI Agents spanning Finance, HR, Marketing, Operations, and Sales",
         "54 Production Connectors (Oracle, SAP, Tally, GSTN, HubSpot, Jira, etc.)",
         "340+ Tools exposed via MCP server, A2A protocol, and REST API",
         "15 Pre-built Workflow Templates (invoice-to-pay, campaign launch, incident response, etc.)",

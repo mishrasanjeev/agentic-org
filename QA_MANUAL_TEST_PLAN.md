@@ -3543,7 +3543,7 @@
 2. Navigate to /dashboard/org-chart
 3. Open browser DevTools → Console tab
 
-**Expected Result:** Page loads within 3 seconds. Title reads "Organization Chart". Subtitle shows agent count, department head count, and hierarchy count (e.g., "24 agents | 4 department heads | 20 in hierarchy"). No JavaScript errors in console.
+**Expected Result:** Page loads within 3 seconds. Title reads "Organization Chart". Subtitle shows agent count, department head count, and hierarchy count (e.g., "50+ agents | 4 department heads | 20 in hierarchy"). No JavaScript errors in console.
 
 ---
 

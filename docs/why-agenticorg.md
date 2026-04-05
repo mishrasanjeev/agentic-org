@@ -236,7 +236,7 @@ AgenticOrg ships with native support for India-specific systems and regulations:
 ```mermaid
 graph LR
     subgraph Proprietary["Proprietary Vendor Pricing"]
-        P1["$420/robot/year x 24 agents"]
+        P1["$420/robot/year x 50+ agents"]
         P2["= $10,080/year minimum"]
         P3["+ per-user fees"]
         P4["+ connector licenses"]
@@ -245,7 +245,7 @@ graph LR
 
     subgraph OpenSource["AgenticOrg Pricing"]
         O1["Apache 2.0 = Free"]
-        O2["24 agents: INR 0"]
+        O2["50+ agents: INR 0"]
         O3["54 connectors: INR 0"]
         O4["Infra: < INR 10L/year"]
         O5["Total: < INR 10L/year"]
