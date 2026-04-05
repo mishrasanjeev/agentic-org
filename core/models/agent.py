@@ -19,6 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -91,7 +92,7 @@ class Agent(BaseModel):
     # Column added via migration v400_apex. nullable=True ensures
     # production works even before migration runs.
     prompt_amendments: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True, server_default="'[]'::jsonb"
+        JSONB, nullable=True, server_default=text("'[]'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
