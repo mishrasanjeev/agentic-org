@@ -1,0 +1,73 @@
+{
+  "app": {
+    "name": "AgenticOrg",
+    "tagline": "AI-Powered Enterprise Automation"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "financeDashboard": "Finance Dashboard",
+    "marketingDashboard": "Marketing Dashboard",
+    "abm": "ABM",
+    "observatory": "Observatory",
+    "agents": "Agents",
+    "orgChart": "Org Chart",
+    "workflows": "Workflows",
+    "approvals": "Approvals",
+    "connectors": "Connectors",
+    "promptTemplates": "Prompt Templates",
+    "createFromSop": "Create from SOP",
+    "a2aMcp": "A2A / MCP",
+    "salesPipeline": "Sales Pipeline",
+    "schemas": "Schemas",
+    "reportSchedules": "Report Schedules",
+    "scopeDashboard": "Scope Dashboard",
+    "enforceAudit": "Enforce Audit",
+    "auditLog": "Audit Log",
+    "slaMonitor": "SLA Monitor",
+    "settings": "Settings"
+  },
+  "header": {
+    "search": "Search or ask anything...",
+    "notifications": "Notifications",
+    "language": "Language",
+    "logout": "Logout"
+  },
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "submit": "Submit",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "approve": "Approve",
+    "reject": "Reject",
+    "download": "Download",
+    "upload": "Upload",
+    "refresh": "Refresh",
+    "filter": "Filter",
+    "export": "Export"
+  },
+  "status": {
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error",
+    "pending": "Pending",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "approved": "Approved",
+    "rejected": "Rejected"
+  },
+  "auth": {
+    "login": "Log In",
+    "signup": "Sign Up",
+    "forgotPassword": "Forgot Password?",
+    "resetPassword": "Reset Password",
+    "email": "Email",
+    "password": "Password",
+    "rememberMe": "Remember me"
+  }
+}

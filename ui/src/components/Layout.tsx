@@ -1,7 +1,13 @@
 import { useState, lazy, Suspense } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
+
+const LANGUAGES = [
+  { code: "en", label: "EN" },
+  { code: "hi", label: "HI" },
+] as const;
 
 const NLQueryBar = lazy(() => import("./NLQueryBar"));
 const ChatPanel = lazy(() => import("./ChatPanel"));
@@ -45,6 +51,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const auth = useAuth();
+  const { i18n } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -169,6 +176,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Suspense fallback={null}>
               <NLQueryBar onOpenChat={() => setChatOpen(true)} />
             </Suspense>
+            {/* Language picker */}
+            <select
+              value={i18n.language}
+              onChange={(e) => i18n.changeLanguage(e.target.value)}
+              className="h-8 px-2 rounded border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-label="Select language"
+              data-testid="language-picker"
+            >
+              {LANGUAGES.map(({ code, label }) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
             <Suspense fallback={null}>
               <NotificationBell />
             </Suspense>

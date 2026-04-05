@@ -224,6 +224,12 @@ async def create_workflow(
         raise HTTPException(400, "Workflow must have at least one step")
 
     tid = _uuid.UUID(tenant_id)
+
+    # Inject replan_on_failure into the definition dict so the engine sees it
+    definition = body.definition
+    if body.replan_on_failure:
+        definition = {**definition, "replan_on_failure": True}
+
     async with get_tenant_session(tid) as session:
         wf = WorkflowDefinition(
             tenant_id=tid,
@@ -231,7 +237,7 @@ async def create_workflow(
             version=body.version,
             description=body.description,
             domain=body.domain,
-            definition=body.definition,
+            definition=definition,
             trigger_type=body.trigger_type,
             trigger_config=body.trigger_config,
             is_active=True,
@@ -503,3 +509,66 @@ async def get_workflow_run(
         raise HTTPException(404, "Workflow run not found")
 
     return _run_to_dict(run, include_steps=True)
+
+
+# ── GET /workflows/runs/{run_id}/replan-history ────────────────────────────
+@router.get("/workflows/runs/{run_id}/replan-history")
+async def get_replan_history(
+    run_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Return the list of re-planning events for a workflow run."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(WorkflowRun).where(
+                WorkflowRun.id == run_id, WorkflowRun.tenant_id == tid
+            )
+        )
+        run = result.scalar_one_or_none()
+
+    if not run:
+        raise HTTPException(404, "Workflow run not found")
+
+    context = run.context or {}
+    return {
+        "run_id": str(run_id),
+        "replan_count": context.get("replan_count", 0),
+        "replan_history": context.get("replan_history", []),
+    }
+
+
+# ── PUT /workflows/{wf_id}/replan-config ──────────────────────────────────
+
+
+class ReplanConfigUpdate(BaseModel):
+    replan_on_failure: bool = Field(..., description="Enable or disable adaptive re-planning")
+
+
+@router.put("/workflows/{wf_id}/replan-config")
+async def update_replan_config(
+    wf_id: UUID,
+    body: ReplanConfigUpdate,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Toggle the replan_on_failure setting for a workflow definition."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(WorkflowDefinition).where(
+                WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid
+            )
+        )
+        wf = result.scalar_one_or_none()
+        if not wf:
+            raise HTTPException(404, "Workflow not found")
+
+        definition = dict(wf.definition) if wf.definition else {}
+        definition["replan_on_failure"] = body.replan_on_failure
+        wf.definition = definition
+        await session.commit()
+
+    return {
+        "workflow_id": str(wf_id),
+        "replan_on_failure": body.replan_on_failure,
+    }

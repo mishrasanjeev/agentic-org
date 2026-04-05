@@ -1,0 +1,73 @@
+{
+  "app": {
+    "name": "AgenticOrg",
+    "tagline": "AI-संचालित एंटरप्राइज़ ऑटोमेशन"
+  },
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "financeDashboard": "वित्त डैशबोर्ड",
+    "marketingDashboard": "मार्केटिंग डैशबोर्ड",
+    "abm": "ABM",
+    "observatory": "ऑब्ज़र्वेटरी",
+    "agents": "एजेंट",
+    "orgChart": "संगठन चार्ट",
+    "workflows": "वर्कफ़्लो",
+    "approvals": "अनुमोदन",
+    "connectors": "कनेक्टर",
+    "promptTemplates": "प्रॉम्प्ट टेम्पलेट",
+    "createFromSop": "SOP से बनाएं",
+    "a2aMcp": "A2A / MCP",
+    "salesPipeline": "बिक्री पाइपलाइन",
+    "schemas": "स्कीमा",
+    "reportSchedules": "रिपोर्ट शेड्यूल",
+    "scopeDashboard": "स्कोप डैशबोर्ड",
+    "enforceAudit": "एनफोर्स ऑडिट",
+    "auditLog": "ऑडिट लॉग",
+    "slaMonitor": "SLA मॉनिटर",
+    "settings": "सेटिंग्स"
+  },
+  "header": {
+    "search": "खोजें या कुछ भी पूछें...",
+    "notifications": "सूचनाएं",
+    "language": "भाषा",
+    "logout": "लॉग आउट"
+  },
+  "buttons": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "create": "बनाएं",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "submit": "जमा करें",
+    "confirm": "पुष्टि करें",
+    "back": "वापस",
+    "next": "अगला",
+    "approve": "अनुमोदित करें",
+    "reject": "अस्वीकार करें",
+    "download": "डाउनलोड",
+    "upload": "अपलोड",
+    "refresh": "रीफ्रेश",
+    "filter": "फ़िल्टर",
+    "export": "निर्यात"
+  },
+  "status": {
+    "loading": "लोड हो रहा है...",
+    "success": "सफल",
+    "error": "त्रुटि",
+    "pending": "लंबित",
+    "running": "चल रहा है",
+    "completed": "पूर्ण",
+    "failed": "विफल",
+    "approved": "अनुमोदित",
+    "rejected": "अस्वीकृत"
+  },
+  "auth": {
+    "login": "लॉग इन",
+    "signup": "साइन अप",
+    "forgotPassword": "पासवर्ड भूल गए?",
+    "resetPassword": "पासवर्ड रीसेट करें",
+    "email": "ईमेल",
+    "password": "पासवर्ड",
+    "rememberMe": "मुझे याद रखें"
+  }
+}

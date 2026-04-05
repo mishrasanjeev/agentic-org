@@ -15,6 +15,18 @@ from workflows.retry import retry_with_backoff
 from workflows.state_store import WorkflowStateStore
 from workflows.step_types import execute_step
 
+try:
+    from workflows.replanner import (
+        MAX_REPLAN_ATTEMPTS,
+        ReplanError,
+        build_replan_event,
+        replan_workflow,
+    )
+
+    _HAS_REPLANNER = True
+except ImportError:
+    _HAS_REPLANNER = False
+
 logger = structlog.get_logger()
 
 
@@ -46,6 +58,8 @@ class WorkflowEngine:
             "steps_completed": 0,
             "step_results": {},
             "started_at": datetime.now(UTC).isoformat(),
+            "replan_count": 0,
+            "replan_history": [],
         }
         await self.state_store.save(state)
         logger.info("workflow_run_started", run_id=run_id)
@@ -106,6 +120,20 @@ class WorkflowEngine:
             try:
                 result = await self._execute_with_retry(step, state, context)
             except Exception as exc:
+                # ---- dynamic re-planning ----
+                replan_enabled = (
+                    _HAS_REPLANNER
+                    and state["definition"].get("replan_on_failure") is True
+                    and state.get("replan_count", 0) < MAX_REPLAN_ATTEMPTS
+                )
+                if replan_enabled:
+                    replan_result = await self._attempt_replan(
+                        state, run_id, step_id, step, steps, execution_order, str(exc),
+                    )
+                    if replan_result is not None:
+                        # Re-planning succeeded — restart execution with updated steps
+                        return await self.execute(run_id)
+
                 state["step_results"][step_id] = {
                     "output": None,
                     "status": "failed",
@@ -340,6 +368,110 @@ class WorkflowEngine:
             state["cancelled_at"] = datetime.now(UTC).isoformat()
             await self.state_store.save(state)
             logger.info("workflow_cancelled", run_id=run_id)
+
+    # ------------------------------------------------------------------
+    # Dynamic re-planning
+    # ------------------------------------------------------------------
+
+    async def _attempt_replan(
+        self,
+        state: dict,
+        run_id: str,
+        failed_step_id: str,
+        failed_step: dict,
+        all_steps: list[dict],
+        execution_order: list[str],
+        error_msg: str,
+    ) -> list[dict] | None:
+        """Attempt to re-plan the workflow after a step failure.
+
+        Returns the new steps list on success, or None if re-planning failed.
+        """
+        if not _HAS_REPLANNER:
+            return None
+
+        replan_count = state.get("replan_count", 0) + 1
+        logger.info(
+            "workflow_replan_attempt",
+            run_id=run_id,
+            step_id=failed_step_id,
+            attempt=replan_count,
+        )
+
+        # Build completed steps context (steps that succeeded before this failure)
+        completed_steps = []
+        for sid, sresult in state.get("step_results", {}).items():
+            completed_steps.append({"id": sid, **sresult})
+
+        # Build failed step context
+        failed_context = {
+            "id": failed_step_id,
+            "error": error_msg,
+            **{k: v for k, v in failed_step.items() if k != "id"},
+        }
+
+        # Identify remaining steps (not yet executed and not the failed step)
+        executed_ids = set(state.get("step_results", {}).keys()) | {failed_step_id}
+        step_index = self._build_step_index(all_steps)
+        remaining_steps = [
+            step_index[sid] for sid in execution_order
+            if sid not in executed_ids and sid in step_index
+        ]
+
+        try:
+            new_steps = await replan_workflow(
+                original_definition=state["definition"],
+                completed_steps=completed_steps,
+                failed_step=failed_context,
+                remaining_steps=remaining_steps,
+            )
+        except (ReplanError, Exception) as exc:
+            logger.warning(
+                "workflow_replan_failed",
+                run_id=run_id,
+                step_id=failed_step_id,
+                error=str(exc),
+            )
+            return None
+
+        # Record the replan event
+        event = build_replan_event(replan_count, failed_step_id, error_msg, new_steps)
+        state.setdefault("replan_history", []).append(event)
+        state["replan_count"] = replan_count
+
+        # Mark the failed step as replanned (not failed — it was handled)
+        state["step_results"][failed_step_id] = {
+            "output": None,
+            "status": "replanned",
+            "confidence": None,
+            "error": error_msg,
+            "replanned": True,
+        }
+        state["steps_completed"] = len(state["step_results"])
+
+        # Replace remaining steps in the definition with the replanned ones
+        # Keep completed steps + the replanned marker, append new steps
+        completed_step_defs = [
+            s for s in all_steps if s["id"] in state.get("step_results", {})
+        ]
+        # Mark new steps as replanned for UI display
+        for ns in new_steps:
+            ns["replanned"] = True
+
+        state["definition"]["steps"] = completed_step_defs + new_steps
+        state["steps_total"] = len(state["definition"]["steps"])
+
+        await self.state_store.save(state)
+
+        logger.info(
+            "workflow_replanned_successfully",
+            run_id=run_id,
+            failed_step=failed_step_id,
+            new_step_count=len(new_steps),
+            replan_count=replan_count,
+        )
+
+        return new_steps
 
     # ------------------------------------------------------------------
     # Dependency graph helpers

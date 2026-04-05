@@ -51,6 +51,7 @@ export default function WorkflowCreate() {
   const [domain, setDomain] = useState("finance");
   const [triggerType, setTriggerType] = useState("manual");
   const [stepsJson, setStepsJson] = useState(STEP_TEMPLATE);
+  const [replanOnFailure, setReplanOnFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -86,6 +87,7 @@ export default function WorkflowCreate() {
         domain,
         trigger_type: triggerType,
         definition: { steps: parsed },
+        replan_on_failure: replanOnFailure,
       });
       navigate(`/dashboard/workflows/${data.workflow_id || data.id || ""}`);
     } catch (e: any) {
@@ -347,6 +349,23 @@ export default function WorkflowCreate() {
                     {TRIGGER_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
                   </select>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="replan-on-failure"
+                  data-testid="replan-toggle"
+                  checked={replanOnFailure}
+                  onChange={(e) => setReplanOnFailure(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <label htmlFor="replan-on-failure" className="text-sm font-medium cursor-pointer">
+                  Enable adaptive replanning
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  When a step fails, the AI will attempt to re-plan the remaining steps (max 3 attempts).
+                </span>
               </div>
 
               <div>

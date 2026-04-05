@@ -129,6 +129,7 @@ class WorkflowCreate(BaseModel):
     definition: dict[str, Any]
     trigger_type: str | None = None
     trigger_config: dict[str, Any] | None = None
+    replan_on_failure: bool = False
 
 
 class WorkflowRunTrigger(BaseModel):

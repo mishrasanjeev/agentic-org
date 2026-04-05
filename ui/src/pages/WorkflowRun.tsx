@@ -13,6 +13,7 @@ interface StepExecution {
   confidence?: number;
   latency_ms?: number;
   error?: string;
+  replanned?: boolean;
 }
 
 interface RunDetail {
@@ -67,6 +68,7 @@ export default function WorkflowRun() {
   const stepStatusColor: Record<string, string> = {
     completed: "success", failed: "destructive", pending: "outline",
     running: "warning", waiting_hitl: "secondary", skipped: "outline",
+    replanned: "outline",
   };
 
   if (loading) return <p className="text-muted-foreground">Loading workflow run...</p>;
@@ -122,6 +124,9 @@ export default function WorkflowRun() {
                   <div className="flex items-center gap-3">
                     {step.confidence != null && <span className="text-xs text-muted-foreground">{(step.confidence * 100).toFixed(0)}%</span>}
                     {step.latency_ms != null && <span className="text-xs text-muted-foreground">{step.latency_ms}ms</span>}
+                    {(step.replanned || step.status === "replanned") && (
+                      <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300" data-testid="replanned-badge">Replanned</Badge>
+                    )}
                     <Badge variant={(stepStatusColor[step.status] || "default") as any}>{step.status}</Badge>
                   </div>
                 </div>

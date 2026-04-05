@@ -223,6 +223,33 @@ async def run_agent(
                 ]
             logger.info("pii_deanonymized_after_llm", entities=len(pii_token_map), agent_id=agent_id)
 
+        # --- Step 7: Content safety check (if enabled in connector_config) ---
+        content_safety_result: dict[str, Any] = {}
+        _cs_config = (connector_config or {}).get("content_safety")
+        if _cs_config and isinstance(_cs_config, dict):
+            try:
+                from core.content_safety.checker import check_content_safety
+
+                # Build text to check from output
+                _cs_output = result.get("output", {})
+                if isinstance(_cs_output, dict):
+                    import json as _cs_json
+                    _cs_text = _cs_json.dumps(_cs_output, default=str)
+                else:
+                    _cs_text = str(_cs_output)
+
+                content_safety_result = await check_content_safety(_cs_text, _cs_config)
+
+                if not content_safety_result.get("safe", True):
+                    logger.warning(
+                        "content_safety_flagged",
+                        agent_id=agent_id,
+                        issues=len(content_safety_result.get("issues", [])),
+                        scores=content_safety_result.get("scores", {}),
+                    )
+            except Exception as _cs_exc:
+                logger.debug("content_safety_check_skipped", error=str(_cs_exc))
+
         # --- Step 8: Generate explanation (skip for hitl_triggered) ---
         run_status = result.get("status", "completed")
         explanation: dict[str, Any] = {}
@@ -247,6 +274,7 @@ async def run_agent(
             "hitl_trigger": result.get("hitl_trigger", ""),
             "error": result.get("error", ""),
             "explanation": explanation,
+            "content_safety": content_safety_result,
             "performance": {
                 "total_latency_ms": latency_ms,
                 "llm_tokens_used": tokens_used,
