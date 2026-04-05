@@ -305,9 +305,10 @@ test.describe("UI: Error display", () => {
     await page.waitForLoadState("networkidle");
 
     // Switch to template tab (NL description tab may be default)
-    const templateTab = page.getByText(/use template|template/i).first();
-    if (await templateTab.isVisible({ timeout: 3000 }).catch(() => false)) {
+    const templateTab = page.locator('[data-testid="tab-template"]');
+    if (await templateTab.isVisible({ timeout: 5000 }).catch(() => false)) {
       await templateTab.click();
+      await page.waitForTimeout(1000);
     }
 
     // Fill name but leave steps invalid

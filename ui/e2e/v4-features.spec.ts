@@ -402,15 +402,16 @@ test.describe("v4 — Sidebar Navigation", () => {
   test("sidebar_has_v4_nav_entries", async ({ page }) => {
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
-    await page.waitForTimeout(2000); // wait for sidebar render
+    await page.waitForTimeout(3000);
 
-    // Check full page text for sidebar nav labels
-    const bodyText = (await page.locator("body").textContent()) || "";
-    const hasKB = /knowledge base/i.test(bodyText);
-    const hasBilling = /billing/i.test(bodyText);
+    // Look for sidebar links by href
+    const billingLink = page.locator('a[href*="/dashboard/billing"]');
+    const knowledgeLink = page.locator('a[href*="/dashboard/knowledge"]');
+    const hasBilling = await billingLink.count().catch(() => 0);
+    const hasKB = await knowledgeLink.count().catch(() => 0);
 
-    // At least billing should be visible (it's for all roles)
-    expect(hasKB || hasBilling).toBeTruthy();
+    // At least one v4 nav entry should be present
+    expect((hasBilling as number) + (hasKB as number)).toBeGreaterThanOrEqual(1);
   });
 
   test("sidebar_knowledge_link_navigates", async ({ page }) => {
