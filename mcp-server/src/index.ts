@@ -64,7 +64,7 @@ async function apiPost(path: string, body: unknown): Promise<unknown> {
 const server = new McpServer({
   name: "agenticorg",
   version: "0.1.0",
-  description: "AgenticOrg — run enterprise AI agents, 35 agents, 54 connectors, 340+ tools",
+  description: "AgenticOrg — run enterprise AI agents, 50+ agents, 1000+ integrations, 54 native connectors, 340+ tools",
 });
 
 // ── Tool: list_agents ───────────────────────────────────────────────────
@@ -159,7 +159,7 @@ server.tool(
 
 server.tool(
   "list_connectors",
-  "List all 43 available connectors (SAP, Oracle, Jira, HubSpot, GSTN, Darwinbox, etc.) and their status.",
+  "List all 54 available connectors (SAP, Oracle, Jira, HubSpot, GSTN, Darwinbox, etc.) and their status.",
   async () => {
     const data = await apiGet("/api/v1/connectors");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };

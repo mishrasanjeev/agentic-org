@@ -10,7 +10,7 @@ import datetime
 import os
 from fpdf import FPDF
 
-VERSION = "3.3.0"
+VERSION = "4.0.0"
 DATE = datetime.date.today().strftime("%B %d, %Y")
 
 # ── Color palette ─────────────────────────────────────────────────────────

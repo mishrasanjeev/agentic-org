@@ -68,6 +68,12 @@ const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
 /* ── Report Schedules ── */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
 
+/* ── Knowledge Base, Voice, RPA, Industry Packs ── */
+const KnowledgeBase = lazyRetry(() => import("./pages/KnowledgeBase"));
+const VoiceSetup = lazyRetry(() => import("./pages/VoiceSetup"));
+const RPAScripts = lazyRetry(() => import("./pages/RPAScripts"));
+const IndustryPacks = lazyRetry(() => import("./pages/IndustryPacks"));
+
 /* ── Billing ── */
 const Billing = lazyRetry(() => import("./pages/Billing"));
 
@@ -416,6 +422,46 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <SalesPipeline />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/knowledge"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+            <Layout>
+              <KnowledgeBase />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/voice-setup"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <VoiceSetup />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/rpa"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <RPAScripts />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/packs"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <IndustryPacks />
             </Layout>
           </ProtectedRoute>
         }

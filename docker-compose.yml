@@ -142,9 +142,31 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # ── RAG: RAGFlow ────────────────────────────────────────────────────
+  ragflow:
+    image: infiniflow/ragflow:latest
+    ports:
+      - "9380:9380"
+    volumes:
+      - ragflow_data:/ragflow/data
+    profiles:
+      - ragflow
+    restart: unless-stopped
+
+  # ── Voice: LiveKit ─────────────────────────────────────────────────
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+    profiles:
+      - voice
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
   ollama_data:
   vllm_models:
+  ragflow_data:

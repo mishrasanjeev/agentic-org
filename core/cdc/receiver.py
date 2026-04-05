@@ -23,11 +23,19 @@ def _compute_event_id(connector: str, payload: dict[str, Any]) -> str:
 def _validate_signature(payload_bytes: bytes, signature: str, connector: str) -> bool:
     """Validate HMAC-SHA256 signature using per-connector secret.
 
-    Falls back to accepting all events when no secret is configured (dev mode).
+    Fails closed — rejects all events when no secret is configured.
     """
+    import structlog
+
+    _log = structlog.get_logger()
     secret = os.getenv(f"CDC_WEBHOOK_SECRET_{connector.upper()}", "")
     if not secret:
-        return True  # dev mode — no secret configured
+        _log.warning(
+            "cdc_webhook_secret_missing",
+            connector=connector,
+            hint="Set CDC_WEBHOOK_SECRET_<CONNECTOR> env var",
+        )
+        return False  # fail closed — no secret configured
     expected = hmac.new(secret.encode(), payload_bytes, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 

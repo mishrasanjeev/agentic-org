@@ -1,6 +1,16 @@
 # AgenticOrg Roadmap
 
-## Current (v3.3.0) — Shipped 2026-04-04
+## Current (v4.0.0) — Shipped 2026-04-05
+
+### Project Apex (22 Features)
+- 1000+ integrations via Composio (MIT), smart LLM routing, pre-LLM PII redaction
+- NL workflow builder, persona builder, explainable AI, self-improving agents
+- Voice agents (LiveKit + Pipecat), browser RPA, multi-language (EN/HI)
+- Air-gapped deployment (Ollama/vLLM), billing (Stripe + PineLabs)
+- Industry packs (Healthcare, Legal, Insurance, Manufacturing)
+- SOC2/ISO 27001 controls, enterprise onboarding, real-time CDC
+
+## Previous (v3.3.0) — Shipped 2026-04-04
 
 ### Scope Enforcement Fix (Security)
 - **Manifest-based scope enforcement**: Replaced keyword-guessing `check_scope()` with Grantex SDK `grantex.enforce()` — offline JWT + manifest permission check in <1ms

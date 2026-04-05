@@ -13,7 +13,7 @@ from fpdf import FPDF
 
 # ── Shared constants ──────────────────────────────────────────────────────
 
-VERSION = "3.3.0"
+VERSION = "4.0.0"
 DATE = datetime.date.today().strftime("%Y-%m-%d")
 TITLE_SHORT = f"AgenticOrg v{VERSION} -QA Test Plan (Summary)"
 TITLE_FULL = f"AgenticOrg v{VERSION} -QA Test Plan (Comprehensive)"

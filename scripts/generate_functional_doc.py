@@ -13,7 +13,7 @@ from fpdf import FPDF
 
 # -- Constants ----------------------------------------------------------------
 
-VERSION = "3.3.0"
+VERSION = "4.0.0"
 DATE = datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
 DOC_TITLE = f"AgenticOrg Functional Specification v{VERSION}"
 

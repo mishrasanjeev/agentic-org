@@ -73,7 +73,25 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
 
     Returns dict with event_type and processing result.
     """
+    import time as _time
+
     event = _verify_signature(payload, sig_header)
+
+    # Replay prevention — reject events older than 5 minutes
+    event_created = event.get("created", 0)
+    age_seconds = _time.time() - event_created
+    if age_seconds > 300:
+        logger.warning(
+            "stripe_webhook_stale_event",
+            event_id=event.get("id"),
+            event_type=event.get("type"),
+            age_seconds=int(age_seconds),
+        )
+        return {
+            "event_type": event.get("type", "unknown"),
+            "processed": False, "rejected": True, "reason": "stale_event",
+        }
+
     event_type: str = event["type"]
     data_obj = event["data"]["object"]
 
