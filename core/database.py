@@ -64,9 +64,23 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Run on startup — verify connectivity."""
+    """Run on startup — verify connectivity and apply safe schema additions."""
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
+
+        # v4.0.0: Ensure prompt_amendments column exists on agents table.
+        # Safe to run every startup (IF NOT EXISTS check).
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'agents' AND column_name = 'prompt_amendments'
+                ) THEN
+                    ALTER TABLE agents ADD COLUMN prompt_amendments JSONB DEFAULT '[]'::jsonb;
+                END IF;
+            END $$;
+        """))
 
 
 async def close_db() -> None:

@@ -285,7 +285,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "system_prompt_text": agent.system_prompt_text,
         "reporting_to": agent.reporting_to,
         "org_level": agent.org_level,
-        "prompt_amendments": agent.prompt_amendments if hasattr(agent, "prompt_amendments") else [],
+        "prompt_amendments": getattr(agent, "prompt_amendments", None) or [],
     }
 
 
