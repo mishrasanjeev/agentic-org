@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     llm_primary: str = "gemini-2.5-flash"
     llm_fallback: str = "gemini-2.5-flash-preview-05-20"
     llm_temperature: float = 0.2
+    llm_routing: str = "auto"  # auto | tier1 | tier2 | tier3 | disabled
+    llm_mode: str = "cloud"  # cloud | local | auto
 
     # Auth
     auth_provider: str = "grantex"

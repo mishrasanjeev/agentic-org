@@ -120,11 +120,18 @@ def build_tools_for_agent(
 def _build_tool_index() -> dict[str, tuple[str, str]]:
     """Build a reverse index: tool_name -> (connector_name, description).
 
-    Scans all registered connectors and their tool registries.
+    Scans all registered native connectors and their tool registries,
+    then appends Composio tools (with ``composio:`` prefix) from the
+    ConnectorRegistry.  Native tools always take priority.
     """
     index: dict[str, tuple[str, str]] = {}
 
+    # 1. Native connectors first
     for connector_name in ConnectorRegistry.all_names():
+        # Skip the composio meta-connector; its tools are handled below
+        if connector_name == "composio":
+            continue
+
         connector_cls = ConnectorRegistry.get(connector_name)
         if not connector_cls:
             continue
@@ -142,5 +149,10 @@ def _build_tool_index() -> dict[str, tuple[str, str]]:
             if tool_name not in index:
                 doc = (handler.__doc__ or "").strip().split("\n")[0]
                 index[tool_name] = (connector_name, doc)
+
+    # 2. Composio tools (already filtered for native priority in registry)
+    for tool_name, meta in ConnectorRegistry.get_composio_tools().items():
+        if tool_name not in index:
+            index[tool_name] = ("composio", meta.get("description", ""))
 
     return index

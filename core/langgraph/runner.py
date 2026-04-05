@@ -22,6 +22,7 @@ from langgraph.errors import GraphInterrupt
 
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.state import AgentState
+from core.pii.redactor import PIIRedactor
 
 logger = structlog.get_logger()
 
@@ -83,6 +84,15 @@ async def run_agent(
 
     # Build initial state
     user_message = _build_user_message(task_input)
+
+    # --- Step 3: PII redaction (before LLM) ---
+    pii_redactor = PIIRedactor()
+    pii_token_map: dict[str, str] = {}
+    if pii_redactor.mode == "before_llm":
+        user_message, pii_token_map = pii_redactor.redact(user_message)
+        if pii_token_map:
+            logger.info("pii_redacted_before_llm", entities=len(pii_token_map), agent_id=agent_id)
+
     initial_state: AgentState = {
         "messages": [
             SystemMessage(content=system_prompt),
@@ -148,6 +158,31 @@ async def run_agent(
 
         # Estimate cost (Gemini 2.5 Flash pricing: $0.15/1M input, $0.60/1M output)
         cost_usd = round(tokens_used * 0.000375 / 1000, 6) if tokens_used else 0
+
+        # --- Step 6: PII de-anonymization (after LLM) ---
+        if pii_token_map:
+            output = result.get("output", {})
+            if isinstance(output, dict):
+                import json as _json
+
+                raw = _json.dumps(output, default=str)
+                restored = pii_redactor.deanonymize(raw, pii_token_map)
+                try:
+                    output = _json.loads(restored)
+                except Exception:
+                    output = {"raw": restored}
+                result["output"] = output
+            elif isinstance(output, str):
+                result["output"] = pii_redactor.deanonymize(output, pii_token_map)
+
+            # Also deanonymize reasoning trace
+            trace = result.get("reasoning_trace", [])
+            if trace:
+                result["reasoning_trace"] = [
+                    pii_redactor.deanonymize(t, pii_token_map) if isinstance(t, str) else t
+                    for t in trace
+                ]
+            logger.info("pii_deanonymized_after_llm", entities=len(pii_token_map), agent_id=agent_id)
 
         return {
             "status": result.get("status", "completed"),
