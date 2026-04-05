@@ -7,7 +7,7 @@ description: >
 domain: marketing
 
 trigger:
-  type: scheduled
+  type: schedule
   cron: "0 8 * * 1"  # 8 AM every Monday
   description: "Weekly marketing standup digest"
 

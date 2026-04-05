@@ -4,7 +4,7 @@ description: >
   IT incident management with automatic escalation tiers. Detects incident,
   attempts auto-remediation, escalates to L1/L2/L3 support based on
   severity and response time.
-domain: ops
+domain: operations
 
 trigger:
   type: api_event

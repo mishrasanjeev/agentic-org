@@ -4,7 +4,7 @@ description: >
   Automated customer onboarding — welcome email, account setup, training
   schedule, and manager notification. Triggered manually when a new
   customer contract is signed.
-domain: ops
+domain: operations
 
 trigger:
   type: manual

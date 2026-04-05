@@ -3,7 +3,7 @@ version: "1.0"
 description: >
   New vendor setup workflow. Collects vendor details, runs compliance and
   credit checks, creates vendor in ERP, and notifies procurement.
-domain: ops
+domain: operations
 
 trigger:
   type: manual

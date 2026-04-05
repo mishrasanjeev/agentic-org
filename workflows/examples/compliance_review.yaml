@@ -4,10 +4,10 @@ description: >
   Periodic compliance review workflow. Runs quarterly checks on data
   privacy, financial regulations, and security policies. Generates a
   compliance report and escalates gaps to the compliance officer.
-domain: ops
+domain: operations
 
 trigger:
-  type: scheduled
+  type: schedule
   cron: "0 9 1 */3 *"  # 9 AM on 1st day of every quarter
   description: "Quarterly compliance review"
 
