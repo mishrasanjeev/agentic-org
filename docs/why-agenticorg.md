@@ -231,7 +231,7 @@ AgenticOrg ships with native support for India-specific systems and regulations:
 - No per-user seats
 - No per-transaction charges
 - Your only cost is infrastructure (compute, storage, LLM API calls)
-- A mid-size enterprise can run 24 agents for under INR 10L/year total infra cost
+- A mid-size enterprise can run 50+ agents for under INR 10L/year total infra cost
 
 ```mermaid
 graph LR
