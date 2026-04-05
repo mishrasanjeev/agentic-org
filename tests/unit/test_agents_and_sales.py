@@ -177,6 +177,7 @@ class TestAgentToDict:
             "employee_name", "avatar_url", "designation",
             "specialization", "routing_filter", "is_builtin",
             "system_prompt_text", "reporting_to", "org_level",
+            "prompt_amendments",
         }
         assert set(result.keys()) == expected_keys
 
