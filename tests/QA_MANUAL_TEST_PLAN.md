@@ -114,7 +114,7 @@ FLOW 4: CFO Logs In → Sees Only Finance
 | C6 | Approvals page | Click "Approvals" | HITL approval queue — shows pending approvals (if any) | | |
 | C7 | Audit page | Click "Audit Log" | List of audit events with: event type, actor, action, outcome, timestamp | | |
 | C8 | Observatory | Click "Observatory" | Real-time agent monitoring with traces and metrics | | |
-| C9 | Connectors | Click "Connectors" | List of 54 connectors with status | | |
+| C9 | Connectors | Click "Connectors" | List of 1000+ connectors with status (54 native + Composio) | | |
 | C10 | Settings | Click "Settings" | Admin settings page | | |
 | C11 | Prompt Templates | Click "Prompt Templates" | 27 templates listed. Built-in badge shown. Click to expand and see template text | | |
 | C12 | Sales Pipeline | Click "Sales Pipeline" | Pipeline dashboard: funnel bar, metrics cards, lead table | | |
@@ -393,22 +393,22 @@ Severity: [Critical/High/Medium/Low]
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| L1 | Hero stats show updated numbers | Open https://agenticorg.ai. Look at the hero section stats | Stats show "35 agents", "54 connectors", "340+ tools" | | |
+| L1 | Hero stats show updated numbers | Open https://agenticorg.ai. Look at the hero section stats | Stats show "50+ agents", "1000+ connectors", "340+ tools" | | |
 | L2 | Role cards show updated agent counts | Scroll to the role/domain cards section | Cards show updated counts: 10 finance agents, 9 marketing agents, and correct counts for other domains | | |
 | L3 | CA Firm case study section visible | Scroll down the landing page to the section before the Final CTA | A CA Firm case study section is visible with heading, summary, and call-to-action link | | |
 | L4 | Case study link works | Click "Read the full case study" link in the CA Firm section | Navigates to /blog/ca-firm-ai-agent-end-to-end. Blog post loads with full content | | |
 | L5 | Blog nav link works | Click "Blog" in the top navigation bar | Navigates to /blog. Page shows 8+ blog posts listed with titles, dates, and category badges | | |
 | L6 | New blog posts load correctly | On /blog, click each of the 4 newest blog posts | Each post loads fully with title, content, images (if any), and proper formatting. No 404 errors | | |
-| L7 | Pricing page shows 54 connectors | Navigate to /pricing | Pricing page mentions "54 connectors" in the feature list or comparison table | | |
-| L8 | Meta description matches | View page source of landing page. Search for meta description tag | Meta description contains "35 pre-built agents" | | |
+| L7 | Pricing page shows 1000+ connectors | Navigate to /pricing | Pricing page mentions "1000+ connectors (54 native + Composio)" in the feature list or comparison table | | |
+| L8 | Meta description matches | View page source of landing page. Search for meta description tag | Meta description contains "50+ pre-built agents" | | |
 
 ### SECTION M: SEO & Indexing
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
 | M1 | Sitemap includes new blog URLs | Open https://agenticorg.ai/sitemap.xml | Sitemap contains URLs for all 4 new blog posts. Each URL has a valid <lastmod> date | | |
-| M2 | llms.txt shows updated numbers | Open https://agenticorg.ai/llms.txt | Content mentions "35 agents", "54 connectors", and "340+ tools" | | |
-| M3 | llms-full.txt shows updated numbers | Open https://agenticorg.ai/llms-full.txt | Content mentions "35 agents", "54 connectors", and "340+ tools" | | |
+| M2 | llms.txt shows updated numbers | Open https://agenticorg.ai/llms.txt | Content mentions "50+ agents", "1000+ connectors", and "340+ tools" | | |
+| M3 | llms-full.txt shows updated numbers | Open https://agenticorg.ai/llms-full.txt | Content mentions "50+ agents", "1000+ connectors", and "340+ tools" | | |
 | M4 | robots.txt allows /blog/* | Open https://agenticorg.ai/robots.txt | robots.txt contains Allow rule for /blog/* or does not disallow /blog/ paths | | |
 | M5 | New blog posts have proper meta tags | Open each of the 4 new blog posts. View page source | Each post has a unique <title> tag and a <meta name="description"> tag with relevant content | | |
 

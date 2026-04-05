@@ -1,0 +1,77 @@
+name: expense_reimbursement
+version: "1.0"
+description: >
+  Expense claim processing workflow. Employee submits receipts, AP agent
+  validates amounts and policy compliance, manager approves, then finance
+  triggers reimbursement via payroll.
+domain: finance
+
+trigger:
+  type: api_event
+  filter: { event_type: "expense.submitted" }
+
+timeout_hours: 120
+
+steps:
+  - id: validate_receipts
+    name: Validate Receipts & Policy
+    type: agent
+    agent_type: ap_processor
+    action: validate_expense_claim
+    inputs:
+      employee_id: "{{employee_id}}"
+      receipts: "{{receipts}}"
+      total_amount: "{{total_amount}}"
+      expense_category: "{{expense_category}}"
+
+  - id: manager_approval
+    name: Manager Approval
+    type: human_in_loop
+    depends_on: [validate_receipts]
+    assignee: "{{manager_email}}"
+    decision_options: [approve, reject, request_info]
+    context:
+      summary: "Expense claim from {{employee_name}} — {{total_amount}} for {{expense_category}}"
+      validation: "{{validate_receipts.output}}"
+
+  - id: finance_review
+    name: Finance Team Review
+    type: agent
+    agent_type: fpa_agent
+    action: review_expense_budget_impact
+    depends_on: [manager_approval]
+    inputs:
+      department: "{{department}}"
+      amount: "{{total_amount}}"
+      budget_code: "{{budget_code}}"
+
+  - id: process_reimbursement
+    name: Process Reimbursement
+    type: agent
+    agent_type: ap_processor
+    action: process_reimbursement
+    depends_on: [finance_review]
+    inputs:
+      employee_id: "{{employee_id}}"
+      amount: "{{total_amount}}"
+      payment_method: "{{payment_method}}"
+
+  - id: notify_employee
+    name: Notify Employee
+    type: notify
+    connector: email
+    depends_on: [process_reimbursement]
+    template: expense_reimbursed
+    inputs:
+      to: "{{employee_email}}"
+      subject: "Expense reimbursement of {{total_amount}} processed"
+
+notifications:
+  on_complete:
+    - channel: email
+      to: "{{employee_email}}"
+      subject: "Your expense claim has been reimbursed"
+  on_failure:
+    - channel: slack
+      target: "#finance-ops"
+      message: "Expense reimbursement failed for {{employee_name}} — manual intervention needed."

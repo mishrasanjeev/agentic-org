@@ -1,0 +1,75 @@
+name: marketing_weekly_standup
+version: "1.0"
+description: >
+  Weekly marketing metrics collection workflow. Pulls campaign performance,
+  social engagement, SEO rankings, and competitor intel. Compiles a digest
+  and posts to Slack every Monday morning.
+domain: marketing
+
+trigger:
+  type: scheduled
+  cron: "0 8 * * 1"  # 8 AM every Monday
+  description: "Weekly marketing standup digest"
+
+timeout_hours: 4
+
+steps:
+  - id: pull_campaign_metrics
+    name: Pull Campaign Performance
+    type: agent
+    agent_type: campaign_pilot
+    action: get_weekly_metrics
+    inputs:
+      period: "last_7_days"
+      channels: ["google_ads", "meta_ads", "linkedin"]
+
+  - id: pull_social_metrics
+    name: Pull Social Media Engagement
+    type: agent
+    agent_type: social_media
+    action: get_weekly_engagement
+    inputs:
+      period: "last_7_days"
+      platforms: ["twitter", "linkedin", "instagram"]
+
+  - id: pull_seo_rankings
+    name: Pull SEO Rankings
+    type: agent
+    agent_type: seo_strategist
+    action: get_keyword_rankings
+    depends_on: [pull_campaign_metrics]
+    inputs:
+      domain: "agenticorg.ai"
+      top_n: 20
+
+  - id: compile_digest
+    name: Compile Weekly Marketing Digest
+    type: agent
+    agent_type: campaign_pilot
+    action: compile_weekly_digest
+    depends_on: [pull_campaign_metrics, pull_social_metrics, pull_seo_rankings]
+    inputs:
+      campaign_data: "{{pull_campaign_metrics.output}}"
+      social_data: "{{pull_social_metrics.output}}"
+      seo_data: "{{pull_seo_rankings.output}}"
+      format: "markdown"
+
+  - id: post_to_slack
+    name: Post Digest to Slack
+    type: notify
+    connector: slack
+    depends_on: [compile_digest]
+    template: marketing_weekly_digest
+    inputs:
+      channel: "#marketing-team"
+      message: "{{compile_digest.digest}}"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#marketing-team"
+      message: "Weekly marketing standup digest posted."
+  on_failure:
+    - channel: email
+      to: "{{cmo_email}}"
+      subject: "Weekly marketing digest failed to generate"

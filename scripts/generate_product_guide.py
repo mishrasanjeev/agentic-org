@@ -262,9 +262,9 @@ def build_guide() -> GuidePdf:
 
     pdf.sub_title("The AgenticOrg Solution")
     pdf.body(
-        "Deploy 35 pre-built AI agents across Finance, HR, Marketing, Operations, Back Office, "
+        "Deploy 50+ pre-built AI agents across Finance, HR, Marketing, Operations, Back Office, "
         "and Communications. Each agent connects to your real systems (Oracle, SAP, HubSpot, "
-        "Jira, Gmail...) via 54 connectors with 340+ tools. Every action is audited, "
+        "Jira, Gmail...) via 54 native connectors + 1000+ via Composio with 340+ tools. Every action is audited, "
         "every permission is enforced, and humans stay in control."
     )
 
@@ -1024,6 +1024,7 @@ def build_guide() -> GuidePdf:
         ("v2.3.0", "Mar 2026", "SDKs, MCP, CLI, A2A, API keys, shadow enforcement"),
         ("v2.2.0", "Mar 2026", "Agent-to-connector bridge, GitHub/Jira/HubSpot live"),
         ("v2.0.0", "Mar 2026", "Initial release: 24 agents, 43 connectors, workflows"),
+        ("v4.0.0", "Apr 2026", "50+ agents, 54 native connectors + 1000+ via Composio, 20+ workflows"),
     ]
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_fill_color(*C_NAVY)

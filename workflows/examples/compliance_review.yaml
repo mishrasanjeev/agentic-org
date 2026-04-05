@@ -1,0 +1,76 @@
+name: compliance_review
+version: "1.0"
+description: >
+  Periodic compliance review workflow. Runs quarterly checks on data
+  privacy, financial regulations, and security policies. Generates a
+  compliance report and escalates gaps to the compliance officer.
+domain: ops
+
+trigger:
+  type: scheduled
+  cron: "0 9 1 */3 *"  # 9 AM on 1st day of every quarter
+  description: "Quarterly compliance review"
+
+timeout_hours: 240
+
+steps:
+  - id: data_privacy_audit
+    name: Data Privacy Audit
+    type: agent
+    agent_type: tax_compliance
+    action: audit_data_privacy
+    inputs:
+      scope: "all_tenants"
+      regulations: ["DPDP", "GDPR", "SOC2"]
+
+  - id: financial_compliance
+    name: Financial Regulation Check
+    type: agent
+    agent_type: tax_compliance
+    action: audit_financial_compliance
+    depends_on: [data_privacy_audit]
+    inputs:
+      scope: "all_entities"
+      regulations: ["GST", "TDS", "ROC"]
+
+  - id: security_policy_review
+    name: Security Policy Review
+    type: agent
+    agent_type: tax_compliance
+    action: review_security_policies
+    depends_on: [data_privacy_audit]
+    inputs:
+      check_areas: ["access_control", "encryption", "audit_logs", "api_keys"]
+
+  - id: generate_report
+    name: Generate Compliance Report
+    type: agent
+    agent_type: fpa_agent
+    action: generate_compliance_report
+    depends_on: [financial_compliance, security_policy_review]
+    inputs:
+      privacy_results: "{{data_privacy_audit.output}}"
+      financial_results: "{{financial_compliance.output}}"
+      security_results: "{{security_policy_review.output}}"
+      format: "pdf"
+
+  - id: compliance_officer_review
+    name: Compliance Officer Review
+    type: human_in_loop
+    depends_on: [generate_report]
+    assignee: "{{compliance_officer}}"
+    decision_options: [approve, escalate, remediate]
+    context:
+      summary: "Quarterly compliance report ready for review"
+      report: "{{generate_report.report_url}}"
+      gaps_found: "{{generate_report.gaps_count}}"
+
+notifications:
+  on_complete:
+    - channel: email
+      to: "{{compliance_officer}}"
+      subject: "Quarterly Compliance Review Complete"
+  on_failure:
+    - channel: slack
+      target: "#compliance"
+      message: "ALERT: Quarterly compliance review workflow failed — manual review required."

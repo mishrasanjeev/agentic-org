@@ -1,0 +1,78 @@
+name: vendor_onboarding
+version: "1.0"
+description: >
+  New vendor setup workflow. Collects vendor details, runs compliance and
+  credit checks, creates vendor in ERP, and notifies procurement.
+domain: ops
+
+trigger:
+  type: manual
+  description: "Triggered when procurement initiates a new vendor request"
+
+timeout_hours: 168
+
+steps:
+  - id: collect_vendor_info
+    name: Collect & Validate Vendor Information
+    type: agent
+    agent_type: onboarding-agent
+    action: validate_vendor_info
+    inputs:
+      vendor_name: "{{vendor_name}}"
+      vendor_email: "{{vendor_email}}"
+      gstn: "{{gstn}}"
+      pan: "{{pan}}"
+      bank_details: "{{bank_details}}"
+
+  - id: compliance_check
+    name: Run Compliance & Credit Check
+    type: agent
+    agent_type: tax_compliance
+    action: vendor_compliance_check
+    depends_on: [collect_vendor_info]
+    inputs:
+      vendor_name: "{{vendor_name}}"
+      gstn: "{{gstn}}"
+      pan: "{{pan}}"
+
+  - id: procurement_approval
+    name: Procurement Manager Approval
+    type: human_in_loop
+    depends_on: [compliance_check]
+    assignee: "{{procurement_manager}}"
+    decision_options: [approve, reject, request_more_info]
+    context:
+      summary: "New vendor: {{vendor_name}} — Compliance: {{compliance_check.status}}"
+      details: "{{compliance_check.output}}"
+
+  - id: create_vendor_erp
+    name: Create Vendor in ERP
+    type: agent
+    agent_type: ap_processor
+    action: create_vendor_master
+    depends_on: [procurement_approval]
+    inputs:
+      vendor_name: "{{vendor_name}}"
+      gstn: "{{gstn}}"
+      bank_details: "{{bank_details}}"
+      payment_terms: "{{payment_terms}}"
+
+  - id: notify_team
+    name: Notify Procurement Team
+    type: notify
+    connector: slack
+    depends_on: [create_vendor_erp]
+    template: vendor_onboarded
+    inputs:
+      channel: "#procurement"
+      message: "Vendor '{{vendor_name}}' onboarded successfully — ERP ID: {{create_vendor_erp.vendor_id}}"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#procurement"
+      message: "Vendor onboarding complete for {{vendor_name}}."
+  on_failure:
+    - channel: email
+      to: "{{procurement_manager}}"
+      subject: "Vendor onboarding failed for {{vendor_name}}"

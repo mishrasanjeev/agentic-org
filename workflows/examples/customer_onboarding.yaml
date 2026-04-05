@@ -1,0 +1,67 @@
+name: customer_onboarding
+version: "1.0"
+description: >
+  Automated customer onboarding — welcome email, account setup, training
+  schedule, and manager notification. Triggered manually when a new
+  customer contract is signed.
+domain: ops
+
+trigger:
+  type: manual
+  description: "Triggered when a new customer contract is signed"
+
+timeout_hours: 72
+
+steps:
+  - id: welcome_email
+    name: Send Welcome Email
+    type: agent
+    agent_type: email_marketing
+    action: send_welcome_email
+    inputs:
+      customer_name: "{{customer_name}}"
+      customer_email: "{{customer_email}}"
+      plan: "{{plan}}"
+
+  - id: account_setup
+    name: Provision Customer Account
+    type: agent
+    agent_type: onboarding-agent
+    action: provision_account
+    depends_on: [welcome_email]
+    inputs:
+      customer_name: "{{customer_name}}"
+      customer_email: "{{customer_email}}"
+      plan: "{{plan}}"
+      modules: "{{modules}}"
+
+  - id: schedule_training
+    name: Schedule Onboarding Training
+    type: agent
+    agent_type: onboarding-agent
+    action: schedule_onboarding_training
+    depends_on: [account_setup]
+    inputs:
+      customer_email: "{{customer_email}}"
+      modules: "{{modules}}"
+      preferred_date: "{{preferred_date}}"
+
+  - id: notify_manager
+    name: Notify Account Manager
+    type: notify
+    connector: slack
+    depends_on: [schedule_training]
+    template: customer_onboarding_complete
+    inputs:
+      channel: "#customer-success"
+      message: "Onboarding complete for {{customer_name}} — account provisioned, training scheduled."
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#customer-success"
+      message: "Customer onboarding workflow completed for {{customer_name}}."
+  on_failure:
+    - channel: email
+      to: "{{account_manager_email}}"
+      subject: "ALERT: Customer onboarding failed for {{customer_name}}"

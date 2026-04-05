@@ -108,13 +108,13 @@ export const CONTENT_PAGES: ContentPage[] = [
     sections: [
       { heading: "What to Look For", body: "An enterprise AI automation platform should provide: pre-built agents for common workflows, a no-code builder for custom agents, human-in-the-loop governance, enterprise connectors (SAP, Oracle, Salesforce), audit trails, role-based access control, and shadow mode testing." },
       { heading: "10 Evaluation Criteria", body: "1. Agent library breadth (how many pre-built agents?)\n2. Custom agent creation (no-code vs code-required?)\n3. HITL governance (configurable thresholds? escalation chains?)\n4. Connector ecosystem (how many enterprise systems supported?)\n5. Security (SOC-2? PII masking? tenant isolation?)\n6. Audit trail (WORM-compliant? retention policy?)\n7. LLM flexibility (which models? failover support?)\n8. Shadow mode (can you test without production risk?)\n9. India compliance (GSTN, EPFO, Darwinbox?)\n10. Total cost of ownership (per-agent pricing vs platform fee?)" },
-      { heading: "AgenticOrg vs Alternatives", body: "AgenticOrg provides 35 pre-built agents that call real APIs (Jira, HubSpot, GitHub), 43 enterprise connectors (340+ tools), no-code agent builder, HITL governance, shadow mode, and India-first compliance — all deployable in under 5 minutes on any Kubernetes cluster." },
+      { heading: "AgenticOrg vs Alternatives", body: "AgenticOrg provides 50+ pre-built agents that call real APIs (Jira, HubSpot, GitHub), 54 native connectors + 1000+ via Composio (340+ tools), no-code agent builder, HITL governance, shadow mode, and India-first compliance — all deployable in under 5 minutes on any Kubernetes cluster." },
     ],
     faqs: [
-      { q: "How much does an enterprise AI platform cost?", a: "Pricing varies. AgenticOrg offers a free tier (35 agents), Pro at $499/month (12 agents), and custom Enterprise plans. Total cost is typically 50-80% less than equivalent RPA deployments." },
+      { q: "How much does an enterprise AI platform cost?", a: "Pricing varies. AgenticOrg offers a free tier (50+ agents), Pro at $499/month (12 agents), and custom Enterprise plans. Total cost is typically 50-80% less than equivalent RPA deployments." },
     ],
     relatedSlugs: ["what-are-ai-agents-for-enterprise", "ai-agents-vs-rpa", "no-code-ai-agent-builder"],
-    cta: { text: "Start Free — 35 Agents Included", link: "/signup" },
+    cta: { text: "Start Free — 50+ Agents Included", link: "/signup" },
   },
   {
     slug: "agentic-ai-explained",

@@ -871,8 +871,8 @@ def sec04_agents(pdf: FuncSpecPdf) -> None:
 
     # 4.7
     pdf.check_space(50)
-    pdf.sub_title("4.7  Pre-built Agents (35)")
-    pdf.body("AgenticOrg ships with 35 pre-built agents across 7 domains:")
+    pdf.sub_title("4.7  Pre-built Agents (50+)")
+    pdf.body("AgenticOrg ships with 50+ pre-built agents across 7 domains:")
 
     pdf.sub_sub_title("Finance (10 agents)")
     fin_agents = [

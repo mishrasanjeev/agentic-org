@@ -1,0 +1,82 @@
+name: it_incident_escalation
+version: "1.0"
+description: >
+  IT incident management with automatic escalation tiers. Detects incident,
+  attempts auto-remediation, escalates to L1/L2/L3 support based on
+  severity and response time.
+domain: ops
+
+trigger:
+  type: api_event
+  filter: { event_type: "monitoring.alert_fired" }
+
+timeout_hours: 24
+
+steps:
+  - id: classify_incident
+    name: Classify Incident Severity
+    type: agent
+    agent_type: onboarding-agent
+    action: classify_incident
+    inputs:
+      alert_name: "{{alert_name}}"
+      service: "{{service}}"
+      error_message: "{{error_message}}"
+      metrics: "{{metrics}}"
+
+  - id: auto_remediate
+    name: Attempt Auto-Remediation
+    type: agent
+    agent_type: onboarding-agent
+    action: auto_remediate
+    depends_on: [classify_incident]
+    inputs:
+      incident_type: "{{classify_incident.incident_type}}"
+      service: "{{service}}"
+      severity: "{{classify_incident.severity}}"
+    on_failure: continue
+
+  - id: l1_escalation
+    name: L1 Support Notification
+    type: notify
+    connector: slack
+    depends_on: [auto_remediate]
+    condition: "{{auto_remediate.resolved}} == false"
+    template: incident_l1_alert
+    inputs:
+      channel: "#it-support-l1"
+      message: "INCIDENT [{{classify_incident.severity}}]: {{alert_name}} on {{service}} — auto-remediation failed. Please investigate."
+
+  - id: l2_escalation
+    name: L2 Engineering Escalation
+    type: human_in_loop
+    depends_on: [l1_escalation]
+    timeout_minutes: 30
+    assignee: "{{l2_oncall}}"
+    decision_options: [resolved, escalate_l3, investigating]
+    context:
+      summary: "Incident {{alert_name}} — Severity: {{classify_incident.severity}}"
+      service: "{{service}}"
+      auto_remediation: "{{auto_remediate.output}}"
+
+  - id: l3_escalation
+    name: L3 Senior Engineering Escalation
+    type: human_in_loop
+    depends_on: [l2_escalation]
+    condition: "{{l2_escalation.decision}} == escalate_l3"
+    timeout_minutes: 60
+    assignee: "{{l3_oncall}}"
+    decision_options: [resolved, war_room]
+    context:
+      summary: "CRITICAL: Incident {{alert_name}} escalated to L3"
+      full_context: "{{l2_escalation.notes}}"
+
+notifications:
+  on_complete:
+    - channel: slack
+      target: "#it-incidents"
+      message: "Incident {{alert_name}} resolved. Total time: {{workflow.duration_minutes}} min."
+  on_timeout:
+    - channel: slack
+      target: "#it-leadership"
+      message: "ALERT: Incident {{alert_name}} timed out after 24h — requires executive attention."

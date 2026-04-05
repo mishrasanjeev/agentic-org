@@ -109,7 +109,7 @@
 3. Scroll to feature comparison table
 4. Scroll to FAQ section
 
-**Expected Result:** 3 tier cards render with correct pricing. Feature comparison table shows checkmarks/X marks. FAQ accordion expands/collapses on click. Free plan shows "35 agents, 20 connectors, 500 tasks/day".
+**Expected Result:** 3 tier cards render with correct pricing. Feature comparison table shows checkmarks/X marks. FAQ accordion expands/collapses on click. Free plan shows "50+ agents, 20 connectors, 500 tasks/day".
 
 ---
 

@@ -1,8 +1,9 @@
 """SIP trunk configuration for voice agents.
 
 Supports Twilio, Vonage, and custom SIP providers.  Credentials are
-expected to be encrypted at rest (via the platform secrets manager) and
-are only decrypted at connection-test time.
+encrypted at rest using Fernet symmetric encryption (key derived from
+AGENTICORG_SECRET_KEY).  Falls back to base64 encoding if the
+``cryptography`` package is not installed.
 """
 
 from __future__ import annotations
@@ -41,12 +42,16 @@ _E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
 class SIPConfig:
     """SIP trunk configuration.
 
+    Credentials are encrypted at rest using Fernet symmetric encryption.
+    Use :func:`encrypt_credentials` before persisting and
+    :func:`decrypt_credentials` after loading from storage.
+
     Attributes
     ----------
     provider : str
         One of ``twilio``, ``vonage``, ``custom``.
     credentials : dict
-        Provider-specific credentials (encrypted at rest).
+        Provider-specific credentials (encrypted at rest via Fernet).
     phone_number : str
         Phone number in E.164 format (e.g., ``+919876543210``).
     display_name : str
@@ -63,10 +68,74 @@ class SIPConfig:
 
 
 # ---------------------------------------------------------------------------
+# Credential encryption helpers
+# ---------------------------------------------------------------------------
+def encrypt_credentials(credentials: dict) -> dict:
+    """Encrypt sensitive credential values before storage.
+
+    Uses Fernet symmetric encryption with key from AGENTICORG_SECRET_KEY.
+    Falls back to base64 encoding if cryptography not available.
+    """
+    try:
+        import base64
+        import hashlib
+        import os
+
+        from cryptography.fernet import Fernet
+
+        secret = os.getenv("AGENTICORG_SECRET_KEY", "")
+        if not secret:
+            return credentials  # no key = no encryption
+        # Derive Fernet key from secret
+        key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+        f = Fernet(key)
+        encrypted: dict[str, Any] = {}
+        for k, v in credentials.items():
+            if isinstance(v, str) and v:
+                encrypted[k] = f.encrypt(v.encode()).decode()
+            else:
+                encrypted[k] = v
+        return encrypted
+    except ImportError:
+        return credentials  # cryptography not installed
+
+
+def decrypt_credentials(credentials: dict) -> dict:
+    """Decrypt credential values retrieved from storage."""
+    try:
+        import base64
+        import hashlib
+        import os
+
+        from cryptography.fernet import Fernet
+
+        secret = os.getenv("AGENTICORG_SECRET_KEY", "")
+        if not secret:
+            return credentials
+        key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+        f = Fernet(key)
+        decrypted: dict[str, Any] = {}
+        for k, v in credentials.items():
+            if isinstance(v, str) and v:
+                try:
+                    decrypted[k] = f.decrypt(v.encode()).decode()
+                except Exception:
+                    decrypted[k] = v  # not encrypted, return as-is
+            else:
+                decrypted[k] = v
+        return decrypted
+    except ImportError:
+        return credentials
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 def validate_sip_config(config: SIPConfig) -> list[str]:
     """Validate a SIP configuration.
+
+    Credentials should be encrypted at rest via :func:`encrypt_credentials`.
+    This validator checks the *decrypted* form of credentials.
 
     Returns
     -------

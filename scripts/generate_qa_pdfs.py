@@ -230,7 +230,7 @@ def build_short_pdf() -> QAPdf:
     pdf.section_title("5", "Regression Checklist")
     regression = [
         ("RG-01", "Existing agents work", "Agents without Grantex tokens execute tools normally"),
-        ("RG-02", "Workflows run", "All 15 workflow templates trigger and complete"),
+        ("RG-02", "Workflows run", "All 20+ workflow templates trigger and complete"),
         ("RG-03", "HITL approvals", "Approval queue shows pending, approve/reject works"),
         ("RG-04", "Shadow mode", "New agents start in shadow, quality gates enforced"),
         ("RG-05", "Kill switch", "Pause agent stops execution within 30s"),
@@ -307,8 +307,8 @@ def build_full_pdf() -> QAPdf:
         "keyword-based permission guessing (check_scope()) with Grantex SDK manifest-based "
         "scope enforcement (grantex.enforce()). This affects the LangGraph agent execution path, "
         "the ToolGateway API-direct path, and adds new UI pages for scope visibility.\n\n"
-        "Platform summary: 35 pre-built AI agents across 6 domains (finance, HR, marketing, ops, "
-        "backoffice, comms), 54 connectors with 340+ tools, 15 workflow templates, CFO/CMO/ABM "
+        "Platform summary: 50+ pre-built AI agents across 6 domains (finance, HR, marketing, ops, "
+        "backoffice, comms), 54 native connectors + 1000+ via Composio, 20+ workflow templates, CFO/CMO/ABM "
         "dashboards, NL Query, HITL governance, A/B testing, email drip, web push, multi-company, "
         "scheduled reports, and full SDK/MCP/A2A/CLI support."
     )
@@ -457,7 +457,7 @@ def build_full_pdf() -> QAPdf:
         ("AG-19", "LLM selection", "Agent uses configured model (Gemini/Claude/GPT)", "P2"),
         ("AG-20", "Confidence scoring", "LLM output confidence extracted, capped on errors", "P1"),
         ("AG-21", "Anti-hallucination", "Agent cannot invent data not from tools", "P1"),
-        ("AG-22", "35 agent types", "All 35 pre-built agents register and run", "P1"),
+        ("AG-22", "50+ agent types", "All 50+ pre-built agents register and run", "P1"),
         ("AG-23", "Custom agent type", "Wizard custom type creates with BaseAgent", "P2"),
         ("AG-24", "Routing filters", "Multiple agents of same type, filter-based routing", "P3"),
         ("AG-25", "Agent personas", "Employee name, designation, avatar, specialization", "P3"),
