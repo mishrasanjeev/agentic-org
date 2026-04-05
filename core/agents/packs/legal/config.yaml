@@ -1,0 +1,34 @@
+name: legal
+display_name: Legal Pack
+description: AI agents for contract review, case research, document drafting, and compliance checking
+compliance:
+  - attorney_client_privilege
+  - data_retention
+agents:
+  - type: contract_review
+    domain: ops
+    tools: [knowledge_base_search, composio:docusign:get_document]
+    system_prompt_suffix: >
+      Review contracts for key clauses, risks, and missing terms.
+      Flag liability caps, indemnification, and termination provisions.
+  - type: case_research
+    domain: ops
+    tools: [knowledge_base_search, composio:google:search]
+    system_prompt_suffix: >
+      Research case law and precedents relevant to the query.
+      Cite sources and flag jurisdictional limitations.
+  - type: document_drafting
+    domain: ops
+    tools: [knowledge_base_search, composio:google_docs:create_document]
+    system_prompt_suffix: >
+      Draft legal documents following firm templates and style guides.
+      Include placeholder markers for attorney review.
+  - type: compliance_checker
+    domain: finance
+    tools: [knowledge_base_search]
+    system_prompt_suffix: >
+      Check regulatory compliance against applicable frameworks.
+      Report non-conformities with severity and remediation steps.
+workflows:
+  - contract_lifecycle
+  - litigation_support

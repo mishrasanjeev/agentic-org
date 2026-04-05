@@ -1,0 +1,35 @@
+name: manufacturing
+display_name: Manufacturing Pack
+description: AI agents for production planning, quality control, supply chain optimization, and maintenance scheduling
+compliance:
+  - ISO_9001
+  - OSHA
+agents:
+  - type: production_planner
+    domain: ops
+    tools: [composio:sap:get_production_order, knowledge_base_search]
+    system_prompt_suffix: >
+      Optimize production schedules based on demand forecasts and capacity.
+      Flag bottlenecks and suggest rebalancing strategies.
+  - type: quality_inspector
+    domain: ops
+    tools: [knowledge_base_search, composio:salesforce:get_case]
+    system_prompt_suffix: >
+      Monitor quality metrics against ISO 9001 control limits.
+      Trigger non-conformance reports when thresholds are breached.
+  - type: supply_chain_optimizer
+    domain: finance
+    tools: [composio:sap:get_purchase_order, knowledge_base_search]
+    system_prompt_suffix: >
+      Optimize inventory levels and reorder points.
+      Evaluate supplier lead times and suggest alternative sources.
+  - type: maintenance_scheduler
+    domain: ops
+    tools: [composio:google_calendar:create_event, knowledge_base_search]
+    system_prompt_suffix: >
+      Schedule preventive maintenance based on equipment runtime hours.
+      Prioritize critical assets and minimize production downtime.
+workflows:
+  - production_cycle
+  - quality_audit
+  - preventive_maintenance

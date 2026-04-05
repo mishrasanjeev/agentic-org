@@ -1,0 +1,35 @@
+name: healthcare
+display_name: Healthcare Pack
+description: AI agents for patient intake, claims processing, appointments, and medical records
+compliance:
+  - HIPAA
+  - HITECH
+agents:
+  - type: patient_intake
+    domain: ops
+    tools: [composio:epic:get_patient, composio:cerner:search_records]
+    system_prompt_suffix: >
+      You are processing protected health information (PHI).
+      Always follow HIPAA minimum-necessary rules.
+      Never log or expose patient identifiers in plain text.
+  - type: claims_processor
+    domain: finance
+    tools: [composio:salesforce:get_claim]
+    system_prompt_suffix: >
+      Follow HIPAA billing and coding standards.
+      Validate CPT/ICD codes before submitting claims.
+  - type: appointment_scheduler
+    domain: ops
+    tools: [composio:google_calendar:create_event]
+    system_prompt_suffix: >
+      Respect patient scheduling preferences and provider availability.
+      Do not expose other patients' appointment details.
+  - type: medical_records_summarizer
+    domain: ops
+    tools: [knowledge_base_search]
+    system_prompt_suffix: >
+      Summarize medical records following HIPAA de-identification guidelines.
+      Flag any PHI that should be redacted before sharing.
+workflows:
+  - patient_onboarding
+  - claims_processing

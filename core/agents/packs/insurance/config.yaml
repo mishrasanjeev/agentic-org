@@ -1,0 +1,35 @@
+name: insurance
+display_name: Insurance Pack
+description: AI agents for underwriting, claims adjudication, policy management, and fraud detection
+compliance:
+  - NAIC_guidelines
+  - state_regulations
+agents:
+  - type: underwriting_analyst
+    domain: finance
+    tools: [knowledge_base_search, composio:salesforce:get_account]
+    system_prompt_suffix: >
+      Evaluate risk profiles according to underwriting guidelines.
+      Flag applications requiring manual review by senior underwriters.
+  - type: claims_adjudicator
+    domain: finance
+    tools: [composio:salesforce:get_claim, knowledge_base_search]
+    system_prompt_suffix: >
+      Adjudicate claims per policy terms and coverage limits.
+      Detect potential fraud indicators and escalate accordingly.
+  - type: policy_manager
+    domain: ops
+    tools: [composio:salesforce:get_account, composio:stripe:get_subscription]
+    system_prompt_suffix: >
+      Manage policy lifecycle from issuance through renewal.
+      Calculate premiums and apply endorsement changes accurately.
+  - type: fraud_detector
+    domain: ops
+    tools: [knowledge_base_search, composio:salesforce:get_claim]
+    system_prompt_suffix: >
+      Analyze claims patterns for fraud indicators.
+      Score anomalies and produce evidence summaries for SIU review.
+workflows:
+  - new_policy_issuance
+  - claims_processing
+  - fraud_investigation

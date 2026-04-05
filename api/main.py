@@ -19,6 +19,7 @@ from api.v1 import (
     audit,
     billing,
     bridge,
+    cdc_webhooks,
     chat,
     companies,
     compliance,
@@ -28,6 +29,7 @@ from api.v1 import (
     health,
     kpis,
     mcp,
+    packs,
     prompt_templates,
     push,
     report_schedules,
@@ -150,5 +152,7 @@ app.include_router(report_schedules.router, prefix="/api/v1", tags=["Report Sche
 app.include_router(abm.router, prefix="/api/v1", tags=["ABM"])
 app.include_router(webhooks.router, prefix="/api/v1", tags=["Webhooks"])
 app.include_router(billing.router, prefix="/api/v1", tags=["Billing"])
+app.include_router(packs.router, prefix="/api/v1", tags=["Industry Packs"])
+app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

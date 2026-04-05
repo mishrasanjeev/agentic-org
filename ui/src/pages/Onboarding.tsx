@@ -1,7 +1,79 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "../contexts/AuthContext";
+
+/* ── Milestone Tracker Types ──────────────────────────────────────────── */
+interface MilestoneTask {
+  id: string;
+  label: string;
+  completed: boolean;
+}
+
+interface WeekMilestone {
+  week: number;
+  title: string;
+  tasks: MilestoneTask[];
+}
+
+const INITIAL_MILESTONES: WeekMilestone[] = [
+  {
+    week: 1,
+    title: "Foundation Setup",
+    tasks: [
+      { id: "w1t1", label: "Configure tenant and SSO", completed: false },
+      { id: "w1t2", label: "Connect 3+ data sources", completed: false },
+      { id: "w1t3", label: "Complete security review", completed: false },
+      { id: "w1t4", label: "Enable MFA for admins", completed: false },
+    ],
+  },
+  {
+    week: 2,
+    title: "Agent Deployment",
+    tasks: [
+      { id: "w2t1", label: "Select and configure agents", completed: false },
+      { id: "w2t2", label: "Deploy agents in shadow mode", completed: false },
+      { id: "w2t3", label: "Configure 2+ workflows", completed: false },
+      { id: "w2t4", label: "Complete team training", completed: false },
+    ],
+  },
+  {
+    week: 3,
+    title: "Validation & Tuning",
+    tasks: [
+      { id: "w3t1", label: "Review shadow mode outputs", completed: false },
+      { id: "w3t2", label: "Tune agent prompts", completed: false },
+      { id: "w3t3", label: "Test approval workflows end-to-end", completed: false },
+      { id: "w3t4", label: "Set up monitoring dashboards", completed: false },
+    ],
+  },
+  {
+    week: 4,
+    title: "Go-Live",
+    tasks: [
+      { id: "w4t1", label: "Promote agents to active mode", completed: false },
+      { id: "w4t2", label: "Enable production workflows", completed: false },
+      { id: "w4t3", label: "Verify monitoring and alerting", completed: false },
+      { id: "w4t4", label: "Complete onboarding sign-off", completed: false },
+    ],
+  },
+];
+
+const MILESTONE_STORAGE_KEY = "agenticorg_onboarding_milestones";
+
+function loadMilestones(): WeekMilestone[] {
+  try {
+    const raw = localStorage.getItem(MILESTONE_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as WeekMilestone[];
+  } catch {
+    // fall through
+  }
+  return INITIAL_MILESTONES;
+}
+
+function saveMilestones(milestones: WeekMilestone[]) {
+  localStorage.setItem(MILESTONE_STORAGE_KEY, JSON.stringify(milestones));
+}
 
 interface InviteRow {
   role: string;
@@ -24,6 +96,33 @@ export default function Onboarding() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState(false);
+
+  /* ── Milestone tracker state ────────────────────────────────────── */
+  const [milestones, setMilestones] = useState<WeekMilestone[]>(loadMilestones);
+
+  useEffect(() => {
+    saveMilestones(milestones);
+  }, [milestones]);
+
+  const toggleMilestoneTask = (weekIndex: number, taskId: string) => {
+    setMilestones((prev) =>
+      prev.map((week, wi) =>
+        wi === weekIndex
+          ? {
+              ...week,
+              tasks: week.tasks.map((t) =>
+                t.id === taskId ? { ...t, completed: !t.completed } : t,
+              ),
+            }
+          : week,
+      ),
+    );
+  };
+
+  const getWeekProgress = (week: WeekMilestone) => {
+    const done = week.tasks.filter((t) => t.completed).length;
+    return { done, total: week.tasks.length, pct: Math.round((done / week.tasks.length) * 100) };
+  };
 
   const updateInvite = (index: number, field: "name" | "email", value: string) => {
     setInvites((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
@@ -247,7 +346,7 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 4: Getting Started Guide */}
+          {/* Step 4: Getting Started Guide + Milestone Tracker */}
           {step === 4 && (
             <div className="space-y-6">
               <div className="text-center">
@@ -273,6 +372,58 @@ export default function Onboarding() {
                     </div>
                   </button>
                 ))}
+              </div>
+
+              {/* 4-Week Milestone Tracker */}
+              <div className="border-t border-border pt-6">
+                <h3 className="text-lg font-semibold mb-4">4-Week Onboarding Milestones</h3>
+                <div className="space-y-4">
+                  {milestones.map((week, wi) => {
+                    const progress = getWeekProgress(week);
+                    return (
+                      <div key={week.week} className="rounded-lg border border-border p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">
+                            Week {week.week}: {week.title}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {progress.done}/{progress.total} ({progress.pct}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-1.5 mb-3">
+                          <div
+                            className="bg-primary h-1.5 rounded-full transition-all"
+                            style={{ width: `${progress.pct}%` }}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          {week.tasks.map((task) => (
+                            <label
+                              key={task.id}
+                              className="flex items-center gap-2 cursor-pointer text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={task.completed}
+                                onChange={() => toggleMilestoneTask(wi, task.id)}
+                                className="rounded border-border text-primary focus:ring-primary/50"
+                              />
+                              <span
+                                className={
+                                  task.completed
+                                    ? "line-through text-muted-foreground"
+                                    : "text-foreground"
+                                }
+                              >
+                                {task.label}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <button
