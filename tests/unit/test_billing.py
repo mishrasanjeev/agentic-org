@@ -135,8 +135,11 @@ class TestStripeWebhookValidatesSignature:
     @patch("core.billing.stripe_client._get_stripe")
     def test_stripe_webhook_validates_signature(self, mock_get_stripe):
         mock_stripe = MagicMock()
+        import time
+
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "invoice.paid",
+            "created": int(time.time()),
             "data": {
                 "object": {
                     "metadata": {"tenant_id": "t1"},
