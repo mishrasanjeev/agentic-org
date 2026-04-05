@@ -1,7 +1,7 @@
 {
   "name": "AgenticOrg — Enterprise AI Agent Platform",
   "short_name": "AgenticOrg",
-  "description": "Deploy 24 AI agents across Finance, HR, Marketing & Ops with human-in-the-loop governance and 43 enterprise connectors.",
+  "description": "Deploy 50+ AI agents across Finance, HR, Marketing & Ops with 1000+ integrations, voice agents, knowledge base, and HITL governance.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
