@@ -11,7 +11,7 @@ COPY observability/ observability/
 COPY audit/ audit/
 COPY schemas/ schemas/
 COPY migrations/ migrations/
-RUN pip install --no-cache-dir .
+RUN pip install --upgrade pip && pip install --no-cache-dir .
 
 FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
