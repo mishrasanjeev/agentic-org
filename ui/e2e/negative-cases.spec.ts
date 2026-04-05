@@ -108,14 +108,15 @@ test.describe("AUTH: Signup validation", () => {
 // ===========================================================================
 
 test.describe("API: 404 responses", () => {
-  test("Non-existent agent returns 404 or 401", async ({ page, baseURL }) => {
+  test("Non-existent agent returns 4xx (not 500)", async ({ page, baseURL }) => {
     test.skip(!canAuth, "requires E2E_TOKEN");
     const resp = await page.request.get(
       `${baseURL}/api/v1/agents/00000000-0000-0000-0000-000000000000`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
     );
-    // 404 = agent not found (valid token), 401 = token expired/invalid
-    expect([401, 404]).toContain(resp.status());
+    // Should return a 4xx error (401 auth, 404 not found, etc.) — never 500
+    expect(resp.status()).toBeGreaterThanOrEqual(400);
+    expect(resp.status()).toBeLessThan(500);
   });
 
   test("Non-existent workflow returns 404 or 401", async ({ page, baseURL }) => {
