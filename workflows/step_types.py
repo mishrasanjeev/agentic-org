@@ -22,9 +22,17 @@ async def execute_step(step: dict, state: dict) -> dict[str, Any]:
         "sub_workflow": _execute_sub_workflow,
         "wait": _execute_wait,
         "wait_for_event": _execute_wait_for_event,
+        "collaboration": _execute_collaboration,
     }
     handler = handlers.get(step_type, _execute_agent)
     return await handler(step, state)
+
+
+async def _execute_collaboration(step: dict, state: dict) -> dict[str, Any]:
+    """Delegate to the collaboration step handler for parallel multi-agent execution."""
+    from workflows.collaboration import execute_collaboration_step
+
+    return await execute_collaboration_step(step, state)
 
 
 async def _execute_agent(step, state):

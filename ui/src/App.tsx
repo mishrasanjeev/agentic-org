@@ -68,6 +68,9 @@ const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
 /* ── Report Schedules ── */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
 
+/* ── Billing ── */
+const Billing = lazyRetry(() => import("./pages/Billing"));
+
 /* ── Scope Enforcement ── */
 const ScopeDashboard = lazyRetry(() => import("./pages/ScopeDashboard"));
 const EnforceAuditLog = lazyRetry(() => import("./pages/EnforceAuditLog"));
@@ -413,6 +416,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <SalesPipeline />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/billing"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <Billing />
             </Layout>
           </ProtectedRoute>
         }

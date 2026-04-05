@@ -40,6 +40,7 @@ from core.agents.ops import (
     compliance_guard,  # noqa: F401
     contract_intelligence,  # noqa: F401
     it_operations,  # noqa: F401
+    support_deflector,  # noqa: F401
     support_triage,  # noqa: F401
     vendor_manager,  # noqa: F401
 )

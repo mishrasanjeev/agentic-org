@@ -19,6 +19,7 @@ class WorkflowParser:
         "sub_workflow",
         "wait",
         "wait_for_event",
+        "collaboration",
     }
 
     def parse(self, definition: dict[str, Any] | str) -> dict[str, Any]:

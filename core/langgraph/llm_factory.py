@@ -2,11 +2,17 @@
 
 Supports Gemini (default), Claude, GPT, and local models (Ollama/vLLM)
 with automatic fallback and smart tier-based routing via LLMRouter.
+
+Air-gapped deployment modes (AGENTICORG_LLM_MODE):
+  - cloud: default behaviour, use cloud LLM providers
+  - local: require local endpoint (Ollama/vLLM), fail if unavailable
+  - auto: try local Ollama first, fallback to cloud
 """
 
 from __future__ import annotations
 
 import os
+import socket
 
 import structlog
 from langchain_core.language_models import BaseChatModel
@@ -14,6 +20,20 @@ from langchain_core.language_models import BaseChatModel
 from core.llm.router import smart_router
 
 logger = structlog.get_logger()
+
+
+def _is_local_endpoint_available(host: str = "localhost", port: int = 11434, timeout: float = 1.0) -> bool:
+    """Check if a local LLM endpoint (Ollama/vLLM) is reachable."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (OSError, ConnectionRefusedError, TimeoutError):
+        return False
+
+
+def _get_llm_mode() -> str:
+    """Return the LLM mode: 'cloud', 'local', or 'auto'."""
+    return os.getenv("AGENTICORG_LLM_MODE", "cloud").lower()
 
 
 def create_chat_model(
@@ -30,6 +50,16 @@ def create_chat_model(
     selects the optimal model tier.  Otherwise the explicitly requested
     *model* (or the env-var default) is used directly.
 
+    Air-gapped mode handling:
+      - ``AGENTICORG_LLM_MODE=local``: forces Ollama/vLLM endpoints, raises
+        if no local endpoint is available.
+      - ``AGENTICORG_LLM_MODE=auto``: tries localhost:11434 (Ollama) first,
+        falls back to cloud providers on failure.
+      - ``AGENTICORG_LLM_MODE=cloud``: existing cloud behaviour (default).
+
+    Models prefixed with ``ollama:`` or ``vllm:`` are routed to the
+    corresponding local backend regardless of mode.
+
     Args:
         model: Explicit model name override.  When empty, the router or
                env default decides.
@@ -45,7 +75,46 @@ def create_chat_model(
     """
     routing_config = routing_config or {}
     routing_mode = routing_config.get("routing", os.getenv("AGENTICORG_LLM_ROUTING", "auto"))
+    llm_mode = _get_llm_mode()
 
+    # ── Handle explicit ollama:/vllm: prefixes regardless of mode ────
+    if model.startswith("ollama:"):
+        return _build_ollama_model(model[len("ollama:"):], temperature, max_tokens)
+    if model.startswith("vllm:"):
+        return _build_vllm_model(model[len("vllm:"):], temperature, max_tokens)
+
+    # ── Air-gapped: local mode — require local endpoint ──────────────
+    if llm_mode == "local":
+        ollama_url = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434"))
+        vllm_url = os.getenv("VLLM_BASE_URL", os.getenv("VLLM_API_BASE", "http://localhost:8000"))
+
+        # Try Ollama first
+        if _is_local_endpoint_available("localhost", 11434):
+            local_model = model or os.getenv("AGENTICORG_LOCAL_TIER1", "gemma3:7b")
+            logger.info("llm_mode_local_ollama", model=local_model, base_url=ollama_url)
+            return _build_ollama_model(local_model, temperature, max_tokens)
+
+        # Try vLLM
+        if _is_local_endpoint_available("localhost", 8000):
+            local_model = model or os.getenv("AGENTICORG_LOCAL_TIER2", "llama3.1:8b")
+            logger.info("llm_mode_local_vllm", model=local_model, base_url=vllm_url)
+            return _build_vllm_model(local_model, temperature, max_tokens)
+
+        raise ConnectionError(
+            "AGENTICORG_LLM_MODE=local but no local LLM endpoint is available. "
+            "Start Ollama (port 11434) or vLLM (port 8000)."
+        )
+
+    # ── Auto mode: try local first, fallback to cloud ────────────────
+    if llm_mode == "auto":
+        if _is_local_endpoint_available("localhost", 11434):
+            local_model = model or os.getenv("AGENTICORG_LOCAL_TIER1", "gemma3:7b")
+            logger.info("llm_mode_auto_using_local", model=local_model)
+            return _build_ollama_model(local_model, temperature, max_tokens)
+        logger.debug("llm_mode_auto_no_local_falling_back_to_cloud")
+        # Fall through to cloud path
+
+    # ── Cloud mode (default) ─────────────────────────────────────────
     # If routing is not disabled and we have a query, ask the smart router
     if routing_mode != "disabled" and query:
         try:
@@ -63,34 +132,46 @@ def create_chat_model(
     return _build_model(resolved, temperature, max_tokens)
 
 
+def _build_ollama_model(model_name: str, temperature: float, max_tokens: int) -> BaseChatModel:
+    """Create a ChatOpenAI pointing to the Ollama OpenAI-compatible endpoint."""
+    from langchain_openai import ChatOpenAI
+
+    base_url = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")) + "/v1"
+    logger.info("building_ollama_model", model=model_name, base_url=base_url)
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        openai_api_key="ollama",  # Ollama doesn't need a real key
+        openai_api_base=base_url,
+    )
+
+
+def _build_vllm_model(model_name: str, temperature: float, max_tokens: int) -> BaseChatModel:
+    """Create a ChatOpenAI pointing to the vLLM OpenAI-compatible endpoint."""
+    from langchain_openai import ChatOpenAI
+
+    base_url = os.getenv("VLLM_BASE_URL", os.getenv("VLLM_API_BASE", "http://localhost:8000")) + "/v1"
+    logger.info("building_vllm_model", model=model_name, base_url=base_url)
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        openai_api_key=os.getenv("VLLM_API_KEY", "vllm"),
+        openai_api_base=base_url,
+    )
+
+
 def _build_model(resolved: str, temperature: float, max_tokens: int) -> BaseChatModel:
     """Instantiate the correct LangChain ChatModel for *resolved* model name."""
 
     # Local models via Ollama (OpenAI-compatible API)
     if _is_ollama_model(resolved):
-        from langchain_openai import ChatOpenAI
-
-        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434") + "/v1"
-        return ChatOpenAI(
-            model=resolved,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            openai_api_key="ollama",  # Ollama doesn't need a real key
-            openai_api_base=base_url,
-        )
+        return _build_ollama_model(resolved, temperature, max_tokens)
 
     # Local models via vLLM (OpenAI-compatible API)
     if _is_vllm_model(resolved):
-        from langchain_openai import ChatOpenAI
-
-        base_url = os.getenv("VLLM_API_BASE", "http://localhost:8000/v1")
-        return ChatOpenAI(
-            model=resolved,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            openai_api_key=os.getenv("VLLM_API_KEY", "vllm"),
-            openai_api_base=base_url,
-        )
+        return _build_vllm_model(resolved, temperature, max_tokens)
 
     # Cloud: Gemini
     if "gemini" in resolved:

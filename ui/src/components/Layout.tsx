@@ -35,6 +35,7 @@ const ALL_NAV = [
   { path: "/dashboard/enforce-audit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/sla", label: "SLA Monitor", roles: ["admin"] },
+  { path: "/dashboard/billing", label: "Billing", roles: ["admin"] },
   { path: "/dashboard/settings", label: "Settings", roles: ["admin"] },
 ];
 

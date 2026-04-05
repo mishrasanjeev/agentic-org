@@ -93,7 +93,58 @@ services:
         condition: service_healthy
     command: celery -A core.worker worker --loglevel=info --concurrency=4
 
+  # ── Air-gapped: Ollama (CPU) ──────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - airgap
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+
+  # ── Air-gapped: vLLM (GPU) ──────────────────────────────────────
+  vllm:
+    image: vllm/vllm-openai:latest
+    profiles:
+      - airgap-gpu
+    ports:
+      - "8001:8000"
+    volumes:
+      - vllm_models:/root/.cache/huggingface
+    environment:
+      VLLM_API_KEY: vllm
+    command: >
+      --model meta-llama/Llama-3.1-70B-Instruct
+      --max-model-len 8192
+      --tensor-parallel-size 1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  ollama_data:
+  vllm_models:

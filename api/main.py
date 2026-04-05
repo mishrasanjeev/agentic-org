@@ -17,6 +17,7 @@ from api.v1 import (
     api_keys,
     approvals,
     audit,
+    billing,
     bridge,
     chat,
     companies,
@@ -148,5 +149,6 @@ app.include_router(push.router, prefix="/api/v1", tags=["Push Notifications"])
 app.include_router(report_schedules.router, prefix="/api/v1", tags=["Report Schedules"])
 app.include_router(abm.router, prefix="/api/v1", tags=["ABM"])
 app.include_router(webhooks.router, prefix="/api/v1", tags=["Webhooks"])
+app.include_router(billing.router, prefix="/api/v1", tags=["Billing"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])
