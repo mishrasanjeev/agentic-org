@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 
 interface Plan {
   plan: string;
@@ -60,7 +59,6 @@ function ProgressBar({ value, max, label }: { value: number; max: number; label:
 }
 
 export default function Billing() {
-  const { t } = useTranslation();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
