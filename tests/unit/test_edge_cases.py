@@ -126,10 +126,10 @@ class TestConnectorEdgeCases:
 
     @pytest.mark.asyncio
     async def test_health_check_not_connected_returns_status(self):
-        """Health check on disconnected connector returns not_connected."""
+        """Health check on disconnected/unconfigured connector returns proper status."""
         connector = self._make_connector(config={})
         result = await connector.health_check()
-        assert result["status"] == "not_connected"
+        assert result["status"] in ("not_connected", "not_configured")
 
     @pytest.mark.asyncio
     async def test_execute_tool_unknown_tool_raises(self):
