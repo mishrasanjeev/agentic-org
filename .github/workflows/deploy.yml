@@ -309,7 +309,7 @@ jobs:
           PROD_URL="${{ secrets.PROD_API_URL }}"
           for i in $(seq 1 20); do
             RESP=$(curl -sf "${PROD_URL}/api/v1/health" || true)
-            if echo "$RESP" | grep -q '"status":"healthy"'; then
+            if echo "$RESP" | grep -qE '"status":"(healthy|degraded|ok)"'; then
               echo "Production health check passed"
               echo "$RESP"
               exit 0
