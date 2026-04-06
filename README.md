@@ -212,7 +212,16 @@ Each agent is a virtual employee with persona, specialization, and routing:
 Visual tree hierarchy per department. Each agent has an `org_level` field (e.g., Head → Manager → Analyst) and a parent reference, forming a reporting chain used for smart escalation — when an agent's confidence is below threshold, the task auto-escalates to its parent in the org tree. CSV bulk import lets you onboard entire departments in one upload.
 
 ### No-Code Agent Creator
-5-step wizard: Persona → Role → Prompt → Behavior → Deploy as Shadow
+5-step wizard: Persona → Role → Prompt → Behavior → Deploy as Shadow. Or describe the employee you need in plain English — the system auto-generates the full agent configuration.
+
+### NL Workflow Builder
+Describe business processes in plain English (e.g., "Automate invoice approval when amount > 5L") and the system generates the complete workflow definition. Preview before deploying.
+
+### Multi-Language Support
+Platform available in English and Hindi. Language picker in header. Agents respond in the user's preferred language. Extensible to Tamil, Telugu, Kannada.
+
+### Content Safety
+AI-generated content is checked for PII leakage, toxicity (via HuggingFace toxic-bert), and near-duplicate detection before delivery. Configurable thresholds per agent.
 
 ### Prompt Template Library
 27 production-tested templates with `{{variable}}` substitution. Built-in templates are read-only — clone to customize. Full prompt audit trail with edit history. Prompt lock on active agents.
@@ -527,6 +536,21 @@ Playwright-based automation for legacy web portals without APIs. Pre-built scrip
 
 ### Billing & Hosted Tier
 Self-hosted is free forever. Hosted tier: Free (3 agents) / Pro ($49/mo) / Enterprise ($299/mo). India pricing: Free / Rs 999/mo / Rs 4999/mo. Stripe (global) + PineLabs Plural (India).
+
+### Explainable AI
+Every agent decision includes a "Why?" panel with 3-5 plain-English bullet points, confidence bar, tools cited, and Flesch-Kincaid readability scoring. Non-technical users can understand why the agent approved or rejected an action.
+
+### Self-Improving Agents
+Thumbs up/down feedback on every agent run. After 10+ feedback entries, the system auto-generates prompt amendments. Agents learn from corrections without manual prompt editing.
+
+### Multi-Agent Collaboration
+Workflow `collaboration` step type runs 2+ agents in parallel with shared context. Aggregation strategies: merge (combine outputs), vote (majority wins), first_complete (fastest agent wins).
+
+### Customer Support Deflection
+Pre-built `support_deflector` agent auto-resolves 60%+ of support tickets using FAQ matching + knowledge base (RAG) search. Tracks deflection rate metric on the dashboard.
+
+### Real-Time CDC (Change Data Capture)
+Webhook receivers + polling-based CDC for connected systems. When data changes externally (e.g., new HubSpot deal), CDC events trigger workflows automatically. HMAC-SHA256 signature validation, fail-closed security.
 
 ### Integration Workflow Page
 The `/integration-workflow` page provides a visual guide for connecting external systems, with SDK/CLI quickstart examples and protocol documentation.
