@@ -52,7 +52,7 @@ dnspython==2.8.0
 
 # ─── LLM Providers ──────────────────────────────────────────────────────────
 google-genai==1.69.0
-anthropic==0.86.0
+anthropic==0.89.0
 openai==2.29.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
@@ -79,7 +79,7 @@ opentelemetry-instrumentation-fastapi==0.61b0
 prometheus-client==0.22.1
 
 # ─── Document Processing & Reporting ─────────────────────────────────────────
-pypdf==6.7.5
+pypdf==6.9.2
 pyyaml==6.0.2
 jinja2==3.1.6
 defusedxml==0.7.1
