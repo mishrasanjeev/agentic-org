@@ -538,12 +538,33 @@ async def generate_agent_config(
 
     try:
         parsed = _parse_llm_response(response.content)
-    except (json.JSONDecodeError, ValueError) as exc:
-        logger.warning("agent_generator_parse_failed", error=str(exc), raw=response.content[:500])
-        raise ValueError(
-            "Failed to parse agent configuration from LLM response. "
-            "Please try rephrasing your description."
-        ) from exc
+    except (json.JSONDecodeError, ValueError) as first_exc:
+        logger.warning("agent_generator_parse_failed_retry", error=str(first_exc), raw=response.content[:500])
+
+        # Retry with a simplified prompt and truncated input
+        short_desc = sanitized[:500] if len(sanitized) > 500 else sanitized
+        retry_messages = [
+            {"role": "system", "content": (
+                "Return ONLY valid JSON. No markdown. No commentary.\n"
+                "Format: {\"suggestions\": [{\"confidence\": 0.9, \"agent_type\": \"...\", "
+                "\"domain\": \"...\", \"employee_name\": \"...\", \"designation\": \"...\", "
+                "\"suggested_tools\": [], \"system_prompt\": \"...\", "
+                "\"confidence_floor\": 0.88, \"hitl_condition\": \"confidence < 0.88\", "
+                "\"specialization\": \"...\"}]}"
+            )},
+            {"role": "user", "content": f"Create an agent for: {short_desc}"},
+        ]
+        try:
+            retry_response = await router.complete(
+                messages=retry_messages, temperature=0.1, max_tokens=1024,
+            )
+            parsed = _parse_llm_response(retry_response.content)
+        except (json.JSONDecodeError, ValueError) as retry_exc:
+            logger.warning("agent_generator_retry_also_failed", error=str(retry_exc))
+            raise ValueError(
+                "Failed to parse agent configuration from LLM response. "
+                "Please try rephrasing your description."
+            ) from retry_exc
 
     suggestions = parsed.get("suggestions", [])
     if not suggestions:

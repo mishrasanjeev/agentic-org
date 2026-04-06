@@ -80,6 +80,55 @@ async def list_registry_connectors(category: str | None = None):
     return {"items": items, "total": len(items)}
 
 
+# ── GET /tools — Function-level tool names ─────────────────────────────────
+@router.get("/tools")
+async def list_tools(category: str | None = None):
+    """Return all function-level tool names from the connector registry.
+
+    Unlike ``GET /mcp/tools`` which returns agent-level MCP tool names
+    (e.g., ``agenticorg_email_agent``), this returns the actual function-level
+    tool names (e.g., ``send_email``, ``read_inbox``) that agents use.
+    """
+    try:
+        from core.langgraph.tool_adapter import _build_tool_index
+
+        tool_index = _build_tool_index()
+        tools: list[str] = []
+        tool_details: list[dict] = []
+        for tool_name, (connector_name, description) in sorted(tool_index.items()):
+            if category:
+                # Filter by connector category if requested
+                from connectors.registry import ConnectorRegistry
+
+                cls = ConnectorRegistry.get(connector_name)
+                if cls and cls.category != category:
+                    continue
+            tools.append(tool_name)
+            tool_details.append({
+                "name": tool_name,
+                "connector": connector_name,
+                "description": description or f"{tool_name} on {connector_name}",
+            })
+        return {
+            "tools": tools,
+            "details": tool_details,
+            "total": len(tools),
+        }
+    except Exception:
+        # Fallback: extract from _AGENT_TYPE_DEFAULT_TOOLS
+        from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
+
+        all_tools: set[str] = set()
+        for tools_list in _AGENT_TYPE_DEFAULT_TOOLS.values():
+            all_tools.update(tools_list)
+        sorted_tools = sorted(all_tools)
+        return {
+            "tools": sorted_tools,
+            "details": [{"name": t, "connector": "unknown", "description": t} for t in sorted_tools],
+            "total": len(sorted_tools),
+        }
+
+
 # ── GET /connectors ─────────────────────────────────────────────────────────
 @router.get("/connectors")
 async def list_connectors(

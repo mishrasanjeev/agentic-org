@@ -286,6 +286,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "reporting_to": agent.reporting_to,
         "org_level": agent.org_level,
         "prompt_amendments": getattr(agent, "prompt_amendments", None) or [],
+        "config": agent.config,
     }
 
 
@@ -945,7 +946,7 @@ async def update_agent(
                 raise HTTPException(
                     422,
                     detail=f"Invalid authorized_tools: {', '.join(invalid)}. "
-                    "Use /mcp/tools to discover valid tool names.",
+                    "Use GET /connectors/registry or GET /tools to discover valid tool names.",
                 )
             agent.authorized_tools = update_data["authorized_tools"]
         if "hitl_policy" in update_data and update_data["hitl_policy"] is not None:
@@ -1111,6 +1112,7 @@ async def run_agent(
             confidence_floor=float(agent_config.get("confidence_floor", 0.88)),
             hitl_condition=agent_config.get("hitl_condition", ""),
             grant_token=grant_token,
+            connector_config=agent_config.get("config"),
         )
     except Exception as exc:
         logger.error("agent_run_error", agent_id=str(agent_id), error=str(exc))

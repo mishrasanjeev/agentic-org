@@ -19,7 +19,7 @@ export default function NotificationBell() {
   const [count, setCount] = useState(0);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushSupported] = useState(isPushSupported);
+  const [pushSupported] = useState(() => isPushSupported());
   const [toggling, setToggling] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 

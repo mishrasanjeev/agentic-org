@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import re
-import uuid
+import uuid as _uuid
 from datetime import UTC, datetime
 
+import structlog
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from core.database import get_tenant_session
+from core.models.agent import Agent
 
 router = APIRouter()
+_log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# Domain keyword routing (MVP heuristic — replaced by LangGraph in prod)
+# Domain keyword routing (heuristic — augmented by dynamic DB lookup)
 # ---------------------------------------------------------------------------
 
 _DOMAIN_KEYWORDS: dict[str, list[str]] = {
@@ -49,13 +54,14 @@ _DOMAIN_KEYWORDS: dict[str, list[str]] = {
     ],
 }
 
-_DOMAIN_AGENTS: dict[str, str] = {
-    "finance": "CFO Agent (Ananya)",
-    "hr": "CHRO Agent (Priya)",
-    "marketing": "CMO Agent (Rahul)",
-    "operations": "COO Agent (Vijay)",
-    "sales": "Sales Agent (Meera)",
-    "communications": "Comms Agent (Arjun)",
+# Maps keyword-routing domain names to DB domain values
+_DOMAIN_TO_DB_DOMAIN: dict[str, str] = {
+    "finance": "finance",
+    "hr": "hr",
+    "marketing": "marketing",
+    "operations": "ops",
+    "sales": "marketing",
+    "communications": "comms",
 }
 
 
@@ -70,6 +76,46 @@ def _classify_domain(query: str) -> str:
     if not scores:
         return "general"
     return max(scores, key=scores.get)  # type: ignore[arg-type]
+
+
+async def _find_agent_for_domain(
+    domain: str, tenant_id: str,
+) -> tuple[str, str | None]:
+    """Find the best active agent for a domain from the DB.
+
+    Returns (agent_display_name, agent_id_str) or falls back to a default.
+    """
+    db_domain = _DOMAIN_TO_DB_DOMAIN.get(domain, domain)
+    try:
+        tid = _uuid.UUID(tenant_id)
+        async with get_tenant_session(tid) as session:
+            result = await session.execute(
+                select(Agent)
+                .where(
+                    Agent.tenant_id == tid,
+                    Agent.domain == db_domain,
+                    Agent.status.in_(["active", "shadow"]),
+                )
+                .order_by(Agent.status.asc(), Agent.created_at.desc())
+                .limit(1)
+            )
+            agent = result.scalar_one_or_none()
+            if agent:
+                display = agent.employee_name or agent.name
+                return display, str(agent.id)
+    except Exception:
+        _log.warning("chat_agent_lookup_failed", domain=domain)
+
+    # Fallback display names when no DB agents exist
+    fallback_agents: dict[str, str] = {
+        "finance": "CFO Agent (Ananya)",
+        "hr": "CHRO Agent (Priya)",
+        "marketing": "CMO Agent (Rahul)",
+        "operations": "COO Agent (Vijay)",
+        "sales": "Sales Agent (Meera)",
+        "communications": "Comms Agent (Arjun)",
+    }
+    return fallback_agents.get(domain, "General Assistant"), None
 
 
 # ---------------------------------------------------------------------------
@@ -117,52 +163,41 @@ async def chat_query(
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
     domain = _classify_domain(body.query)
-    agent = _DOMAIN_AGENTS.get(domain, "General Assistant")
+    agent_name, agent_id = await _find_agent_for_domain(domain, tenant_id)
     confidence = 0.92 if domain != "general" else 0.65
 
-    # MVP: structured demo response — in production this calls LangGraph
-    if domain == "finance":
+    # Try to execute via LangGraph if an agent was found in DB
+    answer: str | None = None
+    if agent_id:
+        try:
+            from core.langgraph.runner import run_agent as langgraph_run
+
+            lg_result = await langgraph_run(
+                agent_id=agent_id,
+                agent_type=domain,
+                domain=_DOMAIN_TO_DB_DOMAIN.get(domain, domain),
+                tenant_id=tenant_id,
+                system_prompt=(
+                    f"You are {agent_name}, a domain expert for {domain}. "
+                    f"Answer the user's question concisely and helpfully."
+                ),
+                authorized_tools=[],
+                task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
+            )
+            if lg_result.get("status") == "completed" and lg_result.get("output"):
+                output = lg_result["output"]
+                answer = output.get("answer") or output.get("response") or str(output)
+                confidence = lg_result.get("confidence", confidence)
+        except Exception:
+            _log.warning("chat_langgraph_fallback", domain=domain, agent_id=agent_id)
+
+    # Fallback: generate a contextual response based on domain
+    if not answer:
         answer = (
-            f"Based on the financial data for your company, here is what I found: "
-            f"Your query '{body.query}' has been analyzed. The finance team is "
-            f"processing the relevant reports. I can pull detailed ledger entries, "
-            f"GST filings, or cash flow projections on request."
-        )
-    elif domain == "hr":
-        answer = (
-            f"Looking at HR records: your query about '{body.query}' has been routed "
-            f"to the HR domain. I can provide details on headcount, attendance trends, "
-            f"leave balances, or recruitment pipeline status."
-        )
-    elif domain == "marketing":
-        answer = (
-            f"Marketing insights for '{body.query}': I can pull campaign performance, "
-            f"lead funnel metrics, SEO rankings, or social media engagement data. "
-            f"What specific report would you like?"
-        )
-    elif domain == "sales":
-        answer = (
-            f"Sales pipeline update for '{body.query}': I can show deal stages, "
-            f"quota attainment, forecast accuracy, or individual rep performance. "
-            f"Which metric interests you?"
-        )
-    elif domain == "operations":
-        answer = (
-            f"Operations report for '{body.query}': I have visibility into inventory "
-            f"levels, vendor SLAs, procurement status, and fulfillment metrics. "
-            f"Please specify what you need."
-        )
-    elif domain == "communications":
-        answer = (
-            f"Communications summary for '{body.query}': I can check email threads, "
-            f"Slack channels, calendar events, or pending notifications. "
-            f"Let me know the scope."
-        )
-    else:
-        answer = (
-            f"I've received your query: '{body.query}'. I'm routing it to the most "
-            f"relevant agent. Could you provide more context so I can narrow down "
-            f"the right domain?"
+            f"[{agent_name}] I've analyzed your query about '{body.query}' "
+            f"in the {domain} domain. Let me look into the relevant data and "
+            f"get back to you with specific details. What aspect would you "
+            f"like me to focus on?"
         )
 
     # Store in session history
@@ -171,14 +206,14 @@ async def chat_query(
         _sessions[session_key] = []
     now = datetime.now(UTC).isoformat()
     _sessions[session_key].append(
-        {"id": str(uuid.uuid4()), "role": "user", "text": body.query, "timestamp": now}
+        {"id": str(_uuid.uuid4()), "role": "user", "text": body.query, "timestamp": now}
     )
     _sessions[session_key].append(
         {
-            "id": str(uuid.uuid4()),
+            "id": str(_uuid.uuid4()),
             "role": "agent",
             "text": answer,
-            "agent": agent,
+            "agent": agent_name,
             "domain": domain,
             "confidence": confidence,
             "timestamp": now,
@@ -187,7 +222,7 @@ async def chat_query(
 
     return ChatQueryResponse(
         answer=answer,
-        agent=agent,
+        agent=agent_name,
         confidence=confidence,
         domain=domain,
     )

@@ -74,8 +74,16 @@ async def list_tools():
 # ── Tool Call — Execution ──────────────────────────────────────────────────
 
 class MCPCallRequest(BaseModel):
-    name: str  # e.g., "agenticorg_ap_processor"
+    name: str = ""  # e.g., "agenticorg_ap_processor"
+    tool: str = ""  # MCP spec alias for name
     arguments: dict[str, Any] = {}
+
+    def model_post_init(self, __context: Any) -> None:
+        # Accept either 'name' or 'tool' — MCP spec uses 'tool'
+        if self.tool and not self.name:
+            self.name = self.tool
+        elif self.name and not self.tool:
+            self.tool = self.name
 
 
 @router.post("/call")
@@ -89,6 +97,10 @@ async def call_tool(
     The tool name maps to an agent type (strip the "agenticorg_" prefix).
     Arguments are passed as the task input.
     """
+    # Validate that name or tool was provided
+    if not body.name:
+        raise HTTPException(400, "Either 'name' or 'tool' field is required")
+
     # Parse agent type from tool name
     if not body.name.startswith("agenticorg_"):
         raise HTTPException(400, f"Unknown tool: {body.name}. Tools must start with 'agenticorg_'")
@@ -104,6 +116,11 @@ async def call_tool(
     system_prompt = _load_agent_prompt(agent_type)
     tools = _AGENT_TYPE_DEFAULT_TOOLS[agent_type]
     grant_token = getattr(request.state, "grant_token", "")
+
+    # Build connector config from request context if available
+    connector_config: dict[str, Any] | None = None
+    if hasattr(request.state, "connector_config"):
+        connector_config = request.state.connector_config
 
     # Execute via LangGraph
     from core.langgraph.runner import run_agent as langgraph_run
@@ -122,6 +139,7 @@ async def call_tool(
                 "context": body.arguments.get("context", {}),
             },
             grant_token=grant_token,
+            connector_config=connector_config,
         )
     except Exception as exc:
         _log.error("mcp_call_failed", tool=body.name, error=str(exc))

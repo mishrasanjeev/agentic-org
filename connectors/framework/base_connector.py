@@ -57,11 +57,44 @@ class BaseConnector(abc.ABC):
     def _register_tools(self) -> None:
         """Register all tool functions for this connector."""
 
+    def _has_credentials(self) -> bool:
+        """Check whether meaningful auth credentials are configured.
+
+        Returns False when config is empty or contains only blank strings,
+        which prevents "Illegal header value b'Bearer '" errors when
+        connectors attempt to authenticate with missing credentials.
+        """
+        if not self.config:
+            return False
+        # Check common credential keys
+        cred_keys = [
+            "api_key", "access_token", "client_id", "client_secret",
+            "secret_ref", "email", "password", "token", "refresh_token",
+        ]
+        for key in cred_keys:
+            val = self.config.get(key, "")
+            if val and str(val).strip():
+                return True
+        # Also check for any secret_ref_* keys
+        for key in self.config:
+            if key.startswith("secret_ref") and self.config[key]:
+                return True
+        return False
+
     async def connect(self) -> None:
-        """Initialize HTTP client and authenticate."""
-        # Authenticate first to populate _auth_headers
-        await self._authenticate()
-        # Then create client with the auth headers
+        """Initialize HTTP client and authenticate.
+
+        Skips authentication when no credentials are configured,
+        preventing 'Illegal header value' errors from empty Bearer tokens.
+        """
+        if self._has_credentials():
+            await self._authenticate()
+        else:
+            logger.info(
+                "connector_skip_auth_no_credentials",
+                connector=self.name,
+            )
+        # Create client with whatever auth headers were set (may be empty)
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_ms / 1000,
@@ -73,7 +106,16 @@ class BaseConnector(abc.ABC):
             await self._client.aclose()
 
     async def health_check(self) -> dict[str, Any]:
-        """Test connectivity. Override for connector-specific checks."""
+        """Test connectivity. Override for connector-specific checks.
+
+        Returns 'not_configured' when credentials are missing instead of
+        attempting a request that would fail with empty Bearer tokens.
+        """
+        if not self._has_credentials():
+            return {
+                "status": "not_configured",
+                "reason": "No credentials configured for this connector",
+            }
         try:
             if self._client:
                 resp = await self._client.get("/")

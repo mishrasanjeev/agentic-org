@@ -116,12 +116,24 @@ export default function AgentCreate() {
     }).catch(() => setAvailableParents([]));
   }, [domain]);
 
-  // Load default tools when agent type changes
+  // Load available function-level tools from connector registry
   useEffect(() => {
-    api.get("/mcp/tools").then(({ data }) => {
-      const allTools = (data.tools || []).map((t: { name: string }) => t.name);
+    api.get("/tools").then(({ data }) => {
+      const allTools: string[] = data.tools || [];
       setAvailableTools(allTools);
-    }).catch(() => setAvailableTools([]));
+    }).catch(() => {
+      // Fallback: try connector registry
+      api.get("/connectors/registry").then(({ data }) => {
+        const items = data.items || [];
+        const allTools: string[] = [];
+        items.forEach((item: { tool_functions?: string[] }) => {
+          (item.tool_functions || []).forEach((t: string) => {
+            if (!allTools.includes(t)) allTools.push(t);
+          });
+        });
+        setAvailableTools(allTools);
+      }).catch(() => setAvailableTools([]));
+    });
   }, []);
 
   // Auto-assign default tools when agent type changes

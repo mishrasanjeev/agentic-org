@@ -53,6 +53,57 @@ def _team_to_dict(team: AgentTeam, members: list[AgentTeamMember] | None = None)
     return d
 
 
+# ── GET /agent-teams ────────────────────────────────────────────────────────
+@router.get("/agent-teams")
+async def list_teams(
+    domain: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """List all agent teams for the current tenant."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(AgentTeam).where(AgentTeam.tenant_id == tid)
+        if domain:
+            query = query.where(AgentTeam.domain == domain)
+        query = query.order_by(AgentTeam.created_at.desc())
+        result = await session.execute(query)
+        teams = result.scalars().all()
+
+        items = []
+        for team in teams:
+            member_result = await session.execute(
+                select(AgentTeamMember).where(AgentTeamMember.team_id == team.id)
+            )
+            members = member_result.scalars().all()
+            items.append(_team_to_dict(team, list(members)))
+
+    return {"items": items, "total": len(items)}
+
+
+# ── GET /agent-teams/{team_id} ─────────────────────────────────────────────
+@router.get("/agent-teams/{team_id}")
+async def get_team(
+    team_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Get a single agent team by ID."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(AgentTeam).where(AgentTeam.id == team_id, AgentTeam.tenant_id == tid)
+        )
+        team = result.scalar_one_or_none()
+        if not team:
+            raise HTTPException(404, "Agent team not found")
+
+        member_result = await session.execute(
+            select(AgentTeamMember).where(AgentTeamMember.team_id == team.id)
+        )
+        members = member_result.scalars().all()
+
+    return _team_to_dict(team, list(members))
+
+
 # ── POST /agent-teams ───────────────────────────────────────────────────────
 @router.post("/agent-teams", status_code=201)
 async def create_team(
