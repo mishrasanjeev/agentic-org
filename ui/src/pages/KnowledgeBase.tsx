@@ -19,7 +19,8 @@ interface KBDocument {
 interface KBStats {
   total_documents: number;
   total_chunks: number;
-  index_size_bytes: number;
+  index_size_bytes?: number;
+  index_size_mb?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -44,10 +45,10 @@ const MOCK_STATS: KBStats = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+function formatBytes(bytes: number | undefined | null): string {
+  if (!bytes || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
@@ -181,15 +182,15 @@ export default function KnowledgeBase() {
         <div className="grid grid-cols-3 gap-4">
           <Card>
             <CardHeader><CardTitle className="text-sm text-muted-foreground">Total Documents</CardTitle></CardHeader>
-            <CardContent><p className="text-3xl font-bold">{stats.total_documents}</p></CardContent>
+            <CardContent><p className="text-3xl font-bold">{stats.total_documents ?? 0}</p></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm text-muted-foreground">Total Chunks</CardTitle></CardHeader>
-            <CardContent><p className="text-3xl font-bold">{stats.total_chunks.toLocaleString()}</p></CardContent>
+            <CardContent><p className="text-3xl font-bold">{(stats.total_chunks ?? 0).toLocaleString()}</p></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm text-muted-foreground">Index Size</CardTitle></CardHeader>
-            <CardContent><p className="text-3xl font-bold">{formatBytes(stats.index_size_bytes)}</p></CardContent>
+            <CardContent><p className="text-3xl font-bold">{stats.index_size_mb != null ? `${stats.index_size_mb.toFixed(1)} MB` : formatBytes(stats.index_size_bytes)}</p></CardContent>
           </Card>
         </div>
       )}
@@ -270,8 +271,8 @@ export default function KnowledgeBase() {
                   <td className="p-3">
                     <Badge variant={STATUS_BADGE[doc.status] || "secondary"}>{doc.status}</Badge>
                   </td>
-                  <td className="p-3">{formatBytes(doc.size_bytes)}</td>
-                  <td className="p-3">{new Date(doc.uploaded_at).toLocaleDateString()}</td>
+                  <td className="p-3">{formatBytes(doc.size_bytes ?? 0)}</td>
+                  <td className="p-3">{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : "-"}</td>
                   <td className="p-3">
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(doc.id)}>
                       Delete
