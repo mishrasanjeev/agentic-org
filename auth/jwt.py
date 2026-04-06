@@ -49,7 +49,7 @@ def _token_redis_key(token: str) -> str:
     import os as _os
 
     _key = _os.getenv("AGENTICORG_SECRET_KEY", "agenticorg-default-key").encode()
-    digest = _hmac.new(_key, token.encode(), "sha256").hexdigest()
+    digest = _hmac.new(_key, token.encode(), "sha384").hexdigest()
     return f"token_blacklist:{digest}"
 
 
