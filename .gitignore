@@ -66,8 +66,9 @@ ui/.next/
 .nyc_output
 docker-compose.override.yml
 
-# Generated PDFs (QA plans, product guides, functional docs)
+# Generated docs (QA plans, product guides, functional docs, bug reports)
 docs/*.pdf
+docs/*.xlsx
 *.pem
 *.key
 secrets/
