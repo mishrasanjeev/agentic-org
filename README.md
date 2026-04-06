@@ -258,32 +258,49 @@ Comms (9): Slack, GitHub, Gmail, SendGrid, GCS, Google Calendar, Twilio, WhatsAp
 ## Quick Start
 
 ### Prerequisites
-- Python 3.12+ | Node.js 20+ | Docker
+- Python 3.11+ (tested on 3.12, 3.13) | Node.js 20+ | Docker
+
+### Installation
+
+AgenticOrg provides three requirements files for different deployment scenarios:
+
+| File | Packages | Purpose | Required? |
+|------|----------|---------|-----------|
+| `requirements.txt` | 45 pinned | Core platform (API, agents, workflows, connectors, auth) | **Yes** |
+| `requirements-v4.txt` | 4 | v4 features: Composio 1000+ tools, RouteLLM smart routing, Presidio PII redaction | Optional (graceful degradation) |
+| `requirements-dev.txt` | 11 | Development: pytest, ruff, mypy, bandit, pre-commit | For contributors only |
+
+All versions in `requirements.txt` are pinned to exact production-tested versions (2026-04-06).
 
 ### Local Development
 
 ```bash
 git clone https://github.com/mishrasanjeev/agentic-org.git
 cd agentic-org
-cp .env.example .env  # Add your Gemini API key
+cp .env.example .env  # Add your Gemini API key (free at aistudio.google.com)
 
-# Backend — core platform
-pip install -r requirements.txt
+# Install Python dependencies
+pip install -r requirements.txt              # Core platform (required)
+pip install -r requirements-v4.txt           # v4 features (optional)
+pip install -r requirements-dev.txt          # Dev tools (optional)
 
-# Backend — v4 features (Composio 1000+ tools, LLM routing, PII redaction)
-pip install -r requirements-v4.txt
-
-# Backend — development tools (pytest, ruff, mypy)
-pip install -r requirements-dev.txt
-
-# Start infrastructure
+# Start infrastructure (PostgreSQL + Redis)
 docker compose up -d postgres redis
 
-# Run API
+# Run API server
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Frontend
+# Run frontend (separate terminal)
 cd ui && npm install && npm run dev
+```
+
+### Optional Docker Services
+
+```bash
+docker compose --profile ragflow up -d       # Knowledge Base (RAGFlow)
+docker compose --profile voice up -d         # Voice Agents (LiveKit)
+docker compose --profile airgap up -d        # Local LLM (Ollama, CPU)
+docker compose --profile airgap-gpu up -d    # Local LLM (vLLM, GPU)
 ```
 
 ### Docker Compose
