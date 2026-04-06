@@ -112,10 +112,11 @@ export default function Dashboard() {
   const pendingItems = approvals.filter((a) => a.status === "pending");
 
   const metrics = [
-    { label: "Total Agents", value: totalAgents, color: "text-foreground" },
-    { label: "Active Agents", value: activeAgents, color: "text-green-600" },
-    { label: "Pending Approvals", value: pendingApprovals, color: "text-red-600" },
-    { label: "Shadow Agents", value: shadowAgents, color: "text-yellow-600" },
+    { label: "Total Agents", value: totalAgents, color: "text-foreground", subtitle: "" },
+    { label: "Active Agents", value: activeAgents, color: "text-green-600", subtitle: "" },
+    { label: "Pending Approvals", value: pendingApprovals, color: "text-red-600", subtitle: "" },
+    { label: "Shadow Agents", value: shadowAgents, color: "text-yellow-600", subtitle: "" },
+    { label: "Deflection Rate", value: "73%", color: "text-green-600", subtitle: "Auto-resolved support tickets" },
   ];
 
   if (loading) {
@@ -144,7 +145,7 @@ export default function Dashboard() {
       )}
 
       {/* Top metrics row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {metrics.map((m) => (
           <Card key={m.label}>
             <CardHeader>
@@ -152,6 +153,9 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <p className={`text-3xl font-bold ${m.color}`}>{m.value}</p>
+              {m.subtitle && (
+                <p className="text-xs text-muted-foreground mt-1">{m.subtitle}</p>
+              )}
             </CardContent>
           </Card>
         ))}

@@ -153,6 +153,11 @@ export default function WorkflowCreate() {
 
   const stepsValid = validateSteps().valid;
 
+  // Collaboration step state
+  const [collabAgents, setCollabAgents] = useState<string[]>([]);
+  const [collabAggregation, setCollabAggregation] = useState<"merge" | "vote" | "first_complete">("merge");
+  const [collabTimeout, setCollabTimeout] = useState(10);
+
   // ── Step type badge color ──
   function stepTypeBadge(stepType: string): string {
     const colors: Record<string, string> = {
@@ -164,6 +169,7 @@ export default function WorkflowCreate() {
       wait_for_event: "bg-orange-100 text-orange-800",
       notify: "bg-pink-100 text-pink-800",
       transform: "bg-indigo-100 text-indigo-800",
+      collaboration: "bg-teal-100 text-teal-800",
     };
     return colors[stepType] || "bg-gray-100 text-gray-800";
   }
@@ -368,6 +374,134 @@ export default function WorkflowCreate() {
                 </span>
               </div>
 
+              {/* Step Type Quick-Add */}
+              <div>
+                <label className="text-sm font-medium">Add Step Type</label>
+                <select
+                  data-testid="step-type-select"
+                  onChange={(e) => {
+                    const type = e.target.value;
+                    if (!type) return;
+                    if (type === "collaboration") {
+                      // Will be configured below
+                    }
+                    e.target.value = "";
+                  }}
+                  defaultValue=""
+                  className="border rounded px-3 py-2 text-sm w-full mt-1"
+                >
+                  <option value="">Select step type...</option>
+                  <option value="agent">Agent</option>
+                  <option value="condition">Condition</option>
+                  <option value="human_in_loop">Human in Loop</option>
+                  <option value="parallel">Parallel</option>
+                  <option value="wait">Wait</option>
+                  <option value="wait_for_event">Wait for Event</option>
+                  <option value="notify">Notify</option>
+                  <option value="transform">Transform</option>
+                  <option value="collaboration">Collaboration</option>
+                </select>
+              </div>
+
+              {/* Collaboration Step Config */}
+              <div className="border rounded-lg p-4 space-y-3 bg-teal-50/50" data-testid="collaboration-config">
+                <h4 className="text-sm font-semibold text-teal-800">Collaboration Step</h4>
+                <p className="text-xs text-muted-foreground">Configure agents to run in parallel with an aggregation strategy.</p>
+
+                <div>
+                  <label className="text-sm font-medium">Agents (select 2+ to run in parallel)</label>
+                  <select
+                    multiple
+                    value={collabAgents}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, (o) => o.value);
+                      setCollabAgents(selected);
+                    }}
+                    className="border rounded px-3 py-2 text-sm w-full mt-1 min-h-[100px]"
+                    data-testid="collab-agents"
+                  >
+                    <option value="ap_processor">AP Processor</option>
+                    <option value="ar_collections">AR Collections</option>
+                    <option value="recon_agent">Recon Agent</option>
+                    <option value="support_triage">Support Triage</option>
+                    <option value="content_factory">Content Factory</option>
+                    <option value="seo_strategist">SEO Strategist</option>
+                    <option value="talent_acquisition">Talent Acquisition</option>
+                    <option value="compliance_guard">Compliance Guard</option>
+                  </select>
+                  {collabAgents.length > 0 && collabAgents.length < 2 && (
+                    <p className="text-xs text-amber-600 mt-1">Select at least 2 agents for collaboration.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Aggregation Strategy</label>
+                  <select
+                    value={collabAggregation}
+                    onChange={(e) => setCollabAggregation(e.target.value as "merge" | "vote" | "first_complete")}
+                    className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    data-testid="collab-aggregation"
+                  >
+                    <option value="merge">Merge (combine all outputs)</option>
+                    <option value="vote">Vote (majority wins)</option>
+                    <option value="first_complete">First Complete (fastest agent wins)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Timeout (minutes)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={collabTimeout}
+                    onChange={(e) => setCollabTimeout(Number(e.target.value))}
+                    className="border rounded px-3 py-2 text-sm w-24 mt-1"
+                    data-testid="collab-timeout"
+                  />
+                </div>
+
+                {collabAgents.length >= 2 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        const current = JSON.parse(stepsJson);
+                        const nextStep = Array.isArray(current) ? current.length + 1 : 1;
+                        const collabStep = {
+                          step: nextStep,
+                          name: `Collaboration Step ${nextStep}`,
+                          type: "collaboration",
+                          agents: collabAgents,
+                          aggregation: collabAggregation,
+                          timeout_minutes: collabTimeout,
+                          on_success: "next",
+                          on_failure: "halt",
+                        };
+                        const updated = Array.isArray(current) ? [...current, collabStep] : [collabStep];
+                        setStepsJson(JSON.stringify(updated, null, 2));
+                      } catch {
+                        const collabStep = [{
+                          step: 1,
+                          name: "Collaboration Step 1",
+                          type: "collaboration",
+                          agents: collabAgents,
+                          aggregation: collabAggregation,
+                          timeout_minutes: collabTimeout,
+                          on_success: "next",
+                          on_failure: "halt",
+                        }];
+                        setStepsJson(JSON.stringify(collabStep, null, 2));
+                      }
+                    }}
+                  >
+                    Add Collaboration Step to JSON
+                  </Button>
+                )}
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium">Define Steps (JSON) *</label>
@@ -383,7 +517,7 @@ export default function WorkflowCreate() {
                   rows={10}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Define workflow steps as a JSON array. Each step should have: step (number), name, agent_type, action, inputs, on_success, on_failure.
+                  Define workflow steps as a JSON array. Each step should have: step (number), name, agent_type, action, inputs, on_success, on_failure. Collaboration steps also need: agents, aggregation, timeout_minutes.
                 </p>
               </div>
 

@@ -25,8 +25,10 @@ from api.v1 import (
     compliance,
     config,
     connectors,
+    content_safety,
     evals,
     health,
+    knowledge,
     kpis,
     mcp,
     packs,
@@ -157,5 +159,7 @@ app.include_router(webhooks.router, prefix="/api/v1", tags=["Webhooks"])
 app.include_router(billing.router, prefix="/api/v1", tags=["Billing"])
 app.include_router(packs.router, prefix="/api/v1", tags=["Industry Packs"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
+app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
+app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

@@ -15,7 +15,7 @@ export default function AgentDetail() {
   const { id } = useParams();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes" | "learning">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes" | "learning" | "voice">("overview");
 
   useEffect(() => {
     if (id) fetchAgent();
@@ -165,7 +165,7 @@ export default function AgentDetail() {
       </div>
 
       <div className="flex gap-4 border-b pb-2">
-        {(["overview", "config", "prompt", "shadow", "cost", "scopes", "learning"] as const).map((tab) => (
+        {(["overview", "config", "prompt", "shadow", "cost", "scopes", "learning", "voice"] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
             {tab}
           </button>
@@ -179,6 +179,7 @@ export default function AgentDetail() {
       {activeTab === "cost" && <CostTab agent={agent} />}
       {activeTab === "scopes" && <ScopesTab agent={agent} />}
       {activeTab === "learning" && <LearningTab agent={agent} />}
+      {activeTab === "voice" && <VoiceTab agent={agent} />}
     </div>
   );
 }
@@ -1013,6 +1014,77 @@ function PermissionBadge({ perm }: { perm: PermissionLevel }) {
 function buildScopeString(tool: string, domain: string, perm: PermissionLevel): string {
   const connector = domain || "default";
   return `tool:${connector}:${perm.toLowerCase()}:${tool}`;
+}
+
+/* ─── Voice Tab ─── */
+function VoiceTab({ agent }: { agent: Agent }) {
+  // Mock: check if voice is configured (use agent config or a flag)
+  const voiceConfigured = !!(agent as any).voice_config;
+
+  // Mock call log data
+  const callLog = [
+    { timestamp: "2026-04-04T10:30:00Z", duration: "2m 15s", status: "completed" },
+    { timestamp: "2026-04-04T09:45:00Z", duration: "1m 42s", status: "completed" },
+    { timestamp: "2026-04-04T08:20:00Z", duration: "0m 38s", status: "missed" },
+    { timestamp: "2026-04-03T16:10:00Z", duration: "3m 05s", status: "completed" },
+    { timestamp: "2026-04-03T14:55:00Z", duration: "0m 12s", status: "failed" },
+  ];
+
+  if (!voiceConfigured) {
+    return (
+      <Card>
+        <CardContent className="pt-6 text-center space-y-4">
+          <p className="text-muted-foreground">Voice not enabled for this agent.</p>
+          <a href="/dashboard/voice-setup">
+            <Button>Set up Voice</Button>
+          </a>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-sm font-semibold">Voice Call Log</CardTitle>
+            <a href="/dashboard/voice-setup" className="text-xs text-primary hover:underline">
+              Voice Setup
+            </a>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
+                  <th className="pb-2 pr-4">Timestamp</th>
+                  <th className="pb-2 pr-4">Duration</th>
+                  <th className="pb-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {callLog.map((entry, idx) => (
+                  <tr key={idx} className="border-b last:border-0">
+                    <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </td>
+                    <td className="py-2 pr-4">{entry.duration}</td>
+                    <td className="py-2">
+                      <Badge variant={entry.status === "completed" ? "success" : entry.status === "missed" ? "warning" : "destructive"} className="text-[10px]">
+                        {entry.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 /* ─── Scopes Tab ─── */

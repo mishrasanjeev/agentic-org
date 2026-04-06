@@ -102,8 +102,11 @@ export default function AgentCreate() {
   const [hitlCondition, setHitlCondition] = useState("confidence < 0.88");
   const [maxRetries, setMaxRetries] = useState(3);
   const [llmModel, setLlmModel] = useState("gemini-2.5-flash");
+  const [llmRouting, setLlmRouting] = useState("auto");
   const [authorizedTools, setAuthorizedTools] = useState<string[]>([]);
   const [availableTools, setAvailableTools] = useState<string[]>([]);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [composioExpanded, setComposioExpanded] = useState(false);
 
   // Load available parent agents when domain changes
   useEffect(() => {
@@ -248,6 +251,7 @@ export default function AgentCreate() {
         max_retries: maxRetries,
         initial_status: "shadow",
         llm: { model: llmModel, fallback_model: "gemini-2.5-flash-preview-05-20" },
+        llm_routing: llmRouting,
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
         authorized_tools: authorizedTools.length > 0 ? authorizedTools : undefined,
@@ -493,6 +497,29 @@ export default function AgentCreate() {
                   </p>
                 </div>
                 <div>
+                  <label className="text-sm font-medium">LLM Routing</label>
+                  <select
+                    data-testid="llm-routing"
+                    value={llmRouting}
+                    onChange={(e) => setLlmRouting(e.target.value)}
+                    className="border rounded px-3 py-2 text-sm w-full mt-1"
+                  >
+                    <option value="auto">Auto (Recommended)</option>
+                    <option value="tier1">Economy - Gemini Flash (Free)</option>
+                    <option value="tier2">Standard - Gemini Pro</option>
+                    <option value="tier3">Premium - Claude/GPT-4o</option>
+                    <option value="disabled">Disabled - Use selected model</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Estimated cost per 1K tokens:{" "}
+                    {llmRouting === "auto" && "varies by task complexity"}
+                    {llmRouting === "tier1" && "~$0.00 (free tier)"}
+                    {llmRouting === "tier2" && "~$0.30"}
+                    {llmRouting === "tier3" && "~$3.00"}
+                    {llmRouting === "disabled" && "depends on selected model above"}
+                  </p>
+                </div>
+                <div>
                   <label className="text-sm font-medium">Confidence Floor: {(confidenceFloor * 100).toFixed(0)}%</label>
                   <input type="range" min={0.5} max={0.99} step={0.01} value={confidenceFloor} onChange={(e) => setConfidenceFloor(Number(e.target.value))} className="w-full mt-1" />
                   <p className="text-xs text-muted-foreground mt-1">Agent escalates to HITL when confidence drops below this threshold.</p>
@@ -561,6 +588,58 @@ export default function AgentCreate() {
                       <option key={t} value={t}>{humanize(t)}</option>
                     ))}
                   </select>
+
+                  {/* Composio Marketplace Tools */}
+                  <div className="mt-4 border-t pt-4">
+                    <button
+                      type="button"
+                      data-testid="composio-toggle"
+                      onClick={() => setComposioExpanded(!composioExpanded)}
+                      className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                    >
+                      <span>{composioExpanded ? "\u25BC" : "\u25B6"}</span>
+                      Browse 1000+ Marketplace Tools
+                      <span className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground font-normal">Composio</span>
+                    </button>
+                    {composioExpanded && (
+                      <div className="mt-3 grid grid-cols-4 gap-2">
+                        {[
+                          { name: "Notion", key: "notion" },
+                          { name: "Slack", key: "slack" },
+                          { name: "Asana", key: "asana" },
+                          { name: "Trello", key: "trello" },
+                          { name: "Monday", key: "monday" },
+                          { name: "Linear", key: "linear" },
+                          { name: "Airtable", key: "airtable" },
+                          { name: "Calendly", key: "calendly" },
+                        ].map((app) => {
+                          const toolId = `composio:${app.key}`;
+                          const isAdded = authorizedTools.includes(toolId);
+                          return (
+                            <button
+                              key={app.key}
+                              type="button"
+                              data-testid={`composio-chip-${app.key}`}
+                              onClick={() => {
+                                if (isAdded) {
+                                  setAuthorizedTools(authorizedTools.filter((t) => t !== toolId));
+                                } else {
+                                  setAuthorizedTools([...authorizedTools, toolId]);
+                                }
+                              }}
+                              className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                                isAdded
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted/30 hover:bg-muted/60 border-muted"
+                              }`}
+                            >
+                              {app.name} {isAdded ? "\u2713" : "+"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {authorizedTools.length === 0 && (
@@ -588,6 +667,31 @@ export default function AgentCreate() {
                     </div>
                   </div>
                 )}
+
+                {/* Voice Toggle */}
+                <div className="pt-2 border-t">
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={voiceEnabled}
+                      onChange={(e) => setVoiceEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                      data-testid="voice-toggle"
+                    />
+                    Enable Voice
+                  </label>
+                  {voiceEnabled && (
+                    <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+                      <p>Voice will be configured after agent creation via Voice Setup page.</p>
+                      <a
+                        href="/dashboard/voice-setup"
+                        className="text-xs text-primary hover:underline mt-1 inline-block"
+                      >
+                        Go to Voice Setup
+                      </a>
+                    </div>
+                  )}
+                </div>
 
                 <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
                   <p>New agents start in <strong>Shadow Mode</strong>. They observe and produce outputs without taking actions. Promote to Active after validation.</p>
