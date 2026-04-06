@@ -267,10 +267,19 @@ git clone https://github.com/mishrasanjeev/agentic-org.git
 cd agentic-org
 cp .env.example .env  # Add your Gemini API key
 
-# Backend
-pip install -e ".[dev]"
+# Backend — core platform
+pip install -r requirements.txt
+
+# Backend — v4 features (Composio 1000+ tools, LLM routing, PII redaction)
+pip install -r requirements-v4.txt
+
+# Backend — development tools (pytest, ruff, mypy)
+pip install -r requirements-dev.txt
+
+# Start infrastructure
 docker compose up -d postgres redis
-python -m scripts.seed_data
+
+# Run API
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Frontend

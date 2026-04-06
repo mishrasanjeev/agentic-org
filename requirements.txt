@@ -1,0 +1,90 @@
+# ==============================================================================
+# AgenticOrg v4.0.0 (Project Apex) — Production Requirements
+# ==============================================================================
+#
+# Python >= 3.11 required (tested on 3.12, 3.13)
+#
+# Quick start:
+#   pip install -r requirements.txt           # Core platform
+#   pip install -r requirements-v4.txt        # v4 features (optional)
+#   pip install -r requirements-dev.txt       # Development tools (optional)
+#
+# Docker (recommended):
+#   docker compose up -d                      # Core services
+#   docker compose --profile ragflow up -d    # + Knowledge Base
+#   docker compose --profile voice up -d      # + Voice Agents
+#   docker compose --profile airgap up -d     # + Local LLM (Ollama)
+#
+# Pinned to exact versions from production (2026-04-06).
+# All versions verified against CI pipeline and production deployment.
+#
+# ==============================================================================
+
+# ─── Web Framework ───────────────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-multipart==0.0.22
+websockets==15.0.1
+
+# ─── Database & ORM ──────────────────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.40
+asyncpg==0.31.0
+alembic==1.18.4
+pgvector==0.4.2
+
+# ─── Cache, Task Queue & Message Broker ──────────────────────────────────────
+redis[hiredis]==6.4.0
+celery[redis]==5.6.2
+
+# ─── Data Validation & Schemas ───────────────────────────────────────────────
+pydantic==2.11.3
+pydantic-settings==2.8.1
+jsonschema==4.24.0
+
+# ─── Authentication & Security ───────────────────────────────────────────────
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+grantex==0.3.4
+
+# ─── HTTP Client & DNS ───────────────────────────────────────────────────────
+httpx==0.28.1
+dnspython==2.8.0
+
+# ─── LLM Providers ──────────────────────────────────────────────────────────
+google-genai==1.69.0
+anthropic==0.86.0
+openai==2.29.0
+
+# ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
+langgraph==1.1.4
+langchain==1.2.13
+langchain-google-genai==4.2.1
+langchain-anthropic==1.4.0
+langchain-openai==1.1.12
+langgraph-checkpoint-postgres==3.0.5
+langsmith==0.7.23
+
+# ─── Google Cloud Platform ───────────────────────────────────────────────────
+google-cloud-storage==2.19.0
+google-cloud-secret-manager==2.23.2
+google-api-python-client==2.166.0
+google-auth==2.49.1
+
+# ─── Observability & Monitoring ──────────────────────────────────────────────
+structlog==25.5.0
+opentelemetry-api==1.40.0
+opentelemetry-sdk==1.40.0
+opentelemetry-exporter-otlp==1.40.0
+opentelemetry-instrumentation-fastapi==0.61b0
+prometheus-client==0.22.1
+
+# ─── Document Processing & Reporting ─────────────────────────────────────────
+pypdf==6.7.5
+pyyaml==6.0.2
+jinja2==3.1.6
+defusedxml==0.7.1
+fpdf2==2.8.7
+openpyxl==3.1.5
+
+# ─── Push Notifications ─────────────────────────────────────────────────────
+pywebpush==2.3.0

@@ -1,0 +1,26 @@
+# ==============================================================================
+# AgenticOrg v4.0.0 — Optional v4 Feature Dependencies
+# ==============================================================================
+#
+# These enable v4-specific features. The platform runs without them
+# (all imports are guarded with try/except — graceful degradation).
+#
+# Install: pip install -r requirements-v4.txt
+#
+# ==============================================================================
+
+# ─── Composio: 1000+ Tool Marketplace (MIT) ─────────────────────────────────
+# Enables: /dashboard/connectors "Marketplace" tab, composio:* tools in agents
+# Without: Only 63 native connectors available
+composio-core>=0.7.0
+
+# ─── RouteLLM: Smart Multi-Model Routing (Apache 2.0) ───────────────────────
+# Enables: Auto/Economy/Standard/Premium LLM tier routing, 85% cost savings
+# Without: All queries go to the agent's configured LLM model
+routellm>=0.2.0
+
+# ─── Microsoft Presidio: Pre-LLM PII Redaction (MIT) ────────────────────────
+# Enables: Aadhaar, PAN, GSTIN, UPI, email, phone scrubbed BEFORE reaching LLM
+# Without: PII masking in logs only (post-LLM)
+presidio-analyzer==2.2.362
+presidio-anonymizer==2.2.362
