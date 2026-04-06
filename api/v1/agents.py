@@ -1114,7 +1114,7 @@ async def run_agent(
         )
     except Exception as exc:
         logger.error("agent_run_error", agent_id=str(agent_id), error=str(exc))
-        raise HTTPException(500, "Agent execution failed") from exc
+        raise HTTPException(500, "Agent execution failed. Check server logs for details.") from None
 
     task_status = lg_result.get("status", "completed")
     task_confidence = lg_result.get("confidence", 0.0)

@@ -103,7 +103,9 @@ def _handle_agents(client, args):
         agents = client.agents.list(domain=args.domain)
         for a in agents:
             name = a.get("employee_name") or a.get("name", "")
-            print(f"  {a.get('id', '')[:8]}  {name:<25} {a.get('agent_type', ''):<20} {a.get('status', '')}")
+            agent_id = a.get("id", "")
+            short_id = f"{agent_id[:8]}..." if len(agent_id) > 8 else agent_id  # noqa: S105
+            print(f"  {short_id:<12} {name:<25} {a.get('agent_type', ''):<20} {a.get('status', '')}")
         print(f"\n{len(agents)} agents")
 
     elif args.action == "get":

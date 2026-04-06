@@ -126,7 +126,7 @@ async def call_tool(
     except Exception as exc:
         _log.error("mcp_call_failed", tool=body.name, error=str(exc))
         return {
-            "content": [{"type": "text", "text": f"Agent execution failed: {type(exc).__name__}"}],
+            "content": [{"type": "text", "text": "Agent execution failed. Check logs for details."}],
             "isError": True,
         }
 
@@ -139,7 +139,7 @@ async def call_tool(
 
     if status == "failed":
         return {
-            "content": [{"type": "text", "text": f"Agent failed: {result.get('error', 'unknown error')}"}],
+            "content": [{"type": "text", "text": "Agent task failed. Review configuration and retry."}],
             "isError": True,
         }
 

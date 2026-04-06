@@ -46,7 +46,10 @@ def _token_redis_key(token: str) -> str:
     JWTs sharing the same header (e.g. every HS256 token starts with the
     same 36-char base64url header).  An HMAC of the full token is unique.
     """
-    digest = _hmac.new(b"blacklist", token.encode(), "sha256").hexdigest()
+    import os as _os
+
+    _key = _os.getenv("AGENTICORG_SECRET_KEY", "agenticorg-default-key").encode()
+    digest = _hmac.new(_key, token.encode(), "sha256").hexdigest()
     return f"token_blacklist:{digest}"
 
 
