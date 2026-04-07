@@ -1,12 +1,12 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mishrasanjeev/agenticorg",
-  "description": "Run 50+ enterprise AI agents and 340+ tools with human-in-the-loop governance",
+  "description": "50+ AI agents, 1000+ integrations, voice, RAG, LLM routing. Finance/HR/Marketing/Ops.",
   "repository": {
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
   },
-  "version": "4.0.0",
+  "version": "4.0.1",
   "packages": [
     {
       "registryType": "npm",
@@ -18,26 +18,28 @@
     }
   ],
   "tools": [
-    { "name": "list_agents", "description": "List all available AI agents, optionally filter by domain" },
-    { "name": "run_agent", "description": "Run an AI agent by type (ap_processor, recon_agent, payroll_agent, etc.)" },
-    { "name": "get_agent_details", "description": "Get full details of a specific agent by ID" },
-    { "name": "create_agent_from_sop", "description": "Parse an SOP document and create a new AI agent from it" },
-    { "name": "deploy_agent", "description": "Deploy an agent configuration to make it live" },
-    { "name": "list_connectors", "description": "List all 54 connectors (SAP, Oracle, Jira, HubSpot, GSTN, Bombora, G2, TrustRadius, etc.)" },
-    { "name": "call_connector_tool", "description": "Call any of 340+ connector tools directly" },
-    { "name": "list_mcp_tools", "description": "Discover all 340+ available MCP tools across 54 connectors" },
-    { "name": "discover_agents_a2a", "description": "Discover agent skills via A2A protocol" },
-    { "name": "get_agent_card", "description": "Get the public A2A Agent Card" }
+    { "name": "list_agents", "description": "List 50+ AI agents across Finance, HR, Marketing, Ops — filter by domain, status, type" },
+    { "name": "run_agent", "description": "Execute any AI agent (ap_processor, payroll_engine, campaign_pilot, support_triage, etc.) with real tool calls" },
+    { "name": "get_agent_details", "description": "Get agent config, scopes, tools, confidence floor, HITL conditions, shadow status" },
+    { "name": "create_agent", "description": "Create a new AI agent from natural language description or manual config" },
+    { "name": "create_agent_from_sop", "description": "Parse an SOP/policy document (PDF/Word) and auto-generate an AI agent" },
+    { "name": "list_connectors", "description": "List 54 native connectors + 1000+ via Composio (SAP, Oracle, Jira, HubSpot, Salesforce, GSTN, Tally, Stripe, Gmail, Slack, Teams)" },
+    { "name": "call_connector_tool", "description": "Call any of 340+ connector tools — create Jira tickets, send emails, query CRM, file GST returns, process payments" },
+    { "name": "list_workflows", "description": "List 20+ workflow templates — invoice_to_pay, month_end_close, campaign_launch, incident_response" },
+    { "name": "run_workflow", "description": "Trigger a multi-step workflow with parallel agents, HITL approval gates, and adaptive replanning" },
+    { "name": "search_knowledge_base", "description": "Search company documents (PDF, Word, Excel) via RAG — agents answer from your uploaded policies and SOPs" },
+    { "name": "list_mcp_tools", "description": "Discover all available MCP tools across 54 native connectors and 1000+ Composio integrations" },
+    { "name": "get_agent_card", "description": "Get the A2A protocol Agent Card for cross-platform agent discovery" }
   ],
   "environmentVariables": [
     {
       "name": "AGENTICORG_API_KEY",
-      "description": "API key from your AgenticOrg dashboard (Settings → API Keys)",
+      "description": "API key from your AgenticOrg dashboard (Settings > API Keys). Start free at agenticorg.ai",
       "required": true
     },
     {
       "name": "AGENTICORG_BASE_URL",
-      "description": "Custom base URL (default: https://app.agenticorg.ai)",
+      "description": "Custom API base URL (default: https://app.agenticorg.ai). Set for self-hosted deployments.",
       "required": false
     }
   ]
