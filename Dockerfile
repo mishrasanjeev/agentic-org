@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY core/ core/
@@ -13,7 +13,7 @@ COPY schemas/ schemas/
 COPY migrations/ migrations/
 RUN pip install --upgrade pip && pip install --no-cache-dir .
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg
 WORKDIR /app
