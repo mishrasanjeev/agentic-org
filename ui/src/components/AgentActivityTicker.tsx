@@ -22,7 +22,7 @@ const STATUS_STYLES = {
 export default function AgentActivityTicker() {
   const [visibleItems, setVisibleItems] = useState<number[]>([0, 1, 2, 3, 4]);
   const [fadeState, setFadeState] = useState<"in" | "shift">("in");
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
