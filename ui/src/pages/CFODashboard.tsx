@@ -269,7 +269,7 @@ export default function CFODashboard() {
                   tick={{ fontSize: 12 }}
                   tickFormatter={(v: number) => `${v}L`}
                 />
-                <Tooltip formatter={(v: number) => `${v.toFixed(1)}L`} />
+                <Tooltip formatter={(v: any) => `${Number(v).toFixed(1)}L`} />
                 <Bar dataKey="amount" name="AR Amount">
                   {agingChartData(data.ar_aging).map((_, idx) => (
                     <rect key={idx} fill={AGING_COLORS[idx]} />
@@ -295,7 +295,7 @@ export default function CFODashboard() {
                   tick={{ fontSize: 12 }}
                   tickFormatter={(v: number) => `${v}L`}
                 />
-                <Tooltip formatter={(v: number) => `${v.toFixed(1)}L`} />
+                <Tooltip formatter={(v: any) => `${Number(v).toFixed(1)}L`} />
                 <Bar dataKey="amount" name="AP Amount" fill="#6366f1" />
               </BarChart>
             </ResponsiveContainer>
@@ -386,7 +386,7 @@ export default function CFODashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}L`} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(1)}L`} />
+                <Tooltip formatter={(v: any) => `${Number(v).toFixed(1)}L`} />
                 <Legend />
                 <Line type="monotone" dataKey="Revenue" stroke="#3b82f6" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="COGS" stroke="#f59e0b" strokeWidth={2} dot={false} />

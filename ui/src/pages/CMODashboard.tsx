@@ -300,7 +300,7 @@ export default function CMODashboard() {
                 tick={{ fontSize: 12 }}
                 tickFormatter={(v: number) => `${v}x`}
               />
-              <Tooltip formatter={(v: number) => `${v.toFixed(1)}x`} />
+              <Tooltip formatter={(v: any) => `${Number(v).toFixed(1)}x`} />
               <Bar dataKey="roas" name="ROAS">
                 {roasData.map((entry) => (
                   <Cell
@@ -326,7 +326,7 @@ export default function CMODashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="metric" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v: number) => `${v}%`} />
-                <Tooltip formatter={(v: number) => `${v}%`} />
+                <Tooltip formatter={(v: any) => `${v}%`} />
                 <Bar dataKey="value" name="Rate" fill="#8b5cf6" />
               </BarChart>
             </ResponsiveContainer>
@@ -351,7 +351,7 @@ export default function CMODashboard() {
                   }
                 />
                 <Tooltip
-                  formatter={(v: number) => formatNumber(v)}
+                  formatter={(v: any) => formatNumber(v)}
                 />
                 <Bar dataKey="engagements" name="Engagements">
                   {socialData.map((entry) => (
