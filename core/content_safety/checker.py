@@ -225,6 +225,9 @@ async def check_content_safety(
     dict
         ``{safe: bool, issues: [{type, detail, severity}], scores: {pii, toxicity, duplicate}}``
     """
+    if text is None or not isinstance(text, str) or not text.strip():
+        return {"safe": True, "issues": [], "scores": {"pii": 0.0, "toxicity": 0.0, "duplicate": 0.0}}
+
     cfg = {**DEFAULT_CONFIG, **(config or {})}
     issues: list[dict[str, str]] = []
     scores: dict[str, float] = {"pii": 0.0, "toxicity": 0.0, "duplicate": 0.0}

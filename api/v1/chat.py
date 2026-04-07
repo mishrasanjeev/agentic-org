@@ -7,7 +7,7 @@ import uuid as _uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -159,6 +159,7 @@ class ChatMessage(BaseModel):
 @router.post("/chat/query", response_model=ChatQueryResponse)
 async def chat_query(
     body: ChatQueryRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
@@ -172,6 +173,7 @@ async def chat_query(
         try:
             from core.langgraph.runner import run_agent as langgraph_run
 
+            grant_token = getattr(request.state, "grant_token", None)
             lg_result = await langgraph_run(
                 agent_id=agent_id,
                 agent_type=domain,
@@ -183,6 +185,10 @@ async def chat_query(
                 ),
                 authorized_tools=[],
                 task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
+                llm_model="",
+                confidence_floor=0.88,
+                grant_token=grant_token,
+                connector_config=None,
             )
             if lg_result.get("status") == "completed" and lg_result.get("output"):
                 output = lg_result["output"]

@@ -52,7 +52,7 @@ async def execute_collaboration_step(step: dict, state: dict) -> dict[str, Any]:
         }
 
     # Shared context dict — agents can read/write during execution
-    shared_ctx: dict[str, Any] = {} if shared_context_enabled else {}
+    shared_ctx: dict[str, Any] | None = {} if shared_context_enabled else None
 
     # Build coroutines for each agent
     agent_tasks = {

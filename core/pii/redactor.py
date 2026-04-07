@@ -119,6 +119,9 @@ class PIIRedactor:
             When mode is not ``before_llm`` or Presidio is unavailable,
             returns the original text with an empty map.
         """
+        if text is None:
+            return "", {}
+
         if self.mode != PII_MODE_BEFORE_LLM:
             return text, {}
 

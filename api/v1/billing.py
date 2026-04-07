@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+
+from api.deps import get_current_tenant
 
 logger = structlog.get_logger()
 
@@ -85,7 +87,7 @@ async def subscribe_india(body: IndiaSubscribeRequest) -> dict[str, Any]:
 
 
 @router.get("/usage")
-async def get_usage(tenant_id: str) -> dict[str, Any]:
+async def get_usage(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     """Return current usage counters for a tenant."""
     from core.billing.usage_tracker import get_usage as _get_usage
 
@@ -93,7 +95,7 @@ async def get_usage(tenant_id: str) -> dict[str, Any]:
 
 
 @router.get("/invoices")
-async def list_invoices(tenant_id: str) -> list[dict[str, Any]]:
+async def list_invoices(tenant_id: str = Depends(get_current_tenant)) -> list[dict[str, Any]]:
     """Return invoice history for a tenant.
 
     In production this queries Stripe's invoice API; here we return
