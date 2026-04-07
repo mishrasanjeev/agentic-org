@@ -1,10 +1,20 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 
 const TRIGGER_TYPES = ["manual", "schedule", "webhook", "api_event", "email_received"];
+
+const COMMON_ENGLISH_WORDS = new Set([
+  "the", "a", "an", "and", "or", "for", "to", "in", "of", "on",
+  "with", "from", "by", "at", "when", "if", "then", "after", "before",
+  "create", "process", "send", "check", "verify", "approve", "review",
+  "generate", "update", "notify", "calculate", "run", "start", "stop",
+  "all", "each", "every", "new", "should", "will", "can", "must",
+  "is", "are", "was", "be", "have", "has", "do", "does", "not",
+  "this", "that", "it", "they", "we", "my", "our",
+]);
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
 
 const STEP_TEMPLATE = JSON.stringify([
@@ -41,16 +51,19 @@ interface GeneratedWorkflow {
 
 export default function WorkflowCreate() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const templateState = location.state as Record<string, string | number> | null;
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<TabMode>("describe");
+  const [activeTab, setActiveTab] = useState<TabMode>(templateState?.templateId ? "template" : "describe");
 
-  // Template form state (existing)
-  const [name, setName] = useState("");
+  // Template form state (existing) — pre-fill from template navigation
+  const [name, setName] = useState(templateState?.templateName as string || "");
   const [version, setVersion] = useState("1.0.0");
-  const [domain, setDomain] = useState("finance");
-  const [triggerType, setTriggerType] = useState("manual");
+  const [domain, setDomain] = useState(templateState?.templateDomain as string || "finance");
+  const [triggerType, setTriggerType] = useState(templateState?.templateTrigger as string || "manual");
   const [stepsJson, setStepsJson] = useState(STEP_TEMPLATE);
+  const [cronSchedule, setCronSchedule] = useState("0 9 * * 1-5");
   const [replanOnFailure, setReplanOnFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -86,6 +99,7 @@ export default function WorkflowCreate() {
         version,
         domain,
         trigger_type: triggerType,
+        ...(triggerType === "schedule" ? { cron_schedule: cronSchedule } : {}),
         definition: { steps: parsed },
         replan_on_failure: replanOnFailure,
       });
@@ -97,10 +111,32 @@ export default function WorkflowCreate() {
     }
   }
 
+  // ── NL validation helper ──
+  function validateNlInput(text: string): string | null {
+    const trimmed = text.trim();
+    if (trimmed.length < 20) {
+      return "Please provide a more detailed description (at least 20 characters).";
+    }
+    const words = trimmed.split(/\s+/);
+    if (words.length < 3) {
+      return "Please use at least 3 words to describe your workflow.";
+    }
+    const matchedCommon = words.filter((w) => COMMON_ENGLISH_WORDS.has(w.toLowerCase()));
+    if (matchedCommon.length < 2) {
+      return "Your input does not appear to be a valid workflow description. Please describe the process in plain English.";
+    }
+    return null;
+  }
+
   // ── NL generation ──
   async function handleGenerate() {
     if (!nlDescription.trim()) {
       setNlError("Please describe the workflow you want to create.");
+      return;
+    }
+    const validationError = validateNlInput(nlDescription);
+    if (validationError) {
+      setNlError(validationError);
       return;
     }
     setGenerating(true);
@@ -110,6 +146,7 @@ export default function WorkflowCreate() {
       const { data } = await api.post("/workflows/generate", {
         description: nlDescription.trim(),
         deploy: false,
+        ...(triggerType === "schedule" ? { cron_schedule: cronSchedule } : {}),
       });
       setGeneratedWorkflow(data.workflow as GeneratedWorkflow);
     } catch (e: any) {
@@ -130,6 +167,7 @@ export default function WorkflowCreate() {
       const { data } = await api.post("/workflows/generate", {
         description: nlDescription.trim(),
         deploy: true,
+        ...(triggerType === "schedule" ? { cron_schedule: cronSchedule } : {}),
       });
       if (data.workflow_id) {
         navigate(`/dashboard/workflows/${data.workflow_id}`);
@@ -224,11 +262,16 @@ export default function WorkflowCreate() {
                 }
                 className="border rounded px-3 py-2 text-sm w-full mt-1 min-h-[120px]"
                 rows={5}
-                maxLength={2000}
+                maxLength={5000}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Describe your business process in plain English. We will generate the workflow steps automatically.
-              </p>
+              <div className="flex justify-between mt-1">
+                <p className="text-xs text-muted-foreground">
+                  Describe your business process in plain English. We will generate the workflow steps automatically.
+                </p>
+                <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                  {nlDescription.length} / 5000
+                </span>
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -356,6 +399,21 @@ export default function WorkflowCreate() {
                   </select>
                 </div>
               </div>
+
+              {triggerType === "schedule" && (
+                <div className="mt-4" data-testid="cron-schedule-section">
+                  <label className="text-sm font-medium">Cron Schedule</label>
+                  <input
+                    type="text"
+                    value={cronSchedule}
+                    onChange={(e) => setCronSchedule(e.target.value)}
+                    placeholder="0 9 * * 1-5 (weekdays at 9 AM)"
+                    className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    data-testid="cron-schedule-input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Format: minute hour day month weekday</p>
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <input

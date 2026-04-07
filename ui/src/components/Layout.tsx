@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
@@ -57,8 +57,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const auth = useAuth();
   const { i18n } = useTranslation();
+  const [currentLang, setCurrentLang] = useState(i18n.language);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (lng: string) => setCurrentLang(lng);
+    i18n.on("languageChanged", handler);
+    return () => { i18n.off("languageChanged", handler); };
+  }, [i18n]);
 
   const handleLogout = () => {
     auth.logout();
@@ -183,7 +190,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Suspense>
             {/* Language picker */}
             <select
-              value={i18n.language}
+              value={currentLang}
               onChange={(e) => i18n.changeLanguage(e.target.value)}
               className="h-8 px-2 rounded border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               aria-label="Select language"

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
 
 interface QueryResponse {
@@ -6,6 +7,55 @@ interface QueryResponse {
   agent: string;
   confidence: number;
   domain: string;
+}
+
+// Client-side intent detection for navigation queries
+interface NavIntent {
+  path: string;
+  params?: Record<string, string>;
+}
+
+function detectNavigationIntent(text: string): NavIntent | null {
+  const q = text.trim().toLowerCase();
+
+  // "show me <domain> agents" / "list <domain> agents"
+  const agentDomainMatch = q.match(/^(?:show\s+(?:me\s+)?|list\s+|view\s+)(.+?)\s+agents?$/);
+  if (agentDomainMatch) {
+    const domain = agentDomainMatch[1].trim();
+    return { path: "/dashboard/agents", params: { domain } };
+  }
+
+  // "show agents" / "list agents" / "go to agents"
+  if (/^(?:show\s+(?:me\s+)?|list\s+|view\s+|go\s+to\s+)agents?$/.test(q)) {
+    return { path: "/dashboard/agents" };
+  }
+
+  // "show workflows" / "list workflows" / "go to workflows"
+  if (/^(?:show\s+(?:me\s+)?|list\s+|view\s+|go\s+to\s+)workflows?$/.test(q)) {
+    return { path: "/dashboard/workflows" };
+  }
+
+  // "show connectors" / "go to connectors"
+  if (/^(?:show\s+(?:me\s+)?|list\s+|view\s+|go\s+to\s+)connectors?$/.test(q)) {
+    return { path: "/dashboard/connectors" };
+  }
+
+  // "go to dashboard" / "show dashboard"
+  if (/^(?:show\s+(?:me\s+)?|go\s+to\s+|open\s+)(?:the\s+)?dashboard$/.test(q)) {
+    return { path: "/dashboard" };
+  }
+
+  // "go to approvals" / "show approvals"
+  if (/^(?:show\s+(?:me\s+)?|list\s+|view\s+|go\s+to\s+)approvals?$/.test(q)) {
+    return { path: "/dashboard/approvals" };
+  }
+
+  // "go to settings"
+  if (/^(?:show\s+(?:me\s+)?|go\s+to\s+|open\s+)settings?$/.test(q)) {
+    return { path: "/dashboard/settings" };
+  }
+
+  return null;
 }
 
 export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) {
@@ -16,6 +66,7 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
 
   // Cmd+K / Ctrl+K keyboard shortcut to focus
   useEffect(() => {
@@ -45,6 +96,20 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
   const submitQuery = useCallback(
     async (text: string) => {
       if (!text.trim()) return;
+
+      // Check for navigation intent before making API call
+      const navIntent = detectNavigationIntent(text);
+      if (navIntent) {
+        const searchParams = navIntent.params
+          ? "?" + new URLSearchParams(navIntent.params).toString()
+          : "";
+        navigate(navIntent.path + searchParams);
+        setQuery("");
+        setDropdownOpen(false);
+        setResult(null);
+        return;
+      }
+
       setLoading(true);
       try {
         const res = await api.post<QueryResponse>("/chat/query", {
@@ -59,7 +124,7 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
         setLoading(false);
       }
     },
-    [companyId],
+    [companyId, navigate],
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

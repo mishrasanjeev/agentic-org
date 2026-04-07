@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
 
 export default function AgentDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes" | "learning" | "voice">("overview");
@@ -57,7 +58,12 @@ export default function AgentDetail() {
       await api.post(`/agents/${id}/rollback`);
       fetchAgent();
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || "Rollback failed");
+      const detail = err.response?.data?.detail || "Rollback failed";
+      if (detail.toLowerCase().includes("no previous") || detail.toLowerCase().includes("version")) {
+        setActionError("No previous version available. Switch to Shadow mode first to create a version checkpoint.");
+      } else {
+        setActionError(`${detail} — Switch to Shadow mode first to create a version checkpoint.`);
+      }
     } finally {
       setActionLoading(null);
     }
@@ -72,6 +78,19 @@ export default function AgentDetail() {
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Resume failed");
     } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Are you sure you want to delete this agent? This action cannot be undone.`)) return;
+    setActionLoading("delete");
+    setActionError(null);
+    try {
+      await api.delete(`/agents/${id}`);
+      navigate("/dashboard/agents");
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || "Delete failed");
       setActionLoading(null);
     }
   }
@@ -140,11 +159,28 @@ export default function AgentDetail() {
                 {actionLoading === "promote" ? "Promoting..." : "Promote"}
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleRollback} disabled={actionLoading !== null}>
-              {actionLoading === "rollback" ? "Rolling back..." : "Rollback"}
-            </Button>
+            <span title={!agent.version || agent.version === "1.0" || (!agent.shadow_sample_count && agent.status === "active") ? "No previous version available" : undefined}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRollback}
+                disabled={actionLoading !== null || (!agent.version || agent.version === "1.0" || (!agent.shadow_sample_count && agent.status === "active"))}
+              >
+                {actionLoading === "rollback" ? "Rolling back..." : "Rollback"}
+              </Button>
+            </span>
             {agent.status !== "paused" && (
               <KillSwitch agentId={id || ""} agentName={displayName} onPaused={fetchAgent} />
+            )}
+            {(agent.status === "paused" || agent.status === "inactive") && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={actionLoading !== null}
+              >
+                {actionLoading === "delete" ? "Deleting..." : "Delete Agent"}
+              </Button>
             )}
           </div>
           {actionError && <p className="text-xs text-destructive">{actionError}</p>}
@@ -625,6 +661,55 @@ function LearningTab({ agent }: { agent: Agent }) {
 
 /* ──�� Config Tab ─── */
 function ConfigTab({ agent }: { agent: Agent }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [editLlmModel, setEditLlmModel] = useState(agent.llm_model || "");
+  const [editMaxRetries, setEditMaxRetries] = useState(agent.max_retries ?? 3);
+  const [editHitlCondition, setEditHitlCondition] = useState(agent.hitl_condition || "");
+  const [editConfidenceFloor, setEditConfidenceFloor] = useState(
+    agent.confidence_floor != null ? Math.round(agent.confidence_floor * 100) : 70
+  );
+
+  const LLM_OPTIONS = [
+    "gemini-2.0-flash",
+    "gemini-1.5-pro",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "claude-3-opus",
+    "claude-3-sonnet",
+    "llama-3-70b",
+  ];
+
+  function startEditing() {
+    setEditLlmModel(agent.llm_model || "");
+    setEditMaxRetries(agent.max_retries ?? 3);
+    setEditHitlCondition(agent.hitl_condition || "");
+    setEditConfidenceFloor(agent.confidence_floor != null ? Math.round(agent.confidence_floor * 100) : 70);
+    setSaveError(null);
+    setEditing(true);
+  }
+
+  async function handleSaveConfig() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await api.patch(`/agents/${agent.id}`, {
+        config: {
+          llm_model: editLlmModel || undefined,
+          max_retries: editMaxRetries,
+          hitl_condition: editHitlCondition || undefined,
+          confidence_floor: editConfidenceFloor / 100,
+        },
+      });
+      setEditing(false);
+    } catch (err: any) {
+      setSaveError(err.response?.data?.detail || "Failed to save configuration");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const configRows: Array<{ label: string; value: string }> = [
     { label: "LLM Model", value: agent.llm_model || "Not specified" },
     { label: "Max Retries", value: agent.max_retries != null ? String(agent.max_retries) : "Default" },
@@ -636,30 +721,107 @@ function ConfigTab({ agent }: { agent: Agent }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">Agent Configuration</CardTitle>
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-sm font-semibold">Agent Configuration</CardTitle>
+          {!editing && (
+            <Button variant="outline" size="sm" onClick={startEditing}>
+              Edit
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3">
-          {configRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between py-2 border-b last:border-0">
-              <span className="text-sm text-muted-foreground">{row.label}</span>
-              <span className="text-sm font-medium font-mono">{row.value}</span>
+        {editing ? (
+          <div className="space-y-4">
+            {/* LLM Model */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-muted-foreground">LLM Model</label>
+              <select
+                value={editLlmModel}
+                onChange={(e) => setEditLlmModel(e.target.value)}
+                className="border rounded px-3 py-1.5 text-sm"
+              >
+                <option value="">Default (Gemini)</option>
+                {LLM_OPTIONS.map((model) => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
             </div>
-          ))}
-        </div>
 
-        <div className="pt-2">
-          <span className="text-sm text-muted-foreground">Authorized Tools</span>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {agent.authorized_tools && agent.authorized_tools.length > 0 ? (
-              agent.authorized_tools.map((tool) => (
-                <Badge key={tool} variant="default">{tool}</Badge>
-              ))
-            ) : (
-              <span className="text-sm text-muted-foreground">No tools configured</span>
-            )}
+            {/* Max Retries */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-muted-foreground">Max Retries</label>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={editMaxRetries}
+                onChange={(e) => setEditMaxRetries(Number(e.target.value))}
+                className="border rounded px-3 py-1.5 text-sm w-32"
+              />
+            </div>
+
+            {/* HITL Condition */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-muted-foreground">HITL Condition</label>
+              <input
+                type="text"
+                value={editHitlCondition}
+                onChange={(e) => setEditHitlCondition(e.target.value)}
+                placeholder="e.g. confidence < 0.7 or amount > 10000"
+                className="border rounded px-3 py-1.5 text-sm"
+              />
+            </div>
+
+            {/* Confidence Floor */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-muted-foreground">Confidence Floor (%)</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={editConfidenceFloor}
+                onChange={(e) => setEditConfidenceFloor(Number(e.target.value))}
+                className="border rounded px-3 py-1.5 text-sm w-32"
+              />
+            </div>
+
+            {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSaveConfig} disabled={saving}>
+                {saving ? "Saving..." : "Save Config"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setEditing(false); setSaveError(null); }}>
+                Cancel
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-3">
+              {configRows.map((row) => (
+                <div key={row.label} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <span className="text-sm text-muted-foreground">{row.label}</span>
+                  <span className="text-sm font-medium font-mono">{row.value}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2">
+              <span className="text-sm text-muted-foreground">Authorized Tools</span>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {agent.authorized_tools && agent.authorized_tools.length > 0 ? (
+                  agent.authorized_tools.map((tool) => (
+                    <Badge key={tool} variant="default">{tool}</Badge>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted-foreground">No tools configured</span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -800,10 +962,11 @@ function PromptTab({ agent }: { agent: Agent }) {
 /* ─── Shadow Tab ─── */
 function ShadowTab({ agent }: { agent: Agent }) {
   const [generating, setGenerating] = useState(false);
+  const [retesting, setRetesting] = useState(false);
   const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const sampleCount = agent.shadow_sample_count ?? 0;
-  const minSamples = agent.shadow_min_samples ?? 10;
+  const minSamples = agent.shadow_min_samples ?? 20;
   const sampleProgress = minSamples > 0 ? Math.min((sampleCount / minSamples) * 100, 100) : 0;
 
   const accuracyCurrent = agent.shadow_accuracy_current != null ? agent.shadow_accuracy_current * 100 : 0;
@@ -834,6 +997,19 @@ function ShadowTab({ agent }: { agent: Agent }) {
     }
   }
 
+  async function handleRetest() {
+    setRetesting(true);
+    setGenResult(null);
+    try {
+      await api.post(`/agents/${agent.id}/shadow-retest`);
+      setGenResult({ type: "success", msg: "Shadow retest completed. Refresh to see updated results." });
+    } catch (err: any) {
+      setGenResult({ type: "error", msg: err.response?.data?.detail || "Shadow retest failed." });
+    } finally {
+      setRetesting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Sample Progress */}
@@ -841,14 +1017,26 @@ function ShadowTab({ agent }: { agent: Agent }) {
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className="text-sm font-semibold">Shadow Sample Progress</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={generateSample}
-              disabled={generating || meetsCount}
-            >
-              {generating ? "Generating..." : "Generate Test Sample"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generateSample}
+                disabled={generating || retesting || meetsCount}
+              >
+                {generating ? "Generating..." : "Generate Test Sample"}
+              </Button>
+              {sampleCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetest}
+                  disabled={retesting || generating}
+                >
+                  {retesting ? "Retesting..." : "Retest"}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">

@@ -71,17 +71,22 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  // Toggle push notifications
+  // Toggle push notifications (optimistic UI update)
   const handleTogglePush = async () => {
+    const previousState = pushEnabled;
+    setPushEnabled(!pushEnabled); // optimistic update
     setToggling(true);
     try {
-      if (pushEnabled) {
+      if (previousState) {
         await unregisterPush();
-        setPushEnabled(false);
       } else {
         const success = await registerPushSubscription();
-        setPushEnabled(success);
+        if (!success) {
+          setPushEnabled(previousState); // revert on failure
+        }
       }
+    } catch {
+      setPushEnabled(previousState); // revert on error
     } finally {
       setToggling(false);
     }

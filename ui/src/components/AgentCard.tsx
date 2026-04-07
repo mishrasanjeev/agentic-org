@@ -2,6 +2,15 @@ import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import type { Agent } from "@/types";
 
+const DOMAIN_COLORS: Record<string, string> = {
+  finance: "bg-blue-100 text-blue-800",
+  hr: "bg-green-100 text-green-800",
+  marketing: "bg-purple-100 text-purple-800",
+  ops: "bg-orange-100 text-orange-800",
+  backoffice: "bg-gray-100 text-gray-800",
+  it: "bg-cyan-100 text-cyan-800",
+};
+
 interface Props { agent: Agent; onClick?: () => void; }
 
 export default function AgentCard({ agent, onClick }: Props) {
@@ -32,7 +41,11 @@ export default function AgentCard({ agent, onClick }: Props) {
       <CardContent>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div>Type: <span className="font-medium">{agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span></div>
-          <div>Domain: <span className="font-medium">{agent.domain || "—"}</span></div>
+          <div>Domain: {agent.domain ? (
+            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${DOMAIN_COLORS[agent.domain.toLowerCase()] || "bg-gray-100 text-gray-800"}`}>
+              {agent.domain}
+            </span>
+          ) : <span className="font-medium">—</span>}</div>
           <div>Confidence: <span className="font-medium">{agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A"}</span></div>
           <div>Shadow: <span className="font-medium">{agent.shadow_sample_count ?? 0} samples</span></div>
           {agent.specialization && (
