@@ -886,7 +886,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <YAxis type="category" dataKey="name" width={80} />
-              <Tooltip formatter={(value: number) => `${value}%`} />
+              <Tooltip formatter={(value: any) => `${value}%`} />
               <Bar dataKey="value" barSize={28}>
                 {comparisonData.map((_entry, idx) => (
                   <Cell key={idx} fill={idx === 0 ? (meetsThreshold ? "#22c55e" : "#f59e0b") : "#94a3b8"} />

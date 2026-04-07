@@ -1,7 +1,7 @@
 FROM node:25-slim AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
-RUN npm install
+RUN npm ci --legacy-peer-deps
 ARG CACHE_BUST=1
 COPY ui/ .
 # Copy backend source for llms.txt/sitemap generators (they parse agents + connectors)

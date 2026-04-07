@@ -459,14 +459,14 @@ export default function Evals() {
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [`${value}%`, "Composite Score"]}
+                  formatter={(value: any) => [`${value}%`, "Composite Score"]}
                   contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
                 />
                 <Bar dataKey="composite" radius={[0, 4, 4, 0]} barSize={22}>
                   {chartData.map((entry) => (
                     <Cell key={entry.name} fill={DOMAIN_COLORS[entry.domain] ?? "#64748b"} />
                   ))}
-                  <LabelList dataKey="composite" position="right" formatter={(v: number) => `${v}%`} style={{ fontSize: 11 }} />
+                  <LabelList dataKey="composite" position="right" formatter={(v: any) => `${v}%`} style={{ fontSize: 11 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

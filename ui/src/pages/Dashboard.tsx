@@ -277,7 +277,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={60} />
                 <YAxis domain={[0, 100]} />
-                <Tooltip formatter={(value: number) => `${value}%`} />
+                <Tooltip formatter={(value: any) => `${value}%`} />
                 <Bar dataKey="confidence">
                   {confidenceData.map((entry, idx) => (
                     <Cell
