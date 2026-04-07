@@ -268,7 +268,7 @@ Shadow agents have configurable limits: minimum sample count (default 100), accu
 
 ## MCP Registry
 
-AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name `agenticorg-mcp-server`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 10 tools and 340+ connector tools via stdio transport.
+AgenticOrg is listed in the official MCP Registry (registry.modelcontextprotocol.io) as `io.github.mishrasanjeev/agenticorg`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 12 tools and 1000+ integrations via stdio transport. Install: npx agenticorg-mcp-server
 
 ---
 
@@ -408,7 +408,7 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 
 ### MCP Server (npm)
 - Install: `npx agenticorg-mcp-server`
-- Exposes 10 tools: list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, call_connector_tool, list_mcp_tools, discover_agents_a2a, get_agent_card
+- Exposes 12 tools: list_agents, run_agent, get_agent_details, create_agent, create_agent_from_sop, list_connectors, call_connector_tool, list_workflows, run_workflow, search_knowledge_base, list_mcp_tools, get_agent_card
 - Works with ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client
 - Package: https://www.npmjs.com/package/agenticorg-mcp-server
 
