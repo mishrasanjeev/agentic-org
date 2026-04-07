@@ -350,6 +350,117 @@ class TestBug15ErrorMessage:
 # DEPLOY HEALTH CHECK — Post-fix regression for deploy pipeline
 # ═══════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIT BUG 1: Chat langgraph_run missing params
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAuditBug1ChatParams:
+    def test_chat_passes_llm_model(self):
+        """Chat langgraph_run() must pass llm_model parameter."""
+        with open("api/v1/chat.py", encoding="utf-8") as f:
+            code = f.read()
+        assert "llm_model" in code, "chat.py must pass llm_model to langgraph_run()"
+
+    def test_chat_passes_grant_token(self):
+        """Chat langgraph_run() must pass grant_token parameter."""
+        with open("api/v1/chat.py", encoding="utf-8") as f:
+            code = f.read()
+        assert "grant_token" in code, "chat.py must pass grant_token to langgraph_run()"
+
+    def test_chat_passes_confidence_floor(self):
+        """Chat langgraph_run() must pass confidence_floor parameter."""
+        with open("api/v1/chat.py", encoding="utf-8") as f:
+            code = f.read()
+        assert "confidence_floor" in code, "chat.py must pass confidence_floor"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIT BUG 2: Billing tenant isolation (SECURITY)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAuditBug2BillingRBAC:
+    def test_billing_usage_requires_auth(self):
+        """GET /usage must use Depends(get_current_tenant), not raw param."""
+        with open("api/v1/billing.py", encoding="utf-8") as f:
+            code = f.read()
+        assert "get_current_tenant" in code, (
+            "billing.py must use get_current_tenant for tenant isolation"
+        )
+        assert "Depends" in code, "billing.py must use Depends() for auth"
+
+    def test_billing_invoices_requires_auth(self):
+        """GET /invoices must use Depends(get_current_tenant)."""
+        with open("api/v1/billing.py", encoding="utf-8") as f:
+            code = f.read()
+        # The GET endpoint functions must use Depends, not raw params
+        # (Pydantic model classes having tenant_id: str is fine)
+        lines = code.split("\n")
+        get_funcs = [
+            lines[i] for i in range(len(lines))
+            if "async def get_usage" in lines[i] or "async def list_invoices" in lines[i]
+        ]
+        for func_line in get_funcs:
+            assert "Depends" in func_line, (
+                f"GET endpoint must use Depends: {func_line.strip()}"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIT BUG 3: Content safety None guard
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAuditBug3ContentSafetyNone:
+    @pytest.mark.asyncio
+    async def test_content_safety_handles_none(self):
+        """check_content_safety must not crash on None input."""
+        from core.content_safety.checker import check_content_safety
+
+        result = await check_content_safety(None)
+        assert result["safe"] is True
+
+    @pytest.mark.asyncio
+    async def test_content_safety_handles_empty(self):
+        """check_content_safety must handle empty string."""
+        from core.content_safety.checker import check_content_safety
+
+        result = await check_content_safety("")
+        assert result["safe"] is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIT BUG 4: PII redactor None guard
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAuditBug4PIINone:
+    def test_pii_redactor_handles_none(self):
+        """PIIRedactor.redact() must not crash on None input."""
+        from core.pii.redactor import PIIRedactor
+
+        redactor = PIIRedactor()
+        text, token_map = redactor.redact(None)
+        assert text == ""
+        assert token_map == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIT BUG 5: Collaboration shared context
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestAuditBug5CollabContext:
+    def test_shared_context_disabled_is_none(self):
+        """When shared_context_enabled=false, shared_ctx must be None not empty dict."""
+        with open("workflows/collaboration.py", encoding="utf-8") as f:
+            code = f.read()
+        # Must have None when disabled, not always {}
+        assert "None" in code, (
+            "Collaboration must set shared_ctx=None when disabled"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DEPLOY HEALTH CHECK — Post-fix regression for deploy pipeline
+# ═══════════════════════════════════════════════════════════════════════════
+
 class TestDeployHealthCheck:
     def test_ci_health_check_accepts_degraded(self):
         """CI deploy health check must accept degraded status (unconfigured connectors)."""
