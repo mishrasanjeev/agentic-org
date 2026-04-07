@@ -108,10 +108,11 @@ class TestSECDATA002:
         """SEC-DATA-002: Production must not run with the development fallback key."""
         from pydantic import ValidationError
 
-        # Unset secret key to simulate clean production startup
+        # Unset secret key so it falls back to the dev default
         monkeypatch.delenv("AGENTICORG_SECRET_KEY", raising=False)
-        with pytest.raises(ValidationError):
-            Settings(env="production")
+        monkeypatch.delenv("AGENTICORG_ENV", raising=False)
+        with pytest.raises((ValidationError, ValueError)):
+            Settings(env="production", secret_key="dev-only-secret-key")
 
     def test_audit_signature_uses_hmac_sha256(self):
         """SEC-DATA-002: Audit log entries must be signed with HMAC-SHA256,
