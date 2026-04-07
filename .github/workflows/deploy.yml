@@ -17,7 +17,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install ruff mypy pydantic
       - run: ruff check .
@@ -30,7 +30,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install -e ".[dev]"
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml
@@ -48,7 +48,7 @@ jobs:
       redis: { image: "redis:7-alpine", ports: ["6379:6379"] }
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install -e ".[dev]"
       - run: pytest tests/integration/ tests/regression/ -v
@@ -64,7 +64,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: |
           python -m venv .audit-env
@@ -195,7 +195,7 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: "20" }
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
 
       - name: Install Python deps
