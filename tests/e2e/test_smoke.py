@@ -17,24 +17,27 @@ RETRY_DELAY = 10  # seconds
 
 
 def _request_with_retry(client_or_url, path, *, method="GET", expect_status=200):
-    """Make HTTP request with retry on 502/503 (deploy rollover)."""
+    """Make HTTP request with retry on transient errors (deploy rollover)."""
+    resp = None
     for attempt in range(MAX_RETRIES):
         try:
             if isinstance(client_or_url, str):
-                resp = httpx.request(method, f"{client_or_url}{path}", timeout=15)
+                resp = httpx.request(method, f"{client_or_url}{path}", timeout=30)
             else:
                 resp = client_or_url.request(method, path)
 
             if resp.status_code not in (502, 503):
                 return resp
-
-        except httpx.ConnectError:
+        except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout,
+                httpx.WriteTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError):
             pass
 
         if attempt < MAX_RETRIES - 1:
             time.sleep(RETRY_DELAY)
 
-    return resp  # Return last response even if still 502
+    if resp is not None:
+        return resp
+    pytest.fail(f"All {MAX_RETRIES} attempts failed with connection/timeout errors on {path}")
 
 
 @pytest.fixture
