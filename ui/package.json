@@ -36,7 +36,7 @@
     "reactflow": "^11.11.0",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
-    "zod": "^3.24.0"
+    "zod": "^4.3.6"
   },
   "overrides": {
     "dompurify": ">=3.3.2",
