@@ -6,12 +6,12 @@
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "4.0.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agenticorg-mcp-server",
-      "version": "0.1.1",
+      "version": "4.0.0",
       "transport": {
         "type": "stdio"
       }
