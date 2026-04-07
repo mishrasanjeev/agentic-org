@@ -1,0 +1,158 @@
+# ==============================================================================
+# AgenticOrg — Nightly Security Scan
+# Runs daily at 1:00 AM IST (7:30 PM UTC previous day)
+# Reports findings to GitHub Dependabot alerts + workflow summary
+# ==============================================================================
+
+name: Nightly Security Scan
+
+on:
+  schedule:
+    # 1:00 AM IST = 19:30 UTC (previous day)
+    - cron: '30 19 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  python-audit:
+    name: Python Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit bandit safety
+
+      - name: Install project dependencies
+        run: |
+          pip install -r requirements.txt || pip install -e .
+
+      - name: pip-audit (OSV database)
+        run: |
+          echo "## Python Dependency Audit (pip-audit)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          pip-audit -s osv --desc on -r requirements.txt 2>&1 | tee /tmp/pip-audit.txt
+          if [ $? -eq 0 ]; then
+            echo "✅ **No vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Vulnerabilities detected:**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/pip-audit.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+        continue-on-error: true
+
+      - name: Bandit SAST (source code)
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Bandit Static Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          bandit -r core/ api/ auth/ connectors/ workflows/ -ll --format txt 2>&1 | tee /tmp/bandit.txt
+          ISSUES=$(grep -c "^>>" /tmp/bandit.txt 2>/dev/null || echo "0")
+          HIGH=$(grep "High:" /tmp/bandit.txt | grep -o "[0-9]*" | head -1 || echo "0")
+          MEDIUM=$(grep "Medium:" /tmp/bandit.txt | grep -o "[0-9]*" | head -1 || echo "0")
+          if [ "$HIGH" = "0" ] && [ "$MEDIUM" = "0" ]; then
+            echo "✅ **No medium/high issues found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **High: $HIGH | Medium: $MEDIUM**" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -15 /tmp/bandit.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: pip-audit (v4 optional deps)
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## v4 Optional Dependencies Audit" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          pip install -r requirements-v4.txt 2>/dev/null || true
+          pip-audit -s osv --desc on -r requirements-v4.txt 2>&1 | tee /tmp/pip-audit-v4.txt
+          if [ $? -eq 0 ]; then
+            echo "✅ **No vulnerabilities in v4 deps**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/pip-audit-v4.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+        continue-on-error: true
+
+  npm-audit:
+    name: Frontend Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: npm audit
+        run: |
+          cd ui
+          npm ci
+          echo "## Frontend Dependency Audit (npm)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          npm audit 2>&1 | tee /tmp/npm-audit.txt
+          if [ $? -eq 0 ]; then
+            echo "✅ **No vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/npm-audit.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+        continue-on-error: true
+
+  docker-scan:
+    name: Container Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build -t agenticorg-api:scan .
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: 'agenticorg-api:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Trivy summary
+        run: |
+          echo "## Container Image Scan (Trivy)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          docker run --rm aquasec/trivy:latest image --severity CRITICAL,HIGH --format table agenticorg-api:scan 2>&1 | tail -20 >> $GITHUB_STEP_SUMMARY || echo "✅ Scan completed" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+  summary:
+    name: Security Report
+    needs: [python-audit, npm-audit, docker-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🔒 Nightly Security Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Schedule:** Daily at 1:00 AM IST (19:30 UTC)" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Python pip-audit | ${{ needs.python-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend npm audit | ${{ needs.npm-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Trivy scan | ${{ needs.docker-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View full results in individual job logs above." >> $GITHUB_STEP_SUMMARY

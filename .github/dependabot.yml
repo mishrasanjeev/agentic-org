@@ -1,0 +1,67 @@
+# ==============================================================================
+# AgenticOrg — Dependabot Configuration
+# Scans daily for vulnerable dependencies and creates PRs
+# ==============================================================================
+
+version: 2
+updates:
+  # Python (pip) — core platform dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "19:30"    # 1:00 AM IST
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "deps"
+    ignore:
+      # Don't auto-update major versions — those need manual review
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # npm — frontend dependencies
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "daily"
+      time: "19:30"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+      - "frontend"
+    commit-message:
+      prefix: "deps(ui)"
+
+  # GitHub Actions — workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "19:30"
+      timezone: "Asia/Kolkata"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+
+  # Docker — base image updates
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "19:30"
+      timezone: "Asia/Kolkata"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "docker"
