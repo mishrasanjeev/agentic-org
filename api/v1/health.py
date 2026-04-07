@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-APP_VERSION = "2.2.0"
+APP_VERSION = "4.0.0"
 
 # Timeout for individual connector health checks (seconds)
 _CONNECTOR_HC_TIMEOUT = 5.0

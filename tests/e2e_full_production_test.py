@@ -60,7 +60,7 @@ def test_health():
     r = api("GET", "/health")
     check("Health full returns 200", r.status_code == 200)
     d = r.json()
-    check("Health version is 2.2.0", d.get("version") == "2.2.0", d.get("version", "?"))
+    check("Health version is 4.0.0", d.get("version") == "4.0.0", d.get("version", "?"))
 
     r = api("GET", "/evals")
     check("Evals public endpoint returns 200 (no auth)", r.status_code == 200)

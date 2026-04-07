@@ -12,7 +12,7 @@ FE = "https://agenticorg.ai"
 r = requests.get(f"{BASE}/health", timeout=10)
 h = r.json()
 results.append(("API: Health status", h.get("status") in ("healthy", "degraded")))
-results.append(("API: Version 2.2.0", h.get("version") == "2.2.0"))
+results.append(("API: Version 4.0.0", h.get("version") == "4.0.0"))
 results.append(("API: DB healthy", h.get("checks", {}).get("db") == "healthy"))
 results.append(("API: Redis healthy", h.get("checks", {}).get("redis") == "healthy"))
 results.append(("API: 54 connectors", h.get("checks", {}).get("connectors", {}).get("registered") == 43))
