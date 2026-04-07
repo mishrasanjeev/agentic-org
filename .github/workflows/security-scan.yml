@@ -122,7 +122,7 @@ jobs:
         run: docker build -t agenticorg-api:scan .
 
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: 'agenticorg-api:scan'
           format: 'table'
