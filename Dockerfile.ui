@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:25-slim AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
 RUN npm install
