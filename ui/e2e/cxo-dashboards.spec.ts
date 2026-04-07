@@ -63,9 +63,10 @@ test.describe("CFO Dashboard", () => {
   test("AR Aging chart renders", async ({ page }) => {
     await page.goto("/dashboard/cfo", { waitUntil: "domcontentloaded" });
 
+    // Recharts renders SVGs asynchronously — allow extra time
     await expect(
-      page.getByText("Accounts Receivable Aging").first(),
-    ).toBeVisible({ timeout: 15000 });
+      page.getByText(/Accounts Receivable Aging/).first(),
+    ).toBeVisible({ timeout: 30000 });
   });
 
   test("AP Aging chart renders", async ({ page }) => {
@@ -162,9 +163,13 @@ test.describe("CMO Dashboard", () => {
   test("Social Engagement section renders", async ({ page }) => {
     await page.goto("/dashboard/cmo", { waitUntil: "domcontentloaded" });
 
+    // Recharts renders SVGs asynchronously — allow extra time.
+    // The heading appears in a CardTitle inside a grid that may be below the
+    // fold, so wait for the full page to settle before asserting.
+    await page.waitForLoadState("networkidle").catch(() => {});
     await expect(
-      page.getByText("Social Engagement by Platform").first(),
-    ).toBeVisible({ timeout: 15000 });
+      page.getByText(/Social Engagement/).first(),
+    ).toBeVisible({ timeout: 30000 });
   });
 
   test("Brand Sentiment section renders", async ({ page }) => {

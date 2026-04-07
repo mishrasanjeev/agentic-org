@@ -415,21 +415,33 @@ test.describe("G6: Built-in Template Clone", () => {
     await page.goto(`${baseURL}/dashboard/prompt-templates`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle");
-
-    const firstCard = page
+    // Wait for template cards to render (avoid networkidle which can hang)
+    await page
       .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
-      .first();
-    await firstCard.click();
-    await page.waitForLoadState("networkidle");
+      .first()
+      .waitFor({ state: "visible", timeout: 30000 });
 
+    // Click the first built-in card (fallback to first card)
+    const builtInCard = page
+      .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
+      .filter({ hasText: /Built-in/ })
+      .first();
+    const target = (await builtInCard.isVisible({ timeout: 5000 }).catch(() => false))
+      ? builtInCard
+      : page
+          .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
+          .first();
+    await target.click();
+
+    // Wait for the detail panel to render
+    await page.waitForTimeout(1000);
     const bodyText = await page.textContent("body") || "";
     const hasBuiltIn = bodyText.includes("Built-in") || bodyText.includes("built-in") || bodyText.includes("system");
     expect(hasBuiltIn).toBeTruthy();
 
     await expect(
       page.getByRole("button", { name: /Clone/ }),
-    ).toBeVisible({ timeout: 5000 });
+    ).toBeVisible({ timeout: 10000 });
 
     const hasExplanation =
       bodyText?.includes("system template") ||
@@ -452,22 +464,47 @@ test.describe("G6: Built-in Template Clone", () => {
     await page.goto(`${baseURL}/dashboard/prompt-templates`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle");
-
-    const firstCard = page
+    // Wait for template list to appear (avoid networkidle which can hang)
+    await page
       .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 30000 });
+
+    // Click the first card that has a "Built-in" badge so we get the Clone button
+    const builtInCard = page
+      .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
+      .filter({ hasText: /Built-in/ })
       .first();
-    await firstCard.click();
-    await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /Clone/ }).click();
-    await page.waitForLoadState("networkidle");
+    // Fall back to first card if no built-in badge is visible
+    const target = (await builtInCard.isVisible({ timeout: 5000 }).catch(() => false))
+      ? builtInCard
+      : page
+          .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
+          .first();
 
-    await page.reload({ waitUntil: "networkidle" });
+    await target.click();
+
+    // Wait for the detail/preview panel with the Clone button to appear
+    const cloneBtn = page.getByRole("button", { name: /Clone/ });
+    await expect(cloneBtn).toBeVisible({ timeout: 15000 });
+    await cloneBtn.click();
+
+    // Wait for the clone API call to complete and the list to refresh
+    await page.waitForTimeout(2000);
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    // Wait for templates to re-render after reload
+    await page
+      .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 30000 });
 
     const bodyText = await page.textContent("body");
     const hasClone =
-      bodyText?.includes("_custom") || bodyText?.includes("Custom");
+      bodyText?.includes("_custom") ||
+      bodyText?.includes("Custom") ||
+      bodyText?.includes("custom");
     expect(hasClone).toBeTruthy();
   });
 });

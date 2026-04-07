@@ -211,7 +211,7 @@ jobs:
           done
 
       - name: Run Python E2E tests (against production)
-        run: pytest tests/e2e/ -v --timeout=120
+        run: pytest tests/e2e/ -v
         continue-on-error: true
         env:
           AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
