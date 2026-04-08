@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import api from "../lib/api";
 
 interface Company {
   id: string;
   name: string;
   gstin?: string;
+  industry?: string;
 }
 
 export default function CompanySwitcher() {
@@ -126,13 +128,20 @@ export default function CompanySwitcher() {
                 }`}
               >
                 <span className="block truncate">{c.name}</span>
-                {c.gstin && (
-                  <span className="block text-[10px] text-slate-500 mt-0.5">
-                    GSTIN: {c.gstin}
-                  </span>
-                )}
+                <span className="block text-[10px] text-slate-500 mt-0.5">
+                  {c.gstin ? `GSTIN: ${c.gstin}` : ""}
+                  {c.gstin && c.industry ? " · " : ""}
+                  {c.industry || ""}
+                </span>
               </button>
             ))}
+            <Link
+              to="/dashboard/companies"
+              onClick={() => setDropdownOpen(false)}
+              className="block w-full text-left px-3 py-2 text-xs text-blue-400 hover:text-blue-300 border-t border-slate-700 mt-1 pt-2 transition-colors"
+            >
+              Manage Companies
+            </Link>
           </div>
         </>
       )}

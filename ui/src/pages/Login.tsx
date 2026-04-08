@@ -177,7 +177,7 @@ export default function Login() {
           {showDemo && (
             <div className="mt-3 rounded-lg bg-muted/50 border border-border px-4 py-3">
               <p className="text-xs text-muted-foreground text-center mb-2">Click a role to explore with sample data <span className="text-amber-600">(sandbox only — not real credentials)</span>:</p>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {[
                   { role: "CEO/Admin", email: "ceo@agenticorg.local", pw: "ceo123!" },
                   { role: "CFO", email: "cfo@agenticorg.local", pw: "cfo123!", desc: "Finance" },
@@ -185,6 +185,7 @@ export default function Login() {
                   { role: "CMO", email: "cmo@agenticorg.local", pw: "cmo123!", desc: "Marketing" },
                   { role: "COO", email: "coo@agenticorg.local", pw: "coo123!", desc: "Operations" },
                   { role: "Auditor", email: "auditor@agenticorg.local", pw: "audit123!", desc: "Read-only" },
+                  { role: "CA Partner", email: "demo@cafirm.agenticorg.ai", pw: "demo123!", desc: "CA Firm" },
                 ].map(c => (
                   <button key={c.email} type="button"
                     onClick={() => { setEmail(c.email); setPassword(c.pw); }}

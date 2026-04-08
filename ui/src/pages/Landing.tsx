@@ -1113,6 +1113,92 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* 11b. FOR CA FIRMS                                             */}
+      {/* ============================================================ */}
+      <section className="py-24 bg-slate-50 scroll-mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-3xl border border-slate-200 overflow-hidden p-8 sm:p-12">
+              <div className="grid lg:grid-cols-2 gap-12 items-center">
+                <div>
+                  <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
+                    CA Pack &mdash; Paid Add-on
+                  </div>
+                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+                    Built for Chartered Accountant Firms
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-4">Separate paid add-on &middot; 14-day free trial &middot; INR 4,999/month per client</p>
+                  <ul className="space-y-4 mb-8">
+                    <li className="flex items-start gap-3">
+                      <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-900">Multi-Client Management</span>
+                        <span className="text-slate-600"> &mdash; Manage 20+ clients from one dashboard. Instant company switching with isolated data.</span>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-900">GST &amp; TDS Automation</span>
+                        <span className="text-slate-600"> &mdash; Auto GSTR-1/3B filing, TDS Form 26Q/24Q generation, 2A/26AS reconciliation with GSTN integration.</span>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-900">Bank Reconciliation</span>
+                        <span className="text-slate-600"> &mdash; Auto-match 99.7% of bank transactions via Account Aggregator. Flag stale items and escalate to partners.</span>
+                      </div>
+                    </li>
+                  </ul>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Link
+                      to="/solutions/ca-firms"
+                      className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                    >
+                      Learn More
+                    </Link>
+                    <Link
+                      to="/login?demo=true"
+                      className="inline-flex items-center justify-center border border-slate-300 text-slate-700 px-6 py-3 rounded-xl text-sm font-semibold hover:bg-slate-100 transition-all"
+                    >
+                      Try Demo
+                    </Link>
+                  </div>
+                </div>
+                <div className="hidden lg:block">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 space-y-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">CA</div>
+                      <div>
+                        <p className="font-semibold text-slate-900">CA Firm Dashboard</p>
+                        <p className="text-xs text-slate-500">7 clients &middot; 3 pending filings &middot; Health: 92%</p>
+                      </div>
+                    </div>
+                    {[
+                      { label: "GST Filed", value: "94%", color: "bg-emerald-500" },
+                      { label: "Bank Recon", value: "99.7%", color: "bg-blue-500" },
+                      { label: "Month Close", value: "4 hrs", color: "bg-purple-500" },
+                    ].map((stat) => (
+                      <div key={stat.label} className="flex items-center justify-between">
+                        <span className="text-sm text-slate-600">{stat.label}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={`h-full ${stat.color} rounded-full`} style={{ width: stat.value.includes("%") ? stat.value : "80%" }} />
+                          </div>
+                          <span className="text-sm font-semibold text-slate-900 w-14 text-right">{stat.value}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
       {/* 12. DEVELOPERS / SDK                                          */}
       {/* ============================================================ */}
       <section id="developers" className="py-24 bg-slate-900 scroll-mt-16">

@@ -1,0 +1,137 @@
+name: Monthly GSTR Filing
+version: "1.0"
+domain: finance
+description: >
+  End-to-end GST return preparation and filing workflow for CA firms.
+  Runs on the 18th of every month. Fetches GSTR-2A, reconciles with
+  purchase register, prepares GSTR-1 and GSTR-3B, obtains partner
+  approval, and files with DSC signature.
+
+trigger:
+  type: schedule
+  cron: "0 10 18 * *"
+  timezone: Asia/Kolkata
+  description: "18th of every month at 10 AM IST"
+
+timeout_hours: 48
+company_scoped: true
+
+steps:
+  - id: fetch_2a
+    name: Fetch GSTR-2A
+    type: agent
+    agent_type: gst_filing
+    action: fetch_gstr2a
+    inputs:
+      gstin: "{{company.gstin}}"
+      period: "{{previous_month}}"
+    tools: [gstn:fetch_gstr2a]
+
+  - id: reconcile_2a_with_books
+    name: Reconcile GSTR-2A with Purchase Register
+    type: agent
+    agent_type: recon_agent
+    action: reconcile_gstr2a
+    depends_on: [fetch_2a]
+    inputs:
+      gstr2a_data: "{{fetch_2a.output}}"
+      company_id: "{{company_id}}"
+      period: "{{previous_month}}"
+    tools: [tally:get_ledger_balance, gstn:fetch_gstr2a]
+
+  - id: flag_mismatches
+    name: Check for Mismatches
+    type: condition
+    depends_on: [reconcile_2a_with_books]
+    expression: "reconcile_2a_with_books.mismatch_count > 0"
+    true_path: escalate_mismatches
+    false_path: prepare_gstr1
+
+  - id: escalate_mismatches
+    name: Review Mismatched Entries
+    type: human_in_loop
+    depends_on: [flag_mismatches]
+    assignee: senior_associate
+    role_required: senior_associate
+    decision_options: [resolve_and_proceed, investigate, reject]
+    context:
+      summary: "{{reconcile_2a_with_books.mismatch_count}} mismatched entries totaling {{reconcile_2a_with_books.mismatch_total}}"
+      details: "{{reconcile_2a_with_books.mismatch_items}}"
+
+  - id: prepare_gstr1
+    name: Prepare GSTR-1 from Sales Register
+    type: agent
+    agent_type: tax_compliance
+    action: prepare_gstr1
+    depends_on: [reconcile_2a_with_books]
+    inputs:
+      company_id: "{{company_id}}"
+      period: "{{previous_month}}"
+    tools: [tally:generate_gst_report, gstn:push_gstr1_data]
+
+  - id: prepare_gstr3b
+    name: Compute GSTR-3B
+    type: agent
+    agent_type: tax_compliance
+    action: compute_gstr3b
+    depends_on: [prepare_gstr1]
+    inputs:
+      gstr1_data: "{{prepare_gstr1.output}}"
+      gstr2a_data: "{{fetch_2a.output}}"
+      company_id: "{{company_id}}"
+      period: "{{previous_month}}"
+    tools: [gstn:push_gstr1_data]
+
+  - id: partner_review
+    name: Partner Review and Approval
+    type: human_in_loop
+    depends_on: [prepare_gstr3b]
+    assignee: partner
+    role_required: partner
+    decision_options: [approve, request_changes, reject]
+    context:
+      summary: "GSTR-1 and GSTR-3B prepared for {{company.name}} — {{previous_month}}"
+      gstr1_summary: "{{prepare_gstr1.summary}}"
+      gstr3b_summary: "{{prepare_gstr3b.summary}}"
+      tax_liability: "{{prepare_gstr3b.total_tax_liability}}"
+
+  - id: file_gstr3b
+    name: File GSTR-3B with DSC
+    type: agent
+    agent_type: tax_compliance
+    action: file_gstr3b
+    depends_on: [partner_review]
+    inputs:
+      company_id: "{{company_id}}"
+      period: "{{previous_month}}"
+      auto_file: "{{company.gst_auto_file}}"
+      fallback: manual_upload
+    tools: [gstn:file_gstr3b]
+    config:
+      auto_file: "{{company.gst_auto_file}}"
+      fallback: manual_upload
+
+  - id: notify_team
+    name: Notify Team of Filing Status
+    type: notify
+    depends_on: [file_gstr3b]
+    channel: slack
+    target: "#gst-filings"
+    message: >
+      GSTR filing complete for {{company.name}} ({{company.gstin}}) — {{previous_month}}.
+      GSTR-3B filed. Tax liability: {{prepare_gstr3b.total_tax_liability}}.
+      Status: {{file_gstr3b.status}}.
+
+notifications:
+  on_complete:
+    - channel: email
+      to: "{{partner_email}}"
+      subject: "GST Filing Complete — {{company.name}} — {{previous_month}}"
+  on_failure:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "ALERT: Monthly GSTR filing workflow failed for {{company.name}}. Manual intervention required."
+  on_timeout:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "ALERT: Monthly GSTR filing workflow timed out for {{company.name}} after 48 hours."

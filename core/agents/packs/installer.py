@@ -5,7 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.agents.packs.ca import CA_PACK
+
 _PACKS_DIR = Path(__file__).resolve().parent
+
+# Registry of programmatically-defined packs (supplement YAML-based discovery).
+_ca_id: str = str(CA_PACK["id"])
+_REGISTERED_PACKS: dict[str, dict[str, Any]] = {
+    _ca_id: CA_PACK,
+}
+
+# Map pack directory names to registered pack IDs so YAML discovery defers to
+# the richer programmatic definition when both exist.
+_DIR_TO_REGISTERED: dict[str, str] = {
+    "ca": _ca_id,
+}
 
 # In-memory store keyed by tenant_id → set of installed pack names.
 # Replace with DB-backed store once migration exists.
@@ -51,7 +65,12 @@ def _discover_pack_dirs() -> list[Path]:
 def list_packs() -> list[dict[str, Any]]:
     """Return metadata for every available industry pack."""
     packs: list[dict[str, Any]] = []
+
+    # YAML-based packs discovered from subdirectories.
+    # Skip directories that have a richer programmatic registration.
     for pack_dir in _discover_pack_dirs():
+        if pack_dir.name in _DIR_TO_REGISTERED:
+            continue  # handled by _REGISTERED_PACKS below
         cfg = _load_yaml(pack_dir / "config.yaml")
         packs.append(
             {
@@ -63,11 +82,45 @@ def list_packs() -> list[dict[str, Any]]:
                 "compliance": cfg.get("compliance", []),
             }
         )
+
+    # Programmatically-registered packs (e.g. CA pack with pricing metadata).
+    seen_names = {p["name"] for p in packs}
+    for pack_id, pack_cfg in _REGISTERED_PACKS.items():
+        name = pack_cfg.get("name", pack_id)
+        if name in seen_names:
+            continue  # YAML config already captured this pack
+        packs.append(
+            {
+                "name": pack_id,
+                "display_name": pack_cfg.get("name", pack_id),
+                "description": pack_cfg.get("description", ""),
+                "agents": pack_cfg.get("agents", []),
+                "workflows": pack_cfg.get("workflows", []),
+                "compliance": pack_cfg.get("compliance", []),
+                "pricing": pack_cfg.get("pricing", {}),
+                "version": pack_cfg.get("version", "0.0.0"),
+            }
+        )
+
     return packs
 
 
 def get_pack_detail(pack_name: str) -> dict[str, Any] | None:
     """Return full config for a single pack, or None if not found."""
+    # Check registered packs first for exact ID match.
+    if pack_name in _REGISTERED_PACKS:
+        cfg = _REGISTERED_PACKS[pack_name]
+        return {
+            "name": pack_name,
+            "display_name": cfg.get("name", pack_name),
+            "description": cfg.get("description", ""),
+            "agents": cfg.get("agents", []),
+            "workflows": cfg.get("workflows", []),
+            "compliance": cfg.get("compliance", []),
+            "pricing": cfg.get("pricing", {}),
+            "version": cfg.get("version", "0.0.0"),
+        }
+    # Fall back to YAML-based discovery.
     for pack in list_packs():
         if pack["name"] == pack_name:
             return pack

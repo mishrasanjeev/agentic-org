@@ -1,0 +1,194 @@
+name: Quarterly TDS Filing
+version: "1.0"
+domain: finance
+description: >
+  End-to-end quarterly TDS compliance workflow for CA firms. Runs on the
+  1st of Jan/Apr/Jul/Oct. Extracts TDS-applicable transactions, computes
+  deductions per section, prepares Form 26Q (non-salary) and 24Q (salary),
+  obtains partner review, files returns, and generates Form 16A certificates.
+
+trigger:
+  type: schedule
+  cron: "0 10 1 1,4,7,10 *"
+  timezone: Asia/Kolkata
+  description: "1st of Jan/Apr/Jul/Oct at 10 AM IST — quarterly TDS filing"
+
+timeout_hours: 72
+company_scoped: true
+
+steps:
+  - id: extract_tds_transactions
+    name: Extract TDS-Applicable Transactions
+    type: agent
+    agent_type: tds_compliance
+    action: extract_tds_transactions
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+    tools: [tally:get_ledger_balance]
+
+  - id: compute_tds
+    name: Compute TDS Deductions per Section
+    type: agent
+    agent_type: tds_compliance
+    action: compute_tds_deductions
+    depends_on: [extract_tds_transactions]
+    inputs:
+      transactions: "{{extract_tds_transactions.output}}"
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+    tools: [tally:get_ledger_balance]
+
+  - id: reconcile_26as
+    name: Reconcile with 26AS
+    type: agent
+    agent_type: tds_compliance
+    action: reconcile_26as
+    depends_on: [compute_tds]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+      computed_tds: "{{compute_tds.output}}"
+    tools: [income_tax:check_tds_credit_in_26as]
+
+  - id: check_26as_mismatches
+    name: Check 26AS Reconciliation
+    type: condition
+    depends_on: [reconcile_26as]
+    expression: "reconcile_26as.mismatch_count > 0"
+    true_path: escalate_26as_breaks
+    false_path: prepare_26q
+
+  - id: escalate_26as_breaks
+    name: Review 26AS Mismatches
+    type: human_in_loop
+    depends_on: [check_26as_mismatches]
+    assignee: senior_associate
+    role_required: senior_associate
+    decision_options: [resolve_and_proceed, investigate, reject]
+    context:
+      summary: "{{reconcile_26as.mismatch_count}} mismatches found in 26AS reconciliation totaling {{reconcile_26as.mismatch_total}}"
+      details: "{{reconcile_26as.mismatch_items}}"
+
+  - id: prepare_26q
+    name: Prepare Form 26Q (Non-Salary TDS)
+    type: agent
+    agent_type: tds_compliance
+    action: prepare_26q
+    depends_on: [reconcile_26as]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+      tds_data: "{{compute_tds.non_salary_output}}"
+    tools: [income_tax:file_26q_return]
+
+  - id: prepare_24q
+    name: Prepare Form 24Q (Salary TDS)
+    type: agent
+    agent_type: tds_compliance
+    action: prepare_24q
+    depends_on: [reconcile_26as]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+      tds_data: "{{compute_tds.salary_output}}"
+    tools: [income_tax:file_24q_return]
+
+  - id: pay_challan
+    name: Pay TDS Challan
+    type: agent
+    agent_type: tds_compliance
+    action: pay_tds_challan
+    depends_on: [prepare_26q, prepare_24q]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+      challan_26q: "{{prepare_26q.challan_details}}"
+      challan_24q: "{{prepare_24q.challan_details}}"
+    tools: [income_tax:pay_tax_challan]
+
+  - id: partner_review
+    name: Partner Review and Approval
+    type: human_in_loop
+    depends_on: [pay_challan]
+    assignee: partner
+    role_required: partner
+    decision_options: [approve, request_changes, reject]
+    context:
+      summary: "TDS returns prepared for {{company.name}} — Q{{previous_quarter}}"
+      form_26q: "{{prepare_26q.summary}}"
+      form_24q: "{{prepare_24q.summary}}"
+      challan_status: "{{pay_challan.status}}"
+      total_tds: "{{compute_tds.total_tds_amount}}"
+
+  - id: file_26q
+    name: File Form 26Q
+    type: agent
+    agent_type: tds_compliance
+    action: file_26q_return
+    depends_on: [partner_review]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+    tools: [income_tax:file_26q_return]
+
+  - id: file_24q
+    name: File Form 24Q
+    type: agent
+    agent_type: tds_compliance
+    action: file_24q_return
+    depends_on: [partner_review]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+    tools: [income_tax:file_24q_return]
+
+  - id: generate_form16a
+    name: Generate Form 16A Certificates
+    type: agent
+    agent_type: tds_compliance
+    action: generate_form_16a
+    depends_on: [file_26q, file_24q]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+    tools: [income_tax:download_form_16a]
+
+  - id: post_tds_entries
+    name: Post TDS Journal Entries to Books
+    type: agent
+    agent_type: tds_compliance
+    action: post_tds_journal_entries
+    depends_on: [file_26q, file_24q]
+    inputs:
+      company_id: "{{company_id}}"
+      quarter: "{{previous_quarter}}"
+      filing_26q: "{{file_26q.output}}"
+      filing_24q: "{{file_24q.output}}"
+    tools: [tally:post_voucher]
+
+  - id: notify_team
+    name: Notify Team of Filing Status
+    type: notify
+    depends_on: [generate_form16a, post_tds_entries]
+    channel: slack
+    target: "#tds-filings"
+    message: >
+      TDS quarterly filing complete for {{company.name}} — Q{{previous_quarter}}.
+      26Q filed: {{file_26q.status}}. 24Q filed: {{file_24q.status}}.
+      Total TDS: {{compute_tds.total_tds_amount}}.
+      Form 16A certificates generated for {{generate_form16a.certificate_count}} deductees.
+
+notifications:
+  on_complete:
+    - channel: email
+      to: "{{partner_email}}"
+      subject: "TDS Filing Complete — {{company.name}} — Q{{previous_quarter}}"
+  on_failure:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "ALERT: Quarterly TDS filing workflow failed for {{company.name}}. Manual intervention required."
+  on_timeout:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "ALERT: Quarterly TDS filing workflow timed out for {{company.name}} after 72 hours."

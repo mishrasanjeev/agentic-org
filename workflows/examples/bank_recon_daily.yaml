@@ -1,0 +1,124 @@
+name: Daily Bank Reconciliation
+version: "1.0"
+domain: finance
+description: >
+  Daily bank reconciliation workflow for CA firms managing multiple clients.
+  Runs every weekday at 9 AM. Fetches bank statements via Account Aggregator,
+  auto-matches with book entries, flags items outstanding >30 days,
+  escalates breaks, and generates a reconciliation report.
+
+trigger:
+  type: schedule
+  cron: "0 9 * * 1-5"
+  timezone: Asia/Kolkata
+  description: "Every weekday at 9 AM IST"
+
+timeout_hours: 2
+company_scoped: true
+
+steps:
+  - id: fetch_bank_statement
+    name: Fetch Bank Statement
+    type: agent
+    agent_type: bank_reconciliation
+    action: fetch_bank_statement
+    inputs:
+      company_id: "{{company_id}}"
+      date: "{{yesterday}}"
+    tools: [banking_aa:fetch_bank_statement, banking_aa:get_transaction_list]
+
+  - id: fetch_book_entries
+    name: Fetch Book Entries
+    type: agent
+    agent_type: bank_reconciliation
+    action: fetch_book_entries
+    inputs:
+      company_id: "{{company_id}}"
+      date: "{{yesterday}}"
+    tools: [tally:get_ledger_balance]
+
+  - id: auto_match
+    name: Auto-Match Transactions
+    type: agent
+    agent_type: recon_agent
+    action: auto_match_bank_to_books
+    depends_on: [fetch_bank_statement, fetch_book_entries]
+    inputs:
+      bank_transactions: "{{fetch_bank_statement.transactions}}"
+      book_entries: "{{fetch_book_entries.entries}}"
+      company_id: "{{company_id}}"
+      match_threshold: 0.95
+    tools: [tally:get_ledger_balance, tally:get_trial_balance]
+
+  - id: flag_old_outstanding
+    name: Flag Items Outstanding >30 Days
+    type: agent
+    agent_type: bank_reconciliation
+    action: flag_old_outstanding
+    depends_on: [auto_match]
+    inputs:
+      unmatched_items: "{{auto_match.unmatched}}"
+      threshold_days: 30
+      company_id: "{{company_id}}"
+
+  - id: check_breaks
+    name: Check Reconciliation Breaks
+    type: condition
+    depends_on: [auto_match, flag_old_outstanding]
+    expression: "auto_match.break_count > 0 || flag_old_outstanding.flagged_count > 5"
+    true_path: escalate_breaks
+    false_path: generate_report
+
+  - id: escalate_breaks
+    name: Escalate Reconciliation Breaks
+    type: human_in_loop
+    depends_on: [check_breaks]
+    assignee: senior_associate
+    role_required: senior_associate
+    decision_options: [resolve, investigate, defer]
+    context:
+      summary: "{{auto_match.break_count}} unmatched items; {{flag_old_outstanding.flagged_count}} items outstanding >30 days"
+      break_total: "{{auto_match.break_total}}"
+      old_items: "{{flag_old_outstanding.flagged_items}}"
+
+  - id: generate_report
+    name: Generate Reconciliation Report
+    type: agent
+    agent_type: bank_reconciliation
+    action: generate_recon_report
+    depends_on: [auto_match, flag_old_outstanding]
+    inputs:
+      company_id: "{{company_id}}"
+      date: "{{yesterday}}"
+      matched_count: "{{auto_match.matched_count}}"
+      unmatched_count: "{{auto_match.break_count}}"
+      flagged_count: "{{flag_old_outstanding.flagged_count}}"
+    tools: [banking_aa:check_account_balance]
+
+  - id: deliver_report
+    name: Deliver Report
+    type: parallel
+    depends_on: [generate_report]
+    wait_for: all
+    sub_steps:
+      - id: email_report
+        type: notify
+        channel: email
+        to: "{{manager_email}}"
+        subject: "Bank Recon Report — {{company.name}} — {{yesterday}}"
+        attachment: "{{generate_report.report_url}}"
+      - id: slack_report
+        type: notify
+        channel: slack
+        target: "#bank-recon"
+        message: >
+          Bank Recon for {{company.name}} ({{yesterday}}):
+          Matched: {{auto_match.matched_count}} | Unmatched: {{auto_match.break_count}} |
+          Outstanding >30d: {{flag_old_outstanding.flagged_count}} |
+          Balance: {{generate_report.closing_balance}}
+
+notifications:
+  on_failure:
+    - channel: slack
+      target: "#finance-alerts"
+      message: "ALERT: Daily bank reconciliation failed for {{company.name}}. Manual check required."

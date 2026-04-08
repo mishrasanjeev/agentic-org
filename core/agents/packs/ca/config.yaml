@@ -1,0 +1,67 @@
+name: ca
+display_name: Chartered Accountant Firm Pack
+description: Complete automation suite for CA firms managing multiple clients — GST filing, TDS compliance, bank reconciliation, month-end close, and audit trail
+version: "1.0.0"
+pricing:
+  inr_monthly_per_client: 4999
+  usd_monthly_per_client: 59
+  type: paid_addon
+  trial_days: 14
+  max_trial_clients: 7
+compliance:
+  - GST_Act_2017
+  - Income_Tax_Act_1961
+  - Companies_Act_2013
+  - ICAI_Standards
+agents:
+  - type: gst_filing
+    domain: finance
+    tools: [gstn:fetch_gstr2a, gstn:push_gstr1_data, gstn:file_gstr3b, gstn:file_gstr9, gstn:generate_einvoice_irn, gstn:generate_eway_bill, tally:get_trial_balance, tally:generate_gst_report]
+    llm_model: gpt-4o
+    hitl_condition: always_before_filing
+    system_prompt_suffix: >
+      You automate GSTR-1/3B/9 preparation, GSTR-2A reconciliation, and DSC-signed filing.
+      ALWAYS trigger human-in-the-loop before any filing submission.
+      Reconcile every inward supply against the purchase register before proceeding.
+      Never file a return with unresolved mismatches above 5% of return value.
+  - type: tds_compliance
+    domain: finance
+    tools: [income_tax:file_26q_return, income_tax:file_24q_return, income_tax:check_tds_credit_in_26as, income_tax:download_form_16a, income_tax:pay_tax_challan, tally:get_ledger_balance, tally:post_voucher]
+    llm_model: gpt-4o
+    hitl_condition: always_before_filing
+    system_prompt_suffix: >
+      You compute TDS per applicable sections, file Form 26Q/24Q, generate Form 16A, and reconcile 26AS.
+      ALWAYS trigger human-in-the-loop before filing returns or paying challans.
+      Validate PAN and section applicability for every deductee before computing TDS.
+      Never proceed if 26AS credit does not reconcile with books within 1% tolerance.
+  - type: bank_reconciliation
+    domain: finance
+    tools: [banking_aa:fetch_bank_statement, banking_aa:check_account_balance, banking_aa:get_transaction_list, tally:get_ledger_balance, tally:get_trial_balance]
+    llm_model: gpt-4o-mini
+    confidence_floor: 0.95
+    system_prompt_suffix: >
+      Auto-match bank statement entries with book entries using amount, date, and reference.
+      Flag items outstanding for more than 30 days for review.
+      Never auto-post reconciliation entries without a confirmed GL account match.
+  - type: fpa_analyst
+    domain: finance
+    tools: [tally:get_trial_balance, tally:get_ledger_balance, zoho_books:get_profit_loss, zoho_books:get_balance_sheet]
+    llm_model: gpt-4o-mini
+    system_prompt_suffix: >
+      Perform variance analysis, budget vs actual comparison, and MIS report generation.
+      Label all forecast outputs as MODEL_OUTPUT, not ACTUALS.
+      Flag variances exceeding 15% for partner review.
+  - type: ar_collections
+    domain: finance
+    tools: [tally:get_ledger_balance, zoho_books:list_invoices, email:send]
+    llm_model: gpt-4o-mini
+    system_prompt_suffix: >
+      Track overdue invoices across all clients, send tiered reminders, and escalate aging items.
+      Day 30: email reminder. Day 60: follow-up with payment link. Day 90+: escalate to partner.
+      Never send communications without verifying the invoice is still outstanding.
+workflows:
+  - gstr_filing_monthly
+  - tds_quarterly_filing
+  - bank_recon_daily
+  - month_end_close
+  - tax_calendar

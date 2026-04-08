@@ -98,6 +98,13 @@ const ResourcePage = lazyRetry(() => import("./pages/resources/ResourcePage"));
 /* ── Explainer pages ── */
 const HowGrantexWorks = lazyRetry(() => import("./pages/HowGrantexWorks"));
 
+/* ── CA Firms / Company pages ── */
+const CAFirmsSolution = lazyRetry(() => import("./pages/CAFirmsSolution"));
+const CompanyDashboard = lazyRetry(() => import("./pages/CompanyDashboard"));
+const CompanyOnboard = lazyRetry(() => import("./pages/CompanyOnboard"));
+const CompanyDetail = lazyRetry(() => import("./pages/CompanyDetail"));
+const PartnerDashboard = lazyRetry(() => import("./pages/PartnerDashboard"));
+
 /* ── Loading fallback ── */
 function PageLoader() {
   return (
@@ -141,6 +148,9 @@ export default function App() {
 
       {/* Explainer pages */}
       <Route path="/how-grantex-works" element={<HowGrantexWorks />} />
+
+      {/* CA Firms Solution */}
+      <Route path="/solutions/ca-firms" element={<CAFirmsSolution />} />
 
       {/* Google Ads landing pages */}
       <Route path="/solutions/ai-invoice-processing" element={<AdsLanding />} />
@@ -472,6 +482,46 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <Billing />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/partner"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <PartnerDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/companies"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <CompanyDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/companies/new"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo"]}>
+            <Layout>
+              <CompanyOnboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/companies/:id"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <CompanyDetail />
             </Layout>
           </ProtectedRoute>
         }

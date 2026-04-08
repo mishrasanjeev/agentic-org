@@ -24,6 +24,7 @@ from api.v1 import (
     companies,
     compliance,
     config,
+    cron,
     connectors,
     content_safety,
     evals,
@@ -150,6 +151,7 @@ app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
+app.include_router(cron.router, prefix="/api/v1", tags=["Cron"])
 app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregator"])
 app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])
 app.include_router(push.router, prefix="/api/v1", tags=["Push Notifications"])
