@@ -21,13 +21,19 @@ export default function CompanySwitcher() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get<Company[]>("/companies");
+        const res = await api.get("/companies");
         if (cancelled) return;
-        setCompanies(res.data);
+        // API returns { items: [...], total, page, per_page } or a plain array
+        const list: Company[] = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.items)
+            ? res.data.items
+            : [];
+        setCompanies(list);
 
         // Auto-select first company if none stored
-        if (!current && res.data.length > 0) {
-          const first = res.data[0].id;
+        if (!current && list.length > 0) {
+          const first = list[0].id;
           setCurrent(first);
           localStorage.setItem("company_id", first);
         }
