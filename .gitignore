@@ -98,8 +98,15 @@ test-results/
 cloudbuild-ui.yaml
 mcp-server/.mcpregistry_*
 
-# Sales / marketing decks (confidential)
+# Marketing / sales content (confidential — keep local only)
 docs/*Sales*
 docs/*sales*
 docs/*.pptx
+docs/*.pdf
+docs/*.xlsx
+docs/*.html
 scripts/gen_sales_deck.py
+scripts/gen_bugfix*.py
+scripts/generate_*pdf*
+scripts/generate_*doc*
+scripts/marketing*
