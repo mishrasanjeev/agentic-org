@@ -9,7 +9,7 @@ Each endpoint:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -242,7 +242,7 @@ async def _query_agent_results(
     tenant_id: str, domains: list[str], hours: int = 24, limit: int = 50
 ) -> list[dict]:
     """Query recent agent_task_results for the given domains."""
-    cutoff = datetime.now(datetime.UTC) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     try:
         async with get_tenant_session(tenant_id) as session:
             rows = (
@@ -377,7 +377,7 @@ async def _build_kpi_response(
     cache = KPICache()
     cached = await cache.get_all_for_role(tenant_id, role)
 
-    now_iso = datetime.now(datetime.UTC).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     if cached and not all(v.get("stale") for v in cached.values()):
         # Merge cached values into a flat dict
