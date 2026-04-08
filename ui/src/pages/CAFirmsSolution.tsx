@@ -434,6 +434,11 @@ export default function CAFirmsSolution() {
                   "SOC2 audit trail",
                   "Priority email support",
                   "14-day free trial",
+                  "Partner self-approval",
+                  "Bulk filing approval",
+                  "Compliance calendar with alerts",
+                  "GSTN credential vault",
+                  "Partner dashboard",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
                     <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />

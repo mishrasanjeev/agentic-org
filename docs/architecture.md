@@ -642,3 +642,70 @@ graph LR
     style Ops_C fill:#e8eaf6,stroke:#283593
     style Comms_C fill:#fce4ec,stroke:#c62828
 ```
+
+---
+
+## CA Multi-Company Architecture
+
+The CA Firms add-on extends the platform with multi-company management, filing workflows, and compliance automation for Chartered Accountant practices.
+
+### New Tables
+
+6 tables added in migration `013_company_model.sql`:
+
+| Table | Purpose | RLS |
+|-------|---------|-----|
+| `companies` | Client company entities (GSTIN, PAN, FY, Tally config) | Yes -- tenant_id |
+| `ca_subscriptions` | CA pack subscription per tenant (plan, trial, billing) | Yes -- tenant_id |
+| `filing_approvals` | Filing approval workflow records (status, decided_by, reason) | Yes -- tenant_id via company |
+| `gstn_uploads` | Generated GSTN JSON files for manual portal upload (ARN tracking) | Yes -- tenant_id via company |
+| `gstn_credentials` | Encrypted GSTN portal credentials (Fernet, never returns passwords) | Yes -- tenant_id via company |
+| `compliance_deadlines` | Auto-generated filing deadlines with alert tracking flags | Yes -- tenant_id via company |
+
+Row-Level Security is enforced on all 6 tables. The `companies` table is filtered directly by `tenant_id`. Child tables (`filing_approvals`, `gstn_uploads`, `gstn_credentials`, `compliance_deadlines`) join through `company_id` to inherit tenant isolation.
+
+### Filing Approval Workflow
+
+```
+Agent (GST/TDS) --> creates approval (status: pending)
+    |
+    +--> if company.gst_auto_file = true --> auto-approved
+    |
+    +--> else --> partner reviews in Partner Dashboard
+              |
+              +--> POST .../approve --> status: approved --> proceed to file
+              |
+              +--> POST .../reject  --> status: rejected (with reason)
+              |
+              +--> POST /companies/bulk-approve --> batch approve across clients
+```
+
+The workflow ensures no filing is submitted to GSTN without explicit partner approval (or a pre-configured auto-file flag per company).
+
+### Credential Vault
+
+- **Encryption**: Fernet symmetric encryption (AES-128-CBC with HMAC-SHA256 authentication)
+- **Key management**: `encryption_key_ref` field supports key rotation -- new credentials use the latest key version, old credentials decrypt with their stored key ref
+- **API safety**: `GET /credentials` never returns the `password` or `encrypted_password` fields
+- **Verification**: `POST /credentials/{cid}/verify` tests decryption and optionally validates against the GSTN portal
+- **Deactivation**: `DELETE` soft-deactivates (sets `is_active=false`) -- records retained for audit
+
+### Compliance Cron
+
+- **Scheduler**: Celery Beat, daily at 6:00 AM IST (00:30 UTC)
+- **Job**: `POST /api/v1/cron/compliance-alerts`
+- **7-day alert**: Email sent to partner when a deadline is 7 days away (`alert_7day_sent` flag)
+- **1-day alert**: Email sent when a deadline is 1 day away (`alert_1day_sent` flag)
+- **Idempotent**: Alert flags prevent duplicate sends on re-runs
+- **Deadline generation**: `POST /companies/{id}/deadlines/generate` creates deadlines for GSTR-1, GSTR-3B, TDS 26Q/24Q based on the company's filing obligations and financial year
+
+### Partner Dashboard
+
+`GET /api/v1/partner-dashboard` runs aggregate queries across all companies in the tenant:
+
+- Total clients, filings pending/overdue/completed
+- Per-client health score (composite of: overdue count, days since last activity, filing completion rate)
+- Deadlines due in next 7 days
+- Monthly revenue from CA subscriptions
+
+All queries use the existing RLS context -- no cross-tenant data exposure.

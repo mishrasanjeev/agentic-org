@@ -1150,6 +1150,13 @@ export default function Landing() {
                         <span className="text-slate-600"> &mdash; Auto-match 99.7% of bank transactions via Account Aggregator. Flag stale items and escalate to partners.</span>
                       </div>
                     </li>
+                    <li className="flex items-start gap-3">
+                      <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-900">Partner Dashboard</span>
+                        <span className="text-slate-600"> &mdash; Aggregate health scores, pending filings, compliance calendar, and revenue tracking across all clients.</span>
+                      </div>
+                    </li>
                   </ul>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <Link

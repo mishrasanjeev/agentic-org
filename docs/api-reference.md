@@ -1422,3 +1422,621 @@ Returns summary data for the ABM dashboard — total accounts, tier breakdown, a
   "updated_at": "2026-04-02T10:00:00Z"
 }
 ```
+
+---
+
+## CA Firms API
+
+Endpoints for the CA Firms paid add-on. All endpoints require JWT authentication and are scoped to the current tenant.
+
+### Filing Approvals
+
+#### List Filing Approvals
+```
+GET /api/v1/companies/{id}/approvals
+```
+Returns all filing approvals for a company. Filterable by status.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | No | Filter: `pending`, `approved`, `rejected`, `all`. Default: `all` |
+| `filing_type` | string | No | Filter: `gstr1`, `gstr3b`, `tds_26q`, `tds_24q` |
+| `limit` | integer | No | Default: 50 |
+| `offset` | integer | No | Default: 0 |
+
+**Response:** `200 OK`
+```json
+{
+  "approvals": [
+    {
+      "id": "uuid",
+      "company_id": "uuid",
+      "filing_type": "gstr3b",
+      "period": "2026-03",
+      "status": "pending",
+      "auto_approved": false,
+      "created_by_agent": "gst-filing-agent",
+      "created_at": "2026-04-05T10:00:00Z",
+      "decided_at": null,
+      "decided_by": null,
+      "reject_reason": null
+    }
+  ],
+  "count": 12
+}
+```
+
+#### Create Filing Approval
+```
+POST /api/v1/companies/{id}/approvals
+```
+Creates a filing approval request. If the company has `gst_auto_file=True`, the approval is auto-approved immediately.
+
+**Request Body:**
+```json
+{
+  "filing_type": "gstr3b",
+  "period": "2026-03",
+  "payload": {
+    "total_liability": 142000,
+    "itc_claimed": 98000,
+    "net_payable": 44000
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `filing_type` | string | Yes | One of: `gstr1`, `gstr3b`, `tds_26q`, `tds_24q` |
+| `period` | string | Yes | Filing period (YYYY-MM or YYYY-QN) |
+| `payload` | object | No | Filing summary data for review |
+
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "status": "pending",
+  "auto_approved": false
+}
+```
+
+#### Partner Self-Approve
+```
+POST /api/v1/companies/{id}/approvals/{aid}/approve
+```
+Partner approves a pending filing. Only the tenant owner (CA partner) can approve.
+
+**Request Body:** (optional)
+```json
+{
+  "notes": "Verified ITC reconciliation. Approved."
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "status": "approved",
+  "decided_by": "partner@cafirm.com",
+  "decided_at": "2026-04-06T14:30:00Z"
+}
+```
+
+**Error Responses:**
+| Status | Detail |
+|--------|--------|
+| 404 | Approval not found |
+| 409 | Approval already decided |
+
+#### Reject Filing
+```
+POST /api/v1/companies/{id}/approvals/{aid}/reject
+```
+Rejects a pending filing with a reason.
+
+**Request Body:**
+```json
+{
+  "reason": "ITC mismatch with GSTR-2A. Needs reconciliation."
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reason` | string | Yes | Reason for rejection |
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "status": "rejected",
+  "reject_reason": "ITC mismatch with GSTR-2A. Needs reconciliation.",
+  "decided_by": "partner@cafirm.com",
+  "decided_at": "2026-04-06T14:30:00Z"
+}
+```
+
+#### Bulk Approve Filings
+```
+POST /api/v1/companies/bulk-approve
+```
+Approve multiple filings across companies in one call.
+
+**Request Body:**
+```json
+{
+  "approval_ids": ["uuid-1", "uuid-2", "uuid-3"],
+  "notes": "Batch approved after quarterly review."
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `approval_ids` | array | Yes | List of approval UUIDs to approve |
+| `notes` | string | No | Notes applied to all approvals |
+
+**Response:** `200 OK`
+```json
+{
+  "approved": 3,
+  "failed": 0,
+  "results": [
+    {"id": "uuid-1", "status": "approved"},
+    {"id": "uuid-2", "status": "approved"},
+    {"id": "uuid-3", "status": "approved"}
+  ]
+}
+```
+
+---
+
+### GSTN Credentials
+
+#### List Credentials
+```
+GET /api/v1/companies/{id}/credentials
+```
+Returns stored GSTN credentials for a company. Passwords are never returned in responses.
+
+**Response:** `200 OK`
+```json
+{
+  "credentials": [
+    {
+      "id": "uuid",
+      "gstin": "29XXXXX1234X1Z5",
+      "username": "taxpayer_user",
+      "portal": "gstn",
+      "is_active": true,
+      "encryption_key_ref": "v1",
+      "last_verified_at": "2026-04-01T06:00:00Z",
+      "created_at": "2026-03-15T10:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Store Encrypted Credential
+```
+POST /api/v1/companies/{id}/credentials
+```
+Stores a GSTN credential. The password is encrypted with AES-256 (Fernet) before storage.
+
+**Request Body:**
+```json
+{
+  "gstin": "29XXXXX1234X1Z5",
+  "username": "taxpayer_user",
+  "password": "secret123",
+  "portal": "gstn"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `gstin` | string | Yes | GSTIN (15-character format) |
+| `username` | string | Yes | Portal login username |
+| `password` | string | Yes | Portal login password (encrypted at rest) |
+| `portal` | string | No | Portal identifier. Default: `gstn` |
+
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "gstin": "29XXXXX1234X1Z5",
+  "username": "taxpayer_user",
+  "is_active": true,
+  "encryption_key_ref": "v1"
+}
+```
+
+#### Deactivate Credential
+```
+DELETE /api/v1/companies/{id}/credentials/{cid}
+```
+Deactivates a stored credential. Does not delete the record (retained for audit).
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "is_active": false,
+  "deactivated_at": "2026-04-06T14:30:00Z"
+}
+```
+
+#### Verify Credential (Test Decrypt)
+```
+POST /api/v1/companies/{id}/credentials/{cid}/verify
+```
+Tests that the stored credential can be decrypted and optionally validates against the GSTN portal.
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "decrypt_ok": true,
+  "portal_login_ok": true,
+  "verified_at": "2026-04-06T14:35:00Z"
+}
+```
+
+**Error Responses:**
+| Status | Detail |
+|--------|--------|
+| 404 | Credential not found |
+| 400 | Decryption failed (key rotation needed) |
+
+---
+
+### GSTN Uploads
+
+#### List Generated Files
+```
+GET /api/v1/companies/{id}/gstn-uploads
+```
+Returns generated GSTN JSON files for manual portal upload.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `filing_type` | string | No | Filter: `gstr1`, `gstr3b` |
+| `status` | string | No | Filter: `generated`, `uploaded`, `accepted`, `rejected` |
+| `limit` | integer | No | Default: 50 |
+| `offset` | integer | No | Default: 0 |
+
+**Response:** `200 OK`
+```json
+{
+  "uploads": [
+    {
+      "id": "uuid",
+      "company_id": "uuid",
+      "filing_type": "gstr1",
+      "period": "2026-03",
+      "status": "generated",
+      "file_url": "/api/v1/companies/{id}/gstn-uploads/{uid}/download",
+      "arn": null,
+      "generated_at": "2026-04-05T10:00:00Z",
+      "uploaded_at": null
+    }
+  ],
+  "count": 5
+}
+```
+
+#### Generate GSTN JSON
+```
+POST /api/v1/companies/{id}/gstn-uploads
+```
+Generates a GSTN-compliant JSON file for manual upload to the GSTN portal.
+
+**Request Body:**
+```json
+{
+  "filing_type": "gstr1",
+  "period": "2026-03"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `filing_type` | string | Yes | `gstr1` or `gstr3b` |
+| `period` | string | Yes | Filing period (YYYY-MM) |
+
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "filing_type": "gstr1",
+  "period": "2026-03",
+  "status": "generated",
+  "file_url": "/api/v1/companies/{id}/gstn-uploads/{uid}/download",
+  "invoice_count": 142,
+  "total_taxable_value": 8500000,
+  "generated_at": "2026-04-05T10:00:00Z"
+}
+```
+
+#### Update Upload Status
+```
+PATCH /api/v1/companies/{id}/gstn-uploads/{uid}
+```
+Updates the upload status and ARN after manual portal upload.
+
+**Request Body:**
+```json
+{
+  "status": "uploaded",
+  "arn": "AA290326000001X"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | string | Yes | `uploaded`, `accepted`, or `rejected` |
+| `arn` | string | No | Acknowledgement Reference Number from GSTN portal |
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "status": "uploaded",
+  "arn": "AA290326000001X",
+  "uploaded_at": "2026-04-06T14:30:00Z"
+}
+```
+
+---
+
+### Compliance Deadlines
+
+#### List Upcoming Deadlines
+```
+GET /api/v1/companies/{id}/deadlines
+```
+Returns upcoming compliance deadlines for a company.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | No | Filter: `upcoming`, `overdue`, `filed`, `all`. Default: `upcoming` |
+| `months_ahead` | integer | No | Number of months to look ahead. Default: 3 |
+
+**Response:** `200 OK`
+```json
+{
+  "deadlines": [
+    {
+      "id": "uuid",
+      "company_id": "uuid",
+      "filing_type": "gstr3b",
+      "period": "2026-03",
+      "due_date": "2026-04-20",
+      "status": "upcoming",
+      "alert_7day_sent": true,
+      "alert_1day_sent": false,
+      "filed_at": null
+    }
+  ],
+  "count": 8
+}
+```
+
+#### Generate Deadlines
+```
+POST /api/v1/companies/{id}/deadlines/generate
+```
+Generates compliance deadlines for upcoming months based on the company's filing obligations.
+
+**Request Body:**
+```json
+{
+  "months_ahead": 6
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `months_ahead` | integer | No | Number of months to generate. Default: 3 |
+
+**Response:** `201 Created`
+```json
+{
+  "generated": 18,
+  "company_id": "uuid",
+  "filings": ["gstr1", "gstr3b", "tds_26q"]
+}
+```
+
+#### Mark Deadline as Filed
+```
+PATCH /api/v1/companies/{id}/deadlines/{did}/filed
+```
+Marks a compliance deadline as filed.
+
+**Request Body:** (optional)
+```json
+{
+  "arn": "AA290326000001X",
+  "filed_via": "portal"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "status": "filed",
+  "filed_at": "2026-04-06T14:30:00Z",
+  "arn": "AA290326000001X"
+}
+```
+
+---
+
+### CA Subscription
+
+#### Get Tenant Subscription
+```
+GET /api/v1/ca-subscription
+```
+Returns the current CA pack subscription for the tenant.
+
+**Response:** `200 OK`
+```json
+{
+  "tenant_id": "uuid",
+  "plan": "ca_pack",
+  "status": "active",
+  "price_inr": 4999,
+  "billing_cycle": "monthly",
+  "trial_ends_at": null,
+  "current_period_start": "2026-04-01T00:00:00Z",
+  "current_period_end": "2026-04-30T23:59:59Z",
+  "client_count": 7,
+  "client_limit": null
+}
+```
+
+#### Activate Subscription
+```
+POST /api/v1/ca-subscription/activate
+```
+Starts a 14-day free trial or activates a paid subscription.
+
+**Request Body:**
+```json
+{
+  "plan": "ca_pack",
+  "trial": true
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `plan` | string | Yes | Subscription plan: `ca_pack` |
+| `trial` | boolean | No | Start with 14-day trial. Default: `true` |
+
+**Response:** `201 Created`
+```json
+{
+  "tenant_id": "uuid",
+  "plan": "ca_pack",
+  "status": "trial",
+  "trial_ends_at": "2026-04-20T00:00:00Z",
+  "activated_at": "2026-04-06T10:00:00Z"
+}
+```
+
+**Error Responses:**
+| Status | Detail |
+|--------|--------|
+| 409 | Subscription already active |
+| 400 | Invalid plan |
+
+---
+
+### Partner Dashboard
+
+#### Aggregate KPIs
+```
+GET /api/v1/partner-dashboard
+```
+Returns aggregate KPIs across all client companies for the CA partner.
+
+**Response:** `200 OK`
+```json
+{
+  "tenant_id": "uuid",
+  "total_clients": 7,
+  "filings_pending": 12,
+  "filings_overdue": 2,
+  "filings_completed_this_month": 18,
+  "deadlines_next_7_days": 5,
+  "client_health": [
+    {
+      "company_id": "uuid",
+      "company_name": "Acme Corp Pvt Ltd",
+      "health_score": 92,
+      "pending_filings": 1,
+      "overdue_filings": 0,
+      "last_activity": "2026-04-06T09:00:00Z"
+    }
+  ],
+  "revenue_this_month": 34993,
+  "updated_at": "2026-04-06T10:00:00Z"
+}
+```
+
+---
+
+### Tally Auto-Detect
+
+#### Detect Company from Tally Bridge
+```
+POST /api/v1/companies/tally-detect
+```
+Reads the Tally bridge and auto-creates or matches a company entity using GSTIN, PAN, and financial year.
+
+**Request Body:**
+```json
+{
+  "bridge_url": "http://localhost:9000",
+  "company_name": "Acme Corp"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bridge_url` | string | Yes | Tally bridge endpoint URL |
+| `company_name` | string | No | Tally company name to select (if multiple open) |
+
+**Response:** `200 OK`
+```json
+{
+  "company_id": "uuid",
+  "company_name": "Acme Corp Pvt Ltd",
+  "gstin": "29XXXXX1234X1Z5",
+  "pan": "XXXXX1234X",
+  "financial_year": "2025-04-01 to 2026-03-31",
+  "created": false,
+  "matched_existing": true
+}
+```
+
+**Error Responses:**
+| Status | Detail |
+|--------|--------|
+| 400 | Tally bridge unreachable |
+| 400 | No company open in Tally |
+| 409 | GSTIN conflict with existing company in different tenant |
+
+---
+
+### Compliance Alert Cron
+
+#### Trigger Daily Compliance Alerts
+```
+POST /api/v1/cron/compliance-alerts
+```
+Triggers the daily compliance alert job. Normally run by Celery Beat at 6 AM IST. Sends email alerts for deadlines due in 7 days and 1 day. Idempotent -- safe to call multiple times per day.
+
+**Request Body:** None
+
+**Response:** `200 OK`
+```json
+{
+  "alerts_sent": 5,
+  "seven_day_alerts": 3,
+  "one_day_alerts": 2,
+  "companies_notified": 4,
+  "run_at": "2026-04-06T00:30:00Z"
+}
+```

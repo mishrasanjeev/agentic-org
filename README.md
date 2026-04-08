@@ -10,7 +10,7 @@
 [![E2E](https://img.shields.io/badge/E2E-17_Playwright_specs-brightgreen.svg)](ui/e2e/)
 [![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
 [![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
-[![Version](https://img.shields.io/badge/Version-4.0.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.3.0-green.svg)](CHANGELOG.md)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -38,7 +38,7 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 | SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
 | LLM | Smart routing via RouteLLM: Gemini Flash (free) / Gemini Pro / Claude/GPT-4o. Air-gapped: Ollama/vLLM |
 | Deployment | GKE Autopilot, ~$95/month |
-| Version | **4.0.0** |
+| Version | **4.3.0** |
 
 ### What It Does
 
@@ -261,6 +261,22 @@ Comms (9): Slack, GitHub, Gmail, SendGrid, GCS, Google Calendar, Twilio, WhatsAp
 | **ABM Dashboard** | Target account management with intent heatmap, CSV upload, tier filtering, and one-click campaign launch |
 | **Wait Step** | Real time delays in workflows (was stub) — supports minutes, hours, and day-based delays |
 | **Wait-for-Event** | Pause workflow execution until a specific event occurs (email opened, link clicked, form submitted) |
+
+### CA Firms -- Paid Add-on
+
+**INR 4,999/month per client | 14-day free trial**
+
+Purpose-built for Chartered Accountant firms managing multiple client companies from a single tenant.
+
+| Feature | Details |
+|---------|---------|
+| **5 AI Agents** | GST Filing, TDS Compliance, Bank Reconciliation, FP&A Analyst, AR Collections |
+| **Partner Dashboard** | Aggregate KPIs across all clients -- filing status, overdue counts, client health scores |
+| **Filing Approvals** | Agent generates filing --> pending --> partner self-approve --> filed. Supports bulk approve across clients |
+| **GSTN Credential Vault** | AES-256 encrypted storage per client. Passwords never returned in API responses. Supports key rotation via `encryption_key_ref` |
+| **Compliance Calendar** | Auto-generated deadlines for GSTR-1, GSTR-3B, TDS 26Q/24Q. Email alerts at 7-day and 1-day before due date |
+| **Tally Auto-Detect** | `POST /api/v1/companies/tally-detect` reads Tally bridge and auto-creates the company entity with GSTIN, PAN, and FY |
+| **Demo Seeded** | 7 demo companies seeded for `demo@cafirm.agenticorg.ai` -- ready to explore immediately |
 
 ---
 
