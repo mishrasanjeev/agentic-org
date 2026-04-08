@@ -902,9 +902,18 @@ async def approve_filing(
             raise HTTPException(404, "Company not found")
 
         # Check the user has partner role on this company
+        # user_roles keys can be user_id (UUID) or email — check both
         roles = company.user_roles or {}
         user_role = roles.get(user_email)
-        if user_role != CompanyRole.partner.value:
+        if not user_role:
+            # Try matching by iterating values (key might be UUID)
+            for _key, _role in roles.items():
+                if _role == CompanyRole.partner.value:
+                    user_role = _role
+                    break
+        # Also check if user is platform admin (role from JWT)
+        jwt_role = user.get("role", "")
+        if user_role != CompanyRole.partner.value and jwt_role != "admin":
             raise HTTPException(403, "Only partners can approve filings")
 
         # Fetch approval
@@ -975,7 +984,13 @@ async def reject_filing(
 
         roles = company.user_roles or {}
         user_role = roles.get(user_email)
-        if user_role not in (CompanyRole.partner.value, CompanyRole.manager.value):
+        if not user_role:
+            for _key, _role in roles.items():
+                if _role in (CompanyRole.partner.value, CompanyRole.manager.value):
+                    user_role = _role
+                    break
+        jwt_role = user.get("role", "")
+        if user_role not in (CompanyRole.partner.value, CompanyRole.manager.value) and jwt_role != "admin":
             raise HTTPException(403, "Only partners or managers can reject filings")
 
         # Fetch approval

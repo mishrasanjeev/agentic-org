@@ -90,6 +90,19 @@ async def init_db() -> None:
             END $$;
         """))
 
+        # v4.3.0: Ensure connector_ids column exists on agents table.
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'agents' AND column_name = 'connector_ids'
+                ) THEN
+                    ALTER TABLE agents ADD COLUMN connector_ids JSONB DEFAULT '[]'::jsonb;
+                END IF;
+            END $$;
+        """))
+
         # v4.1.0: Ensure company_id column exists on operational tables.
         # Enables CA multi-tenant use case where a tenant manages N client
         # companies.  Nullable FK — existing rows keep company_id = NULL.
