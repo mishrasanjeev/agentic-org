@@ -97,7 +97,7 @@ class ArCollectionsAgent(BaseAgent):
 
             # --- Step 2: Categorize invoices by aging bucket ---
             total_outstanding = 0.0
-            aging_buckets = {"0-30": [], "31-60": [], "61-90": [], "90+": []}
+            aging_buckets: dict[str, list] = {"0-30": [], "31-60": [], "61-90": [], "90+": []}
             reminders_sent: list[dict] = []
             escalations: list[dict] = []
 

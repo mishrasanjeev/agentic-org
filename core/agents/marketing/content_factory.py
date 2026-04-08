@@ -22,7 +22,7 @@ from core.schemas.messages import (
 logger = structlog.get_logger()
 
 # Content type configurations
-CONTENT_TYPES = {
+CONTENT_TYPES: dict[str, dict[str, Any]] = {
     "blog": {"min_words": 800, "max_words": 2000, "channels": ["website", "linkedin"]},
     "social": {"min_words": 20, "max_words": 280, "channels": ["twitter", "linkedin", "facebook"]},
     "email": {"min_words": 100, "max_words": 500, "channels": ["email"]},

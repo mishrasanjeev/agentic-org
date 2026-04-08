@@ -144,14 +144,14 @@ class CampaignPilotAgent(BaseAgent):
 
                 if roas > 0 and roas < ROAS_PAUSE_THRESHOLD and spend > 0:
                     # Pause underperforming channel
-                    connector_map = {
+                    connector_name_map: dict[str, str] = {
                         "google_ads": "google_ads",
                         "facebook_ads": "facebook_ads",
                         "linkedin_ads": "linkedin_ads",
                     }
-                    if channel in connector_map:
+                    if channel in connector_name_map:
                         pause_result = await self._safe_tool_call(
-                            connector_map[channel], "pause_campaign",
+                            connector_name_map[channel], "pause_campaign",
                             {"campaign_id": campaign_id, "campaign_name": campaign_name},
                             trace, tool_calls,
                         )

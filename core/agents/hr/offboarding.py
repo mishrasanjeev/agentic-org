@@ -256,7 +256,7 @@ class OffboardingAgentAgent(BaseAgent):
             factors: list[float] = []
             factors.append(completed_count / total_steps if total_steps else 0.5)
             factors.append(0.95 if access_revoked else 0.50)
-            factors.append(0.90 if fnf_settlement["net_payable"] >= 0 else 0.70)
+            factors.append(0.90 if float(fnf_settlement["net_payable"]) >= 0 else 0.70)
 
             confidence = round(sum(factors) / len(factors), 3)
             confidence = min(max(confidence, 0.0), 1.0)
@@ -268,7 +268,7 @@ class OffboardingAgentAgent(BaseAgent):
                 hitl_reasons.append("access not fully revoked")
             if unreturned_assets:
                 hitl_reasons.append(f"unreturned assets: {', '.join(unreturned_assets)}")
-            if fnf_settlement["net_payable"] > 500_000:
+            if float(fnf_settlement["net_payable"]) > 500_000:
                 hitl_reasons.append(f"F&F amount INR {fnf_settlement['net_payable']:,.0f} requires approval")
             if confidence < self.confidence_floor:
                 hitl_reasons.append(f"confidence {confidence:.3f} < floor")
