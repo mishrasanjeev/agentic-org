@@ -632,20 +632,15 @@ class TestAGENT_BUDGET_014:
 
 
 class TestAGENT_API_015:
-    """AGENT-API-015 — AgentUpdate rejects extra fields."""
+    """AGENT-API-015 — AgentUpdate ignores extra fields (BUG #6: changed to extra=ignore)."""
 
-    def test_extra_field_raises_validation_error(self):
-        """Creating AgentUpdate with an unknown field must raise ValidationError."""
+    def test_extra_field_silently_ignored(self):
+        """AgentUpdate with an unknown field should NOT raise (extra=ignore)."""
         from core.schemas.api import AgentUpdate
 
-        with pytest.raises(ValidationError) as exc_info:
-            AgentUpdate(invalid_field="test")
-
-        # Verify the error mentions the extra field
-        errors = exc_info.value.errors()
-        assert any("invalid_field" in str(e) for e in errors), (
-            f"ValidationError should mention 'invalid_field': {errors}"
-        )
+        update = AgentUpdate(invalid_field="test")
+        # extra=ignore means the field is silently dropped
+        assert not hasattr(update, "invalid_field")
 
     def test_valid_fields_accepted(self):
         """Creating AgentUpdate with valid fields must succeed."""
@@ -667,18 +662,19 @@ class TestAGENT_API_015:
         assert update.confidence_floor == 0.92
         assert update.employee_name == "Raj"
 
-    def test_extra_forbid_config(self):
-        """AgentUpdate must have extra='forbid' in its model_config."""
+    def test_extra_ignore_config(self):
+        """AgentUpdate must have extra='ignore' (BUG #6 fix: was 'forbid')."""
         from core.schemas.api import AgentUpdate
 
         config = AgentUpdate.model_config
-        assert config.get("extra") == "forbid", (
-            f"AgentUpdate.model_config must have extra='forbid', got {config}"
+        assert config.get("extra") == "ignore", (
+            f"AgentUpdate.model_config must have extra='ignore', got {config}"
         )
 
-    def test_multiple_extra_fields_rejected(self):
-        """Multiple unknown fields should all be rejected."""
+    def test_multiple_extra_fields_silently_ignored(self):
+        """Multiple unknown fields should be silently ignored."""
         from core.schemas.api import AgentUpdate
 
-        with pytest.raises(ValidationError):
-            AgentUpdate(bogus_a="x", bogus_b="y")
+        update = AgentUpdate(bogus_a="x", bogus_b="y")
+        assert not hasattr(update, "bogus_a")
+        assert not hasattr(update, "bogus_b")
