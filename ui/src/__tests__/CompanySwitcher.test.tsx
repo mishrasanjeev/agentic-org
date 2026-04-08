@@ -6,6 +6,7 @@
  * and loading state.
  */
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ describe("CompanySwitcher", () => {
   it("renders loading skeleton initially", () => {
     mockGet.mockReturnValue(new Promise(() => {}));
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     // Should show the pulse skeleton
     const skeleton = document.querySelector(".animate-pulse");
@@ -78,7 +79,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -93,7 +94,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });
     localStorage.setItem("company_id", "nonexistent-id");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("No Company")).toBeInTheDocument();
@@ -106,7 +107,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -121,7 +122,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -145,7 +146,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -164,7 +165,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -192,7 +193,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -218,7 +219,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -243,7 +244,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     // No company_id in localStorage
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(localStorage.setItem).toHaveBeenCalledWith(
@@ -259,7 +260,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
@@ -289,7 +290,7 @@ describe("CompanySwitcher", () => {
   it("handles API error gracefully without crashing", async () => {
     mockGet.mockRejectedValue(new Error("Network Error"));
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     // Should finish loading without crashing
     await waitFor(() => {
@@ -304,7 +305,7 @@ describe("CompanySwitcher", () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });
     localStorage.setItem("company_id", "comp-001");
 
-    render(<CompanySwitcher />);
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
       expect(mockGet).toHaveBeenCalledWith("/companies");
