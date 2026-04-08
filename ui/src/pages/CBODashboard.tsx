@@ -127,11 +127,12 @@ const SENTIMENT_COLORS: Record<string, string> = {
 
 // Compliance score gauge: 0-100
 function ComplianceGauge({ score }: { score: number }) {
+  const safeScore = score ?? 0;
   const gaugeData = [
-    { name: "Score", value: score },
-    { name: "Remaining", value: 100 - score },
+    { name: "Score", value: safeScore },
+    { name: "Remaining", value: 100 - safeScore },
   ];
-  const color = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
+  const color = safeScore >= 80 ? "#22c55e" : safeScore >= 60 ? "#f59e0b" : "#ef4444";
 
   return (
     <div className="flex flex-col items-center">
@@ -155,7 +156,7 @@ function ComplianceGauge({ score }: { score: number }) {
       </ResponsiveContainer>
       <div className="text-center -mt-16">
         <p className="text-3xl font-bold" style={{ color }}>
-          {score}
+          {safeScore}
         </p>
         <p className="text-xs text-muted-foreground">out of 100</p>
       </div>
@@ -222,10 +223,10 @@ export default function CBODashboard() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">CBO Dashboard</h2>
         <div className="flex items-center gap-2">
-          {data.stale && (
+          {data?.stale && (
             <Badge variant="warning">Data may be stale</Badge>
           )}
-          {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+          {data?.demo && <Badge variant="secondary">Demo Data</Badge>}
         </div>
       </div>
 
@@ -252,7 +253,7 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Active Contracts</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-blue-600">{formatNumber(data.active_contracts)}</p>
+                <p className="text-2xl font-bold text-blue-600">{formatNumber(data?.active_contracts ?? 0)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -260,8 +261,8 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Pending Reviews</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${data.pending_reviews > 0 ? "text-orange-600" : "text-green-600"}`}>
-                  {data.pending_reviews}
+                <p className={`text-2xl font-bold ${(data?.pending_reviews ?? 0) > 0 ? "text-orange-600" : "text-green-600"}`}>
+                  {data?.pending_reviews ?? 0}
                 </p>
               </CardContent>
             </Card>
@@ -270,7 +271,7 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">NDA Count</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-purple-600">{formatNumber(data.nda_count)}</p>
+                <p className="text-2xl font-bold text-purple-600">{formatNumber(data?.nda_count ?? 0)}</p>
               </CardContent>
             </Card>
           </div>
@@ -292,7 +293,7 @@ export default function CBODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.contract_review_queue.map((c, idx) => (
+                    {(data?.contract_review_queue || []).map((c, idx) => (
                       <tr key={idx} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{c.title}</td>
                         <td className="py-2 pr-4">{c.type}</td>
@@ -301,7 +302,7 @@ export default function CBODashboard() {
                           <Badge variant={statusBadge[c.status] || "default"}>{c.status}</Badge>
                         </td>
                         <td className="py-2 text-right">
-                          {new Date(c.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          {c.due_date ? new Date(c.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                         </td>
                       </tr>
                     ))}
@@ -317,7 +318,7 @@ export default function CBODashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {data.litigation_tracker.map((l, idx) => (
+                {(data?.litigation_tracker || []).map((l, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 rounded border">
                     <div>
                       <p className="text-sm font-medium">{l.case_title}</p>
@@ -326,7 +327,7 @@ export default function CBODashboard() {
                     <div className="text-right">
                       <Badge variant={statusBadge[l.status] || "default"}>{l.status}</Badge>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Next: {new Date(l.next_hearing).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        Next: {l.next_hearing ? new Date(l.next_hearing).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                       </p>
                     </div>
                   </div>
@@ -346,7 +347,7 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm font-semibold">Compliance Score</CardTitle>
               </CardHeader>
               <CardContent>
-                <ComplianceGauge score={data.compliance_score} />
+                <ComplianceGauge score={data?.compliance_score ?? 0} />
               </CardContent>
             </Card>
 
@@ -355,8 +356,8 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Open Audit Findings</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center justify-center py-8">
-                <p className={`text-4xl font-bold ${data.open_audit_findings > 0 ? "text-orange-600" : "text-green-600"}`}>
-                  {data.open_audit_findings}
+                <p className={`text-4xl font-bold ${(data?.open_audit_findings ?? 0) > 0 ? "text-orange-600" : "text-green-600"}`}>
+                  {data?.open_audit_findings ?? 0}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">findings pending resolution</p>
               </CardContent>
@@ -367,7 +368,7 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Sanctions Screened (MTD)</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center justify-center py-8">
-                <p className="text-4xl font-bold text-blue-600">{formatNumber(data.sanctions_screened_mtd)}</p>
+                <p className="text-4xl font-bold text-blue-600">{formatNumber(data?.sanctions_screened_mtd ?? 0)}</p>
                 <p className="text-sm text-muted-foreground mt-2">entities screened</p>
               </CardContent>
             </Card>
@@ -390,7 +391,7 @@ export default function CBODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.risk_register.map((r, idx) => (
+                    {(data?.risk_register || []).map((r, idx) => (
                       <tr key={idx} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{r.risk}</td>
                         <td className="py-2 pr-4">
@@ -427,7 +428,7 @@ export default function CBODashboard() {
               </CardHeader>
               <CardContent>
                 <p className="text-xl font-bold text-blue-600">
-                  {new Date(data.next_board_meeting).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                  {data?.next_board_meeting ? new Date(data.next_board_meeting).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "N/A"}
                 </p>
               </CardContent>
             </Card>
@@ -436,8 +437,8 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Days Until AGM</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${data.days_until_agm <= 30 ? "text-orange-600" : "text-blue-600"}`}>
-                  {data.days_until_agm} days
+                <p className={`text-2xl font-bold ${(data?.days_until_agm ?? 0) <= 30 ? "text-orange-600" : "text-blue-600"}`}>
+                  {data?.days_until_agm ?? 0} days
                 </p>
               </CardContent>
             </Card>
@@ -449,12 +450,12 @@ export default function CBODashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {data.statutory_filings.map((f, idx) => (
+                {(data?.statutory_filings || []).map((f, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 rounded border">
                     <div>
                       <p className="text-sm font-medium">{f.filing}</p>
                       <p className="text-xs text-muted-foreground">
-                        Due: {new Date(f.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        Due: {f.due_date ? new Date(f.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                       </p>
                     </div>
                     <Badge variant={statusBadge[f.status] || "default"}>{f.status}</Badge>
@@ -472,19 +473,19 @@ export default function CBODashboard() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Total Shares</p>
-                  <p className="text-lg font-bold">{formatNumber(data.share_register_summary.total_shares)}</p>
+                  <p className="text-lg font-bold">{formatNumber(data?.share_register_summary?.total_shares ?? 0)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Promoter %</p>
-                  <p className="text-lg font-bold text-blue-600">{data.share_register_summary.promoter_pct}%</p>
+                  <p className="text-lg font-bold text-blue-600">{data?.share_register_summary?.promoter_pct ?? 0}%</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Public %</p>
-                  <p className="text-lg font-bold text-emerald-600">{data.share_register_summary.public_pct}%</p>
+                  <p className="text-lg font-bold text-emerald-600">{data?.share_register_summary?.public_pct ?? 0}%</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Institutional %</p>
-                  <p className="text-lg font-bold text-purple-600">{data.share_register_summary.institutional_pct}%</p>
+                  <p className="text-lg font-bold text-purple-600">{data?.share_register_summary?.institutional_pct ?? 0}%</p>
                 </div>
               </div>
             </CardContent>
@@ -501,7 +502,7 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Internal Comms Reach</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-blue-600">{data.internal_comms_reach_pct}%</p>
+                <p className="text-2xl font-bold text-blue-600">{data?.internal_comms_reach_pct ?? 0}%</p>
               </CardContent>
             </Card>
             <Card>
@@ -509,7 +510,7 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Media Mentions (MTD)</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-emerald-600">{formatNumber(data.media_mentions_mtd)}</p>
+                <p className="text-2xl font-bold text-emerald-600">{formatNumber(data?.media_mentions_mtd ?? 0)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -517,8 +518,8 @@ export default function CBODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Investor Queries Open</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${data.investor_queries_open > 0 ? "text-orange-600" : "text-green-600"}`}>
-                  {data.investor_queries_open}
+                <p className={`text-2xl font-bold ${(data?.investor_queries_open ?? 0) > 0 ? "text-orange-600" : "text-green-600"}`}>
+                  {data?.investor_queries_open ?? 0}
                 </p>
               </CardContent>
             </Card>
@@ -540,12 +541,12 @@ export default function CBODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.recent_press_coverage.map((p, idx) => (
+                    {(data?.recent_press_coverage || []).map((p, idx) => (
                       <tr key={idx} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium max-w-[300px] truncate" title={p.headline}>{p.headline}</td>
                         <td className="py-2 pr-4">{p.outlet}</td>
                         <td className="py-2 pr-4">
-                          {new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                          {p.date ? new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "N/A"}
                         </td>
                         <td className="py-2 text-right">
                           <span className={`capitalize font-medium ${SENTIMENT_COLORS[p.sentiment] || ""}`}>

@@ -85,7 +85,7 @@ interface CHROKPIData {
   stale?: boolean;
   company_id: string;
   total_employees: number;
-  attrition_rate: number;
+  attrition_rate_monthly: number;
   new_joiners_mtd: number;
   open_positions: number;
   department_breakdown: DeptBreakdown[];
@@ -199,20 +199,21 @@ export default function CHRODashboard() {
   }
 
   const topMetrics = [
-    { label: "Total Employees", value: formatNumber(data.total_employees), color: "text-blue-600" },
-    { label: "Attrition Rate", value: `${data.attrition_rate}%`, color: "text-red-600" },
-    { label: "New Joiners (MTD)", value: formatNumber(data.new_joiners_mtd), color: "text-emerald-600" },
-    { label: "Open Positions", value: formatNumber(data.open_positions), color: "text-purple-600" },
+    { label: "Total Employees", value: formatNumber(data?.total_employees ?? 0), color: "text-blue-600" },
+    { label: "Attrition Rate", value: `${data?.attrition_rate_monthly ?? 0}%`, color: "text-red-600" },
+    { label: "New Joiners (MTD)", value: formatNumber(data?.new_joiners_mtd ?? 0), color: "text-emerald-600" },
+    { label: "Open Positions", value: formatNumber(data?.open_positions ?? 0), color: "text-purple-600" },
   ];
 
-  // Funnel data for recruitment
-  const funnelData = data.recruitment_funnel
+  // Funnel data for recruitment — guard against undefined
+  const funnel = data?.recruitment_funnel;
+  const funnelData = funnel
     ? [
-        { stage: "Applied", count: data.recruitment_funnel.applied },
-        { stage: "Screened", count: data.recruitment_funnel.screened },
-        { stage: "Interviewed", count: data.recruitment_funnel.interviewed },
-        { stage: "Offered", count: data.recruitment_funnel.offered },
-        { stage: "Accepted", count: data.recruitment_funnel.accepted },
+        { stage: "Applied", count: funnel.applied ?? 0 },
+        { stage: "Screened", count: funnel.screened ?? 0 },
+        { stage: "Interviewed", count: funnel.interviewed ?? 0 },
+        { stage: "Offered", count: funnel.offered ?? 0 },
+        { stage: "Accepted", count: funnel.accepted ?? 0 },
       ]
     : [];
 
@@ -224,10 +225,10 @@ export default function CHRODashboard() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">CHRO Dashboard</h2>
         <div className="flex items-center gap-2">
-          {data.stale && (
+          {data?.stale && (
             <Badge variant="warning">Data may be stale</Badge>
           )}
-          {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+          {data?.demo && <Badge variant="secondary">Demo Data</Badge>}
         </div>
       </div>
 
@@ -277,16 +278,16 @@ export default function CHRODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.department_breakdown.map((d) => (
+                    {(data?.department_breakdown || []).map((d) => (
                       <tr key={d.department} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{d.department}</td>
-                        <td className="py-2 pr-4 text-right">{d.headcount}</td>
+                        <td className="py-2 pr-4 text-right">{d.headcount ?? 0}</td>
                         <td className="py-2 pr-4 text-right">
-                          <span className={d.attrition_pct > 15 ? "text-red-600" : "text-green-600"}>
-                            {d.attrition_pct}%
+                          <span className={(d.attrition_pct ?? 0) > 15 ? "text-red-600" : "text-green-600"}>
+                            {d.attrition_pct ?? 0}%
                           </span>
                         </td>
-                        <td className="py-2 text-right">{d.avg_tenure_years}</td>
+                        <td className="py-2 text-right">{d.avg_tenure_years ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -301,7 +302,7 @@ export default function CHRODashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={data.headcount_trend}>
+                <LineChart data={data?.headcount_trend || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={(m: string) => m.slice(5)} />
                   <YAxis tick={{ fontSize: 11 }} />
@@ -324,30 +325,30 @@ export default function CHRODashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4 mb-6">
-                <Badge variant={data.payroll_current_month_status === "processed" ? "success" : "warning"}>
-                  {data.payroll_current_month_status === "processed" ? "Processed" : "Pending"}
+                <Badge variant={data?.payroll_current_month_status === "processed" ? "success" : "warning"}>
+                  {data?.payroll_current_month_status === "processed" ? "Processed" : "Pending"}
                 </Badge>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Total CTC</p>
-                  <p className="text-lg font-bold">{INR.format(data.payroll_total_ctc)}</p>
+                  <p className="text-lg font-bold">{INR.format(data?.payroll_total_ctc ?? 0)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">PF Contribution</p>
-                  <p className="text-lg font-bold">{INR.format(data.payroll_pf)}</p>
+                  <p className="text-lg font-bold">{INR.format(data?.payroll_pf ?? 0)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">ESI</p>
-                  <p className="text-lg font-bold">{INR.format(data.payroll_esi)}</p>
+                  <p className="text-lg font-bold">{INR.format(data?.payroll_esi ?? 0)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Professional Tax</p>
-                  <p className="text-lg font-bold">{INR.format(data.payroll_pt)}</p>
+                  <p className="text-lg font-bold">{INR.format(data?.payroll_pt ?? 0)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">TDS on Salary</p>
-                  <p className="text-lg font-bold">{INR.format(data.payroll_tds)}</p>
+                  <p className="text-lg font-bold">{INR.format(data?.payroll_tds ?? 0)}</p>
                 </div>
               </div>
             </CardContent>
@@ -372,14 +373,14 @@ export default function CHRODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.payroll_history.map((r) => (
+                    {(data?.payroll_history || []).map((r) => (
                       <tr key={r.month} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{r.month}</td>
-                        <td className="py-2 pr-4 text-right">{lakhs(r.total_ctc)}</td>
-                        <td className="py-2 pr-4 text-right">{lakhs(r.pf)}</td>
-                        <td className="py-2 pr-4 text-right">{lakhs(r.esi)}</td>
-                        <td className="py-2 pr-4 text-right">{lakhs(r.pt)}</td>
-                        <td className="py-2 pr-4 text-right">{lakhs(r.tds)}</td>
+                        <td className="py-2 pr-4 text-right">{lakhs(r.total_ctc ?? 0)}</td>
+                        <td className="py-2 pr-4 text-right">{lakhs(r.pf ?? 0)}</td>
+                        <td className="py-2 pr-4 text-right">{lakhs(r.esi ?? 0)}</td>
+                        <td className="py-2 pr-4 text-right">{lakhs(r.pt ?? 0)}</td>
+                        <td className="py-2 pr-4 text-right">{lakhs(r.tds ?? 0)}</td>
                         <td className="py-2 text-right">
                           <Badge variant={statusBadge[r.status] || "default"}>{r.status}</Badge>
                         </td>
@@ -433,14 +434,14 @@ export default function CHRODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.open_positions_list.map((p) => (
+                    {(data?.open_positions_list || []).map((p) => (
                       <tr key={`${p.role}-${p.department}`} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{p.role}</td>
                         <td className="py-2 pr-4">{p.department}</td>
                         <td className="py-2 pr-4 text-right">
-                          <span className={p.days_open > 30 ? "text-red-600" : ""}>{p.days_open}</span>
+                          <span className={(p.days_open ?? 0) > 30 ? "text-red-600" : ""}>{p.days_open ?? 0}</span>
                         </td>
-                        <td className="py-2 text-right">{p.applicants}</td>
+                        <td className="py-2 text-right">{p.applicants ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -455,7 +456,7 @@ export default function CHRODashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={data.time_to_hire_trend}>
+                <LineChart data={data?.time_to_hire_trend || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} tickFormatter={(m: string) => m.slice(5)} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}d`} />
@@ -478,8 +479,8 @@ export default function CHRODashboard() {
                 <CardTitle className="text-sm font-semibold">Employee Net Promoter Score (eNPS)</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center justify-center py-8">
-                <p className={`text-5xl font-bold ${data.enps_score >= 30 ? "text-green-600" : data.enps_score >= 0 ? "text-yellow-600" : "text-red-600"}`}>
-                  {data.enps_score}
+                <p className={`text-5xl font-bold ${(data?.enps_score ?? 0) >= 30 ? "text-green-600" : (data?.enps_score ?? 0) >= 0 ? "text-yellow-600" : "text-red-600"}`}>
+                  {data?.enps_score ?? 0}
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">eNPS Score</p>
               </CardContent>
@@ -490,8 +491,8 @@ export default function CHRODashboard() {
                 <CardTitle className="text-sm font-semibold">Pulse Survey Score</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center justify-center py-8">
-                <p className={`text-5xl font-bold ${data.pulse_survey_score >= 70 ? "text-green-600" : data.pulse_survey_score >= 50 ? "text-yellow-600" : "text-red-600"}`}>
-                  {data.pulse_survey_score}%
+                <p className={`text-5xl font-bold ${(data?.pulse_survey_score ?? 0) >= 70 ? "text-green-600" : (data?.pulse_survey_score ?? 0) >= 50 ? "text-yellow-600" : "text-red-600"}`}>
+                  {data?.pulse_survey_score ?? 0}%
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">overall satisfaction</p>
               </CardContent>
@@ -504,7 +505,7 @@ export default function CHRODashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {data.attrition_risk.map((r) => (
+                {(data?.attrition_risk || []).map((r) => (
                   <div key={r.department} className={`p-3 rounded ${RISK_COLORS[r.risk_level] || "bg-gray-100"}`}>
                     <p className="text-sm font-medium">{r.department}</p>
                     <p className="text-xs capitalize">{r.risk_level} risk</p>
@@ -520,10 +521,10 @@ export default function CHRODashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {data.top_concerns.map((c) => (
+                {(data?.top_concerns || []).map((c) => (
                   <div key={c.concern} className="flex items-center justify-between p-3 rounded border">
                     <p className="text-sm font-medium">{c.concern}</p>
-                    <Badge variant="secondary">{c.mentions} mentions</Badge>
+                    <Badge variant="secondary">{c.mentions ?? 0} mentions</Badge>
                   </div>
                 ))}
               </div>
@@ -540,17 +541,17 @@ export default function CHRODashboard() {
               <CardTitle className="text-sm font-semibold">Pending Compliance Items</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center py-6">
-              <p className={`text-4xl font-bold ${data.pending_compliance_items > 0 ? "text-orange-600" : "text-green-600"}`}>
-                {data.pending_compliance_items}
+              <p className={`text-4xl font-bold ${(data?.pending_compliance_items ?? 0) > 0 ? "text-orange-600" : "text-green-600"}`}>
+                {data?.pending_compliance_items ?? 0}
               </p>
               <p className="text-sm text-muted-foreground mt-2">items pending action</p>
             </CardContent>
           </Card>
 
           {[
-            { title: "EPFO Filing Status", items: data.epfo_filings },
-            { title: "ESI Filing Status", items: data.esi_filings },
-            { title: "Professional Tax Filing Status", items: data.pt_filings },
+            { title: "EPFO Filing Status", items: data?.epfo_filings || [] },
+            { title: "ESI Filing Status", items: data?.esi_filings || [] },
+            { title: "Professional Tax Filing Status", items: data?.pt_filings || [] },
           ].map((section) => (
             <Card key={section.title}>
               <CardHeader>
@@ -558,12 +559,12 @@ export default function CHRODashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {section.items.map((f) => (
-                    <div key={`${f.filing}-${f.period}`} className="flex items-center justify-between p-3 rounded border">
+                  {section.items.map((f, idx) => (
+                    <div key={`${f.filing}-${f.period}-${idx}`} className="flex items-center justify-between p-3 rounded border">
                       <div>
                         <p className="text-sm font-medium">{f.filing}</p>
                         <p className="text-xs text-muted-foreground">
-                          {f.period} — Due: {new Date(f.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          {f.period} — Due: {f.due_date ? new Date(f.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                         </p>
                       </div>
                       <Badge variant={statusBadge[f.status] || "default"}>{f.status}</Badge>

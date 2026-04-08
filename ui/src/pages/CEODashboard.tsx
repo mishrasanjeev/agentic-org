@@ -149,20 +149,27 @@ export default function CEODashboard() {
     );
   }
 
+  const healthScore = data?.health_score ?? 0;
   const healthColor =
-    data.health_score >= 80
+    healthScore >= 80
       ? "text-green-600"
-      : data.health_score >= 60
+      : healthScore >= 60
         ? "text-yellow-600"
         : "text-red-600";
 
   const topMetrics = [
-    { label: "Revenue MTD", value: INR.format(data.revenue_mtd), color: "text-blue-600" },
-    { label: "Total Employees", value: formatNumber(data.total_employees), color: "text-emerald-600" },
-    { label: "Active Incidents", value: formatNumber(data.active_incidents), color: "text-red-600" },
-    { label: "Pipeline Value", value: INR.format(data.pipeline_value), color: "text-purple-600" },
-    { label: "Health Score", value: `${data.health_score}/100`, color: healthColor },
+    { label: "Revenue MTD", value: INR.format(data?.revenue_mtd ?? 0), color: "text-blue-600" },
+    { label: "Total Employees", value: formatNumber(data?.total_employees ?? 0), color: "text-emerald-600" },
+    { label: "Active Incidents", value: formatNumber(data?.active_incidents ?? 0), color: "text-red-600" },
+    { label: "Pipeline Value", value: INR.format(data?.pipeline_value ?? 0), color: "text-purple-600" },
+    { label: "Health Score", value: `${healthScore}/100`, color: healthColor },
   ];
+
+  // Safe references to nested quadrant objects
+  const finance = data?.finance;
+  const hr = data?.hr;
+  const marketing = data?.marketing;
+  const ops = data?.ops;
 
   return (
     <div className="space-y-6">
@@ -172,10 +179,10 @@ export default function CEODashboard() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">CEO Dashboard</h2>
         <div className="flex items-center gap-2">
-          {data.stale && (
+          {data?.stale && (
             <Badge variant="warning">Data may be stale</Badge>
           )}
-          {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+          {data?.demo && <Badge variant="secondary">Demo Data</Badge>}
         </div>
       </div>
 
@@ -207,15 +214,15 @@ export default function CEODashboard() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Cash Runway</p>
-                <p className="text-lg font-bold">{data.finance.cash_runway_months} mo</p>
+                <p className="text-lg font-bold">{finance?.cash_runway_months ?? 0} mo</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">AR / AP</p>
-                <p className="text-lg font-bold">{lakhs(data.finance.ar_total)} / {lakhs(data.finance.ap_total)}</p>
+                <p className="text-lg font-bold">{lakhs(finance?.ar_total ?? 0)} / {lakhs(finance?.ap_total ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pending Invoices</p>
-                <p className="text-lg font-bold text-orange-600">{data.finance.pending_invoices}</p>
+                <p className="text-lg font-bold text-orange-600">{finance?.pending_invoices ?? 0}</p>
               </div>
             </div>
           </CardContent>
@@ -233,17 +240,17 @@ export default function CEODashboard() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Headcount</p>
-                <p className="text-lg font-bold">{formatNumber(data.hr.headcount)}</p>
+                <p className="text-lg font-bold">{formatNumber(hr?.headcount ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Attrition Rate</p>
-                <p className={`text-lg font-bold ${data.hr.attrition_rate > 15 ? "text-red-600" : "text-green-600"}`}>
-                  {data.hr.attrition_rate}%
+                <p className={`text-lg font-bold ${(hr?.attrition_rate ?? 0) > 15 ? "text-red-600" : "text-green-600"}`}>
+                  {hr?.attrition_rate ?? 0}%
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Open Positions</p>
-                <p className="text-lg font-bold text-purple-600">{data.hr.open_positions}</p>
+                <p className="text-lg font-bold text-purple-600">{hr?.open_positions ?? 0}</p>
               </div>
             </div>
           </CardContent>
@@ -261,15 +268,15 @@ export default function CEODashboard() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">MQLs</p>
-                <p className="text-lg font-bold">{formatNumber(data.marketing.mqls)}</p>
+                <p className="text-lg font-bold">{formatNumber(marketing?.mqls ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">CAC</p>
-                <p className="text-lg font-bold">{INR.format(data.marketing.cac)}</p>
+                <p className="text-lg font-bold">{INR.format(marketing?.cac ?? 0)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Campaign ROI</p>
-                <p className="text-lg font-bold text-emerald-600">{data.marketing.campaign_roi}x</p>
+                <p className="text-lg font-bold text-emerald-600">{marketing?.campaign_roi ?? 0}x</p>
               </div>
             </div>
           </CardContent>
@@ -287,19 +294,19 @@ export default function CEODashboard() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground">Ticket SLA</p>
-                <p className={`text-lg font-bold ${data.ops.ticket_sla_pct >= 90 ? "text-green-600" : "text-orange-600"}`}>
-                  {data.ops.ticket_sla_pct}%
+                <p className={`text-lg font-bold ${(ops?.ticket_sla_pct ?? 0) >= 90 ? "text-green-600" : "text-orange-600"}`}>
+                  {ops?.ticket_sla_pct ?? 0}%
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Incidents</p>
-                <p className={`text-lg font-bold ${data.ops.active_incidents > 0 ? "text-red-600" : "text-green-600"}`}>
-                  {data.ops.active_incidents}
+                <p className={`text-lg font-bold ${(ops?.active_incidents ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>
+                  {ops?.active_incidents ?? 0}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Vendor Spend MTD</p>
-                <p className="text-lg font-bold">{lakhs(data.ops.vendor_spend_mtd)}</p>
+                <p className="text-lg font-bold">{lakhs(ops?.vendor_spend_mtd ?? 0)}</p>
               </div>
             </div>
           </CardContent>
@@ -324,7 +331,7 @@ export default function CEODashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data.recent_escalations.map((e, idx) => (
+                {(data?.recent_escalations || []).map((e, idx) => (
                   <tr key={idx} className="border-b last:border-0">
                     <td className="py-2 pr-4 font-medium">{e.item}</td>
                     <td className="py-2 pr-4">{e.department}</td>
@@ -334,7 +341,7 @@ export default function CEODashboard() {
                       </Badge>
                     </td>
                     <td className="py-2 pr-4">{e.requested_by}</td>
-                    <td className="py-2 text-right">{e.age_hours}</td>
+                    <td className="py-2 text-right">{e.age_hours ?? 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -360,7 +367,7 @@ export default function CEODashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data.agent_actions.map((a, idx) => (
+                {(data?.agent_actions || []).map((a, idx) => (
                   <tr key={idx} className="border-b last:border-0">
                     <td className="py-2 pr-4 font-medium">{a.agent}</td>
                     <td className="py-2 pr-4">{a.action}</td>
@@ -368,12 +375,12 @@ export default function CEODashboard() {
                       <Badge variant="secondary">{a.domain}</Badge>
                     </td>
                     <td className="py-2 text-right text-muted-foreground">
-                      {new Date(a.timestamp).toLocaleString("en-IN", {
+                      {a.timestamp ? new Date(a.timestamp).toLocaleString("en-IN", {
                         day: "numeric",
                         month: "short",
                         hour: "2-digit",
                         minute: "2-digit",
-                      })}
+                      }) : "N/A"}
                     </td>
                   </tr>
                 ))}

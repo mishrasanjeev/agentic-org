@@ -190,16 +190,16 @@ export default function COODashboard() {
     );
   }
 
-  // Severity chart data
-  const severityData = Object.entries(data.severity_breakdown).map(([sev, count]) => ({
+  // Severity chart data — guard against undefined severity_breakdown
+  const severityData = Object.entries(data?.severity_breakdown || {}).map(([sev, count]) => ({
     severity: sev,
-    count,
+    count: count ?? 0,
   }));
 
-  // Vendor spend pie data
-  const vendorSpendData = data.vendor_spend_by_category.map((v) => ({
+  // Vendor spend pie data — guard against undefined array
+  const vendorSpendData = (data?.vendor_spend_by_category || []).map((v) => ({
     name: v.category,
-    value: v.spend,
+    value: v.spend ?? 0,
   }));
 
   return (
@@ -210,10 +210,10 @@ export default function COODashboard() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">COO Dashboard</h2>
         <div className="flex items-center gap-2">
-          {data.stale && (
+          {data?.stale && (
             <Badge variant="warning">Data may be stale</Badge>
           )}
-          {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+          {data?.demo && <Badge variant="secondary">Demo Data</Badge>}
         </div>
       </div>
 
@@ -236,10 +236,10 @@ export default function COODashboard() {
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Active Incidents", value: formatNumber(data.active_incidents), color: "text-red-600" },
-              { label: "MTTR (hours)", value: `${data.mttr_hours}h`, color: "text-orange-600" },
-              { label: "Uptime %", value: `${data.uptime_pct}%`, color: "text-emerald-600" },
-              { label: "Change Success Rate", value: `${data.change_success_rate}%`, color: "text-blue-600" },
+              { label: "Active Incidents", value: formatNumber(data?.active_incidents ?? 0), color: "text-red-600" },
+              { label: "MTTR (hours)", value: `${data?.mttr_hours ?? 0}h`, color: "text-orange-600" },
+              { label: "Uptime %", value: `${data?.uptime_pct ?? 0}%`, color: "text-emerald-600" },
+              { label: "Change Success Rate", value: `${data?.change_success_rate ?? 0}%`, color: "text-blue-600" },
             ].map((m) => (
               <Card key={m.label}>
                 <CardHeader>
@@ -290,7 +290,7 @@ export default function COODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.recent_incidents.map((inc, idx) => (
+                    {(data?.recent_incidents || []).map((inc, idx) => (
                       <tr key={idx} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{inc.title}</td>
                         <td className="py-2 pr-4">
@@ -300,7 +300,7 @@ export default function COODashboard() {
                           <Badge variant={statusBadge[inc.status] || "default"}>{inc.status}</Badge>
                         </td>
                         <td className="py-2 pr-4">{inc.assignee}</td>
-                        <td className="py-2 text-right">{inc.duration_hours}</td>
+                        <td className="py-2 text-right">{inc.duration_hours ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -316,10 +316,10 @@ export default function COODashboard() {
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Open Tickets", value: formatNumber(data.open_tickets), color: "text-orange-600" },
-              { label: "Resolved Today", value: formatNumber(data.resolved_today), color: "text-emerald-600" },
-              { label: "CSAT Score", value: `${data.csat_score}%`, color: "text-blue-600" },
-              { label: "Deflection Rate", value: `${data.deflection_rate}%`, color: "text-purple-600" },
+              { label: "Open Tickets", value: formatNumber(data?.open_tickets ?? 0), color: "text-orange-600" },
+              { label: "Resolved Today", value: formatNumber(data?.resolved_today ?? 0), color: "text-emerald-600" },
+              { label: "CSAT Score", value: `${data?.csat_score ?? 0}%`, color: "text-blue-600" },
+              { label: "Deflection Rate", value: `${data?.deflection_rate ?? 0}%`, color: "text-purple-600" },
             ].map((m) => (
               <Card key={m.label}>
                 <CardHeader>
@@ -338,7 +338,7 @@ export default function COODashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={data.ticket_volume_trend}>
+                <LineChart data={data?.ticket_volume_trend || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} />
                   <YAxis tick={{ fontSize: 11 }} />
@@ -357,11 +357,11 @@ export default function COODashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {data.sla_compliance.map((s) => (
+                  {(data?.sla_compliance || []).map((s) => (
                     <div key={s.priority} className="flex items-center justify-between p-3 rounded border">
                       <p className="text-sm font-medium">{s.priority}</p>
-                      <span className={`text-sm font-bold ${s.compliance_pct >= 90 ? "text-green-600" : s.compliance_pct >= 70 ? "text-yellow-600" : "text-red-600"}`}>
-                        {s.compliance_pct}%
+                      <span className={`text-sm font-bold ${(s.compliance_pct ?? 0) >= 90 ? "text-green-600" : (s.compliance_pct ?? 0) >= 70 ? "text-yellow-600" : "text-red-600"}`}>
+                        {s.compliance_pct ?? 0}%
                       </span>
                     </div>
                   ))}
@@ -375,7 +375,7 @@ export default function COODashboard() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={data.top_ticket_categories} layout="vertical">
+                  <BarChart data={data?.top_ticket_categories || []} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="category" tick={{ fontSize: 11 }} width={120} />
@@ -398,7 +398,7 @@ export default function COODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Active Vendors</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-blue-600">{formatNumber(data.active_vendors)}</p>
+                <p className="text-2xl font-bold text-blue-600">{formatNumber(data?.active_vendors ?? 0)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -406,8 +406,8 @@ export default function COODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Contracts Expiring in 30 Days</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${data.contracts_expiring_30d > 0 ? "text-orange-600" : "text-green-600"}`}>
-                  {data.contracts_expiring_30d}
+                <p className={`text-2xl font-bold ${(data?.contracts_expiring_30d ?? 0) > 0 ? "text-orange-600" : "text-green-600"}`}>
+                  {data?.contracts_expiring_30d ?? 0}
                 </p>
               </CardContent>
             </Card>
@@ -457,18 +457,18 @@ export default function COODashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.vendor_scorecard.map((v) => (
+                    {(data?.vendor_scorecard || []).map((v) => (
                       <tr key={v.name} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{v.name}</td>
                         <td className="py-2 pr-4">{v.category}</td>
                         <td className="py-2 pr-4 text-right">
-                          <span className={v.sla_pct >= 95 ? "text-green-600" : "text-orange-600"}>
-                            {v.sla_pct}%
+                          <span className={(v.sla_pct ?? 0) >= 95 ? "text-green-600" : "text-orange-600"}>
+                            {v.sla_pct ?? 0}%
                           </span>
                         </td>
-                        <td className="py-2 pr-4 text-right">{INR.format(v.spend)}</td>
+                        <td className="py-2 pr-4 text-right">{INR.format(v.spend ?? 0)}</td>
                         <td className="py-2 text-right">
-                          {new Date(v.contract_end).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          {v.contract_end ? new Date(v.contract_end).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                         </td>
                       </tr>
                     ))}
@@ -489,8 +489,8 @@ export default function COODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Open Maintenance Requests</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${data.open_maintenance_requests > 0 ? "text-orange-600" : "text-green-600"}`}>
-                  {data.open_maintenance_requests}
+                <p className={`text-2xl font-bold ${(data?.open_maintenance_requests ?? 0) > 0 ? "text-orange-600" : "text-green-600"}`}>
+                  {data?.open_maintenance_requests ?? 0}
                 </p>
               </CardContent>
             </Card>
@@ -499,7 +499,7 @@ export default function COODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Asset Utilization %</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-blue-600">{data.asset_utilization_pct}%</p>
+                <p className="text-2xl font-bold text-blue-600">{data?.asset_utilization_pct ?? 0}%</p>
               </CardContent>
             </Card>
             <Card>
@@ -507,7 +507,7 @@ export default function COODashboard() {
                 <CardTitle className="text-sm text-muted-foreground">Travel Expense MTD</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold text-purple-600">{INR.format(data.travel_expense_mtd)}</p>
+                <p className="text-2xl font-bold text-purple-600">{INR.format(data?.travel_expense_mtd ?? 0)}</p>
               </CardContent>
             </Card>
           </div>
@@ -518,12 +518,12 @@ export default function COODashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {data.upcoming_maintenance.map((m, idx) => (
+                {(data?.upcoming_maintenance || []).map((m, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 rounded border">
                     <div>
                       <p className="text-sm font-medium">{m.item}</p>
                       <p className="text-xs text-muted-foreground">
-                        Scheduled: {new Date(m.scheduled_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        Scheduled: {m.scheduled_date ? new Date(m.scheduled_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                       </p>
                     </div>
                     <Badge variant={statusBadge[m.status] || "default"}>{m.status}</Badge>
