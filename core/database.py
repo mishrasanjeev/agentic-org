@@ -114,7 +114,7 @@ async def init_db() -> None:
                         ALTER TABLE {_tbl} ADD COLUMN company_id UUID;
                     END IF;
                 END $$;
-            """))  # noqa: S608
+            """))  # noqa: S608  # nosec B608
 
         # v4.1.0: Ensure the companies table exists (CA multi-company model).
         await conn.execute(text("""
@@ -171,7 +171,7 @@ async def init_db() -> None:
                         ALTER TABLE companies ADD COLUMN {_col} {_type};
                     END IF;
                 END $$;
-            """))  # noqa: S608
+            """))  # noqa: S608  # nosec B608
 
         # v4.2.0: Ensure ca_subscriptions table exists.
         await conn.execute(text("""
