@@ -6,6 +6,7 @@
  * empty query prevention, and dropdown behavior.
  */
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import _userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
@@ -50,7 +51,7 @@ const MOCK_FINANCE_RESPONSE = {
 // ---------------------------------------------------------------------------
 
 function renderNLQuery(props: { onOpenChat?: () => void } = {}) {
-  return render(<NLQueryBar {...props} />);
+  return render(<MemoryRouter><NLQueryBar {...props} /></MemoryRouter>);
 }
 
 // ---------------------------------------------------------------------------
