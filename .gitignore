@@ -97,3 +97,9 @@ test-results/
 # Temp build files
 cloudbuild-ui.yaml
 mcp-server/.mcpregistry_*
+
+# Sales / marketing decks (confidential)
+docs/*Sales*
+docs/*sales*
+docs/*.pptx
+scripts/gen_sales_deck.py
