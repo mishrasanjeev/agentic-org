@@ -9,6 +9,7 @@ Each connector tool becomes a LangChain @tool function that:
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -35,7 +36,8 @@ async def _execute_connector_tool(
     if not connector_cls:
         return {"error": f"Connector '{connector_name}' not found in registry"}
 
-    cache_key = f"{connector_name}:{id(config)}"
+    config_fingerprint = json.dumps(config or {}, sort_keys=True)
+    cache_key = f"{connector_name}:{config_fingerprint}"
     if cache_key not in _connector_cache:
         instance = connector_cls(config or {})
         try:
@@ -86,7 +88,7 @@ def build_tools_for_agent(
     seen: set[str] = set()
 
     # Build a reverse index: tool_name -> (connector_name, handler_doc)
-    tool_index = _build_tool_index()
+    tool_index = _build_tool_index(connector_config)
 
     for tool_ref in authorized_tools:
         if tool_ref in seen:
@@ -117,7 +119,9 @@ def build_tools_for_agent(
     return tools
 
 
-def _build_tool_index() -> dict[str, tuple[str, str]]:
+def _build_tool_index(
+    connector_config: dict[str, Any] | None = None,
+) -> dict[str, tuple[str, str]]:
     """Build a reverse index: tool_name -> (connector_name, description).
 
     Scans all registered native connectors and their tool registries,
@@ -138,7 +142,7 @@ def _build_tool_index() -> dict[str, tuple[str, str]]:
 
         # Instantiate just to read the tool registry
         instance = connector_cls.__new__(connector_cls)
-        instance.config = {}
+        instance.config = connector_config or {}
         instance._tool_registry = {}
         try:
             instance._register_tools()

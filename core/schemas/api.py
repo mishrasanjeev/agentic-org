@@ -75,7 +75,7 @@ class AgentCreate(BaseModel):
 
 
 class AgentUpdate(BaseModel):
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "ignore"}
 
     name: str | None = None
     system_prompt: str | None = None

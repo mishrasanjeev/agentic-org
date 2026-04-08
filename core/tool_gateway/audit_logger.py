@@ -42,9 +42,21 @@ class AuditLogger:
         actor_type: str = "agent",
         actor_id: str | None = None,
         trace_id: str | None = None,
+        enforcement_action: str | None = None,
     ) -> None:
         """Write an audit log entry. Never update or delete."""
         from core.tool_gateway.pii_masker import mask_pii
+
+        now = datetime.now(UTC)
+        enriched_details = dict(details or {})
+
+        # Include enforcement action details (scope denied, rate limited)
+        if enforcement_action:
+            enriched_details["enforcement_action"] = enforcement_action
+            enriched_details["enforcement_at"] = now.isoformat()
+
+        # Always include timestamp for freshness filtering
+        enriched_details["logged_at"] = now.isoformat()
 
         entry = {
             "id": str(uuid.uuid4()),
@@ -58,9 +70,9 @@ class AuditLogger:
             "resource_id": resource_id or tool_name,
             "action": action,
             "outcome": outcome,
-            "details": mask_pii(details or {}),
+            "details": mask_pii(enriched_details),
             "trace_id": trace_id or "",
-            "created_at": datetime.now(UTC).isoformat(),
+            "created_at": now.isoformat(),
         }
         entry["signature"] = self._sign(entry)
 

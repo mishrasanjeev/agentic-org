@@ -220,14 +220,14 @@ describe("NLQueryBar", () => {
 
   // ── Debounce Behavior ──────────────────────────────────────────────────
 
-  it("debounces typing before making API call", async () => {
+  it("does not auto-fire API on typing (requires explicit submit)", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
 
     renderNLQuery();
 
     const input = screen.getByPlaceholderText(/Ask anything/i);
 
-    // Type more than 2 characters to trigger debounce
+    // Type more than 2 characters
     await act(async () => {
       fireEvent.change(input, { target: { value: "cash" } });
     });
@@ -235,14 +235,13 @@ describe("NLQueryBar", () => {
     // API should not be called immediately
     expect(mockPost).not.toHaveBeenCalled();
 
-    // Advance past debounce timer (300ms)
+    // Advance past any debounce timer
     await act(async () => {
-      vi.advanceTimersByTime(350);
+      vi.advanceTimersByTime(500);
     });
 
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalled();
-    });
+    // API should STILL not be called — requires explicit submit (BUG #18 fix)
+    expect(mockPost).not.toHaveBeenCalled();
   });
 
   it("does not trigger debounce for queries with 2 or fewer characters", async () => {

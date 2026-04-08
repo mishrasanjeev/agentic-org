@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json as _json
 import re
 import uuid as _uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -12,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS, _DOMAIN_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.models.agent import Agent
 
@@ -80,10 +83,11 @@ def _classify_domain(query: str) -> str:
 
 async def _find_agent_for_domain(
     domain: str, tenant_id: str,
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, str | None, list[str]]:
     """Find the best active agent for a domain from the DB.
 
-    Returns (agent_display_name, agent_id_str) or falls back to a default.
+    Returns (agent_display_name, agent_id_str, agent_type, authorized_tools)
+    or falls back to a default.
     """
     db_domain = _DOMAIN_TO_DB_DOMAIN.get(domain, domain)
     try:
@@ -102,7 +106,13 @@ async def _find_agent_for_domain(
             agent = result.scalar_one_or_none()
             if agent:
                 display = agent.employee_name or agent.name
-                return display, str(agent.id)
+                tools = agent.authorized_tools or []
+                if not tools:
+                    tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
+                        agent.agent_type,
+                        _DOMAIN_DEFAULT_TOOLS.get(db_domain, []),
+                    )
+                return display, str(agent.id), agent.agent_type, tools
     except Exception:
         _log.warning("chat_agent_lookup_failed", domain=domain)
 
@@ -115,14 +125,55 @@ async def _find_agent_for_domain(
         "sales": "Sales Agent (Meera)",
         "communications": "Comms Agent (Arjun)",
     }
-    return fallback_agents.get(domain, "General Assistant"), None
+    fallback_name = fallback_agents.get(domain, "General Assistant")
+    fallback_tools = _DOMAIN_DEFAULT_TOOLS.get(db_domain, [])
+    return fallback_name, None, None, fallback_tools
 
 
 # ---------------------------------------------------------------------------
-# In-memory session history (MVP — replaced by Redis/DB in prod)
+# Session history — Redis-backed with in-memory fallback
 # ---------------------------------------------------------------------------
 
 _sessions: dict[str, list[dict]] = {}
+_SESSION_TTL_SECONDS = 86400  # 24 hours
+
+_redis_client: Any = None
+
+try:
+    import redis.asyncio as _aioredis
+
+    _redis_url = __import__("os").environ.get("REDIS_URL", "redis://localhost:6379/0")
+    _redis_client = _aioredis.from_url(_redis_url, decode_responses=True)
+except Exception:
+    _log.info("chat_redis_unavailable_using_memory_fallback")
+
+
+async def _load_session(key: str) -> list[dict]:
+    """Load session history from Redis, falling back to in-memory dict."""
+    if _redis_client is not None:
+        try:
+            raw = await _redis_client.get(f"chat:session:{key}")
+            if raw:
+                return _json.loads(raw)
+            return []
+        except Exception:
+            _log.debug("chat_redis_load_fallback", key=key)
+    return _sessions.get(key, [])
+
+
+async def _save_session(key: str, entries: list[dict]) -> None:
+    """Persist session history to Redis, falling back to in-memory dict."""
+    if _redis_client is not None:
+        try:
+            await _redis_client.set(
+                f"chat:session:{key}",
+                _json.dumps(entries, default=str),
+                ex=_SESSION_TTL_SECONDS,
+            )
+            return
+        except Exception:
+            _log.debug("chat_redis_save_fallback", key=key)
+    _sessions[key] = entries
 
 # ---------------------------------------------------------------------------
 # Schemas
@@ -164,8 +215,25 @@ async def chat_query(
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
     domain = _classify_domain(body.query)
-    agent_name, agent_id = await _find_agent_for_domain(domain, tenant_id)
-    confidence = 0.92 if domain != "general" else 0.65
+    agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
+        domain, tenant_id,
+    )
+    # Default confidence based on whether we matched a domain at all
+    tools_used = False
+    confidence = 0.6 if domain == "general" else 0.85
+
+    # Build connector config from request state or default to empty dict (BUG #20)
+    connector_config: dict[str, Any] = {}
+    if hasattr(request.state, "connector_config") and request.state.connector_config:
+        connector_config = request.state.connector_config
+
+    # Resolve agent_type: prefer DB value, fall back to domain keyword (BUG #3)
+    resolved_agent_type = agent_type or domain
+
+    # Resolve authorized_tools: prefer agent's tools from DB lookup (BUG #2)
+    resolved_tools = agent_tools or _AGENT_TYPE_DEFAULT_TOOLS.get(
+        resolved_agent_type, _DOMAIN_DEFAULT_TOOLS.get(domain, [])
+    )
 
     # Try to execute via LangGraph if an agent was found in DB
     answer: str | None = None
@@ -176,26 +244,34 @@ async def chat_query(
             grant_token = getattr(request.state, "grant_token", None)
             lg_result = await langgraph_run(
                 agent_id=agent_id,
-                agent_type=domain,
+                agent_type=resolved_agent_type,
                 domain=_DOMAIN_TO_DB_DOMAIN.get(domain, domain),
                 tenant_id=tenant_id,
                 system_prompt=(
                     f"You are {agent_name}, a domain expert for {domain}. "
                     f"Answer the user's question concisely and helpfully."
                 ),
-                authorized_tools=[],
+                authorized_tools=resolved_tools,
                 task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
                 llm_model="",
                 confidence_floor=0.88,
                 grant_token=grant_token,
-                connector_config=None,
+                connector_config=connector_config,
             )
             if lg_result.get("status") == "completed" and lg_result.get("output"):
                 output = lg_result["output"]
                 answer = output.get("answer") or output.get("response") or str(output)
-                confidence = lg_result.get("confidence", confidence)
+                # Extract real confidence from LLM response if available (BUG #21)
+                confidence = lg_result.get("confidence", 0.85 if resolved_tools else 0.6)
+                tools_used = bool(lg_result.get("tools_called"))
         except Exception:
             _log.warning("chat_langgraph_fallback", domain=domain, agent_id=agent_id)
+
+    # Adjust confidence based on tool execution success (BUG #21)
+    if answer and tools_used:
+        confidence = max(confidence, 0.85)
+    elif answer and not tools_used:
+        confidence = min(confidence, 0.6)
 
     # Fallback: generate a contextual response based on domain
     if not answer:
@@ -205,16 +281,16 @@ async def chat_query(
             f"get back to you with specific details. What aspect would you "
             f"like me to focus on?"
         )
+        confidence = 0.6 if domain == "general" else 0.7
 
-    # Store in session history
+    # Store in session history (Redis-backed, BUG #22)
     session_key = f"{tenant_id}:{body.company_id}"
-    if session_key not in _sessions:
-        _sessions[session_key] = []
+    entries = await _load_session(session_key)
     now = datetime.now(UTC).isoformat()
-    _sessions[session_key].append(
+    entries.append(
         {"id": str(_uuid.uuid4()), "role": "user", "text": body.query, "timestamp": now}
     )
-    _sessions[session_key].append(
+    entries.append(
         {
             "id": str(_uuid.uuid4()),
             "role": "agent",
@@ -225,6 +301,7 @@ async def chat_query(
             "timestamp": now,
         }
     )
+    await _save_session(session_key, entries)
 
     return ChatQueryResponse(
         answer=answer,
@@ -239,7 +316,7 @@ async def chat_history(
     company_id: str = "",
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Return in-memory chat history for the current session."""
+    """Return chat history for the current session (Redis-backed)."""
     session_key = f"{tenant_id}:{company_id}"
-    entries = _sessions.get(session_key, [])
+    entries = await _load_session(session_key)
     return [ChatMessage(**e) for e in entries]

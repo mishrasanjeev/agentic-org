@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,15 @@ import {
   ResponsiveContainer, CartesianGrid, Cell,
 } from "recharts";
 
+const ChatPanel = lazy(() => import("@/components/ChatPanel"));
+
 export default function AgentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes" | "learning" | "voice">("overview");
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     if (id) fetchAgent();
@@ -91,6 +94,19 @@ export default function AgentDetail() {
       navigate("/dashboard/agents");
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Delete failed");
+      setActionLoading(null);
+    }
+  }
+
+  async function handleRun() {
+    setActionLoading("run");
+    setActionError(null);
+    try {
+      await api.post(`/agents/${id}/run`);
+      alert("Agent run started successfully.");
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || "Run failed");
+    } finally {
       setActionLoading(null);
     }
   }
@@ -182,6 +198,21 @@ export default function AgentDetail() {
                 {actionLoading === "delete" ? "Deleting..." : "Delete Agent"}
               </Button>
             )}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleRun}
+              disabled={actionLoading !== null}
+            >
+              {actionLoading === "run" ? "Running..." : "Run Agent"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setChatOpen(true)}
+            >
+              Chat with Agent
+            </Button>
           </div>
           {actionError && <p className="text-xs text-destructive">{actionError}</p>}
         </div>
@@ -216,6 +247,16 @@ export default function AgentDetail() {
       {activeTab === "scopes" && <ScopesTab agent={agent} />}
       {activeTab === "learning" && <LearningTab agent={agent} />}
       {activeTab === "voice" && <VoiceTab agent={agent} />}
+
+      <Suspense fallback={null}>
+        {chatOpen && (
+          <ChatPanel
+            open={chatOpen}
+            onClose={() => setChatOpen(false)}
+            agentId={id}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

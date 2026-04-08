@@ -422,10 +422,10 @@ class CostLedger:
             return
 
         records = self._buffer.copy()
-        self._buffer.clear()
         self._last_flush = time.monotonic()
 
         if self._db_session_factory is None:
+            self._buffer.clear()
             logger.debug("cost_flush_skipped_no_db", count=len(records))
             return
 
@@ -450,11 +450,12 @@ class CostLedger:
                         },
                     )
                 await session.commit()
+                # Clear buffer ONLY after successful commit (BUG #11)
+                self._buffer.clear()
                 logger.info("cost_flush_complete", count=len(records))
         except Exception as exc:
             logger.error("cost_flush_failed", error=str(exc), count=len(records))
-            # Re-queue records that failed to flush
-            self._buffer.extend(records)
+            # Records remain in self._buffer for retry since we didn't clear
 
     async def _emit_budget_exceeded_event(
         self,

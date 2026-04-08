@@ -112,9 +112,15 @@ async def call_tool(
     if agent_type not in _AGENT_TYPE_DEFAULT_TOOLS:
         raise HTTPException(400, f"Unknown agent type: {agent_type}")
 
-    # Load agent prompt
+    # Load agent prompt and validate tools exist
     system_prompt = _load_agent_prompt(agent_type)
     tools = _AGENT_TYPE_DEFAULT_TOOLS[agent_type]
+    if not tools:
+        raise HTTPException(
+            400,
+            f"No tools configured for agent type '{agent_type}'. "
+            "Check _AGENT_TYPE_DEFAULT_TOOLS configuration.",
+        )
     grant_token = getattr(request.state, "grant_token", "")
 
     # Build connector config from request context if available

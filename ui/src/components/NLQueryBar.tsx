@@ -119,7 +119,13 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
         setResult(res.data);
         setDropdownOpen(true);
       } catch {
-        setResult(null);
+        setResult({
+          answer: "Search unavailable. Please try again later.",
+          agent: "System",
+          confidence: 0,
+          domain: "",
+        });
+        setDropdownOpen(true);
       } finally {
         setLoading(false);
       }
@@ -134,14 +140,11 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
     // Debounce: clear previous timer
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    if (value.trim().length > 2) {
-      debounceRef.current = setTimeout(() => {
-        submitQuery(value);
-      }, 300);
-    } else {
+    if (value.trim().length <= 2) {
       setDropdownOpen(false);
       setResult(null);
     }
+    // Do NOT auto-submit on debounce — API is only called on Enter or button click
   };
 
   const handleSubmit = (e: React.FormEvent) => {

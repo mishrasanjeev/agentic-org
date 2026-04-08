@@ -57,6 +57,7 @@ class Agent(BaseModel):
     max_retries: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=3)
     retry_backoff: Mapped[str] = mapped_column(String(20), nullable=False, default="exponential")
     authorized_tools: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    connector_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
     output_schema: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="shadow")
     version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")

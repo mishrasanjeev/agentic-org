@@ -613,7 +613,7 @@ async def delegate_to_agent(
             parent_grant_token=body.get("parent_grant_token", ""),
             child_grantex_agent_id=child_grantex["grantex_agent_id"],
             child_scopes=child_scopes,
-            expires_in=body.get("expires_in", "8h"),
+            expires_in=body.get("expires_in", 28800),
         )
         return {
             "status": "delegated",

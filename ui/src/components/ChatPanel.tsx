@@ -21,9 +21,11 @@ interface ChatQueryResponse {
 export default function ChatPanel({
   open,
   onClose,
+  agentId,
 }: {
   open: boolean;
   onClose: () => void;
+  agentId?: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -39,6 +41,27 @@ export default function ChatPanel({
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Load chat history on open
+  useEffect(() => {
+    if (!open) return;
+    const params = agentId ? `?agent_id=${agentId}` : "";
+    api.get(`/chat/history${params}`).then(({ data }) => {
+      const items: any[] = Array.isArray(data) ? data : data?.messages || [];
+      const loaded: Message[] = items.map((m: any) => ({
+        id: m.id || crypto.randomUUID(),
+        role: m.role === "user" ? "user" : "agent",
+        text: m.text || m.content || "",
+        agent: m.agent,
+        confidence: m.confidence,
+        domain: m.domain,
+        timestamp: new Date(m.timestamp || m.created_at || Date.now()),
+      }));
+      if (loaded.length > 0) setMessages(loaded);
+    }).catch(() => {
+      // history endpoint unavailable — start fresh
+    });
+  }, [open, agentId]);
 
   // Focus input when panel opens
   useEffect(() => {
@@ -66,6 +89,7 @@ export default function ChatPanel({
       const res = await api.post<ChatQueryResponse>("/chat/query", {
         query: text,
         company_id: companyId,
+        agent_id: agentId,
       });
       const agentMsg: Message = {
         id: crypto.randomUUID(),
@@ -116,7 +140,9 @@ export default function ChatPanel({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-          <h2 className="text-sm font-semibold text-slate-200">Agent Chat</h2>
+          <h2 className="text-sm font-semibold text-slate-200">
+            {agentId ? `Chat with Agent ${agentId}` : "Agent Chat"}
+          </h2>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
