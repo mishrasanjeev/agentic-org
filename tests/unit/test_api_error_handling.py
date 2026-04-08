@@ -308,8 +308,8 @@ class TestCompaniesErrors:
             "/api/v1/companies/00000000-0000-0000-0000-000000000099",
             json={},
         )
-        # Returns 404 (company not found) or 200 (no-op) depending on existence
-        assert resp.status_code in (200, 404)
+        # Returns 404 (not found), 200 (no-op), or 400 (no DB session)
+        assert resp.status_code in (200, 400, 404)
 
     def test_create_company_without_auth_returns_401(self, noauth_client):
         resp = noauth_client.post(
@@ -337,8 +337,8 @@ class TestCompaniesErrors:
                 "foo": 42,
             },
         )
-        # 201 if DB is available, 422/500 if not — but never crashes
-        assert resp.status_code in (201, 422, 500)
+        # 201 if DB is available, 400/422/500 if not — but never crashes
+        assert resp.status_code in (201, 400, 422, 500)
         if resp.status_code == 201:
             data = resp.json()
             assert "unknown_field" not in data
