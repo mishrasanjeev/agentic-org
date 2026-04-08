@@ -1206,6 +1206,96 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* 11c. BUILT FOR EVERY C-SUITE EXECUTIVE                        */}
+      {/* ============================================================ */}
+      <section className="py-24 bg-white scroll-mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
+                One Platform, Every Function
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
+                Built for Every C-Suite Executive
+              </h2>
+              <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
+                Dedicated AI agent teams for every function. Each CxO gets a purpose-built solution with role-specific dashboards, KPIs, and automation workflows.
+              </p>
+            </div>
+          </FadeIn>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+            {[
+              {
+                role: "CFO",
+                title: "Virtual Finance Team",
+                description: "AP/AR automation, bank reconciliation, tax compliance, and month-end close in 4 hours.",
+                gradient: "from-emerald-500 to-teal-600",
+                icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+                link: "/solutions/cfo",
+              },
+              {
+                role: "CHRO",
+                title: "Virtual HR Team",
+                description: "Screen 500 resumes/hr, day-1 onboarding, zero-error payroll, and EPFO/ESI compliance.",
+                gradient: "from-violet-500 to-purple-600",
+                icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
+                link: "/solutions/chro",
+              },
+              {
+                role: "CMO",
+                title: "Virtual Marketing Team",
+                description: "3.2x ROAS, 42% lower CAC, AI content factory, and multi-channel campaign automation.",
+                gradient: "from-pink-500 to-rose-600",
+                icon: "M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z",
+                link: "/solutions/cmo",
+              },
+              {
+                role: "COO",
+                title: "Virtual Operations Team",
+                description: "88% auto-triage, MTTR from 4hr to 15min, vendor SLA monitoring, and compliance guard.",
+                gradient: "from-cyan-500 to-blue-600",
+                icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
+                link: "/solutions/coo",
+              },
+              {
+                role: "CBO",
+                title: "Virtual Business Ops Team",
+                description: "Contract review in 2 days, continuous compliance, fraud detection, and data governance.",
+                gradient: "from-amber-500 to-orange-600",
+                icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
+                link: "/solutions/cbo",
+              },
+            ].map((card, i) => (
+              <FadeIn key={card.role} delay={i * 100}>
+                <Link
+                  to={card.link}
+                  className="group block bg-gradient-to-br from-slate-50 to-white rounded-2xl p-6 border border-slate-200 hover:shadow-xl hover:border-slate-300 transition-all duration-300 h-full"
+                >
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${card.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
+                    </svg>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 rounded-full px-3 py-1 text-xs font-semibold mb-3">
+                    For {card.role}s
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 mb-2">{card.title}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed mb-4">{card.description}</p>
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 group-hover:gap-2 transition-all">
+                    Learn More
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </Link>
+              </FadeIn>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
       {/* 12. DEVELOPERS / SDK                                          */}
       {/* ============================================================ */}
       <section id="developers" className="py-24 bg-slate-900 scroll-mt-16">

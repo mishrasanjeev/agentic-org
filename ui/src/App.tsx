@@ -102,6 +102,13 @@ const ResourcePage = lazyRetry(() => import("./pages/resources/ResourcePage"));
 /* ── Explainer pages ── */
 const HowGrantexWorks = lazyRetry(() => import("./pages/HowGrantexWorks"));
 
+/* ── CxO Solution pages ── */
+const CFOSolution = lazyRetry(() => import("./pages/CFOSolution"));
+const CHROSolution = lazyRetry(() => import("./pages/CHROSolution"));
+const CMOSolution = lazyRetry(() => import("./pages/CMOSolution"));
+const COOSolution = lazyRetry(() => import("./pages/COOSolution"));
+const CBOSolution = lazyRetry(() => import("./pages/CBOSolution"));
+
 /* ── CA Firms / Company pages ── */
 const CAFirmsSolution = lazyRetry(() => import("./pages/CAFirmsSolution"));
 const CompanyDashboard = lazyRetry(() => import("./pages/CompanyDashboard"));
@@ -155,6 +162,13 @@ export default function App() {
 
       {/* CA Firms Solution */}
       <Route path="/solutions/ca-firms" element={<CAFirmsSolution />} />
+
+      {/* CxO Solution Pages */}
+      <Route path="/solutions/cfo" element={<CFOSolution />} />
+      <Route path="/solutions/chro" element={<CHROSolution />} />
+      <Route path="/solutions/cmo" element={<CMOSolution />} />
+      <Route path="/solutions/coo" element={<COOSolution />} />
+      <Route path="/solutions/cbo" element={<CBOSolution />} />
 
       {/* Google Ads landing pages */}
       <Route path="/solutions/ai-invoice-processing" element={<AdsLanding />} />
