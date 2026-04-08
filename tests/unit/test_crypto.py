@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ============================================================================
 # Basic encrypt / decrypt round-trip
 # ============================================================================
@@ -148,9 +147,9 @@ class TestVerifyCredential:
         assert verify_credential("") is False
 
     def test_verify_random_base64_returns_false(self):
-        from core.crypto import verify_credential
-
         import base64
+
+        from core.crypto import verify_credential
         garbage = base64.urlsafe_b64encode(b"random-garbage-data").decode()
         assert verify_credential(garbage) is False
 

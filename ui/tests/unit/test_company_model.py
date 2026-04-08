@@ -1,6 +1,8 @@
 """Tests for Company model and validation."""
 from __future__ import annotations
+
 import re
+
 import pytest
 
 GSTIN_RE = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
@@ -69,7 +71,8 @@ class TestTAN:
 class TestRoles:
     def test_five_roles(self):
         from api.v1.companies import CompanyRole
-        assert {r.value for r in CompanyRole} == {"partner", "manager", "senior_associate", "associate", "audit_reviewer"}
+        expected = {"partner", "manager", "senior_associate", "associate", "audit_reviewer"}
+        assert {r.value for r in CompanyRole} == expected
 
 class TestDefaults:
     def test_gst_auto_file(self):

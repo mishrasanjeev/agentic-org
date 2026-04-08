@@ -1,5 +1,6 @@
 """Regression tests for CA features."""
 from __future__ import annotations
+
 import inspect
 import re
 
@@ -49,4 +50,5 @@ class TestGSTDefault:
 class TestRoles:
     def test_all_five(self):
         from api.v1.companies import CompanyRole
-        assert {r.value for r in CompanyRole} == {"partner", "manager", "senior_associate", "associate", "audit_reviewer"}
+        expected = {"partner", "manager", "senior_associate", "associate", "audit_reviewer"}
+        assert {r.value for r in CompanyRole} == expected

@@ -15,10 +15,7 @@ Tests cover:
 from __future__ import annotations
 
 import inspect
-from datetime import date, timedelta
-
-import pytest
-
+from datetime import date
 
 # ============================================================================
 # Alert Logic — source inspection of send_alerts_for_due_deadlines

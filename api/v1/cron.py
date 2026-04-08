@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, Header, HTTPException
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

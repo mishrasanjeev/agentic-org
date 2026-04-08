@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC
 
 import bcrypt as _bcrypt
 from sqlalchemy import select
@@ -297,7 +298,7 @@ async def seed_ca_demo(session: AsyncSession, tenant_id: uuid.UUID | None = None
         ).limit(1)
     )
     if not existing_sub.scalar_one_or_none():
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         sub = CASubscription(
             tenant_id=tenant_id,
@@ -306,7 +307,7 @@ async def seed_ca_demo(session: AsyncSession, tenant_id: uuid.UUID | None = None
             max_clients=7,
             price_inr=4999,
             price_usd=59,
-            trial_ends_at=datetime.now(timezone.utc) + timedelta(days=14),
+            trial_ends_at=datetime.now(UTC) + timedelta(days=14),
         )
         session.add(sub)
         await session.flush()

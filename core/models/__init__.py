@@ -16,10 +16,10 @@ from core.models.ca_subscription import CASubscription as CASubscription
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
+from core.models.document import Document as Document
 from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.gstn_credential import GSTNCredential as GSTNCredential
 from core.models.gstn_upload import GSTNUpload as GSTNUpload
-from core.models.document import Document as Document
 from core.models.hitl import HITLQueue as HITLQueue
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline

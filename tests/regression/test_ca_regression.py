@@ -183,7 +183,6 @@ class TestCompanyHealthScoreRange:
 
         col = Company.__table__.c.client_health_score
         # Verify it's a numeric column
-        from sqlalchemy import Integer
 
         # The column type should be Integer (mapped_column without explicit type defaults to Integer)
         assert col is not None

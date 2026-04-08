@@ -1,6 +1,8 @@
 """Tests for CA workflow YAML definitions."""
 from __future__ import annotations
+
 from pathlib import Path
+
 import yaml
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "workflows" / "examples"

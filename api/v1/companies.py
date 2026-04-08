@@ -597,9 +597,9 @@ async def onboard_company(
 # Filing Approval schemas
 # ===========================================================================
 
+from core.models.ca_subscription import CASubscription  # noqa: E402
 from core.models.filing_approval import FilingApproval  # noqa: E402
 from core.models.gstn_upload import GSTNUpload  # noqa: E402
-from core.models.ca_subscription import CASubscription  # noqa: E402
 
 
 class FilingApprovalCreate(BaseModel):
@@ -1280,8 +1280,8 @@ async def activate_ca_subscription(
 # GSTN Credential Vault schemas
 # ===========================================================================
 
+from core.crypto import decrypt_credential, encrypt_credential  # noqa: E402
 from core.models.gstn_credential import GSTNCredential  # noqa: E402
-from core.crypto import encrypt_credential, decrypt_credential  # noqa: E402
 
 
 class GSTNCredentialCreate(BaseModel):
@@ -1715,8 +1715,8 @@ async def list_compliance_deadlines(
 # COMPLIANCE DEADLINES -- GENERATE
 # ---------------------------------------------------------------------------
 
+from datetime import UTC  # noqa: E402
 from datetime import date as _date  # noqa: E402
-
 
 # Standard Indian compliance calendar: deadline_type -> day-of-month
 _DEADLINE_CALENDAR: dict[str, int] = {
@@ -1760,7 +1760,7 @@ async def generate_compliance_deadlines(
         if not company:
             raise HTTPException(404, "Company not found")
 
-        today = _date.today()
+        today = datetime.now(tz=UTC).date()
         created: list[ComplianceDeadline] = []
 
         for offset in range(months_ahead):
@@ -1949,7 +1949,7 @@ async def get_partner_dashboard(
     compliance_deadlines (upcoming + overdue).
     """
     tid = _uuid.UUID(tenant_id)
-    today = _date.today()
+    today = datetime.now(tz=UTC).date()
 
     async with get_tenant_session(tid) as session:
         # All companies for this tenant

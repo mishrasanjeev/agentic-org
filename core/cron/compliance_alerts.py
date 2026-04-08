@@ -12,11 +12,11 @@ based on Indian tax filing rules (GST, TDS, PF, ESI).
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
-from core.database import async_session_factory, get_session
+from core.database import async_session_factory
 from core.models.company import Company
 from core.models.compliance_deadline import ComplianceDeadline
 
@@ -117,7 +117,7 @@ async def generate_deadlines_for_company(
     session, company: Company
 ) -> int:
     """Generate all statutory deadlines for a company.  Returns count of new records."""
-    today = date.today()
+    today = datetime.now(UTC).date()
     company_id = str(company.id)
     tenant_id = str(company.tenant_id)
 
@@ -154,7 +154,7 @@ async def send_alerts_for_due_deadlines(session, today: date | None = None) -> d
     Returns summary: {alerts_7d: N, alerts_1d: N, overdue: N}
     """
     if today is None:
-        today = date.today()
+        today = datetime.now(UTC).date()
 
     seven_days = today + timedelta(days=7)
     one_day = today + timedelta(days=1)
@@ -179,7 +179,7 @@ async def send_alerts_for_due_deadlines(session, today: date | None = None) -> d
             deadline.company_id,
         )
         deadline.alert_7d_sent = True
-        deadline.updated_at = datetime.now(timezone.utc)
+        deadline.updated_at = datetime.now(UTC)
         session.add(deadline)
         summary["alerts_7d"] += 1
 
@@ -200,7 +200,7 @@ async def send_alerts_for_due_deadlines(session, today: date | None = None) -> d
             deadline.company_id,
         )
         deadline.alert_1d_sent = True
-        deadline.updated_at = datetime.now(timezone.utc)
+        deadline.updated_at = datetime.now(UTC)
         session.add(deadline)
         summary["alerts_1d"] += 1
 

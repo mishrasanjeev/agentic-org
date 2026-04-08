@@ -1,6 +1,6 @@
 """Tests for CA Firm Industry Pack."""
 from __future__ import annotations
-import pytest
+
 
 class TestCAPack:
     def test_importable(self):
