@@ -432,7 +432,7 @@ class TestPromptInjection:
     @pytest.mark.asyncio
     async def test_overly_long_description_rejected(self) -> None:
         """Description exceeding max length should be rejected."""
-        long_desc = "a" * 2001
+        long_desc = "a" * 10001  # exceeds _MAX_DESCRIPTION_LENGTH (10000)
         with pytest.raises(ValueError, match="too long"):
             await generate_workflow(
                 description=long_desc,
