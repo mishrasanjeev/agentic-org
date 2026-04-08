@@ -61,6 +61,10 @@ const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 /* ── Role-specific dashboards ── */
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
 const CMODashboard = lazyRetry(() => import("./pages/CMODashboard"));
+const CHRODashboard = lazyRetry(() => import("./pages/CHRODashboard"));
+const COODashboard = lazyRetry(() => import("./pages/COODashboard"));
+const CBODashboard = lazyRetry(() => import("./pages/CBODashboard"));
+const CEODashboard = lazyRetry(() => import("./pages/CEODashboard"));
 
 /* ── ABM Dashboard ── */
 const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
@@ -184,6 +188,46 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cmo"]}>
             <Layout>
               <CMODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/chro"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "chro"]}>
+            <Layout>
+              <CHRODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/coo"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "coo"]}>
+            <Layout>
+              <COODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/cbo"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <CBODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ceo"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <CEODashboard />
             </Layout>
           </ProtectedRoute>
         }

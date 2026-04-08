@@ -247,6 +247,95 @@ async def init_db() -> None:
             );
         """))
 
+        # v5.0.0: Ensure kpi_cache table exists.
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS kpi_cache (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id),
+                company_id UUID REFERENCES companies(id),
+                role VARCHAR(20) NOT NULL,
+                metric_name VARCHAR(100) NOT NULL,
+                metric_value JSONB NOT NULL,
+                source VARCHAR(50) NOT NULL DEFAULT 'agent',
+                computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ttl_seconds INT NOT NULL DEFAULT 3600,
+                stale BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_kpi_cache_tenant_role "
+            "ON kpi_cache(tenant_id, role)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_kpi_cache_metric "
+            "ON kpi_cache(tenant_id, role, metric_name)"
+        ))
+
+        # v5.0.0: Ensure agent_task_results table exists.
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS agent_task_results (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id),
+                agent_id UUID NOT NULL,
+                agent_type VARCHAR(100) NOT NULL,
+                domain VARCHAR(50) NOT NULL,
+                task_type VARCHAR(100) NOT NULL,
+                task_input JSONB NOT NULL DEFAULT '{}'::jsonb,
+                task_output JSONB NOT NULL DEFAULT '{}'::jsonb,
+                confidence FLOAT,
+                tool_calls JSONB DEFAULT '[]'::jsonb,
+                llm_model VARCHAR(100),
+                tokens_used INT DEFAULT 0,
+                cost_usd FLOAT DEFAULT 0.0,
+                duration_ms INT DEFAULT 0,
+                status VARCHAR(20) NOT NULL DEFAULT 'completed',
+                error_message TEXT,
+                hitl_required BOOLEAN NOT NULL DEFAULT FALSE,
+                hitl_decision VARCHAR(20),
+                company_id UUID REFERENCES companies(id),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_agent_results_tenant "
+            "ON agent_task_results(tenant_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_agent_results_domain "
+            "ON agent_task_results(tenant_id, domain)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_agent_results_created "
+            "ON agent_task_results(created_at)"
+        ))
+
+        # v5.0.0: Ensure connector_configs table exists.
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS connector_configs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id),
+                connector_name VARCHAR(100) NOT NULL,
+                display_name VARCHAR(255),
+                auth_type VARCHAR(50) NOT NULL DEFAULT 'api_key',
+                credentials_encrypted JSONB NOT NULL DEFAULT '{}'::jsonb,
+                config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                status VARCHAR(20) NOT NULL DEFAULT 'configured',
+                last_health_check TIMESTAMPTZ,
+                health_status VARCHAR(20) DEFAULT 'unknown',
+                last_sync_at TIMESTAMPTZ,
+                sync_error TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ,
+                CONSTRAINT uq_connector_config_tenant
+                    UNIQUE (tenant_id, connector_name)
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_connector_configs_tenant "
+            "ON connector_configs(tenant_id)"
+        ))
+
         # v4.3.0: gstn_auto_upload flag on companies
         await conn.execute(text("""
             DO $$

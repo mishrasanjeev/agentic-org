@@ -7,6 +7,7 @@ from core.models.agent import AgentTeam as AgentTeam
 from core.models.agent import AgentTeamMember as AgentTeamMember
 from core.models.agent import AgentVersion as AgentVersion
 from core.models.agent import ShadowComparison as ShadowComparison
+from core.models.agent_task_result import AgentTaskResult as AgentTaskResult
 from core.models.api_key import APIKey as APIKey
 from core.models.audit import AuditLog as AuditLog
 from core.models.base import BaseModel as BaseModel
@@ -16,6 +17,7 @@ from core.models.ca_subscription import CASubscription as CASubscription
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
+from core.models.connector_config import ConnectorConfig as ConnectorConfig
 from core.models.document import Document as Document
 from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.gstn_credential import GSTNCredential as GSTNCredential
