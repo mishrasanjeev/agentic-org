@@ -735,17 +735,25 @@ function ConfigTab({ agent }: { agent: Agent }) {
     setSaving(true);
     setSaveError(null);
     try {
-      await api.patch(`/agents/${agent.id}`, {
-        config: {
-          llm_model: editLlmModel || undefined,
-          max_retries: editMaxRetries,
-          hitl_condition: editHitlCondition || undefined,
-          confidence_floor: editConfidenceFloor / 100,
-        },
-      });
+      const payload: Record<string, any> = {
+        confidence_floor: editConfidenceFloor / 100,
+      };
+      if (editLlmModel) {
+        payload.llm = { model: editLlmModel };
+      }
+      if (editHitlCondition) {
+        payload.hitl_policy = { condition: editHitlCondition };
+      }
+      await api.patch(`/agents/${agent.id}`, payload);
       setEditing(false);
     } catch (err: any) {
-      setSaveError(err.response?.data?.detail || "Failed to save configuration");
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "string"
+        ? detail
+        : typeof detail === "object" && detail?.message
+          ? detail.message
+          : JSON.stringify(detail) || "Failed to save configuration";
+      setSaveError(msg);
     } finally {
       setSaving(false);
     }
@@ -1259,14 +1267,21 @@ function VoiceTab({ agent }: { agent: Agent }) {
     { timestamp: "2026-04-03T14:55:00Z", duration: "0m 12s", status: "failed" },
   ];
 
+  const voiceNavigate = useNavigate();
+
   if (!voiceConfigured) {
     return (
       <Card>
         <CardContent className="pt-6 text-center space-y-4">
           <p className="text-muted-foreground">Voice not enabled for this agent.</p>
-          <a href="/dashboard/voice-setup">
-            <Button>Set up Voice</Button>
-          </a>
+          <div className="flex justify-center gap-3">
+            <Button onClick={() => voiceNavigate("/dashboard/voice-setup")} className="relative z-10">
+              Set up Voice
+            </Button>
+            <Button variant="outline" onClick={() => voiceNavigate(-1 as any)} className="relative z-10">
+              Back
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -1278,9 +1293,12 @@ function VoiceTab({ agent }: { agent: Agent }) {
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className="text-sm font-semibold">Voice Call Log</CardTitle>
-            <a href="/dashboard/voice-setup" className="text-xs text-primary hover:underline">
+            <button
+              onClick={() => voiceNavigate("/dashboard/voice-setup")}
+              className="text-xs text-primary hover:underline relative z-10 cursor-pointer"
+            >
               Voice Setup
-            </a>
+            </button>
           </div>
         </CardHeader>
         <CardContent>

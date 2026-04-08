@@ -2,11 +2,70 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import ConnectorCard from "@/components/ConnectorCard";
 import api from "@/lib/api";
 import type { Connector } from "@/types";
 
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms", "microsoft"];
+
+// Full catalog of all 54+ native connectors
+const NATIVE_CONNECTOR_CATALOG: Array<{ id: string; name: string; category: string; description: string }> = [
+  { id: "salesforce", name: "Salesforce", category: "comms", description: "CRM and sales management" },
+  { id: "hubspot", name: "HubSpot", category: "marketing", description: "Inbound marketing and CRM" },
+  { id: "zoho_crm", name: "Zoho CRM", category: "comms", description: "Customer relationship management" },
+  { id: "slack", name: "Slack", category: "comms", description: "Team messaging and collaboration" },
+  { id: "microsoft_teams", name: "Microsoft Teams", category: "comms", description: "Team chat and meetings" },
+  { id: "gmail", name: "Gmail", category: "comms", description: "Email communication" },
+  { id: "google_workspace", name: "Google Workspace", category: "ops", description: "Productivity suite" },
+  { id: "google_sheets", name: "Google Sheets", category: "ops", description: "Spreadsheets and data" },
+  { id: "google_drive", name: "Google Drive", category: "ops", description: "Cloud file storage" },
+  { id: "quickbooks", name: "QuickBooks", category: "finance", description: "Accounting and invoicing" },
+  { id: "xero", name: "Xero", category: "finance", description: "Cloud accounting" },
+  { id: "tally", name: "Tally", category: "finance", description: "Indian accounting software" },
+  { id: "razorpay", name: "Razorpay", category: "finance", description: "Payment gateway (India)" },
+  { id: "stripe", name: "Stripe", category: "finance", description: "Online payment processing" },
+  { id: "sap", name: "SAP", category: "finance", description: "Enterprise ERP" },
+  { id: "oracle_erp", name: "Oracle ERP", category: "finance", description: "Enterprise resource planning" },
+  { id: "jira", name: "Jira", category: "ops", description: "Issue tracking and project management" },
+  { id: "zendesk", name: "Zendesk", category: "comms", description: "Customer support platform" },
+  { id: "freshdesk", name: "Freshdesk", category: "comms", description: "Customer support ticketing" },
+  { id: "twilio", name: "Twilio", category: "comms", description: "SMS and voice communication" },
+  { id: "sendgrid", name: "SendGrid", category: "comms", description: "Email delivery service" },
+  { id: "aws_s3", name: "AWS S3", category: "ops", description: "Cloud object storage" },
+  { id: "gcp_storage", name: "GCP Storage", category: "ops", description: "Google Cloud storage" },
+  { id: "postgresql", name: "PostgreSQL", category: "ops", description: "Relational database" },
+  { id: "mongodb", name: "MongoDB", category: "ops", description: "Document database" },
+  { id: "redis", name: "Redis", category: "ops", description: "In-memory data store" },
+  { id: "elasticsearch", name: "Elasticsearch", category: "ops", description: "Search and analytics engine" },
+  { id: "snowflake", name: "Snowflake", category: "ops", description: "Cloud data warehouse" },
+  { id: "bigquery", name: "BigQuery", category: "ops", description: "Google analytics data warehouse" },
+  { id: "power_bi", name: "Power BI", category: "ops", description: "Business intelligence" },
+  { id: "tableau", name: "Tableau", category: "ops", description: "Data visualization" },
+  { id: "github", name: "GitHub", category: "ops", description: "Code hosting and CI/CD" },
+  { id: "gitlab", name: "GitLab", category: "ops", description: "DevOps platform" },
+  { id: "bitbucket", name: "Bitbucket", category: "ops", description: "Git code management" },
+  { id: "confluence", name: "Confluence", category: "ops", description: "Team knowledge base" },
+  { id: "notion", name: "Notion", category: "ops", description: "All-in-one workspace" },
+  { id: "asana", name: "Asana", category: "ops", description: "Work management" },
+  { id: "trello", name: "Trello", category: "ops", description: "Visual project management" },
+  { id: "monday_com", name: "Monday.com", category: "ops", description: "Work operating system" },
+  { id: "airtable", name: "Airtable", category: "ops", description: "Spreadsheet-database hybrid" },
+  { id: "zapier", name: "Zapier", category: "ops", description: "Workflow automation" },
+  { id: "webhook_generic", name: "Webhook (Generic)", category: "ops", description: "Generic webhook integration" },
+  { id: "rest_api", name: "REST API", category: "ops", description: "Custom REST API connector" },
+  { id: "graphql_api", name: "GraphQL API", category: "ops", description: "Custom GraphQL connector" },
+  { id: "smtp", name: "SMTP", category: "comms", description: "Email sending protocol" },
+  { id: "imap", name: "IMAP", category: "comms", description: "Email reading protocol" },
+  { id: "ftp_sftp", name: "FTP/SFTP", category: "ops", description: "File transfer protocol" },
+  { id: "ldap_ad", name: "LDAP / Active Directory", category: "hr", description: "Directory services" },
+  { id: "okta", name: "Okta", category: "hr", description: "Identity and access management" },
+  { id: "azure_ad", name: "Azure AD", category: "hr", description: "Microsoft identity platform" },
+  { id: "whatsapp_business", name: "WhatsApp Business", category: "comms", description: "Business messaging" },
+  { id: "indian_gstn", name: "Indian GSTN", category: "finance", description: "GST Network portal" },
+  { id: "digilocker", name: "DigiLocker", category: "finance", description: "Digital document store (India)" },
+  { id: "account_aggregator", name: "Account Aggregator", category: "finance", description: "Financial data sharing (India)" },
+];
 
 const MICROSOFT_CONNECTORS: Connector[] = [
   { id: "ms-teams", name: "Microsoft Teams", category: "microsoft", status: "active", description: "Team chat, channels, and meetings", connector_id: "ms-teams" } as unknown as Connector,
@@ -211,6 +270,46 @@ export default function Connectors() {
                   </Button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Browse All Native Connectors (full catalog of 54+) */}
+          {!loading && (
+            <div className="mt-8">
+              <h3 className="text-lg font-semibold mb-4">Browse All Native Connectors ({NATIVE_CONNECTOR_CATALOG.length})</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Full catalog of all supported native connectors. Click "Register" to add one to your tenant.
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                {NATIVE_CONNECTOR_CATALOG
+                  .filter((c) => categoryFilter === "all" || c.category === categoryFilter)
+                  .map((c) => {
+                    const alreadyRegistered = connectors.some((existing) =>
+                      existing.id === c.id || (existing as any).connector_id === c.id || existing.name?.toLowerCase() === c.name.toLowerCase()
+                    );
+                    return (
+                      <Card key={c.id} className="p-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-medium truncate">{c.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{c.category}</span>
+                          <span className="text-[10px] text-muted-foreground line-clamp-2">{c.description}</span>
+                          {alreadyRegistered ? (
+                            <Badge variant="outline" className="text-[10px] mt-1 w-fit">Registered</Badge>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-1 text-xs h-7"
+                              onClick={() => navigate(`/dashboard/connectors/new?type=${c.id}`)}
+                            >
+                              Register
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
+              </div>
             </div>
           )}
         </>

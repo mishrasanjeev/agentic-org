@@ -1854,3 +1854,41 @@ async def list_agent_amendments(
         "amendments": amendments,
         "count": len(amendments),
     }
+
+
+# ── DELETE /agents/{id} ─────────────────────────────────────────────────────
+@router.delete("/agents/{agent_id}")
+async def delete_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Permanently delete an agent. Only paused, retired, or inactive agents can be deleted."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        deletable_statuses = {"paused", "retired", "inactive"}
+        if agent.status not in deletable_statuses:
+            raise HTTPException(
+                409,
+                f"Cannot delete agent in '{agent.status}' status. "
+                f"Pause or retire the agent first.",
+            )
+
+        # Audit log entry before deletion
+        audit = AuditLog(
+            tenant_id=tid,
+            action="agent_deleted",
+            resource_type="agent",
+            resource_id=str(agent_id),
+            details={"agent_name": agent.name, "agent_type": agent.agent_type},
+        )
+        session.add(audit)
+        await session.delete(agent)
+
+    return {"id": str(agent_id), "deleted": True}

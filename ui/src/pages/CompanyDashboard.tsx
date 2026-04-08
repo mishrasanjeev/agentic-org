@@ -18,8 +18,11 @@ interface Company {
   industry?: string;
   state?: string;
   status?: string;
+  is_active?: boolean;
   created_at?: string;
   health_score?: number;
+  client_health_score?: number;
+  pending_approvals?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -33,6 +36,7 @@ const MOCK_COMPANIES: Company[] = [
   { id: "c4", name: "Horizon IT Solutions", gstin: "36AABCH7890Q1ZJ", pan: "AABCH7890Q", industry: "IT Services", state: "Telangana", status: "inactive", health_score: 45 },
   { id: "c5", name: "Sapphire Textiles", gstin: "24AAGCS3456R1ZL", pan: "AAGCS3456R", industry: "Textile", state: "Gujarat", status: "active", health_score: 91 },
   { id: "c6", name: "Metro Logistics Corp", gstin: "33AABCM6789S1ZN", pan: "AABCM6789S", industry: "Logistics", state: "Tamil Nadu", status: "active", health_score: 85 },
+  { id: "c7", name: "Reddy Agro Exports", gstin: "36AABCR2345T1ZP", pan: "AABCR2345T", industry: "Export", state: "Telangana", status: "active", health_score: 67 },
 ];
 
 const INDUSTRY_COLORS: Record<string, string> = {
@@ -87,8 +91,9 @@ export default function CompanyDashboard() {
     return matchSearch && matchIndustry && matchState;
   });
 
-  const activeCount = companies.filter((c) => c.status === "active").length;
-  const inactiveCount = companies.filter((c) => c.status !== "active").length;
+  const isActive = (c: Company) => c.status === "active" || c.is_active === true || (c.is_active !== false && !c.status);
+  const activeCount = companies.filter(isActive).length;
+  const inactiveCount = companies.length - activeCount;
 
   if (loading) {
     return (
@@ -139,7 +144,7 @@ export default function CompanyDashboard() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-2xl font-bold text-amber-600">{Math.max(1, Math.floor(activeCount * 0.6))}</p>
+            <p className="text-2xl font-bold text-amber-600">{companies.reduce((sum, c) => sum + (c.pending_approvals ?? 0), 0) || Math.max(1, Math.floor(activeCount * 0.6))}</p>
             <p className="text-xs text-muted-foreground">Pending Filings</p>
           </CardContent>
         </Card>
@@ -203,13 +208,13 @@ export default function CompanyDashboard() {
                   <div className="flex items-center gap-2">
                     <span
                       className={`w-2.5 h-2.5 rounded-full ${
-                        (company.health_score ?? 0) >= 80 ? "bg-emerald-500" :
-                        (company.health_score ?? 0) >= 50 ? "bg-amber-500" : "bg-red-500"
+                        ((company.health_score ?? company.client_health_score ?? 0)) >= 80 ? "bg-emerald-500" :
+                        ((company.health_score ?? company.client_health_score ?? 0)) >= 50 ? "bg-amber-500" : "bg-red-500"
                       }`}
-                      title={`Health: ${company.health_score ?? "N/A"}`}
+                      title={`Health: ${company.health_score ?? company.client_health_score ?? "N/A"}`}
                     />
-                    <Badge variant={company.status === "active" ? "success" : "secondary"}>
-                      {company.status || "active"}
+                    <Badge variant={isActive(company) ? "success" : "secondary"}>
+                      {isActive(company) ? "active" : (company.status || "inactive")}
                     </Badge>
                   </div>
                 </div>

@@ -64,11 +64,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   const { i18n } = useTranslation();
   const [currentLang, setCurrentLang] = useState(i18n.language);
+  // Force re-render key when language changes so all translated text updates instantly
+  const [langKey, setLangKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
-    const handler = (lng: string) => setCurrentLang(lng);
+    const handler = (lng: string) => {
+      setCurrentLang(lng);
+      setLangKey((k) => k + 1);
+    };
     i18n.on("languageChanged", handler);
     return () => { i18n.off("languageChanged", handler); };
   }, [i18n]);
@@ -198,7 +203,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <select
               value={currentLang}
               onChange={(e) => i18n.changeLanguage(e.target.value)}
-              className="h-8 px-2 rounded border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-8 px-2 rounded border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary relative z-50"
               aria-label="Select language"
               data-testid="language-picker"
             >
@@ -212,7 +217,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <HITLBadge />
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+        <main key={langKey} className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
       </div>
 
       {/* Chat slide-out panel */}

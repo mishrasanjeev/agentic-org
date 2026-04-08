@@ -163,6 +163,7 @@ export default function CompanyDetail() {
   const navigate = useNavigate();
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [agents] = useState<AgentAssignment[]>(MOCK_AGENTS);
   const [workflows] = useState<WorkflowRun[]>(MOCK_WORKFLOWS);
@@ -170,6 +171,15 @@ export default function CompanyDetail() {
   const [roles, setRoles] = useState<RoleMember[]>(MOCK_ROLES);
   const [editForm, setEditForm] = useState<Partial<CompanyInfo>>({});
   const [saving, setSaving] = useState(false);
+
+  /* Approvals data -- shared between overview metrics and approvals tab */
+  const filingApprovals = [
+    { id: "fa1", filing_type: "GSTR-1", period: "Mar 2026", status: "approved", requested_by: "GST Agent", approved_by: "partner@cafirm.com", date: "2026-04-05" },
+    { id: "fa2", filing_type: "GSTR-3B", period: "Mar 2026", status: "pending", requested_by: "GST Agent", approved_by: null as string | null, date: "2026-04-07" },
+    { id: "fa3", filing_type: "TDS 26Q", period: "Q4 FY26", status: "approved", requested_by: "TDS Agent", approved_by: "partner@cafirm.com", date: "2026-04-06" },
+    { id: "fa4", filing_type: "GSTR-9", period: "FY 2025-26", status: "pending", requested_by: "GST Agent", approved_by: null as string | null, date: "2026-04-08" },
+  ];
+  const pendingFilingsCount = filingApprovals.filter((a) => a.status === "pending").length;
   const [newRoleEmail, setNewRoleEmail] = useState("");
   const [newRoleValue, setNewRoleValue] = useState("auditor");
 
@@ -185,16 +195,28 @@ export default function CompanyDetail() {
 
   const fetchCompany = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await api.get(`/companies/${id}`);
-      if (res.data?.id) {
+      if (res.status && res.status >= 400) {
+        setError(`Server returned ${res.status}. Showing demo data.`);
+        setCompany({ ...MOCK_COMPANY, id: id || "c1" });
+        setEditForm({ ...MOCK_COMPANY, id: id || "c1" });
+      } else if (res.data?.id) {
         setCompany(res.data);
         setEditForm(res.data);
       } else {
         setCompany({ ...MOCK_COMPANY, id: id || "c1" });
         setEditForm({ ...MOCK_COMPANY, id: id || "c1" });
       }
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 502) {
+        setError("502 Bad Gateway -- API is temporarily unavailable. Showing demo data.");
+      } else {
+        setError(`Failed to load company: ${msg}. Showing demo data.`);
+      }
       setCompany({ ...MOCK_COMPANY, id: id || "c1" });
       setEditForm({ ...MOCK_COMPANY, id: id || "c1" });
     } finally {
@@ -239,6 +261,11 @@ export default function CompanyDetail() {
   if (!company) {
     return (
       <div className="space-y-4">
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          </div>
+        )}
         <p className="text-muted-foreground">Company not found.</p>
         <Button variant="outline" onClick={() => navigate("/dashboard/companies")}>Back to Companies</Button>
       </div>
@@ -260,6 +287,13 @@ export default function CompanyDetail() {
       <Helmet>
         <title>{company.name} | AgenticOrg</title>
       </Helmet>
+
+      {/* Error banner */}
+      {error && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+          <p className="text-sm text-amber-700 dark:text-amber-300">{error}</p>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -311,7 +345,7 @@ export default function CompanyDetail() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <Card>
               <CardContent className="pt-4 pb-4">
-                <p className="text-2xl font-bold text-amber-600">3</p>
+                <p className="text-2xl font-bold text-amber-600">{pendingFilingsCount}</p>
                 <p className="text-xs text-muted-foreground">Pending Filings</p>
               </CardContent>
             </Card>
@@ -691,12 +725,7 @@ export default function CompanyDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[
-                      { id: "fa1", filing_type: "GSTR-1", period: "Mar 2026", status: "approved", requested_by: "GST Agent", approved_by: "partner@cafirm.com", date: "2026-04-05" },
-                      { id: "fa2", filing_type: "GSTR-3B", period: "Mar 2026", status: "pending", requested_by: "GST Agent", approved_by: null, date: "2026-04-07" },
-                      { id: "fa3", filing_type: "TDS 26Q", period: "Q4 FY26", status: "approved", requested_by: "TDS Agent", approved_by: "partner@cafirm.com", date: "2026-04-06" },
-                      { id: "fa4", filing_type: "GSTR-9", period: "FY 2025-26", status: "pending", requested_by: "GST Agent", approved_by: null, date: "2026-04-08" },
-                    ].map((req) => (
+                    {filingApprovals.map((req) => (
                       <tr key={req.id} className="border-b last:border-0">
                         <td className="py-2 px-3 font-medium">{req.filing_type}</td>
                         <td className="py-2 px-3 text-muted-foreground">{req.period}</td>

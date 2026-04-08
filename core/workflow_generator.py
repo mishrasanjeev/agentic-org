@@ -150,8 +150,8 @@ _INJECTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"reveal\s+(your|the)\s+(system\s+)?prompt", re.IGNORECASE),
 ]
 
-# Maximum description length to prevent abuse
-_MAX_DESCRIPTION_LENGTH = 2000
+# Maximum description length to prevent abuse (raised to support 500+ word inputs)
+_MAX_DESCRIPTION_LENGTH = 10000
 
 
 def _sanitize_description(description: str) -> str:

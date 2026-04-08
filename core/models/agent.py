@@ -67,7 +67,7 @@ class Agent(BaseModel):
     shadow_comparison_agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True
     )
-    shadow_min_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    shadow_min_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     shadow_accuracy_floor: Mapped[Decimal] = mapped_column(
         Numeric(4, 3), nullable=False, default=Decimal("0.950")
     )

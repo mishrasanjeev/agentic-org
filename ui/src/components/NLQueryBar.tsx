@@ -214,6 +214,30 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
           </p>
 
           <div className="flex items-center justify-between border-t border-slate-700 pt-2">
+            {result.domain && (
+              <button
+                type="button"
+                onClick={() => {
+                  const domainRouteMap: Record<string, string> = {
+                    finance: "/dashboard/cfo",
+                    hr: "/dashboard/chro",
+                    marketing: "/dashboard/cmo",
+                    ops: "/dashboard/coo",
+                    operations: "/dashboard/coo",
+                    sales: "/dashboard/sales",
+                    backoffice: "/dashboard/coo",
+                    compliance: "/dashboard/enforce-audit",
+                  };
+                  const route = domainRouteMap[result.domain.toLowerCase()] || "/dashboard";
+                  navigate(route);
+                  setDropdownOpen(false);
+                  setQuery("");
+                }}
+                className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+              >
+                Go to {result.domain} Dashboard &rarr;
+              </button>
+            )}
             <button
               type="button"
               onClick={handleOpenChat}

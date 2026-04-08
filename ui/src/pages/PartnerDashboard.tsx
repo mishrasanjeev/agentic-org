@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import api from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -69,8 +70,38 @@ function healthTextColor(score: number): string {
 /* ------------------------------------------------------------------ */
 
 export default function PartnerDashboard() {
-  const [clients] = useState<ClientHealth[]>(MOCK_CLIENTS);
-  const [deadlines] = useState<Deadline[]>(MOCK_DEADLINES);
+  const [clients, setClients] = useState<ClientHealth[]>(MOCK_CLIENTS);
+  const [deadlines, setDeadlines] = useState<Deadline[]>(MOCK_DEADLINES);
+  const [loading, setLoading] = useState(true);
+
+  const fetchPartnerData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/partner-dashboard");
+      const data = res.data;
+      if (data?.clients && Array.isArray(data.clients) && data.clients.length > 0) {
+        setClients(data.clients.map((c: Record<string, unknown>) => ({
+          id: c.id || c.company_id || "",
+          name: c.name || c.company_name || "",
+          health_score: c.health_score ?? c.client_health_score ?? 0,
+          pending_filings: c.pending_filings ?? c.pending_approvals ?? 0,
+          status: c.is_active === false ? "inactive" : (c.status || "active"),
+          subscription: c.subscription || c.subscription_status || "active",
+        })));
+      }
+      if (data?.deadlines && Array.isArray(data.deadlines) && data.deadlines.length > 0) {
+        setDeadlines(data.deadlines);
+      }
+    } catch {
+      // API unavailable, keep mock data
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPartnerData();
+  }, [fetchPartnerData]);
 
   const totalClients = clients.length;
   const activeClients = clients.filter((c) => c.status === "active").length;
@@ -80,6 +111,14 @@ export default function PartnerDashboard() {
 
   const filedCount = clients.filter((c) => c.pending_filings === 0 && c.status === "active").length;
   const pendingCount = clients.filter((c) => c.pending_filings > 0).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-muted-foreground">Loading partner dashboard...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

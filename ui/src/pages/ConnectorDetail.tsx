@@ -36,7 +36,13 @@ export default function ConnectorDetailPage() {
   const [authToken, setAuthToken] = useState("");
   const [secretRef, setSecretRef] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [baseUrlError, setBaseUrlError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(60);
+
+  function validateBaseUrl(url: string): boolean {
+    if (!url.trim()) return true; // empty is allowed (optional field)
+    return /^https?:\/\/.+/.test(url.trim());
+  }
 
   useEffect(() => {
     fetchConnector();
@@ -58,6 +64,11 @@ export default function ConnectorDetailPage() {
   }
 
   async function handleSave() {
+    if (!validateBaseUrl(baseUrl)) {
+      setBaseUrlError("Invalid URL — must start with http:// or https://");
+      return;
+    }
+    setBaseUrlError("");
     setSaving(true);
     setFeedback(null);
     try {
@@ -155,7 +166,24 @@ export default function ConnectorDetailPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Base URL</label>
-                  <input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                  <input
+                    type="url"
+                    value={baseUrl}
+                    onChange={(e) => {
+                      setBaseUrl(e.target.value);
+                      if (baseUrlError && validateBaseUrl(e.target.value)) setBaseUrlError("");
+                    }}
+                    onBlur={() => {
+                      if (baseUrl.trim() && !validateBaseUrl(baseUrl)) {
+                        setBaseUrlError("Invalid URL — must start with http:// or https://");
+                      } else {
+                        setBaseUrlError("");
+                      }
+                    }}
+                    placeholder="https://api.example.com"
+                    className={`border rounded px-3 py-2 text-sm w-full mt-1 ${baseUrlError ? "border-red-500" : ""}`}
+                  />
+                  {baseUrlError && <p className="text-xs text-red-600 mt-1">{baseUrlError}</p>}
                 </div>
                 {authType !== "none" && (
                   <>

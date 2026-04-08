@@ -17,6 +17,12 @@ const COMMON_ENGLISH_WORDS = new Set([
 ]);
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice"];
 
+// CRON expression validator (5-field: minute hour day month weekday)
+const CRON_REGEX = /^(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)$/;
+function isValidCron(expr: string): boolean {
+  return CRON_REGEX.test(expr.trim());
+}
+
 const STEP_TEMPLATE = JSON.stringify([
   {
     step: 1,
@@ -67,6 +73,7 @@ export default function WorkflowCreate() {
   const [replanOnFailure, setReplanOnFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [cronError, setCronError] = useState("");
 
   // NL generation state
   const [nlDescription, setNlDescription] = useState("");
@@ -91,6 +98,11 @@ export default function WorkflowCreate() {
     if (!name.trim()) { setError("Workflow name is required"); return; }
     const { valid, parsed } = validateSteps();
     if (!valid) { setError("Steps must be valid JSON array. Check syntax and try again."); return; }
+    if (triggerType === "schedule" && !isValidCron(cronSchedule)) {
+      setCronError("Invalid CRON expression. Use 5 fields: minute hour day month weekday (e.g. 0 9 * * 1-5)");
+      return;
+    }
+    setCronError("");
     setSubmitting(true);
     setError("");
     try {
@@ -406,12 +418,23 @@ export default function WorkflowCreate() {
                   <input
                     type="text"
                     value={cronSchedule}
-                    onChange={(e) => setCronSchedule(e.target.value)}
+                    onChange={(e) => {
+                      setCronSchedule(e.target.value);
+                      if (cronError && isValidCron(e.target.value)) setCronError("");
+                    }}
+                    onBlur={() => {
+                      if (cronSchedule.trim() && !isValidCron(cronSchedule)) {
+                        setCronError("Invalid CRON expression. Use 5 fields: minute hour day month weekday (e.g. 0 9 * * 1-5)");
+                      } else {
+                        setCronError("");
+                      }
+                    }}
                     placeholder="0 9 * * 1-5 (weekdays at 9 AM)"
-                    className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    className={`border rounded px-3 py-2 text-sm w-full mt-1 ${cronError ? "border-destructive" : ""}`}
                     data-testid="cron-schedule-input"
                   />
                   <p className="text-xs text-gray-500 mt-1">Format: minute hour day month weekday</p>
+                  {cronError && <p className="text-xs text-destructive mt-1">{cronError}</p>}
                 </div>
               )}
 

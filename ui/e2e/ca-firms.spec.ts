@@ -300,7 +300,7 @@ test.describe("Company Detail", () => {
     }
   });
 
-  test("CompanyDetail shows 6 tabs", async ({ page }) => {
+  test("CompanyDetail shows 7 tabs", async ({ page }) => {
     await page.goto(`${APP}/dashboard/companies/c1`, {
       waitUntil: "domcontentloaded",
     });
@@ -312,6 +312,7 @@ test.describe("Company Detail", () => {
       "Agents",
       "Workflows",
       "Audit Log",
+      "Approvals",
       "Settings",
     ];
 
