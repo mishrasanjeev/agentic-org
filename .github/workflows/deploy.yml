@@ -251,8 +251,8 @@ jobs:
       - name: Install Playwright
         run: cd ui && npm install --legacy-peer-deps && npx playwright install --with-deps chromium
 
-      - name: Run ALL Playwright E2E tests against production
-        run: cd ui && npx playwright test --project chromium
+      - name: Run ALL Playwright E2E regression suite against production
+        run: cd ui && npx playwright test --config=e2e/regression.config.ts
         continue-on-error: true
         env:
           BASE_URL: https://app.agenticorg.ai
