@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-EXAMPLES = Path(__file__).resolve().parents[2] / "workflows" / "examples"
+EXAMPLES = Path(__file__).resolve().parents[3] / "workflows" / "examples"
 
 def _load(name):
     p = EXAMPLES / name
@@ -20,7 +20,12 @@ class TestGSTR:
         assert _load("gstr_filing_monthly.yaml")["domain"] == "finance"
 
     def test_schedule(self):
-        assert _load("gstr_filing_monthly.yaml")["trigger"] == "schedule"
+        trigger = _load("gstr_filing_monthly.yaml")["trigger"]
+        # trigger can be a string "schedule" or a dict {"type": "schedule", ...}
+        if isinstance(trigger, dict):
+            assert trigger["type"] == "schedule"
+        else:
+            assert trigger == "schedule"
 
     def test_company_scoped(self):
         assert _load("gstr_filing_monthly.yaml").get("company_scoped") is True

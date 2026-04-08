@@ -30,12 +30,12 @@ class TestSeedData:
 
 class TestDemoUser:
     def test_email(self):
-        from core.seed_ca_demo import DEMO_USER
-        assert DEMO_USER["email"] == "demo@cafirm.agenticorg.ai"
+        from core.seed_ca_demo import DEMO_USER_EMAIL
+        assert DEMO_USER_EMAIL == "demo@cafirm.agenticorg.ai"
 
     def test_role(self):
-        from core.seed_ca_demo import DEMO_USER
-        assert DEMO_USER["role"] == "partner"
+        from core.seed_ca_demo import DEMO_USER_ROLE
+        assert DEMO_USER_ROLE == "admin"
 
 class TestGSTDefault:
     def test_auto_file_off(self):

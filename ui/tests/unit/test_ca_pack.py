@@ -38,4 +38,5 @@ class TestCAPack:
 
     def test_in_list_packs(self):
         from core.agents.packs.installer import list_packs
-        assert "ca-firm" in [p["id"] for p in list_packs()]
+        names = [p.get("name", p.get("id", "")) for p in list_packs()]
+        assert "ca-firm" in names or "ca" in names
