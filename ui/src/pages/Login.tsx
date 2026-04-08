@@ -17,7 +17,8 @@ export default function Login() {
 
   // Fetch Google Client ID from backend config
   useEffect(() => {
-    fetch("/api/v1/auth/config")
+    const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/v1` : "/api/v1";
+    fetch(`${apiBase}/auth/config`)
       .then((r) => r.json())
       .then((data) => {
         if (data.google_client_id) setGoogleClientId(data.google_client_id);

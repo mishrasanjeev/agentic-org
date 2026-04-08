@@ -1,5 +1,9 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api/v1`
+  : "/api/v1";
+
 interface AuthUser {
   email: string;
   name: string | null;
@@ -29,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch("/api/v1/auth/login", {
+    const res = await fetch(`${API_BASE}/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -51,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(async (orgName: string, name: string, email: string, password: string) => {
-    const res = await fetch("/api/v1/auth/signup", {
+    const res = await fetch(`${API_BASE}/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ org_name: orgName, admin_name: name, admin_email: email, password }),
@@ -69,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginWithGoogle = useCallback(async (credential: string) => {
-    const res = await fetch("/api/v1/auth/google", {
+    const res = await fetch(`${API_BASE}/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ credential }),
