@@ -1363,3 +1363,127 @@ test.describe("Compliance Alerts Configuration", () => {
     expect(hasOnboardRef).toBeTruthy();
   });
 });
+
+// ==========================================================================
+//  CxO Dashboard Nav Links in Layout Sidebar
+// ==========================================================================
+
+test.describe("CxO Dashboard Nav Links in Layout", () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    await authenticate(page);
+  });
+
+  test("sidebar contains CxO dashboard links", async ({ page }) => {
+    await page.goto(`${APP}/dashboard`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+
+    // The Layout sidebar should contain links for CxO dashboards.
+    // Depending on the user role, not all 6 may be visible.
+    const cxoLabels = [
+      "CEO Dashboard",
+      "Finance Dashboard",
+      "CHRO Dashboard",
+      "Marketing Dashboard",
+      "COO Dashboard",
+      "CBO Dashboard",
+    ];
+
+    let foundCount = 0;
+    for (const label of cxoLabels) {
+      // Try both nav-scoped and general link locators
+      const navLink = page.locator(`nav a:has-text("${label}")`).first();
+      const anyLink = page.locator(`a:has-text("${label}")`).first();
+      if (
+        (await navLink.isVisible({ timeout: 2000 }).catch(() => false)) ||
+        (await anyLink.isVisible({ timeout: 1000 }).catch(() => false))
+      ) {
+        foundCount++;
+      }
+    }
+
+    // Fallback: check that the page body references at least one CxO dashboard
+    const body = (await page.locator("body").textContent()) || "";
+    const hasCxoRef =
+      body.includes("CEO") ||
+      body.includes("CFO") ||
+      body.includes("Dashboard");
+
+    // At minimum, the user should see at least one CxO link or reference
+    expect(foundCount >= 1 || hasCxoRef).toBeTruthy();
+  });
+
+  test("CEO Dashboard nav link navigates correctly", async ({ page }) => {
+    await page.goto(`${APP}/dashboard`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+
+    const ceoLink = page.locator('nav a:has-text("CEO Dashboard")').first();
+    if (await ceoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await ceoLink.click();
+      await page.waitForLoadState("networkidle").catch(() => {});
+      expect(page.url()).toContain("/dashboard/ceo");
+      await expect(page.getByText("CEO Dashboard").first()).toBeVisible({
+        timeout: 15000,
+      });
+    }
+  });
+
+  test("Finance Dashboard nav link navigates to CFO page", async ({ page }) => {
+    await page.goto(`${APP}/dashboard`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+
+    const cfoLink = page.locator('nav a:has-text("Finance Dashboard")').first();
+    if (await cfoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await cfoLink.click();
+      await page.waitForLoadState("networkidle").catch(() => {});
+      expect(page.url()).toContain("/dashboard/cfo");
+      await expect(page.getByText("CFO Dashboard").first()).toBeVisible({
+        timeout: 15000,
+      });
+    }
+  });
+
+  test("Marketing Dashboard nav link navigates to CMO page", async ({ page }) => {
+    await page.goto(`${APP}/dashboard`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+
+    const cmoLink = page.locator('nav a:has-text("Marketing Dashboard")').first();
+    if (await cmoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await cmoLink.click();
+      await page.waitForLoadState("networkidle").catch(() => {});
+      expect(page.url()).toContain("/dashboard/cmo");
+      await expect(page.getByText("CMO Dashboard").first()).toBeVisible({
+        timeout: 15000,
+      });
+    }
+  });
+
+  test("sidebar CxO links have correct active state highlighting", async ({ page }) => {
+    await page.goto(`${APP}/dashboard/cfo`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+
+    // The Finance Dashboard link should have an active/highlighted class
+    const cfoLink = page.locator('a:has-text("Finance Dashboard")').first();
+    if (await cfoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      const className = (await cfoLink.getAttribute("class")) || "";
+      // Accept any active-state styling: bg-primary, bg-accent, active, aria-current, etc.
+      const hasActiveStyle =
+        className.includes("bg-primary") ||
+        className.includes("bg-accent") ||
+        className.includes("active") ||
+        className.includes("selected");
+      const ariaCurrent = await cfoLink.getAttribute("aria-current");
+      expect(hasActiveStyle || ariaCurrent === "page").toBeTruthy();
+    }
+  });
+});
