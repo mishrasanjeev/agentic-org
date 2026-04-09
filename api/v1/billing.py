@@ -322,9 +322,7 @@ async def get_usage(tenant_id: str = Depends(get_current_tenant)) -> dict[str, A
 
 
 @router.get("/invoices")
-async def list_invoices(
-    tenant_id: str = Depends(get_current_tenant),
-) -> list[dict[str, Any]]:
+async def list_invoices(tenant_id: str = Depends(get_current_tenant)) -> list[dict[str, Any]]:
     """Return invoice history for a tenant."""
     # TODO: wire to DB billing_invoices table
     return [
