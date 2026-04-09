@@ -55,6 +55,19 @@ function detectNavigationIntent(text: string): NavIntent | null {
     return { path: "/dashboard/settings" };
   }
 
+  // Domain-specific queries → route to CxO dashboards (TC-002)
+  const domainRoutes: [RegExp, string][] = [
+    [/\b(?:finance|invoice|payment|cash|revenue|p&l|gst|tax|reconcil|budget|expense|billing)\b/i, "/dashboard/cfo"],
+    [/\b(?:employee|hr|payroll|leave|attendance|hiring|recruit|onboard|offboard|talent|performance)\b/i, "/dashboard/chro"],
+    [/\b(?:marketing|campaign|lead|seo|content|social|brand|crm|email\s*market|abm)\b/i, "/dashboard/cmo"],
+    [/\b(?:operations|support|ticket|vendor|compliance|incident|sla|procurement)\b/i, "/dashboard/coo"],
+  ];
+  for (const [pattern, path] of domainRoutes) {
+    if (pattern.test(q)) {
+      return { path };
+    }
+  }
+
   return null;
 }
 

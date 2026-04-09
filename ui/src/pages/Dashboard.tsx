@@ -42,7 +42,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchAll() {
     setLoading(true);

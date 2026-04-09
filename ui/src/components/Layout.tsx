@@ -14,39 +14,41 @@ const ChatPanel = lazy(() => import("./ChatPanel"));
 const CompanySwitcher = lazy(() => import("./CompanySwitcher"));
 const NotificationBell = lazy(() => import("./NotificationBell"));
 
+// Nav labels use i18n keys (nav.<key>) with English fallback.
+// See ui/src/locales/en.json and hi.json for translations.
 const ALL_NAV = [
-  { path: "/dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
-  { path: "/dashboard/partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
-  { path: "/dashboard/companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
-  { path: "/dashboard/ceo", label: "CEO Dashboard", roles: ["admin"] },
-  { path: "/dashboard/cfo", label: "Finance Dashboard", roles: ["admin", "cfo"] },
-  { path: "/dashboard/cmo", label: "Marketing Dashboard", roles: ["admin", "cmo"] },
-  { path: "/dashboard/chro", label: "CHRO Dashboard", roles: ["admin", "chro"] },
-  { path: "/dashboard/coo", label: "COO Dashboard", roles: ["admin", "coo"] },
-  { path: "/dashboard/cbo", label: "CBO Dashboard", roles: ["admin"] },
-  { path: "/dashboard/abm", label: "ABM", roles: ["admin", "cmo"] },
-  { path: "/dashboard/observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/agents", label: "Agents", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/org-chart", label: "Org Chart", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/connectors", label: "Connectors", roles: ["admin"] },
-  { path: "/dashboard/prompt-templates", label: "Prompt Templates", roles: ["admin"] },
-  { path: "/dashboard/agents/from-sop", label: "Create from SOP", roles: ["admin"] },
-  { path: "/dashboard/integrations", label: "A2A / MCP", roles: ["admin"] },
-  { path: "/dashboard/sales", label: "Sales Pipeline", roles: ["admin"] },
-  { path: "/dashboard/schemas", label: "Schemas", roles: ["admin"] },
-  { path: "/dashboard/report-schedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo"] },
-  { path: "/dashboard/scopes", label: "Scope Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/enforce-audit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
-  { path: "/dashboard/audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
-  { path: "/dashboard/knowledge", label: "Knowledge Base", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/voice-setup", label: "Voice Agents", roles: ["admin"] },
-  { path: "/dashboard/rpa", label: "RPA Scripts", roles: ["admin"] },
-  { path: "/dashboard/packs", label: "Industry Packs", roles: ["admin"] },
-  { path: "/dashboard/sla", label: "SLA Monitor", roles: ["admin"] },
-  { path: "/dashboard/billing", label: "Billing", roles: ["admin"] },
-  { path: "/dashboard/settings", label: "Settings", roles: ["admin"] },
+  { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
+  { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
+  { path: "/dashboard/ceo", labelKey: "nav.ceo", label: "CEO Dashboard", roles: ["admin"] },
+  { path: "/dashboard/cfo", labelKey: "nav.cfo", label: "Finance Dashboard", roles: ["admin", "cfo"] },
+  { path: "/dashboard/cmo", labelKey: "nav.cmo", label: "Marketing Dashboard", roles: ["admin", "cmo"] },
+  { path: "/dashboard/chro", labelKey: "nav.chro", label: "CHRO Dashboard", roles: ["admin", "chro"] },
+  { path: "/dashboard/coo", labelKey: "nav.coo", label: "COO Dashboard", roles: ["admin", "coo"] },
+  { path: "/dashboard/cbo", labelKey: "nav.cbo", label: "CBO Dashboard", roles: ["admin"] },
+  { path: "/dashboard/abm", labelKey: "nav.abm", label: "ABM", roles: ["admin", "cmo"] },
+  { path: "/dashboard/observatory", labelKey: "nav.observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/agents", labelKey: "nav.agents", label: "Agents", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/org-chart", labelKey: "nav.orgChart", label: "Org Chart", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/workflows", labelKey: "nav.workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: ["admin"] },
+  { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
+  { path: "/dashboard/agents/from-sop", labelKey: "nav.createFromSop", label: "Create from SOP", roles: ["admin"] },
+  { path: "/dashboard/integrations", labelKey: "nav.integrations", label: "A2A / MCP", roles: ["admin"] },
+  { path: "/dashboard/sales", labelKey: "nav.sales", label: "Sales Pipeline", roles: ["admin"] },
+  { path: "/dashboard/schemas", labelKey: "nav.schemas", label: "Schemas", roles: ["admin"] },
+  { path: "/dashboard/report-schedules", labelKey: "nav.reportSchedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo"] },
+  { path: "/dashboard/scopes", labelKey: "nav.scopes", label: "Scope Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/enforce-audit", labelKey: "nav.enforceAudit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/audit", labelKey: "nav.audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/knowledge", labelKey: "nav.knowledge", label: "Knowledge Base", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/voice-setup", labelKey: "nav.voiceAgents", label: "Voice Agents", roles: ["admin"] },
+  { path: "/dashboard/rpa", labelKey: "nav.rpa", label: "RPA Scripts", roles: ["admin"] },
+  { path: "/dashboard/packs", labelKey: "nav.packs", label: "Industry Packs", roles: ["admin"] },
+  { path: "/dashboard/sla", labelKey: "nav.sla", label: "SLA Monitor", roles: ["admin"] },
+  { path: "/dashboard/billing", labelKey: "nav.billing", label: "Billing", roles: ["admin"] },
+  { path: "/dashboard/settings", labelKey: "nav.settings", label: "Settings", roles: ["admin"] },
 ];
 
 const ROLE_LABELS: Record<string, { title: string; domain: string }> = {
@@ -62,7 +64,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const auth = useAuth();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [currentLang, setCurrentLang] = useState(i18n.language);
   // Force re-render key when language changes so all translated text updates instantly
   const [langKey, setLangKey] = useState(0);
@@ -91,10 +93,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <>
       <h1 className="text-lg font-bold mb-4 px-1">AgenticOrg</h1>
       <nav className="flex flex-col gap-1 flex-1 overflow-y-auto">
-        {filteredNav.map(({ path, label }) => (
+        {filteredNav.map(({ path, labelKey, label }) => (
           <Link key={path} to={path}
             onClick={() => setSidebarOpen(false)}
-            className={`px-3 py-2 rounded text-sm ${location.pathname === path ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{label}</Link>
+            className={`px-3 py-2 rounded text-sm ${location.pathname === path ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{labelKey ? t(labelKey, label) : label}</Link>
         ))}
       </nav>
       <div className="border-t pt-3 mt-3">
@@ -153,10 +155,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="flex flex-col gap-1 flex-1 overflow-y-auto">
-          {filteredNav.map(({ path, label }) => (
+          {filteredNav.map(({ path, labelKey, label }) => (
             <Link key={path} to={path}
               onClick={() => setSidebarOpen(false)}
-              className={`px-3 py-2 rounded text-sm ${location.pathname === path ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{label}</Link>
+              className={`px-3 py-2 rounded text-sm ${location.pathname === path ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{labelKey ? t(labelKey, label) : label}</Link>
           ))}
         </nav>
         <div className="border-t pt-3 mt-3">

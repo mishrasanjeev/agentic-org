@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgenticOrg vs Claude Managed Agents</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    h1 {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 2.5rem;
+      font-size: 1.05rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 2.5rem;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 0.85rem 1.1rem;
+      text-align: left;
+      border-bottom: 1px solid #1e293b;
+    }
+    th {
+      background: #1e293b;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #cbd5e1;
+    }
+    th:first-child { width: 18%; }
+    th:nth-child(2), th:nth-child(3) { width: 41%; }
+    td:first-child {
+      font-weight: 600;
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+    tr:nth-child(even) { background: rgba(30, 41, 59, 0.4); }
+    tr:hover { background: rgba(30, 41, 59, 0.7); }
+    .highlight { color: #60a5fa; }
+    .section {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .section h2 {
+      font-size: 1.2rem;
+      margin-bottom: 0.75rem;
+    }
+    .section p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    .tag {
+      display: inline-block;
+      background: rgba(96, 165, 250, 0.15);
+      color: #60a5fa;
+      padding: 0.15rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+    .tag.purple {
+      background: rgba(167, 139, 250, 0.15);
+      color: #a78bfa;
+    }
+    .bottom-note {
+      text-align: center;
+      color: #475569;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AgenticOrg vs Claude Managed Agents</h1>
+    <p class="subtitle">One-page comparison &mdash; what each solves and where they differ</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th><span class="tag purple">Claude Managed Agents</span></th>
+          <th><span class="tag">AgenticOrg</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>What it is</td>
+          <td>Anthropic-hosted runtime for Claude-based agents</td>
+          <td>Full enterprise AI employee platform</td>
+        </tr>
+        <tr>
+          <td>Agent scope</td>
+          <td>Generic &mdash; you define each agent via API</td>
+          <td>50+ pre-built domain agents (Finance, HR, Marketing, Ops) with SOP-driven logic</td>
+        </tr>
+        <tr>
+          <td>Orchestration</td>
+          <td>Simple agent loop managed by Anthropic</td>
+          <td>LangGraph with deterministic flows, HITL interrupts, GrantEx capability system</td>
+        </tr>
+        <tr>
+          <td>Connectors</td>
+          <td>Basic &mdash; code exec, file ops, web browse, GitHub</td>
+          <td>54 native connectors (340+ tools) + 1000+ via Composio &mdash; Jira, HubSpot, GSTN, Tally, Banking&nbsp;AA, etc.</td>
+        </tr>
+        <tr>
+          <td>Multi-tenancy</td>
+          <td>Sessions are isolated but no tenant model</td>
+          <td>Full RBAC, multi-company, CA firm multi-client, audit trails</td>
+        </tr>
+        <tr>
+          <td>UI</td>
+          <td>None &mdash; API only</td>
+          <td>React 19 dashboards (CFO / CMO / CEO), Cmd+K NL query, workflow builder</td>
+        </tr>
+        <tr>
+          <td>Deployment</td>
+          <td>Anthropic's cloud only</td>
+          <td>Self-hosted on GCP (GKE), air-gapped option (Ollama / vLLM), full control</td>
+        </tr>
+        <tr>
+          <td>India-specific</td>
+          <td>Nothing</td>
+          <td>GSTN 2-step auth, Tally XML/TDL bridge, RBI-compliant Banking AA</td>
+        </tr>
+        <tr>
+          <td>Pricing</td>
+          <td>Per-token + $0.08 / agent-hour</td>
+          <td>Self-hosted &mdash; you control costs</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section">
+      <h2>Claude Managed Agents <span class="tag purple">Runtime Layer</span></h2>
+      <p>"We'll host the agent loop for you so you don't build your own orchestration." Great for teams that want to ship a simple Claude-powered agent fast without managing infra.</p>
+    </div>
+
+    <div class="section">
+      <h2>AgenticOrg <span class="tag">Full Vertical Platform</span></h2>
+      <p>Domain-specific agents, 54 real-world connectors, governance, dashboards, and India-market specialization. The agent execution loop (what Managed Agents provides) is just one small slice &mdash; AgenticOrg layers connectors, UI, governance, and domain logic on top.</p>
+    </div>
+
+    <div class="section">
+      <h2>Bottom Line</h2>
+      <p>They are <strong style="color:#e2e8f0;">complementary, not competitive</strong>. Managed Agents could serve as one LLM backend (alongside existing RouteLLM smart routing), but it would replace only the agent execution loop &mdash; not the connectors, UI, governance, or domain logic that make AgenticOrg a platform.</p>
+    </div>
+
+    <p class="bottom-note">Last updated: April 2026</p>
+  </div>
+</body>
+</html>

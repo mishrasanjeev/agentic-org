@@ -2,11 +2,27 @@ import axios from "axios";
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api/v1`
   : "/api/v1";
-const api = axios.create({ baseURL: API_BASE });
+const api = axios.create({ baseURL: API_BASE, timeout: 30000 });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
+});
+
+// TC-001: Auto-retry failed GET requests once (covers transient failures on navigation)
+api.interceptors.response.use(undefined, async (error) => {
+  const config = error.config;
+  if (
+    config &&
+    !config._retried &&
+    config.method === "get" &&
+    (!error.response || error.response.status >= 500)
+  ) {
+    config._retried = true;
+    await new Promise((r) => setTimeout(r, 1000));
+    return api(config);
+  }
+  return Promise.reject(error);
 });
 let isRedirectingTo401 = false;
 api.interceptors.response.use(

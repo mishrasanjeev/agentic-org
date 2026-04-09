@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re as _re
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -639,6 +640,18 @@ async def import_agents_csv(
     text_content = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text_content))
 
+    # TC-009: Validate CSV has proper headers
+    if not reader.fieldnames or not {"name", "agent_type", "domain"}.intersection(
+        {f.strip().lower() for f in reader.fieldnames}
+    ):
+        raise HTTPException(
+            422,
+            detail="CSV missing required columns. Expected: name, agent_type, domain",
+        )
+
+    valid_domains = {"finance", "hr", "marketing", "ops", "backoffice", "comms"}
+    name_pattern = _re.compile(r"^[a-zA-Z][a-zA-Z0-9 _\-\.]{1,99}$")
+
     imported: list[dict] = []
     skipped: list[dict] = []
     rows_with_parent: list[dict] = []
@@ -647,10 +660,28 @@ async def import_agents_csv(
         for row in reader:
             name = (row.get("name") or row.get("Name") or "").strip()
             agent_type = (row.get("agent_type") or "").strip()
-            domain = (row.get("domain") or "").strip()
+            domain = (row.get("domain") or "").strip().lower()
 
             if not name or not agent_type or not domain:
                 skipped.append({"reason": "missing required field", "row": dict(row)})
+                continue
+
+            # TC-011: Validate data formats
+            if not name_pattern.match(name):
+                skipped.append({
+                    "reason": "invalid name — must start with a letter, alphanumeric only",
+                    "row": dict(row),
+                })
+                continue
+            if not name_pattern.match(agent_type):
+                skipped.append({"reason": "invalid agent_type format", "row": dict(row)})
+                continue
+            if domain not in valid_domains:
+                allowed = ", ".join(sorted(valid_domains))
+                skipped.append({
+                    "reason": f"invalid domain '{domain}' — must be: {allowed}",
+                    "row": dict(row),
+                })
                 continue
 
             designation = (row.get("designation") or "").strip()
@@ -1872,7 +1903,7 @@ async def delete_agent(
         if not agent:
             raise HTTPException(404, "Agent not found")
 
-        deletable_statuses = {"paused", "retired", "inactive"}
+        deletable_statuses = {"paused", "retired", "inactive", "shadow"}
         if agent.status not in deletable_statuses:
             raise HTTPException(
                 409,
@@ -1889,6 +1920,19 @@ async def delete_agent(
             details={"agent_name": agent.name, "agent_type": agent.agent_type},
         )
         session.add(audit)
+
+        # Delete related records that may have FK constraints
+        for related_model in (AgentLifecycleEvent, AgentCostLedger, AgentVersion):
+            await session.execute(
+                related_model.__table__.delete().where(
+                    related_model.agent_id == agent_id
+                )
+            )
+        # Clear HITL queue entries for this agent
+        await session.execute(
+            HITLQueue.__table__.delete().where(HITLQueue.agent_id == agent_id)
+        )
+
         await session.delete(agent)
 
     return {"id": str(agent_id), "deleted": True}

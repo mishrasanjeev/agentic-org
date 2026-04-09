@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ const PROVIDERS = [
 /* ------------------------------------------------------------------ */
 
 export default function VoiceSetup() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<VoiceConfig>({
     sip_provider: "",
@@ -291,7 +293,7 @@ export default function VoiceSetup() {
 
       {/* Navigation */}
       <div className="flex justify-between">
-        <Button variant="outline" onClick={() => setStep((s) => s - 1)} disabled={step === 0}>
+        <Button variant="outline" onClick={() => step === 0 ? navigate(-1) : setStep((s) => s - 1)}>
           Back
         </Button>
         {step < STEPS.length - 1 && (

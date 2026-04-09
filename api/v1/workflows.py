@@ -108,6 +108,12 @@ async def generate_workflow_endpoint(
         definition = await generate_workflow(body.description, tenant_id)
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from None
+    except Exception as exc:
+        _log.exception("workflow_generation_failed", description=body.description[:100])
+        raise HTTPException(
+            502,
+            detail=f"Workflow generation failed: {type(exc).__name__}: {exc}",
+        ) from None
 
     workflow_id: str | None = None
     deployed = False

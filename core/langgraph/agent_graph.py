@@ -185,8 +185,9 @@ def build_agent_graph(
         output_incomplete = (
             not output
             or output.get("status") == "error"
-            or output.get("raw_output") is not None  # JSON parse failed
         )
+        # Note: raw_output presence (non-JSON LLM response) is NOT treated as
+        # incomplete — many valid agent responses are free-text prose.
 
         if any_tool_failed or output_incomplete:
             confidence = min(confidence, 0.5)

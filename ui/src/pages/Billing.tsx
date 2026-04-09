@@ -89,16 +89,10 @@ export default function Billing() {
 
   const handleSubscribe = async (plan: string) => {
     const token = localStorage.getItem("token");
-    const endpoint = currency === "inr" ? "/api/v1/billing/subscribe/india" : "/api/v1/billing/subscribe";
-    const body =
-      currency === "inr"
-        ? { tenant_id: tenantId, plan }
-        : {
-            tenant_id: tenantId,
-            plan,
-            success_url: `${window.location.origin}/dashboard/billing?success=1`,
-            cancel_url: `${window.location.origin}/dashboard/billing?cancelled=1`,
-          };
+    const isIndia = currency === "inr";
+    const endpoint = isIndia ? "/api/v1/billing/subscribe/india" : "/api/v1/billing/subscribe";
+    // Both flows use server-side callback verification — no need to pass success/cancel URLs
+    const body = { tenant_id: tenantId, plan };
 
     try {
       const resp = await fetch(`${API}${endpoint}`, {
@@ -110,7 +104,8 @@ export default function Billing() {
         body: JSON.stringify(body),
       });
       const data = await resp.json();
-      const url = data.checkout_url || data.payment_url;
+      // Plural returns challenge_url, Stripe returns checkout_url
+      const url = data.challenge_url || data.checkout_url;
       if (url) window.location.href = url;
     } catch {
       // handled silently

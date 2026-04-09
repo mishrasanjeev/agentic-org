@@ -21,6 +21,7 @@ export default function Agents() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     fetchAgents();
@@ -32,9 +33,10 @@ export default function Agents() {
       const params: Record<string, string> = {};
       if (domainFilter !== "all") params.domain = domainFilter;
       if (statusFilter !== "all") params.status = statusFilter;
-      const { data } = await api.get("/agents", { params });
+      const { data } = await api.get("/agents", { params: { ...params, per_page: "500" } });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setAgents(items);
+      if (data?.total !== undefined) setTotalCount(data.total);
     } catch {
       setAgents([]);
     } finally {
@@ -47,7 +49,7 @@ export default function Agents() {
   );
 
   const stats = {
-    total: agents.length,
+    total: totalCount || agents.length,
     active: agents.filter((a) => a.status === "active").length,
     shadow: agents.filter((a) => a.status === "shadow").length,
     paused: agents.filter((a) => a.status === "paused").length,
@@ -72,7 +74,12 @@ export default function Agents() {
     setImportResult(null);
     try {
       const { data } = await agentsApi.importCsv(importFile);
-      setImportResult(data);
+      // TC-009: Treat zero imports with zero skips as an error
+      if (data && data.imported === 0 && data.skipped === 0 && !data.error) {
+        setImportResult({ error: "CSV file contains no valid agent rows. Please check the file format and ensure it has data rows with required columns: name, agent_type, domain." });
+      } else {
+        setImportResult(data);
+      }
       fetchAgents();
     } catch (err: any) {
       setImportResult({ error: err.response?.data?.detail || "Import failed" });

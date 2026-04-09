@@ -510,60 +510,74 @@ class TestHubSpotRealPaths:
 
 
 class TestPineLabsRealPaths:
-    """Verify PineLabs Plural connector hits correct Plural PG API paths."""
+    """Verify PineLabs Plural connector hits correct Plural API v1 paths."""
 
     def _make_connector(self):
         from connectors.finance.pinelabs_plural import PinelabsPluralConnector
         c = PinelabsPluralConnector({
+            "client_id": "test_client",
+            "client_secret": "test_secret",
             "merchant_id": "M001",
-            "salt_key": "salt123",
-            "salt_index": "1",
         })
         # _authenticate() sets these — set manually since we skip auth
+        c._client_id = "test_client"
+        c._client_secret = "test_secret"
         c._merchant_id = "M001"
-        c._salt_key = "salt123"
-        c._salt_index = "1"
+        c._access_token = "test_bearer_token"
+        c._token_expires = 9999999999.0
+        c._auth_headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test_bearer_token",
+        }
+        c.base_url = "https://pluraluat.v2.pinepg.in/api"
         c._client = MagicMock()
         return c
 
     @pytest.mark.asyncio
     async def test_create_order_path(self):
         c = self._make_connector()
-        c._client.post = _async_response({"success": True, "code": "PAYMENT_INITIATED", "data": {}})
-        await c.create_order(merchantTransactionId="TXN001", amount=100000)
+        c._client.post = _async_response({
+            "order_id": "v1-ord-1", "redirect_url": "https://checkout.test/pay",
+            "response_code": 200,
+        })
+        await c.create_order(merchant_order_reference="ref1", amount=100000)
         args = c._client.post.call_args
         path = args[0][0]
-        assert path == "/pg/v1/pay"
+        assert "/checkout/v1/orders" in path
 
     @pytest.mark.asyncio
     async def test_check_order_status_path(self):
         c = self._make_connector()
-        c._client.get = _async_response({"success": True, "code": "PAYMENT_SUCCESS", "data": {}})
-        await c.check_order_status(merchantTransactionId="TXN001")
+        c._client.get = _async_response({
+            "order_id": "v1-ord-1", "status": "PROCESSED", "payments": [],
+        })
+        await c.get_order_status(order_id="v1-ord-1")
         args = c._client.get.call_args
         path = args[0][0]
-        assert path == "/pg/v1/status/M001/TXN001"
+        assert "/pay/v1/orders/v1-ord-1" in path
 
     @pytest.mark.asyncio
     async def test_initiate_refund_path(self):
         c = self._make_connector()
-        c._client.post = _async_response({"success": True, "code": "REFUND_INITIATED", "data": {}})
-        await c.initiate_refund(
-            merchantTransactionId="REF001",
-            originalTransactionId="TXN001",
-            amount=50000,
-        )
+        c._client.post = _async_response({
+            "refund_id": "ref-1", "status": "PENDING", "refund_amount": {},
+        })
+        await c.initiate_refund(order_id="v1-ord-1", amount=50000)
         args = c._client.post.call_args
         path = args[0][0]
-        assert path == "/pg/v1/refund"
+        assert "/pay/v1/orders/v1-ord-1/refunds" in path
 
     @pytest.mark.asyncio
-    async def test_create_order_has_x_verify_header(self):
+    async def test_create_order_has_bearer_auth(self):
         c = self._make_connector()
-        c._client.post = _async_response({"success": True, "data": {}})
-        await c.create_order(merchantTransactionId="TXN002", amount=200000)
+        c._client.post = _async_response({
+            "order_id": "v1-ord-2", "challenge_url": "https://checkout.test/pay",
+            "status": "CREATED",
+        })
+        await c.create_order(merchant_order_reference="ref2", amount=200000)
         args = c._client.post.call_args
         headers = args[1].get("headers", {})
-        assert "X-VERIFY" in headers
-        assert "X-MERCHANT-ID" in headers
-        assert headers["X-MERCHANT-ID"] == "M001"
+        assert "Authorization" in headers
+        assert headers["Authorization"].startswith("Bearer ")
+        assert "Request-ID" in headers
+        assert "Request-Timestamp" in headers

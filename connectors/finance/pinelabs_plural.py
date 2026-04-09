@@ -1,13 +1,17 @@
-"""PineLabs Plural connector — real PhonePe/Plural PG API integration.
+"""PineLabs Plural connector — Plural API v1 integration.
 
-Uses X-VERIFY header with SHA256 checksum authentication.
-Reference: https://developer.phonepe.com/docs/
+Uses OAuth2 bearer token authentication via /api/auth/v1/token.
+All payment methods supported in redirect (hosted checkout) mode:
+  CARD, UPI, NETBANKING, WALLET, CREDIT_EMI, DEBIT_EMI
+
+Reference: https://developer.pinelabsonline.com/
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
+import time
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -16,269 +20,329 @@ from connectors.framework.base_connector import BaseConnector
 
 logger = structlog.get_logger()
 
+# Plural API base URLs
+_BASE_URLS = {
+    "sandbox": "https://pluraluat.v2.pinepg.in/api",
+    "production": "https://api.pluralpay.in/api",
+}
+
+ALL_PAYMENT_METHODS = [
+    "CARD", "UPI", "NETBANKING", "WALLET", "CREDIT_EMI", "DEBIT_EMI",
+]
+
 
 class PinelabsPluralConnector(BaseConnector):
     name = "pinelabs_plural"
     category = "finance"
-    auth_type = "api_key"
-    base_url = "https://api.pluralonline.com/api"
+    auth_type = "oauth2"
+    base_url = "https://pluraluat.v2.pinepg.in/api"
     rate_limit_rpm = 200
 
     def _register_tools(self):
         self._tool_registry["create_order"] = self.create_order
-        self._tool_registry["check_order_status"] = self.check_order_status
+        self._tool_registry["get_order_status"] = self.get_order_status
         self._tool_registry["create_payment_link"] = self.create_payment_link
         self._tool_registry["initiate_refund"] = self.initiate_refund
         self._tool_registry["get_settlement_report"] = self.get_settlement_report
         self._tool_registry["get_payout_analytics"] = self.get_payout_analytics
 
-    async def _authenticate(self):
-        """Load merchant credentials for X-VERIFY signing.
-
-        PineLabs Plural uses per-request checksum auth rather than a static
-        bearer token.  The salt_key and salt_index are stored and used by
-        ``_sign_request`` on every outbound call.
-        """
-        self._merchant_id = self._get_secret("merchant_id")
-        self._salt_key = self._get_secret("salt_key")
-        self._salt_index = self._get_secret("salt_index") or "1"
+        # Defaults for pre-auth state (overwritten by _authenticate)
+        self._access_token = ""
+        self._token_expires = 0.0
         self._auth_headers = {"Content-Type": "application/json"}
 
-    def _sign_request(self, payload_json: str, endpoint: str) -> str:
-        """Compute the X-VERIFY header value.
+    async def _authenticate(self):
+        """Obtain OAuth2 bearer token from Plural auth endpoint."""
+        self._client_id = self._get_secret("client_id")
+        self._client_secret = self._get_secret("client_secret")
+        self._merchant_id = self._get_secret("merchant_id")
+        env = self._get_secret("environment") or "sandbox"
+        self.base_url = _BASE_URLS.get(env, _BASE_URLS["sandbox"])
 
-        checksum = SHA256(base64(payload) + endpoint + salt_key) + "###" + salt_index
-        """
-        import base64
+        await self._refresh_token()
 
-        encoded_payload = base64.b64encode(payload_json.encode()).decode()
-        raw = f"{encoded_payload}{endpoint}{self._salt_key}"
-        sha = hashlib.sha256(raw.encode()).hexdigest()
-        return f"{sha}###{self._salt_index}"
-
-    async def _signed_post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        """POST with X-VERIFY checksum header."""
+    async def _refresh_token(self):
+        """Fetch a new bearer token from /api/auth/v1/token."""
         if not self._client:
             raise RuntimeError("Connector not connected")
-        payload_json = json.dumps(body)
-        x_verify = self._sign_request(payload_json, path)
+
         resp = await self._client.post(
-            path,
-            content=payload_json,
-            headers={
-                "Content-Type": "application/json",
-                "X-VERIFY": x_verify,
-                "X-MERCHANT-ID": self._merchant_id,
+            f"{self.base_url}/auth/v1/token",
+            json={
+                "client_id": self._client_id,
+                "client_secret": self._client_secret,
+                "grant_type": "client_credentials",
             },
+            headers={"Content-Type": "application/json"},
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        self._access_token = data["access_token"]
+        expires_at = data.get("expires_at", "")
+        if expires_at:
+            try:
+                dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                self._token_expires = dt.timestamp()
+            except (ValueError, TypeError):
+                self._token_expires = time.time() + 3000
+        else:
+            self._token_expires = time.time() + 3000
 
-    async def _signed_get(self, path: str, params: dict | None = None) -> dict[str, Any]:
-        """GET with X-VERIFY checksum header (payload is empty for GETs)."""
-        if not self._client:
-            raise RuntimeError("Connector not connected")
-        x_verify = self._sign_request("", path)
-        resp = await self._client.get(
-            path,
-            params=params,
-            headers={
-                "X-VERIFY": x_verify,
-                "X-MERCHANT-ID": self._merchant_id,
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()
+        self._auth_headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._access_token}",
+        }
+
+    def _request_headers(self) -> dict[str, str]:
+        """Build per-request headers with timestamp and request ID."""
+        return {
+            **self._auth_headers,
+            "Request-Timestamp": datetime.now(UTC)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z"),
+            "Request-ID": str(uuid.uuid4()),
+        }
+
+    async def _ensure_token(self):
+        """Refresh token if expired or about to expire."""
+        if time.time() > (self._token_expires - 60):
+            await self._refresh_token()
 
     async def health_check(self) -> dict[str, Any]:
-        """Verify credentials by checking status of a dummy transaction."""
+        """Verify credentials by fetching a fresh token."""
         try:
-            data = await self._signed_get(
-                f"/pg/v1/status/{self._merchant_id}/health_ping"
-            )
-            return {
-                "status": "healthy",
-                "response_code": data.get("code"),
-            }
+            await self._refresh_token()
+            return {"status": "healthy", "token_acquired": True}
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
-    # ── Order / Payment ────────────────────────────────────────────────
+    # ── Create Order (Hosted Checkout / Redirect) ───────────────────
 
     async def create_order(self, **params) -> dict[str, Any]:
-        """Initiate a payment order via the Plural PG.
+        """Create a payment order — returns challenge_url for redirect checkout.
 
-        Required: merchantTransactionId, amount (in paise), merchantUserId,
-                  redirectUrl, redirectMode, paymentInstrument.
+        Required: merchant_order_reference, amount (in paise).
+        Optional: callback_url, failure_callback_url, customer_email,
+                  allowed_payment_methods (defaults to all).
         """
-        merchant_txn_id = params.get("merchantTransactionId")
+        await self._ensure_token()
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+
+        merchant_ref = params.get("merchant_order_reference")
         amount = params.get("amount")
-        if not merchant_txn_id or not amount:
-            return {"error": "merchantTransactionId and amount are required"}
+        if not merchant_ref or not amount:
+            return {"error": "merchant_order_reference and amount are required"}
 
-        body = {
-            "merchantId": params.get("merchantId") or self._merchant_id,
-            "merchantTransactionId": merchant_txn_id,
-            "amount": amount,
-            "merchantUserId": params.get("merchantUserId", ""),
-            "redirectUrl": params.get("redirectUrl", ""),
-            "redirectMode": params.get("redirectMode", "REDIRECT"),
-            "paymentInstrument": params.get("paymentInstrument", {"type": "PAY_PAGE"}),
+        body: dict[str, Any] = {
+            "merchant_order_reference": merchant_ref,
+            "order_amount": {
+                "value": int(amount),
+                "currency": params.get("currency", "INR"),
+            },
+            "pre_auth": params.get("pre_auth", False),
+            "allowed_payment_methods": params.get(
+                "allowed_payment_methods", ALL_PAYMENT_METHODS
+            ),
         }
 
-        data = await self._signed_post("/pg/v1/pay", body)
-        inner = data.get("data", {})
-        return {
-            "success": data.get("success"),
-            "code": data.get("code"),
-            "message": data.get("message"),
-            "merchantTransactionId": inner.get("merchantTransactionId"),
-            "instrumentResponse": inner.get("instrumentResponse"),
-        }
+        if params.get("callback_url"):
+            body["callback_url"] = params["callback_url"]
+        if params.get("failure_callback_url"):
+            body["failure_callback_url"] = params["failure_callback_url"]
+        if params.get("notes"):
+            body["notes"] = params["notes"]
 
-    async def check_order_status(self, **params) -> dict[str, Any]:
-        """Check the status of a payment transaction.
+        # Customer details
+        if params.get("customer_email") or params.get("customer_name"):
+            customer: dict[str, Any] = {}
+            if params.get("customer_email"):
+                customer["email_id"] = params["customer_email"]
+            if params.get("customer_name"):
+                parts = params["customer_name"].split(" ", 1)
+                customer["first_name"] = parts[0]
+                if len(parts) > 1:
+                    customer["last_name"] = parts[1]
+            if params.get("customer_phone"):
+                customer["mobile_number"] = params["customer_phone"]
+                customer["country_code"] = "91"
+            body["purchase_details"] = {"customer": customer}
 
-        Required: merchantTransactionId.
-        Optional: merchantId (defaults to configured merchant).
-        """
-        merchant_txn_id = params.get("merchantTransactionId")
-        if not merchant_txn_id:
-            return {"error": "merchantTransactionId is required"}
-        merchant_id = params.get("merchantId") or self._merchant_id
-
-        data = await self._signed_get(
-            f"/pg/v1/status/{merchant_id}/{merchant_txn_id}"
+        # Use the hosted checkout endpoint (returns redirect_url)
+        resp = await self._client.post(
+            f"{self.base_url}/checkout/v1/orders",
+            json=body,
+            headers=self._request_headers(),
         )
-        inner = data.get("data", {})
+        resp.raise_for_status()
+        data = resp.json()
+
         return {
-            "success": data.get("success"),
-            "code": data.get("code"),
-            "message": data.get("message"),
-            "merchantTransactionId": inner.get("merchantTransactionId"),
-            "transactionId": inner.get("transactionId"),
-            "amount": inner.get("amount"),
-            "state": inner.get("state"),
-            "paymentInstrument": inner.get("paymentInstrument"),
+            "order_id": data.get("order_id"),
+            "redirect_url": data.get("redirect_url"),
+            "status": "CREATED",
+            "merchant_order_reference": merchant_ref,
+            "integration_mode": "REDIRECT",
+            "allowed_payment_methods": ALL_PAYMENT_METHODS,
         }
 
-    # ── Payment Links ──────────────────────────────────────────────────
+    # ── Get Order Status ────────────────────────────────────────────
+
+    async def get_order_status(self, **params) -> dict[str, Any]:
+        """Check the status of a payment order.
+
+        Required: order_id.
+        """
+        await self._ensure_token()
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+
+        order_id = params.get("order_id")
+        if not order_id:
+            return {"error": "order_id is required"}
+
+        resp = await self._client.get(
+            f"{self.base_url}/pay/v1/orders/{order_id}",
+            headers=self._request_headers(),
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+        # Plural wraps response in "data" key
+        data = raw.get("data", raw)
+
+        return {
+            "order_id": data.get("order_id"),
+            "merchant_order_reference": data.get("merchant_order_reference"),
+            "status": data.get("status"),
+            "order_amount": data.get("order_amount", {}),
+            "payments": data.get("payments", []),
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
+        }
+
+    # ── Payment Links ───────────────────────────────────────────────
 
     async def create_payment_link(self, **params) -> dict[str, Any]:
         """Create a shareable payment link.
 
-        Required: amount, merchantTransactionId.
-        Optional: merchantUserId.
+        Required: amount, merchant_order_reference.
         """
+        await self._ensure_token()
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+
         amount = params.get("amount")
-        merchant_txn_id = params.get("merchantTransactionId")
-        if not amount or not merchant_txn_id:
-            return {"error": "amount and merchantTransactionId are required"}
+        merchant_ref = params.get("merchant_order_reference")
+        if not amount or not merchant_ref:
+            return {"error": "amount and merchant_order_reference are required"}
 
-        body = {
-            "merchantId": self._merchant_id,
-            "merchantTransactionId": merchant_txn_id,
-            "merchantUserId": params.get("merchantUserId", ""),
-            "amount": amount,
+        body: dict[str, Any] = {
+            "merchant_order_reference": merchant_ref,
+            "order_amount": {"value": int(amount), "currency": "INR"},
+            "allowed_payment_methods": params.get(
+                "allowed_payment_methods", ALL_PAYMENT_METHODS
+            ),
         }
 
-        data = await self._signed_post("/v1/payment-links/create", body)
-        inner = data.get("data", {})
+        if params.get("callback_url"):
+            body["callback_url"] = params["callback_url"]
+
+        resp = await self._client.post(
+            f"{self.base_url}/pay/v1/orders",
+            json=body,
+            headers=self._request_headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
         return {
-            "success": data.get("success"),
-            "code": data.get("code"),
-            "message": data.get("message"),
-            "paymentLinkId": inner.get("paymentLinkId"),
-            "paymentLinkUrl": inner.get("paymentLinkUrl"),
-            "expiresAt": inner.get("expiresAt"),
+            "order_id": data.get("order_id"),
+            "challenge_url": data.get("challenge_url"),
+            "status": data.get("status"),
         }
 
-    # ── Refunds ────────────────────────────────────────────────────────
+    # ── Refunds ─────────────────────────────────────────────────────
 
     async def initiate_refund(self, **params) -> dict[str, Any]:
-        """Initiate a refund for a completed transaction.
+        """Initiate a refund for a completed order.
 
-        Required: merchantTransactionId, originalTransactionId, amount (in paise).
+        Required: order_id, amount (in paise).
         """
-        merchant_txn_id = params.get("merchantTransactionId")
-        original_txn_id = params.get("originalTransactionId")
+        await self._ensure_token()
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+
+        order_id = params.get("order_id")
         amount = params.get("amount")
-        if not merchant_txn_id or not original_txn_id or not amount:
-            return {
-                "error": "merchantTransactionId, originalTransactionId, and amount are required"
-            }
+        if not order_id or not amount:
+            return {"error": "order_id and amount are required"}
 
         body = {
-            "merchantId": params.get("merchantId") or self._merchant_id,
-            "merchantTransactionId": merchant_txn_id,
-            "originalTransactionId": original_txn_id,
-            "amount": amount,
+            "merchant_refund_reference": f"ref_{uuid.uuid4().hex[:12]}",
+            "refund_amount": {"value": int(amount), "currency": "INR"},
         }
 
-        data = await self._signed_post("/pg/v1/refund", body)
-        inner = data.get("data", {})
+        resp = await self._client.post(
+            f"{self.base_url}/pay/v1/orders/{order_id}/refunds",
+            json=body,
+            headers=self._request_headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
         return {
-            "success": data.get("success"),
-            "code": data.get("code"),
-            "message": data.get("message"),
-            "merchantTransactionId": inner.get("merchantTransactionId"),
-            "transactionId": inner.get("transactionId"),
-            "amount": inner.get("amount"),
-            "state": inner.get("state"),
+            "refund_id": data.get("refund_id"),
+            "order_id": order_id,
+            "status": data.get("status"),
+            "refund_amount": data.get("refund_amount", {}),
         }
 
-    # ── Settlements ────────────────────────────────────────────────────
+    # ── Settlements ─────────────────────────────────────────────────
 
     async def get_settlement_report(self, **params) -> dict[str, Any]:
         """Retrieve settlement details for a date range.
 
-        Optional: startDate, endDate (ISO 8601 format).
+        Optional: start_date, end_date (ISO 8601).
         """
+        await self._ensure_token()
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+
         query: dict[str, Any] = {}
-        if params.get("startDate"):
-            query["startDate"] = params["startDate"]
-        if params.get("endDate"):
-            query["endDate"] = params["endDate"]
+        if params.get("start_date"):
+            query["start_date"] = params["start_date"]
+        if params.get("end_date"):
+            query["end_date"] = params["end_date"]
 
-        data = await self._signed_get("/v1/settlements", params=query)
-        settlements = data.get("data", [])
-        if isinstance(settlements, dict):
-            settlements = settlements.get("settlements", [])
-        return {
-            "success": data.get("success"),
-            "code": data.get("code"),
-            "settlements": [
-                {
-                    "settlementId": s.get("settlementId"),
-                    "amount": s.get("amount"),
-                    "status": s.get("status"),
-                    "settledAt": s.get("settledAt"),
-                    "utr": s.get("utr"),
-                }
-                for s in (settlements if isinstance(settlements, list) else [])
-            ],
-        }
+        resp = await self._client.get(
+            f"{self.base_url}/pay/v1/settlements",
+            params=query,
+            headers=self._request_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
 
-    # ── Analytics ──────────────────────────────────────────────────────
+    # ── Analytics ───────────────────────────────────────────────────
 
     async def get_payout_analytics(self, **params) -> dict[str, Any]:
         """Retrieve payout analytics for a date range.
 
-        Optional: startDate, endDate (ISO 8601 format).
+        Optional: start_date, end_date (ISO 8601).
         """
-        query: dict[str, Any] = {}
-        if params.get("startDate"):
-            query["startDate"] = params["startDate"]
-        if params.get("endDate"):
-            query["endDate"] = params["endDate"]
+        await self._ensure_token()
+        if not self._client:
+            raise RuntimeError("Connector not connected")
 
-        data = await self._signed_get("/v1/analytics/payouts", params=query)
-        inner = data.get("data", {})
-        return {
-            "success": data.get("success"),
-            "code": data.get("code"),
-            "totalPayouts": inner.get("totalPayouts"),
-            "totalAmount": inner.get("totalAmount"),
-            "currency": inner.get("currency"),
-            "payouts": inner.get("payouts", []),
-        }
+        query: dict[str, Any] = {}
+        if params.get("start_date"):
+            query["start_date"] = params["start_date"]
+        if params.get("end_date"):
+            query["end_date"] = params["end_date"]
+
+        resp = await self._client.get(
+            f"{self.base_url}/pay/v1/analytics/payouts",
+            params=query,
+            headers=self._request_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()

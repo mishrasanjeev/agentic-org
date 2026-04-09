@@ -80,6 +80,7 @@ const IndustryPacks = lazyRetry(() => import("./pages/IndustryPacks"));
 
 /* ── Billing ── */
 const Billing = lazyRetry(() => import("./pages/Billing"));
+const BillingCallback = lazyRetry(() => import("./pages/BillingCallback"));
 
 /* ── Scope Enforcement ── */
 const ScopeDashboard = lazyRetry(() => import("./pages/ScopeDashboard"));
@@ -543,6 +544,10 @@ export default function App() {
             </Layout>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/dashboard/billing/callback"
+        element={<BillingCallback />}
       />
       <Route
         path="/dashboard/partner"
