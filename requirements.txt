@@ -63,7 +63,7 @@ langchain-google-genai==4.2.1
 langchain-anthropic==1.4.0
 langchain-openai==1.1.12
 langgraph-checkpoint-postgres==3.0.5
-langsmith==0.7.26
+langsmith==0.7.29
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0
