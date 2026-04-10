@@ -5,6 +5,7 @@ Phase 3-4 API endpoint tests using FastAPI TestClient.
 
 from __future__ import annotations
 
+import os
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import patch
@@ -362,6 +363,10 @@ class TestCompanies:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.skipif(
+    not os.getenv("AGENTICORG_DB_URL"),
+    reason="report schedules now backed by PostgreSQL",
+)
 class TestReportSchedules:
     """CRUD + run-now + toggle for report schedules."""
 

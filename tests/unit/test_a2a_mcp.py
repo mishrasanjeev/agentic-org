@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi import HTTPException
 
@@ -52,12 +54,19 @@ class TestA2ATask:
             )
         assert exc.value.status_code == 400
 
+    @pytest.mark.skipif(
+        not os.getenv("AGENTICORG_DB_URL"),
+        reason="requires DB (a2a tasks now backed by PostgreSQL)",
+    )
     @pytest.mark.asyncio
     async def test_get_task_not_found(self):
         from api.v1.a2a import get_task
 
         with pytest.raises(HTTPException) as exc:
-            await get_task("nonexistent_task_id")
+            await get_task(
+                "nonexistent_task_id",
+                "00000000-0000-0000-0000-000000000001",
+            )
         assert exc.value.status_code == 404
 
 

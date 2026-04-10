@@ -2063,6 +2063,11 @@ class TestGetSalesMetrics:
 
 
 class TestSeedTargetProspects:
+    @pytest.fixture(autouse=True)
+    def _demo_env(self, monkeypatch):
+        """Seed endpoint is gated to demo/dev environments."""
+        monkeypatch.setenv("AGENTICORG_ENV", "demo")
+
     @pytest.mark.asyncio
     async def test_seed_all_new(self, mock_session, tenant_id):
         from api.v1.sales import seed_target_prospects

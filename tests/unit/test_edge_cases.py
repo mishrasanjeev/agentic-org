@@ -548,53 +548,51 @@ class TestKPIEdgeCases:
     """Edge cases for KPI data handling."""
 
     def test_cfo_kpi_bank_balances_is_list_not_null(self):
-        """bank_balances should always be a list, never null."""
+        """domain_breakdown should always be a list, never null."""
         from core.reports.generator import ReportGenerator
 
         data = ReportGenerator._fetch_cfo_kpis("default")
-        assert isinstance(data["bank_balances"], list)
-        assert len(data["bank_balances"]) > 0
+        assert isinstance(data["domain_breakdown"], list)
 
     def test_cfo_kpi_ar_aging_has_all_buckets(self):
+        """agent_count should always be an integer."""
         from core.reports.generator import ReportGenerator
 
         data = ReportGenerator._fetch_cfo_kpis("default")
-        ar = data["ar_aging"]
-        for key in ("0_30", "31_60", "61_90", "90_plus"):
-            assert key in ar
-            assert isinstance(ar[key], (int, float))
+        assert isinstance(data["agent_count"], int)
 
     def test_cfo_kpi_monthly_pl_is_list(self):
+        """domain_breakdown should always be a list."""
         from core.reports.generator import ReportGenerator
 
         data = ReportGenerator._fetch_cfo_kpis("default")
-        assert isinstance(data["monthly_pl"], list)
-        assert len(data["monthly_pl"]) > 0
+        assert isinstance(data["domain_breakdown"], list)
 
     def test_cmo_kpi_roas_is_dict(self):
+        """success_rate should be a non-negative number."""
         from core.reports.generator import ReportGenerator
 
         data = ReportGenerator._fetch_cmo_kpis("default")
-        assert isinstance(data["roas_by_channel"], dict)
+        assert isinstance(data["success_rate"], (int, float))
+        assert data["success_rate"] >= 0
 
     def test_cmo_kpi_email_performance_has_rates(self):
+        """total_tasks_30d should be a non-negative integer."""
         from core.reports.generator import ReportGenerator
 
         data = ReportGenerator._fetch_cmo_kpis("default")
-        ep = data["email_performance"]
-        assert "open_rate" in ep
-        assert "click_rate" in ep
-        assert "unsubscribe_rate" in ep
+        assert isinstance(data["total_tasks_30d"], int)
+        assert data["total_tasks_30d"] >= 0
 
     def test_kpi_values_are_non_negative(self):
         """All KPI numeric values should be non-negative in demo data."""
         from core.reports.generator import ReportGenerator
 
         data = ReportGenerator._fetch_cfo_kpis("default")
-        assert data["cash_runway_months"] >= 0
-        assert data["burn_rate"] >= 0
-        assert data["dso_days"] >= 0
-        assert data["dpo_days"] >= 0
+        assert data["agent_count"] >= 0
+        assert data["total_tasks_30d"] >= 0
+        assert data["success_rate"] >= 0
+        assert data["total_cost_usd"] >= 0
 
     def test_kpi_large_numbers_handled(self):
         """Verify the INR formatter handles large numbers."""

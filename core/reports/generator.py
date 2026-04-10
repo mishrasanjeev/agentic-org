@@ -500,6 +500,9 @@ class ReportGenerator:
             "agent_count": 0,
             "total_tasks_30d": 0,
             "success_rate": 0,
+            "hitl_interventions": 0,
+            "total_cost_usd": 0,
+            "domain_breakdown": [],
             "demo": True,
             "source": "report_generator_fallback",
         }
@@ -524,6 +527,9 @@ class ReportGenerator:
             "agent_count": 0,
             "total_tasks_30d": 0,
             "success_rate": 0,
+            "hitl_interventions": 0,
+            "total_cost_usd": 0,
+            "domain_breakdown": [],
             "demo": True,
             "source": "report_generator_fallback",
         }
