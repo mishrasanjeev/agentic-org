@@ -77,41 +77,18 @@ const MICROSOFT_CONNECTORS: Connector[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Composio Marketplace mock data
+// Composio Marketplace — real data from /api/v1/composio/apps
 // ---------------------------------------------------------------------------
-const COMPOSIO_CATEGORIES = ["All", "CRM", "HR", "Finance", "Dev Tools", "Support", "Marketing", "Productivity"];
 
 interface ComposioApp {
+  key: string;
   name: string;
   description: string;
-  category: string;
-  icon: string;
+  logo: string;
+  categories: string[];
+  enabled: boolean;
+  no_auth: boolean;
 }
-
-const COMPOSIO_APPS: ComposioApp[] = [
-  { name: "Notion", description: "All-in-one workspace for notes, docs, and project management", category: "Productivity", icon: "N" },
-  { name: "Asana", description: "Work management platform for teams to orchestrate work", category: "Productivity", icon: "A" },
-  { name: "Trello", description: "Visual project management with boards, lists, and cards", category: "Productivity", icon: "T" },
-  { name: "Monday", description: "Work operating system for managing projects and workflows", category: "Productivity", icon: "M" },
-  { name: "Zoho CRM", description: "Customer relationship management for sales and marketing", category: "CRM", icon: "Z" },
-  { name: "Pipedrive", description: "Sales CRM and pipeline management for small teams", category: "CRM", icon: "P" },
-  { name: "Freshdesk", description: "Customer support ticketing and helpdesk software", category: "Support", icon: "F" },
-  { name: "Intercom", description: "Customer messaging platform for sales, marketing, and support", category: "Support", icon: "I" },
-  { name: "Shopify", description: "E-commerce platform for online stores and retail POS", category: "Finance", icon: "S" },
-  { name: "Stripe", description: "Online payment processing for internet businesses", category: "Finance", icon: "S" },
-  { name: "QuickBooks", description: "Accounting software for small and medium businesses", category: "Finance", icon: "Q" },
-  { name: "Xero", description: "Cloud-based accounting software for small businesses", category: "Finance", icon: "X" },
-  { name: "Workday", description: "Enterprise cloud for finance and human capital management", category: "HR", icon: "W" },
-  { name: "BambooHR", description: "HR software for small and medium businesses", category: "HR", icon: "B" },
-  { name: "Linear", description: "Issue tracking and project management for software teams", category: "Dev Tools", icon: "L" },
-  { name: "ClickUp", description: "All-in-one productivity and project management platform", category: "Productivity", icon: "C" },
-  { name: "Airtable", description: "Spreadsheet-database hybrid for flexible data management", category: "Productivity", icon: "A" },
-  { name: "Typeform", description: "Interactive forms and surveys with conversational UI", category: "Marketing", icon: "T" },
-  { name: "Calendly", description: "Scheduling automation for meetings and appointments", category: "Productivity", icon: "C" },
-  { name: "Zendesk", description: "Customer service software and support ticket system", category: "Support", icon: "Z" },
-  { name: "HubSpot", description: "Inbound marketing, sales, and CRM platform", category: "Marketing", icon: "H" },
-  { name: "Mailchimp", description: "Email marketing and automation platform", category: "Marketing", icon: "M" },
-];
 
 export default function Connectors() {
   const navigate = useNavigate();
@@ -125,7 +102,11 @@ export default function Connectors() {
 
   // Marketplace state
   const [marketplaceSearch, setMarketplaceSearch] = useState("");
-  const [marketplaceCategory, setMarketplaceCategory] = useState("All");
+  const [marketplaceCategory, setMarketplaceCategory] = useState("");
+  const [marketplaceApps, setMarketplaceApps] = useState<ComposioApp[]>([]);
+  const [marketplaceTotal, setMarketplaceTotal] = useState(0);
+  const [marketplaceCategories, setMarketplaceCategories] = useState<string[]>([]);
+  const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [connectedApps, setConnectedApps] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -190,12 +171,42 @@ export default function Connectors() {
     unhealthy: connectors.filter((c) => c.status !== "active").length,
   };
 
-  // Marketplace filtering
-  const filteredMarketplace = COMPOSIO_APPS.filter((app) => {
-    const matchesSearch = !marketplaceSearch || app.name.toLowerCase().includes(marketplaceSearch.toLowerCase()) || app.description.toLowerCase().includes(marketplaceSearch.toLowerCase());
-    const matchesCategory = marketplaceCategory === "All" || app.category === marketplaceCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Fetch marketplace apps from Composio API
+  async function fetchMarketplace() {
+    setMarketplaceLoading(true);
+    try {
+      const params: Record<string, string> = { limit: "200" };
+      if (marketplaceSearch) params.search = marketplaceSearch;
+      if (marketplaceCategory) params.category = marketplaceCategory;
+      const { data } = await api.get("/composio/apps", { params });
+      setMarketplaceApps(data.apps || []);
+      setMarketplaceTotal(data.total || 0);
+    } catch {
+      setMarketplaceApps([]);
+    } finally {
+      setMarketplaceLoading(false);
+    }
+  }
+
+  async function fetchCategories() {
+    try {
+      const { data } = await api.get("/composio/categories");
+      setMarketplaceCategories(Array.isArray(data) ? data : []);
+    } catch {
+      setMarketplaceCategories([]);
+    }
+  }
+
+  // Fetch when tab switches to marketplace or filters change
+  useEffect(() => {
+    if (activeTab === "marketplace") {
+      fetchMarketplace();
+      if (marketplaceCategories.length === 0) fetchCategories();
+    }
+  }, [activeTab, marketplaceSearch, marketplaceCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Filtering is done server-side via query params
+  const filteredMarketplace = marketplaceApps;
 
   function handleConnect(appName: string) {
     setConnectedApps((prev) => {
@@ -230,7 +241,7 @@ export default function Connectors() {
           onClick={() => setActiveTab("marketplace")}
           className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "marketplace" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary hover:border-primary/50"}`}
         >
-          Marketplace (1000+)
+          Marketplace ({marketplaceTotal || "1000+"})
         </button>
       </div>
 
@@ -324,7 +335,7 @@ export default function Connectors() {
               type="text"
               value={marketplaceSearch}
               onChange={(e) => setMarketplaceSearch(e.target.value)}
-              placeholder="Search 1000+ Composio tools..."
+              placeholder={`Search ${marketplaceTotal || "1000+"}  apps...`}
               className="border rounded px-3 py-2 text-sm flex-1"
             />
             <select
@@ -333,38 +344,45 @@ export default function Connectors() {
               onChange={(e) => setMarketplaceCategory(e.target.value)}
               className="border rounded px-3 py-2 text-sm"
             >
-              {COMPOSIO_CATEGORIES.map((c) => (
+              <option value="">All Categories</option>
+              {marketplaceCategories.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
 
-          {filteredMarketplace.length === 0 ? (
-            <p className="text-muted-foreground">No marketplace tools match your search.</p>
+          {marketplaceLoading ? (
+            <p className="text-muted-foreground">Loading marketplace apps...</p>
+          ) : filteredMarketplace.length === 0 ? (
+            <p className="text-muted-foreground">No marketplace apps match your search.</p>
           ) : (
             <div className="grid grid-cols-3 gap-4">
               {filteredMarketplace.map((app) => (
-                <Card key={app.name} data-testid={`composio-card-${app.name.toLowerCase().replace(/\s+/g, "-")}`}>
+                <Card key={app.key} data-testid={`composio-card-${app.key}`}>
                   <CardHeader className="pb-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
-                        {app.icon}
-                      </div>
+                      {app.logo ? (
+                        <img src={app.logo} alt={app.name} className="w-10 h-10 rounded-lg object-contain" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
+                          {app.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <CardTitle className="text-sm">{app.name}</CardTitle>
-                        <span className="text-[10px] text-muted-foreground">{app.category}</span>
+                        <span className="text-[10px] text-muted-foreground">{(app.categories || []).join(", ")}</span>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-xs text-muted-foreground mb-3">{app.description}</p>
+                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{app.description}</p>
                     <Button
                       size="sm"
-                      variant={connectedApps.has(app.name) ? "outline" : "default"}
+                      variant={connectedApps.has(app.key) ? "outline" : "default"}
                       className="w-full"
-                      onClick={() => handleConnect(app.name)}
+                      onClick={() => handleConnect(app.key)}
                     >
-                      {connectedApps.has(app.name) ? "Connected" : "Connect"}
+                      {connectedApps.has(app.key) ? "Connected" : "Connect"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -372,10 +390,13 @@ export default function Connectors() {
             </div>
           )}
 
-          {/* Composio badge */}
-          <div className="flex justify-center pt-4 pb-2">
+          {/* Total count + Composio badge */}
+          <div className="flex justify-between items-center pt-4 pb-2">
+            <span className="text-xs text-muted-foreground">
+              Showing {filteredMarketplace.length} of {marketplaceTotal} apps
+            </span>
             <span className="text-xs text-muted-foreground bg-muted/50 rounded-full px-4 py-1.5 border">
-              Powered by Composio (MIT)
+              Powered by Composio (MIT, Open Source)
             </span>
           </div>
         </>
