@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 from typing import Any
@@ -29,10 +30,24 @@ class ToolGateway:
         self.rate_limiter = rate_limiter
         self.idempotency = idempotency_store
         self.audit = audit_logger
-        self._connectors: dict[str, Any] = {}
+        # P1.3: Cache keyed by (tenant_id, connector_name) to prevent
+        # cross-tenant credential confusion. Per-key asyncio.Lock prevents
+        # races when concurrent requests load the same connector.
+        self._connectors: dict[tuple[str, str], Any] = {}
+        self._connector_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._global_lock = asyncio.Lock()  # protects _connector_locks dict itself
 
-    def register_connector(self, name: str, connector: Any) -> None:
-        self._connectors[name] = connector
+    def register_connector(self, name: str, connector: Any, tenant_id: str = "_global") -> None:
+        """Register a pre-configured connector. Use tenant_id='_global' for shared instances."""
+        self._connectors[(tenant_id, name)] = connector
+
+    async def _get_connector_lock(self, tenant_id: str, connector_name: str) -> asyncio.Lock:
+        """Get or create per-connector lock atomically."""
+        key = (tenant_id, connector_name)
+        async with self._global_lock:
+            if key not in self._connector_locks:
+                self._connector_locks[key] = asyncio.Lock()
+            return self._connector_locks[key]
 
     async def execute(
         self,
@@ -118,18 +133,22 @@ class ToolGateway:
             if cached is not None:
                 return cached
 
-        # 4. Resolve connector (pre-registered or dynamic from registry)
-        connector = self._connectors.get(connector_name)
+        # 4. Resolve connector — tenant-scoped + global fallback
+        connector = (
+            self._connectors.get((tenant_id, connector_name))
+            or self._connectors.get(("_global", connector_name))
+        )
         if not connector:
             connector = await self._resolve_connector(tenant_id, connector_name)
         if not connector:
             return {"error": {"code": "E1005", "message": f"Connector not found: {connector_name}"}}
 
-        try:
-            # Mask PII in params before logging
-            masked_params = mask_pii(params)
+        # P2.3: Mask PII in params BEFORE passing to connector — connectors may
+        # log their own params. We pass masked_params to the tool call.
+        masked_params = mask_pii(params) if isinstance(params, dict) else params
 
-            result = await connector.execute_tool(tool_name, params)
+        try:
+            result = await connector.execute_tool(tool_name, masked_params)
             latency_ms = int((time.monotonic() - start_time) * 1000)
 
             # 5. Mask PII in result before storing/logging
@@ -172,43 +191,58 @@ class ToolGateway:
             return {"error": {"code": "E1001", "message": str(e)}}
 
     async def _resolve_connector(self, tenant_id: str, connector_name: str) -> Any | None:
-        """Dynamically resolve and connect a connector from the registry + DB config."""
+        """Dynamically resolve and connect a connector from registry + DB config.
+
+        P1.3: Uses per-connector asyncio.Lock to prevent races where two
+        concurrent requests load the same connector with different configs.
+        Cache is keyed by (tenant_id, connector_name) to prevent cross-tenant
+        credential confusion.
+        """
         from connectors.registry import ConnectorRegistry
 
-        connector_cls = ConnectorRegistry.get(connector_name)
-        if not connector_cls:
-            return None
+        cache_key = (tenant_id, connector_name)
+        lock = await self._get_connector_lock(tenant_id, connector_name)
 
-        # Load config from database
-        config: dict[str, Any] = {}
-        try:
-            import uuid as _uuid
+        async with lock:
+            # Double-check after acquiring lock — another task may have populated the cache
+            if cache_key in self._connectors:
+                return self._connectors[cache_key]
 
-            from sqlalchemy import select
+            connector_cls = ConnectorRegistry.get(connector_name)
+            if not connector_cls:
+                return None
 
-            from core.database import get_tenant_session
-            from core.models.connector import Connector
+            # Load config from database
+            config: dict[str, Any] = {}
+            try:
+                import uuid as _uuid
 
-            tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-            async with get_tenant_session(tid) as session:
-                result = await session.execute(
-                    select(Connector).where(
-                        Connector.tenant_id == tid,
-                        Connector.name == connector_name,
+                from sqlalchemy import select
+
+                from core.database import get_tenant_session
+                from core.models.connector import Connector
+
+                tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+                async with get_tenant_session(tid) as session:
+                    result = await session.execute(
+                        select(Connector).where(
+                            Connector.tenant_id == tid,
+                            Connector.name == connector_name,
+                        )
                     )
-                )
-                db_connector = result.scalar_one_or_none()
-                if db_connector:
-                    config = db_connector.auth_config or {}
-        except Exception as e:
-            logger.warning("connector_config_load_failed", connector=connector_name, error=str(e))
+                    db_connector = result.scalar_one_or_none()
+                    if db_connector:
+                        config = db_connector.auth_config or {}
+            except Exception as e:
+                logger.warning("connector_config_load_failed", connector=connector_name, error=str(e))
 
-        connector = connector_cls(config=config)
-        try:
-            await connector.connect()
-            # Cache for future calls in this gateway instance
-            self._connectors[connector_name] = connector
-            return connector
-        except Exception as e:
-            logger.warning("connector_connect_failed", connector=connector_name, error=str(e))
-            return connector  # Return even if auth fails — some tools work without auth
+            connector = connector_cls(config=config)
+            try:
+                await connector.connect()
+                # P1.3: Only cache on successful connect — prevent caching broken connectors
+                self._connectors[cache_key] = connector
+                return connector
+            except Exception as e:
+                logger.warning("connector_connect_failed", connector=connector_name, error=str(e))
+                # Return without caching — next call will retry
+                return connector

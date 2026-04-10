@@ -1099,8 +1099,18 @@ async def run_agent(
     cost_controls = agent_config.get("cost_controls", {})
     monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if cost_controls else 0
     if monthly_cap and monthly_cap > 0:
+        # P3.1: Use a Postgres advisory lock keyed on agent_id to serialize
+        # concurrent budget checks. Without this, two requests could both see
+        # spend < cap and both proceed, causing overspend.
         async with get_tenant_session(tid) as session:
             from sqlalchemy import func as sqlfunc
+            from sqlalchemy import text as sqltext
+
+            # Acquire advisory lock for this agent (auto-released at txn end)
+            # pg_advisory_xact_lock(int8) — use hash of UUID as the key
+            lock_key = abs(hash(str(agent_id))) % (2**31)
+            await session.execute(sqltext("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
             month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
             spent_result = await session.execute(
                 select(sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0)).where(

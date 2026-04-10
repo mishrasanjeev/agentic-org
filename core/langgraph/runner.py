@@ -11,6 +11,7 @@ It handles:
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any
@@ -121,16 +122,40 @@ async def run_agent(
     # Compile with checkpointer
     compiled = graph.compile(checkpointer=_checkpointer)
 
-    # Build initial state
-    user_message = _build_user_message(task_input)
-
-    # --- Step 3: PII redaction (before LLM) ---
+    # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
+    # if production has redaction disabled — never silently send PII to LLMs.
     pii_redactor = PIIRedactor()
+    pii_mode = pii_redactor.mode
+    env = os.getenv("AGENTICORG_ENV", "production").lower()
+    if pii_mode == "disabled" and env == "production":
+        raise RuntimeError(
+            "PII redaction is disabled in production. Set "
+            "AGENTICORG_PII_REDACTION_MODE=before_llm. Refusing to send "
+            "user data to LLM without sanitization."
+        )
+
+    # Build user message FROM ALREADY-REDACTED task_input
+    # Apply redaction at the source (each task_input field) so no concatenation
+    # ever sees raw PII.
     pii_token_map: dict[str, str] = {}
-    if pii_redactor.mode == "before_llm":
-        user_message, pii_token_map = pii_redactor.redact(user_message)
+    if pii_mode in ("before_llm", "before_log"):
+        # Recursively redact all string values in task_input
+        from copy import deepcopy
+        redacted_input = deepcopy(task_input) if isinstance(task_input, dict) else task_input
+        if isinstance(redacted_input, dict):
+            for k, v in list(redacted_input.items()):
+                if isinstance(v, str):
+                    new_v, tokens = pii_redactor.redact(v)
+                    redacted_input[k] = new_v
+                    pii_token_map.update(tokens)
+        user_message = _build_user_message(redacted_input)
+        # Defense in depth: redact the assembled message too
+        user_message, extra_tokens = pii_redactor.redact(user_message)
+        pii_token_map.update(extra_tokens)
         if pii_token_map:
             logger.info("pii_redacted_before_llm", entities=len(pii_token_map), agent_id=agent_id)
+    else:
+        user_message = _build_user_message(task_input)
 
     initial_state: AgentState = {
         "messages": [

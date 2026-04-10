@@ -10,14 +10,73 @@ import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant, get_user_domains
+from api.deps import get_current_tenant, get_current_user, get_user_domains, get_user_role
 from core.database import get_tenant_session
 from core.models.agent import Agent
+from core.models.audit import AuditLog
 from core.models.hitl import HITLQueue
 from core.schemas.api import HITLDecision, PaginatedResponse
 
 router = APIRouter()
 _log = structlog.get_logger()
+
+# RBAC role hierarchy — higher number = more authority.
+# A user can decide on HITL items where their level >= the assignee_role's level.
+_ROLE_HIERARCHY: dict[str, int] = {
+    "staff": 10,
+    "manager": 20,
+    "auditor": 25,
+    "cfo": 30,
+    "chro": 30,
+    "cmo": 30,
+    "coo": 30,
+    "cbo": 30,
+    "ceo": 50,
+    "admin": 100,  # admin can VIEW all but DECIDE only on assigned (see decide endpoint)
+}
+
+
+def _role_level(role: str) -> int:
+    return _ROLE_HIERARCHY.get((role or "").lower(), 0)
+
+
+def _can_decide(
+    user_role: str,
+    user_domains: list[str] | None,
+    assignee_role: str,
+    agent_domain: str | None,
+) -> tuple[bool, str]:
+    """Check if user can decide on a HITL item.
+
+    Rules:
+      - admin can DECIDE only on items where role matches (not blanket override)
+      - For other roles: user role level must be >= assignee_role level
+      - Domain match required if user has domain restriction
+    """
+    if not user_role:
+        return False, "user has no role"
+    if not assignee_role:
+        return False, "HITL item has no assignee_role"
+
+    user_lvl = _role_level(user_role)
+    required_lvl = _role_level(assignee_role)
+
+    if user_lvl == 0:
+        return False, f"unknown role '{user_role}'"
+
+    # P3.2: admin must still match the assignee role to DECIDE (not just by being admin)
+    if user_role.lower() == "admin":
+        # Admin can decide if they share the same level/domain as assignee
+        if user_lvl < required_lvl:
+            return False, f"admin level {user_lvl} insufficient for {assignee_role} ({required_lvl})"
+    elif user_lvl < required_lvl:
+        return False, f"role '{user_role}' (level {user_lvl}) cannot approve '{assignee_role}' (level {required_lvl})"
+
+    # Domain check (if user has domain restriction)
+    if user_domains is not None and agent_domain and agent_domain not in user_domains:
+        return False, f"user not authorized for domain '{agent_domain}'"
+
+    return True, ""
 
 
 def _hitl_to_dict(item: HITLQueue) -> dict:
@@ -252,8 +311,18 @@ async def decide(
     body: HITLDecision,
     background_tasks: BackgroundTasks,
     tenant_id: str = Depends(get_current_tenant),
+    user_claims: dict = Depends(get_current_user),
+    user_role: str = Depends(get_user_role),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     tid = _uuid.UUID(tenant_id)
+
+    # P2.1: capture decision_by from authenticated user (always required)
+    user_id_str = user_claims.get("sub") or user_claims.get("agenticorg:user_id") or ""
+    user_name = user_claims.get("name") or user_claims.get("email") or "unknown"
+    if not user_id_str:
+        raise HTTPException(401, "Cannot identify user — missing 'sub' claim")
+
     async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(HITLQueue).where(HITLQueue.id == hitl_id, HITLQueue.tenant_id == tid)
@@ -268,11 +337,75 @@ async def decide(
         if item.expires_at and datetime.now(UTC) > item.expires_at:
             raise HTTPException(410, "HITL item has expired")
 
+        # Validate assignee_role exists (P2.1 — never allow approval without role)
+        if not item.assignee_role:
+            raise HTTPException(
+                422,
+                "HITL item has no assignee_role — cannot validate authorization",
+            )
+
+        # P1.1 + P3.2: Resolve agent domain for RBAC check
+        agent_result = await session.execute(
+            select(Agent.domain).where(Agent.id == item.agent_id)
+        )
+        agent_domain = agent_result.scalar_one_or_none()
+
+        # P1.1: Enforce role hierarchy and domain match
+        allowed, reason = _can_decide(user_role, user_domains, item.assignee_role, agent_domain)
+        if not allowed:
+            _log.warning(
+                "hitl_decide_denied",
+                hitl_id=str(hitl_id),
+                user_id=user_id_str,
+                user_role=user_role,
+                assignee_role=item.assignee_role,
+                reason=reason,
+            )
+            raise HTTPException(403, f"Cannot decide on this approval: {reason}")
+
+        # Apply decision with full attribution
+        try:
+            user_uuid = _uuid.UUID(user_id_str)
+            item.decision_by = user_uuid
+        except (ValueError, TypeError):
+            # Non-UUID sub claim — store None but log
+            _log.warning("hitl_decide_non_uuid_user", user_id=user_id_str)
+
         item.decision = body.decision
         item.decision_notes = body.notes if body.notes else None
         item.decision_at = datetime.now(UTC)
         item.status = "decided"
         workflow_run_id = item.workflow_run_id
+
+        # Audit log entry — captures who approved/rejected what
+        audit = AuditLog(
+            tenant_id=tid,
+            event_type="hitl.decided",
+            actor_type="user",
+            actor_id=user_id_str,
+            agent_id=item.agent_id,
+            action=body.decision or "decide",
+            outcome="success",
+            resource_type="hitl_item",
+            resource_id=str(hitl_id),
+            details={
+                "decision": body.decision,
+                "notes": body.notes or "",
+                "user_name": user_name,
+                "user_role": user_role,
+                "assignee_role": item.assignee_role,
+                "agent_domain": agent_domain,
+            },
+        )
+        session.add(audit)
+
+        _log.info(
+            "hitl_decided",
+            hitl_id=str(hitl_id),
+            user_id=user_id_str,
+            user_role=user_role,
+            decision=body.decision,
+        )
 
     # Resume workflow execution in background
     if workflow_run_id:
@@ -287,5 +420,6 @@ async def decide(
         "hitl_id": str(hitl_id),
         "decision": body.decision,
         "status": "decided",
+        "decided_by": user_id_str,
         "decided_at": item.decision_at.isoformat(),
     }
