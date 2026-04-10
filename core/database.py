@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
@@ -388,17 +389,18 @@ async def init_db() -> None:
             );
         """))
 
-    # Seed demo CA companies (non-transactional — runs after DDL commit)
-    try:
-        from core.seed_ca_demo import seed_ca_demo
+    # Seed demo CA companies ONLY in demo/dev environments — never in production
+    if os.getenv("AGENTICORG_ENV", "production").lower() in ("demo", "development", "dev"):
+        try:
+            from core.seed_ca_demo import seed_ca_demo
 
-        async with async_session_factory() as session:
-            await seed_ca_demo(session)
-            await session.commit()
-    except Exception as exc:
-        import logging as _logging
+            async with async_session_factory() as session:
+                await seed_ca_demo(session)
+                await session.commit()
+        except Exception as exc:
+            import logging as _logging
 
-        _logging.getLogger(__name__).debug("CA demo seed skipped: %s", exc)
+            _logging.getLogger(__name__).debug("CA demo seed skipped: %s", exc)
 
 
 async def close_db() -> None:

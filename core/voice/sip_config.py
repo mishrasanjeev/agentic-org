@@ -212,11 +212,11 @@ async def _test_twilio(config: SIPConfig) -> dict[str, Any]:
             "details": {"status": account.status},
         }
     except ImportError:
-        logger.info("twilio_sdk_not_installed", msg="returning mock success")
+        logger.warning("twilio_sdk_not_installed")
         return {
-            "success": True,
-            "message": "Twilio SDK not installed — mock success (credentials format OK)",
-            "details": {"mock": True},
+            "success": False,
+            "message": "Twilio SDK not installed — run: pip install twilio",
+            "details": {},
         }
     except Exception as exc:
         return {
@@ -243,11 +243,11 @@ async def _test_vonage(config: SIPConfig) -> dict[str, Any]:
             "details": {"balance": str(balance)},
         }
     except ImportError:
-        logger.info("vonage_sdk_not_installed", msg="returning mock success")
+        logger.warning("vonage_sdk_not_installed")
         return {
-            "success": True,
-            "message": "Vonage SDK not installed — mock success (credentials format OK)",
-            "details": {"mock": True},
+            "success": False,
+            "message": "Vonage SDK not installed — run: pip install vonage",
+            "details": {},
         }
     except Exception as exc:
         return {
