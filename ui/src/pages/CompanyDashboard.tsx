@@ -25,19 +25,6 @@ interface Company {
   pending_approvals?: number;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data                                                          */
-/* ------------------------------------------------------------------ */
-
-const MOCK_COMPANIES: Company[] = [
-  { id: "c1", name: "Acme Manufacturing Pvt Ltd", gstin: "29AABCU9603R1ZM", pan: "AABCU9603R", industry: "Manufacturing", state: "Karnataka", status: "active", health_score: 95 },
-  { id: "c2", name: "Greenleaf Exports Ltd", gstin: "07AADCG1234N1Z5", pan: "AADCG1234N", industry: "Export", state: "Delhi", status: "active", health_score: 88 },
-  { id: "c3", name: "Sunrise Healthcare LLP", gstin: "27AACFS5678P1ZK", pan: "AACFS5678P", industry: "Healthcare", state: "Maharashtra", status: "active", health_score: 72 },
-  { id: "c4", name: "Horizon IT Solutions", gstin: "36AABCH7890Q1ZJ", pan: "AABCH7890Q", industry: "IT Services", state: "Telangana", status: "inactive", health_score: 45 },
-  { id: "c5", name: "Sapphire Textiles", gstin: "24AAGCS3456R1ZL", pan: "AAGCS3456R", industry: "Textile", state: "Gujarat", status: "active", health_score: 91 },
-  { id: "c6", name: "Metro Logistics Corp", gstin: "33AABCM6789S1ZN", pan: "AABCM6789S", industry: "Logistics", state: "Tamil Nadu", status: "active", health_score: 85 },
-  { id: "c7", name: "Reddy Agro Exports", gstin: "36AABCR2345T1ZP", pan: "AABCR2345T", industry: "Export", state: "Telangana", status: "active", health_score: 67 },
-];
 
 const INDUSTRY_COLORS: Record<string, string> = {
   Manufacturing: "from-blue-500 to-cyan-600",
@@ -65,13 +52,9 @@ export default function CompanyDashboard() {
     try {
       const res = await api.get("/companies");
       const data = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.items) ? res.data.items : [];
-      if (data.length > 0) {
-        setCompanies(data);
-      } else {
-        setCompanies(MOCK_COMPANIES);
-      }
+      setCompanies(data);
     } catch {
-      setCompanies(MOCK_COMPANIES);
+      setCompanies([]);
     } finally {
       setLoading(false);
     }
@@ -190,7 +173,9 @@ export default function CompanyDashboard() {
       {/* Company Cards Grid */}
       {filtered.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No companies found matching your filters.</p>
+          <p className="text-muted-foreground">
+            {companies.length === 0 ? "No data yet. Add a client to get started." : "No companies found matching your filters."}
+          </p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

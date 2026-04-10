@@ -323,19 +323,40 @@ async def get_usage(tenant_id: str = Depends(get_current_tenant)) -> dict[str, A
 
 @router.get("/invoices")
 async def list_invoices(tenant_id: str = Depends(get_current_tenant)) -> list[dict[str, Any]]:
-    """Return invoice history for a tenant."""
-    # TODO: wire to DB billing_invoices table
-    return [
-        {
-            "id": "inv_stub_001",
-            "tenant_id": tenant_id,
-            "date": "2026-03-01",
-            "amount": 9900,
-            "currency": "usd",
-            "status": "paid",
-            "plan": "pro",
-        }
-    ]
+    """Return invoice history for a tenant from the billing_invoices table."""
+    import uuid as _uuid
+
+    from sqlalchemy import text
+
+    from core.database import get_tenant_session
+
+    tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT id, amount_cents, currency, status, "
+                        "external_invoice_id, paid_at, created_at "
+                        "FROM billing_invoices WHERE tenant_id = :tid "
+                        "ORDER BY created_at DESC LIMIT 50"
+                    ),
+                    {"tid": str(tid)},
+                )
+            ).fetchall()
+            return [
+                {
+                    "id": str(r[0]),
+                    "amount": r[1] or 0,
+                    "currency": r[2] or "usd",
+                    "status": r[3] or "pending",
+                    "plan": "",
+                    "date": (r[5] or r[6]).isoformat() if (r[5] or r[6]) else "",
+                }
+                for r in rows
+            ]
+    except Exception:
+        return []
 
 
 # ── Cancel ───────────────────────────────────────────────────────────

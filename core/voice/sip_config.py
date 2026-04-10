@@ -275,6 +275,6 @@ async def _test_custom(config: SIPConfig) -> dict[str, Any]:
         }
     return {
         "success": True,
-        "message": f"Custom SIP URI '{sip_uri}' format is valid",
-        "details": {"mock": True, "sip_uri": sip_uri},
+        "message": f"Custom SIP URI '{sip_uri}' format is valid (connectivity not tested — requires SIP INVITE)",
+        "details": {"format_valid": True, "sip_uri": sip_uri},
     }

@@ -697,9 +697,13 @@ async def seed_target_prospects(
     auto_process: bool = False,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Seed 20 pre-built Indian enterprise prospects into pipeline.
+    """Seed pre-built prospects into pipeline (demo/dev environments only).
     Set auto_process=true to immediately trigger sales agent on each.
     """
+    import os
+
+    if os.getenv("AGENTICORG_ENV", "production").lower() not in ("demo", "development", "dev"):
+        raise HTTPException(403, "Seed prospects is only available in demo/dev environments")
     tid = _uuid.UUID(tenant_id)
     imported = []
     skipped = []

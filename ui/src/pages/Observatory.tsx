@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import api from "@/lib/api";
 import {
   LineChart,
   Line,
@@ -29,74 +30,8 @@ interface WorkflowStep {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Simulated event pools by domain                                    */
+/*  No simulated event pools — events come from the API                */
 /* ------------------------------------------------------------------ */
-
-const CFO_EVENTS: Omit<AgentEvent, "id" | "timestamp">[] = [
-  { agent: "AP Processor", avatar: "\uD83E\uDDFE", eventType: "thinking", message: "Analyzing invoice INV-2024-0891 from Tata Steel...", domain: "finance" },
-  { agent: "AP Processor", avatar: "\uD83E\uDDFE", eventType: "tool_call", message: "oracle_fusion.read_purchase_order(po_id=\"PO-7842\")", domain: "finance" },
-  { agent: "AP Processor", avatar: "\uD83E\uDDFE", eventType: "tool_call", message: "gstn.validate_gstin(gstin=\"29ABCDE1234F1Z5\")", domain: "finance" },
-  { agent: "AP Processor", avatar: "\uD83E\uDDFE", eventType: "result", message: "GSTIN validated \u2713 | 3-way match: \u2713 | Confidence: 96.2%", domain: "finance" },
-  { agent: "AP Processor", avatar: "\uD83E\uDDFE", eventType: "tool_call", message: "banking_aa.queue_payment(amount=\u20B94,82,000, schedule=\"day_9\")", domain: "finance" },
-  { agent: "Recon Agent", avatar: "\uD83D\uDD0D", eventType: "thinking", message: "Processing batch 47/50 \u2014 matching HDFC transactions...", domain: "finance" },
-  { agent: "Recon Agent", avatar: "\uD83D\uDD0D", eventType: "result", message: "23/23 transactions matched | Auto-posted to GL", domain: "finance" },
-  { agent: "Tax Compliance", avatar: "\uD83D\uDCCA", eventType: "thinking", message: "Computing IGST for inter-state invoice...", domain: "finance" },
-  { agent: "Tax Compliance", avatar: "\uD83D\uDCCA", eventType: "result", message: "IGST \u20B986,760 computed | Added to GSTR-1 draft", domain: "finance" },
-  { agent: "AP Processor", avatar: "\uD83E\uDDFE", eventType: "hitl_trigger", message: "\u26A0\uFE0F Invoice INV-2024-0892 total \u20B97,82,000 exceeds \u20B95L threshold", domain: "finance" },
-  { agent: "Treasury Agent", avatar: "\uD83C\uDFE6", eventType: "thinking", message: "Forecasting weekly cash position from HDFC & ICICI pools...", domain: "finance" },
-  { agent: "Treasury Agent", avatar: "\uD83C\uDFE6", eventType: "result", message: "Projected surplus \u20B912.4Cr | Sweep recommendation generated", domain: "finance" },
-  { agent: "AR Collector", avatar: "\uD83D\uDCE8", eventType: "tool_call", message: "email_service.send_reminder(customer=\"Reliance Retail\", days_overdue=15)", domain: "finance" },
-  { agent: "AR Collector", avatar: "\uD83D\uDCE8", eventType: "result", message: "Payment reminder sent | Outstanding: \u20B923,50,000", domain: "finance" },
-];
-
-const CHRO_EVENTS: Omit<AgentEvent, "id" | "timestamp">[] = [
-  { agent: "Onboarding Bot", avatar: "\uD83D\uDC64", eventType: "thinking", message: "Setting up Day-1 checklist for Priya Sharma (Engineering)...", domain: "hr" },
-  { agent: "Onboarding Bot", avatar: "\uD83D\uDC64", eventType: "tool_call", message: "workday.create_employee_profile(emp_id=\"EMP-4521\")", domain: "hr" },
-  { agent: "Onboarding Bot", avatar: "\uD83D\uDC64", eventType: "tool_call", message: "gsuite.provision_account(email=\"priya.sharma@edumatica.in\")", domain: "hr" },
-  { agent: "Onboarding Bot", avatar: "\uD83D\uDC64", eventType: "result", message: "Profile created \u2713 | IT assets provisioned \u2713 | Slack invite sent", domain: "hr" },
-  { agent: "Leave Manager", avatar: "\uD83D\uDCC5", eventType: "thinking", message: "Processing leave request #LR-892 from Amit Verma...", domain: "hr" },
-  { agent: "Leave Manager", avatar: "\uD83D\uDCC5", eventType: "result", message: "Auto-approved: 2 days CL | Balance: 8 days remaining", domain: "hr" },
-  { agent: "Payroll Agent", avatar: "\uD83D\uDCB0", eventType: "thinking", message: "Computing March payroll for 342 employees...", domain: "hr" },
-  { agent: "Payroll Agent", avatar: "\uD83D\uDCB0", eventType: "tool_call", message: "epfo.compute_pf_contribution(month=\"2026-03\")", domain: "hr" },
-  { agent: "Payroll Agent", avatar: "\uD83D\uDCB0", eventType: "result", message: "Gross: \u20B92.1Cr | PF: \u20B918.4L | TDS: \u20B912.8L | Net: \u20B91.78Cr", domain: "hr" },
-  { agent: "Talent Screener", avatar: "\uD83C\uDFAF", eventType: "thinking", message: "Ranking 47 resumes for Senior ML Engineer role...", domain: "hr" },
-  { agent: "Talent Screener", avatar: "\uD83C\uDFAF", eventType: "result", message: "Top 5 shortlisted | Avg match score: 87.3%", domain: "hr" },
-  { agent: "Payroll Agent", avatar: "\uD83D\uDCB0", eventType: "hitl_trigger", message: "\u26A0\uFE0F Salary revision for VP-level employee requires CFO approval", domain: "hr" },
-];
-
-const CMO_EVENTS: Omit<AgentEvent, "id" | "timestamp">[] = [
-  { agent: "Campaign Agent", avatar: "\uD83D\uDCE2", eventType: "thinking", message: "Analyzing Q1 campaign performance across Google & Meta...", domain: "marketing" },
-  { agent: "Campaign Agent", avatar: "\uD83D\uDCE2", eventType: "tool_call", message: "google_ads.fetch_metrics(campaign=\"Spring_Launch_2026\")", domain: "marketing" },
-  { agent: "Campaign Agent", avatar: "\uD83D\uDCE2", eventType: "result", message: "CTR: 3.2% | CPC: \u20B918.40 | ROAS: 4.7x | Budget utilization: 78%", domain: "marketing" },
-  { agent: "Content Writer", avatar: "\u270D\uFE0F", eventType: "thinking", message: "Generating product description for Enterprise AI Suite...", domain: "marketing" },
-  { agent: "Content Writer", avatar: "\u270D\uFE0F", eventType: "result", message: "Draft generated | Readability: Grade 8 | SEO score: 91/100", domain: "marketing" },
-  { agent: "SEO Analyzer", avatar: "\uD83D\uDD0E", eventType: "tool_call", message: "semrush.keyword_analysis(domain=\"edumatica.in\")", domain: "marketing" },
-  { agent: "SEO Analyzer", avatar: "\uD83D\uDD0E", eventType: "result", message: "12 keywords ranking top-10 | 3 new opportunities found", domain: "marketing" },
-  { agent: "Social Monitor", avatar: "\uD83D\uDCF1", eventType: "thinking", message: "Scanning brand mentions across Twitter & LinkedIn...", domain: "marketing" },
-  { agent: "Social Monitor", avatar: "\uD83D\uDCF1", eventType: "result", message: "47 mentions today | Sentiment: 82% positive | 2 escalations", domain: "marketing" },
-  { agent: "Social Monitor", avatar: "\uD83D\uDCF1", eventType: "hitl_trigger", message: "\u26A0\uFE0F Negative viral post detected \u2014 requires PR team response", domain: "marketing" },
-];
-
-const COO_EVENTS: Omit<AgentEvent, "id" | "timestamp">[] = [
-  { agent: "Inventory Agent", avatar: "\uD83D\uDCE6", eventType: "thinking", message: "Checking stock levels at Pune warehouse...", domain: "ops" },
-  { agent: "Inventory Agent", avatar: "\uD83D\uDCE6", eventType: "tool_call", message: "sap_wms.get_stock_levels(warehouse=\"PUNE-01\")", domain: "ops" },
-  { agent: "Inventory Agent", avatar: "\uD83D\uDCE6", eventType: "result", message: "SKU-A412: 2,340 units | Reorder point: 500 | Status: OK", domain: "ops" },
-  { agent: "Logistics Bot", avatar: "\uD83D\uDE9A", eventType: "thinking", message: "Optimizing delivery routes for Mumbai zone...", domain: "ops" },
-  { agent: "Logistics Bot", avatar: "\uD83D\uDE9A", eventType: "tool_call", message: "google_maps.optimize_routes(zone=\"MUM\", orders=34)", domain: "ops" },
-  { agent: "Logistics Bot", avatar: "\uD83D\uDE9A", eventType: "result", message: "34 deliveries optimized | Est. savings: 23% fuel | ETA: 4.2hrs avg", domain: "ops" },
-  { agent: "QA Inspector", avatar: "\u2705", eventType: "thinking", message: "Running quality checks on production batch #B-2026-0891...", domain: "ops" },
-  { agent: "QA Inspector", avatar: "\u2705", eventType: "result", message: "Batch passed | 0 defects in 50 samples | Confidence: 99.1%", domain: "ops" },
-  { agent: "Vendor Manager", avatar: "\uD83E\uDD1D", eventType: "tool_call", message: "procurement.evaluate_vendor(vendor_id=\"V-1042\")", domain: "ops" },
-  { agent: "Vendor Manager", avatar: "\uD83E\uDD1D", eventType: "result", message: "Vendor score: 4.6/5 | On-time delivery: 97% | Renewed for FY27", domain: "ops" },
-  { agent: "Inventory Agent", avatar: "\uD83D\uDCE6", eventType: "hitl_trigger", message: "\u26A0\uFE0F SKU-C891 below safety stock \u2014 urgent PO needed for \u20B94.2L", domain: "ops" },
-];
-
-const DOMAIN_EVENTS: Record<string, Omit<AgentEvent, "id" | "timestamp">[]> = {
-  finance: CFO_EVENTS,
-  hr: CHRO_EVENTS,
-  marketing: CMO_EVENTS,
-  ops: COO_EVENTS,
-};
 
 const ROLE_TO_DOMAIN: Record<string, string[]> = {
   cfo: ["finance"],
@@ -170,19 +105,16 @@ export default function Observatory() {
   const role = user?.role || "admin";
   const domains = ROLE_TO_DOMAIN[role] || ["finance", "hr", "marketing", "ops"];
 
-  // Build the event pool for this user's domains
-  const eventPool = domains.flatMap((d) => DOMAIN_EVENTS[d] || []);
-
   const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [, setEventIdx] = useState(0);
-  const [txCount, setTxCount] = useState(2847);
-  const [hitlCount, setHitlCount] = useState(4);
+  const [txCount, setTxCount] = useState(0);
+  const [hitlCount, setHitlCount] = useState(0);
   const [throughputData, setThroughputData] = useState<{ t: number; v: number }[]>(
-    () => Array.from({ length: 20 }, (_, i) => ({ t: i, v: 40 + Math.floor(Math.random() * 30) }))
+    () => Array.from({ length: 20 }, (_, i) => ({ t: i, v: 0 }))
   );
-  const [workflowStepIdx, setWorkflowStepIdx] = useState(2); // start mid-pipeline
+  const [workflowStepIdx, setWorkflowStepIdx] = useState(0);
   const feedRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
+  const lastFetchedId = useRef<string | null>(null);
 
   // Pick the primary domain for the workflow display
   const primaryDomain = domains[0];
@@ -194,55 +126,85 @@ export default function Observatory() {
   }));
 
   // Active agent count from recent events
-  const activeAgentCount = new Set(events.slice(0, 15).map((e) => e.agent)).size || domains.length;
+  const activeAgentCount = new Set(events.slice(0, 15).map((e) => e.agent)).size;
 
-  // Memoised add-event to avoid closure issues
-  const addEvent = useCallback(() => {
-    setEventIdx((prev) => {
-      const idx = prev % eventPool.length;
-      const template = eventPool[idx];
-      const now = new Date();
-      const ts = now.toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  // Map an audit entry from the API into an AgentEvent
+  const mapAuditEntry = useCallback((entry: any): AgentEvent => {
+    const eventType: EventType =
+      entry.event_type === "hitl_trigger" ? "hitl_trigger"
+        : entry.event_type === "tool_call" ? "tool_call"
+        : entry.event_type === "thinking" ? "thinking"
+        : "result";
+    const ts = entry.timestamp
+      ? new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : new Date().toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return {
+      id: nextId.current++,
+      timestamp: ts,
+      agent: entry.agent_name || entry.agent || "Agent",
+      avatar: entry.avatar || "\u2699\uFE0F",
+      eventType,
+      message: entry.message || entry.detail || entry.action || "",
+      domain: entry.domain || "ops",
+    };
+  }, []);
 
-      const newEvent: AgentEvent = {
-        ...template,
-        id: nextId.current++,
-        timestamp: ts,
-      };
+  // Poll API for real events
+  const fetchEvents = useCallback(async () => {
+    try {
+      const { data } = await api.get("/audit", { params: { limit: 20 } });
+      const raw: any[] = Array.isArray(data) ? data : data?.items || [];
+      if (raw.length === 0) return;
 
-      setEvents((old) => [newEvent, ...old].slice(0, 80));
+      // Detect new entries since last fetch
+      const newestId = raw[0]?.id || raw[0]?.timestamp;
+      if (newestId === lastFetchedId.current) return;
+      lastFetchedId.current = newestId;
 
-      // Increment counters
-      if (template.eventType === "result") {
-        setTxCount((c) => c + Math.floor(Math.random() * 3) + 1);
-      }
-      if (template.eventType === "hitl_trigger") {
-        setHitlCount((c) => c + 1);
-      }
-
-      // Update throughput sparkline
-      setThroughputData((old) => {
-        const next = [...old.slice(1), { t: old[old.length - 1].t + 1, v: 40 + Math.floor(Math.random() * 35) }];
-        return next;
+      const mapped = raw.map(mapAuditEntry);
+      setEvents((old) => {
+        const merged = [...mapped, ...old];
+        // Deduplicate by keeping unique messages (first occurrence)
+        const seen = new Set<string>();
+        return merged.filter((e) => {
+          const key = `${e.agent}::${e.message}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, 80);
       });
 
-      return prev + 1;
-    });
-  }, [eventPool]);
+      // Update counters from fetched data
+      const newResults = mapped.filter((e) => e.eventType === "result").length;
+      const newHitl = mapped.filter((e) => e.eventType === "hitl_trigger").length;
+      if (newResults > 0) setTxCount((c) => c + newResults);
+      if (newHitl > 0) setHitlCount((c) => c + newHitl);
 
-  // Advance the workflow step periodically
+      // Update throughput sparkline with actual event count
+      setThroughputData((old) => {
+        const next = [...old.slice(1), { t: old[old.length - 1].t + 1, v: mapped.length }];
+        return next;
+      });
+    } catch {
+      // API not available — leave feed empty with "Waiting for agent activity..." message
+    }
+  }, [mapAuditEntry]);
+
+  // Initial fetch + polling interval
   useEffect(() => {
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 5000);
+    return () => clearInterval(interval);
+  }, [fetchEvents]);
+
+  // Advance the workflow step periodically (only when we have events)
+  useEffect(() => {
+    if (events.length === 0) return;
     const stepTimer = setInterval(() => {
       setWorkflowStepIdx((prev) => (prev + 1) % workflow.steps.length);
     }, 8000);
     return () => clearInterval(stepTimer);
-  }, [workflow.steps.length]);
-
-  // Main event ticker
-  useEffect(() => {
-    const interval = setInterval(addEvent, 2200);
-    return () => clearInterval(interval);
-  }, [addEvent]);
+  }, [workflow.steps.length, events.length]);
 
   // Auto-scroll feed
   useEffect(() => {
@@ -250,9 +212,6 @@ export default function Observatory() {
       feedRef.current.scrollTop = 0;
     }
   }, [events.length]);
-
-  const avgConfidence = 93.2;
-  const autoMatchRate = 99.7;
 
   return (
     <div className="observatory -m-6 min-h-full bg-slate-900 text-white">
@@ -292,7 +251,10 @@ export default function Observatory() {
           </span>
         </div>
         <span className="text-sm text-slate-400">
-          <span className="text-white font-semibold">{activeAgentCount}</span> agents active
+          {activeAgentCount > 0
+            ? <><span className="text-white font-semibold">{activeAgentCount}</span> agents active</>
+            : "No agents active"
+          }
         </span>
       </div>
 
@@ -377,7 +339,7 @@ export default function Observatory() {
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}
           >
             {events.length === 0 && (
-              <p className="text-slate-600 text-xs mt-8 text-center">Waiting for agent events...</p>
+              <p className="text-slate-600 text-xs mt-8 text-center">Waiting for agent activity...</p>
             )}
             {events.map((evt) => {
               const style = EVENT_STYLES[evt.eventType];
@@ -408,13 +370,13 @@ export default function Observatory() {
 
       {/* ============ BOTTOM STATS BAR ============ */}
       <div className="border-t border-slate-700 px-6 py-3 flex items-center justify-around bg-slate-800/50">
-        <StatCounter label="Transactions Today" value={txCount.toLocaleString("en-IN")} color="text-emerald-400" />
+        <StatCounter label="Transactions Today" value={txCount > 0 ? txCount.toLocaleString("en-IN") : "--"} color="text-emerald-400" />
         <Divider />
-        <StatCounter label="Auto-match Rate" value={`${autoMatchRate}%`} color="text-blue-400" />
+        <StatCounter label="Active Agents" value={activeAgentCount > 0 ? String(activeAgentCount) : "--"} color="text-blue-400" />
         <Divider />
-        <StatCounter label="Avg Confidence" value={`${avgConfidence}%`} color="text-violet-400" />
+        <StatCounter label="Events Received" value={events.length > 0 ? String(events.length) : "--"} color="text-violet-400" />
         <Divider />
-        <StatCounter label="HITL Escalations" value={String(hitlCount)} color="text-red-400" />
+        <StatCounter label="HITL Escalations" value={hitlCount > 0 ? String(hitlCount) : "--"} color="text-red-400" />
       </div>
     </div>
   );

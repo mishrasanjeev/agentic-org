@@ -32,25 +32,6 @@ interface EnforceEntry {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Mock data (used when API endpoints are not yet available)          */
-/* ------------------------------------------------------------------ */
-
-const MOCK_SCOPES: AgentScope[] = [
-  { agent_id: "a1", agent_name: "AP Processor", connector: "oracle_fusion", tools: ["read_purchase_order", "create_invoice", "approve_payment"], permission: "WRITE", status: "active", calls_24h: 142, denials_24h: 3 },
-  { agent_id: "a2", agent_name: "Recon Agent", connector: "banking_aa", tools: ["fetch_transactions", "match_entries"], permission: "READ", status: "active", calls_24h: 87, denials_24h: 0 },
-  { agent_id: "a3", agent_name: "Tax Compliance", connector: "gstn", tools: ["validate_gstin", "file_gstr1", "compute_igst"], permission: "WRITE", status: "active", calls_24h: 56, denials_24h: 1 },
-  { agent_id: "a4", agent_name: "Payroll Agent", connector: "workday", tools: ["compute_payroll", "submit_pf", "generate_payslips"], permission: "WRITE", status: "active", calls_24h: 34, denials_24h: 0 },
-  { agent_id: "a5", agent_name: "Onboarding Bot", connector: "gsuite", tools: ["provision_account", "send_invite"], permission: "WRITE", status: "active", calls_24h: 21, denials_24h: 2 },
-  { agent_id: "a6", agent_name: "Campaign Agent", connector: "google_ads", tools: ["fetch_metrics", "update_budget", "pause_campaign"], permission: "ADMIN", status: "active", calls_24h: 63, denials_24h: 5 },
-  { agent_id: "a7", agent_name: "Content Writer", connector: "wordpress", tools: ["create_post", "update_post"], permission: "WRITE", status: "shadow", calls_24h: 18, denials_24h: 0 },
-  { agent_id: "a8", agent_name: "SEO Analyzer", connector: "semrush", tools: ["keyword_analysis", "backlink_audit"], permission: "READ", status: "active", calls_24h: 29, denials_24h: 0 },
-  { agent_id: "a9", agent_name: "Treasury Agent", connector: "hdfc_bank", tools: ["fetch_balance", "initiate_sweep", "delete_scheduled_transfer"], permission: "DELETE", status: "active", calls_24h: 44, denials_24h: 4 },
-  { agent_id: "a10", agent_name: "AR Collector", connector: "email_service", tools: ["send_reminder", "escalate_overdue"], permission: "WRITE", status: "active", calls_24h: 31, denials_24h: 1 },
-  { agent_id: "a11", agent_name: "Leave Manager", connector: "workday", tools: ["approve_leave", "check_balance"], permission: "WRITE", status: "active", calls_24h: 19, denials_24h: 0 },
-  { agent_id: "a12", agent_name: "Social Monitor", connector: "twitter_api", tools: ["fetch_mentions", "analyze_sentiment"], permission: "READ", status: "active", calls_24h: 52, denials_24h: 0 },
-];
-
-/* ------------------------------------------------------------------ */
 /*  Permission badge colors                                            */
 /* ------------------------------------------------------------------ */
 
@@ -94,36 +75,31 @@ export default function ScopeDashboard() {
         ? (Array.isArray(enforceRes.value.data) ? enforceRes.value.data : enforceRes.value.data?.items || [])
         : [];
 
-      if (agents.length > 0 && enforceData.length > 0) {
-        // Build scope entries from real data
-        const scopeMap = new Map<string, AgentScope>();
-        for (const entry of enforceData as EnforceEntry[]) {
-          const key = `${entry.agent_name}::${entry.connector}`;
-          if (!scopeMap.has(key)) {
-            const agent = agents.find((a: any) => a.name === entry.agent_name);
-            scopeMap.set(key, {
-              agent_id: agent?.id || entry.agent_name,
-              agent_name: entry.agent_name,
-              connector: entry.connector,
-              tools: [],
-              permission: (entry.permission as AgentScope["permission"]) || "READ",
-              status: agent?.status || "active",
-              calls_24h: 0,
-              denials_24h: 0,
-            });
-          }
-          const scope = scopeMap.get(key)!;
-          if (entry.tool && !scope.tools.includes(entry.tool)) scope.tools.push(entry.tool);
-          scope.calls_24h += 1;
-          if (entry.result === "denied") scope.denials_24h += 1;
+      // Build scope entries from real data
+      const scopeMap = new Map<string, AgentScope>();
+      for (const entry of enforceData as EnforceEntry[]) {
+        const key = `${entry.agent_name}::${entry.connector}`;
+        if (!scopeMap.has(key)) {
+          const agent = agents.find((a: any) => a.name === entry.agent_name);
+          scopeMap.set(key, {
+            agent_id: agent?.id || entry.agent_name,
+            agent_name: entry.agent_name,
+            connector: entry.connector,
+            tools: [],
+            permission: (entry.permission as AgentScope["permission"]) || "READ",
+            status: agent?.status || "active",
+            calls_24h: 0,
+            denials_24h: 0,
+          });
         }
-        setScopes(Array.from(scopeMap.values()));
-      } else {
-        // Fallback to mock data
-        setScopes(MOCK_SCOPES);
+        const scope = scopeMap.get(key)!;
+        if (entry.tool && !scope.tools.includes(entry.tool)) scope.tools.push(entry.tool);
+        scope.calls_24h += 1;
+        if (entry.result === "denied") scope.denials_24h += 1;
       }
+      setScopes(Array.from(scopeMap.values()));
     } catch {
-      setScopes(MOCK_SCOPES);
+      setScopes([]);
     } finally {
       setLoading(false);
     }

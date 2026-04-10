@@ -30,96 +30,6 @@ interface IndustryPack {
   installed: boolean;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data                                                          */
-/* ------------------------------------------------------------------ */
-
-const MOCK_PACKS: IndustryPack[] = [
-  {
-    id: "healthcare",
-    name: "Healthcare",
-    description: "HIPAA-compliant patient data processing, appointment scheduling, insurance claim automation, and medical records management.",
-    icon: "H",
-    agent_count: 6,
-    agents: [
-      { name: "Claims Processor", type: "Finance" },
-      { name: "Patient Scheduler", type: "Operations" },
-      { name: "Insurance Verifier", type: "Compliance" },
-      { name: "Medical Records Indexer", type: "Knowledge" },
-      { name: "Prescription Monitor", type: "Compliance" },
-      { name: "Billing Reconciler", type: "Finance" },
-    ],
-    workflows: [
-      { name: "Insurance Claim Pipeline", description: "End-to-end claim submission and tracking" },
-      { name: "Patient Onboarding", description: "Automated patient registration and insurance verification" },
-    ],
-    required_connectors: ["ehr_system", "insurance_api", "email_service"],
-    installed: false,
-  },
-  {
-    id: "legal",
-    name: "Legal",
-    description: "Contract review, compliance monitoring, case management, legal document generation, and regulatory filing automation.",
-    icon: "L",
-    agent_count: 5,
-    agents: [
-      { name: "Contract Reviewer", type: "Compliance" },
-      { name: "Case Manager", type: "Operations" },
-      { name: "Legal Doc Generator", type: "Knowledge" },
-      { name: "Regulatory Filing Bot", type: "Compliance" },
-      { name: "Due Diligence Analyzer", type: "Research" },
-    ],
-    workflows: [
-      { name: "Contract Review Pipeline", description: "Automated clause extraction and risk flagging" },
-      { name: "Regulatory Filing", description: "Auto-fill and submit regulatory documents" },
-    ],
-    required_connectors: ["document_store", "email_service", "gstn"],
-    installed: true,
-  },
-  {
-    id: "insurance",
-    name: "Insurance",
-    description: "Policy underwriting, claims adjudication, fraud detection, customer onboarding, and actuarial data processing.",
-    icon: "I",
-    agent_count: 7,
-    agents: [
-      { name: "Underwriting Agent", type: "Finance" },
-      { name: "Claims Adjudicator", type: "Operations" },
-      { name: "Fraud Detector", type: "Compliance" },
-      { name: "Policy Renewal Bot", type: "Operations" },
-      { name: "Customer Onboarder", type: "HR" },
-      { name: "Actuarial Processor", type: "Finance" },
-      { name: "Lapse Prevention Agent", type: "Marketing" },
-    ],
-    workflows: [
-      { name: "Claims Pipeline", description: "From submission to settlement with fraud checks" },
-      { name: "Policy Renewal Flow", description: "Automated renewal reminders and processing" },
-    ],
-    required_connectors: ["insurance_core", "banking_aa", "email_service"],
-    installed: false,
-  },
-  {
-    id: "manufacturing",
-    name: "Manufacturing",
-    description: "Supply chain optimization, quality control automation, equipment maintenance scheduling, and production planning.",
-    icon: "M",
-    agent_count: 5,
-    agents: [
-      { name: "Supply Chain Optimizer", type: "Operations" },
-      { name: "QC Inspector", type: "Compliance" },
-      { name: "Maintenance Scheduler", type: "Operations" },
-      { name: "Production Planner", type: "Operations" },
-      { name: "Vendor Manager", type: "Finance" },
-    ],
-    workflows: [
-      { name: "Production Order Pipeline", description: "From order receipt to production scheduling" },
-      { name: "Predictive Maintenance", description: "Equipment health monitoring and auto-scheduling" },
-    ],
-    required_connectors: ["erp_system", "iot_gateway", "email_service"],
-    installed: false,
-  },
-];
-
 const ICON_COLORS: Record<string, string> = {
   Healthcare: "from-red-500 to-pink-600",
   Legal: "from-amber-500 to-orange-600",
@@ -153,14 +63,10 @@ export default function IndustryPacks() {
           ? Array.isArray(installedRes.value.data) ? installedRes.value.data : installedRes.value.data?.items || []
           : [];
 
-      if (allPacks.length > 0) {
-        const installedIds = new Set(installed.map((i: any) => i.id || i.name));
-        setPacks(allPacks.map((p: IndustryPack) => ({ ...p, installed: installedIds.has(p.id) })));
-      } else {
-        setPacks(MOCK_PACKS);
-      }
+      const installedIds = new Set(installed.map((i: any) => i.id || i.name));
+      setPacks(allPacks.map((p: IndustryPack) => ({ ...p, installed: installedIds.has(p.id) })));
     } catch {
-      setPacks(MOCK_PACKS);
+      setPacks([]);
     } finally {
       setLoading(false);
     }
@@ -210,6 +116,9 @@ export default function IndustryPacks() {
       </div>
 
       {/* Pack grid */}
+      {packs.length === 0 ? (
+        <p className="text-muted-foreground">No industry packs available.</p>
+      ) : (
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
         {packs.map((pack) => (
           <Card
@@ -253,6 +162,7 @@ export default function IndustryPacks() {
           </Card>
         ))}
       </div>
+      )}
 
       {/* Detail panel */}
       {selectedPack && (

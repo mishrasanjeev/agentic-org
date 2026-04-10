@@ -67,49 +67,6 @@ interface RoleMember {
   role: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data (used as fallback when API returns empty)                */
-/* ------------------------------------------------------------------ */
-
-const MOCK_COMPANY: CompanyInfo = {
-  id: "c1", name: "Acme Manufacturing Pvt Ltd", gstin: "29AABCU9603R1ZM", pan: "AABCU9603R",
-  tan: "BLRA12345F", cin: "U12345KA2020PTC123456", industry: "Manufacturing", state: "Karnataka",
-  status: "active", address: "123 Industrial Area, Bengaluru 560001",
-  pf_reg: "KA/BLR/12345/000/12345", esi_reg: "12-34-567890-123-4567", pt_reg: "PT-KA-001234",
-  fy_start: "2026-04-01", fy_end: "2027-03-31",
-  signatory_name: "Rajesh Kumar", signatory_designation: "Director", signatory_email: "rajesh@acme.in",
-  bank_name: "HDFC Bank", account_number: "50100123456789", ifsc: "HDFC0001234", branch: "MG Road, Bengaluru",
-  tally_bridge_url: "http://localhost:9100", tally_company_name: "Acme Manufacturing",
-  gst_auto_file: true,
-};
-
-const MOCK_AGENTS: AgentAssignment[] = [
-  { id: "a1", name: "GST Filing Agent", domain: "finance", status: "active" },
-  { id: "a2", name: "TDS Compliance Agent", domain: "finance", status: "active" },
-  { id: "a3", name: "Bank Reconciliation Agent", domain: "finance", status: "active" },
-  { id: "a4", name: "Month-End Close Agent", domain: "finance", status: "shadow" },
-  { id: "a5", name: "Accounts Payable Agent", domain: "finance", status: "active" },
-];
-
-const MOCK_WORKFLOWS: WorkflowRun[] = [
-  { id: "w1", name: "GSTR-1 March 2026", status: "completed", started_at: "2026-04-05T10:30:00Z" },
-  { id: "w2", name: "Bank Recon April W1", status: "running", started_at: "2026-04-07T06:00:00Z" },
-  { id: "w3", name: "TDS Q4 FY26", status: "pending", started_at: "2026-04-01T00:00:00Z" },
-];
-
-const MOCK_AUDIT: AuditEntry[] = [
-  { id: "au1", timestamp: "2026-04-07T09:15:00Z", action: "GST Filing submitted", actor: "GST Filing Agent", outcome: "success" },
-  { id: "au2", timestamp: "2026-04-07T08:30:00Z", action: "Bank statement fetched", actor: "Bank Recon Agent", outcome: "success" },
-  { id: "au3", timestamp: "2026-04-06T17:00:00Z", action: "TDS Form 26Q generated", actor: "TDS Agent", outcome: "success" },
-  { id: "au4", timestamp: "2026-04-06T14:20:00Z", action: "Invoice mismatch flagged", actor: "AP Agent", outcome: "warning" },
-  { id: "au5", timestamp: "2026-04-05T11:00:00Z", action: "Month-end close initiated", actor: "Close Agent", outcome: "success" },
-];
-
-const MOCK_ROLES: RoleMember[] = [
-  { email: "partner@cafirm.com", role: "admin" },
-  { email: "junior@cafirm.com", role: "auditor" },
-  { email: "rajesh@acme.in", role: "cfo" },
-];
 
 /* ------------------------------------------------------------------ */
 /*  GST Calendar helpers                                               */
@@ -165,10 +122,10 @@ export default function CompanyDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [agents] = useState<AgentAssignment[]>(MOCK_AGENTS);
-  const [workflows] = useState<WorkflowRun[]>(MOCK_WORKFLOWS);
-  const [auditLog] = useState<AuditEntry[]>(MOCK_AUDIT);
-  const [roles, setRoles] = useState<RoleMember[]>(MOCK_ROLES);
+  const [agents] = useState<AgentAssignment[]>([]);
+  const [workflows] = useState<WorkflowRun[]>([]);
+  const [auditLog] = useState<AuditEntry[]>([]);
+  const [roles, setRoles] = useState<RoleMember[]>([]);
   const [editForm, setEditForm] = useState<Partial<CompanyInfo>>({});
   const [saving, setSaving] = useState(false);
 
@@ -199,26 +156,27 @@ export default function CompanyDetail() {
     try {
       const res = await api.get(`/companies/${id}`);
       if (res.status && res.status >= 400) {
-        setError(`Server returned ${res.status}. Showing demo data.`);
-        setCompany({ ...MOCK_COMPANY, id: id || "c1" });
-        setEditForm({ ...MOCK_COMPANY, id: id || "c1" });
+        setError(`Server returned ${res.status}.`);
+        setCompany(null);
+        setEditForm({});
       } else if (res.data?.id) {
         setCompany(res.data);
         setEditForm(res.data);
       } else {
-        setCompany({ ...MOCK_COMPANY, id: id || "c1" });
-        setEditForm({ ...MOCK_COMPANY, id: id || "c1" });
+        setError("No data returned from API.");
+        setCompany(null);
+        setEditForm({});
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 502) {
-        setError("502 Bad Gateway -- API is temporarily unavailable. Showing demo data.");
+        setError("502 Bad Gateway -- API is temporarily unavailable.");
       } else {
-        setError(`Failed to load company: ${msg}. Showing demo data.`);
+        setError(`Failed to load company: ${msg}.`);
       }
-      setCompany({ ...MOCK_COMPANY, id: id || "c1" });
-      setEditForm({ ...MOCK_COMPANY, id: id || "c1" });
+      setCompany(null);
+      setEditForm({});
     } finally {
       setLoading(false);
     }
@@ -407,8 +365,11 @@ export default function CompanyDetail() {
                 <CardTitle className="text-base">Recent Agent Runs</CardTitle>
               </CardHeader>
               <CardContent>
+                {auditLog.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No data yet.</p>
+                ) : (
                 <div className="space-y-3">
-                  {MOCK_AUDIT.slice(0, 4).map((entry) => (
+                  {auditLog.slice(0, 4).map((entry) => (
                     <div key={entry.id} className="flex items-center justify-between text-sm">
                       <div>
                         <p className="font-medium">{entry.action}</p>
@@ -420,6 +381,7 @@ export default function CompanyDetail() {
                     </div>
                   ))}
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -610,6 +572,9 @@ export default function CompanyDetail() {
       {/* ==================== Agents Tab ==================== */}
       {activeTab === "agents" && (
         <div className="space-y-4">
+          {agents.length === 0 && (
+            <p className="text-muted-foreground text-sm">No data yet. Agents will appear once assigned to this company.</p>
+          )}
           {agents.map((agent) => (
             <Card key={agent.id} className="hover:shadow-md transition-shadow">
               <CardContent className="pt-4 pb-4">
@@ -642,6 +607,9 @@ export default function CompanyDetail() {
       {/* ==================== Workflows Tab ==================== */}
       {activeTab === "workflows" && (
         <div className="space-y-4">
+          {workflows.length === 0 && (
+            <p className="text-muted-foreground text-sm">No data yet. Workflow runs will appear once triggered.</p>
+          )}
           {workflows.map((wf) => (
             <Card key={wf.id} className="hover:shadow-md transition-shadow">
               <CardContent className="pt-4 pb-4">
@@ -668,6 +636,9 @@ export default function CompanyDetail() {
       {activeTab === "audit" && (
         <Card>
           <CardContent className="pt-4">
+            {auditLog.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No data yet. Audit entries will appear as agents perform actions.</p>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -696,6 +667,7 @@ export default function CompanyDetail() {
                 </tbody>
               </table>
             </div>
+            )}
           </CardContent>
         </Card>
       )}

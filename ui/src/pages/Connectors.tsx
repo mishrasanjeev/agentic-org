@@ -7,7 +7,7 @@ import ConnectorCard from "@/components/ConnectorCard";
 import api from "@/lib/api";
 import type { Connector } from "@/types";
 
-const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms", "microsoft"];
+const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
 
 // Full catalog of all 54+ native connectors
 const NATIVE_CONNECTOR_CATALOG: Array<{ id: string; name: string; category: string; description: string }> = [
@@ -65,15 +65,6 @@ const NATIVE_CONNECTOR_CATALOG: Array<{ id: string; name: string; category: stri
   { id: "indian_gstn", name: "Indian GSTN", category: "finance", description: "GST Network portal" },
   { id: "digilocker", name: "DigiLocker", category: "finance", description: "Digital document store (India)" },
   { id: "account_aggregator", name: "Account Aggregator", category: "finance", description: "Financial data sharing (India)" },
-];
-
-const MICROSOFT_CONNECTORS: Connector[] = [
-  { id: "ms-teams", name: "Microsoft Teams", category: "microsoft", status: "active", description: "Team chat, channels, and meetings", connector_id: "ms-teams" } as unknown as Connector,
-  { id: "ms-outlook", name: "Microsoft Outlook", category: "microsoft", status: "active", description: "Email, calendar, and contacts", connector_id: "ms-outlook" } as unknown as Connector,
-  { id: "ms-sharepoint", name: "Microsoft SharePoint", category: "microsoft", status: "active", description: "Document management and collaboration", connector_id: "ms-sharepoint" } as unknown as Connector,
-  { id: "ms-onedrive", name: "Microsoft OneDrive", category: "microsoft", status: "active", description: "Cloud file storage and sharing", connector_id: "ms-onedrive" } as unknown as Connector,
-  { id: "ms-excel-online", name: "Excel Online", category: "microsoft", status: "active", description: "Spreadsheets and data analysis", connector_id: "ms-excel-online" } as unknown as Connector,
-  { id: "ms-power-bi", name: "Power BI", category: "microsoft", status: "active", description: "Business analytics and reporting", connector_id: "ms-power-bi" } as unknown as Connector,
 ];
 
 // ---------------------------------------------------------------------------
@@ -155,15 +146,9 @@ export default function Connectors() {
     }
   }
 
-  const baseFiltered = connectors.filter(
+  const filtered = connectors.filter(
     (c) => categoryFilter === "all" || c.category === categoryFilter
   );
-  // When "microsoft" category is selected, show Microsoft 365 mock cards
-  const filtered = categoryFilter === "microsoft"
-    ? MICROSOFT_CONNECTORS
-    : categoryFilter === "all"
-      ? [...baseFiltered, ...MICROSOFT_CONNECTORS]
-      : baseFiltered;
 
   const stats = {
     total: connectors.length,

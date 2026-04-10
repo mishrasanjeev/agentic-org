@@ -27,27 +27,6 @@ interface Deadline {
   due_date: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data                                                          */
-/* ------------------------------------------------------------------ */
-
-const MOCK_CLIENTS: ClientHealth[] = [
-  { id: "c1", name: "Sharma Manufacturing Pvt Ltd", health_score: 95, pending_filings: 0, status: "active", subscription: "active" },
-  { id: "c2", name: "Gupta Traders & Sons", health_score: 88, pending_filings: 1, status: "active", subscription: "active" },
-  { id: "c3", name: "Patel Pharma LLP", health_score: 72, pending_filings: 1, status: "active", subscription: "active" },
-  { id: "c4", name: "Mehta Textiles", health_score: 45, pending_filings: 2, status: "inactive", subscription: "expired" },
-  { id: "c5", name: "Singh Logistics Corp", health_score: 91, pending_filings: 0, status: "active", subscription: "active" },
-  { id: "c6", name: "Joshi IT Solutions", health_score: 85, pending_filings: 1, status: "active", subscription: "active" },
-  { id: "c7", name: "Reddy Agro Exports", health_score: 67, pending_filings: 0, status: "active", subscription: "trial" },
-];
-
-const MOCK_DEADLINES: Deadline[] = [
-  { id: "d1", type: "GSTR-3B", period: "Apr 2026", company: "Sharma Manufacturing Pvt Ltd", due_date: "2026-04-20" },
-  { id: "d2", type: "GSTR-1", period: "Apr 2026", company: "Gupta Traders & Sons", due_date: "2026-05-11" },
-  { id: "d3", type: "TDS 26Q", period: "Q1 FY27", company: "Patel Pharma LLP", due_date: "2026-07-31" },
-  { id: "d4", type: "PF ECR", period: "Apr 2026", company: "Singh Logistics Corp", due_date: "2026-05-15" },
-  { id: "d5", type: "GSTR-3B", period: "Apr 2026", company: "Joshi IT Solutions", due_date: "2026-04-20" },
-];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -70,8 +49,8 @@ function healthTextColor(score: number): string {
 /* ------------------------------------------------------------------ */
 
 export default function PartnerDashboard() {
-  const [clients, setClients] = useState<ClientHealth[]>(MOCK_CLIENTS);
-  const [deadlines, setDeadlines] = useState<Deadline[]>(MOCK_DEADLINES);
+  const [clients, setClients] = useState<ClientHealth[]>([]);
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPartnerData = useCallback(async () => {
@@ -93,7 +72,9 @@ export default function PartnerDashboard() {
         setDeadlines(data.deadlines);
       }
     } catch {
-      // API unavailable, keep mock data
+      // API unavailable, show empty state
+      setClients([]);
+      setDeadlines([]);
     } finally {
       setLoading(false);
     }
@@ -105,7 +86,7 @@ export default function PartnerDashboard() {
 
   const totalClients = clients.length;
   const activeClients = clients.filter((c) => c.status === "active").length;
-  const avgHealth = Math.round(clients.reduce((sum, c) => sum + c.health_score, 0) / clients.length);
+  const avgHealth = clients.length > 0 ? Math.round(clients.reduce((sum, c) => sum + c.health_score, 0) / clients.length) : 0;
   const totalPending = clients.reduce((sum, c) => sum + c.pending_filings, 0);
   const overdueCount = clients.filter((c) => c.health_score < 50).length;
 
@@ -201,6 +182,9 @@ export default function PartnerDashboard() {
           <CardTitle className="text-base">Client Health Overview</CardTitle>
         </CardHeader>
         <CardContent>
+          {clients.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4">No data yet. Add clients to see their health overview.</p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -258,6 +242,7 @@ export default function PartnerDashboard() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -268,6 +253,9 @@ export default function PartnerDashboard() {
             <CardTitle className="text-base">Upcoming Deadlines</CardTitle>
           </CardHeader>
           <CardContent>
+            {deadlines.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No data yet.</p>
+            ) : (
             <div className="space-y-3">
               {deadlines.map((dl) => {
                 const dueDate = new Date(dl.due_date);
@@ -294,6 +282,7 @@ export default function PartnerDashboard() {
                 );
               })}
             </div>
+            )}
           </CardContent>
         </Card>
 

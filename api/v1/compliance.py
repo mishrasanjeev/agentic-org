@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 
@@ -181,20 +182,20 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
             },
             "encryption_at_rest": {
                 "control_id": "CC6.7-rest",
-                "provider": "GCP Cloud SQL TDE + GCS GMEK",
-                "algorithm": "AES-256",
+                "provider": os.getenv("AGENTICORG_ENCRYPTION_PROVIDER", "GCP Cloud SQL TDE + GCS GMEK"),
+                "algorithm": os.getenv("AGENTICORG_ENCRYPTION_ALGO", "AES-256"),
                 "status": "collected",
             },
             "encryption_in_transit": {
                 "control_id": "CC6.7-transit",
-                "protocol": "TLS 1.3",
-                "mtls_internal": True,
+                "protocol": os.getenv("AGENTICORG_TLS_VERSION", "TLS 1.3"),
+                "mtls_internal": os.getenv("AGENTICORG_MTLS", "true").lower() == "true",
                 "status": "collected",
             },
             "change_management": {
                 "control_id": "CC8.1",
-                "ci_cd": "GitHub Actions",
-                "checks": ["ruff", "mypy", "pytest", "playwright"],
+                "ci_cd": os.getenv("AGENTICORG_CI_CD", "GitHub Actions"),
+                "checks": os.getenv("AGENTICORG_CI_CHECKS", "ruff,mypy,pytest,playwright").split(","),
                 "status": "collected",
             },
             "deployment_records": {
@@ -216,7 +217,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
             },
             "session_management": {
                 "control_id": "CC6.1-session",
-                "token_expiry_minutes": 60,
+                "token_expiry_minutes": int(os.getenv("AGENTICORG_TOKEN_TTL_MINUTES", "60")),
                 "refresh_expiry_days": 7,
                 "concurrent_session_limit": 5,
                 "status": "collected",
@@ -227,8 +228,8 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
                 "hashing": "bcrypt",
                 "cost_factor": 12,
                 "mfa_available": True,
-                "lockout_threshold": 5,
-                "lockout_cooldown_minutes": 15,
+                "lockout_threshold": int(os.getenv("AGENTICORG_LOCKOUT_THRESHOLD", "5")),
+                "lockout_cooldown_minutes": int(os.getenv("AGENTICORG_LOCKOUT_COOLDOWN", "15")),
                 "status": "collected",
             },
         },

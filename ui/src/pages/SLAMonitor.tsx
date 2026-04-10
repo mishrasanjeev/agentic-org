@@ -29,37 +29,52 @@ export default function SLAMonitor() {
   async function fetchSLAData() {
     setLoading(true);
     try {
-      const { data } = await api.get("/health");
-      const isHealthy = data.status === "ok" || data.status === "healthy";
-
-      setMetrics([
-        { label: "Uptime", current: isHealthy ? "Healthy" : "Degraded", target: "99.9%", ok: isHealthy },
-        { label: "API P95 Latency", current: isHealthy ? "< 2s" : "N/A", target: "< 2s", ok: isHealthy ? true : null },
-        { label: "Agent Success Rate", current: "Measuring", target: "> 95%", ok: true },
-        { label: "HITL Response Time", current: "Measuring", target: "< 4 hrs", ok: true },
+      const [healthRes, checksRes, uptimeRes] = await Promise.allSettled([
+        api.get("/health"),
+        api.get("/health/checks"),
+        api.get("/health/uptime"),
       ]);
 
-      // Generate last 10 health checks
-      const checks: HealthCheck[] = [];
-      const now = Date.now();
-      for (let i = 9; i >= 0; i--) {
-        checks.push({
-          timestamp: new Date(now - i * 5 * 60 * 1000).toISOString(),
-          status: "healthy",
-        });
-      }
-      setHealthChecks(checks);
+      // Parse health status
+      const healthData = healthRes.status === "fulfilled" ? healthRes.value.data : null;
+      const isHealthy = healthData
+        ? healthData.status === "ok" || healthData.status === "healthy"
+        : null;
 
-      // Generate 24h uptime data
-      const uptime: { hour: string; uptime: number }[] = [];
-      for (let i = 23; i >= 0; i--) {
-        const h = new Date(now - i * 60 * 60 * 1000);
-        uptime.push({
-          hour: h.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          uptime: 100,
-        });
+      setMetrics([
+        { label: "Uptime", current: isHealthy === null ? "N/A" : isHealthy ? "Healthy" : "Degraded", target: "99.9%", ok: isHealthy },
+        { label: "API P95 Latency", current: healthData?.p95_latency || "N/A", target: "< 2s", ok: isHealthy },
+        { label: "Agent Success Rate", current: healthData?.agent_success_rate || "N/A", target: "> 95%", ok: isHealthy },
+        { label: "HITL Response Time", current: healthData?.hitl_response_time || "N/A", target: "< 4 hrs", ok: isHealthy },
+      ]);
+
+      // Parse health checks from API (if endpoint exists)
+      if (checksRes.status === "fulfilled") {
+        const rawChecks = Array.isArray(checksRes.value.data)
+          ? checksRes.value.data
+          : checksRes.value.data?.items || [];
+        setHealthChecks(rawChecks);
+      } else {
+        // Single health check from the /health endpoint
+        if (healthData) {
+          setHealthChecks([{
+            timestamp: new Date().toISOString(),
+            status: isHealthy ? "healthy" : "unhealthy",
+          }]);
+        } else {
+          setHealthChecks([]);
+        }
       }
-      setUptimeData(uptime);
+
+      // Parse uptime data from API (if endpoint exists)
+      if (uptimeRes.status === "fulfilled") {
+        const rawUptime = Array.isArray(uptimeRes.value.data)
+          ? uptimeRes.value.data
+          : uptimeRes.value.data?.items || [];
+        setUptimeData(rawUptime);
+      } else {
+        setUptimeData([]);
+      }
     } catch {
       setMetrics([
         { label: "Uptime", current: "N/A", target: "99.9%", ok: null },
@@ -84,6 +99,8 @@ export default function SLAMonitor() {
 
       {loading ? (
         <p className="text-muted-foreground">Loading SLA data...</p>
+      ) : metrics.length === 0 || metrics.every((m) => m.ok === null) ? (
+        <p className="text-muted-foreground">No monitoring data yet.</p>
       ) : (
         <>
           {/* Metric cards */}

@@ -23,23 +23,6 @@ interface KBStats {
   index_size_mb?: number;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data                                                          */
-/* ------------------------------------------------------------------ */
-
-const MOCK_DOCS: KBDocument[] = [
-  { id: "d1", filename: "Employee Handbook 2026.pdf", status: "indexed", size_bytes: 2_456_000, uploaded_at: "2026-03-28T10:15:00Z" },
-  { id: "d2", filename: "AP Process SOP.docx", status: "indexed", size_bytes: 345_000, uploaded_at: "2026-03-29T14:30:00Z" },
-  { id: "d3", filename: "Tax Compliance Guide.pdf", status: "processing", size_bytes: 1_890_000, uploaded_at: "2026-04-01T09:00:00Z" },
-  { id: "d4", filename: "Vendor Master List.xlsx", status: "indexed", size_bytes: 567_000, uploaded_at: "2026-04-02T11:45:00Z" },
-  { id: "d5", filename: "Leave Policy Draft.txt", status: "failed", size_bytes: 23_000, uploaded_at: "2026-04-03T16:20:00Z" },
-];
-
-const MOCK_STATS: KBStats = {
-  total_documents: 5,
-  total_chunks: 1247,
-  index_size_bytes: 45_678_000,
-};
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -84,11 +67,11 @@ export default function KnowledgeBase() {
           : [];
       const s = statsRes.status === "fulfilled" ? statsRes.value.data : null;
 
-      setDocuments(docs.length > 0 ? docs : MOCK_DOCS);
-      setStats(s || MOCK_STATS);
+      setDocuments(docs);
+      setStats(s || null);
     } catch {
-      setDocuments(MOCK_DOCS);
-      setStats(MOCK_STATS);
+      setDocuments([]);
+      setStats(null);
     } finally {
       setLoading(false);
     }

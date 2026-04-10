@@ -27,61 +27,6 @@ interface RPAExecution {
   output: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data                                                          */
-/* ------------------------------------------------------------------ */
-
-const MOCK_SCRIPTS: RPAScript[] = [
-  {
-    id: "rpa1",
-    name: "EPFO ECR Download",
-    target_url: "https://unifiedportal-emp.epfindia.gov.in",
-    last_run: "2026-04-03T08:30:00Z",
-    status: "success",
-    params: [
-      { name: "establishment_id", label: "Establishment ID", placeholder: "e.g. DLCPM0012345" },
-      { name: "month", label: "Month (MMYYYY)", placeholder: "e.g. 032026" },
-    ],
-  },
-  {
-    id: "rpa2",
-    name: "MCA Company Search",
-    target_url: "https://www.mca.gov.in",
-    last_run: "2026-04-02T14:15:00Z",
-    status: "success",
-    params: [
-      { name: "cin", label: "CIN / Company Name", placeholder: "e.g. U72200DL2020PTC123456" },
-    ],
-  },
-  {
-    id: "rpa3",
-    name: "Income Tax 26AS",
-    target_url: "https://www.incometax.gov.in",
-    last_run: "2026-04-01T10:00:00Z",
-    status: "failed",
-    params: [
-      { name: "pan", label: "PAN Number", placeholder: "e.g. ABCDE1234F" },
-      { name: "fy", label: "Financial Year", placeholder: "e.g. 2025-26" },
-    ],
-  },
-  {
-    id: "rpa4",
-    name: "GST Return Status",
-    target_url: "https://www.gst.gov.in",
-    last_run: null,
-    status: "ready",
-    params: [
-      { name: "gstin", label: "GSTIN", placeholder: "e.g. 07AABCU1234F1ZL" },
-      { name: "return_type", label: "Return Type", placeholder: "e.g. GSTR-1" },
-    ],
-  },
-];
-
-const MOCK_HISTORY: RPAExecution[] = [
-  { id: "e1", script_id: "rpa1", script_name: "EPFO ECR Download", started_at: "2026-04-03T08:30:00Z", finished_at: "2026-04-03T08:32:15Z", status: "success", output: "ECR file downloaded: ECR_032026.txt (145 KB)" },
-  { id: "e2", script_id: "rpa2", script_name: "MCA Company Search", started_at: "2026-04-02T14:15:00Z", finished_at: "2026-04-02T14:16:30Z", status: "success", output: "Company data extracted: 3 directors, registration active" },
-  { id: "e3", script_id: "rpa3", script_name: "Income Tax 26AS", started_at: "2026-04-01T10:00:00Z", finished_at: "2026-04-01T10:03:45Z", status: "failed", output: "Login captcha could not be solved after 3 retries" },
-];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -122,11 +67,11 @@ export default function RPAScripts() {
           ? Array.isArray(historyRes.value.data) ? historyRes.value.data : historyRes.value.data?.items || []
           : [];
 
-      setScripts(s.length > 0 ? s : MOCK_SCRIPTS);
-      setHistory(h.length > 0 ? h : MOCK_HISTORY);
+      setScripts(s);
+      setHistory(h);
     } catch {
-      setScripts(MOCK_SCRIPTS);
-      setHistory(MOCK_HISTORY);
+      setScripts([]);
+      setHistory([]);
     } finally {
       setLoading(false);
     }
@@ -182,6 +127,9 @@ export default function RPAScripts() {
       </div>
 
       {/* Script table */}
+      {scripts.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No data yet. RPA scripts will appear once configured.</p>
+      ) : (
       <div className="border rounded overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted">
@@ -222,6 +170,7 @@ export default function RPAScripts() {
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Run dialog */}
       {dialogScript && (

@@ -19,39 +19,6 @@ interface EnforceEntry {
   reason: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Mock data (used when API endpoint is not yet available)            */
-/* ------------------------------------------------------------------ */
-
-function generateMockEntries(): EnforceEntry[] {
-  const agents = ["AP Processor", "Recon Agent", "Tax Compliance", "Payroll Agent", "Onboarding Bot", "Campaign Agent", "Treasury Agent", "AR Collector", "Leave Manager", "SEO Analyzer", "Social Monitor", "Content Writer"];
-  const connectors = ["oracle_fusion", "banking_aa", "gstn", "workday", "gsuite", "google_ads", "hdfc_bank", "email_service", "semrush", "twitter_api", "wordpress"];
-  const tools = ["read_purchase_order", "create_invoice", "fetch_transactions", "validate_gstin", "compute_payroll", "provision_account", "fetch_metrics", "update_budget", "fetch_balance", "send_reminder", "keyword_analysis", "create_post", "delete_scheduled_transfer", "file_gstr1", "approve_payment"];
-  const permissions = ["READ", "WRITE", "DELETE", "ADMIN"];
-  const reasons_allowed = ["Scope matched", "Permission granted by policy", "Admin override active", "Tool within agent manifest"];
-  const reasons_denied = ["Tool not in agent scope", "Permission level insufficient", "Connector not authorized for agent", "Rate limit exceeded", "Cross-tenant access blocked"];
-
-  const entries: EnforceEntry[] = [];
-  const now = Date.now();
-  for (let i = 0; i < 200; i++) {
-    const isDenied = Math.random() < 0.15;
-    entries.push({
-      id: `enf-${String(i + 1).padStart(4, "0")}`,
-      timestamp: new Date(now - i * 120000 - Math.random() * 60000).toISOString(),
-      agent_name: agents[Math.floor(Math.random() * agents.length)],
-      connector: connectors[Math.floor(Math.random() * connectors.length)],
-      tool: tools[Math.floor(Math.random() * tools.length)],
-      permission: permissions[Math.floor(Math.random() * permissions.length)],
-      result: isDenied ? "denied" : "allowed",
-      reason: isDenied
-        ? reasons_denied[Math.floor(Math.random() * reasons_denied.length)]
-        : reasons_allowed[Math.floor(Math.random() * reasons_allowed.length)],
-    });
-  }
-  return entries;
-}
-
-const MOCK_ENTRIES = generateMockEntries();
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -75,9 +42,9 @@ export default function EnforceAuditLog() {
     try {
       const { data } = await api.get("/audit/enforce");
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-      setEntries(items.length > 0 ? items : MOCK_ENTRIES);
+      setEntries(items);
     } catch {
-      setEntries(MOCK_ENTRIES);
+      setEntries([]);
     } finally {
       setLoading(false);
     }

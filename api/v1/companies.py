@@ -1897,7 +1897,7 @@ class TallyDetectResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# TALLY AUTO-DETECT -- POST (stub)
+# TALLY AUTO-DETECT -- POST
 # ---------------------------------------------------------------------------
 
 
@@ -1911,23 +1911,39 @@ async def tally_detect(
 ):
     """Attempt to connect to a Tally bridge and detect company info.
 
-    This is a stub that returns mock data.  Actual Tally bridge
-    connection depends on the bridge process being available on the
-    client's network.
+    Requires the AgenticOrg Bridge agent to be running on the client's
+    network with access to the Tally Prime instance.
     """
     if not body.tally_bridge_url:
         raise HTTPException(422, "tally_bridge_url is required")
 
-    # Stub: return mock detected data
-    return TallyDetectResponse(
-        detected=True,
-        company_name="Demo Enterprises Pvt Ltd",
-        gstin="29AABCU9603R1ZM",
-        pan="AABCU9603R",
-        address="No. 42, MG Road, Bengaluru, Karnataka 560001",
-        fy_start="2025-04-01",
-        fy_end="2026-03-31",
-    )
+    # Try to connect to the real Tally bridge
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"{body.tally_bridge_url}/api/company-info")
+            resp.raise_for_status()
+            data = resp.json()
+            return TallyDetectResponse(
+                detected=True,
+                company_name=data.get("company_name", ""),
+                gstin=data.get("gstin", ""),
+                pan=data.get("pan", ""),
+                address=data.get("address", ""),
+                fy_start=data.get("fy_start", ""),
+                fy_end=data.get("fy_end", ""),
+            )
+    except Exception as exc:
+        return TallyDetectResponse(
+            detected=False,
+            company_name="",
+            gstin="",
+            pan="",
+            address=f"Could not connect to Tally bridge at {body.tally_bridge_url}: {exc}",
+            fy_start="",
+            fy_end="",
+        )
 
 
 # ===========================================================================
