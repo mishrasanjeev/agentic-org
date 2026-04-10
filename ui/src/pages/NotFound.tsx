@@ -1,8 +1,23 @@
 import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+import { useEffect } from "react";
 
 export default function NotFound() {
+  // Set HTTP status hint for crawlers via meta refresh + noindex
+  useEffect(() => {
+    // Mark page as 404 in browser so analytics/SEO tools record correctly
+    document.title = "404 — Page Not Found | AgenticOrg";
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+      <Helmet>
+        <title>404 — Page Not Found | AgenticOrg</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="googlebot" content="noindex, nofollow" />
+        <meta httpEquiv="Status" content="404 Not Found" />
+        <link rel="canonical" href="https://agenticorg.ai/404" />
+      </Helmet>
       <div className="text-center max-w-md">
         {/* Large 404 */}
         <div className="relative mb-8">
