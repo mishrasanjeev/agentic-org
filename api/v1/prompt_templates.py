@@ -141,11 +141,14 @@ async def create_prompt_template(
             422,
             "Invalid agent_type: must be lowercase snake_case (e.g., ap_processor)",
         )
-    if body.description and not re.search(r"[a-zA-Z]{3,}", body.description):
-        raise HTTPException(
-            422, "Description must contain meaningful text (at least 3 letters)"
-        )
-    if not re.search(r"[a-zA-Z]{10,}", body.template_text or ""):
+    if body.description:
+        desc_letter_count = sum(1 for c in body.description if c.isalpha())
+        if desc_letter_count < 3:
+            raise HTTPException(
+                422, "Description must contain meaningful text (at least 3 letters)"
+            )
+    template_letter_count = sum(1 for c in (body.template_text or "") if c.isalpha())
+    if template_letter_count < 10:
         raise HTTPException(
             422, "Template text must contain meaningful content (at least 10 letters)"
         )

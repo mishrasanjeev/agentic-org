@@ -178,9 +178,13 @@ class TestAgentGraph:
         assert _extract_confidence({"confidence": "high"}) == 0.95
 
     def test_extract_confidence_missing(self):
+        """TC-008: Empty output returns variable confidence, not hardcoded 0.85.
+        Now computed from real signals (output structure, content length).
+        """
         from core.langgraph.agent_graph import _extract_confidence
 
-        assert _extract_confidence({}) == 0.85
+        # Empty output: base 0.6 - short_output_penalty 0.20 = 0.40
+        assert _extract_confidence({}) == 0.4
 
     def test_extract_confidence_clamps(self):
         from core.langgraph.agent_graph import _extract_confidence

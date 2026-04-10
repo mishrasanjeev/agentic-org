@@ -1968,8 +1968,13 @@ class TestPromptTemplatesEndpoints:
             name="New Template",
             agent_type="sales",
             domain="sales",
-            template_text="Respond to lead: {name}",
+            template_text="Respond to the lead politely: {name}",
         )
+
+        # Mock the TC-005 duplicate-check query to return None (no duplicate)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
 
         ctx = _patch_tenant_session("prompt_templates", mock_session)
         try:
@@ -1990,12 +1995,17 @@ class TestPromptTemplatesEndpoints:
             name="Template with vars",
             agent_type="finance",
             domain="finance",
-            template_text="Process {invoice_id} for {amount}",
+            template_text="Process invoice {invoice_id} for amount {amount} in finance system",
             variables=[
                 {"name": "invoice_id", "type": "string"},
                 {"name": "amount", "type": "number"},
             ],
         )
+
+        # Mock the TC-005 duplicate-check query to return None (no duplicate)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
 
         ctx = _patch_tenant_session("prompt_templates", mock_session)
         try:
