@@ -9,10 +9,13 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom", "react-router-dom"],
-          "vendor-charts": ["recharts"],
-          "vendor-ui": ["axios", "@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-select", "@radix-ui/react-tabs", "@radix-ui/react-tooltip"],
+        manualChunks: (id: string) => {
+          if (id.includes("node_modules")) {
+            if (/[\\/]react(?:-dom|-router-dom)?[\\/]/.test(id)) return "vendor-react";
+            if (id.includes("recharts")) return "vendor-charts";
+            if (id.includes("@radix-ui") || id.includes("axios")) return "vendor-ui";
+          }
+          return undefined;
         },
       },
     },
