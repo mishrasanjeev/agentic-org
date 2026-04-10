@@ -1,23 +1,44 @@
 name: healthcare
 display_name: Healthcare Pack
-description: AI agents for patient intake, claims processing, appointments, and medical records
+description: AI agents for patient intake, claims processing, appointments, and medical records — fully HIPAA-compliant with PHI safeguards and HITL gates
+version: "1.0.0"
+pricing:
+  usd_monthly_per_provider: 299
+  type: paid_addon
+  trial_days: 14
+  max_trial_providers: 5
 compliance:
   - HIPAA
   - HITECH
+  - HIPAA_BAA_Required
+  - CMS_Quality_Reporting
 agents:
   - type: patient_intake
     domain: ops
-    tools: [composio:epic:get_patient, composio:cerner:search_records]
+    prompt_file: prompts/patient_intake.prompt.txt
+    tools: [composio:epic:get_patient, composio:epic:create_patient, composio:epic:update_patient, composio:epic:verify_insurance_eligibility, composio:epic:get_medication_list, composio:epic:create_encounter, composio:cerner:search_records, composio:salesforce:upsert_contact]
+    llm_model: gpt-4o
+    hitl_condition: always_before_registration
+    confidence_floor: 0.95
     system_prompt_suffix: >
       You are processing protected health information (PHI).
       Always follow HIPAA minimum-necessary rules.
       Never log or expose patient identifiers in plain text.
+      Verify patient identity with two-factor matching before accessing records.
+      All new registrations require human review for identity document verification.
   - type: claims_processor
     domain: finance
-    tools: [composio:salesforce:get_claim]
+    prompt_file: prompts/claims_processor.prompt.txt
+    tools: [composio:epic:get_encounter_charges, composio:epic:check_prior_auth, composio:epic:post_era_payment, composio:availity:submit_claim_837, composio:availity:check_claim_status, composio:salesforce:update_claim, composio:salesforce:update_claim_ar]
+    llm_model: gpt-4o
+    hitl_condition: always_before_submission
+    confidence_floor: 0.93
     system_prompt_suffix: >
       Follow HIPAA billing and coding standards.
-      Validate CPT/ICD codes before submitting claims.
+      Validate CPT/ICD-10 codes and CCI edits before submitting claims.
+      Verify prior authorization for all services that require it.
+      Never auto-submit appeals or write-offs — human approval is mandatory.
+      Claims exceeding $25,000 always require human review.
   - type: appointment_scheduler
     domain: ops
     tools: [composio:google_calendar:create_event]
@@ -33,3 +54,5 @@ agents:
 workflows:
   - patient_onboarding
   - claims_processing
+  - denial_management
+  - ar_aging_review

@@ -1,34 +1,59 @@
 name: legal
 display_name: Legal Pack
 description: AI agents for contract review, case research, document drafting, and compliance checking
+version: "1.0.0"
+pricing:
+  inr_monthly_per_client: 7999
+  usd_monthly_per_client: 95
+  type: paid_addon
+  trial_days: 14
+  max_trial_clients: 5
 compliance:
   - attorney_client_privilege
   - data_retention
+  - legal_professional_privilege
 agents:
   - type: contract_review
     domain: ops
-    tools: [knowledge_base_search, composio:docusign:get_document]
+    tools: [knowledge_base_search, composio:docusign:get_document, composio:docusign:list_envelopes, composio:google:search]
+    llm_model: gpt-4o
+    hitl_condition: always_before_legal_opinion
+    confidence_floor: 0.90
+    prompt_file: prompts/contract_review.prompt.txt
     system_prompt_suffix: >
       Review contracts for key clauses, risks, and missing terms.
       Flag liability caps, indemnification, and termination provisions.
   - type: case_research
     domain: ops
     tools: [knowledge_base_search, composio:google:search]
+    llm_model: gpt-4o
+    hitl_condition: always_before_legal_opinion
+    confidence_floor: 0.88
+    prompt_file: prompts/case_research.prompt.txt
     system_prompt_suffix: >
       Research case law and precedents relevant to the query.
       Cite sources and flag jurisdictional limitations.
   - type: document_drafting
     domain: ops
-    tools: [knowledge_base_search, composio:google_docs:create_document]
+    tools: [knowledge_base_search, composio:google_docs:create_document, composio:docusign:create_envelope]
+    llm_model: gpt-4o
+    hitl_condition: always_before_finalization
+    confidence_floor: 0.90
+    prompt_file: prompts/document_drafting.prompt.txt
     system_prompt_suffix: >
       Draft legal documents following firm templates and style guides.
       Include placeholder markers for attorney review.
   - type: compliance_checker
     domain: finance
     tools: [knowledge_base_search]
+    llm_model: gpt-4o-mini
     system_prompt_suffix: >
       Check regulatory compliance against applicable frameworks.
       Report non-conformities with severity and remediation steps.
+prompts:
+  contract_review: prompts/contract_review.prompt.txt
+  case_research: prompts/case_research.prompt.txt
+  document_drafting: prompts/document_drafting.prompt.txt
 workflows:
   - contract_lifecycle
   - litigation_support

@@ -1,31 +1,59 @@
 name: insurance
 display_name: Insurance Pack
 description: AI agents for underwriting, claims adjudication, policy management, and fraud detection
+version: "1.0.0"
+pricing:
+  inr_monthly_per_client: 7999
+  usd_monthly_per_client: 95
+  type: paid_addon
+  trial_days: 14
+  max_trial_clients: 5
 compliance:
   - NAIC_guidelines
   - state_regulations
+  - IRDA_regulations
 agents:
   - type: underwriting_analyst
     domain: finance
-    tools: [knowledge_base_search, composio:salesforce:get_account]
+    tools: [knowledge_base_search, composio:salesforce:get_account, composio:salesforce:get_opportunity, composio:salesforce:update_record]
+    llm_model: gpt-4o
+    hitl_condition: high_value_or_complex_risk
+    confidence_floor: 0.90
+    prompt_file: prompts/underwriting_analyst.prompt.txt
     system_prompt_suffix: >
       Evaluate risk profiles according to underwriting guidelines.
       Flag applications requiring manual review by senior underwriters.
+      ALWAYS trigger human-in-the-loop for risks above binding authority.
+      Never auto-bind substandard risks or prohibited class codes.
   - type: claims_adjudicator
     domain: finance
-    tools: [composio:salesforce:get_claim, knowledge_base_search]
+    tools: [composio:salesforce:get_claim, composio:salesforce:update_record, knowledge_base_search]
+    llm_model: gpt-4o
+    hitl_condition: high_value_or_fraud_indicator
+    confidence_floor: 0.92
+    prompt_file: prompts/claims_adjudicator.prompt.txt
     system_prompt_suffix: >
       Adjudicate claims per policy terms and coverage limits.
       Detect potential fraud indicators and escalate accordingly.
+      ALWAYS trigger human-in-the-loop for claims above auto-adjudication threshold.
+      Never authorize payment without verified coverage on date of loss.
   - type: policy_manager
     domain: ops
-    tools: [composio:salesforce:get_account, composio:stripe:get_subscription]
+    tools: [composio:salesforce:get_account, composio:salesforce:update_record, composio:stripe:get_subscription, composio:stripe:update_subscription]
+    llm_model: gpt-4o
+    hitl_condition: cancellation_or_major_endorsement
+    confidence_floor: 0.90
+    prompt_file: prompts/policy_manager.prompt.txt
     system_prompt_suffix: >
       Manage policy lifecycle from issuance through renewal.
       Calculate premiums and apply endorsement changes accurately.
+      ALWAYS trigger human-in-the-loop for cancellations and reinstatements.
+      Never skip state-mandated notice periods for any policy action.
   - type: fraud_detector
     domain: ops
     tools: [knowledge_base_search, composio:salesforce:get_claim]
+    llm_model: gpt-4o
+    confidence_floor: 0.88
     system_prompt_suffix: >
       Analyze claims patterns for fraud indicators.
       Score anomalies and produce evidence summaries for SIU review.

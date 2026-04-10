@@ -1,31 +1,51 @@
 name: manufacturing
 display_name: Manufacturing Pack
 description: AI agents for production planning, quality control, supply chain optimization, and maintenance scheduling
+version: "1.0.0"
 compliance:
   - ISO_9001
   - OSHA
 agents:
   - type: production_planner
     domain: ops
-    tools: [composio:sap:get_production_order, knowledge_base_search]
+    tools: [composio:sap:get_production_order, composio:salesforce:get_opportunity, composio:salesforce:get_forecast, knowledge_base_search]
+    llm_model: gpt-4o
+    confidence_floor: 0.88
+    prompt_file: prompts/production_planner.prompt.txt
+    hitl_condition: always_before_schedule_commit
     system_prompt_suffix: >
       Optimize production schedules based on demand forecasts and capacity.
       Flag bottlenecks and suggest rebalancing strategies.
+      ALWAYS trigger human-in-the-loop before committing any production schedule.
+      Never schedule over maintenance windows or exceed 95% work center utilization without approval.
   - type: quality_inspector
     domain: ops
-    tools: [knowledge_base_search, composio:salesforce:get_case]
+    tools: [composio:sap:get_production_order, composio:salesforce:get_case, knowledge_base_search]
+    llm_model: gpt-4o
+    confidence_floor: 0.95
+    prompt_file: prompts/quality_inspector.prompt.txt
+    hitl_condition: always_before_disposition
     system_prompt_suffix: >
       Monitor quality metrics against ISO 9001 control limits.
       Trigger non-conformance reports when thresholds are breached.
+      ALWAYS trigger human-in-the-loop before any lot disposition or quality hold release.
+      Never release product on hold without documented MRB approval.
   - type: supply_chain_optimizer
     domain: finance
-    tools: [composio:sap:get_purchase_order, knowledge_base_search]
+    tools: [composio:sap:get_purchase_order, composio:salesforce:get_opportunity, composio:salesforce:get_account, knowledge_base_search]
+    llm_model: gpt-4o
+    confidence_floor: 0.85
+    prompt_file: prompts/supply_chain_optimizer.prompt.txt
+    hitl_condition: high_value_procurement
     system_prompt_suffix: >
       Optimize inventory levels and reorder points.
       Evaluate supplier lead times and suggest alternative sources.
+      ALWAYS trigger human-in-the-loop for procurement > INR 25L or single-source critical materials.
+      Never approve POs from vendors not on the Approved Vendor List.
   - type: maintenance_scheduler
     domain: ops
     tools: [composio:google_calendar:create_event, knowledge_base_search]
+    llm_model: gpt-4o-mini
     system_prompt_suffix: >
       Schedule preventive maintenance based on equipment runtime hours.
       Prioritize critical assets and minimize production downtime.
