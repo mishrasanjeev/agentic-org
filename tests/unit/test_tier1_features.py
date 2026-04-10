@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -738,8 +739,12 @@ class TestNewConnectors:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.skipif(
+    not os.getenv("AGENTICORG_DB_URL"),
+    reason="ABM endpoints require PostgreSQL (set AGENTICORG_DB_URL)",
+)
 class TestABMApi:
-    """Tests for ABM (Account-Based Marketing) API endpoints."""
+    """Tests for ABM (Account-Based Marketing) API endpoints — requires DB."""
 
     @pytest.fixture(scope="class")
     def app(self):
@@ -758,7 +763,7 @@ class TestABMApi:
 
         from api.deps import get_current_tenant
 
-        test_tenant = f"test-abm-{uuid.uuid4().hex[:8]}"
+        test_tenant = str(uuid.uuid4())
         app.dependency_overrides[get_current_tenant] = lambda: test_tenant
 
         async def _fake_validate(token):

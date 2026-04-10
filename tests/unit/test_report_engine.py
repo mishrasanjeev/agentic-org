@@ -82,17 +82,17 @@ class TestReportGenerator:
         gen = self._make_generator()
         output = gen.generate(report_type="cfo_daily", params={})
         data = output.content_data
-        assert "cash_runway_months" in data
-        assert "burn_rate" in data
-        assert "bank_balances" in data
+        assert "agent_count" in data
+        assert "total_tasks_30d" in data
+        assert "success_rate" in data
 
     def test_cmo_weekly_has_expected_kpi_data(self):
         gen = self._make_generator()
         output = gen.generate(report_type="cmo_weekly", params={})
         data = output.content_data
-        assert "cac" in data
-        assert "roas_by_channel" in data
-        assert "pipeline_value" in data
+        assert "agent_count" in data
+        assert "total_tasks_30d" in data
+        assert "success_rate" in data
 
     def test_html_contains_agenticorg_branding(self):
         gen = self._make_generator()

@@ -167,21 +167,27 @@ class ReportGenerator:
 
         kpis = "".join([
             "<div class='kpi-row'>",
-            _kpi_card("Cash Runway", f"{data['cash_runway_months']:.1f} mo", data.get("cash_runway_trend")),
-            _kpi_card("Monthly Burn", _inr(data["burn_rate"]), data.get("burn_rate_trend")),
-            _kpi_card("DSO", f"{data['dso_days']} days", data.get("dso_trend")),
-            _kpi_card("DPO", f"{data['dpo_days']} days", data.get("dpo_trend")),
-            _kpi_card("Pending Approvals", str(data["pending_approvals_count"])),
+            _kpi_card("Agents", str(data.get("agent_count", 0))),
+            _kpi_card("Tasks (30d)", str(data.get("total_tasks_30d", 0))),
+            _kpi_card("Success Rate", f"{data.get('success_rate', 0)}%"),
+            _kpi_card("HITL Interventions", str(data.get("hitl_interventions", 0))),
+            _kpi_card("Cost (USD)", f"${data.get('total_cost_usd', 0):.2f}"),
             "</div>",
         ])
 
-        bank_rows = [[b["account"], f"{b['currency']} {b['balance']:,.0f}"] for b in data["bank_balances"]]
-        bank_table = _table(["Account", "Balance"], bank_rows)
+        # Domain breakdown table
+        domains = data.get("domain_breakdown", [])
+        domain_rows = [
+            [d.get("domain", ""), str(d.get("total", 0)), str(d.get("completed", 0)),
+             str(d.get("failed", 0)), f"{d.get('avg_confidence', 0):.2f}"]
+            for d in domains
+        ]
+        domain_table = _table(
+            ["Domain", "Total Tasks", "Completed", "Failed", "Avg Confidence"],
+            domain_rows,
+        ) if domain_rows else "<p>No agent activity in the last 30 days.</p>"
 
-        tax_rows = [[t["filing"], t["due_date"], t["status"].title()] for t in data["tax_calendar"]]
-        tax_table = _table(["Filing", "Due Date", "Status"], tax_rows)
-
-        body = f"{kpis}<h3>Bank Balances</h3>{bank_table}<h3>Tax Calendar</h3>{tax_table}"
+        body = f"{kpis}<h3>Domain Breakdown</h3>{domain_table}"
 
         content_html = _wrap_html(
             "CFO Daily Briefing",
@@ -212,34 +218,29 @@ class ReportGenerator:
 
         kpis = "".join([
             "<div class='kpi-row'>",
-            _kpi_card("CAC", _inr(data["cac"]), data.get("cac_trend")),
-            _kpi_card("MQLs", str(data["mqls"]), data.get("mqls_trend")),
-            _kpi_card("SQLs", str(data["sqls"]), data.get("sqls_trend")),
-            _kpi_card("Pipeline Value", _inr(data["pipeline_value"]), data.get("pipeline_trend")),
-            _kpi_card("Brand Sentiment", str(data["brand_sentiment_score"]), data.get("brand_sentiment_trend")),
+            _kpi_card("Agents", str(data.get("agent_count", 0))),
+            _kpi_card("Tasks (30d)", str(data.get("total_tasks_30d", 0))),
+            _kpi_card("Success Rate", f"{data.get('success_rate', 0)}%"),
+            _kpi_card("HITL Interventions", str(data.get("hitl_interventions", 0))),
+            _kpi_card("Cost (USD)", f"${data.get('total_cost_usd', 0.0):.2f}"),
             "</div>",
         ])
 
-        roas_rows = [[ch, f"{val:.1f}x"] for ch, val in data["roas_by_channel"].items()]
-        roas_table = _table(["Channel", "ROAS"], roas_rows)
-
-        email_data = data["email_performance"]
-        email_rows = [
-            ["Open Rate", f"{email_data['open_rate']:.1f}%"],
-            ["Click Rate", f"{email_data['click_rate']:.1f}%"],
-            ["Unsubscribe Rate", f"{email_data['unsubscribe_rate']:.1f}%"],
+        # Domain breakdown table (marketing-relevant domains)
+        domains = data.get("domain_breakdown", [])
+        domain_rows = [
+            [d.get("domain", ""), str(d.get("total", 0)), str(d.get("completed", 0)),
+             str(d.get("failed", 0)), f"{d.get('avg_confidence', 0):.2f}"]
+            for d in domains
         ]
-        email_table = _table(["Metric", "Value"], email_rows)
-
-        top_pages = data["content_top_pages"]
-        page_rows = [[p["page"], f"{p['views']:,}", f"{p['avg_time_sec']}s"] for p in top_pages]
-        pages_table = _table(["Page", "Views", "Avg Time"], page_rows)
+        domain_table = _table(
+            ["Domain", "Total Tasks", "Completed", "Failed", "Avg Confidence"],
+            domain_rows,
+        ) if domain_rows else "<p>No marketing activity in the last 30 days.</p>"
 
         body = (
             f"{kpis}"
-            f"<h3>ROAS by Channel</h3>{roas_table}"
-            f"<h3>Email Performance</h3>{email_table}"
-            f"<h3>Top Content Pages</h3>{pages_table}"
+            f"<h3>Domain Breakdown</h3>{domain_table}"
         )
 
         content_html = _wrap_html(
@@ -269,36 +270,31 @@ class ReportGenerator:
         data = self._fetch_cfo_kpis(company_id)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
-        ar = data["ar_aging"]
-        ap = data["ap_aging"]
-
-        buckets = ["0-30 days", "31-60 days", "61-90 days", "90+ days"]
-        ar_vals = [ar["0_30"], ar["31_60"], ar["61_90"], ar["90_plus"]]
-        ap_vals = [ap["0_30"], ap["31_60"], ap["61_90"], ap["90_plus"]]
-
-        ar_rows = [[b, _inr(v)] for b, v in zip(buckets, ar_vals, strict=False)]
-        ap_rows = [[b, _inr(v)] for b, v in zip(buckets, ap_vals, strict=False)]
-
-        ar_total = sum(ar_vals)
-        ap_total = sum(ap_vals)
-
-        ar_rows.append(["Total", _inr(ar_total)])
-        ap_rows.append(["Total", _inr(ap_total)])
-
         kpis = "".join([
             "<div class='kpi-row'>",
-            _kpi_card("Total AR", _inr(ar_total)),
-            _kpi_card("Total AP", _inr(ap_total)),
-            _kpi_card("Net Position", _inr(ar_total - ap_total)),
-            _kpi_card("DSO", f"{data['dso_days']} days"),
-            _kpi_card("DPO", f"{data['dpo_days']} days"),
+            _kpi_card("Agents", str(data.get("agent_count", 0))),
+            _kpi_card("Tasks (30d)", str(data.get("total_tasks_30d", 0))),
+            _kpi_card("Success Rate", f"{data.get('success_rate', 0)}%"),
+            _kpi_card("HITL Interventions", str(data.get("hitl_interventions", 0))),
+            _kpi_card("Cost (USD)", f"${data.get('total_cost_usd', 0.0):.2f}"),
             "</div>",
         ])
 
+        # Domain breakdown table (replaces legacy AR/AP aging buckets)
+        domains = data.get("domain_breakdown", [])
+        domain_rows = [
+            [d.get("domain", ""), str(d.get("total", 0)), str(d.get("completed", 0)),
+             str(d.get("failed", 0)), f"{d.get('avg_confidence', 0):.2f}"]
+            for d in domains
+        ]
+        domain_table = _table(
+            ["Domain", "Total Tasks", "Completed", "Failed", "Avg Confidence"],
+            domain_rows,
+        ) if domain_rows else "<p>No aging data available. Connect accounting integrations to populate AR/AP aging.</p>"
+
         body = (
             f"{kpis}"
-            f"<h3>Accounts Receivable Aging</h3>{_table(['Bucket', 'Amount'], ar_rows)}"
-            f"<h3>Accounts Payable Aging</h3>{_table(['Bucket', 'Amount'], ap_rows)}"
+            f"<h3>Domain Breakdown</h3>{domain_table}"
         )
 
         content_html = _wrap_html(
@@ -310,7 +306,7 @@ class ReportGenerator:
 
         return ReportOutput(
             content_html=content_html,
-            content_data={"ar_aging": ar, "ap_aging": ap, "dso_days": data["dso_days"], "dpo_days": data["dpo_days"]},
+            content_data=data,
             report_type="aging_report",
         )
 
@@ -328,36 +324,35 @@ class ReportGenerator:
         data = self._fetch_cfo_kpis(company_id)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
-        pl_data = data["monthly_pl"]
-
-        total_revenue = sum(m["revenue"] for m in pl_data)
-        total_cogs = sum(m["cogs"] for m in pl_data)
-        total_gm = sum(m["gross_margin"] for m in pl_data)
-        total_opex = sum(m["opex"] for m in pl_data)
-        total_ni = sum(m["net_income"] for m in pl_data)
-
-        gm_pct = (total_gm / total_revenue * 100) if total_revenue else 0
-        ni_pct = (total_ni / total_revenue * 100) if total_revenue else 0
-
         kpis = "".join([
             "<div class='kpi-row'>",
-            _kpi_card("Total Revenue", _inr(total_revenue)),
-            _kpi_card("Gross Margin", f"{gm_pct:.1f}%"),
-            _kpi_card("Net Income", _inr(total_ni)),
-            _kpi_card("Net Margin", f"{ni_pct:.1f}%"),
+            _kpi_card("Agents", str(data.get("agent_count", 0))),
+            _kpi_card("Tasks (30d)", str(data.get("total_tasks_30d", 0))),
+            _kpi_card("Success Rate", f"{data.get('success_rate', 0)}%"),
+            _kpi_card("HITL Interventions", str(data.get("hitl_interventions", 0))),
+            _kpi_card("Cost (USD)", f"${data.get('total_cost_usd', 0.0):.2f}"),
             "</div>",
         ])
 
-        headers = ["Month", "Revenue", "COGS", "Gross Margin", "OpEx", "Net Income"]
-        rows = [
-            [m["month"], _inr(m["revenue"]), _inr(m["cogs"]),
-             _inr(m["gross_margin"]), _inr(m["opex"]), _inr(m["net_income"])]
-            for m in pl_data
+        # Domain breakdown table (replaces legacy monthly P&L)
+        domains = data.get("domain_breakdown", [])
+        domain_rows = [
+            [d.get("domain", ""), str(d.get("total", 0)), str(d.get("completed", 0)),
+             str(d.get("failed", 0)), f"{d.get('avg_confidence', 0):.2f}"]
+            for d in domains
         ]
-        rows.append(["Total", _inr(total_revenue), _inr(total_cogs),
-                      _inr(total_gm), _inr(total_opex), _inr(total_ni)])
+        domain_table = _table(
+            ["Domain", "Total Tasks", "Completed", "Failed", "Avg Confidence"],
+            domain_rows,
+        ) if domain_rows else (
+            "<p>No P&amp;L data available. "
+            "Connect accounting integrations to populate financials.</p>"
+        )
 
-        body = f"{kpis}<h3>Profit & Loss Statement</h3>{_table(headers, rows)}"
+        body = (
+            f"{kpis}"
+            f"<h3>Domain Task Summary</h3>{domain_table}"
+        )
 
         content_html = _wrap_html(
             "Profit & Loss Report",
@@ -368,11 +363,7 @@ class ReportGenerator:
 
         return ReportOutput(
             content_html=content_html,
-            content_data={"monthly_pl": pl_data, "totals": {
-                "revenue": total_revenue, "cogs": total_cogs,
-                "gross_margin": total_gm, "opex": total_opex,
-                "net_income": total_ni,
-            }},
+            content_data=data,
             report_type="pnl_report",
         )
 
@@ -392,29 +383,29 @@ class ReportGenerator:
 
         kpis = "".join([
             "<div class='kpi-row'>",
-            _kpi_card("CAC", _inr(data["cac"]), data.get("cac_trend")),
-            _kpi_card("MQLs", str(data["mqls"]), data.get("mqls_trend")),
-            _kpi_card("SQLs", str(data["sqls"]), data.get("sqls_trend")),
-            _kpi_card("Pipeline", _inr(data["pipeline_value"]), data.get("pipeline_trend")),
+            _kpi_card("Agents", str(data.get("agent_count", 0))),
+            _kpi_card("Tasks (30d)", str(data.get("total_tasks_30d", 0))),
+            _kpi_card("Success Rate", f"{data.get('success_rate', 0)}%"),
+            _kpi_card("HITL Interventions", str(data.get("hitl_interventions", 0))),
+            _kpi_card("Cost (USD)", f"${data.get('total_cost_usd', 0.0):.2f}"),
             "</div>",
         ])
 
-        roas_rows = [[ch, f"{val:.1f}x"] for ch, val in data["roas_by_channel"].items()]
-
-        social_rows = [[platform, f"{engagements:,}"] for platform, engagements in data["social_engagement"].items()]
-
-        traffic = data["website_traffic"]
-        traffic_rows = [
-            ["Sessions", f"{traffic['sessions']:,}"],
-            ["Users", f"{traffic['users']:,}"],
-            ["Bounce Rate", f"{traffic['bounce_rate']:.1f}%"],
+        # Domain breakdown table (replaces legacy campaign/ROAS/social/traffic)
+        domains = data.get("domain_breakdown", [])
+        domain_rows = [
+            [d.get("domain", ""), str(d.get("total", 0)), str(d.get("completed", 0)),
+             str(d.get("failed", 0)), f"{d.get('avg_confidence', 0):.2f}"]
+            for d in domains
         ]
+        domain_table = _table(
+            ["Domain", "Total Tasks", "Completed", "Failed", "Avg Confidence"],
+            domain_rows,
+        ) if domain_rows else "<p>No campaign data available. Connect marketing integrations to populate metrics.</p>"
 
         body = (
             f"{kpis}"
-            f"<h3>ROAS by Channel</h3>{_table(['Channel', 'ROAS'], roas_rows)}"
-            f"<h3>Social Engagement</h3>{_table(['Platform', 'Engagements'], social_rows)}"
-            f"<h3>Website Traffic</h3>{_table(['Metric', 'Value'], traffic_rows)}"
+            f"<h3>Domain Breakdown</h3>{domain_table}"
         )
 
         content_html = _wrap_html(
