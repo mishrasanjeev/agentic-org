@@ -461,7 +461,10 @@ class TestPluralWebhookHandler:
     """Full webhook handler flow."""
 
     def test_handle_webhook_success(self):
-        from core.billing.pinelabs_client import handle_webhook
+        from core.billing.pinelabs_client import handle_webhook, store_order_mapping
+
+        # Pre-populate the order mapping (simulates the order being created earlier)
+        store_order_mapping("aoabc123", "v1-order-42", "tenant1", "pro")
 
         secret = base64.b64encode(b"webhook_key").decode()
         webhook_id = "evt_abc"
@@ -469,7 +472,7 @@ class TestPluralWebhookHandler:
         payload = {
             "order_id": "v1-order-42",
             "status": "PROCESSED",
-            "merchant_order_reference": "ao_tenant1_pro_xyz",
+            "merchant_order_reference": "aoabc123",
         }
         body = json.dumps(payload).encode()
 
@@ -583,13 +586,16 @@ class TestPluralE2ERedirectFlow:
         assert status["payments"][0]["status"] == "CAPTURED"
 
         # Step 4: Webhook confirmation
+        from core.billing.pinelabs_client import store_order_mapping
+        store_order_mapping("aoe2etest", "v1-e2e-order-001", "e2e", "pro")
+
         secret = base64.b64encode(b"e2e_webhook_secret").decode()
         webhook_id = "evt_e2e_001"
         webhook_ts = str(int(time.time()))
         webhook_payload = {
             "order_id": "v1-e2e-order-001",
             "status": "PROCESSED",
-            "merchant_order_reference": "ao_e2e_pro_test1",
+            "merchant_order_reference": "aoe2etest",
         }
         webhook_body = json.dumps(webhook_payload).encode()
 

@@ -69,36 +69,60 @@ PLAN_AMOUNT_INR: dict[str, int] = {
     "enterprise": 49_999_00,  # INR 49,999
 }
 
-# ── Order mapping (merchant_ref → order_id) ─────────────────────────
-# Kept in memory; for multi-process deploys, move to Redis.
+# ── Order mapping (merchant_ref → order details) ───────────────────
+# Stored in Redis so it survives restarts and works across multiple pods.
+# Falls back to in-memory dict if Redis is unavailable.
 _order_map: dict[str, Any] = {}
+_MAPPING_TTL = 86400  # 24 hours
+
+
+def _redis_client():
+    try:
+        from core.billing.usage_tracker import _get_redis
+        return _get_redis()
+    except Exception:
+        return None
 
 
 def store_order_mapping(
     merchant_ref: str, order_id: str, tenant_id: str = "", plan: str = "",
 ) -> None:
-    """Store merchant_ref → order details mapping for callback lookup."""
-    _order_map[merchant_ref] = {
-        "order_id": order_id,
-        "tenant_id": tenant_id,
-        "plan": plan,
-    }
+    """Store merchant_ref → order details mapping in Redis (with in-memory fallback)."""
+    import json as _json
+
+    entry = {"order_id": order_id, "tenant_id": tenant_id, "plan": plan}
+    _order_map[merchant_ref] = entry  # always store in-memory as fallback
+
+    redis = _redis_client()
+    if redis is not None:
+        try:
+            redis.setex(f"plural:order:{merchant_ref}", _MAPPING_TTL, _json.dumps(entry))
+        except Exception:
+            logger.debug("plural_order_mapping_redis_failed")
 
 
 def lookup_order_id(merchant_ref: str) -> str:
     """Look up Plural order_id from merchant_order_reference."""
-    entry = _order_map.get(merchant_ref, {})
-    if isinstance(entry, dict):
-        return entry.get("order_id", "")
-    return entry  # backwards compat if raw string
+    return lookup_order_details(merchant_ref).get("order_id", "")
 
 
 def lookup_order_details(merchant_ref: str) -> dict[str, str]:
-    """Look up full order details from merchant_order_reference."""
+    """Look up full order details — Redis first, then in-memory fallback."""
+    import json as _json
+
+    redis = _redis_client()
+    if redis is not None:
+        try:
+            raw = redis.get(f"plural:order:{merchant_ref}")
+            if raw:
+                if isinstance(raw, bytes):
+                    raw = raw.decode()
+                return _json.loads(raw)
+        except Exception:
+            logger.debug("plural_order_lookup_redis_failed")
+
     entry = _order_map.get(merchant_ref, {})
-    if isinstance(entry, dict):
-        return entry
-    return {"order_id": entry} if entry else {}
+    return entry if isinstance(entry, dict) else {}
 
 
 # ── Token cache ─────────────────────────────────────────────────────
@@ -197,7 +221,9 @@ def create_payment_order(
     if not amount:
         raise ValueError(f"Unknown plan or zero amount: {plan}")
 
-    merchant_ref = f"ao_{tenant_id}_{plan}_{uuid.uuid4().hex[:8]}"
+    # Plural merchant_order_reference: max 50 chars, A-Z a-z 0-9 - _
+    # Short unique ref — full tenant/plan stored in Redis mapping
+    merchant_ref = f"ao{uuid.uuid4().hex[:20]}"  # 22 chars total
 
     cb_params = f"merchant_ref={merchant_ref}&tenant_id={tenant_id}&plan={plan}"
     body: dict[str, Any] = {
@@ -401,14 +427,8 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
     tenant_id = stored.get("tenant_id", "")
     plan = stored.get("plan", "")
 
-    if not tenant_id and merchant_ref.startswith("ao_"):
-        # Fallback: format is ao_{tenant}_{plan}_{uuid8}
-        # Use rsplit to peel off uuid and plan from the right side
-        without_prefix = merchant_ref[3:]  # strip "ao_"
-        rparts = without_prefix.rsplit("_", 2)  # [tenant..., plan, uuid8]
-        if len(rparts) == 3:
-            tenant_id = rparts[0]
-            plan = rparts[1]
+    # tenant_id and plan come from the Redis-backed order mapping
+    # (set when create_payment_order was called).  No string parsing.
 
     is_success = status in ("PROCESSED", "AUTHORIZED", "CAPTURED")
 
