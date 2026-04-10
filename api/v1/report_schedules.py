@@ -1,29 +1,23 @@
 """Report Schedule API — CRUD + ad-hoc trigger for scheduled reports.
 
-Uses an in-memory store for now; will be migrated to the database model
-once the ORM schema is finalised.
+Uses PostgreSQL via SQLAlchemy ORM with tenant-scoped sessions (RLS).
 """
 
 from __future__ import annotations
 
-import uuid
+import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from core.database import get_tenant_session
+from core.models.report_schedule import ReportSchedule
 
 router = APIRouter()
-
-# ---------------------------------------------------------------------------
-# In-memory store (shared with Celery task layer)
-# ---------------------------------------------------------------------------
-# Import the canonical store from the task layer so both sides see the same data.
-from core.tasks.report_tasks import get_schedule_store  # noqa: E402
-
-_store = get_schedule_store()
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +74,7 @@ class ReportScheduleResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _compute_next_run(cron: str) -> str:
+def _compute_next_run(cron: str) -> datetime:
     """Lightweight next-run estimation (matches task-layer logic)."""
     now = datetime.now(UTC)
     interval_map: dict[str, timedelta] = {
@@ -91,29 +85,30 @@ def _compute_next_run(cron: str) -> str:
         "monthly": timedelta(days=30),
     }
     delta = interval_map.get(cron, timedelta(days=1))
-    return (now + delta).isoformat()
+    return now + delta
 
 
-def _to_response(record: dict[str, Any]) -> ReportScheduleResponse:
-    """Convert an internal store record to the API response model."""
-    channels = record.get("delivery_channels", [])
+def _to_response(row: ReportSchedule) -> ReportScheduleResponse:
+    """Convert an ORM row to the API response model."""
+    config: dict[str, Any] = row.config or {}
+    channels_raw: list[Any] = row.recipients or []
     parsed_channels = [
         DeliveryChannel(**ch) if isinstance(ch, dict) else ch
-        for ch in channels
+        for ch in channels_raw
     ]
     return ReportScheduleResponse(
-        id=record["id"],
-        report_type=record["report_type"],
-        cron_expression=record["cron_expression"],
+        id=str(row.id),
+        report_type=row.report_type,
+        cron_expression=row.cron_expression,
         delivery_channels=parsed_channels,
-        format=record.get("format", "pdf"),
-        is_active=record.get("is_active", True),
-        company_id=record.get("company_id", "default"),
-        params=record.get("params", {}),
-        tenant_id=record["tenant_id"],
-        last_run_at=record.get("last_run_at"),
-        next_run_at=record.get("next_run_at"),
-        created_at=record["created_at"],
+        format=row.format or "pdf",
+        is_active=row.enabled,
+        company_id=config.get("company_id", "default"),
+        params=config.get("params", {}),
+        tenant_id=str(row.tenant_id),
+        last_run_at=row.last_run_at.isoformat() if row.last_run_at else None,
+        next_run_at=row.next_run_at.isoformat() if row.next_run_at else None,
+        created_at=row.created_at.isoformat() if row.created_at else datetime.now(UTC).isoformat(),
     )
 
 
@@ -122,15 +117,17 @@ def _to_response(record: dict[str, Any]) -> ReportScheduleResponse:
 # ---------------------------------------------------------------------------
 
 @router.get("/report-schedules", response_model=list[ReportScheduleResponse])
-def list_report_schedules(
+async def list_report_schedules(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[ReportScheduleResponse]:
     """List all report schedules for the current tenant."""
-    return [
-        _to_response(rec)
-        for rec in _store.values()
-        if rec.get("tenant_id") == tenant_id
-    ]
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(ReportSchedule).where(ReportSchedule.tenant_id == tid)
+        )
+        rows = result.scalars().all()
+        return [_to_response(row) for row in rows]
 
 
 @router.post(
@@ -138,103 +135,167 @@ def list_report_schedules(
     response_model=ReportScheduleResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_report_schedule(
+async def create_report_schedule(
     body: ReportScheduleCreate,
     tenant_id: str = Depends(get_current_tenant),
 ) -> ReportScheduleResponse:
     """Create a new report schedule."""
-    schedule_id = str(uuid.uuid4())
-    now_iso = datetime.now(UTC).isoformat()
+    tid = _uuid.UUID(tenant_id)
+    schedule_id = _uuid.uuid4()
+    channels_data = [ch.model_dump() for ch in body.delivery_channels]
+    primary_channel = body.delivery_channels[0].type if body.delivery_channels else "email"
 
-    record: dict[str, Any] = {
-        "id": schedule_id,
-        "report_type": body.report_type,
-        "cron_expression": body.cron_expression,
-        "delivery_channels": [ch.model_dump() for ch in body.delivery_channels],
-        "format": body.format,
-        "is_active": body.is_active,
+    config: dict[str, Any] = {
         "company_id": body.company_id,
         "params": body.params,
-        "tenant_id": tenant_id,
-        "last_run_at": None,
-        "next_run_at": _compute_next_run(body.cron_expression) if body.is_active else None,
-        "created_at": now_iso,
     }
 
-    _store[schedule_id] = record
-    return _to_response(record)
+    row = ReportSchedule(
+        id=schedule_id,
+        name=body.report_type,
+        report_type=body.report_type,
+        cron_expression=body.cron_expression,
+        recipients=channels_data,
+        delivery_channel=primary_channel,
+        format=body.format,
+        enabled=body.is_active,
+        last_run_at=None,
+        next_run_at=_compute_next_run(body.cron_expression) if body.is_active else None,
+        config=config,
+        tenant_id=tid,
+    )
+
+    async with get_tenant_session(tid) as session:
+        session.add(row)
+        await session.flush()
+        return _to_response(row)
 
 
 @router.patch("/report-schedules/{schedule_id}", response_model=ReportScheduleResponse)
-def update_report_schedule(
+async def update_report_schedule(
     schedule_id: str,
     body: ReportScheduleUpdate,
     tenant_id: str = Depends(get_current_tenant),
 ) -> ReportScheduleResponse:
     """Update an existing report schedule (partial update)."""
-    record = _store.get(schedule_id)
-    if record is None or record.get("tenant_id") != tenant_id:
-        raise HTTPException(status_code=404, detail="Schedule not found")
+    tid = _uuid.UUID(tenant_id)
+    sid = _uuid.UUID(schedule_id)
 
-    updates = body.model_dump(exclude_unset=True)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(ReportSchedule).where(
+                ReportSchedule.id == sid,
+                ReportSchedule.tenant_id == tid,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Schedule not found")
 
-    # Serialise delivery channels if provided.
-    if "delivery_channels" in updates and updates["delivery_channels"] is not None:
-        updates["delivery_channels"] = [
-            ch.model_dump() if hasattr(ch, "model_dump") else ch
-            for ch in updates["delivery_channels"]
-        ]
+        updates = body.model_dump(exclude_unset=True)
 
-    record.update(updates)
+        if "report_type" in updates:
+            row.report_type = updates["report_type"]
+            row.name = updates["report_type"]
 
-    # Recompute next_run if cron or active status changed.
-    if "cron_expression" in updates or "is_active" in updates:
-        if record.get("is_active"):
-            record["next_run_at"] = _compute_next_run(record["cron_expression"])
-        else:
-            record["next_run_at"] = None
+        if "cron_expression" in updates:
+            row.cron_expression = updates["cron_expression"]
 
-    return _to_response(record)
+        if "delivery_channels" in updates and updates["delivery_channels"] is not None:
+            channels_data = [
+                ch.model_dump() if hasattr(ch, "model_dump") else ch
+                for ch in updates["delivery_channels"]
+            ]
+            row.recipients = channels_data
+            if channels_data:
+                first = channels_data[0]
+                row.delivery_channel = first.get("type", "email") if isinstance(first, dict) else "email"
+
+        if "format" in updates:
+            row.format = updates["format"]
+
+        if "is_active" in updates:
+            row.enabled = updates["is_active"]
+
+        # Update config fields (company_id, params)
+        config: dict[str, Any] = dict(row.config or {})
+        if "company_id" in updates:
+            config["company_id"] = updates["company_id"]
+        if "params" in updates:
+            config["params"] = updates["params"]
+        row.config = config
+
+        # Recompute next_run if cron or active status changed.
+        if "cron_expression" in updates or "is_active" in updates:
+            if row.enabled:
+                row.next_run_at = _compute_next_run(row.cron_expression)
+            else:
+                row.next_run_at = None
+
+        await session.flush()
+        return _to_response(row)
 
 
 @router.delete("/report-schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_report_schedule(
+async def delete_report_schedule(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
 ) -> None:
     """Delete a report schedule."""
-    record = _store.get(schedule_id)
-    if record is None or record.get("tenant_id") != tenant_id:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    del _store[schedule_id]
+    tid = _uuid.UUID(tenant_id)
+    sid = _uuid.UUID(schedule_id)
+
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(ReportSchedule).where(
+                ReportSchedule.id == sid,
+                ReportSchedule.tenant_id == tid,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        await session.delete(row)
 
 
 @router.post("/report-schedules/{schedule_id}/run-now")
-def run_report_now(
+async def run_report_now(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Trigger immediate generation for a schedule (ignores cron timing)."""
-    record = _store.get(schedule_id)
-    if record is None or record.get("tenant_id") != tenant_id:
-        raise HTTPException(status_code=404, detail="Schedule not found")
+    tid = _uuid.UUID(tenant_id)
+    sid = _uuid.UUID(schedule_id)
 
-    from core.tasks.report_tasks import generate_report
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(ReportSchedule).where(
+                ReportSchedule.id == sid,
+                ReportSchedule.tenant_id == tid,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Schedule not found")
 
-    report_config: dict[str, Any] = {
-        "report_type": record["report_type"],
-        "params": record.get("params", {}),
-        "company_id": record.get("company_id", "default"),
-        "tenant_id": tenant_id,
-        "delivery_channels": record.get("delivery_channels", []),
-        "format": record.get("format", "pdf"),
-        "schedule_id": schedule_id,
-    }
+        config: dict[str, Any] = row.config or {}
 
-    task = generate_report.delay(report_config)
+        from core.tasks.report_tasks import generate_report
 
-    return {
-        "message": "Report generation triggered",
-        "task_id": task.id,
-        "schedule_id": schedule_id,
-    }
+        report_config: dict[str, Any] = {
+            "report_type": row.report_type,
+            "params": config.get("params", {}),
+            "company_id": config.get("company_id", "default"),
+            "tenant_id": tenant_id,
+            "delivery_channels": row.recipients or [],
+            "format": row.format or "pdf",
+            "schedule_id": schedule_id,
+        }
+
+        task = generate_report.delay(report_config)
+
+        return {
+            "message": "Report generation triggered",
+            "task_id": task.id,
+            "schedule_id": schedule_id,
+        }

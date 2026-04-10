@@ -1,13 +1,15 @@
 """A2A (Agent-to-Agent) Protocol endpoints.
 
 Implements the A2A spec for agent discovery and task execution:
-- GET  /a2a/.well-known/agent.json  — Agent Card (discovery)
-- POST /a2a/tasks                    — Execute task via JSON-RPC
-- GET  /a2a/tasks/{id}               — Get task status
+- GET  /a2a/.well-known/agent.json  -- Agent Card (discovery)
+- POST /a2a/tasks                    -- Execute task via JSON-RPC
+- GET  /a2a/tasks/{id}               -- Get task status
 
 External agents (ChatGPT, Claude, partner systems) discover our agents
 via the Agent Card, then send tasks via JSON-RPC with a Grantex grant
 token for authorization.
+
+Tasks are persisted to PostgreSQL via the A2ATask ORM model.
 """
 
 from __future__ import annotations
@@ -19,17 +21,17 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from core.database import get_tenant_session
+from core.models.a2a_task import A2ATask
 
 router = APIRouter(prefix="/a2a", tags=["A2A"])
 _log = structlog.get_logger()
 
-# In-memory task store (production would use Redis/DB)
-_task_store: dict[str, dict[str, Any]] = {}
 
-
-# ── Agent Card — Discovery endpoint ────────────────────────────────────────
+# -- Agent Card -- Discovery endpoint ----------------------------------------
 
 
 @router.get("/.well-known/agent.json")
@@ -37,7 +39,7 @@ _task_store: dict[str, dict[str, Any]] = {}
 async def agent_card():
     """Return the A2A Agent Card for AgenticOrg.
 
-    This is the discovery endpoint — external systems fetch this to learn
+    This is the discovery endpoint -- external systems fetch this to learn
     what agents are available and how to authenticate.
     """
     grantex_url = os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev")
@@ -72,7 +74,7 @@ async def list_available_agents():
     return {"agents": _build_agent_skills()}
 
 
-# ── Task execution — JSON-RPC style ────────────────────────────────────────
+# -- Task execution -- JSON-RPC style ----------------------------------------
 
 
 class A2ATaskRequest(BaseModel):
@@ -95,6 +97,7 @@ async def create_task(
     scopes for the requested agent type.
     """
     task_id = f"a2a_{_uuid.uuid4().hex[:16]}"
+    tid = _uuid.UUID(tenant_id)
 
     # Check if the requested agent type exists
     from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
@@ -102,13 +105,21 @@ async def create_task(
     if body.agent_type not in _AGENT_TYPE_DEFAULT_TOOLS:
         raise HTTPException(400, f"Unknown agent type: {body.agent_type}")
 
-    # Store task as pending
-    _task_store[task_id] = {
-        "id": task_id,
-        "status": "running",
-        "agent_type": body.agent_type,
-        "result": None,
-    }
+    # Persist task as running
+    async with get_tenant_session(tid) as session:
+        task_row = A2ATask(
+            tenant_id=tid,
+            task_id=task_id,
+            agent_type=body.agent_type,
+            status="running",
+            input_data={
+                "action": body.action,
+                "inputs": body.inputs,
+                "context": body.context,
+                "metadata": body.metadata,
+            },
+        )
+        session.add(task_row)
 
     # Execute via LangGraph
     try:
@@ -144,41 +155,78 @@ async def create_task(
             grant_token=grant_token,
         )
 
-        _task_store[task_id] = {
-            "id": task_id,
-            "status": result.get("status", "completed"),
-            "agent_type": body.agent_type,
-            "result": {
-                "output": result.get("output", {}),
-                "confidence": result.get("confidence", 0.0),
-                "reasoning_trace": result.get("reasoning_trace", []),
-            },
+        final_status = result.get("status", "completed")
+        output_data = {
+            "output": result.get("output", {}),
+            "confidence": result.get("confidence", 0.0),
+            "reasoning_trace": result.get("reasoning_trace", []),
         }
+
+        async with get_tenant_session(tid) as session:
+            db_result = await session.execute(
+                select(A2ATask).where(A2ATask.task_id == task_id, A2ATask.tenant_id == tid)
+            )
+            task_row = db_result.scalar_one()
+            task_row.status = final_status
+            task_row.output_data = output_data
 
         _log.info("a2a_task_completed", task_id=task_id, agent_type=body.agent_type)
 
+        return {
+            "id": task_id,
+            "status": final_status,
+            "agent_type": body.agent_type,
+            "result": output_data,
+        }
+
     except Exception as exc:
         _log.error("a2a_task_failed", task_id=task_id, error=str(exc))
-        _task_store[task_id] = {
+
+        async with get_tenant_session(tid) as session:
+            db_result = await session.execute(
+                select(A2ATask).where(A2ATask.task_id == task_id, A2ATask.tenant_id == tid)
+            )
+            task_row = db_result.scalar_one_or_none()
+            if task_row:
+                task_row.status = "failed"
+                task_row.error = "Task execution failed"
+                task_row.output_data = {"error": "Task execution failed"}
+
+        return {
             "id": task_id,
             "status": "failed",
             "agent_type": body.agent_type,
             "result": {"error": "Task execution failed"},
         }
 
-    return _task_store[task_id]
-
 
 @router.get("/tasks/{task_id}")
-async def get_task(task_id: str):
+async def get_task(
+    task_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+):
     """Get task status and result."""
-    task = _task_store.get(task_id)
-    if not task:
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(A2ATask).where(A2ATask.task_id == task_id, A2ATask.tenant_id == tid)
+        )
+        task_row = result.scalar_one_or_none()
+
+    if not task_row:
         raise HTTPException(404, "Task not found")
-    return task
+
+    return {
+        "id": task_row.task_id,
+        "status": task_row.status,
+        "agent_type": task_row.agent_type,
+        "result": task_row.output_data if task_row.output_data else (
+            {"error": task_row.error} if task_row.error else None
+        ),
+    }
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------------------
 
 _DOMAIN_MAP = {
     "ap_processor": "finance", "ar_collections": "finance", "recon_agent": "finance",
