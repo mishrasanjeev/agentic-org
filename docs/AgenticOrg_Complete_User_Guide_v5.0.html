@@ -1723,51 +1723,98 @@ tr:hover td {
   <p>Color coding: blue (normal), yellow (80-99% utilized &mdash; warning), red (at limit &mdash; blocked).</p>
   <p>At 80% usage, the system displays a warning. At 100%, the affected resource is hard-blocked until the next billing cycle or a plan upgrade.</p>
 
-  <h2>19.4 Payment Gateways</h2>
-  <p>AgenticOrg supports two payment gateways based on geography:</p>
+  <h2>19.4 How to Upgrade Your Plan</h2>
 
-  <h3>19.4.1 Stripe (Outside India &mdash; USD)</h3>
-  <p>International customers pay via Stripe Checkout. Supported methods: Credit/Debit Cards, Google Pay, Apple Pay, Link.</p>
-  <p><strong>Flow:</strong></p>
+  <h3>19.4.1 For Indian Customers (Pay in INR via PineLabs Plural)</h3>
+  <p>Indian customers can pay using <strong>UPI, Credit/Debit Cards, Net Banking, Wallets, or EMI</strong> &mdash; all 6 payment methods are available on the secure payment page powered by Pine Labs.</p>
+
+  <div class="avoid-break">
+  <p><strong>Step-by-step:</strong></p>
   <ol>
-    <li>On the Billing page, select currency <strong>USD</strong> and click <strong>Upgrade</strong> on the desired plan.</li>
-    <li>You are redirected to the <strong>Stripe Hosted Checkout</strong> page.</li>
-    <li>Complete payment using your preferred method.</li>
-    <li>Stripe redirects back to AgenticOrg. The server verifies the payment session before showing the result.</li>
-    <li>Your plan is activated immediately. A webhook confirmation from Stripe updates the subscription in the background.</li>
+    <li><strong>Go to Billing:</strong> Navigate to <code>Dashboard &rarr; Billing</code> from the sidebar.</li>
+    <li><strong>Switch to INR:</strong> Click the <strong>Currency toggle</strong> button in the top-right corner of the Billing page. It should show <strong>INR &#8377;</strong>.</li>
+    <li><strong>Choose a plan:</strong> You will see three plan cards &mdash; Free, Pro (&#8377;9,999/mo), and Enterprise (&#8377;49,999/mo). Click <strong>"Upgrade to Pro"</strong> or <strong>"Upgrade to Enterprise"</strong>.</li>
+    <li><strong>Payment page:</strong> You are redirected to the <strong>Pine Labs Plural secure payment page</strong>. This page is hosted by Pine Labs &mdash; your card or bank details are never shared with AgenticOrg.</li>
+    <li><strong>Select payment method:</strong> On the Plural page, choose how you want to pay:
+      <ul>
+        <li><strong>UPI:</strong> Enter your UPI ID (e.g., name@upi) or scan the QR code with any UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
+        <li><strong>Credit/Debit Card:</strong> Enter card number, expiry, and CVV</li>
+        <li><strong>Net Banking:</strong> Select your bank and log in to authorize</li>
+        <li><strong>Wallet:</strong> Select your wallet provider (Paytm, MobiKwik, etc.)</li>
+        <li><strong>EMI:</strong> Select Credit EMI or Debit EMI for installment payments</li>
+      </ul>
+    </li>
+    <li><strong>Complete payment:</strong> Authorize the transaction on your bank/UPI app.</li>
+    <li><strong>Confirmation:</strong> After successful payment, you are automatically redirected back to AgenticOrg. You will see a <strong>Payment Successful</strong> page with your order details.</li>
+    <li><strong>Plan activated:</strong> Your new plan is active immediately. The upgraded agent count, run limits, and features are available right away. Click <strong>"Go to Billing"</strong> to see your updated plan.</li>
   </ol>
-  <p><strong>Customer Portal:</strong> Existing Stripe subscribers can access the self-service portal (<code>POST /api/v1/billing/portal</code>) to update payment methods, view invoices, or cancel.</p>
+  </div>
 
-  <h3>19.4.2 PineLabs Plural (India &mdash; INR)</h3>
-  <p>Indian customers pay via PineLabs Plural hosted checkout. Supported methods: <strong>Cards, UPI, Net Banking, Wallets, Credit EMI, Debit EMI</strong> &mdash; all 6 payment methods enabled.</p>
-  <p><strong>Flow:</strong></p>
+  <div class="avoid-break">
+  <p><strong>What if payment fails?</strong></p>
+  <ul>
+    <li>If the payment is declined or times out, you will see a <strong>Payment Failed</strong> page. Click <strong>"Try Again"</strong> to retry.</li>
+    <li>If the payment is pending (common with UPI and Net Banking), you will see <strong>Payment Pending</strong>. The system will confirm within a few minutes. Check the Billing page again shortly.</li>
+    <li>Your plan is NOT upgraded until payment is confirmed. No partial charges.</li>
+  </ul>
+  </div>
+
+  <h3>19.4.2 For International Customers (Pay in USD via Stripe)</h3>
+  <p>Customers outside India can pay using <strong>Credit/Debit Cards, Google Pay, or Apple Pay</strong> through Stripe's secure checkout.</p>
+
+  <div class="avoid-break">
+  <p><strong>Step-by-step:</strong></p>
   <ol>
-    <li>On the Billing page, select currency <strong>INR</strong> and click <strong>Upgrade</strong> on the desired plan.</li>
-    <li>You are redirected to the <strong>Plural Hosted Checkout</strong> page (powered by Pine Labs).</li>
-    <li>Choose your preferred payment method (UPI, Card, Net Banking, Wallet, or EMI) and complete payment.</li>
-    <li>Plural redirects back to AgenticOrg. The server verifies the order status with Plural's API before showing the result.</li>
-    <li>Your plan is activated immediately. A webhook confirmation from Plural (HMAC-SHA256 signed) updates the subscription in the background.</li>
+    <li><strong>Go to Billing:</strong> Navigate to <code>Dashboard &rarr; Billing</code> from the sidebar.</li>
+    <li><strong>Ensure USD is selected:</strong> The currency toggle should show <strong>USD $</strong> (this is the default).</li>
+    <li><strong>Choose a plan:</strong> Click <strong>"Upgrade to Pro"</strong> ($99/mo) or <strong>"Upgrade to Enterprise"</strong> ($499/mo).</li>
+    <li><strong>Stripe Checkout:</strong> You are redirected to the <strong>Stripe secure checkout page</strong>. Enter your card details or use Google Pay / Apple Pay.</li>
+    <li><strong>Confirmation:</strong> After payment, you are redirected back to AgenticOrg with a <strong>Payment Successful</strong> confirmation.</li>
+    <li><strong>Plan activated:</strong> Your subscription is active immediately. Stripe handles recurring monthly billing automatically.</li>
   </ol>
+  </div>
 
-  <h3>19.4.3 Security</h3>
+  <div class="avoid-break">
+  <p><strong>Managing your subscription:</strong></p>
+  <ul>
+    <li><strong>Update payment method:</strong> Use the Stripe Customer Portal (accessible from the Billing page) to change your card or add a new one.</li>
+    <li><strong>View invoices:</strong> All past invoices are available in the Customer Portal and on the Billing page.</li>
+    <li><strong>Cancel subscription:</strong> Cancel anytime from the Billing page. Your access continues until the end of the current billing period.</li>
+  </ul>
+  </div>
+
+  <h3>19.4.3 Payment Security</h3>
+  <p>All payments are processed on <strong>secure, PCI-compliant</strong> hosted payment pages. AgenticOrg never sees, stores, or processes your card numbers, UPI PINs, or bank credentials.</p>
   <table>
-    <tr><th>Feature</th><th>Stripe</th><th>Plural</th></tr>
-    <tr><td>Signature Verification</td><td>Stripe Webhook Signature</td><td>HMAC-SHA256 (webhook-id.timestamp.body)</td></tr>
-    <tr><td>Replay Protection</td><td>5-minute event window</td><td>5-minute timestamp window</td></tr>
-    <tr><td>Callback Verification</td><td>Server-side Session.retrieve()</td><td>Server-side GET /orders/{id}</td></tr>
-    <tr><td>Subscription Activation</td><td>On checkout.session.completed webhook</td><td>On PROCESSED/AUTHORIZED webhook</td></tr>
-    <tr><td>PCI Compliance</td><td>Handled by Stripe</td><td>Handled by Pine Labs</td></tr>
+    <tr><th>Security Feature</th><th>Stripe (USD)</th><th>PineLabs Plural (INR)</th></tr>
+    <tr><td>Payment page</td><td>Hosted by Stripe</td><td>Hosted by Pine Labs</td></tr>
+    <tr><td>Card/bank data</td><td>Never touches AgenticOrg</td><td>Never touches AgenticOrg</td></tr>
+    <tr><td>Payment verification</td><td>Server-side verified before showing result</td><td>Server-side verified before showing result</td></tr>
+    <tr><td>Tampering protection</td><td>Cryptographic webhook signatures</td><td>Cryptographic webhook signatures</td></tr>
+    <tr><td>Compliance</td><td>PCI DSS Level 1</td><td>PCI DSS Level 1</td></tr>
   </table>
-  <p>No card details are stored or processed on AgenticOrg servers. All payment processing is handled entirely by the respective gateway's hosted checkout page.</p>
 
   <h2>19.5 Invoice History</h2>
-  <p>A table showing all past invoices with: date, amount, currency, status (paid/pending/failed), and plan name.</p>
-
-  <h2>19.6 Cancellation</h2>
-  <p>Subscriptions can be cancelled from the Billing page. The system detects the payment provider (Stripe or Plural) and handles cancellation appropriately:</p>
+  <p>The Invoice History table at the bottom of the Billing page shows all past payments with:</p>
   <ul>
-    <li><strong>Stripe:</strong> Subscription is cancelled via Stripe API. Access continues until the end of the current billing period.</li>
-    <li><strong>Plural:</strong> One-time payment &mdash; plan is downgraded to Free immediately.</li>
+    <li><strong>Date:</strong> When the payment was made</li>
+    <li><strong>Plan:</strong> Which plan was purchased (Pro / Enterprise)</li>
+    <li><strong>Amount:</strong> Payment amount in the original currency (USD or INR)</li>
+    <li><strong>Status:</strong> <span style="color:green;">Paid</span> (successful), <span style="color:orange;">Pending</span> (processing), or <span style="color:red;">Failed</span></li>
+  </ul>
+
+  <h2>19.6 Cancellation &amp; Downgrade</h2>
+  <p>To cancel your subscription:</p>
+  <ol>
+    <li>Go to <code>Dashboard &rarr; Billing</code>.</li>
+    <li>Click <strong>Cancel Subscription</strong>.</li>
+    <li>Confirm the cancellation.</li>
+  </ol>
+  <p><strong>What happens after cancellation:</strong></p>
+  <ul>
+    <li><strong>Stripe (USD) subscribers:</strong> Your plan remains active until the end of the current billing period. After that, you are downgraded to Free.</li>
+    <li><strong>Plural (INR) subscribers:</strong> Since INR payments are one-time, cancellation immediately downgrades you to the Free plan.</li>
+    <li><strong>Your data is never deleted.</strong> Agents, workflows, and audit history are preserved. You can re-subscribe at any time to regain access to Pro/Enterprise features.</li>
   </ul>
 </div>
 
