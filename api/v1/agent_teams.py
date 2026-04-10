@@ -67,15 +67,23 @@ async def list_teams(
             query = query.where(AgentTeam.domain == domain)
         query = query.order_by(AgentTeam.created_at.desc())
         result = await session.execute(query)
-        teams = result.scalars().all()
+        teams = list(result.scalars().all())
 
-        items = []
-        for team in teams:
-            member_result = await session.execute(
-                select(AgentTeamMember).where(AgentTeamMember.team_id == team.id)
-            )
-            members = member_result.scalars().all()
-            items.append(_team_to_dict(team, list(members)))
+        if not teams:
+            return {"items": [], "total": 0}
+
+        # Fix N+1: fetch all members for all teams in ONE query
+        team_ids = [t.id for t in teams]
+        members_result = await session.execute(
+            select(AgentTeamMember).where(AgentTeamMember.team_id.in_(team_ids))
+        )
+        all_members = list(members_result.scalars().all())
+        # Group by team_id
+        members_by_team: dict[UUID, list[AgentTeamMember]] = {}
+        for m in all_members:
+            members_by_team.setdefault(m.team_id, []).append(m)
+
+        items = [_team_to_dict(team, members_by_team.get(team.id, [])) for team in teams]
 
     return {"items": items, "total": len(items)}
 

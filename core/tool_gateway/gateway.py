@@ -243,6 +243,11 @@ class ToolGateway:
                 self._connectors[cache_key] = connector
                 return connector
             except Exception as e:
-                logger.warning("connector_connect_failed", connector=connector_name, error=str(e))
-                # Return without caching — next call will retry
-                return connector
+                # Critical Analysis #6: Do NOT return a broken connector.
+                # Returning it would cause silent downstream failures.
+                logger.warning(
+                    "connector_connect_failed",
+                    connector=connector_name,
+                    error=str(e),
+                )
+                return None

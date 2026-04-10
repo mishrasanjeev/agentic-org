@@ -57,10 +57,24 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secret(self) -> Settings:
-        """Prevent accidental use of the development fallback in production."""
-        if self.env.lower() == "production" and self.secret_key == "dev-only-secret-key":
-            msg = "AGENTICORG_SECRET_KEY must be explicitly set in production"
-            raise ValueError(msg)
+        """Prevent accidental use of development fallbacks in production."""
+        if self.env.lower() == "production":
+            if self.secret_key == "dev-only-secret-key":
+                raise ValueError(
+                    "AGENTICORG_SECRET_KEY must be explicitly set in production"
+                )
+            # Refuse to start with the dev DB URL — would silently use localhost
+            # with default credentials, causing data loss or auth bypass.
+            if "agenticorg_dev@localhost" in self.db_url:
+                raise ValueError(
+                    "AGENTICORG_DB_URL must be explicitly set in production "
+                    "(detected dev fallback with localhost credentials)"
+                )
+            if "localhost" in self.redis_url:
+                raise ValueError(
+                    "AGENTICORG_REDIS_URL must be explicitly set in production "
+                    "(detected localhost fallback)"
+                )
         return self
 
 

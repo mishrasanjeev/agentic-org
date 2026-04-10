@@ -25,6 +25,8 @@ from typing import Any
 
 import structlog
 
+from core.http_retry import retry_http
+
 try:
     import httpx as _httpx
 except ImportError:  # pragma: no cover
@@ -136,8 +138,12 @@ def _get_http() -> Any:
     return _httpx
 
 
+@retry_http(max_attempts=3)
 def _get_access_token() -> str:
-    """Obtain or reuse a cached OAuth access token from Plural."""
+    """Obtain or reuse a cached OAuth access token from Plural.
+
+    Wrapped with retry_http for transient failures (network/5xx/429).
+    """
     now = time.time()
     if _token_cache["access_token"] and _token_cache["expires_at"] > now + 60:
         return _token_cache["access_token"]
@@ -187,6 +193,7 @@ def _auth_headers() -> dict[str, str]:
 # ── Create Order (Hosted Checkout / Redirect) ──────────────────────
 
 
+@retry_http(max_attempts=3)
 def create_payment_order(
     tenant_id: str,
     plan: str,
@@ -295,6 +302,7 @@ def create_payment_order(
 # ── Get Order Status ────────────────────────────────────────────────
 
 
+@retry_http(max_attempts=3)
 def get_order_status(order_id: str) -> dict[str, Any]:
     """Check the status of a Plural order.
 

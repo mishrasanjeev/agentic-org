@@ -166,30 +166,46 @@ async def list_accounts(
     tier: str | None = None,
     industry: str | None = None,
     min_intent_score: float | None = None,
+    page: int = 1,
+    per_page: int = 50,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """List target accounts with optional filters."""
+    """List target accounts with optional filters and pagination."""
+    if page < 1:
+        raise HTTPException(422, "page must be >= 1")
+    per_page = min(max(per_page, 1), 200)
+
     tid = _uuid.UUID(tenant_id)
 
     async with get_tenant_session(tid) as session:
         query = select(ABMAccount).where(ABMAccount.tenant_id == tid)
+        count_query = select(func.count()).select_from(ABMAccount).where(ABMAccount.tenant_id == tid)
 
         if tier:
             query = query.where(ABMAccount.tier == tier)
+            count_query = count_query.where(ABMAccount.tier == tier)
         if industry:
             query = query.where(func.lower(ABMAccount.industry) == industry.lower())
+            count_query = count_query.where(func.lower(ABMAccount.industry) == industry.lower())
         if min_intent_score is not None:
             query = query.where(ABMAccount.intent_score >= min_intent_score)
+            count_query = count_query.where(ABMAccount.intent_score >= min_intent_score)
 
-        # Sort by intent score descending
+        total = (await session.execute(count_query)).scalar() or 0
+
         query = query.order_by(ABMAccount.intent_score.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
 
         result = await session.execute(query)
         accounts = [_account_to_dict(a) for a in result.scalars().all()]
 
+    pages = max(1, (total + per_page - 1) // per_page)
     return {
         "accounts": accounts,
-        "total": len(accounts),
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
     }
 
 
