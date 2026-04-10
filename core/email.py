@@ -80,10 +80,11 @@ def send_email(to: str, subject: str, html: str) -> None:
 
 
 def send_welcome_email(to: str, org_name: str, name: str) -> None:
+    app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
     html = (
         f"<h2>Welcome, {name}!</h2>"
         f"<p>Your organization <b>{org_name}</b> is ready on AgenticOrg.</p>"
-        "<p><a href='https://app.agenticorg.ai/dashboard'>Go to Dashboard</a></p>"
+        f"<p><a href='{app_url}/dashboard'>Go to Dashboard</a></p>"
     )
     send_email(to, f"Welcome to AgenticOrg — {org_name}", html)
 

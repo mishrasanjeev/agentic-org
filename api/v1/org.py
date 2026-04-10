@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 
@@ -180,7 +181,8 @@ async def invite_member(body: InviteRequest, request: Request):
         expires_minutes=1440,  # 24 hours
     )
 
-    invite_link = f"https://app.agenticorg.ai/accept-invite?token={invite_token}"
+    app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
+    invite_link = f"{app_url}/accept-invite?token={invite_token}"
 
     # Send invite email
     try:

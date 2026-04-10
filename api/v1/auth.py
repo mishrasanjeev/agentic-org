@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 import uuid
@@ -390,7 +391,8 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
             },
             expires_minutes=60,
         )
-        reset_link = f"https://app.agenticorg.ai/reset-password?token={reset_token}"
+        app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
+        reset_link = f"{app_url}/reset-password?token={reset_token}"
         try:
             send_password_reset_email(user.email, reset_link)
         except Exception:
