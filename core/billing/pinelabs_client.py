@@ -47,8 +47,10 @@ _BASE_URLS = {
 
 _BASE_URL = _BASE_URLS.get(_ENV, _BASE_URLS["sandbox"])
 
+_APP_BASE_URL = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.com")
+
 _API_CALLBACK_URL = os.getenv(
-    "PLURAL_CALLBACK_URL", "https://app.agenticorg.com/api/v1/billing/callback"
+    "PLURAL_CALLBACK_URL", f"{_APP_BASE_URL}/api/v1/billing/callback"
 )
 
 # All payment methods supported in redirect mode

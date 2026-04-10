@@ -45,9 +45,11 @@ PLAN_AMOUNT_USD: dict[str, int] = {
     "enterprise": 499_00,  # $499/mo
 }
 
+_APP_BASE_URL = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.com")
+
 _API_CALLBACK_URL = os.getenv(
     "STRIPE_CALLBACK_URL",
-    "https://app.agenticorg.com/api/v1/billing/callback/stripe",
+    f"{_APP_BASE_URL}/api/v1/billing/callback/stripe",
 )
 
 
@@ -131,7 +133,7 @@ def create_checkout_session(
     )
     effective_cancel_url = (
         cancel_url
-        or "https://app.agenticorg.com/dashboard/billing?cancelled=1"
+        or f"{_APP_BASE_URL}/dashboard/billing?cancelled=1"
     )
 
     session = s.checkout.Session.create(
@@ -374,7 +376,7 @@ def create_portal_session(tenant_id: str, return_url: str = "") -> str:
     if not customer_id:
         raise ValueError(f"No Stripe customer found for tenant {tenant_id}")
 
-    effective_return_url = return_url or "https://app.agenticorg.com/dashboard/billing"
+    effective_return_url = return_url or f"{_APP_BASE_URL}/dashboard/billing"
 
     session = s.billing_portal.Session.create(
         customer=customer_id,
