@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
-import { Link } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -9,95 +8,38 @@ import api from "@/lib/api";
 // Types
 // ---------------------------------------------------------------------------
 
-interface FinanceQuadrant {
-  cash_runway_months: number;
-  ar_total: number;
-  ap_total: number;
-  pending_invoices: number;
-}
-
-interface HRQuadrant {
-  headcount: number;
-  attrition_rate: number;
-  open_positions: number;
-}
-
-interface MarketingQuadrant {
-  mqls: number;
-  cac: number;
-  campaign_roi: number;
-}
-
-interface OpsQuadrant {
-  ticket_sla_pct: number;
-  active_incidents: number;
-  vendor_spend_mtd: number;
-}
-
-interface Escalation {
-  item: string;
-  department: string;
-  urgency: string;
-  requested_by: string;
-  age_hours: number;
-}
-
-interface AgentAction {
-  agent: string;
-  action: string;
+interface DomainBreakdown {
   domain: string;
-  timestamp: string;
+  total: number;
+  completed: number;
+  failed: number;
+  avg_confidence: number;
 }
 
 interface CEOKPIData {
   demo: boolean;
-  stale?: boolean;
   company_id: string;
-  // Top KPIs
-  revenue_mtd: number;
-  total_employees: number;
-  active_incidents: number;
-  pipeline_value: number;
-  health_score: number;
-  // Quadrants
-  finance: FinanceQuadrant;
-  hr: HRQuadrant;
-  marketing: MarketingQuadrant;
-  ops: OpsQuadrant;
-  // Bottom section
-  recent_escalations: Escalation[];
-  agent_actions: AgentAction[];
+  agent_count: number;
+  total_tasks_30d: number;
+  success_rate: number;
+  hitl_interventions: number;
+  total_cost_usd: number;
+  domain_breakdown: DomainBreakdown[];
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const INR = new Intl.NumberFormat("en-IN", {
+const USD = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
+  currency: "USD",
+  maximumFractionDigits: 2,
 });
 
 function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n);
 }
-
-function lakhs(value: number): string {
-  return (value / 100_000).toFixed(1) + "L";
-}
-
-const URGENCY_COLORS: Record<string, string> = {
-  high: "text-red-600",
-  medium: "text-yellow-600",
-  low: "text-green-600",
-};
-
-const URGENCY_BADGE: Record<string, "destructive" | "warning" | "default"> = {
-  high: "destructive",
-  medium: "warning",
-  low: "default",
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -109,25 +51,20 @@ export default function CEODashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const resp = await api.get("/kpis/ceo");
+        setData(resp.data);
+      } catch {
+        setError("Failed to load CEO KPIs");
+      } finally {
+        setLoading(false);
+      }
+    }
     fetchData();
   }, []);
-
-  async function fetchData() {
-    setLoading(true);
-    setError(null);
-    try {
-      const [kpiResp] = await Promise.allSettled([api.get("/kpis/ceo")]);
-      if (kpiResp.status === "fulfilled") {
-        setData(kpiResp.value.data);
-      } else {
-        setError("Failed to load CEO KPIs");
-      }
-    } catch {
-      setError("Failed to load CEO KPIs");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -149,27 +86,24 @@ export default function CEODashboard() {
     );
   }
 
-  const healthScore = data?.health_score ?? 0;
-  const healthColor =
-    healthScore >= 80
+  const successColor =
+    data.success_rate >= 0.9
       ? "text-green-600"
-      : healthScore >= 60
+      : data.success_rate >= 0.7
         ? "text-yellow-600"
         : "text-red-600";
 
   const topMetrics = [
-    { label: "Revenue MTD", value: INR.format(data?.revenue_mtd ?? 0), color: "text-blue-600" },
-    { label: "Total Employees", value: formatNumber(data?.total_employees ?? 0), color: "text-emerald-600" },
-    { label: "Active Incidents", value: formatNumber(data?.active_incidents ?? 0), color: "text-red-600" },
-    { label: "Pipeline Value", value: INR.format(data?.pipeline_value ?? 0), color: "text-purple-600" },
-    { label: "Health Score", value: `${healthScore}/100`, color: healthColor },
+    { label: "Agents", value: formatNumber(data.agent_count), color: "text-blue-600" },
+    { label: "Total Tasks (30d)", value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
+    { label: "Success Rate", value: `${(data.success_rate * 100).toFixed(1)}%`, color: successColor },
+    { label: "HITL Interventions", value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
+    { label: "Total Cost", value: USD.format(data.total_cost_usd), color: "text-purple-600" },
   ];
 
-  // Safe references to nested quadrant objects
-  const finance = data?.finance;
-  const hr = data?.hr;
-  const marketing = data?.marketing;
-  const ops = data?.ops;
+  const domains = data.domain_breakdown || [];
+  const maxTotal = Math.max(1, ...domains.map((d) => d.total));
+  const hasActivity = data.total_tasks_30d > 0 || domains.length > 0;
 
   return (
     <div className="space-y-6">
@@ -178,12 +112,7 @@ export default function CEODashboard() {
       </Helmet>
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">CEO Dashboard</h2>
-        <div className="flex items-center gap-2">
-          {data?.stale && (
-            <Badge variant="warning">Data may be stale</Badge>
-          )}
-          {data?.demo && <Badge variant="secondary">Demo Data</Badge>}
-        </div>
+        {data.demo && <Badge variant="secondary">Demo Data</Badge>}
       </div>
 
       {/* ── Top KPI Cards ── */}
@@ -200,195 +129,74 @@ export default function CEODashboard() {
         ))}
       </div>
 
-      {/* ── 4 Quadrants ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Finance Quadrant */}
+      {!hasActivity ? (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold">Finance</CardTitle>
-            <Link to="/dashboard/cfo" className="text-xs text-blue-600 hover:underline">
-              View Details &rarr;
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Cash Runway</p>
-                <p className="text-lg font-bold">{finance?.cash_runway_months ?? 0} mo</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">AR / AP</p>
-                <p className="text-lg font-bold">{lakhs(finance?.ar_total ?? 0)} / {lakhs(finance?.ap_total ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Pending Invoices</p>
-                <p className="text-lg font-bold text-orange-600">{finance?.pending_invoices ?? 0}</p>
-              </div>
-            </div>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            No agent activity yet. Once your agents start handling tasks, their
+            performance will appear here.
           </CardContent>
         </Card>
-
-        {/* HR Quadrant */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold">HR</CardTitle>
-            <Link to="/dashboard/chro" className="text-xs text-blue-600 hover:underline">
-              View Details &rarr;
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Headcount</p>
-                <p className="text-lg font-bold">{formatNumber(hr?.headcount ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Attrition Rate</p>
-                <p className={`text-lg font-bold ${(hr?.attrition_rate ?? 0) > 15 ? "text-red-600" : "text-green-600"}`}>
-                  {hr?.attrition_rate ?? 0}%
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Open Positions</p>
-                <p className="text-lg font-bold text-purple-600">{hr?.open_positions ?? 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Marketing Quadrant */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold">Marketing</CardTitle>
-            <Link to="/dashboard/cmo" className="text-xs text-blue-600 hover:underline">
-              View Details &rarr;
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">MQLs</p>
-                <p className="text-lg font-bold">{formatNumber(marketing?.mqls ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">CAC</p>
-                <p className="text-lg font-bold">{INR.format(marketing?.cac ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Campaign ROI</p>
-                <p className="text-lg font-bold text-emerald-600">{marketing?.campaign_roi ?? 0}x</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Operations Quadrant */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold">Operations</CardTitle>
-            <Link to="/dashboard/coo" className="text-xs text-blue-600 hover:underline">
-              View Details &rarr;
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Ticket SLA</p>
-                <p className={`text-lg font-bold ${(ops?.ticket_sla_pct ?? 0) >= 90 ? "text-green-600" : "text-orange-600"}`}>
-                  {ops?.ticket_sla_pct ?? 0}%
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Incidents</p>
-                <p className={`text-lg font-bold ${(ops?.active_incidents ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>
-                  {ops?.active_incidents ?? 0}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vendor Spend MTD</p>
-                <p className="text-lg font-bold">{lakhs(ops?.vendor_spend_mtd ?? 0)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Recent Escalations ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold">Recent Escalations</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 pr-4">Item</th>
-                  <th className="pb-2 pr-4">Department</th>
-                  <th className="pb-2 pr-4">Urgency</th>
-                  <th className="pb-2 pr-4">Requested By</th>
-                  <th className="pb-2 text-right">Age (hrs)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.recent_escalations || []).map((e, idx) => (
-                  <tr key={idx} className="border-b last:border-0">
-                    <td className="py-2 pr-4 font-medium">{e.item}</td>
-                    <td className="py-2 pr-4">{e.department}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant={URGENCY_BADGE[e.urgency] || "default"}>
-                        <span className={URGENCY_COLORS[e.urgency] || ""}>{e.urgency}</span>
-                      </Badge>
-                    </td>
-                    <td className="py-2 pr-4">{e.requested_by}</td>
-                    <td className="py-2 text-right">{e.age_hours ?? 0}</td>
-                  </tr>
+      ) : (
+        <>
+          {/* ── Domain Breakdown Bar Chart ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">Domain Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {domains.map((d) => (
+                  <div key={d.domain}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-medium capitalize">{d.domain}</span>
+                      <span className="text-muted-foreground">{d.total} tasks</span>
+                    </div>
+                    <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500"
+                        style={{ width: `${(d.total / maxTotal) * 100}%` }}
+                      />
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* ── Agent Observatory ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold">Agent Observatory (Last 10 Actions)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 pr-4">Agent</th>
-                  <th className="pb-2 pr-4">Action</th>
-                  <th className="pb-2 pr-4">Domain</th>
-                  <th className="pb-2 text-right">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.agent_actions || []).map((a, idx) => (
-                  <tr key={idx} className="border-b last:border-0">
-                    <td className="py-2 pr-4 font-medium">{a.agent}</td>
-                    <td className="py-2 pr-4">{a.action}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant="secondary">{a.domain}</Badge>
-                    </td>
-                    <td className="py-2 text-right text-muted-foreground">
-                      {a.timestamp ? new Date(a.timestamp).toLocaleString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }) : "N/A"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+          {/* ── Domain Breakdown Table ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">Domain Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="pb-2 pr-4">Domain</th>
+                      <th className="pb-2 pr-4 text-right">Total</th>
+                      <th className="pb-2 pr-4 text-right">Completed</th>
+                      <th className="pb-2 pr-4 text-right">Failed</th>
+                      <th className="pb-2 text-right">Avg Confidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {domains.map((d) => (
+                      <tr key={d.domain} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-medium capitalize">{d.domain}</td>
+                        <td className="py-2 pr-4 text-right">{formatNumber(d.total)}</td>
+                        <td className="py-2 pr-4 text-right text-green-600">{formatNumber(d.completed)}</td>
+                        <td className="py-2 pr-4 text-right text-red-600">{formatNumber(d.failed)}</td>
+                        <td className="py-2 text-right">{(d.avg_confidence * 100).toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
