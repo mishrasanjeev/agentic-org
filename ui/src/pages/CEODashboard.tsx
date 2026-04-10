@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -46,6 +47,7 @@ function formatNumber(n: number): string {
 // ---------------------------------------------------------------------------
 
 export default function CEODashboard() {
+  const { t } = useTranslation();
   const [data, setData] = useState<CEOKPIData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +71,8 @@ export default function CEODashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">CEO Dashboard</h2>
-        <p className="text-muted-foreground">Loading executive overview...</p>
+        <h2 className="text-2xl font-bold">{t("kpi.ceoDashboard", "CEO Dashboard")}</h2>
+        <p className="text-muted-foreground">{t("kpi.loading", "Loading...")}</p>
       </div>
     );
   }
@@ -78,7 +80,7 @@ export default function CEODashboard() {
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">CEO Dashboard</h2>
+        <h2 className="text-2xl font-bold">{t("kpi.ceoDashboard", "CEO Dashboard")}</h2>
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
           {error || "No data available"}
         </div>
@@ -94,11 +96,11 @@ export default function CEODashboard() {
         : "text-red-600";
 
   const topMetrics = [
-    { label: "Agents", value: formatNumber(data.agent_count), color: "text-blue-600" },
-    { label: "Total Tasks (30d)", value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
-    { label: "Success Rate", value: `${(data.success_rate * 100).toFixed(1)}%`, color: successColor },
-    { label: "HITL Interventions", value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
-    { label: "Total Cost", value: USD.format(data.total_cost_usd), color: "text-purple-600" },
+    { label: t("kpi.agents", "Agents"), value: formatNumber(data.agent_count), color: "text-blue-600" },
+    { label: t("kpi.totalTasks", "Total Tasks (30d)"), value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
+    { label: t("kpi.successRate", "Success Rate"), value: `${(data.success_rate * 100).toFixed(1)}%`, color: successColor },
+    { label: t("kpi.hitlInterventions", "HITL Interventions"), value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
+    { label: t("kpi.totalCost", "Total Cost (USD)"), value: USD.format(data.total_cost_usd), color: "text-purple-600" },
   ];
 
   const domains = data.domain_breakdown || [];
@@ -111,8 +113,8 @@ export default function CEODashboard() {
         <title>CEO Dashboard — AgenticOrg</title>
       </Helmet>
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">CEO Dashboard</h2>
-        {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+        <h2 className="text-2xl font-bold">{t("kpi.ceoDashboard", "CEO Dashboard")}</h2>
+        {data.demo && <Badge variant="secondary">{t("kpi.demoData", "Demo Data")}</Badge>}
       </div>
 
       {/* ── Top KPI Cards ── */}
@@ -132,8 +134,7 @@ export default function CEODashboard() {
       {!hasActivity ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No agent activity yet. Once your agents start handling tasks, their
-            performance will appear here.
+            {t("kpi.noActivity", "No agent activity yet. Once agents run tasks, KPIs will appear here.")}
           </CardContent>
         </Card>
       ) : (
@@ -141,7 +142,7 @@ export default function CEODashboard() {
           {/* ── Domain Breakdown Bar Chart ── */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold">Domain Activity</CardTitle>
+              <CardTitle className="text-sm font-semibold">{t("kpi.totalTasksPerDomain", "Total Tasks per Domain")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -166,18 +167,18 @@ export default function CEODashboard() {
           {/* ── Domain Breakdown Table ── */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold">Domain Breakdown</CardTitle>
+              <CardTitle className="text-sm font-semibold">{t("kpi.domainBreakdown", "Domain Breakdown")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-2 pr-4">Domain</th>
-                      <th className="pb-2 pr-4 text-right">Total</th>
-                      <th className="pb-2 pr-4 text-right">Completed</th>
-                      <th className="pb-2 pr-4 text-right">Failed</th>
-                      <th className="pb-2 text-right">Avg Confidence</th>
+                      <th className="pb-2 pr-4">{t("kpi.domain", "Domain")}</th>
+                      <th className="pb-2 pr-4 text-right">{t("kpi.total", "Total Tasks")}</th>
+                      <th className="pb-2 pr-4 text-right">{t("kpi.completed", "Completed")}</th>
+                      <th className="pb-2 pr-4 text-right">{t("kpi.failed", "Failed")}</th>
+                      <th className="pb-2 text-right">{t("kpi.avgConfidence", "Avg Confidence")}</th>
                     </tr>
                   </thead>
                   <tbody>

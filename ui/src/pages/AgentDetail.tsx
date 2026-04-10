@@ -1050,10 +1050,15 @@ function ShadowTab({ agent }: { agent: Agent }) {
     setRetesting(true);
     setGenResult(null);
     try {
-      await api.post(`/agents/${agent.id}/shadow-retest`);
+      await api.post(`/agents/${agent.id}/retest`);
       setGenResult({ type: "success", msg: "Shadow retest completed. Refresh to see updated results." });
     } catch (err: any) {
-      setGenResult({ type: "error", msg: err.response?.data?.detail || "Shadow retest failed." });
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Shadow retest failed. Please try again.";
+      setGenResult({ type: "error", msg: typeof detail === "string" ? detail : JSON.stringify(detail) });
     } finally {
       setRetesting(false);
     }

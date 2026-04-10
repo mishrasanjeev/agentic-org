@@ -17,6 +17,7 @@ export default function PromptTemplates() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -39,6 +40,7 @@ export default function PromptTemplates() {
   }
 
   async function handleCreate() {
+    setCreateError(null);
     try {
       await promptTemplatesApi.create({
         name: newName.trim(), agent_type: newType.trim(), domain: newDomain,
@@ -47,7 +49,23 @@ export default function PromptTemplates() {
       setCreating(false);
       setNewName(""); setNewType(""); setNewText(""); setNewDesc("");
       fetchTemplates();
-    } catch { /* ignore */ }
+    } catch (err: unknown) {
+      // TC-005: Surface API error message instead of silently failing
+      let message = "Failed to create template. Please try again.";
+      const e = err as { response?: { data?: { detail?: unknown; message?: string } }; message?: string };
+      const detail = e?.response?.data?.detail;
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (detail && typeof detail === "object" && "message" in detail) {
+        const msg = (detail as { message?: unknown }).message;
+        if (typeof msg === "string") message = msg;
+      } else if (e?.response?.data?.message) {
+        message = e.response.data.message;
+      } else if (e?.message) {
+        message = e.message;
+      }
+      setCreateError(message);
+    }
   }
 
   const selected = templates.find((t) => t.id === selectedId);
@@ -56,7 +74,7 @@ export default function PromptTemplates() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Prompt Templates</h2>
-        <Button onClick={() => setCreating(!creating)}>{creating ? "Cancel" : "Create Template"}</Button>
+        <Button onClick={() => { setCreating(!creating); setCreateError(null); }}>{creating ? "Cancel" : "Create Template"}</Button>
       </div>
 
       {/* Create Form */}
@@ -88,6 +106,11 @@ export default function PromptTemplates() {
               <label className="text-sm font-medium">Template Text *</label>
               <textarea value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="You are the {{role}} Agent for {{org_name}}..." className="border rounded px-3 py-2 text-sm w-full mt-1 font-mono" rows={10} />
             </div>
+            {createError && (
+              <div className="rounded border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                {createError}
+              </div>
+            )}
             <Button onClick={handleCreate} disabled={!newName.trim() || !newType.trim() || !newText.trim()}>Create Template</Button>
           </CardContent>
         </Card>

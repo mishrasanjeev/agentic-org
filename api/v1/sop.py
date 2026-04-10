@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 
 import structlog
@@ -102,6 +103,23 @@ async def parse_text_sop(
 
     if len(body.text) > 50000:
         raise HTTPException(400, "Text too long (max 50,000 characters)")
+
+    # TC-006: Validate SOP content has structured/meaningful text
+    text = body.text.strip()
+    # Must have at least 50 characters of actual letters (not just symbols)
+    letter_count = sum(1 for c in text if c.isalpha())
+    if letter_count < 50:
+        raise HTTPException(
+            422,
+            "Invalid SOP content. Please provide structured process steps with actual text.",
+        )
+    # Must have at least 5 distinct words of 3+ letters
+    words = re.findall(r"[a-zA-Z]{3,}", text)
+    unique_words = {w.lower() for w in words}
+    if len(unique_words) < 5:
+        raise HTTPException(
+            422, "SOP content too sparse. Please provide structured process steps."
+        )
 
     from core.langgraph.sop_parser import parse_sop_document
 

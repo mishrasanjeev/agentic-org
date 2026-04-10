@@ -1911,10 +1911,15 @@ async def delete_agent(
                 f"Pause or retire the agent first.",
             )
 
-        # Audit log entry before deletion
+        # Audit log entry before deletion (all NOT NULL fields populated)
         audit = AuditLog(
             tenant_id=tid,
-            action="agent_deleted",
+            event_type="agent.deleted",
+            actor_type="user",
+            actor_id="api",
+            agent_id=agent_id,
+            action="delete",
+            outcome="success",
             resource_type="agent",
             resource_id=str(agent_id),
             details={"agent_name": agent.name, "agent_type": agent.agent_type},

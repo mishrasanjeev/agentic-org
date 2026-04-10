@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -53,6 +54,7 @@ const USD = new Intl.NumberFormat("en-US", {
 // ---------------------------------------------------------------------------
 
 export default function CBODashboard() {
+  const { t } = useTranslation();
   const [data, setData] = useState<CBOKPIData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,8 +79,8 @@ export default function CBODashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">CBO Dashboard</h2>
-        <p className="text-muted-foreground">Loading business operations data...</p>
+        <h2 className="text-2xl font-bold">{t("kpi.cboDashboard", "CBO Dashboard")}</h2>
+        <p className="text-muted-foreground">{t("kpi.loading", "Loading...")}</p>
       </div>
     );
   }
@@ -86,7 +88,7 @@ export default function CBODashboard() {
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">CBO Dashboard</h2>
+        <h2 className="text-2xl font-bold">{t("kpi.cboDashboard", "CBO Dashboard")}</h2>
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
           {error || "No data available"}
         </div>
@@ -99,27 +101,27 @@ export default function CBODashboard() {
 
   const topMetrics = [
     {
-      label: "Agents",
+      label: t("kpi.agents", "Agents"),
       value: data.agent_count.toLocaleString(),
       color: "text-blue-600",
     },
     {
-      label: "Total Tasks (30d)",
+      label: t("kpi.totalTasks", "Total Tasks (30d)"),
       value: data.total_tasks_30d.toLocaleString(),
       color: "text-indigo-600",
     },
     {
-      label: "Success Rate",
+      label: t("kpi.successRate", "Success Rate"),
       value: `${data.success_rate.toFixed(1)}%`,
       color: "text-emerald-600",
     },
     {
-      label: "HITL Interventions",
+      label: t("kpi.hitlInterventions", "HITL Interventions"),
       value: data.hitl_interventions.toLocaleString(),
       color: "text-orange-600",
     },
     {
-      label: "Total Cost (USD)",
+      label: t("kpi.totalCost", "Total Cost (USD)"),
       value: USD.format(data.total_cost_usd),
       color: "text-purple-600",
     },
@@ -136,13 +138,13 @@ export default function CBODashboard() {
         <title>CBO Dashboard — AgenticOrg</title>
       </Helmet>
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">CBO Dashboard</h2>
-        {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+        <h2 className="text-2xl font-bold">{t("kpi.cboDashboard", "CBO Dashboard")}</h2>
+        {data.demo && <Badge variant="secondary">{t("kpi.demoData", "Demo Data")}</Badge>}
       </div>
 
       {isEmpty && (
         <div className="rounded-lg bg-muted px-4 py-6 text-center text-sm text-muted-foreground">
-          No back office activity yet.
+          {t("kpi.noActivity", "No agent activity yet. Once agents run tasks, KPIs will appear here.")}
         </div>
       )}
 
@@ -163,7 +165,7 @@ export default function CBODashboard() {
       {/* ── Row 2: Domain Breakdown Chart ── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Total Tasks per Domain</CardTitle>
+          <CardTitle className="text-sm font-semibold">{t("kpi.totalTasksPerDomain", "Total Tasks per Domain")}</CardTitle>
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
@@ -187,7 +189,7 @@ export default function CBODashboard() {
       {/* ── Row 3: Domain Breakdown Table ── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Domain Breakdown</CardTitle>
+          <CardTitle className="text-sm font-semibold">{t("kpi.domainBreakdown", "Domain Breakdown")}</CardTitle>
         </CardHeader>
         <CardContent>
           {domainBreakdown.length === 0 ? (
@@ -199,11 +201,11 @@ export default function CBODashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 pr-4">Domain</th>
-                    <th className="pb-2 pr-4 text-right">Total Tasks</th>
-                    <th className="pb-2 pr-4 text-right">Completed</th>
-                    <th className="pb-2 pr-4 text-right">Failed</th>
-                    <th className="pb-2 text-right">Avg Confidence</th>
+                    <th className="pb-2 pr-4">{t("kpi.domain", "Domain")}</th>
+                    <th className="pb-2 pr-4 text-right">{t("kpi.total", "Total Tasks")}</th>
+                    <th className="pb-2 pr-4 text-right">{t("kpi.completed", "Completed")}</th>
+                    <th className="pb-2 pr-4 text-right">{t("kpi.failed", "Failed")}</th>
+                    <th className="pb-2 text-right">{t("kpi.avgConfidence", "Avg Confidence")}</th>
                   </tr>
                 </thead>
                 <tbody>

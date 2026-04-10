@@ -80,5 +80,28 @@
     "email": "ईमेल",
     "password": "पासवर्ड",
     "rememberMe": "मुझे याद रखें"
+  },
+  "kpi": {
+    "agents": "एजेंट",
+    "totalTasks": "कुल कार्य (30 दिन)",
+    "successRate": "सफलता दर",
+    "hitlInterventions": "HITL हस्तक्षेप",
+    "totalCost": "कुल लागत (USD)",
+    "domainBreakdown": "डोमेन विवरण",
+    "totalTasksPerDomain": "प्रति डोमेन कुल कार्य",
+    "domain": "डोमेन",
+    "total": "कुल कार्य",
+    "completed": "पूर्ण",
+    "failed": "विफल",
+    "avgConfidence": "औसत विश्वास",
+    "noActivity": "अभी तक कोई एजेंट गतिविधि नहीं। जब एजेंट कार्य चलाएंगे, तो KPI यहां दिखाई देंगे।",
+    "loading": "लोड हो रहा है...",
+    "demoData": "डेमो डेटा",
+    "cfoDashboard": "CFO डैशबोर्ड",
+    "cmoDashboard": "CMO डैशबोर्ड",
+    "ceoDashboard": "CEO डैशबोर्ड",
+    "chroDashboard": "CHRO डैशबोर्ड",
+    "cooDashboard": "COO डैशबोर्ड",
+    "cboDashboard": "CBO डैशबोर्ड"
   }
 }

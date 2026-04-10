@@ -9,6 +9,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant, get_user_domains
 from core.database import get_tenant_session
@@ -126,6 +127,29 @@ async def create_prompt_template(
     body: PromptTemplateCreate,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    # TC-004: Validate input format
+    name_pattern = re.compile(r"^[a-zA-Z][a-zA-Z0-9 _\-]{1,99}$")
+    type_pattern = re.compile(r"^[a-z][a-z0-9_]{1,49}$")
+
+    if not name_pattern.match(body.name or ""):
+        raise HTTPException(
+            422,
+            "Invalid name: must start with a letter and contain only letters, numbers, spaces, hyphens, underscores",
+        )
+    if body.agent_type and not type_pattern.match(body.agent_type):
+        raise HTTPException(
+            422,
+            "Invalid agent_type: must be lowercase snake_case (e.g., ap_processor)",
+        )
+    if body.description and not re.search(r"[a-zA-Z]{3,}", body.description):
+        raise HTTPException(
+            422, "Description must contain meaningful text (at least 3 letters)"
+        )
+    if not re.search(r"[a-zA-Z]{10,}", body.template_text or ""):
+        raise HTTPException(
+            422, "Template text must contain meaningful content (at least 10 letters)"
+        )
+
     # Validate that any connector tool references in the template actually exist
     invalid_refs = _validate_tool_references(body.template_text)
     if invalid_refs:
@@ -144,6 +168,19 @@ async def create_prompt_template(
 
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
+        # TC-005: Check for existing template with same (tenant_id, name, agent_type)
+        existing = await session.execute(
+            select(PromptTemplate).where(
+                PromptTemplate.tenant_id == tid,
+                PromptTemplate.name == body.name,
+                PromptTemplate.agent_type == body.agent_type,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                409, "A template with this name and agent_type already exists"
+            )
+
         template = PromptTemplate(
             tenant_id=tid,
             name=body.name,
@@ -154,7 +191,13 @@ async def create_prompt_template(
             description=body.description,
         )
         session.add(template)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                409, "A template with this name and agent_type already exists"
+            ) from exc
 
     return {"id": str(template.id), "created": True}
 

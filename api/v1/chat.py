@@ -176,6 +176,45 @@ async def _save_session(key: str, entries: list[dict]) -> None:
     _sessions[key] = entries
 
 # ---------------------------------------------------------------------------
+# Output formatting helper (BUG TC-002)
+# ---------------------------------------------------------------------------
+
+
+def _format_agent_output(output: dict | str | Any) -> str:
+    """Convert a LangGraph agent output dict into a human-readable string.
+
+    The agent runner may return:
+      * a free-text string,
+      * a dict containing ``raw_output`` (LLM didn't return JSON),
+      * a dict with standard ``answer``/``response`` keys, or
+      * a dict with arbitrary structured fields.
+
+    Never returns a raw JSON dict as the user-facing answer.
+    """
+    if isinstance(output, str):
+        return output
+    if not isinstance(output, dict):
+        return str(output)
+    # Free-text response (LLM didn't return JSON)
+    if "raw_output" in output and output["raw_output"]:
+        return str(output["raw_output"])
+    # Standard answer/response keys
+    for key in ("answer", "response", "message", "summary", "result"):
+        if key in output and output[key]:
+            val = output[key]
+            return val if isinstance(val, str) else str(val)
+    # Format remaining structured output as readable text
+    lines = []
+    for k, v in output.items():
+        if k in ("status", "confidence", "trace", "tool_calls"):
+            continue
+        if isinstance(v, (dict, list)):
+            continue  # skip nested structures
+        lines.append(f"{k.replace('_', ' ').title()}: {v}")
+    return "\n".join(lines) if lines else "Task completed successfully."
+
+
+# ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
 
@@ -260,7 +299,7 @@ async def chat_query(
             )
             if lg_result.get("status") == "completed" and lg_result.get("output"):
                 output = lg_result["output"]
-                answer = output.get("answer") or output.get("response") or str(output)
+                answer = _format_agent_output(output)
                 # Extract real confidence from LLM response if available (BUG #21)
                 confidence = lg_result.get("confidence", 0.85 if resolved_tools else 0.6)
                 tools_used = bool(lg_result.get("tools_called"))

@@ -164,35 +164,45 @@ def build_agent_graph(
         # Parse output
         content = last_ai.content or ""
         output = _parse_json_output(content)
-        confidence = _extract_confidence(output)
 
-        # AGE-SAFETY-09: Don't trust LLM self-reported confidence blindly.
-        # If any tool call failed or output is incomplete, cap confidence to
-        # force HITL review.
+        # Compute variable confidence from observable signals (not a fixed default)
+        # Signals: tool success rate, output structure, output length, error presence
         any_tool_failed = any(
             (isinstance(entry, dict) and entry.get("status") == "error")
             for entry in tool_calls_log
         )
-        # Also check for error indicators in tool messages
         from langchain_core.messages import ToolMessage
+        tool_msg_count = 0
+        tool_error_count = 0
         for msg in messages:
             if isinstance(msg, ToolMessage):
+                tool_msg_count += 1
                 msg_content = msg.content if isinstance(msg.content, str) else str(msg.content)
                 if "error" in msg_content.lower() or "failed" in msg_content.lower():
+                    tool_error_count += 1
                     any_tool_failed = True
-                    break
 
         output_incomplete = (
             not output
             or output.get("status") == "error"
         )
-        # Note: raw_output presence (non-JSON LLM response) is NOT treated as
-        # incomplete — many valid agent responses are free-text prose.
 
-        if any_tool_failed or output_incomplete:
+        # Use LLM-reported confidence if present, otherwise compute from signals
+        confidence = _extract_confidence(output, content_length=len(content))
+
+        # Adjust based on tool execution signals
+        if tool_msg_count > 0:
+            tool_success_rate = 1.0 - (tool_error_count / tool_msg_count)
+            # Weight: 60% LLM confidence, 40% tool success rate
+            confidence = (confidence * 0.6) + (tool_success_rate * 0.4)
+
+        # Hard caps for failures
+        if any_tool_failed:
             confidence = min(confidence, 0.5)
-            reason = "tool_call_failed" if any_tool_failed else "output_incomplete"
-            trace.append(f"Confidence capped to 0.5 ({reason}) — forcing HITL review")
+            trace.append("Confidence capped to 0.5 (tool_call_failed)")
+        elif output_incomplete:
+            confidence = min(confidence, 0.5)
+            trace.append("Confidence capped to 0.5 (output_incomplete)")
 
         trace.append(f"Confidence: {confidence:.3f}")
 
@@ -327,14 +337,46 @@ def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
         return {"raw_output": content, "status": "completed"}
 
 
-def _extract_confidence(output: dict[str, Any]) -> float:
-    """Extract confidence score from structured output."""
-    raw = output.get("confidence", output.get("agent_confidence", 0.85))
-    try:
-        return max(0.0, min(1.0, float(raw)))
-    except (ValueError, TypeError):
-        mapping = {"high": 0.95, "medium": 0.75, "low": 0.5}
-        return mapping.get(str(raw).lower().strip(), 0.85)
+def _extract_confidence(output: dict[str, Any], content_length: int = 0) -> float:
+    """Extract or compute confidence score.
+
+    Priority:
+    1. LLM self-reported numeric confidence (0.0-1.0)
+    2. LLM categorical confidence (high/medium/low)
+    3. Computed from structural signals: output completeness, length, fields
+
+    Never returns a hardcoded default — confidence varies based on real signals.
+    """
+    raw = output.get("confidence") or output.get("agent_confidence")
+    if raw is not None:
+        try:
+            return max(0.0, min(1.0, float(raw)))
+        except (ValueError, TypeError):
+            mapping = {"high": 0.95, "medium": 0.75, "low": 0.5}
+            mapped = mapping.get(str(raw).lower().strip())
+            if mapped is not None:
+                return mapped
+
+    # Compute confidence from structural signals
+    # Base: 0.6 (neutral)
+    confidence = 0.6
+
+    # Bonus for structured output (JSON parsed successfully, multiple fields)
+    if isinstance(output, dict) and len(output) > 0 and "raw_output" not in output:
+        field_count = len(output)
+        confidence += min(0.20, field_count * 0.04)  # +0.04 per field, cap at +0.20
+
+    # Bonus for substantial content length (longer = more thorough)
+    if content_length > 500:
+        confidence += 0.10
+    elif content_length > 100:
+        confidence += 0.05
+
+    # Penalty for empty/very short output
+    if content_length < 20:
+        confidence -= 0.20
+
+    return max(0.0, min(1.0, round(confidence, 3)))
 
 
 def _check_hitl_trigger(

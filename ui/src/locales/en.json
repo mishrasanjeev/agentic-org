@@ -80,5 +80,28 @@
     "email": "Email",
     "password": "Password",
     "rememberMe": "Remember me"
+  },
+  "kpi": {
+    "agents": "Agents",
+    "totalTasks": "Total Tasks (30d)",
+    "successRate": "Success Rate",
+    "hitlInterventions": "HITL Interventions",
+    "totalCost": "Total Cost (USD)",
+    "domainBreakdown": "Domain Breakdown",
+    "totalTasksPerDomain": "Total Tasks per Domain",
+    "domain": "Domain",
+    "total": "Total Tasks",
+    "completed": "Completed",
+    "failed": "Failed",
+    "avgConfidence": "Avg Confidence",
+    "noActivity": "No agent activity yet. Once agents run tasks, KPIs will appear here.",
+    "loading": "Loading...",
+    "demoData": "Demo Data",
+    "cfoDashboard": "CFO Dashboard",
+    "cmoDashboard": "CMO Dashboard",
+    "ceoDashboard": "CEO Dashboard",
+    "chroDashboard": "CHRO Dashboard",
+    "cooDashboard": "COO Dashboard",
+    "cboDashboard": "CBO Dashboard"
   }
 }

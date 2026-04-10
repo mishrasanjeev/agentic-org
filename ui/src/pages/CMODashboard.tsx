@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -66,6 +67,7 @@ const MARKETING_DOMAINS = new Set([
 // ---------------------------------------------------------------------------
 
 export default function CMODashboard() {
+  const { t } = useTranslation();
   const [data, setData] = useState<CMOKPIData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,8 +92,8 @@ export default function CMODashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">CMO Dashboard</h2>
-        <p className="text-muted-foreground">Loading marketing data...</p>
+        <h2 className="text-2xl font-bold">{t("kpi.cmoDashboard", "CMO Dashboard")}</h2>
+        <p className="text-muted-foreground">{t("kpi.loading", "Loading...")}</p>
       </div>
     );
   }
@@ -99,7 +101,7 @@ export default function CMODashboard() {
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">CMO Dashboard</h2>
+        <h2 className="text-2xl font-bold">{t("kpi.cmoDashboard", "CMO Dashboard")}</h2>
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
           {error || "No data available"}
         </div>
@@ -114,11 +116,11 @@ export default function CMODashboard() {
   const displayDomains = marketingDomains.length > 0 ? marketingDomains : domains;
 
   const kpiCards = [
-    { label: "Agents", value: formatNumber(data.agent_count), color: "text-blue-600" },
-    { label: "Total Tasks (30d)", value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
-    { label: "Success Rate", value: `${(data.success_rate * 100).toFixed(1)}%`, color: "text-purple-600" },
-    { label: "HITL Interventions", value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
-    { label: "Total Cost (USD)", value: USD.format(data.total_cost_usd), color: "text-rose-600" },
+    { label: t("kpi.agents", "Agents"), value: formatNumber(data.agent_count), color: "text-blue-600" },
+    { label: t("kpi.totalTasks", "Total Tasks (30d)"), value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
+    { label: t("kpi.successRate", "Success Rate"), value: `${(data.success_rate * 100).toFixed(1)}%`, color: "text-purple-600" },
+    { label: t("kpi.hitlInterventions", "HITL Interventions"), value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
+    { label: t("kpi.totalCost", "Total Cost (USD)"), value: USD.format(data.total_cost_usd), color: "text-rose-600" },
   ];
 
   return (
@@ -127,8 +129,8 @@ export default function CMODashboard() {
         <title>CMO Dashboard — AgenticOrg</title>
       </Helmet>
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">CMO Dashboard</h2>
-        {data.demo && <Badge variant="secondary">Demo Data</Badge>}
+        <h2 className="text-2xl font-bold">{t("kpi.cmoDashboard", "CMO Dashboard")}</h2>
+        {data.demo && <Badge variant="secondary">{t("kpi.demoData", "Demo Data")}</Badge>}
       </div>
 
       {/* ── KPI Cards ── */}
@@ -149,25 +151,25 @@ export default function CMODashboard() {
       {displayDomains.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No marketing activity yet
+            {t("kpi.noActivity", "No agent activity yet. Once agents run tasks, KPIs will appear here.")}
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold">Domain Breakdown</CardTitle>
+              <CardTitle className="text-sm font-semibold">{t("kpi.domainBreakdown", "Domain Breakdown")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-2 pr-4">Domain</th>
-                      <th className="pb-2 pr-4 text-right">Total</th>
-                      <th className="pb-2 pr-4 text-right">Completed</th>
-                      <th className="pb-2 pr-4 text-right">Failed</th>
-                      <th className="pb-2 text-right">Avg Conf.</th>
+                      <th className="pb-2 pr-4">{t("kpi.domain", "Domain")}</th>
+                      <th className="pb-2 pr-4 text-right">{t("kpi.total", "Total Tasks")}</th>
+                      <th className="pb-2 pr-4 text-right">{t("kpi.completed", "Completed")}</th>
+                      <th className="pb-2 pr-4 text-right">{t("kpi.failed", "Failed")}</th>
+                      <th className="pb-2 text-right">{t("kpi.avgConfidence", "Avg Confidence")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -194,7 +196,7 @@ export default function CMODashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold">Tasks by Domain</CardTitle>
+              <CardTitle className="text-sm font-semibold">{t("kpi.totalTasksPerDomain", "Total Tasks per Domain")}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
