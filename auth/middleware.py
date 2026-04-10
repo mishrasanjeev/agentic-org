@@ -28,11 +28,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
         "/api/v1/org/accept-invite",
         "/api/v1/demo-request",
+        "/api/v1/billing/callback",  # Plural redirect callback
+        "/api/v1/billing/callback/stripe",  # Stripe redirect callback
         "/docs", "/openapi.json", "/redoc",
     }
 
     EXEMPT_PREFIXES = (
         "/api/v1/evals",
+        "/api/v1/billing/webhook/",  # Plural & Stripe webhooks
     )
 
     async def dispatch(self, request: Request, call_next) -> Response:

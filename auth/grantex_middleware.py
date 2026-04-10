@@ -64,6 +64,8 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/a2a/agents",  # A2A agent list (public)
         "/api/v1/mcp/tools",  # MCP tool discovery (public)
         "/api/v1/push/vapid-key",  # VAPID public key (browser needs before login)
+        "/api/v1/billing/callback",  # Plural redirect callback (browser returning from gateway)
+        "/api/v1/billing/callback/stripe",  # Stripe redirect callback
         "/docs", "/openapi.json", "/redoc",
     }
 
@@ -71,6 +73,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/evals",
         "/api/v1/webhooks/",
         "/api/v1/aa/consent/callback",
+        "/api/v1/billing/webhook/",  # Plural & Stripe server-to-server webhooks
     )
 
     async def dispatch(self, request: Request, call_next) -> Response:
