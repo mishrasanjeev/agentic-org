@@ -3,7 +3,7 @@
 Each endpoint:
   1. Reads from Redis-backed KPICache (hot layer).
   2. Falls back to agent_task_results table (last 24h).
-  3. Returns DEMO data with ``demo: true, stale: true`` when no real data exists.
+  3. Computes real metrics from agent_task_results when no cache exists.
 """
 
 from __future__ import annotations
@@ -32,208 +32,107 @@ ROLE_DOMAIN_MAP: dict[str, list[str]] = {
 }
 
 
-# ── DEMO DATA (fallback when no real data) ─────────────────────────────
+# ── Real metrics computation from agent_task_results ────────────────────
 
-DEMO_DATA: dict[str, dict] = {
-    "ceo": {
-        "total_employees": 127,
-        "revenue_mtd": 78_00_000,
-        "active_incidents": 3,
-        "pipeline_value": 1_42_00_000,
-        "overall_health_score": 82,
-        "departments": [
-            {"name": "Finance", "agent_count": 8, "task_success_rate": 94.2,
-             "pending_approvals": 7},
-            {"name": "HR", "agent_count": 5, "task_success_rate": 91.8,
-             "pending_approvals": 3},
-            {"name": "Marketing", "agent_count": 6, "task_success_rate": 89.5,
-             "pending_approvals": 4},
-            {"name": "Operations", "agent_count": 7, "task_success_rate": 96.1,
-             "pending_approvals": 2},
-            {"name": "Legal", "agent_count": 4, "task_success_rate": 97.3,
-             "pending_approvals": 1},
-            {"name": "Strategy", "agent_count": 5, "task_success_rate": 93.0,
-             "pending_approvals": 0},
-        ],
-        "recent_escalations": [
-            {"id": "esc-001", "title": "Invoice >5L needs approval",
-             "agent": "AP Agent", "priority": "high", "created_at": "2026-04-08T09:15:00Z"},
-            {"id": "esc-002", "title": "GST-3B variance detected",
-             "agent": "GST Agent", "priority": "medium", "created_at": "2026-04-08T08:30:00Z"},
-            {"id": "esc-003", "title": "New vendor onboarding — KYC pending",
-             "agent": "Vendor Agent", "priority": "medium", "created_at": "2026-04-07T16:45:00Z"},
-            {"id": "esc-004", "title": "Payroll delta >2% from last month",
-             "agent": "Payroll Agent", "priority": "low", "created_at": "2026-04-07T14:20:00Z"},
-            {"id": "esc-005", "title": "Contract renewal — legal review needed",
-             "agent": "Contract Agent", "priority": "high", "created_at": "2026-04-07T11:00:00Z"},
-        ],
-    },
-    "cfo": {
-        "cash_runway_months": 14.2,
-        "cash_runway_trend": 1.8,
-        "burn_rate": 18_50_000,
-        "burn_rate_trend": -3.2,
-        "dso_days": 42,
-        "dso_trend": -5.1,
-        "dpo_days": 38,
-        "dpo_trend": 2.4,
-        "ar_aging": {
-            "0_30": 32_00_000, "31_60": 14_50_000,
-            "61_90": 6_80_000, "90_plus": 2_10_000,
-        },
-        "ap_aging": {
-            "0_30": 22_00_000, "31_60": 9_50_000,
-            "61_90": 3_20_000, "90_plus": 80_000,
-        },
-        "monthly_pl": [
-            {"month": "2026-01", "revenue": 68_00_000, "cogs": 19_00_000,
-             "gross_margin": 49_00_000, "opex": 34_00_000, "net_income": 15_00_000},
-            {"month": "2026-02", "revenue": 72_50_000, "cogs": 20_00_000,
-             "gross_margin": 52_50_000, "opex": 35_50_000, "net_income": 17_00_000},
-            {"month": "2026-03", "revenue": 78_00_000, "cogs": 21_50_000,
-             "gross_margin": 56_50_000, "opex": 37_00_000, "net_income": 19_50_000},
-        ],
-        "bank_balances": [
-            {"account": "HDFC Current A/c", "balance": 1_45_00_000, "currency": "INR"},
-            {"account": "ICICI Savings A/c", "balance": 62_00_000, "currency": "INR"},
-            {"account": "SBI FD", "balance": 50_00_000, "currency": "INR"},
-            {"account": "Wise USD A/c", "balance": 48_500, "currency": "USD"},
-        ],
-        "tax_calendar": [
-            {"filing": "GST-3B (March)", "due_date": "2026-04-20", "status": "pending"},
-            {"filing": "TDS 26Q (Q4)", "due_date": "2026-05-15", "status": "upcoming"},
-            {"filing": "Advance Tax Q1", "due_date": "2026-06-15", "status": "upcoming"},
-            {"filing": "ROC Annual Filing", "due_date": "2026-09-30", "status": "upcoming"},
-        ],
-        "pending_approvals_count": 7,
-    },
-    "chro": {
-        "total_employees": 127,
-        "attrition_rate_monthly": 1.8,
-        "new_joiners_mtd": 5,
-        "open_positions": 12,
-        "payroll_status": {
-            "current_month": "2026-04",
-            "processed": True,
-            "pending": False,
-            "total_ctc": 1_85_00_000,
-        },
-        "department_breakdown": [
-            {"dept": "Engineering", "headcount": 42, "attrition": 2.1},
-            {"dept": "Sales", "headcount": 18, "attrition": 3.2},
-            {"dept": "Marketing", "headcount": 14, "attrition": 1.5},
-            {"dept": "Finance", "headcount": 12, "attrition": 0.8},
-            {"dept": "HR", "headcount": 8, "attrition": 0.0},
-            {"dept": "Operations", "headcount": 15, "attrition": 1.2},
-            {"dept": "Legal", "headcount": 6, "attrition": 0.0},
-            {"dept": "Product", "headcount": 12, "attrition": 1.0},
-        ],
-        "recruitment_pipeline": {
-            "applied": 340, "screened": 120, "interviewed": 45,
-            "offered": 18, "accepted": 12,
-        },
-        "compliance": {
-            "epfo_status": "compliant",
-            "esi_status": "compliant",
-            "pt_status": "compliant",
-        },
-        "engagement": {
-            "enps_score": 42,
-            "pulse_score": 7.2,
-            "attrition_risk_count": 8,
-        },
-        "upcoming_events": [
-            {"type": "holiday", "date": "2026-04-14", "description": "Ambedkar Jayanti"},
-            {"type": "review", "date": "2026-04-30", "description": "Q1 Performance Reviews Due"},
-            {"type": "training", "date": "2026-05-05", "description": "Compliance Training Deadline"},
-        ],
-    },
-    "cmo": {
-        "cac": 3_200,
-        "cac_trend": -8.5,
-        "mqls": 284,
-        "mqls_trend": 12.3,
-        "sqls": 67,
-        "sqls_trend": 9.1,
-        "pipeline_value": 1_42_00_000,
-        "pipeline_trend": 15.6,
-        "roas_by_channel": {
-            "Google Ads": 4.2, "Meta Ads": 3.1,
-            "LinkedIn": 2.8, "Organic": 7.6,
-        },
-        "email_performance": {
-            "open_rate": 34.2, "click_rate": 4.8, "unsubscribe_rate": 0.3,
-        },
-        "social_engagement": {
-            "Twitter": 12_400, "LinkedIn": 8_900, "Instagram": 15_600,
-        },
-        "website_traffic": {
-            "sessions": 48_200, "users": 31_500, "bounce_rate": 42.1,
-            "sessions_trend": [
-                {"date": "2026-03-01", "sessions": 1_420},
-                {"date": "2026-03-04", "sessions": 1_580},
-                {"date": "2026-03-07", "sessions": 1_350},
-                {"date": "2026-03-10", "sessions": 1_720},
-                {"date": "2026-03-13", "sessions": 1_890},
-                {"date": "2026-03-16", "sessions": 1_640},
-                {"date": "2026-03-19", "sessions": 2_010},
-                {"date": "2026-03-22", "sessions": 1_950},
-                {"date": "2026-03-25", "sessions": 2_200},
-                {"date": "2026-03-28", "sessions": 2_350},
-            ],
-        },
-        "content_top_pages": [
-            {"page": "/blog/ai-virtual-employees-guide", "views": 4_820, "avg_time_sec": 245},
-            {"page": "/blog/automate-accounts-payable", "views": 3_150, "avg_time_sec": 198},
-            {"page": "/pricing", "views": 2_900, "avg_time_sec": 130},
-            {"page": "/blog/gst-compliance-automation", "views": 2_340, "avg_time_sec": 210},
-            {"page": "/case-studies/enterprise-roi", "views": 1_870, "avg_time_sec": 310},
-        ],
-        "brand_sentiment_score": 78,
-        "brand_sentiment_trend": 3.2,
-        "pending_content_approvals": 4,
-    },
-    "coo": {
-        "active_incidents": 3,
-        "mttr_hours": 4.2,
-        "ticket_volume_today": 47,
-        "sla_compliance_pct": 94.8,
-        "support_metrics": {
-            "open_tickets": 23, "resolved_today": 31,
-            "csat_score": 4.3, "deflection_rate": 38.5,
-        },
-        "vendor_metrics": {
-            "active_vendors": 42, "contracts_expiring_30d": 5,
-            "total_spend_mtd": 12_50_000,
-        },
-        "it_ops": {
-            "uptime_pct": 99.94, "change_success_rate": 97.2,
-            "pending_changes": 4,
-        },
-        "facilities": {
-            "open_requests": 8, "asset_utilization_pct": 72.3,
-        },
-    },
-    "cbo": {
-        "legal": {
-            "active_contracts": 34, "pending_reviews": 7,
-            "nda_count": 12, "litigation_count": 1,
-        },
-        "risk": {
-            "compliance_score": 91, "audit_findings_open": 3,
-            "sanctions_screened_mtd": 245,
-        },
-        "corporate": {
-            "next_board_meeting": "2026-06-15",
-            "statutory_filings_due": 2,
-            "agm_status": "scheduled",
-        },
-        "comms": {
-            "internal_reach_pct": 78.5, "media_mentions_mtd": 14,
-            "investor_queries_open": 3,
-        },
-    },
-}
+
+async def _compute_basic_metrics(
+    tenant_id: str, role: str, domains: list[str],
+) -> dict:
+    """Compute real KPI metrics from agent_task_results for any CxO role.
+
+    Returns honest zeros when no data exists — never fabricated numbers.
+    """
+    from core.database import get_tenant_session
+
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            # Aggregate stats from last 30 days
+            cutoff = datetime.now(UTC) - timedelta(days=30)
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT domain, status, COUNT(*) as cnt, "
+                        "       AVG(confidence) as avg_conf, "
+                        "       SUM(tokens_used) as total_tokens, "
+                        "       SUM(cost_usd) as total_cost, "
+                        "       AVG(duration_ms) as avg_duration, "
+                        "       COUNT(*) FILTER (WHERE hitl_required) as hitl_count "
+                        "FROM agent_task_results "
+                        "WHERE tenant_id = :tid "
+                        "  AND domain = ANY(:domains) "
+                        "  AND created_at > :cutoff "
+                        "GROUP BY domain, status"
+                    ),
+                    {"tid": tenant_id, "domains": domains, "cutoff": cutoff},
+                )
+            ).all()
+
+            # Build per-domain breakdown
+            domain_stats: dict[str, dict] = {}
+            total_tasks = 0
+            total_success = 0
+            total_hitl = 0
+            total_cost = 0.0
+
+            for r in rows:
+                d = r.domain
+                if d not in domain_stats:
+                    domain_stats[d] = {
+                        "total": 0, "completed": 0, "failed": 0,
+                        "avg_confidence": 0.0, "hitl_count": 0,
+                    }
+                domain_stats[d]["total"] += r.cnt
+                total_tasks += r.cnt
+                if r.status == "completed":
+                    domain_stats[d]["completed"] += r.cnt
+                    total_success += r.cnt
+                elif r.status == "failed":
+                    domain_stats[d]["failed"] += r.cnt
+                domain_stats[d]["avg_confidence"] = round(
+                    float(r.avg_conf or 0), 3
+                )
+                domain_stats[d]["hitl_count"] += r.hitl_count or 0
+                total_hitl += r.hitl_count or 0
+                total_cost += float(r.total_cost or 0)
+
+            # Count active agents
+            agent_count_row = await session.execute(
+                text(
+                    "SELECT COUNT(*) FROM agents "
+                    "WHERE tenant_id = :tid AND domain = ANY(:domains) "
+                    "AND status IN ('active', 'shadow')"
+                ),
+                {"tid": tenant_id, "domains": domains},
+            )
+            agent_count = (agent_count_row.scalar() or 0)
+
+            success_rate = round(
+                (total_success / total_tasks * 100) if total_tasks > 0 else 0, 1
+            )
+
+            return {
+                "agent_count": agent_count,
+                "total_tasks_30d": total_tasks,
+                "success_rate": success_rate,
+                "hitl_interventions": total_hitl,
+                "total_cost_usd": round(total_cost, 2),
+                "domain_breakdown": [
+                    {"domain": d, **s} for d, s in domain_stats.items()
+                ],
+            }
+    except Exception:
+        logging.getLogger(__name__).debug("compute_basic_metrics_failed: %s %s", tenant_id, role)
+        return {
+            "agent_count": 0,
+            "total_tasks_30d": 0,
+            "success_rate": 0,
+            "hitl_interventions": 0,
+            "total_cost_usd": 0,
+            "domain_breakdown": [],
+        }
+
+
+
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -416,12 +315,14 @@ async def _build_kpi_response(
                 "company_id": company_id,
             }
 
-    # Final fallback: demo data
-    demo = DEMO_DATA.get(role, {})
+    # Final fallback: compute basic metrics from agent_task_results
+    # (may return zeros if no agent has run yet — that's honest)
+    basic = await _compute_basic_metrics(tenant_id, role, domains)
     return {
-        **demo,
-        "demo": True,
+        **basic,
+        "demo": not bool(results),  # True only if no data exists at all
         "stale": True,
+        "source": "computed",
         "cached_at": now_iso,
         "company_id": company_id,
     }
