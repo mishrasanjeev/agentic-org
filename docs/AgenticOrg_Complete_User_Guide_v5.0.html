@@ -1,0 +1,3133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgenticOrg - Complete Product User Guide v5.0</title>
+<style>
+/* ============================================================
+   GLOBAL STYLES & PRINT LAYOUT
+   ============================================================ */
+@page {
+  size: A4;
+  margin: 20mm 18mm 25mm 18mm;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.65;
+  color: #1e293b;
+  background: #ffffff;
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 15mm;
+}
+
+/* ============================================================
+   PAGE BREAKS
+   ============================================================ */
+.page-break {
+  page-break-before: always;
+  break-before: page;
+}
+
+.avoid-break {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
+.cover-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 90vh;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.cover-logo {
+  width: 90px;
+  height: 90px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 36pt;
+  font-weight: 800;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 30px rgba(37, 99, 235, 0.3);
+}
+
+.cover-title {
+  font-size: 32pt;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+.cover-subtitle {
+  font-size: 15pt;
+  color: #475569;
+  font-weight: 400;
+  margin-bottom: 30px;
+}
+
+.cover-tagline {
+  font-size: 13pt;
+  color: #2563eb;
+  font-weight: 600;
+  padding: 10px 28px;
+  background: #eff6ff;
+  border-radius: 50px;
+  display: inline-block;
+  margin-bottom: 40px;
+}
+
+.cover-meta {
+  font-size: 10pt;
+  color: #64748b;
+  line-height: 2;
+}
+
+.cover-meta strong {
+  color: #334155;
+}
+
+.cover-bar {
+  width: 80px;
+  height: 4px;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  border-radius: 2px;
+  margin: 20px auto;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1 {
+  font-size: 22pt;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 3px solid #2563eb;
+}
+
+h2 {
+  font-size: 16pt;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin-top: 24px;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+h3 {
+  font-size: 13pt;
+  font-weight: 700;
+  color: #2563eb;
+  margin-top: 18px;
+  margin-bottom: 8px;
+}
+
+h4 {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+
+p {
+  margin-bottom: 8px;
+}
+
+ul, ol {
+  margin-left: 20px;
+  margin-bottom: 10px;
+}
+
+li {
+  margin-bottom: 4px;
+}
+
+strong {
+  font-weight: 700;
+}
+
+code {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 9.5pt;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #7c3aed;
+}
+
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px 18px;
+  border-radius: 8px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 9pt;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  background: #eff6ff;
+  padding: 10px 16px;
+  margin: 10px 0;
+  font-style: italic;
+  color: #334155;
+  border-radius: 0 6px 6px 0;
+}
+
+/* ============================================================
+   TABLE OF CONTENTS
+   ============================================================ */
+.toc {
+  columns: 2;
+  column-gap: 30px;
+}
+
+.toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.toc li {
+  padding: 4px 0;
+  border-bottom: 1px dotted #cbd5e1;
+  font-size: 10pt;
+  break-inside: avoid;
+}
+
+.toc li a {
+  color: #1e293b;
+  text-decoration: none;
+}
+
+.toc li a:hover {
+  color: #2563eb;
+}
+
+.toc .toc-section-num {
+  display: inline-block;
+  width: 28px;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 14px;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+}
+
+th {
+  background: #1e3a5f;
+  color: #ffffff;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+tr:hover td {
+  background: #eff6ff;
+}
+
+/* ============================================================
+   INFO / TIP / WARNING BOXES
+   ============================================================ */
+.info-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid #2563eb;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 10pt;
+}
+
+.info-box .box-title {
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.tip-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #22c55e;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 10pt;
+}
+
+.tip-box .box-title {
+  font-weight: 700;
+  color: #16a34a;
+  margin-bottom: 4px;
+}
+
+.warn-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 10pt;
+}
+
+.warn-box .box-title {
+  font-weight: 700;
+  color: #d97706;
+  margin-bottom: 4px;
+}
+
+.danger-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 10pt;
+}
+
+.danger-box .box-title {
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 4px;
+}
+
+/* ============================================================
+   KPI CARDS
+   ============================================================ */
+.kpi-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.kpi-card {
+  flex: 1;
+  min-width: 120px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.kpi-card .kpi-value {
+  font-size: 18pt;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.kpi-card .kpi-label {
+  font-size: 8.5pt;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.kpi-green { color: #16a34a; }
+.kpi-amber { color: #d97706; }
+.kpi-red { color: #dc2626; }
+.kpi-blue { color: #2563eb; }
+.kpi-purple { color: #7c3aed; }
+
+/* ============================================================
+   STEP INDICATORS
+   ============================================================ */
+.step-list {
+  counter-reset: step-counter;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.step-list li {
+  counter-increment: step-counter;
+  padding: 10px 10px 10px 50px;
+  position: relative;
+  margin-bottom: 8px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.step-list li::before {
+  content: counter(step-counter);
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  width: 26px;
+  height: 26px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 10pt;
+  text-align: center;
+  line-height: 26px;
+  border-radius: 50%;
+}
+
+/* ============================================================
+   BADGE STYLES
+   ============================================================ */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 8.5pt;
+  font-weight: 600;
+}
+
+.badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-green { background: #dcfce7; color: #15803d; }
+.badge-amber { background: #fef3c7; color: #b45309; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-purple { background: #f3e8ff; color: #7e22ce; }
+.badge-gray { background: #f1f5f9; color: #475569; }
+
+/* ============================================================
+   SECTION ICON HEADERS
+   ============================================================ */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.section-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 18pt;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   FEATURE GRID
+   ============================================================ */
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.feature-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.feature-card h4 {
+  margin-top: 0;
+  color: #2563eb;
+  font-size: 10.5pt;
+}
+
+.feature-card p {
+  font-size: 9.5pt;
+  color: #475569;
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.doc-footer {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 2px solid #e2e8f0;
+  font-size: 8.5pt;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* ============================================================
+   PRINT OVERRIDES
+   ============================================================ */
+@media print {
+  body {
+    padding: 0;
+    max-width: none;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  a {
+    color: #2563eb !important;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     COVER PAGE
+     ================================================================ -->
+<div class="cover-page">
+  <div class="cover-logo">A</div>
+  <div class="cover-title">AgenticOrg</div>
+  <div class="cover-subtitle">Complete Product User Guide</div>
+  <div class="cover-tagline">The Enterprise AI Virtual Employee Platform</div>
+  <div class="cover-bar"></div>
+  <div class="cover-meta">
+    <strong>Version:</strong> 5.0<br>
+    <strong>Date:</strong> April 2026<br>
+    <strong>Classification:</strong> Customer Documentation<br>
+    <strong>Publisher:</strong> Edumatica Private Limited<br>
+    <strong>Website:</strong> agenticorg.ai
+  </div>
+</div>
+
+<!-- ================================================================
+     TABLE OF CONTENTS
+     ================================================================ -->
+<div class="page-break">
+  <h1>Table of Contents</h1>
+  <div class="toc">
+    <ul>
+      <li><a href="#sec1"><span class="toc-section-num">1</span> Platform Overview</a></li>
+      <li><a href="#sec2"><span class="toc-section-num">2</span> Getting Started</a></li>
+      <li><a href="#sec3"><span class="toc-section-num">3</span> CEO Dashboard</a></li>
+      <li><a href="#sec4"><span class="toc-section-num">4</span> CFO Dashboard</a></li>
+      <li><a href="#sec5"><span class="toc-section-num">5</span> CHRO Dashboard</a></li>
+      <li><a href="#sec6"><span class="toc-section-num">6</span> CMO Dashboard</a></li>
+      <li><a href="#sec7"><span class="toc-section-num">7</span> COO Dashboard</a></li>
+      <li><a href="#sec8"><span class="toc-section-num">8</span> CBO Dashboard</a></li>
+      <li><a href="#sec9"><span class="toc-section-num">9</span> CA Firms (Paid Add-on)</a></li>
+      <li><a href="#sec10"><span class="toc-section-num">10</span> Agent Management</a></li>
+      <li><a href="#sec11"><span class="toc-section-num">11</span> Prompt Templates</a></li>
+      <li><a href="#sec12"><span class="toc-section-num">12</span> Workflows</a></li>
+      <li><a href="#sec13"><span class="toc-section-num">13</span> Approvals (HITL)</a></li>
+      <li><a href="#sec14"><span class="toc-section-num">14</span> Connectors</a></li>
+      <li><a href="#sec15"><span class="toc-section-num">15</span> NL Query Bar (Cmd+K)</a></li>
+      <li><a href="#sec16"><span class="toc-section-num">16</span> Sales Pipeline</a></li>
+      <li><a href="#sec17"><span class="toc-section-num">17</span> ABM (Account-Based Marketing)</a></li>
+      <li><a href="#sec18"><span class="toc-section-num">18</span> Reports &amp; Scheduling</a></li>
+      <li><a href="#sec19"><span class="toc-section-num">19</span> Billing &amp; Usage</a></li>
+      <li><a href="#sec20"><span class="toc-section-num">20</span> Settings</a></li>
+      <li><a href="#sec21"><span class="toc-section-num">21</span> Security &amp; Compliance</a></li>
+      <li><a href="#sec22"><span class="toc-section-num">22</span> Developer Tools</a></li>
+      <li><a href="#sec23"><span class="toc-section-num">23</span> Voice Agents</a></li>
+      <li><a href="#sec24"><span class="toc-section-num">24</span> RAG Knowledge Base</a></li>
+      <li><a href="#sec25"><span class="toc-section-num">25</span> Integrations Reference</a></li>
+      <li><a href="#sec26"><span class="toc-section-num">26</span> Keyboard Shortcuts</a></li>
+      <li><a href="#sec27"><span class="toc-section-num">27</span> FAQ</a></li>
+      <li><a href="#sec28"><span class="toc-section-num">28</span> Glossary</a></li>
+      <li><a href="#sec29"><span class="toc-section-num">29</span> Support &amp; Contact</a></li>
+      <li><a href="#sec30"><span class="toc-section-num">30</span> Version History</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================
+     SECTION 1 — PLATFORM OVERVIEW
+     ================================================================ -->
+<div class="page-break" id="sec1">
+  <div class="section-header">
+    <div class="section-icon">&#9670;</div>
+    <h1>1. Platform Overview</h1>
+  </div>
+
+  <h2>1.1 What Is AgenticOrg?</h2>
+  <p>AgenticOrg is an enterprise AI platform that deploys <strong>AI virtual employees</strong> &mdash; autonomous agents that <em>act</em>, not just chat. Unlike copilot products that assist humans with suggestions, AgenticOrg agents independently execute business processes end-to-end: they file GST returns, reconcile bank statements, process payroll, triage support tickets, score marketing leads, and manage vendor contracts &mdash; all without human intervention unless a decision gate requires approval.</p>
+
+  <p>Each agent operates under a formal Standard Operating Procedure (SOP), follows domain-specific prompt templates, and can be promoted from shadow mode (observation-only) to active mode (full autonomy) only after passing six quality gates. Human-in-the-loop (HITL) checkpoints ensure that high-value or high-risk actions always receive human oversight.</p>
+
+  <h2>1.2 Platform at a Glance</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">50+</div><div class="kpi-label">Pre-built Agents</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">54</div><div class="kpi-label">Native Connectors</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">340+</div><div class="kpi-label">Tools</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">1000+</div><div class="kpi-label">Integrations via Composio</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-red">6</div><div class="kpi-label">CxO Dashboards</div></div>
+  </div>
+
+  <h2>1.3 Six Domains</h2>
+  <table>
+    <tr><th>Domain</th><th>Description</th><th>Key Agents</th></tr>
+    <tr><td><strong>Finance</strong></td><td>AP/AR processing, GST filing, TDS, bank reconciliation, month-end close, treasury</td><td>AP Processor, AR Collector, GST Filing Agent, TDS Agent, Bank Recon Agent, Close Agent, Treasury Agent</td></tr>
+    <tr><td><strong>HR</strong></td><td>Payroll, recruitment, onboarding, leave management, compliance (EPFO/ESI/PT)</td><td>Payroll Agent, Talent Screener, Onboarding Agent, Leave Manager, PF/ESI Agent</td></tr>
+    <tr><td><strong>Marketing</strong></td><td>Lead scoring, campaign management, content publishing, email drip, ABM</td><td>Lead Scorer, Campaign Agent, Content Agent, Email Drip Agent, SEO Agent</td></tr>
+    <tr><td><strong>Operations</strong></td><td>IT incident management, support ticket triage, vendor management, facilities</td><td>Incident Agent, Ticket Triage Agent, Vendor Manager, IT Asset Agent</td></tr>
+    <tr><td><strong>Back Office</strong></td><td>Legal contract review, compliance audit, report generation, RPA scripts</td><td>Contract Review Agent, Compliance Audit Agent, Report Agent, RPA Agent</td></tr>
+    <tr><td><strong>Communications</strong></td><td>Email, Slack, WhatsApp, internal comms, investor relations, media monitoring</td><td>Email Agent, Slack Bot Agent, WhatsApp Agent, Comms Agent</td></tr>
+  </table>
+
+  <h2>1.4 Architecture Overview</h2>
+  <p>AgenticOrg is built on a modern, open-source-only stack:</p>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <h4>&#9656; Agent Runtime</h4>
+      <p>LangGraph-based orchestration engine. Each agent is a stateful graph with nodes for tool calls, LLM reasoning, and HITL gates. Supports per-agent LLM selection (GPT-4o, Gemini 2.5 Flash/Pro, Claude Sonnet).</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Authorization</h4>
+      <p>Grantex authorization framework. Fine-grained scopes per agent (e.g., <code>finance:ap:write</code>). Scope enforcement with audit logging. JWT + API key authentication.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Protocol Layer</h4>
+      <p>A2A (Agent-to-Agent) protocol for inter-agent communication. MCP (Model Context Protocol) server for tool-provider integration. Composio for 1000+ third-party app integrations.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Data Layer</h4>
+      <p>PostgreSQL with Row-Level Security (RLS). pgvector for RAG vector search. Redis for caching. All data encrypted at rest (AES-256) and in transit (TLS 1.3). Deployed on Google Cloud Platform.</p>
+    </div>
+  </div>
+
+  <h2>1.5 Deployment Options</h2>
+  <table>
+    <tr><th>Option</th><th>Description</th><th>Best For</th></tr>
+    <tr><td>Cloud (GCP)</td><td>Fully managed SaaS at agenticorg.ai</td><td>Most customers</td></tr>
+    <tr><td>Self-Hosted (Docker)</td><td>Single <code>docker-compose.yml</code> with all services</td><td>On-premises compliance</td></tr>
+    <tr><td>Kubernetes (Helm)</td><td>Production Helm charts with autoscaling</td><td>Enterprise at scale</td></tr>
+    <tr><td>Air-Gapped</td><td>Fully offline deployment with local LLM support</td><td>Regulated industries</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 2 — GETTING STARTED
+     ================================================================ -->
+<div class="page-break" id="sec2">
+  <div class="section-header">
+    <div class="section-icon">&#9654;</div>
+    <h1>2. Getting Started</h1>
+  </div>
+
+  <h2>2.1 Sign Up</h2>
+  <p>Visit <code>https://agenticorg.ai/signup</code> to create a new account. You will need:</p>
+  <ul>
+    <li>A valid business email address</li>
+    <li>Your organization name</li>
+    <li>Your role (CEO, CFO, CHRO, CMO, COO, or Admin)</li>
+    <li>A password meeting minimum complexity requirements (8+ characters, one uppercase, one number)</li>
+  </ul>
+  <p>After signing up, you will receive a verification email. Click the link to activate your account and proceed to the onboarding wizard.</p>
+
+  <h2>2.2 Demo Accounts</h2>
+  <p>AgenticOrg ships with seven pre-configured demo accounts that showcase role-specific dashboards and functionality. Use these to explore the platform without configuring real data.</p>
+  <table>
+    <tr><th>Role</th><th>Email</th><th>Password</th><th>Access Level</th></tr>
+    <tr><td>Admin / CEO</td><td><code>admin@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>Full platform access, all dashboards</td></tr>
+    <tr><td>CFO</td><td><code>cfo@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>Finance dashboards, approvals, reports</td></tr>
+    <tr><td>CHRO</td><td><code>chro@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>HR dashboards, payroll, recruitment</td></tr>
+    <tr><td>CMO</td><td><code>cmo@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>Marketing dashboards, ABM, campaigns</td></tr>
+    <tr><td>COO</td><td><code>coo@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>Operations dashboards, IT ops, vendors</td></tr>
+    <tr><td>Auditor</td><td><code>auditor@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>Audit trail, compliance, read-only</td></tr>
+    <tr><td>CA Partner</td><td><code>partner@demo.agenticorg.ai</code></td><td><code>Demo@2026</code></td><td>CA Firms module, company management</td></tr>
+  </table>
+
+  <div class="info-box">
+    <div class="box-title">&#9432; Demo Data Notice</div>
+    Demo accounts display a <span class="badge badge-gray">Demo Data</span> badge on all dashboards. All KPIs, transactions, and agent activities are synthetic and reset daily.
+  </div>
+
+  <h2>2.3 First Login Experience</h2>
+  <p>On your first login, the platform guides you through a 4-step onboarding wizard:</p>
+  <ol class="step-list">
+    <li><strong>Organization Profile:</strong> Confirm your company name, industry, and region. The system auto-detects your locale for currency formatting (INR/USD).</li>
+    <li><strong>Connect Your First Connector:</strong> Choose from popular connectors (Tally, Zoho Books, Gmail, Slack) and authenticate via OAuth 2.0 or API key.</li>
+    <li><strong>Deploy Your First Agent:</strong> Select a pre-built agent from the template gallery. The agent starts in Shadow Mode for safe observation.</li>
+    <li><strong>Invite Your Team:</strong> Send email invitations to colleagues with role-based access assignments.</li>
+  </ol>
+
+  <h2>2.4 Dashboard Overview</h2>
+  <p>After onboarding, you land on the main dashboard. The dashboard is role-adaptive &mdash; each user sees a view tailored to their role:</p>
+  <table>
+    <tr><th>Role</th><th>Default Dashboard</th><th>Route</th></tr>
+    <tr><td>Admin / CEO</td><td>CEO Dashboard with 4-quadrant overview</td><td><code>/dashboard/ceo</code></td></tr>
+    <tr><td>CFO</td><td>CFO Dashboard with finance KPIs</td><td><code>/dashboard/cfo</code></td></tr>
+    <tr><td>CHRO</td><td>CHRO Dashboard with HR metrics</td><td><code>/dashboard/chro</code></td></tr>
+    <tr><td>CMO</td><td>CMO Dashboard with marketing analytics</td><td><code>/dashboard/cmo</code></td></tr>
+    <tr><td>COO</td><td>COO Dashboard with operations KPIs</td><td><code>/dashboard/coo</code></td></tr>
+    <tr><td>Auditor</td><td>General Dashboard + Audit Trail</td><td><code>/dashboard</code></td></tr>
+  </table>
+
+  <h2>2.5 Navigation Structure</h2>
+  <p>The left sidebar provides access to all platform sections:</p>
+  <table>
+    <tr><th>Section</th><th>Description</th><th>Access</th></tr>
+    <tr><td>Dashboards</td><td>CEO, CFO, CHRO, CMO, COO, CBO role dashboards</td><td>Role-restricted</td></tr>
+    <tr><td>Agent Fleet</td><td>View, create, manage, and monitor all agents</td><td>Admin + CxO roles</td></tr>
+    <tr><td>Org Chart</td><td>Hierarchical view of agent reporting structure</td><td>Admin + CxO roles</td></tr>
+    <tr><td>Workflows</td><td>Create, schedule, and monitor automated workflows</td><td>Admin + CxO roles</td></tr>
+    <tr><td>Approvals</td><td>Human-in-the-loop approval queue</td><td>Admin + CxO roles</td></tr>
+    <tr><td>Connectors</td><td>Configure and monitor external integrations</td><td>Admin only</td></tr>
+    <tr><td>Prompt Templates</td><td>Manage agent prompt templates and versions</td><td>Admin only</td></tr>
+    <tr><td>Observatory</td><td>Real-time agent activity monitoring</td><td>Admin + CxO roles</td></tr>
+    <tr><td>Knowledge Base</td><td>Upload documents for RAG-powered responses</td><td>Admin + CxO roles</td></tr>
+    <tr><td>Sales Pipeline</td><td>Lead management and AI-powered scoring</td><td>Admin only</td></tr>
+    <tr><td>ABM</td><td>Account-Based Marketing dashboard</td><td>Admin + CMO</td></tr>
+    <tr><td>Report Schedules</td><td>Automated report generation and delivery</td><td>Admin + CFO + CMO</td></tr>
+    <tr><td>Audit Trail</td><td>Immutable activity log for compliance</td><td>Admin + all CxO + Auditor</td></tr>
+    <tr><td>Settings</td><td>Organization config, API keys, fleet limits</td><td>Admin only</td></tr>
+    <tr><td>Billing</td><td>Subscription plans, usage, invoices</td><td>Admin only</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 3 — CEO DASHBOARD
+     ================================================================ -->
+<div class="page-break" id="sec3">
+  <div class="section-header">
+    <div class="section-icon">&#9733;</div>
+    <h1>3. CEO Dashboard</h1>
+  </div>
+
+  <p>The CEO Dashboard (<code>/dashboard/ceo</code>) provides a unified executive overview of the entire organization. It is designed for the chief executive or any admin-level user who needs a single-screen view across all business domains.</p>
+
+  <h2>3.1 Five Headline KPIs</h2>
+  <p>At the top of the dashboard, five metric cards provide instant organizational health:</p>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">&#8377;45.2L</div><div class="kpi-label">Revenue MTD</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">142</div><div class="kpi-label">Total Employees</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-red">3</div><div class="kpi-label">Active Incidents</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">&#8377;1.2Cr</div><div class="kpi-label">Pipeline Value</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">87/100</div><div class="kpi-label">Health Score</div></div>
+  </div>
+
+  <p>The Health Score is color-coded: <span class="badge badge-green">80+</span> (green), <span class="badge badge-amber">60-79</span> (amber), <span class="badge badge-red">&lt;60</span> (red). This score is computed from a weighted average of finance, HR, operations, and marketing sub-scores.</p>
+
+  <h2>3.2 Four-Quadrant Overview</h2>
+  <p>Below the KPIs, four cards summarize the key departments. Each card shows 3 metrics and includes a "View Details" link to the corresponding CxO dashboard:</p>
+
+  <h3>Finance Quadrant</h3>
+  <table>
+    <tr><th>Metric</th><th>Description</th><th>Example</th></tr>
+    <tr><td>Cash Runway</td><td>Months of operating cash remaining</td><td>18 mo</td></tr>
+    <tr><td>AR / AP</td><td>Total accounts receivable vs. accounts payable (in lakhs)</td><td>32.5L / 18.2L</td></tr>
+    <tr><td>Pending Invoices</td><td>Number of invoices awaiting processing or approval</td><td>12</td></tr>
+  </table>
+
+  <h3>HR Quadrant</h3>
+  <table>
+    <tr><th>Metric</th><th>Description</th><th>Example</th></tr>
+    <tr><td>Headcount</td><td>Current total employees</td><td>142</td></tr>
+    <tr><td>Attrition Rate</td><td>Monthly attrition percentage. Red if &gt;15%</td><td>4.2%</td></tr>
+    <tr><td>Open Positions</td><td>Active job openings being recruited</td><td>8</td></tr>
+  </table>
+
+  <h3>Marketing Quadrant</h3>
+  <table>
+    <tr><th>Metric</th><th>Description</th><th>Example</th></tr>
+    <tr><td>MQLs</td><td>Marketing Qualified Leads generated this month</td><td>234</td></tr>
+    <tr><td>CAC</td><td>Customer Acquisition Cost (in INR)</td><td>&#8377;8,500</td></tr>
+    <tr><td>Campaign ROI</td><td>Return on investment across all active campaigns</td><td>3.2x</td></tr>
+  </table>
+
+  <h3>Operations Quadrant</h3>
+  <table>
+    <tr><th>Metric</th><th>Description</th><th>Example</th></tr>
+    <tr><td>Ticket SLA</td><td>Percentage of support tickets resolved within SLA. Green if &ge;90%</td><td>94%</td></tr>
+    <tr><td>Incidents</td><td>Number of active IT incidents. Red if &gt;0</td><td>3</td></tr>
+    <tr><td>Vendor Spend MTD</td><td>Total vendor payments this month (in lakhs)</td><td>45.8L</td></tr>
+  </table>
+
+  <h2>3.3 Recent Escalations</h2>
+  <p>A table showing items that require CEO-level attention. Each row displays:</p>
+  <ul>
+    <li><strong>Item:</strong> Description of the escalation</li>
+    <li><strong>Department:</strong> Originating department</li>
+    <li><strong>Urgency:</strong> Color-coded badge &mdash; <span class="badge badge-red">High</span>, <span class="badge badge-amber">Medium</span>, <span class="badge badge-green">Low</span></li>
+    <li><strong>Requested By:</strong> Name of the person or agent that escalated</li>
+    <li><strong>Age (hrs):</strong> How long the escalation has been pending</li>
+  </ul>
+
+  <h2>3.4 Agent Observatory (Last 10 Actions)</h2>
+  <p>A real-time feed of the most recent agent actions across all domains. Each entry shows:</p>
+  <ul>
+    <li><strong>Agent:</strong> Name of the AI agent that performed the action</li>
+    <li><strong>Action:</strong> What the agent did (e.g., "Filed GSTR-3B", "Scored 12 leads")</li>
+    <li><strong>Domain:</strong> The business domain (finance, hr, marketing, ops)</li>
+    <li><strong>Timestamp:</strong> When the action occurred, in Indian locale format</li>
+  </ul>
+
+  <div class="tip-box">
+    <div class="box-title">&#10003; Pro Tip</div>
+    Click any quadrant's "View Details" link to navigate directly to the corresponding CxO dashboard for a deep dive into that domain's metrics.
+  </div>
+</div>
+
+<!-- ================================================================
+     SECTION 4 — CFO DASHBOARD
+     ================================================================ -->
+<div class="page-break" id="sec4">
+  <div class="section-header">
+    <div class="section-icon">&#8377;</div>
+    <h1>4. CFO Dashboard</h1>
+  </div>
+
+  <p>The CFO Dashboard (<code>/dashboard/cfo</code>) is the finance command center. It provides deep visibility into cash position, receivables/payables, profitability trends, and tax compliance. Accessible to users with the <code>admin</code> or <code>cfo</code> role.</p>
+
+  <h2>4.1 Top Metric Cards</h2>
+  <p>Four headline KPI cards with trend indicators (&#8593; green for positive, &#8595; red for negative):</p>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">18 mo</div><div class="kpi-label">Cash Runway</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">&#8377;28.5L</div><div class="kpi-label">Monthly Burn Rate</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">32d</div><div class="kpi-label">DSO (Days)</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">45d</div><div class="kpi-label">DPO (Days)</div></div>
+  </div>
+
+  <h2>4.2 Accounts Receivable Aging</h2>
+  <p>A bar chart showing AR amounts segmented into aging buckets:</p>
+  <table>
+    <tr><th>Bucket</th><th>Color</th><th>Description</th></tr>
+    <tr><td>0-30 days</td><td><span class="badge badge-blue">Blue</span></td><td>Current receivables, healthy</td></tr>
+    <tr><td>31-60 days</td><td><span class="badge badge-amber">Amber</span></td><td>Slightly overdue, follow up needed</td></tr>
+    <tr><td>61-90 days</td><td><span style="background:#fed7aa;color:#c2410c;padding:2px 8px;border-radius:4px;font-size:8.5pt;font-weight:600;">Orange</span></td><td>At risk, escalation recommended</td></tr>
+    <tr><td>90+ days</td><td><span class="badge badge-red">Red</span></td><td>Critical, potential write-off</td></tr>
+  </table>
+
+  <h2>4.3 Accounts Payable Aging</h2>
+  <p>An identical aging chart for payables, rendered in indigo. This helps the CFO identify payment obligations and optimize cash flow by timing payments strategically.</p>
+
+  <h2>4.4 Monthly P&amp;L Summary</h2>
+  <p>A detailed table showing 6 months of profit and loss data:</p>
+  <ul>
+    <li><strong>Revenue:</strong> Total monthly revenue with month-over-month (MoM) change percentage</li>
+    <li><strong>COGS:</strong> Cost of goods sold (lower is better, so decreases show green)</li>
+    <li><strong>Gross Margin:</strong> Revenue minus COGS</li>
+    <li><strong>OPEX:</strong> Operating expenses (lower is better)</li>
+    <li><strong>Net Income:</strong> Bottom-line profit, shown in bold with MoM trend</li>
+  </ul>
+  <p>Adjacent to the table, a line chart plots Revenue, COGS, and Net Income trends over time in INR lakhs.</p>
+
+  <h2>4.5 Bank Balances</h2>
+  <p>A card listing all connected bank accounts with their current balances. Supports multi-currency display (INR and USD). Each row shows account name, currency, and formatted balance.</p>
+
+  <h2>4.6 Pending Finance Approvals</h2>
+  <p>A large numeric counter showing the number of financial items awaiting review (invoices, expense reports, journal entries). Displayed in orange if any items are pending.</p>
+
+  <h2>4.7 Tax &amp; Compliance Calendar</h2>
+  <p>A list of upcoming tax filings with their status:</p>
+  <table>
+    <tr><th>Filing</th><th>Status Options</th><th>Badge Color</th></tr>
+    <tr><td>GSTR-1, GSTR-3B, GSTR-9</td><td rowspan="4">Pending, Upcoming, Filed</td><td><span class="badge badge-amber">Pending</span></td></tr>
+    <tr><td>TDS 26Q (Quarterly)</td><td><span class="badge badge-gray">Upcoming</span></td></tr>
+    <tr><td>Advance Tax (Quarterly)</td><td><span class="badge badge-green">Filed</span></td></tr>
+    <tr><td>Income Tax Return</td><td></td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 5 — CHRO DASHBOARD
+     ================================================================ -->
+<div class="page-break" id="sec5">
+  <div class="section-header">
+    <div class="section-icon">&#9823;</div>
+    <h1>5. CHRO Dashboard</h1>
+  </div>
+
+  <p>The CHRO Dashboard (<code>/dashboard/chro</code>) is a five-tab HR command center. Access requires <code>admin</code> or <code>chro</code> role.</p>
+
+  <h2>5.1 Workforce Tab</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">142</div><div class="kpi-label">Total Employees</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-red">4.2%</div><div class="kpi-label">Attrition Rate</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">8</div><div class="kpi-label">New Joiners (MTD)</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">12</div><div class="kpi-label">Open Positions</div></div>
+  </div>
+  <p><strong>Department Breakdown Table:</strong> Shows headcount, attrition percentage (red if &gt;15%), and average tenure in years for each department.</p>
+  <p><strong>Headcount Trend Chart:</strong> A 12-month line chart showing total headcount over time, revealing growth or contraction patterns.</p>
+
+  <h2>5.2 Payroll Tab</h2>
+  <p><strong>Current Month Status:</strong> Shows whether payroll is <span class="badge badge-green">Processed</span> or <span class="badge badge-amber">Pending</span>, with five component breakdowns:</p>
+  <table>
+    <tr><th>Component</th><th>Description</th></tr>
+    <tr><td>Total CTC</td><td>Total cost to company for the current month</td></tr>
+    <tr><td>PF Contribution</td><td>Provident Fund employer + employee share</td></tr>
+    <tr><td>ESI</td><td>Employee State Insurance contribution</td></tr>
+    <tr><td>Professional Tax</td><td>State-level professional tax deduction</td></tr>
+    <tr><td>TDS on Salary</td><td>Tax Deducted at Source from salaries</td></tr>
+  </table>
+  <p><strong>Payroll Run History:</strong> Last 6 months of payroll runs with all components and filing status.</p>
+
+  <h2>5.3 Recruitment Tab</h2>
+  <p><strong>Recruitment Funnel:</strong> A horizontal bar chart showing candidate flow through five stages: Applied &#8594; Screened &#8594; Interviewed &#8594; Offered &#8594; Accepted. Each stage uses a distinct color.</p>
+  <p><strong>Open Positions Table:</strong> Lists each open role with department, days open (red if &gt;30), and number of applicants.</p>
+  <p><strong>Time-to-Hire Trend:</strong> A line chart showing average days to hire over the last 12 months, helping identify process bottlenecks.</p>
+
+  <h2>5.4 Engagement Tab</h2>
+  <p><strong>eNPS Score:</strong> A large numeric display of the Employee Net Promoter Score. Color-coded: green (&ge;30), amber (0-29), red (&lt;0).</p>
+  <p><strong>Pulse Survey Score:</strong> Overall satisfaction percentage. Green (&ge;70%), amber (50-69%), red (&lt;50%).</p>
+  <p><strong>Attrition Risk by Department:</strong> A grid of cards showing risk levels per department: <span class="badge badge-red">High</span>, <span class="badge badge-amber">Medium</span>, <span class="badge badge-green">Low</span>.</p>
+  <p><strong>Top Concerns from Surveys:</strong> List of employee concerns ranked by number of mentions.</p>
+
+  <h2>5.5 Compliance Tab</h2>
+  <p><strong>Pending Compliance Items:</strong> A counter showing items needing action (orange if &gt;0, green if zero).</p>
+  <p>Three filing status sections:</p>
+  <ul>
+    <li><strong>EPFO Filing Status:</strong> Monthly ECR uploads, Form 5A, Form 10C</li>
+    <li><strong>ESI Filing Status:</strong> Half-yearly contributions, accident reports</li>
+    <li><strong>Professional Tax Filing Status:</strong> State-level PT returns</li>
+  </ul>
+  <p>Each filing shows the period, due date, and status badge (<span class="badge badge-green">Filed</span>, <span class="badge badge-amber">Pending</span>, <span class="badge badge-red">Overdue</span>).</p>
+</div>
+
+<!-- ================================================================
+     SECTION 6 — CMO DASHBOARD
+     ================================================================ -->
+<div class="page-break" id="sec6">
+  <div class="section-header">
+    <div class="section-icon">&#9776;</div>
+    <h1>6. CMO Dashboard</h1>
+  </div>
+
+  <p>The CMO Dashboard (<code>/dashboard/cmo</code>) provides marketing analytics and campaign performance metrics. Accessible to <code>admin</code> or <code>cmo</code> roles.</p>
+
+  <h2>6.1 Top Metric Cards</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">&#8377;8,500</div><div class="kpi-label">CAC</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">234</div><div class="kpi-label">MQLs This Month</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">67</div><div class="kpi-label">SQLs This Month</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">&#8377;1.2Cr</div><div class="kpi-label">Pipeline Value</div></div>
+  </div>
+  <p>Each card includes a trend indicator showing the month-over-month change. For CAC, a decrease is marked as "(good)" since lower acquisition cost is desirable.</p>
+
+  <h2>6.2 ROAS by Channel</h2>
+  <p>A bar chart displaying Return on Ad Spend for each marketing channel:</p>
+  <table>
+    <tr><th>Channel</th><th>Color</th><th>Description</th></tr>
+    <tr><td>Google Ads</td><td><span class="badge badge-blue">Blue</span></td><td>Search and display campaigns</td></tr>
+    <tr><td>Meta Ads</td><td><span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-size:8.5pt;font-weight:600;">Blue</span></td><td>Facebook and Instagram ads</td></tr>
+    <tr><td>LinkedIn</td><td><span style="background:#dbeafe;color:#075985;padding:2px 8px;border-radius:4px;font-size:8.5pt;font-weight:600;">Dark Blue</span></td><td>B2B targeted campaigns</td></tr>
+    <tr><td>Organic</td><td><span class="badge badge-green">Green</span></td><td>SEO-driven organic traffic</td></tr>
+  </table>
+
+  <h2>6.3 Email Performance</h2>
+  <p>A bar chart showing three key email metrics: Open Rate, Click Rate, and Unsubscribe Rate (as percentages).</p>
+
+  <h2>6.4 Social Engagement by Platform</h2>
+  <p>A bar chart showing total engagements (likes, shares, comments) across Twitter, LinkedIn, and Instagram.</p>
+
+  <h2>6.5 Website Traffic</h2>
+  <p>Three headline numbers (Sessions, Users, Bounce Rate) followed by a 30-day sessions trend line chart. Includes a content table showing top pages with view counts and average time spent.</p>
+
+  <h2>6.6 Brand Sentiment Score</h2>
+  <p>A semi-circular gauge showing brand sentiment on a 0-100 scale with color coding: green (&ge;70), amber (50-69), red (&lt;50). Includes a trend indicator showing month-over-month change.</p>
+
+  <h2>6.7 Pending Content Approvals</h2>
+  <p>A large counter showing blog posts, social posts, and campaigns awaiting review. This integrates with the HITL approval queue.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 7 — COO DASHBOARD
+     ================================================================ -->
+<div class="page-break" id="sec7">
+  <div class="section-header">
+    <div class="section-icon">&#9881;</div>
+    <h1>7. COO Dashboard</h1>
+  </div>
+
+  <p>The COO Dashboard (<code>/dashboard/coo</code>) is a four-tab operations command center. Accessible to <code>admin</code> or <code>coo</code> roles.</p>
+
+  <h2>7.1 IT Ops Tab</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-red">3</div><div class="kpi-label">Active Incidents</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">2.4h</div><div class="kpi-label">MTTR (Hours)</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">99.7%</div><div class="kpi-label">Uptime %</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-blue">96%</div><div class="kpi-label">Change Success Rate</div></div>
+  </div>
+  <p><strong>Incident Severity Breakdown:</strong> Bar chart segmented by P1 (red), P2 (orange), P3 (amber), P4 (blue).</p>
+  <p><strong>Recent Incidents Table:</strong> Title, severity badge, status badge, assignee, and duration in hours.</p>
+
+  <h2>7.2 Support Tab</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-amber">45</div><div class="kpi-label">Open Tickets</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">23</div><div class="kpi-label">Resolved Today</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-blue">92%</div><div class="kpi-label">CSAT Score</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">34%</div><div class="kpi-label">Deflection Rate</div></div>
+  </div>
+  <p><strong>Ticket Volume Trend:</strong> 30-day line chart of daily ticket volume.</p>
+  <p><strong>SLA Compliance by Priority:</strong> Shows compliance percentages for each priority level with color coding (green &ge;90%, amber 70-89%, red &lt;70%).</p>
+  <p><strong>Top Ticket Categories:</strong> Horizontal bar chart showing the most common ticket categories.</p>
+
+  <h2>7.3 Vendors Tab</h2>
+  <p><strong>Summary Cards:</strong> Active Vendors count and Contracts Expiring in 30 Days (orange if &gt;0).</p>
+  <p><strong>Vendor Spend by Category:</strong> Pie chart showing spend distribution across categories (Cloud, SaaS, Professional Services, Hardware, etc.).</p>
+  <p><strong>Vendor Scorecard Table:</strong> Vendor name, category, SLA percentage (green &ge;95%, orange otherwise), spend amount, and contract end date.</p>
+
+  <h2>7.4 Facilities Tab</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-amber">5</div><div class="kpi-label">Open Maintenance Requests</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-blue">78%</div><div class="kpi-label">Asset Utilization %</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">&#8377;3.2L</div><div class="kpi-label">Travel Expense MTD</div></div>
+  </div>
+  <p><strong>Upcoming Maintenance Schedule:</strong> List of scheduled maintenance items with dates and status badges.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 8 — CBO DASHBOARD
+     ================================================================ -->
+<div class="page-break" id="sec8">
+  <div class="section-header">
+    <div class="section-icon">&#9878;</div>
+    <h1>8. CBO Dashboard</h1>
+  </div>
+
+  <p>The CBO (Chief Business Officer) Dashboard (<code>/dashboard/cbo</code>) covers legal, risk, corporate governance, and communications. Accessible to <code>admin</code> role.</p>
+
+  <h2>8.1 Legal Tab</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">34</div><div class="kpi-label">Active Contracts</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">7</div><div class="kpi-label">Pending Reviews</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">12</div><div class="kpi-label">NDA Count</div></div>
+  </div>
+  <p><strong>Contract Review Queue:</strong> Table showing title, type (Service Agreement, NDA, Employment, etc.), counterparty, status badge, and due date.</p>
+  <p><strong>Litigation Tracker:</strong> Case title, court name, status, and next hearing date.</p>
+
+  <h2>8.2 Risk Tab</h2>
+  <p><strong>Compliance Score Gauge:</strong> A half-donut chart showing overall compliance score out of 100. Color-coded: green (&ge;80), amber (60-79), red (&lt;60).</p>
+  <p><strong>Open Audit Findings:</strong> Count of unresolved audit items.</p>
+  <p><strong>Sanctions Screened MTD:</strong> Number of entities screened against sanctions lists this month.</p>
+  <p><strong>Risk Register Table:</strong> Risk description, likelihood (High/Medium/Low, color-coded), impact (High/Medium/Low, color-coded), owner name, and mitigation status.</p>
+
+  <h2>8.3 Corporate Tab</h2>
+  <p><strong>Next Board Meeting:</strong> Date of the upcoming board meeting.</p>
+  <p><strong>Days Until AGM:</strong> Countdown (orange if &le;30 days).</p>
+  <p><strong>Statutory Filing Status (MCA, ROC):</strong> List of mandatory corporate filings with due dates and status.</p>
+  <p><strong>Share Register Summary:</strong> Total shares, promoter percentage, public percentage, and institutional percentage.</p>
+
+  <h2>8.4 Comms Tab</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">87%</div><div class="kpi-label">Internal Comms Reach</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">24</div><div class="kpi-label">Media Mentions (MTD)</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">3</div><div class="kpi-label">Investor Queries Open</div></div>
+  </div>
+  <p><strong>Recent Press Coverage:</strong> Table showing headline, media outlet, date, and sentiment (positive/neutral/negative, color-coded).</p>
+</div>
+
+<!-- ================================================================
+     SECTION 9 — CA FIRMS
+     ================================================================ -->
+<div class="page-break" id="sec9">
+  <div class="section-header">
+    <div class="section-icon">&#9997;</div>
+    <h1>9. CA Firms (Paid Add-on)</h1>
+  </div>
+
+  <p>The CA Firms module is a paid add-on designed specifically for Chartered Accountant firms in India. It enables a single CA practice to manage multiple client companies from one AgenticOrg login, with dedicated agents for GST filing, TDS compliance, bank reconciliation, and month-end close.</p>
+
+  <h2>9.1 Solution Overview Page</h2>
+  <p>The landing page at <code>/solutions/ca-firms</code> presents the CA value proposition:</p>
+  <ul>
+    <li><strong>Pain statistics:</strong> 72-hour average month-end close, INR 12L/year lost to missed early-payment discounts, 5 days to reconcile manually</li>
+    <li><strong>Six core features:</strong> Multi-Client Management, GST Compliance, TDS Automation, Bank Reconciliation, Month-End Close, Audit Trail</li>
+    <li><strong>How It Works (4 steps):</strong> Onboard Client &#8594; Connect Systems &#8594; Configure Agents &#8594; Go Live</li>
+    <li><strong>Trust logos:</strong> Tally, GSTN, EPFO, HDFC Bank, SBI, Adaequare</li>
+    <li><strong>Demo Request Modal:</strong> Captures name, email, firm name, and number of clients</li>
+  </ul>
+
+  <h2>9.2 Seven Demo Companies</h2>
+  <p>The Company Dashboard (<code>/dashboard/companies</code>) comes pre-loaded with seven demo companies spanning different industries and states:</p>
+  <table>
+    <tr><th>Company</th><th>GSTIN</th><th>Industry</th><th>State</th><th>Health</th></tr>
+    <tr><td>Acme Manufacturing Pvt Ltd</td><td>29AABCU9603R1ZM</td><td>Manufacturing</td><td>Karnataka</td><td><span class="badge badge-green">95</span></td></tr>
+    <tr><td>Greenleaf Exports Ltd</td><td>07AADCG1234N1Z5</td><td>Export</td><td>Delhi</td><td><span class="badge badge-green">88</span></td></tr>
+    <tr><td>Sunrise Healthcare LLP</td><td>27AACFS5678P1ZK</td><td>Healthcare</td><td>Maharashtra</td><td><span class="badge badge-amber">72</span></td></tr>
+    <tr><td>Horizon IT Solutions</td><td>36AABCH7890Q1ZJ</td><td>IT Services</td><td>Telangana</td><td><span class="badge badge-red">45</span></td></tr>
+    <tr><td>Sapphire Textiles</td><td>24AAGCS3456R1ZL</td><td>Textile</td><td>Gujarat</td><td><span class="badge badge-green">91</span></td></tr>
+    <tr><td>Metro Logistics Corp</td><td>33AABCM6789S1ZN</td><td>Logistics</td><td>Tamil Nadu</td><td><span class="badge badge-green">85</span></td></tr>
+    <tr><td>Reddy Agro Exports</td><td>36AABCR2345T1ZP</td><td>Export</td><td>Telangana</td><td><span class="badge badge-amber">67</span></td></tr>
+  </table>
+
+  <h2>9.3 Company Onboarding (6-Step Wizard)</h2>
+  <p>Navigate to <code>/dashboard/companies/new</code> to onboard a new client company. The wizard has six steps:</p>
+  <ol class="step-list">
+    <li><strong>Basic Info:</strong> Company name, GSTIN (validated: <code>^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$</code>), PAN (validated), TAN, CIN, state (all 35 Indian states/UTs), industry (15 categories), address.</li>
+    <li><strong>Compliance:</strong> PF registration number, ESI registration number, PT registration number, financial year start/end dates.</li>
+    <li><strong>Signatory:</strong> Authorized signatory name, designation, email, DSC serial number, DSC holder name, DSC expiry date.</li>
+    <li><strong>Banking:</strong> Bank name, account number, IFSC code, branch name.</li>
+    <li><strong>Tally Connection:</strong> Tally Bridge URL (e.g., <code>http://localhost:9100</code>), Bridge ID, and Tally company name for real-time data sync.</li>
+    <li><strong>Review &amp; Confirm:</strong> Summary of all entered data, GST auto-file toggle, compliance email configuration. Submit to create the company.</li>
+  </ol>
+
+  <h2>9.4 Company Detail (7 Tabs)</h2>
+  <p>Each company detail page (<code>/dashboard/companies/:id</code>) provides seven tabs:</p>
+  <table>
+    <tr><th>Tab</th><th>Contents</th></tr>
+    <tr><td>Overview</td><td>Company registration details, GSTIN, PAN, TAN, CIN, state, industry, status, creation date</td></tr>
+    <tr><td>Compliance</td><td>PF/ESI/PT registration numbers, financial year, signatory details, DSC information</td></tr>
+    <tr><td>Banking</td><td>Connected bank accounts with details (name, account, IFSC, branch)</td></tr>
+    <tr><td>Agents</td><td>List of assigned agents (GST Filing, TDS, Bank Recon, Month-End Close, AP) with status badges</td></tr>
+    <tr><td>Workflows</td><td>Active and recent workflow runs (GSTR-1, Bank Recon, TDS quarterly)</td></tr>
+    <tr><td>Audit Trail</td><td>Immutable log of all actions performed on this company, including agent actions, approvals, and filing activities</td></tr>
+    <tr><td>Users &amp; Roles</td><td>Team members assigned to this company with their roles (admin, partner, reviewer)</td></tr>
+  </table>
+
+  <h2>9.5 Filing Approvals (Partner Self-Approve)</h2>
+  <p>CA partners can review and approve filings directly from the approval queue. The system supports partner self-approval for routine filings (GSTR-1, GSTR-3B) when configured, while high-value filings (annual returns, audit reports) require a second partner sign-off.</p>
+
+  <h2>9.6 GSTN Manual Upload</h2>
+  <p>For companies where direct GSTN API access is not available, the platform supports manual JSON upload of GSTR-1 and GSTR-3B data. The system validates the JSON against the GSTN schema before accepting it.</p>
+
+  <h2>9.7 Compliance Calendar &amp; Alerts</h2>
+  <p>A centralized calendar view showing all upcoming compliance deadlines across all client companies. Automatic email and in-app alerts are sent 7 days, 3 days, and 1 day before each due date.</p>
+
+  <h2>9.8 Credential Vault</h2>
+  <p>Securely stores GSTN credentials, DSC details, banking passwords, and EPFO login information for each client company. All credentials are encrypted at rest using AES-256 and are never exposed in plaintext through the UI or API.</p>
+
+  <h2>9.9 Partner Dashboard</h2>
+  <p>The Partner Dashboard (<code>/dashboard/partner</code>) provides a high-level overview for CA firm partners:</p>
+  <ul>
+    <li><strong>Client Health Grid:</strong> Cards showing each client's health score (0-100), pending filings, status, and subscription</li>
+    <li><strong>Upcoming Deadlines:</strong> Consolidated list of all filing deadlines across all clients, sorted by date</li>
+    <li><strong>Quick Actions:</strong> Links to company detail pages and onboarding wizard</li>
+  </ul>
+</div>
+
+<!-- ================================================================
+     SECTION 10 — AGENT MANAGEMENT
+     ================================================================ -->
+<div class="page-break" id="sec10">
+  <div class="section-header">
+    <div class="section-icon">&#9749;</div>
+    <h1>10. Agent Management</h1>
+  </div>
+
+  <h2>10.1 Agent Fleet Page</h2>
+  <p>The Agent Fleet page (<code>/dashboard/agents</code>) is the central hub for managing all AI agents. It provides:</p>
+  <ul>
+    <li><strong>Summary Statistics:</strong> Total agents, Active count, Shadow count, Paused count</li>
+    <li><strong>Domain Filter:</strong> All, Finance, HR, Marketing, Ops, Back Office, Comms</li>
+    <li><strong>Status Filter:</strong> All, Active, Shadow, Paused, Staging, Deprecated</li>
+    <li><strong>Search:</strong> Free-text search by agent name or type</li>
+    <li><strong>Agent Cards:</strong> Grid of cards showing each agent's name, type, domain, status, and key metrics</li>
+  </ul>
+
+  <h2>10.2 Creating a New Agent</h2>
+  <p>Three creation methods are available:</p>
+
+  <h3>Method 1: No-Code Builder</h3>
+  <p>Click "Create Agent" to open the agent builder at <code>/dashboard/agents/new</code>. Configure:</p>
+  <table>
+    <tr><th>Field</th><th>Description</th><th>Example</th></tr>
+    <tr><td>Name</td><td>Display name for the agent</td><td>Priya Sharma</td></tr>
+    <tr><td>Agent Type</td><td>Functional role template</td><td>ap_processor</td></tr>
+    <tr><td>Domain</td><td>Business domain assignment</td><td>finance</td></tr>
+    <tr><td>Designation</td><td>Virtual job title</td><td>Senior AP Analyst</td></tr>
+    <tr><td>Specialization</td><td>Sub-domain expertise</td><td>Domestic invoices, Mumbai</td></tr>
+    <tr><td>Reporting To</td><td>Manager agent name</td><td>VP Finance</td></tr>
+    <tr><td>Org Level</td><td>Hierarchy position (1=C-level, 5=entry)</td><td>2</td></tr>
+    <tr><td>LLM Model</td><td>AI model selection</td><td>gemini-2.5-flash</td></tr>
+    <tr><td>Confidence Floor</td><td>Minimum confidence before HITL escalation</td><td>0.88</td></tr>
+  </table>
+
+  <h3>Method 2: Create from SOP</h3>
+  <p>Click "Create from SOP" to upload a Standard Operating Procedure document. The platform uses AI to parse the SOP and auto-generate an agent with appropriate tools, prompts, and decision gates.</p>
+
+  <h3>Method 3: CSV Import</h3>
+  <p>Click "Import CSV" to bulk-create agents from a spreadsheet. Download the template CSV with the following columns:</p>
+  <pre>name,agent_type,domain,designation,specialization,reporting_to_name,org_level,llm_model,confidence_floor</pre>
+  <p>Maximum file size: 5 MB. Only <code>.csv</code> format is accepted.</p>
+
+  <h2>10.3 Agent Detail Page</h2>
+  <p>Click any agent card to view its detail page (<code>/dashboard/agents/:id</code>). Eight tabs are available:</p>
+  <table>
+    <tr><th>Tab</th><th>Contents</th></tr>
+    <tr><td>Overview</td><td>Agent identity, status, domain, LLM model, confidence floor, creation date, last active timestamp</td></tr>
+    <tr><td>Config</td><td>Full configuration including tools assigned, connectors used, budget limits, and retry policies</td></tr>
+    <tr><td>Prompt</td><td>Current prompt template with version history. Edit and test prompts in-place</td></tr>
+    <tr><td>Shadow</td><td>Shadow mode observation data: proposed actions, accuracy tracking, quality gate scores</td></tr>
+    <tr><td>Cost</td><td>LLM token usage, API call counts, cost breakdown by day/week/month</td></tr>
+    <tr><td>Scopes</td><td>Grantex authorization scopes assigned to this agent (e.g., <code>finance:ap:write</code>)</td></tr>
+    <tr><td>Learning</td><td>Agent performance metrics over time, error patterns, and improvement suggestions</td></tr>
+    <tr><td>Voice</td><td>Voice configuration if the agent supports phone calls (SIP, STT, TTS settings)</td></tr>
+  </table>
+
+  <h2>10.4 Agent Actions</h2>
+  <table>
+    <tr><th>Action</th><th>Button</th><th>Description</th></tr>
+    <tr><td>Chat with Agent</td><td><span class="badge badge-blue">Chat</span></td><td>Opens a live chat panel to converse with the agent in natural language</td></tr>
+    <tr><td>Run Agent</td><td><span class="badge badge-green">Run</span></td><td>Manually trigger the agent to execute its primary workflow</td></tr>
+    <tr><td>Promote</td><td><span class="badge badge-purple">Promote</span></td><td>Move from shadow mode to active mode (requires 6 quality gates passed)</td></tr>
+    <tr><td>Rollback</td><td><span class="badge badge-amber">Rollback</span></td><td>Revert to the previous agent version/configuration</td></tr>
+    <tr><td>Resume</td><td><span class="badge badge-green">Resume</span></td><td>Resume a paused agent</td></tr>
+    <tr><td>Pause</td><td><span class="badge badge-amber">Pause</span></td><td>Temporarily halt agent activity</td></tr>
+    <tr><td>Delete</td><td><span class="badge badge-red">Delete</span></td><td>Permanently remove the agent (with confirmation dialog)</td></tr>
+    <tr><td>Kill Switch</td><td><span class="badge badge-red">Kill</span></td><td>Emergency stop: immediately halts all agent activity across the organization</td></tr>
+  </table>
+
+  <h2>10.5 Shadow Mode &amp; Six Quality Gates</h2>
+  <p>Every new agent starts in <strong>Shadow Mode</strong>, where it observes real transactions and proposes actions without executing them. To be promoted to Active, the agent must pass six quality gates:</p>
+  <ol>
+    <li><strong>Accuracy Gate:</strong> Proposed actions match expected outcomes &ge;95% of the time</li>
+    <li><strong>Compliance Gate:</strong> All actions comply with regulatory requirements and SOPs</li>
+    <li><strong>Cost Gate:</strong> LLM costs per action remain within budget thresholds</li>
+    <li><strong>Latency Gate:</strong> Response times meet SLA requirements</li>
+    <li><strong>Safety Gate:</strong> No PII leaks, no unauthorized data access, no hallucinated actions</li>
+    <li><strong>Human Review Gate:</strong> A human reviewer (admin or domain lead) signs off on promotion</li>
+  </ol>
+
+  <h2>10.6 Agent Org Chart</h2>
+  <p>The Org Chart page (<code>/dashboard/org-chart</code>) displays a hierarchical tree view of all agents and their reporting relationships. Click any node to navigate to that agent's detail page.</p>
+
+  <h2>10.7 Per-Agent LLM Selection</h2>
+  <p>Each agent can be configured to use a different LLM based on cost/performance trade-offs:</p>
+  <table>
+    <tr><th>Model</th><th>Strengths</th><th>Cost Tier</th></tr>
+    <tr><td>gemini-2.5-flash</td><td>Fast, low cost, good for routine tasks</td><td>$</td></tr>
+    <tr><td>gemini-2.5-pro</td><td>High accuracy, complex reasoning</td><td>$$$</td></tr>
+    <tr><td>gpt-4o</td><td>Strong general-purpose, tool use</td><td>$$$</td></tr>
+    <tr><td>claude-sonnet</td><td>Excellent at analysis, long context</td><td>$$</td></tr>
+  </table>
+
+  <h2>10.8 Budget Enforcement</h2>
+  <p>Set monthly LLM spending limits per agent. When an agent approaches its budget (80%), it receives a warning. At 100%, the agent is automatically paused until the next billing cycle or the limit is increased.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 11 — PROMPT TEMPLATES
+     ================================================================ -->
+<div class="page-break" id="sec11">
+  <div class="section-header">
+    <div class="section-icon">&#9998;</div>
+    <h1>11. Prompt Templates</h1>
+  </div>
+
+  <p>The Prompt Templates page (<code>/dashboard/prompt-templates</code>) manages the instruction sets that define how each agent type behaves. There are 26 production templates covering all domains.</p>
+
+  <h2>11.1 Template List</h2>
+  <p>Templates are listed in a sidebar with filtering by domain (Finance, HR, Marketing, Ops, Back Office). Each template shows its name, agent type, domain badge, and a lock icon if it is currently assigned to an active agent.</p>
+
+  <h2>11.2 Viewing &amp; Editing</h2>
+  <p>Click a template to view its full text in the main panel. Edit the template text directly if the template is not locked. Changes are saved immediately and versioned.</p>
+
+  <h2>11.3 Creating a New Template</h2>
+  <p>Click "Create Template" and fill in:</p>
+  <ul>
+    <li><strong>Name:</strong> Unique identifier (e.g., <code>custom_ap</code>)</li>
+    <li><strong>Agent Type:</strong> The agent type this template applies to</li>
+    <li><strong>Domain:</strong> Business domain (finance, hr, marketing, ops, backoffice)</li>
+    <li><strong>Description:</strong> Optional description of the template's purpose</li>
+    <li><strong>Template Text:</strong> The full prompt text with variable placeholders</li>
+  </ul>
+
+  <h2>11.4 Prompt Lock</h2>
+  <p>When a template is assigned to one or more active agents, it is automatically locked. A lock icon appears and edits are disabled. To modify a locked template, you must first pause all agents using it or clone the template.</p>
+
+  <h2>11.5 Version History</h2>
+  <p>Every edit creates a new version. The version history panel shows timestamps, author, and diff highlights. You can revert to any previous version with one click.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 12 — WORKFLOWS
+     ================================================================ -->
+<div class="page-break" id="sec12">
+  <div class="section-header">
+    <div class="section-icon">&#9776;</div>
+    <h1>12. Workflows</h1>
+  </div>
+
+  <p>The Workflows page (<code>/dashboard/workflows</code>) allows you to create, manage, and monitor multi-step automated processes that coordinate multiple agents and tools.</p>
+
+  <h2>12.1 Workflow Templates</h2>
+  <p>AgenticOrg ships with 21 pre-built workflow templates across all domains:</p>
+  <table>
+    <tr><th>Template</th><th>Domain</th><th>Steps</th><th>Trigger</th></tr>
+    <tr><td>Invoice Processing</td><td>Finance</td><td>5</td><td>API Event</td></tr>
+    <tr><td>Bank Reconciliation</td><td>Finance</td><td>4</td><td>Schedule</td></tr>
+    <tr><td>Month-End Close</td><td>Finance</td><td>8</td><td>Schedule</td></tr>
+    <tr><td>GST Filing</td><td>Finance</td><td>6</td><td>Schedule</td></tr>
+    <tr><td>Expense Approval</td><td>Finance</td><td>4</td><td>API Event</td></tr>
+    <tr><td>Payroll Processing</td><td>HR</td><td>6</td><td>Schedule</td></tr>
+    <tr><td>Employee Onboarding</td><td>HR</td><td>7</td><td>API Event</td></tr>
+    <tr><td>Leave Approval</td><td>HR</td><td>3</td><td>API Event</td></tr>
+    <tr><td>Performance Review Cycle</td><td>HR</td><td>6</td><td>Schedule</td></tr>
+    <tr><td>Talent Screening</td><td>HR</td><td>5</td><td>API Event</td></tr>
+    <tr><td>Campaign Launch</td><td>Marketing</td><td>6</td><td>Manual</td></tr>
+    <tr><td>Lead Scoring</td><td>Marketing</td><td>4</td><td>API Event</td></tr>
+    <tr><td>Content Publishing</td><td>Marketing</td><td>5</td><td>Manual</td></tr>
+    <tr><td>Social Media Calendar</td><td>Marketing</td><td>4</td><td>Schedule</td></tr>
+    <tr><td>Email Drip Campaign</td><td>Marketing</td><td>5</td><td>API Event</td></tr>
+    <tr><td>Support Ticket Triage</td><td>Ops</td><td>4</td><td>API Event</td></tr>
+    <tr><td>IT Asset Provisioning</td><td>Ops</td><td>5</td><td>API Event</td></tr>
+    <tr><td>Vendor Onboarding</td><td>Ops</td><td>5</td><td>Manual</td></tr>
+    <tr><td>Contract Renewal</td><td>Ops</td><td>5</td><td>Schedule</td></tr>
+    <tr><td>Compliance Audit</td><td>Ops</td><td>6</td><td>Schedule</td></tr>
+    <tr><td>Report Generation</td><td>Ops</td><td>4</td><td>Schedule</td></tr>
+  </table>
+
+  <h2>12.2 Creating a Workflow</h2>
+  <p>Three methods are available:</p>
+  <ul>
+    <li><strong>From Template:</strong> Click "Use Template" on any template card to pre-fill the workflow builder</li>
+    <li><strong>From Scratch:</strong> Click "Create Workflow" at <code>/dashboard/workflows/new</code> to build a custom workflow using the visual builder</li>
+    <li><strong>From Natural Language:</strong> Describe the desired workflow in plain English, and the AI generates the workflow definition</li>
+  </ul>
+
+  <h2>12.3 CRON Scheduling</h2>
+  <p>Workflows can be triggered on a schedule using CRON expressions. Common presets include daily, weekly, and monthly. Custom CRON expressions (e.g., <code>0 6 * * 1-5</code> for weekdays at 6 AM) are also supported.</p>
+
+  <h2>12.4 HITL Decision Points</h2>
+  <p>Any workflow step can be configured as a human-in-the-loop checkpoint. When execution reaches a HITL step, it pauses and creates an entry in the approval queue. The workflow resumes only after a human approves or rejects.</p>
+
+  <h2>12.5 Monitoring Runs</h2>
+  <p>Click any workflow to view its run history. Each run shows: start time, end time, duration, status (completed/running/failed/pending), and a step-by-step execution log. Click a run to see detailed input/output for each step.</p>
+
+  <h2>12.6 Example Workflow Files</h2>
+  <p>AgenticOrg includes YAML-based workflow definitions for common India-market processes:</p>
+  <ul>
+    <li><code>bank_recon_daily.yaml</code> &mdash; Daily bank reconciliation with auto-matching</li>
+    <li><code>gstr_filing_monthly.yaml</code> &mdash; Monthly GSTR-1/3B filing with DSC signing</li>
+    <li><code>tds_quarterly_filing.yaml</code> &mdash; Quarterly TDS Form 26Q/24Q filing</li>
+  </ul>
+</div>
+
+<!-- ================================================================
+     SECTION 13 — APPROVALS (HITL)
+     ================================================================ -->
+<div class="page-break" id="sec13">
+  <div class="section-header">
+    <div class="section-icon">&#10003;</div>
+    <h1>13. Approvals (HITL)</h1>
+  </div>
+
+  <p>The Approvals page (<code>/dashboard/approvals</code>) is the human-in-the-loop queue where agents escalate decisions for human review.</p>
+
+  <h2>13.1 Approval Queue</h2>
+  <p>The queue has two tabs: <strong>Pending</strong> (items awaiting decision) and <strong>Decided</strong> (historical decisions). A red badge shows the count of pending items. Items can be filtered by priority: Critical, High, Normal, Low.</p>
+
+  <h2>13.2 Approval Card</h2>
+  <p>Each approval item displays:</p>
+  <ul>
+    <li><strong>Title:</strong> Description of what needs approval</li>
+    <li><strong>Agent:</strong> Which AI agent submitted the request</li>
+    <li><strong>Priority:</strong> Color-coded priority badge</li>
+    <li><strong>Context:</strong> Relevant data and the agent's reasoning</li>
+    <li><strong>Expires At:</strong> Deadline for the decision (items auto-expire if not acted upon)</li>
+    <li><strong>Actions:</strong> Approve, Reject, or Request More Info buttons</li>
+    <li><strong>Notes:</strong> Free-text field for the reviewer's comments</li>
+  </ul>
+
+  <h2>13.3 Decision Flow</h2>
+  <ol>
+    <li>Agent encounters a decision gate (e.g., invoice amount &gt; INR 5L, or confidence score &lt; threshold)</li>
+    <li>Agent creates an approval request with full context and reasoning trace</li>
+    <li>Item appears in the approval queue for the appropriate reviewer</li>
+    <li>Reviewer examines the context and makes a decision (approve/reject)</li>
+    <li>Decision is recorded in the audit trail with HMAC signature</li>
+    <li>Agent receives the decision and proceeds (or halts) accordingly</li>
+  </ol>
+
+  <h2>13.4 Escalation Rules</h2>
+  <p>Configurable escalation rules determine when items escalate to a higher authority:</p>
+  <ul>
+    <li>If pending for &gt;4 hours, escalate to department head</li>
+    <li>If pending for &gt;24 hours, escalate to admin</li>
+    <li>Critical items are immediately visible to all admins</li>
+  </ul>
+
+  <h2>13.5 Approval History</h2>
+  <p>The "Decided" tab maintains a complete history of all decisions, searchable by date range, agent, and decision type. Each entry includes the full reasoning trace and decision notes.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 14 — CONNECTORS
+     ================================================================ -->
+<div class="page-break" id="sec14">
+  <div class="section-header">
+    <div class="section-icon">&#9895;</div>
+    <h1>14. Connectors</h1>
+  </div>
+
+  <p>The Connectors page (<code>/dashboard/connectors</code>) manages all external service integrations. AgenticOrg provides 54 native connectors plus 1000+ integrations via the Composio marketplace.</p>
+
+  <h2>14.1 Native Connectors (54)</h2>
+  <p>Connectors are organized by category:</p>
+
+  <h3>Finance (9 connectors)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>QuickBooks</td><td>Accounting and invoicing</td></tr>
+    <tr><td>Xero</td><td>Cloud accounting</td></tr>
+    <tr><td>Tally</td><td>Indian accounting software (via Tally Bridge)</td></tr>
+    <tr><td>PineLabs Plural</td><td>Payment gateway (India) &mdash; Cards, UPI, Net Banking, Wallets, EMI</td></tr>
+    <tr><td>Stripe</td><td>Online payment processing (Global) &mdash; Cards, Google Pay, Apple Pay</td></tr>
+    <tr><td>SAP</td><td>Enterprise ERP</td></tr>
+    <tr><td>Oracle ERP</td><td>Enterprise resource planning</td></tr>
+    <tr><td>Indian GSTN</td><td>GST Network portal for filing</td></tr>
+    <tr><td>Account Aggregator</td><td>Financial data sharing framework (India)</td></tr>
+  </table>
+
+  <h3>HR (3 connectors)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>LDAP / Active Directory</td><td>Directory services for employee data</td></tr>
+    <tr><td>Okta</td><td>Identity and access management</td></tr>
+    <tr><td>Azure AD</td><td>Microsoft identity platform</td></tr>
+  </table>
+
+  <h3>Marketing (1 connector)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>HubSpot</td><td>Inbound marketing and CRM</td></tr>
+  </table>
+
+  <h3>Operations (20 connectors)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>Google Workspace</td><td>Productivity suite (Sheets, Drive, Calendar)</td></tr>
+    <tr><td>Google Sheets</td><td>Spreadsheets and data</td></tr>
+    <tr><td>Google Drive</td><td>Cloud file storage</td></tr>
+    <tr><td>Jira</td><td>Issue tracking and project management</td></tr>
+    <tr><td>AWS S3</td><td>Cloud object storage</td></tr>
+    <tr><td>GCP Storage</td><td>Google Cloud storage</td></tr>
+    <tr><td>PostgreSQL</td><td>Relational database</td></tr>
+    <tr><td>MongoDB</td><td>Document database</td></tr>
+    <tr><td>Redis</td><td>In-memory data store</td></tr>
+    <tr><td>Elasticsearch</td><td>Search and analytics engine</td></tr>
+    <tr><td>Snowflake</td><td>Cloud data warehouse</td></tr>
+    <tr><td>BigQuery</td><td>Google analytics data warehouse</td></tr>
+    <tr><td>Power BI</td><td>Business intelligence</td></tr>
+    <tr><td>Tableau</td><td>Data visualization</td></tr>
+    <tr><td>GitHub / GitLab / Bitbucket</td><td>Code hosting and CI/CD</td></tr>
+    <tr><td>Confluence / Notion</td><td>Knowledge management</td></tr>
+    <tr><td>Asana / Trello / Monday.com</td><td>Project management</td></tr>
+    <tr><td>Airtable</td><td>Spreadsheet-database hybrid</td></tr>
+    <tr><td>Zapier</td><td>Workflow automation bridge</td></tr>
+    <tr><td>Webhook (Generic) / REST API / GraphQL API</td><td>Custom integrations</td></tr>
+  </table>
+
+  <h3>Communications (11 connectors)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>Salesforce</td><td>CRM and sales management</td></tr>
+    <tr><td>Zoho CRM</td><td>Customer relationship management</td></tr>
+    <tr><td>Slack</td><td>Team messaging and collaboration</td></tr>
+    <tr><td>Microsoft Teams</td><td>Team chat and meetings</td></tr>
+    <tr><td>Gmail</td><td>Email communication</td></tr>
+    <tr><td>Zendesk</td><td>Customer support platform</td></tr>
+    <tr><td>Freshdesk</td><td>Customer support ticketing</td></tr>
+    <tr><td>Twilio</td><td>SMS and voice communication</td></tr>
+    <tr><td>SendGrid</td><td>Email delivery service</td></tr>
+    <tr><td>WhatsApp Business</td><td>Business messaging</td></tr>
+    <tr><td>SMTP / IMAP</td><td>Email protocols</td></tr>
+  </table>
+
+  <h3>Microsoft Suite (6 connectors)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>Microsoft Teams</td><td>Team chat, channels, and meetings</td></tr>
+    <tr><td>Microsoft Outlook</td><td>Email, calendar, and contacts</td></tr>
+    <tr><td>Microsoft SharePoint</td><td>Document management and collaboration</td></tr>
+    <tr><td>Microsoft OneDrive</td><td>Cloud file storage and sharing</td></tr>
+    <tr><td>Excel Online</td><td>Spreadsheets and data analysis</td></tr>
+    <tr><td>Power BI</td><td>Business analytics and reporting</td></tr>
+  </table>
+
+  <h3>Other (4 connectors)</h3>
+  <table>
+    <tr><th>Connector</th><th>Description</th></tr>
+    <tr><td>DigiLocker</td><td>Digital document store (India)</td></tr>
+    <tr><td>FTP/SFTP</td><td>File transfer protocol</td></tr>
+    <tr><td>Webhook (Generic)</td><td>Custom webhook integration</td></tr>
+    <tr><td>REST API / GraphQL API</td><td>Custom API connector</td></tr>
+  </table>
+
+  <h2>14.2 Configuring a Connector</h2>
+  <p>Navigate to <code>/dashboard/connectors/new</code> and select the connector type. Authentication methods vary:</p>
+  <table>
+    <tr><th>Auth Type</th><th>Connectors</th><th>Setup Process</th></tr>
+    <tr><td>OAuth 2.0</td><td>Google, Salesforce, HubSpot, Slack</td><td>Click "Connect", authorize in popup, token stored securely</td></tr>
+    <tr><td>API Key</td><td>Stripe, SendGrid, Twilio, PineLabs Plural</td><td>Enter API key/secret in the configuration form</td></tr>
+    <tr><td>Connection String</td><td>PostgreSQL, MongoDB, Redis</td><td>Enter host, port, database, and credentials</td></tr>
+    <tr><td>Bridge</td><td>Tally</td><td>Install Tally Bridge on the local machine, enter bridge URL</td></tr>
+    <tr><td>DSC</td><td>Indian GSTN</td><td>Upload Digital Signature Certificate for GSTN filing</td></tr>
+  </table>
+
+  <h2>14.3 Testing Connection</h2>
+  <p>Every connector provides a "Test Connection" button that verifies connectivity and authentication before saving.</p>
+
+  <h2>14.4 Health Monitoring</h2>
+  <p>The connector list shows real-time status for each configured connector: <span class="badge badge-green">Healthy</span>, <span class="badge badge-amber">Degraded</span>, or <span class="badge badge-red">Down</span>.</p>
+
+  <h2>14.5 Composio Marketplace</h2>
+  <p>The "Marketplace" tab provides access to 1000+ additional integrations via Composio. Browse by category (CRM, HR, Finance, Dev Tools, Support, Marketing, Productivity) and enable integrations with one click.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 15 — NL QUERY BAR
+     ================================================================ -->
+<div class="page-break" id="sec15">
+  <div class="section-header">
+    <div class="section-icon">&#8984;</div>
+    <h1>15. NL Query Bar (Cmd+K)</h1>
+  </div>
+
+  <p>The Natural Language Query Bar is accessible from any page via the keyboard shortcut <code>Cmd+K</code> (Mac) or <code>Ctrl+K</code> (Windows/Linux). It appears in the top navigation bar.</p>
+
+  <h2>15.1 Asking Questions</h2>
+  <p>Type any business question in natural language and press Enter. Examples:</p>
+  <ul>
+    <li>"What is our cash runway?"</li>
+    <li>"How many invoices are pending approval?"</li>
+    <li>"Show me the attrition rate for engineering"</li>
+    <li>"What is the ROAS for Google Ads this month?"</li>
+    <li>"How many P1 incidents are open?"</li>
+  </ul>
+
+  <h2>15.2 Domain Routing</h2>
+  <p>The NL engine automatically routes your query to the appropriate domain agent (finance, HR, marketing, ops) based on intent detection. The response includes the agent name and confidence score.</p>
+
+  <h2>15.3 Navigation Commands</h2>
+  <p>The query bar also supports navigation commands:</p>
+  <ul>
+    <li>"Show agents" or "Go to agents" &rarr; Navigates to <code>/dashboard/agents</code></li>
+    <li>"Show finance agents" &rarr; Navigates to agents filtered by finance domain</li>
+    <li>"Go to workflows" &rarr; Navigates to <code>/dashboard/workflows</code></li>
+    <li>"Show connectors" &rarr; Navigates to <code>/dashboard/connectors</code></li>
+    <li>"Go to approvals" &rarr; Navigates to <code>/dashboard/approvals</code></li>
+    <li>"Open settings" &rarr; Navigates to <code>/dashboard/settings</code></li>
+  </ul>
+
+  <h2>15.4 Chat Panel</h2>
+  <p>For multi-turn conversations, click "Open Chat" to expand the full chat panel. This provides a persistent conversation history with the AI, supporting follow-up questions and contextual responses.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 16 — SALES PIPELINE
+     ================================================================ -->
+<div class="page-break" id="sec16">
+  <div class="section-header">
+    <div class="section-icon">&#9670;</div>
+    <h1>16. Sales Pipeline</h1>
+  </div>
+
+  <p>The Sales Pipeline page (<code>/dashboard/sales</code>) provides AI-powered lead management and sales automation.</p>
+
+  <h2>16.1 Pipeline Stages</h2>
+  <table>
+    <tr><th>Stage</th><th>Color</th><th>Description</th></tr>
+    <tr><td>New</td><td><span class="badge badge-gray">Gray</span></td><td>Freshly captured leads</td></tr>
+    <tr><td>Contacted</td><td><span class="badge badge-blue">Blue</span></td><td>Initial outreach completed</td></tr>
+    <tr><td>Qualified</td><td><span class="badge badge-purple">Indigo</span></td><td>Meets ICP criteria</td></tr>
+    <tr><td>Demo Scheduled</td><td><span class="badge badge-purple">Purple</span></td><td>Product demo booked</td></tr>
+    <tr><td>Demo Done</td><td><span class="badge badge-purple">Violet</span></td><td>Demo completed, evaluating</td></tr>
+    <tr><td>Trial</td><td><span class="badge badge-amber">Amber</span></td><td>Active product trial</td></tr>
+    <tr><td>Negotiation</td><td><span style="background:#fed7aa;color:#c2410c;padding:2px 8px;border-radius:4px;font-size:8.5pt;font-weight:600;">Orange</span></td><td>Contract negotiation in progress</td></tr>
+    <tr><td>Won</td><td><span class="badge badge-green">Green</span></td><td>Deal closed successfully</td></tr>
+    <tr><td>Lost</td><td><span class="badge badge-red">Red</span></td><td>Deal lost</td></tr>
+  </table>
+
+  <h2>16.2 Lead Management</h2>
+  <p>Each lead card displays: name, email, company, role, current stage, AI-generated score (0-100), follow-up count, last contacted date, next follow-up date, and deal value.</p>
+
+  <h2>16.3 Agent-Powered Scoring</h2>
+  <p>Click "Run Agent" on any lead to trigger the Lead Qualification Agent. The agent analyzes the lead using firmographic, behavioral, and engagement signals, then returns a confidence score and reasoning trace showing how it arrived at the qualification decision.</p>
+
+  <h2>16.4 Adding Leads</h2>
+  <p>Click "Add Lead" to manually enter a new lead (name, email, company, role, deal value). Leads can also be created via the API or imported via CSV.</p>
+
+  <h2>16.5 Pipeline Metrics</h2>
+  <p>The metrics panel shows: Total Leads, New This Week, Average Score, Emails Sent This Week, and Stale Leads count.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 17 — ABM
+     ================================================================ -->
+<div class="page-break" id="sec17">
+  <div class="section-header">
+    <div class="section-icon">&#9733;</div>
+    <h1>17. ABM (Account-Based Marketing)</h1>
+  </div>
+
+  <p>The ABM Dashboard (<code>/dashboard/abm</code>) enables account-based marketing strategies with intent scoring and campaign management.</p>
+
+  <h2>17.1 Dashboard Summary</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">Total Accounts</div><div class="kpi-label">All tracked ABM targets</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-amber">Avg Intent Score</div><div class="kpi-label">Cross-account average</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">Pipeline Influenced ($)</div><div class="kpi-label">Revenue attributed to ABM</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">Total Campaigns</div><div class="kpi-label">Active ABM campaigns</div></div>
+  </div>
+
+  <h2>17.2 Target Accounts</h2>
+  <p>Each account shows: company name, domain, tier (Strategic, Enterprise, Growth), industry, revenue range, and intent score with color-coded labels:</p>
+  <table>
+    <tr><th>Score Range</th><th>Label</th><th>Color</th></tr>
+    <tr><td>81-100</td><td>Hot</td><td><span class="badge badge-red">Red</span></td></tr>
+    <tr><td>61-80</td><td>Warm</td><td><span style="background:#fed7aa;color:#c2410c;padding:2px 8px;border-radius:4px;font-size:8.5pt;font-weight:600;">Orange</span></td></tr>
+    <tr><td>31-60</td><td>Medium</td><td><span class="badge badge-amber">Amber</span></td></tr>
+    <tr><td>0-30</td><td>Low</td><td><span class="badge badge-gray">Gray</span></td></tr>
+  </table>
+
+  <h2>17.3 Tier Breakdown</h2>
+  <p>Accounts are segmented into tiers with counts displayed as badges. Filter by tier to focus on specific account segments.</p>
+
+  <h2>17.4 Campaign Management</h2>
+  <p>Launch targeted campaigns for specific accounts or tiers. Track campaign performance with metrics including impressions, engagement, and pipeline influence.</p>
+
+  <h2>17.5 CSV Upload</h2>
+  <p>Bulk-import target accounts via CSV upload. The CSV should include: company name, domain, tier, industry, and revenue range.</p>
+
+  <h2>17.6 Top 10 by Intent</h2>
+  <p>A leaderboard showing the ten accounts with the highest intent scores, providing quick access to the most promising targets.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 18 — REPORTS & SCHEDULING
+     ================================================================ -->
+<div class="page-break" id="sec18">
+  <div class="section-header">
+    <div class="section-icon">&#9776;</div>
+    <h1>18. Reports &amp; Scheduling</h1>
+  </div>
+
+  <p>The Report Scheduler page (<code>/dashboard/report-schedules</code>) automates recurring report generation and delivery.</p>
+
+  <h2>18.1 Report Types</h2>
+  <table>
+    <tr><th>Report</th><th>Description</th><th>Frequency</th></tr>
+    <tr><td>CFO Daily Briefing</td><td>Cash position, AR/AP summary, pending approvals, key alerts</td><td>Daily</td></tr>
+    <tr><td>CMO Weekly Report</td><td>Campaign performance, lead metrics, content analytics</td><td>Weekly</td></tr>
+    <tr><td>P&amp;L Monthly</td><td>Complete profit and loss statement with MoM comparisons</td><td>Monthly</td></tr>
+    <tr><td>AR/AP Aging</td><td>Detailed aging analysis across all customers/vendors</td><td>Weekly or Monthly</td></tr>
+    <tr><td>Campaign Performance</td><td>Channel-by-channel ROAS, spend, and conversion data</td><td>Weekly</td></tr>
+  </table>
+
+  <h2>18.2 Scheduling Delivery</h2>
+  <p>Configure schedules with:</p>
+  <ul>
+    <li><strong>Frequency Presets:</strong> Daily, Weekly, Monthly</li>
+    <li><strong>Custom CRON:</strong> Any valid CRON expression for precise scheduling</li>
+    <li><strong>Delivery Channels:</strong> Email, Slack, WhatsApp &mdash; multiple channels per schedule</li>
+    <li><strong>Recipients:</strong> Enter email addresses or Slack channels as targets</li>
+  </ul>
+
+  <h2>18.3 Export Formats</h2>
+  <table>
+    <tr><th>Format</th><th>Description</th></tr>
+    <tr><td>PDF</td><td>Professionally formatted PDF with charts and tables</td></tr>
+    <tr><td>Excel</td><td>Detailed spreadsheet with raw data and pivot-ready columns</td></tr>
+    <tr><td>Both</td><td>Delivers both PDF and Excel in a single report package</td></tr>
+  </table>
+
+  <h2>18.4 Managing Schedules</h2>
+  <p>Each schedule shows: report type, CRON expression, delivery channels, format, active/paused status, last run time, next run time, and creation date. Toggle schedules on/off or delete them as needed.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 19 — BILLING & USAGE
+     ================================================================ -->
+<div class="page-break" id="sec19">
+  <div class="section-header">
+    <div class="section-icon">&#9830;</div>
+    <h1>19. Billing &amp; Usage</h1>
+  </div>
+
+  <p>The Billing page (<code>/dashboard/billing</code>) manages subscription plans, usage tracking, and payments.</p>
+
+  <h2>19.1 Subscription Plans</h2>
+  <table>
+    <tr><th>Feature</th><th>Free</th><th>Pro</th><th>Enterprise</th></tr>
+    <tr><td>Monthly Price (USD)</td><td>$0</td><td>$99</td><td>$499</td></tr>
+    <tr><td>Monthly Price (INR)</td><td>&#8377;0</td><td>&#8377;9,999</td><td>&#8377;49,999</td></tr>
+    <tr><td>Active Agents</td><td>3</td><td>15</td><td>Unlimited</td></tr>
+    <tr><td>Agent Runs / Month</td><td>1,000</td><td>10,000</td><td>Unlimited</td></tr>
+    <tr><td>Storage</td><td>1 GB</td><td>50 GB</td><td>Unlimited</td></tr>
+    <tr><td>CxO Dashboards</td><td>1 (CEO only)</td><td>All 6</td><td>All 6 + Custom</td></tr>
+    <tr><td>Connectors</td><td>5</td><td>All 54</td><td>All 54 + Custom</td></tr>
+    <tr><td>Approvals / HITL</td><td>Basic</td><td>Advanced</td><td>Advanced + Custom Rules</td></tr>
+    <tr><td>Audit Trail</td><td>30 days</td><td>1 year</td><td>7 years (SOC-2)</td></tr>
+    <tr><td>Support</td><td>Community</td><td>Email + Priority</td><td>Dedicated CSM + SLA</td></tr>
+  </table>
+
+  <h2>19.2 CA Pack Add-on</h2>
+  <table>
+    <tr><th>Feature</th><th>CA Pack</th></tr>
+    <tr><td>Price</td><td>&#8377;4,999/month per firm (up to 10 clients)</td></tr>
+    <tr><td>Trial</td><td>14 days free trial (up to 7 clients)</td></tr>
+    <tr><td>Additional Clients</td><td>&#8377;499/month per client</td></tr>
+    <tr><td>Includes</td><td>Company management, GST agents, TDS agents, Bank Recon, Compliance Calendar, Credential Vault, Partner Dashboard</td></tr>
+    <tr><td>Payment Status</td><td>CA Pack currently activates on a free trial. Payment collection for CA Pack will be integrated in a future release.</td></tr>
+  </table>
+
+  <h2>19.3 Usage Tracking</h2>
+  <p>Progress bars show current usage against plan limits for:</p>
+  <ul>
+    <li><strong>Agent Runs:</strong> Number of agent executions this billing cycle</li>
+    <li><strong>Active Agents:</strong> Number of agents in active or shadow status</li>
+    <li><strong>Storage:</strong> Total storage consumed by documents, logs, and knowledge base</li>
+  </ul>
+  <p>Color coding: blue (normal), yellow (80-99% utilized &mdash; warning), red (at limit &mdash; blocked).</p>
+  <p>At 80% usage, the system displays a warning. At 100%, the affected resource is hard-blocked until the next billing cycle or a plan upgrade.</p>
+
+  <h2>19.4 Payment Gateways</h2>
+  <p>AgenticOrg supports two payment gateways based on geography:</p>
+
+  <h3>19.4.1 Stripe (Outside India &mdash; USD)</h3>
+  <p>International customers pay via Stripe Checkout. Supported methods: Credit/Debit Cards, Google Pay, Apple Pay, Link.</p>
+  <p><strong>Flow:</strong></p>
+  <ol>
+    <li>On the Billing page, select currency <strong>USD</strong> and click <strong>Upgrade</strong> on the desired plan.</li>
+    <li>You are redirected to the <strong>Stripe Hosted Checkout</strong> page.</li>
+    <li>Complete payment using your preferred method.</li>
+    <li>Stripe redirects back to AgenticOrg. The server verifies the payment session before showing the result.</li>
+    <li>Your plan is activated immediately. A webhook confirmation from Stripe updates the subscription in the background.</li>
+  </ol>
+  <p><strong>Customer Portal:</strong> Existing Stripe subscribers can access the self-service portal (<code>POST /api/v1/billing/portal</code>) to update payment methods, view invoices, or cancel.</p>
+
+  <h3>19.4.2 PineLabs Plural (India &mdash; INR)</h3>
+  <p>Indian customers pay via PineLabs Plural hosted checkout. Supported methods: <strong>Cards, UPI, Net Banking, Wallets, Credit EMI, Debit EMI</strong> &mdash; all 6 payment methods enabled.</p>
+  <p><strong>Flow:</strong></p>
+  <ol>
+    <li>On the Billing page, select currency <strong>INR</strong> and click <strong>Upgrade</strong> on the desired plan.</li>
+    <li>You are redirected to the <strong>Plural Hosted Checkout</strong> page (powered by Pine Labs).</li>
+    <li>Choose your preferred payment method (UPI, Card, Net Banking, Wallet, or EMI) and complete payment.</li>
+    <li>Plural redirects back to AgenticOrg. The server verifies the order status with Plural's API before showing the result.</li>
+    <li>Your plan is activated immediately. A webhook confirmation from Plural (HMAC-SHA256 signed) updates the subscription in the background.</li>
+  </ol>
+
+  <h3>19.4.3 Security</h3>
+  <table>
+    <tr><th>Feature</th><th>Stripe</th><th>Plural</th></tr>
+    <tr><td>Signature Verification</td><td>Stripe Webhook Signature</td><td>HMAC-SHA256 (webhook-id.timestamp.body)</td></tr>
+    <tr><td>Replay Protection</td><td>5-minute event window</td><td>5-minute timestamp window</td></tr>
+    <tr><td>Callback Verification</td><td>Server-side Session.retrieve()</td><td>Server-side GET /orders/{id}</td></tr>
+    <tr><td>Subscription Activation</td><td>On checkout.session.completed webhook</td><td>On PROCESSED/AUTHORIZED webhook</td></tr>
+    <tr><td>PCI Compliance</td><td>Handled by Stripe</td><td>Handled by Pine Labs</td></tr>
+  </table>
+  <p>No card details are stored or processed on AgenticOrg servers. All payment processing is handled entirely by the respective gateway's hosted checkout page.</p>
+
+  <h2>19.5 Invoice History</h2>
+  <p>A table showing all past invoices with: date, amount, currency, status (paid/pending/failed), and plan name.</p>
+
+  <h2>19.6 Cancellation</h2>
+  <p>Subscriptions can be cancelled from the Billing page. The system detects the payment provider (Stripe or Plural) and handles cancellation appropriately:</p>
+  <ul>
+    <li><strong>Stripe:</strong> Subscription is cancelled via Stripe API. Access continues until the end of the current billing period.</li>
+    <li><strong>Plural:</strong> One-time payment &mdash; plan is downgraded to Free immediately.</li>
+  </ul>
+</div>
+
+<!-- ================================================================
+     SECTION 20 — SETTINGS
+     ================================================================ -->
+<div class="page-break" id="sec20">
+  <div class="section-header">
+    <div class="section-icon">&#9881;</div>
+    <h1>20. Settings</h1>
+  </div>
+
+  <p>The Settings page (<code>/dashboard/settings</code>) provides organization-wide configuration. Admin-only access.</p>
+
+  <h2>20.1 Organization Settings</h2>
+  <table>
+    <tr><th>Setting</th><th>Description</th><th>Default</th></tr>
+    <tr><td>PII Masking</td><td>Automatically mask personally identifiable information in logs and audit trails</td><td>Enabled</td></tr>
+    <tr><td>Data Region</td><td>Geographic region for data storage (IN = India, US, EU)</td><td>IN</td></tr>
+    <tr><td>Audit Retention</td><td>Number of years to retain audit trail data</td><td>7 years</td></tr>
+  </table>
+
+  <h2>20.2 Fleet Limits</h2>
+  <p>Configure agent capacity limits:</p>
+  <table>
+    <tr><th>Limit</th><th>Description</th><th>Default</th></tr>
+    <tr><td>Max Active Agents</td><td>Maximum number of agents that can be simultaneously active</td><td>35</td></tr>
+    <tr><td>Max Agents Per Domain</td><td>Maximum agents allowed in each domain (finance, HR, etc.)</td><td>20 per domain</td></tr>
+    <tr><td>Max Shadow Agents</td><td>Maximum agents allowed in shadow mode simultaneously</td><td>10</td></tr>
+    <tr><td>Max Replicas Per Type</td><td>Maximum copies of the same agent type</td><td>20</td></tr>
+  </table>
+
+  <h2>20.3 API Keys</h2>
+  <p>API keys provide programmatic access to the AgenticOrg API. All keys use the <code>ao_sk_</code> prefix for easy identification.</p>
+
+  <h3>Creating an API Key</h3>
+  <ol>
+    <li>Enter a descriptive name for the key (e.g., "CI/CD Pipeline")</li>
+    <li>Optionally set an expiry period (in days)</li>
+    <li>Click "Create Key"</li>
+    <li>Copy the generated key immediately &mdash; it is shown only once</li>
+  </ol>
+
+  <h3>Managing API Keys</h3>
+  <p>The API keys table shows: name, prefix (first 8 characters), scopes, status (active/revoked), last used date, expiry date, and creation date. Keys can be revoked at any time.</p>
+
+  <div class="warn-box">
+    <div class="box-title">&#9888; Security Warning</div>
+    API keys provide full access to your organization's data. Store them securely (e.g., in environment variables or a secrets manager). Never commit API keys to version control.
+  </div>
+
+  <h2>20.4 User Management</h2>
+  <p>Invite team members by email with role-based access. The invitation flow sends an email with a secure accept link at <code>/invite</code> or <code>/accept-invite</code>.</p>
+
+  <h2>20.5 Webhook Configuration</h2>
+  <p>Configure webhook endpoints to receive real-time notifications for agent actions, approval decisions, workflow completions, and system events.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 21 — SECURITY & COMPLIANCE
+     ================================================================ -->
+<div class="page-break" id="sec21">
+  <div class="section-header">
+    <div class="section-icon">&#9888;</div>
+    <h1>21. Security &amp; Compliance</h1>
+  </div>
+
+  <h2>21.1 JWT Authentication</h2>
+  <p>All API calls are authenticated using JSON Web Tokens (JWT). Tokens are issued at login, have configurable expiry, and include the user's role and tenant ID as claims. Tokens are transmitted via the <code>Authorization: Bearer &lt;token&gt;</code> header.</p>
+
+  <h2>21.2 Role-Based Access Control (6 Roles)</h2>
+  <table>
+    <tr><th>Role</th><th>Dashboard Access</th><th>Agent Management</th><th>Settings</th><th>Audit</th></tr>
+    <tr><td>admin</td><td>All 6 CxO dashboards</td><td>Full (create, edit, delete)</td><td>Full access</td><td>Full access</td></tr>
+    <tr><td>cfo</td><td>CEO + CFO</td><td>View + run finance agents</td><td>Read-only</td><td>Finance audit</td></tr>
+    <tr><td>chro</td><td>CEO + CHRO</td><td>View + run HR agents</td><td>Read-only</td><td>HR audit</td></tr>
+    <tr><td>cmo</td><td>CEO + CMO + ABM</td><td>View + run marketing agents</td><td>Read-only</td><td>Marketing audit</td></tr>
+    <tr><td>coo</td><td>CEO + COO</td><td>View + run ops agents</td><td>Read-only</td><td>Ops audit</td></tr>
+    <tr><td>auditor</td><td>General dashboard</td><td>Read-only</td><td>None</td><td>Full read access</td></tr>
+  </table>
+
+  <h2>21.3 Row-Level Security (RLS)</h2>
+  <p>PostgreSQL Row-Level Security ensures that each tenant's data is completely isolated at the database level. Even if application-layer security is bypassed, RLS prevents cross-tenant data access.</p>
+
+  <h2>21.4 PII Masking</h2>
+  <p>When enabled (Settings &rarr; PII Masking), the system automatically detects and masks personally identifiable information in:</p>
+  <ul>
+    <li>Audit trail entries</li>
+    <li>Agent reasoning traces</li>
+    <li>Chat panel conversations</li>
+    <li>API responses (when requested)</li>
+  </ul>
+  <p>Masked formats: Aadhaar (XXXX-XXXX-1234), PAN (XXXXX1234X), email (s****@example.com), phone (+91-XXXXXX1234).</p>
+
+  <h2>21.5 Audit Trail (7-Year Retention)</h2>
+  <p>The Audit Trail page (<code>/dashboard/audit</code>) provides an immutable, HMAC-signed log of all platform activities. Each entry records:</p>
+  <ul>
+    <li>Timestamp (UTC with nanosecond precision)</li>
+    <li>Actor (user email or agent name)</li>
+    <li>Action performed</li>
+    <li>Resource affected (agent, workflow, connector, approval)</li>
+    <li>Outcome (success/failure)</li>
+    <li>IP address and user agent</li>
+    <li>HMAC signature for tamper detection</li>
+  </ul>
+  <p>Enterprise plans retain audit data for 7 years, meeting SOC-2 and DPDPA requirements.</p>
+
+  <h2>21.6 Scope Enforcement (Grantex)</h2>
+  <p>The Scope Dashboard (<code>/dashboard/scopes</code>) visualizes the permission scopes assigned to each agent. The Enforcement Audit Log (<code>/dashboard/enforce-audit</code>) records every scope check, including denied actions.</p>
+  <p>Scope format: <code>&lt;domain&gt;:&lt;resource&gt;:&lt;action&gt;</code> (e.g., <code>finance:invoice:write</code>, <code>hr:payroll:read</code>).</p>
+
+  <h2>21.7 SOC-2 Readiness</h2>
+  <p>AgenticOrg implements all 5 SOC-2 Trust Service Criteria:</p>
+  <ul>
+    <li><strong>Security:</strong> Encryption at rest (AES-256) and in transit (TLS 1.3), JWT auth, RLS</li>
+    <li><strong>Availability:</strong> 99.9% uptime SLA, multi-zone deployment, health monitoring</li>
+    <li><strong>Processing Integrity:</strong> HMAC-signed audit trail, agent quality gates</li>
+    <li><strong>Confidentiality:</strong> PII masking, data classification, credential vault encryption</li>
+    <li><strong>Privacy:</strong> DPDPA compliance, data region selection, consent management</li>
+  </ul>
+
+  <h2>21.8 DPDPA Compliance</h2>
+  <p>Compliant with India's Digital Personal Data Protection Act (2023). Features include: data localization (India region), consent tracking, right to erasure, data processing records, and breach notification workflows.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 22 — DEVELOPER TOOLS
+     ================================================================ -->
+<div class="page-break" id="sec22">
+  <div class="section-header">
+    <div class="section-icon">&#60;/&#62;</div>
+    <h1>22. Developer Tools</h1>
+  </div>
+
+  <h2>22.1 Python SDK</h2>
+  <pre>pip install agenticorg</pre>
+  <pre>from agenticorg import AgenticOrg
+
+client = AgenticOrg(api_key="ao_sk_your_key_here")
+
+# List all agents
+agents = client.agents.list(domain="finance")
+
+# Trigger an agent run
+result = client.agents.run("agent_id_here", input={"invoice_id": "INV-001"})
+
+# Query the NL engine
+answer = client.query("What is our cash runway?")
+print(answer.text, answer.confidence)</pre>
+
+  <h2>22.2 TypeScript SDK</h2>
+  <pre>npm install agenticorg-sdk</pre>
+  <pre>import { AgenticOrg } from 'agenticorg-sdk';
+
+const client = new AgenticOrg({ apiKey: 'ao_sk_your_key_here' });
+
+// List workflows
+const workflows = await client.workflows.list();
+
+// Create an approval
+await client.approvals.decide('approval_id', {
+  decision: 'approve',
+  notes: 'Looks good, proceed.'
+});</pre>
+
+  <h2>22.3 MCP Server</h2>
+  <p>AgenticOrg exposes an MCP (Model Context Protocol) server that allows any MCP-compatible AI agent to use AgenticOrg tools. The MCP server provides:</p>
+  <ul>
+    <li>340+ tools organized by domain</li>
+    <li>Automatic schema discovery</li>
+    <li>Authentication via API key</li>
+    <li>Rate limiting and usage tracking</li>
+  </ul>
+
+  <h2>22.4 API Keys</h2>
+  <p>All API keys use the <code>ao_sk_</code> prefix. Create and manage keys from Settings &rarr; API Keys. Include the key in requests as:</p>
+  <pre>Authorization: Bearer ao_sk_your_key_here</pre>
+
+  <h2>22.5 A2A Protocol</h2>
+  <p>The Agent-to-Agent (A2A) protocol enables inter-agent communication within the platform. Agents can delegate tasks, share context, and coordinate workflows using structured message passing. The protocol supports both synchronous (request/response) and asynchronous (event-driven) patterns.</p>
+
+  <h2>22.6 Grantex Authorization</h2>
+  <p>Grantex is the fine-grained authorization framework that controls what each agent can access. Developers can:</p>
+  <ul>
+    <li>Define custom scopes for new tools</li>
+    <li>Assign scopes to agents via the API</li>
+    <li>Check scope enforcement in real-time via the audit log</li>
+    <li>View the Grantex explainer page at <code>/how-grantex-works</code></li>
+  </ul>
+
+  <h2>22.7 Schema Editor</h2>
+  <p>The Schemas page (<code>/dashboard/schemas</code>) provides a visual editor for data schemas used by agents and connectors. Define input/output schemas for custom tools and workflows.</p>
+
+  <h2>22.8 RPA Scripts</h2>
+  <p>The RPA Scripts page (<code>/dashboard/rpa</code>) manages Robotic Process Automation scripts for browser and desktop automation. These scripts handle tasks that require GUI interaction (e.g., government portals, legacy systems).</p>
+
+  <h2>22.9 Playground</h2>
+  <p>The API Playground (<code>/playground</code>) provides an interactive environment to test API calls, experiment with agent configurations, and preview prompt outputs before deploying to production.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 23 — VOICE AGENTS
+     ================================================================ -->
+<div class="page-break" id="sec23">
+  <div class="section-header">
+    <div class="section-icon">&#9742;</div>
+    <h1>23. Voice Agents</h1>
+  </div>
+
+  <p>AgenticOrg supports voice-enabled agents that can conduct phone conversations. The Voice Setup page (<code>/dashboard/voice-setup</code>) guides you through configuration in five steps.</p>
+
+  <h2>23.1 Step 1: Choose SIP Provider</h2>
+  <table>
+    <tr><th>Provider</th><th>Description</th></tr>
+    <tr><td>Twilio</td><td>Enterprise-grade SIP trunking with global reach</td></tr>
+    <tr><td>Vonage</td><td>Global voice API platform</td></tr>
+    <tr><td>Custom SIP</td><td>Bring your own SIP provider (any SIP-compatible service)</td></tr>
+  </table>
+
+  <h2>23.2 Step 2: Enter Credentials</h2>
+  <p>For Twilio/Vonage: Account SID and Auth Token. For Custom SIP: the SIP endpoint URL.</p>
+
+  <h2>23.3 Step 3: Phone Number</h2>
+  <p>Enter the phone number to assign to the voice agent (e.g., +91-80-1234-5678).</p>
+
+  <h2>23.4 Step 4: STT &amp; TTS Engines</h2>
+  <table>
+    <tr><th>Engine</th><th>Type</th><th>Description</th></tr>
+    <tr><td>Whisper (Local)</td><td>Speech-to-Text</td><td>OpenAI Whisper running locally for privacy</td></tr>
+    <tr><td>Deepgram</td><td>Speech-to-Text</td><td>Cloud-based real-time transcription</td></tr>
+    <tr><td>Piper (Local)</td><td>Text-to-Speech</td><td>Open-source local TTS with natural voices</td></tr>
+    <tr><td>Google TTS</td><td>Text-to-Speech</td><td>Google Cloud Text-to-Speech API</td></tr>
+  </table>
+
+  <h2>23.5 Step 5: Review &amp; Save</h2>
+  <p>Review all settings and click "Test Connection" to verify SIP connectivity. Then save the configuration. The voice agent integrates with LiveKit for real-time audio streaming.</p>
+
+  <h2>23.6 Per-Agent Voice Configuration</h2>
+  <p>Each agent has a "Voice" tab on its detail page where you can enable/disable voice capability and customize voice-specific settings (greeting message, hold music, transfer rules).</p>
+</div>
+
+<!-- ================================================================
+     SECTION 24 — RAG KNOWLEDGE BASE
+     ================================================================ -->
+<div class="page-break" id="sec24">
+  <div class="section-header">
+    <div class="section-icon">&#9733;</div>
+    <h1>24. RAG Knowledge Base</h1>
+  </div>
+
+  <p>The Knowledge Base page (<code>/dashboard/knowledge</code>) manages the document store that grounds agent responses in your organization's proprietary knowledge.</p>
+
+  <h2>24.1 Document Upload</h2>
+  <p>Upload documents via drag-and-drop or file picker. Supported formats:</p>
+  <ul>
+    <li>PDF (.pdf)</li>
+    <li>Microsoft Word (.docx)</li>
+    <li>Excel (.xlsx)</li>
+    <li>Plain Text (.txt)</li>
+    <li>Markdown (.md)</li>
+  </ul>
+
+  <h2>24.2 Processing Pipeline</h2>
+  <p>After upload, documents go through a processing pipeline:</p>
+  <ol>
+    <li><strong>Extraction:</strong> Text is extracted from the document</li>
+    <li><strong>Chunking:</strong> Text is split into overlapping chunks optimized for retrieval</li>
+    <li><strong>Embedding:</strong> Each chunk is converted into a vector embedding</li>
+    <li><strong>Indexing:</strong> Embeddings are stored in pgvector for fast similarity search</li>
+  </ol>
+  <p>Document status badges: <span class="badge badge-amber">Processing</span>, <span class="badge badge-green">Indexed</span>, <span class="badge badge-red">Failed</span>.</p>
+
+  <h2>24.3 Knowledge Base Statistics</h2>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-value kpi-blue">Total Documents</div><div class="kpi-label">Uploaded files</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-green">Total Chunks</div><div class="kpi-label">Indexed text segments</div></div>
+    <div class="kpi-card"><div class="kpi-value kpi-purple">Index Size</div><div class="kpi-label">Vector store size (MB)</div></div>
+  </div>
+
+  <h2>24.4 Vector Search</h2>
+  <p>Use the search bar to test knowledge retrieval. Enter a query and the system returns the most relevant document chunks with similarity scores. This is the same search that agents use when answering questions grounded in your documents.</p>
+
+  <h2>24.5 Knowledge-Grounded Responses</h2>
+  <p>When an agent is configured with knowledge base access, it automatically retrieves relevant document chunks as context before generating a response. This reduces hallucination and ensures answers are based on your organization's actual documents and policies.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 25 — INTEGRATIONS REFERENCE
+     ================================================================ -->
+<div class="page-break" id="sec25">
+  <div class="section-header">
+    <div class="section-icon">&#9855;</div>
+    <h1>25. Integrations Reference</h1>
+  </div>
+
+  <h2>25.1 Finance Integrations</h2>
+  <table>
+    <tr><th>Integration</th><th>Auth Type</th><th>Tools Available</th><th>Use Cases</th></tr>
+    <tr><td>Tally</td><td>Bridge</td><td>Read ledgers, post vouchers, fetch trial balance, sync masters</td><td>Accounting sync, journal entries, P&amp;L generation</td></tr>
+    <tr><td>Zoho Books</td><td>OAuth 2.0</td><td>Create invoices, fetch payments, sync contacts, generate reports</td><td>Invoice processing, payment tracking</td></tr>
+    <tr><td>Indian GSTN</td><td>DSC + API</td><td>File GSTR-1, GSTR-3B, GSTR-9, fetch 2A data, validate ITC</td><td>GST compliance automation</td></tr>
+    <tr><td>Account Aggregator</td><td>AA Framework</td><td>Fetch bank statements, account balances, transaction history</td><td>Bank reconciliation, cash flow analysis</td></tr>
+    <tr><td>Stripe</td><td>API Key</td><td>Create charges, manage subscriptions, fetch invoices, handle refunds</td><td>Payment processing, billing automation</td></tr>
+    <tr><td>PineLabs Plural</td><td>OAuth2 (client_id + client_secret)</td><td>Create orders, hosted checkout redirect, verify payments, refunds, settlements</td><td>India payment processing (Cards, UPI, Net Banking, Wallets, EMI)</td></tr>
+    <tr><td>QuickBooks / Xero</td><td>OAuth 2.0</td><td>Full accounting CRUD: invoices, bills, journals, bank feeds</td><td>Cloud accounting sync</td></tr>
+    <tr><td>SAP / Oracle ERP</td><td>API Key</td><td>Read/write financial postings, master data, purchase orders</td><td>Enterprise ERP integration</td></tr>
+  </table>
+
+  <h2>25.2 HR Integrations</h2>
+  <table>
+    <tr><th>Integration</th><th>Auth Type</th><th>Tools Available</th><th>Use Cases</th></tr>
+    <tr><td>LDAP / Active Directory</td><td>Connection String</td><td>Sync employee directory, manage groups, provision accounts</td><td>Employee master sync</td></tr>
+    <tr><td>Okta / Azure AD</td><td>OAuth 2.0</td><td>SSO integration, user provisioning, group management</td><td>Identity management</td></tr>
+    <tr><td>EPFO Portal</td><td>Credentials</td><td>File ECR, download Form 12A/19, check claim status</td><td>PF compliance</td></tr>
+    <tr><td>LinkedIn / Greenhouse</td><td>OAuth 2.0</td><td>Post jobs, fetch candidates, sync applications</td><td>Recruitment automation</td></tr>
+  </table>
+
+  <h2>25.3 Marketing Integrations</h2>
+  <table>
+    <tr><th>Integration</th><th>Auth Type</th><th>Tools Available</th><th>Use Cases</th></tr>
+    <tr><td>HubSpot</td><td>OAuth 2.0</td><td>CRM contacts, deals, campaigns, email sequences, reports</td><td>Lead management, campaign tracking</td></tr>
+    <tr><td>Google Ads</td><td>OAuth 2.0</td><td>Campaign creation, bid management, keyword tracking, reporting</td><td>Paid search automation</td></tr>
+    <tr><td>Meta Ads</td><td>OAuth 2.0</td><td>Ad creation, audience targeting, performance tracking</td><td>Social media advertising</td></tr>
+    <tr><td>Mailchimp / SendGrid</td><td>API Key</td><td>Send campaigns, manage lists, track deliverability</td><td>Email marketing automation</td></tr>
+  </table>
+
+  <h2>25.4 Operations Integrations</h2>
+  <table>
+    <tr><th>Integration</th><th>Auth Type</th><th>Tools Available</th><th>Use Cases</th></tr>
+    <tr><td>Jira</td><td>OAuth 2.0</td><td>Create/update issues, manage sprints, track velocity</td><td>IT project management</td></tr>
+    <tr><td>PagerDuty</td><td>API Key</td><td>Create incidents, acknowledge, resolve, manage on-call</td><td>IT incident management</td></tr>
+    <tr><td>Zendesk / Freshdesk</td><td>OAuth 2.0</td><td>Create/update tickets, manage agents, automate routing</td><td>Customer support automation</td></tr>
+    <tr><td>ServiceNow</td><td>OAuth 2.0</td><td>Incident management, change requests, CMDB operations</td><td>ITSM automation</td></tr>
+  </table>
+
+  <h2>25.5 Communications Integrations</h2>
+  <table>
+    <tr><th>Integration</th><th>Auth Type</th><th>Tools Available</th><th>Use Cases</th></tr>
+    <tr><td>Gmail</td><td>OAuth 2.0</td><td>Send/receive email, manage labels, search messages</td><td>Email processing, notifications</td></tr>
+    <tr><td>Slack</td><td>OAuth 2.0</td><td>Send messages, manage channels, bot interactions, file sharing</td><td>Team notifications, bot commands</td></tr>
+    <tr><td>SendGrid</td><td>API Key</td><td>Transactional email, templates, deliverability tracking</td><td>Automated email delivery</td></tr>
+    <tr><td>Twilio</td><td>API Key</td><td>SMS, voice calls, WhatsApp, SIP trunking</td><td>Voice agents, SMS notifications</td></tr>
+    <tr><td>WhatsApp Business</td><td>API Key</td><td>Send template messages, handle inbound, manage media</td><td>Customer communication, alerts</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 26 — KEYBOARD SHORTCUTS
+     ================================================================ -->
+<div class="page-break" id="sec26">
+  <div class="section-header">
+    <div class="section-icon">&#9000;</div>
+    <h1>26. Keyboard Shortcuts</h1>
+  </div>
+
+  <table>
+    <tr><th>Shortcut</th><th>Action</th><th>Context</th></tr>
+    <tr><td><code>Cmd/Ctrl + K</code></td><td>Focus the NL Query Bar</td><td>Any page</td></tr>
+    <tr><td><code>Escape</code></td><td>Close modal/dialog/chat panel</td><td>When modal is open</td></tr>
+    <tr><td><code>Enter</code></td><td>Submit NL query or form</td><td>When query bar or form is focused</td></tr>
+    <tr><td><code>Tab</code></td><td>Navigate between form fields</td><td>Any form</td></tr>
+    <tr><td><code>Cmd/Ctrl + S</code></td><td>Save current settings/configuration</td><td>Settings, Agent Config</td></tr>
+    <tr><td><code>Cmd/Ctrl + Enter</code></td><td>Submit approval decision</td><td>Approval detail</td></tr>
+    <tr><td><code>Cmd/Ctrl + N</code></td><td>Create new item (context-dependent)</td><td>Agents, Workflows, Connectors</td></tr>
+    <tr><td><code>Cmd/Ctrl + /</code></td><td>Open keyboard shortcuts help</td><td>Any page</td></tr>
+    <tr><td><code>Arrow Up/Down</code></td><td>Navigate NL query suggestions</td><td>When query bar dropdown is open</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 27 — FAQ
+     ================================================================ -->
+<div class="page-break" id="sec27">
+  <div class="section-header">
+    <div class="section-icon">?</div>
+    <h1>27. Frequently Asked Questions</h1>
+  </div>
+
+  <h3>Q1: What makes AgenticOrg different from AI copilots like ChatGPT or Microsoft Copilot?</h3>
+  <p>Copilots assist humans by generating text or answering questions. AgenticOrg agents <em>act autonomously</em> &mdash; they execute complete business processes (filing tax returns, reconciling bank statements, processing payroll) without requiring continuous human input. They operate under SOPs with HITL gates for safety.</p>
+
+  <h3>Q2: How many agents can I run simultaneously?</h3>
+  <p>The Free plan supports 3 active agents. Pro supports 25. Enterprise has no limit. You can configure fleet limits in Settings.</p>
+
+  <h3>Q3: Can agents make mistakes? How do you prevent errors?</h3>
+  <p>Agents start in Shadow Mode where they propose actions without executing. They must pass 6 quality gates before promotion to Active. Confidence floors trigger HITL escalation for uncertain decisions. Kill Switch provides instant emergency stop.</p>
+
+  <h3>Q4: Is my data secure?</h3>
+  <p>Yes. Data is encrypted at rest (AES-256) and in transit (TLS 1.3). PostgreSQL Row-Level Security isolates tenant data. PII masking is enabled by default. The audit trail is HMAC-signed and tamper-proof.</p>
+
+  <h3>Q5: Can I use AgenticOrg with my existing accounting software?</h3>
+  <p>Yes. Native connectors exist for Tally, QuickBooks, Xero, Zoho Books, SAP, and Oracle ERP. The Tally Bridge enables real-time sync with desktop Tally installations.</p>
+
+  <h3>Q6: Does AgenticOrg support GST filing?</h3>
+  <p>Yes. The GST Filing Agent automates GSTR-1, GSTR-3B, and GSTR-9 filing via the GSTN connector. It supports DSC-based signing and 2A reconciliation. Manual JSON upload is available as a fallback.</p>
+
+  <h3>Q7: How does the CA Firms module work?</h3>
+  <p>CA firms purchase the CA Pack add-on to manage multiple client companies from a single login. Each company has isolated data, dedicated agents, and compliance tracking. The Partner Dashboard provides a bird's-eye view of all clients.</p>
+
+  <h3>Q8: Can I bring my own LLM?</h3>
+  <p>Yes. AgenticOrg supports per-agent LLM selection including GPT-4o, Gemini 2.5 Flash/Pro, and Claude Sonnet. For air-gapped deployments, local LLM support is available.</p>
+
+  <h3>Q9: How does billing work for Indian customers?</h3>
+  <p>Indian customers pay in INR via <strong>PineLabs Plural</strong> hosted checkout. All 6 payment methods are supported: Cards, UPI, Net Banking, Wallets, Credit EMI, and Debit EMI. Toggle currency to INR on the Billing page and click Upgrade. International customers pay in USD via <strong>Stripe</strong> (Cards, Google Pay, Apple Pay). The CA Pack add-on is priced at INR 4,999/month per firm (currently on free 14-day trial).</p>
+
+  <h3>Q10: What happens when an agent reaches its budget limit?</h3>
+  <p>At 80% budget utilization, a warning is generated. At 100%, the agent is automatically paused. You can increase the limit from the agent detail page or wait for the next billing cycle.</p>
+
+  <h3>Q11: Can I create custom workflows from natural language?</h3>
+  <p>Yes. The Workflow Creator accepts plain English descriptions and generates multi-step workflows with appropriate agent assignments and HITL gates.</p>
+
+  <h3>Q12: What is the SLA for uptime?</h3>
+  <p>Enterprise plan customers receive a 99.9% uptime SLA. The platform runs on Google Cloud Platform with multi-zone redundancy.</p>
+
+  <h3>Q13: How do I export data from AgenticOrg?</h3>
+  <p>Reports can be exported as PDF or Excel. The API provides full programmatic access to all data. Audit trails can be exported for compliance purposes.</p>
+
+  <h3>Q14: Is there a mobile app?</h3>
+  <p>Currently, AgenticOrg is a web application optimized for desktop and tablet browsers. Mobile optimization is planned for a future release.</p>
+
+  <h3>Q15: What languages does the platform support?</h3>
+  <p>The platform supports English as the primary language. The i18n framework is built-in and will support Hindi and other Indian languages in a future release.</p>
+
+  <h3>Q16: Can agents communicate with each other?</h3>
+  <p>Yes. The A2A (Agent-to-Agent) protocol enables agents to delegate tasks, share context, and coordinate complex workflows across domains.</p>
+
+  <h3>Q17: How do I monitor agent performance?</h3>
+  <p>Use the Observatory page for real-time monitoring. Each agent's detail page shows cost, accuracy, latency, and error metrics. The CEO Dashboard provides the Agent Observatory feed.</p>
+
+  <h3>Q18: What is Grantex?</h3>
+  <p>Grantex is the authorization framework that controls what each agent can do. It uses fine-grained scopes (e.g., <code>finance:invoice:write</code>) to ensure agents only access resources they are authorized for.</p>
+
+  <h3>Q19: Can I self-host AgenticOrg?</h3>
+  <p>Yes. Docker Compose for single-server deployments, Helm charts for Kubernetes clusters, and air-gapped deployment guides are all provided.</p>
+
+  <h3>Q20: How do I get support?</h3>
+  <p>Free plan: Community support via GitHub. Pro plan: Email support. Enterprise plan: Dedicated support with SLA. Contact: sanjeev@agenticorg.ai.</p>
+
+  <h3>Q21: Does AgenticOrg use any proprietary or AGPL-licensed components?</h3>
+  <p>No. AgenticOrg is built entirely on open-source tools. There are no LangSmith, AGPL, or proprietary SaaS dependencies.</p>
+
+  <h3>Q22: What is the Composio marketplace?</h3>
+  <p>Composio is a third-party integration platform that provides pre-built connectors for 1000+ applications. It extends AgenticOrg's native 54 connectors with additional SaaS integrations.</p>
+</div>
+
+<!-- ================================================================
+     SECTION 28 — GLOSSARY
+     ================================================================ -->
+<div class="page-break" id="sec28">
+  <div class="section-header">
+    <div class="section-icon">A</div>
+    <h1>28. Glossary</h1>
+  </div>
+
+  <table>
+    <tr><th style="width:25%;">Term</th><th>Definition</th></tr>
+    <tr><td><strong>A2A</strong></td><td>Agent-to-Agent protocol. Enables inter-agent communication and task delegation within the platform.</td></tr>
+    <tr><td><strong>AA</strong></td><td>Account Aggregator. India's financial data sharing framework for bank statements and account information.</td></tr>
+    <tr><td><strong>ABM</strong></td><td>Account-Based Marketing. A strategy that targets specific high-value accounts with personalized campaigns.</td></tr>
+    <tr><td><strong>AP</strong></td><td>Accounts Payable. Money owed by the company to its vendors and suppliers.</td></tr>
+    <tr><td><strong>AR</strong></td><td>Accounts Receivable. Money owed to the company by its customers.</td></tr>
+    <tr><td><strong>CAC</strong></td><td>Customer Acquisition Cost. Total cost to acquire one new customer.</td></tr>
+    <tr><td><strong>CIN</strong></td><td>Corporate Identity Number. Unique identifier assigned by India's Ministry of Corporate Affairs.</td></tr>
+    <tr><td><strong>CRON</strong></td><td>Time-based job scheduling syntax (e.g., <code>0 6 * * 1-5</code> = weekdays at 6 AM).</td></tr>
+    <tr><td><strong>CSAT</strong></td><td>Customer Satisfaction Score. Measured from customer survey responses.</td></tr>
+    <tr><td><strong>DPO</strong></td><td>Days Payable Outstanding. Average number of days to pay suppliers.</td></tr>
+    <tr><td><strong>DSC</strong></td><td>Digital Signature Certificate. Required for electronically signing GST returns and MCA filings in India.</td></tr>
+    <tr><td><strong>DSO</strong></td><td>Days Sales Outstanding. Average number of days to collect payment after a sale.</td></tr>
+    <tr><td><strong>eNPS</strong></td><td>Employee Net Promoter Score. Measures how likely employees are to recommend the company as a workplace.</td></tr>
+    <tr><td><strong>EPFO</strong></td><td>Employees' Provident Fund Organisation. India's statutory PF body.</td></tr>
+    <tr><td><strong>ESI</strong></td><td>Employee State Insurance. India's health insurance scheme for workers.</td></tr>
+    <tr><td><strong>Grantex</strong></td><td>AgenticOrg's fine-grained authorization framework for controlling agent permissions.</td></tr>
+    <tr><td><strong>GSTIN</strong></td><td>Goods and Services Tax Identification Number. Unique GST registration number in India.</td></tr>
+    <tr><td><strong>GSTN</strong></td><td>Goods and Services Tax Network. India's IT infrastructure for GST.</td></tr>
+    <tr><td><strong>HITL</strong></td><td>Human-in-the-Loop. Decision points where an AI agent pauses for human approval.</td></tr>
+    <tr><td><strong>HMAC</strong></td><td>Hash-based Message Authentication Code. Used to ensure audit trail integrity.</td></tr>
+    <tr><td><strong>JWT</strong></td><td>JSON Web Token. Standard for secure API authentication.</td></tr>
+    <tr><td><strong>LLM</strong></td><td>Large Language Model. The AI model that powers agent reasoning (GPT-4o, Gemini, Claude).</td></tr>
+    <tr><td><strong>LTV</strong></td><td>Lifetime Value. Total revenue expected from a customer over their relationship.</td></tr>
+    <tr><td><strong>MCA</strong></td><td>Ministry of Corporate Affairs. India's corporate governance body.</td></tr>
+    <tr><td><strong>MCP</strong></td><td>Model Context Protocol. Standard for connecting AI models to external tools.</td></tr>
+    <tr><td><strong>MQL</strong></td><td>Marketing Qualified Lead. A lead that meets marketing criteria for follow-up.</td></tr>
+    <tr><td><strong>MTTR</strong></td><td>Mean Time to Resolve. Average time to resolve an IT incident.</td></tr>
+    <tr><td><strong>P&amp;L</strong></td><td>Profit and Loss statement. Summary of revenues, costs, and expenses.</td></tr>
+    <tr><td><strong>PAN</strong></td><td>Permanent Account Number. India's tax identification number.</td></tr>
+    <tr><td><strong>PT</strong></td><td>Professional Tax. State-level tax on salaried individuals in India.</td></tr>
+    <tr><td><strong>RAG</strong></td><td>Retrieval-Augmented Generation. Technique where agents retrieve relevant documents before generating responses.</td></tr>
+    <tr><td><strong>RLS</strong></td><td>Row-Level Security. PostgreSQL feature that restricts data access at the row level per tenant.</td></tr>
+    <tr><td><strong>ROAS</strong></td><td>Return on Ad Spend. Revenue generated per unit of advertising spend.</td></tr>
+    <tr><td><strong>ROC</strong></td><td>Registrar of Companies. Office that handles company registration in India.</td></tr>
+    <tr><td><strong>RPA</strong></td><td>Robotic Process Automation. Software that automates repetitive GUI-based tasks.</td></tr>
+    <tr><td><strong>Shadow Mode</strong></td><td>Agent operating mode where it observes and proposes actions without executing them.</td></tr>
+    <tr><td><strong>SLA</strong></td><td>Service Level Agreement. Contractual guarantee for service quality metrics.</td></tr>
+    <tr><td><strong>SOP</strong></td><td>Standard Operating Procedure. Documented process that an agent follows.</td></tr>
+    <tr><td><strong>SQL (Marketing)</strong></td><td>Sales Qualified Lead. A lead that sales has accepted for direct engagement.</td></tr>
+    <tr><td><strong>TAN</strong></td><td>Tax Deduction and Collection Account Number. Required for TDS in India.</td></tr>
+    <tr><td><strong>TDS</strong></td><td>Tax Deducted at Source. Tax withholding mechanism in India.</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 29 — SUPPORT & CONTACT
+     ================================================================ -->
+<div class="page-break" id="sec29">
+  <div class="section-header">
+    <div class="section-icon">&#9993;</div>
+    <h1>29. Support &amp; Contact</h1>
+  </div>
+
+  <h2>29.1 Support Channels</h2>
+  <table>
+    <tr><th>Channel</th><th>Details</th><th>Availability</th></tr>
+    <tr><td>Email</td><td><a href="mailto:sanjeev@agenticorg.ai">sanjeev@agenticorg.ai</a></td><td>Mon-Fri, 9 AM - 6 PM IST</td></tr>
+    <tr><td>GitHub</td><td><a href="https://github.com/mishrasanjeev/agentic-org">github.com/mishrasanjeev/agentic-org</a></td><td>Open issues, PRs, discussions</td></tr>
+    <tr><td>Website</td><td><a href="https://agenticorg.ai">agenticorg.ai</a></td><td>Documentation, blog, resources</td></tr>
+    <tr><td>Demo Request</td><td>Available on the website and CA Firms page</td><td>Response within 24 hours</td></tr>
+  </table>
+
+  <h2>29.2 Reporting Bugs</h2>
+  <p>To report a bug, create a GitHub issue with the following information:</p>
+  <ul>
+    <li>Steps to reproduce the issue</li>
+    <li>Expected behavior vs. actual behavior</li>
+    <li>Browser and OS version</li>
+    <li>Screenshots or screen recordings (if applicable)</li>
+    <li>API error responses (if applicable)</li>
+  </ul>
+
+  <h2>29.3 Feature Requests</h2>
+  <p>Submit feature requests via GitHub Discussions. Include a description of the use case, the proposed solution, and any relevant context about your workflow.</p>
+
+  <h2>29.4 Enterprise Support</h2>
+  <p>Enterprise customers receive:</p>
+  <ul>
+    <li>Dedicated account manager</li>
+    <li>Priority bug fixes (24-hour SLA for P1 issues)</li>
+    <li>Custom integration development</li>
+    <li>On-site training sessions</li>
+    <li>Quarterly business reviews</li>
+  </ul>
+
+  <h2>29.5 Company Information</h2>
+  <table>
+    <tr><th>Detail</th><th>Value</th></tr>
+    <tr><td>Legal Entity</td><td>Edumatica Private Limited</td></tr>
+    <tr><td>Product</td><td>AgenticOrg</td></tr>
+    <tr><td>Founder</td><td>Sanjeev Kumar</td></tr>
+    <tr><td>Country</td><td>India</td></tr>
+    <tr><td>Cloud Provider</td><td>Google Cloud Platform (GCP)</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     SECTION 30 — VERSION HISTORY
+     ================================================================ -->
+<div class="page-break" id="sec30">
+  <div class="section-header">
+    <div class="section-icon">&#9733;</div>
+    <h1>30. Version History</h1>
+  </div>
+
+  <table>
+    <tr><th style="width:12%;">Version</th><th style="width:15%;">Date</th><th>Highlights</th></tr>
+    <tr>
+      <td><strong>v5.0</strong></td>
+      <td>April 2026</td>
+      <td>
+        <strong>CxO Platform Release.</strong> Six role-specific executive dashboards (CEO, CFO, CHRO, CMO, COO, CBO) with live KPIs, charts, and drill-down capability. 15 domain-specialized agents with India-specific compliance logic. Agent Observatory for real-time monitoring. Escalation tracking. Cross-department navigation from CEO dashboard.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v4.3</strong></td>
+      <td>March 2026</td>
+      <td>
+        <strong>CA Firms Phase 2.</strong> Credential vault for secure storage of GSTN/DSC/banking credentials. Compliance calendar with automated alerts. Partner self-approval for routine filings. GSTN manual JSON upload. Company health scoring.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v4.2</strong></td>
+      <td>February 2026</td>
+      <td>
+        <strong>CA Firms Phase 1.</strong> Multi-company management with 6-step onboarding wizard. Company detail pages with 7 tabs. Partner Dashboard. Filing approval workflows. 7 demo companies.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v4.0</strong></td>
+      <td>January 2026</td>
+      <td>
+        <strong>Core Platform.</strong> 50+ pre-built agents across 6 domains. 54 native connectors with health monitoring. 1000+ Composio marketplace integrations. Sales Pipeline with AI scoring. ABM Dashboard. Report scheduling with PDF/Excel export. Voice agents (LiveKit + SIP). RAG Knowledge Base (pgvector). RPA Scripts. Industry Packs.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v3.2</strong></td>
+      <td>April 2026</td>
+      <td>
+        <strong>Bug Fixes &amp; CI.</strong> 54 connectors, 35 agents, full CI green. All E2E tests passing. Security patches, CxO dashboard fixes, synthetic data improvements, pytest compatibility.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v3.0</strong></td>
+      <td>November 2025</td>
+      <td>
+        <strong>Architecture Migration.</strong> LangGraph-based agent runtime. Grantex authorization framework. A2A and MCP protocol support. SOP-driven agent creation. Cross-tenant isolation. Shadow mode with 6 quality gates.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v2.0</strong></td>
+      <td>August 2025</td>
+      <td>
+        <strong>Multi-Domain Expansion.</strong> Extended from finance-only to 6 domains (Finance, HR, Marketing, Ops, Back Office, Comms). Workflow builder. Approval queue. NL Query Bar. Billing with Stripe.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v1.0</strong></td>
+      <td>April 2025</td>
+      <td>
+        <strong>Initial Release.</strong> Core platform with finance agents (AP, AR, GST). Basic dashboard. First 10 connectors. JWT authentication. PostgreSQL backend.
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     ADDITIONAL PAGES — INDUSTRY PACKS, SLA, EVALS
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix A: Additional Platform Features</h1>
+
+  <h2>A.1 Industry Packs</h2>
+  <p>The Industry Packs page (<code>/dashboard/packs</code>) offers pre-configured agent bundles tailored for specific industries. Each pack includes agents, workflows, prompt templates, and connector configurations optimized for the target industry.</p>
+  <p>Available packs include: Manufacturing, Healthcare, IT Services, Export/Import, Retail, Professional Services, and the CA Firms pack described in Section 9.</p>
+
+  <h2>A.2 SLA Monitor</h2>
+  <p>The SLA Monitor page (<code>/dashboard/sla</code>) tracks agent performance against Service Level Agreements. It shows response times, success rates, and SLA compliance percentages for each agent and workflow.</p>
+
+  <h2>A.3 Evals</h2>
+  <p>The Evals page (<code>/evals</code>) provides agent evaluation benchmarks. Run standardized test suites against your agents to measure accuracy, latency, cost, and safety across different scenarios.</p>
+
+  <h2>A.4 Observatory</h2>
+  <p>The Observatory page (<code>/dashboard/observatory</code>) provides a real-time, live feed of all agent activities across the platform. It includes:</p>
+  <ul>
+    <li>Agent Activity Ticker: Scrolling feed of recent agent actions</li>
+    <li>Domain-wise activity breakdown</li>
+    <li>Agent status summary (active/idle/processing)</li>
+    <li>Error and escalation alerts</li>
+  </ul>
+
+  <h2>A.5 Integration Workflow</h2>
+  <p>The Integration Workflow page (<code>/integration-workflow</code>) provides a visual guide showing how AgenticOrg connects with external systems. It illustrates the data flow from source systems through connectors to agents and back.</p>
+
+  <h2>A.6 Blog &amp; Resources</h2>
+  <p>The platform includes built-in content pages:</p>
+  <ul>
+    <li><strong>Blog:</strong> (<code>/blog</code>) Technical articles, product updates, and best practices</li>
+    <li><strong>Resources:</strong> (<code>/resources</code>) Guides, whitepapers, and industry reports</li>
+    <li><strong>How Grantex Works:</strong> (<code>/how-grantex-works</code>) Detailed explainer of the authorization framework</li>
+  </ul>
+
+  <h2>A.7 Google Ads Landing Pages</h2>
+  <p>Dedicated landing pages optimized for paid search campaigns:</p>
+  <ul>
+    <li><code>/solutions/ai-invoice-processing</code> &mdash; AI Invoice Processing</li>
+    <li><code>/solutions/automated-bank-reconciliation</code> &mdash; Automated Bank Reconciliation</li>
+    <li><code>/solutions/payroll-automation</code> &mdash; Payroll Automation</li>
+  </ul>
+
+  <h2>A.8 Scope Enforcement Dashboard</h2>
+  <p>The Scope Dashboard (<code>/dashboard/scopes</code>) visualizes all agent permission scopes in a matrix view. The Enforcement Audit Log (<code>/dashboard/enforce-audit</code>) provides a searchable log of all scope checks, including denied access attempts.</p>
+</div>
+
+<!-- ================================================================
+     APPENDIX B — COMPLETE API REFERENCE SUMMARY
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix B: API Reference Summary</h1>
+
+  <h2>B.1 Authentication</h2>
+  <pre>POST /api/v1/auth/login     { email, password }  -> { token, user }
+POST /api/v1/auth/signup    { email, password, org_name, role }
+POST /api/v1/auth/forgot    { email }
+POST /api/v1/auth/reset     { token, new_password }</pre>
+
+  <h2>B.2 Agents</h2>
+  <pre>GET    /api/v1/agents                  List agents (filter: domain, status)
+POST   /api/v1/agents                  Create agent
+GET    /api/v1/agents/:id              Get agent detail
+PUT    /api/v1/agents/:id              Update agent
+DELETE /api/v1/agents/:id              Delete agent
+POST   /api/v1/agents/:id/run          Trigger agent run
+POST   /api/v1/agents/:id/promote      Promote from shadow to active
+POST   /api/v1/agents/:id/rollback     Rollback to previous version
+POST   /api/v1/agents/:id/resume       Resume paused agent
+POST   /api/v1/agents/import-csv       Bulk import via CSV</pre>
+
+  <h2>B.3 Workflows</h2>
+  <pre>GET    /api/v1/workflows               List workflows
+POST   /api/v1/workflows               Create workflow
+GET    /api/v1/workflows/:id           Get workflow detail
+POST   /api/v1/workflows/:id/run       Trigger workflow run
+GET    /api/v1/workflows/:id/runs/:rid Get run detail</pre>
+
+  <h2>B.4 Approvals</h2>
+  <pre>GET    /api/v1/approvals               List approvals (filter: status)
+POST   /api/v1/approvals/:id/decide    Submit decision { decision, notes }</pre>
+
+  <h2>B.5 Connectors</h2>
+  <pre>GET    /api/v1/connectors              List connectors
+POST   /api/v1/connectors              Create connector
+GET    /api/v1/connectors/:id          Get connector detail
+DELETE /api/v1/connectors/:id          Delete connector</pre>
+
+  <h2>B.6 KPIs</h2>
+  <pre>GET    /api/v1/kpis/ceo               CEO dashboard data
+GET    /api/v1/kpis/cfo               CFO dashboard data
+GET    /api/v1/kpis/chro              CHRO dashboard data
+GET    /api/v1/kpis/cmo               CMO dashboard data
+GET    /api/v1/kpis/coo               COO dashboard data
+GET    /api/v1/kpis/cbo               CBO dashboard data</pre>
+
+  <h2>B.7 Companies (CA Module)</h2>
+  <pre>GET    /api/v1/companies               List companies
+POST   /api/v1/companies               Create company
+GET    /api/v1/companies/:id           Get company detail
+PUT    /api/v1/companies/:id           Update company
+GET    /api/v1/partner-dashboard       Partner overview data</pre>
+
+  <h2>B.8 Sales &amp; ABM</h2>
+  <pre>GET    /api/v1/sales/pipeline          Get pipeline (filter: stage)
+GET    /api/v1/sales/metrics           Get sales metrics
+POST   /api/v1/sales/pipeline/process-lead  Trigger lead scoring agent
+GET    /api/v1/abm/accounts            List ABM accounts
+GET    /api/v1/abm/dashboard           ABM dashboard summary
+POST   /api/v1/abm/accounts/upload-csv Import ABM accounts</pre>
+
+  <h2>B.9 Knowledge Base</h2>
+  <pre>GET    /api/v1/knowledge/documents     List documents
+POST   /api/v1/knowledge/upload         Upload document
+GET    /api/v1/knowledge/stats          Knowledge base stats
+POST   /api/v1/knowledge/search         Search knowledge base</pre>
+
+  <h2>B.10 Billing</h2>
+  <pre>GET    /api/v1/billing/plans             List available plans (USD + INR)
+GET    /api/v1/billing/usage              Current usage counters
+GET    /api/v1/billing/invoices           Invoice history
+POST   /api/v1/billing/subscribe          Stripe checkout session (USD)
+POST   /api/v1/billing/subscribe/india    Plural hosted checkout (INR)
+GET    /api/v1/billing/callback           Plural redirect callback (server-side verify)
+GET    /api/v1/billing/callback/stripe    Stripe redirect callback (server-side verify)
+POST   /api/v1/billing/order-status       Check Plural order status
+POST   /api/v1/billing/portal             Stripe Customer Portal session
+POST   /api/v1/billing/cancel             Cancel subscription (auto-detects provider)
+POST   /api/v1/billing/webhook/stripe     Stripe webhook (signature verified)
+POST   /api/v1/billing/webhook/plural     Plural webhook (HMAC-SHA256 verified)</pre>
+
+  <h2>B.11 NL Query</h2>
+  <pre>POST   /api/v1/nl-query               { query: string }
+                                       -> { answer, agent, confidence, domain }</pre>
+
+  <h2>B.12 Settings</h2>
+  <pre>GET    /api/v1/config/fleet_limits     Get fleet limits
+PUT    /api/v1/config/fleet_limits     Update fleet limits
+GET    /api/v1/org/api-keys            List API keys
+POST   /api/v1/org/api-keys            Create API key
+DELETE /api/v1/org/api-keys/:id        Revoke API key</pre>
+</div>
+
+<!-- ================================================================
+     APPENDIX C — COMPLETE AGENT CATALOG
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix C: Complete Agent Catalog</h1>
+
+  <p>AgenticOrg ships with 50+ pre-built agents spanning all six business domains. Each agent operates under a dedicated SOP, uses domain-specific prompt templates, and integrates with relevant connectors.</p>
+
+  <h2>C.1 Finance Agents</h2>
+  <table>
+    <tr><th>Agent Name</th><th>Type</th><th>Description</th><th>Key Tools</th><th>HITL Triggers</th></tr>
+    <tr><td>AP Processor</td><td>ap_processor</td><td>Extracts invoice data using OCR, validates against PO, routes for approval based on amount thresholds</td><td>Invoice OCR, PO Matcher, Tally Sync</td><td>Amount &gt; INR 5L, vendor not on approved list</td></tr>
+    <tr><td>AR Collector</td><td>ar_collector</td><td>Sends payment reminders, tracks collection promises, escalates overdue receivables</td><td>Email Sender, Payment Tracker, Aging Analysis</td><td>Write-off &gt; INR 1L, legal notice</td></tr>
+    <tr><td>GST Filing Agent</td><td>gst_filer</td><td>Computes GST liability, prepares GSTR-1/3B/9, files via GSTN API with DSC</td><td>GSTN API, ITC Matcher, DSC Signer</td><td>Mismatch in 2A reconciliation, filing amount deviation &gt;10%</td></tr>
+    <tr><td>TDS Compliance Agent</td><td>tds_agent</td><td>Auto-generates Form 26Q/24Q, issues Form 16A, reconciles with 26AS</td><td>TDS Calculator, Form Generator, 26AS Fetcher</td><td>TDS default notice, section mismatch</td></tr>
+    <tr><td>Bank Reconciliation Agent</td><td>bank_recon</td><td>Matches bank statement entries with ledger transactions, flags stale items</td><td>AA Bank Feed, Tally Ledger, Auto-Matcher</td><td>Unmatched items &gt; 7 days, large discrepancy</td></tr>
+    <tr><td>Month-End Close Agent</td><td>month_close</td><td>Orchestrates 7-step close: accruals, reconciliations, adjustments, reporting</td><td>Journal Entry, Trial Balance, P&amp;L Generator</td><td>Adjustment &gt; INR 10L, CFO sign-off required</td></tr>
+    <tr><td>Treasury Agent</td><td>treasury</td><td>Monitors cash positions across bank accounts, optimizes FD placement, tracks maturity</td><td>Bank Balance Checker, FD Manager, Cash Flow Forecast</td><td>Liquidity below threshold, FD break request</td></tr>
+    <tr><td>Expense Manager</td><td>expense_mgr</td><td>Processes expense reports, validates against policy, routes multi-level approval</td><td>Receipt OCR, Policy Validator, Approval Router</td><td>Expense exceeds policy limit, missing receipt</td></tr>
+    <tr><td>Budget Analyst</td><td>budget_analyst</td><td>Tracks budget vs. actuals, generates variance analysis, forecasts spending</td><td>Budget Tracker, Variance Calculator, Forecast Engine</td><td>Variance &gt; 15%, budget reallocation needed</td></tr>
+    <tr><td>Invoice Generator</td><td>invoice_gen</td><td>Creates and sends invoices based on delivery confirmations and contracts</td><td>Invoice Template, Email Sender, PDF Generator</td><td>First invoice to new customer, credit note</td></tr>
+  </table>
+
+  <h2>C.2 HR Agents</h2>
+  <table>
+    <tr><th>Agent Name</th><th>Type</th><th>Description</th><th>Key Tools</th><th>HITL Triggers</th></tr>
+    <tr><td>Payroll Agent</td><td>payroll</td><td>Calculates salaries, deductions (PF/ESI/PT/TDS), generates payslips</td><td>Salary Calculator, Payslip Generator, Bank Transfer</td><td>Salary change &gt; 20%, new tax regime election</td></tr>
+    <tr><td>Talent Screener</td><td>talent_screener</td><td>Parses resumes, scores candidates against JD requirements, shortlists</td><td>Resume Parser, Score Engine, ATS Sync</td><td>Candidate score borderline, executive hire</td></tr>
+    <tr><td>Onboarding Agent</td><td>onboarding</td><td>Provisions accounts, assigns equipment, schedules orientation</td><td>Account Provisioner, Asset Assigner, Calendar Manager</td><td>Executive onboarding, special access request</td></tr>
+    <tr><td>Leave Manager</td><td>leave_mgr</td><td>Validates leave balance, checks team coverage, routes approval</td><td>Leave Balance Checker, Coverage Analyzer, Approval Router</td><td>Leave during critical period, negative balance</td></tr>
+    <tr><td>PF/ESI Agent</td><td>pf_esi</td><td>Prepares and files EPFO ECR, ESI half-yearly returns</td><td>ECR Generator, EPFO Portal, ESI Portal</td><td>Late filing, contribution mismatch</td></tr>
+    <tr><td>Performance Review Agent</td><td>perf_review</td><td>Initiates review cycles, collects self/manager ratings, generates reports</td><td>Survey Builder, Rating Aggregator, Report Generator</td><td>Rating dispute, calibration needed</td></tr>
+    <tr><td>Exit Manager</td><td>exit_mgr</td><td>Processes resignations, triggers offboarding tasks, calculates F&amp;F</td><td>Exit Checklist, F&amp;F Calculator, Account Deprovisioner</td><td>Senior leader exit, knowledge transfer pending</td></tr>
+    <tr><td>Attendance Tracker</td><td>attendance</td><td>Monitors check-in/check-out, flags anomalies, generates reports</td><td>Biometric Sync, Anomaly Detector, Compliance Reporter</td><td>Persistent absenteeism, overtime &gt; threshold</td></tr>
+  </table>
+
+  <h2>C.3 Marketing Agents</h2>
+  <table>
+    <tr><th>Agent Name</th><th>Type</th><th>Description</th><th>Key Tools</th><th>HITL Triggers</th></tr>
+    <tr><td>Lead Scorer</td><td>lead_scorer</td><td>Evaluates leads using firmographic, behavioral, and engagement signals</td><td>Data Enrichment, Score Model, CRM Sync</td><td>High-value enterprise lead, conflicting signals</td></tr>
+    <tr><td>Campaign Agent</td><td>campaign_mgr</td><td>Coordinates campaign setup across Google Ads, Meta, LinkedIn</td><td>Ad Creator, Budget Allocator, Performance Tracker</td><td>Budget &gt; INR 5L, campaign with legal sensitivity</td></tr>
+    <tr><td>Content Agent</td><td>content_writer</td><td>Drafts blog posts, social content, email copy based on content calendar</td><td>Content Generator, SEO Optimizer, Image Selector</td><td>All content before publishing</td></tr>
+    <tr><td>Email Drip Agent</td><td>email_drip</td><td>Manages sequenced email campaigns with branching based on engagement</td><td>Email Sender, Engagement Tracker, A/B Tester</td><td>Campaign to &gt; 10K recipients, new sequence</td></tr>
+    <tr><td>SEO Agent</td><td>seo</td><td>Analyzes keyword opportunities, optimizes on-page SEO, monitors rankings</td><td>Keyword Analyzer, Page Auditor, Rank Tracker</td><td>Major site structure change</td></tr>
+    <tr><td>Social Media Agent</td><td>social_media</td><td>Schedules and publishes posts across Twitter, LinkedIn, Instagram</td><td>Post Scheduler, Engagement Monitor, Analytics Reporter</td><td>Crisis-related content, political topics</td></tr>
+    <tr><td>ABM Agent</td><td>abm</td><td>Manages account-based campaigns, tracks intent signals, personalizes outreach</td><td>Intent Scorer, Account Matcher, Personalization Engine</td><td>Strategic account engagement, competitor mention</td></tr>
+    <tr><td>Push Notification Agent</td><td>push_notif</td><td>Sends targeted push notifications based on user behavior segments</td><td>Segment Builder, Push Sender, Click Tracker</td><td>Push to all users, sensitive content</td></tr>
+  </table>
+
+  <h2>C.4 Operations Agents</h2>
+  <table>
+    <tr><th>Agent Name</th><th>Type</th><th>Description</th><th>Key Tools</th><th>HITL Triggers</th></tr>
+    <tr><td>Incident Agent</td><td>incident_mgr</td><td>Detects, categorizes, and routes IT incidents based on severity</td><td>Alert Detector, Severity Classifier, PagerDuty Sync</td><td>P1 incident, infrastructure-wide impact</td></tr>
+    <tr><td>Ticket Triage Agent</td><td>ticket_triage</td><td>Classifies support tickets by urgency/topic, routes to correct team</td><td>NLP Classifier, Priority Assigner, Agent Router</td><td>VIP customer ticket, escalation request</td></tr>
+    <tr><td>Vendor Manager</td><td>vendor_mgr</td><td>Tracks vendor contracts, monitors SLA compliance, manages renewals</td><td>Contract Tracker, SLA Monitor, Renewal Notifier</td><td>Contract value &gt; INR 50L, vendor SLA breach</td></tr>
+    <tr><td>IT Asset Agent</td><td>it_asset</td><td>Provisions/deprovisions laptops, licenses, and cloud accounts</td><td>Asset Inventory, License Manager, Provisioner</td><td>Bulk provisioning, executive equipment request</td></tr>
+    <tr><td>Change Manager</td><td>change_mgr</td><td>Manages IT change requests through approval and implementation</td><td>Change Tracker, Risk Assessor, Approval Router</td><td>Emergency change, production deployment</td></tr>
+    <tr><td>Report Generator</td><td>report_gen</td><td>Aggregates data and produces formatted reports on schedule</td><td>Data Aggregator, Template Engine, PDF/Excel Exporter</td><td>First report for new report type</td></tr>
+    <tr><td>Compliance Auditor</td><td>compliance_audit</td><td>Runs automated compliance checks, gathers evidence, flags exceptions</td><td>Control Checker, Evidence Collector, Exception Logger</td><td>Critical control failure, new regulation</td></tr>
+    <tr><td>Facility Manager</td><td>facility_mgr</td><td>Manages maintenance schedules, tracks assets, handles travel requests</td><td>Maintenance Scheduler, Asset Tracker, Travel Booker</td><td>Emergency repair, high-value asset disposal</td></tr>
+  </table>
+
+  <h2>C.5 Back Office &amp; Communications Agents</h2>
+  <table>
+    <tr><th>Agent Name</th><th>Type</th><th>Description</th><th>Key Tools</th><th>HITL Triggers</th></tr>
+    <tr><td>Contract Review Agent</td><td>contract_review</td><td>Analyzes contract terms, flags risks, suggests modifications</td><td>NLP Analyzer, Risk Flagger, Comparison Engine</td><td>All contract reviews before signing</td></tr>
+    <tr><td>Email Agent</td><td>email</td><td>Processes inbound emails, routes to appropriate department/agent</td><td>Email Parser, Intent Classifier, Router</td><td>Legal notices, customer complaints</td></tr>
+    <tr><td>Slack Bot Agent</td><td>slack_bot</td><td>Responds to Slack queries, provides quick answers from knowledge base</td><td>Slack API, Knowledge Search, Response Generator</td><td>HR policy questions, escalation requests</td></tr>
+    <tr><td>WhatsApp Agent</td><td>whatsapp</td><td>Handles customer inquiries via WhatsApp Business API</td><td>WhatsApp API, Template Manager, Response Generator</td><td>Complaint, refund request</td></tr>
+    <tr><td>Internal Comms Agent</td><td>internal_comms</td><td>Drafts and distributes internal announcements, newsletters</td><td>Content Drafter, Distribution Manager, Analytics</td><td>Company-wide announcements, policy changes</td></tr>
+    <tr><td>RPA Agent</td><td>rpa</td><td>Executes browser-based automations for legacy systems and portals</td><td>Browser Automator, Form Filler, Screenshot Validator</td><td>Government portal submission, first-time automation</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     APPENDIX D — COMPLETE WORKFLOW EXAMPLES
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix D: Workflow Examples in Detail</h1>
+
+  <h2>D.1 Bank Reconciliation Daily Workflow</h2>
+  <p>File: <code>workflows/examples/bank_recon_daily.yaml</code></p>
+  <table>
+    <tr><th>Step</th><th>Agent</th><th>Action</th><th>HITL</th></tr>
+    <tr><td>1. Fetch Bank Statements</td><td>Bank Recon Agent</td><td>Pull latest transactions via Account Aggregator</td><td>No</td></tr>
+    <tr><td>2. Fetch Ledger Entries</td><td>Bank Recon Agent</td><td>Extract matching period entries from Tally</td><td>No</td></tr>
+    <tr><td>3. Auto-Match</td><td>Bank Recon Agent</td><td>Match transactions by amount, date, and reference. Target: 99.7% auto-match rate</td><td>No</td></tr>
+    <tr><td>4. Flag Exceptions</td><td>Bank Recon Agent</td><td>Identify unmatched items, stale cheques, reversals</td><td>Yes (if unmatched &gt; 5%)</td></tr>
+    <tr><td>5. Generate Report</td><td>Report Generator</td><td>Create reconciliation statement with matched/unmatched summary</td><td>No</td></tr>
+    <tr><td>6. Notify Stakeholders</td><td>Email Agent</td><td>Send reconciliation report to CFO and accounting team</td><td>No</td></tr>
+  </table>
+
+  <h2>D.2 GSTR Filing Monthly Workflow</h2>
+  <p>File: <code>workflows/examples/gstr_filing_monthly.yaml</code></p>
+  <table>
+    <tr><th>Step</th><th>Agent</th><th>Action</th><th>HITL</th></tr>
+    <tr><td>1. Collect Sales Data</td><td>GST Filing Agent</td><td>Pull all sales invoices from Tally for the filing period</td><td>No</td></tr>
+    <tr><td>2. Collect Purchase Data</td><td>GST Filing Agent</td><td>Pull all purchase invoices and expenses</td><td>No</td></tr>
+    <tr><td>3. Compute Liability</td><td>GST Filing Agent</td><td>Calculate CGST, SGST, IGST, and eligible ITC</td><td>No</td></tr>
+    <tr><td>4. Reconcile 2A</td><td>GST Filing Agent</td><td>Compare computed ITC with GSTR-2A data from GSTN</td><td>Yes (if mismatch &gt; INR 10K)</td></tr>
+    <tr><td>5. Prepare GSTR-1</td><td>GST Filing Agent</td><td>Generate GSTR-1 JSON in GSTN-compliant format</td><td>No</td></tr>
+    <tr><td>6. Prepare GSTR-3B</td><td>GST Filing Agent</td><td>Generate GSTR-3B summary return</td><td>No</td></tr>
+    <tr><td>7. Partner Review</td><td>N/A (Human)</td><td>CA partner reviews computed returns against source data</td><td>Yes (mandatory)</td></tr>
+    <tr><td>8. DSC Signing &amp; Filing</td><td>GST Filing Agent</td><td>Sign with DSC and file via GSTN API</td><td>No</td></tr>
+    <tr><td>9. Confirmation</td><td>Email Agent</td><td>Send filing acknowledgment with ARN to client and partner</td><td>No</td></tr>
+  </table>
+
+  <h2>D.3 TDS Quarterly Filing Workflow</h2>
+  <p>File: <code>workflows/examples/tds_quarterly_filing.yaml</code></p>
+  <table>
+    <tr><th>Step</th><th>Agent</th><th>Action</th><th>HITL</th></tr>
+    <tr><td>1. Collect TDS Transactions</td><td>TDS Compliance Agent</td><td>Extract all TDS-applicable transactions for the quarter</td><td>No</td></tr>
+    <tr><td>2. Validate PAN/TAN</td><td>TDS Compliance Agent</td><td>Verify deductee PAN against TRACES database</td><td>No</td></tr>
+    <tr><td>3. Compute TDS</td><td>TDS Compliance Agent</td><td>Calculate TDS amounts per section (192, 194A, 194C, etc.)</td><td>No</td></tr>
+    <tr><td>4. Generate Form 26Q/24Q</td><td>TDS Compliance Agent</td><td>Prepare quarterly return in prescribed format</td><td>No</td></tr>
+    <tr><td>5. Cross-Verify with 26AS</td><td>TDS Compliance Agent</td><td>Reconcile computed TDS with Form 26AS data</td><td>Yes (if mismatch found)</td></tr>
+    <tr><td>6. Partner Approval</td><td>N/A (Human)</td><td>CA partner reviews and approves the quarterly return</td><td>Yes (mandatory)</td></tr>
+    <tr><td>7. File Return</td><td>TDS Compliance Agent</td><td>Upload to TRACES and obtain provisional receipt</td><td>No</td></tr>
+    <tr><td>8. Issue Form 16A</td><td>TDS Compliance Agent</td><td>Generate and distribute Form 16A to all deductees</td><td>No</td></tr>
+  </table>
+
+  <h2>D.4 Employee Onboarding Workflow</h2>
+  <table>
+    <tr><th>Step</th><th>Agent</th><th>Action</th><th>HITL</th></tr>
+    <tr><td>1. Create Employee Record</td><td>Onboarding Agent</td><td>Create employee profile in HR system with personal and bank details</td><td>No</td></tr>
+    <tr><td>2. Provision IT Accounts</td><td>IT Asset Agent</td><td>Create email, Slack, Jira, and VPN accounts via LDAP/AD</td><td>No</td></tr>
+    <tr><td>3. Assign Equipment</td><td>IT Asset Agent</td><td>Assign laptop, monitor, and peripherals from inventory</td><td>Yes (executive-level hire)</td></tr>
+    <tr><td>4. Assign Software Licenses</td><td>IT Asset Agent</td><td>Provision required SaaS licenses (Office 365, IDE, etc.)</td><td>No</td></tr>
+    <tr><td>5. Schedule Orientation</td><td>Onboarding Agent</td><td>Book calendar slots for HR orientation, manager introduction, team lunch</td><td>No</td></tr>
+    <tr><td>6. Send Welcome Kit</td><td>Email Agent</td><td>Send welcome email with credentials, handbook, and first-week schedule</td><td>No</td></tr>
+    <tr><td>7. Notify Stakeholders</td><td>Slack Bot Agent</td><td>Post announcement in team Slack channel</td><td>No</td></tr>
+  </table>
+
+  <h2>D.5 Campaign Launch Workflow</h2>
+  <table>
+    <tr><th>Step</th><th>Agent</th><th>Action</th><th>HITL</th></tr>
+    <tr><td>1. Prepare Creative Assets</td><td>Content Agent</td><td>Generate ad copy, images, and landing page content</td><td>Yes (creative review)</td></tr>
+    <tr><td>2. Define Target Audience</td><td>ABM Agent</td><td>Build audience segments based on ICP and intent data</td><td>No</td></tr>
+    <tr><td>3. Configure Channels</td><td>Campaign Agent</td><td>Set up campaigns on Google Ads, Meta Ads, LinkedIn</td><td>No</td></tr>
+    <tr><td>4. Set Budgets &amp; Bids</td><td>Campaign Agent</td><td>Allocate budget across channels, set CPC/CPM bids</td><td>Yes (budget &gt; INR 1L)</td></tr>
+    <tr><td>5. Launch</td><td>Campaign Agent</td><td>Activate campaigns across all channels simultaneously</td><td>No</td></tr>
+    <tr><td>6. Monitor &amp; Optimize</td><td>Campaign Agent</td><td>Track performance hourly, auto-adjust bids, pause underperformers</td><td>Yes (campaign pause)</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     APPENDIX E — DEPLOYMENT GUIDE
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix E: Deployment Guide</h1>
+
+  <h2>E.1 Docker Compose (Single Server)</h2>
+  <pre>git clone https://github.com/mishrasanjeev/agentic-org.git
+cd agentic-org
+cp .env.example .env
+# Edit .env with your database, Redis, and LLM API keys
+docker compose up -d</pre>
+  <p>This starts all services: API server, UI, PostgreSQL, Redis, and the agent runtime. Default ports: API on 8000, UI on 3000.</p>
+
+  <h2>E.2 Environment Variables</h2>
+  <table>
+    <tr><th>Variable</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>DATABASE_URL</code></td><td>PostgreSQL connection string</td><td><code>postgresql://user:pass@localhost:5432/agenticorg</code></td></tr>
+    <tr><td><code>REDIS_URL</code></td><td>Redis connection string</td><td><code>redis://localhost:6379/0</code></td></tr>
+    <tr><td><code>JWT_SECRET</code></td><td>Secret key for JWT token signing</td><td>Random 64-character string</td></tr>
+    <tr><td><code>OPENAI_API_KEY</code></td><td>OpenAI API key for GPT-4o agents</td><td><code>sk-...</code></td></tr>
+    <tr><td><code>GOOGLE_AI_API_KEY</code></td><td>Google AI API key for Gemini agents</td><td><code>AIza...</code></td></tr>
+    <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Anthropic API key for Claude agents</td><td><code>sk-ant-...</code></td></tr>
+    <tr><td><code>STRIPE_SECRET_KEY</code></td><td>Stripe API key for billing</td><td><code>sk_live_...</code></td></tr>
+    <tr><td><code>GSTN_API_KEY</code></td><td>GSTN/GSP API key for GST filing</td><td>Obtained from Adaequare GSP</td></tr>
+    <tr><td><code>TWILIO_ACCOUNT_SID</code></td><td>Twilio account SID for voice/SMS</td><td><code>AC...</code></td></tr>
+    <tr><td><code>TWILIO_AUTH_TOKEN</code></td><td>Twilio auth token</td><td>From Twilio console</td></tr>
+    <tr><td><code>SENDGRID_API_KEY</code></td><td>SendGrid API key for email delivery</td><td><code>SG...</code></td></tr>
+    <tr><td><code>COMPOSIO_API_KEY</code></td><td>Composio key for marketplace integrations</td><td>From Composio dashboard</td></tr>
+  </table>
+
+  <h2>E.3 Kubernetes (Helm)</h2>
+  <pre>helm repo add agenticorg https://charts.agenticorg.ai
+helm install agenticorg agenticorg/agenticorg \
+  --namespace agenticorg \
+  --create-namespace \
+  --values values.yaml</pre>
+  <p>The Helm chart includes horizontal pod autoscaling, persistent volumes, and service mesh integration. Customize <code>values.yaml</code> for your cluster.</p>
+
+  <h2>E.4 Air-Gapped Deployment</h2>
+  <p>For environments without internet access:</p>
+  <ol>
+    <li>Download the air-gapped bundle from the release page</li>
+    <li>Transfer the bundle to the target server</li>
+    <li>Load Docker images: <code>docker load -i agenticorg-airgap.tar.gz</code></li>
+    <li>Configure local LLM endpoints (Ollama, vLLM, or LMStudio)</li>
+    <li>Start with <code>docker compose -f docker-compose.airgap.yml up -d</code></li>
+  </ol>
+
+  <h2>E.5 GCP Production Architecture</h2>
+  <table>
+    <tr><th>Component</th><th>GCP Service</th><th>Configuration</th></tr>
+    <tr><td>API Server</td><td>Cloud Run</td><td>2 vCPU, 4 GB RAM, auto-scaling 1-10 instances</td></tr>
+    <tr><td>Database</td><td>Cloud SQL (PostgreSQL 15)</td><td>db-n1-standard-4, 100 GB SSD, automatic backups</td></tr>
+    <tr><td>Cache</td><td>Memorystore (Redis)</td><td>Standard tier, 1 GB, HA enabled</td></tr>
+    <tr><td>UI</td><td>Cloud CDN + Cloud Storage</td><td>Static hosting with global CDN distribution</td></tr>
+    <tr><td>Agent Runtime</td><td>GKE Autopilot</td><td>Spot instances for cost optimization</td></tr>
+    <tr><td>Monitoring</td><td>Cloud Monitoring + Logging</td><td>Custom dashboards, alert policies</td></tr>
+    <tr><td>Secrets</td><td>Secret Manager</td><td>Encrypted storage for all API keys and credentials</td></tr>
+    <tr><td>Load Balancer</td><td>Cloud Load Balancing</td><td>Global HTTPS LB with SSL certificates</td></tr>
+  </table>
+
+  <h2>E.6 Health Checks</h2>
+  <pre>GET /api/v1/health          -> { "status": "ok", "version": "5.0.0" }
+GET /api/v1/health/detailed -> { "db": "ok", "redis": "ok", "agents": 35 }</pre>
+
+  <h2>E.7 Backup &amp; Recovery</h2>
+  <ul>
+    <li><strong>Database:</strong> Automated daily backups with 30-day retention. Point-in-time recovery enabled.</li>
+    <li><strong>Knowledge Base:</strong> Document files stored in GCS with versioning enabled.</li>
+    <li><strong>Configuration:</strong> All agent configs, prompt templates, and workflows exportable via API.</li>
+    <li><strong>Disaster Recovery:</strong> Cross-region replication available on Enterprise plan.</li>
+  </ul>
+</div>
+
+<!-- ================================================================
+     APPENDIX F — TROUBLESHOOTING
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix F: Troubleshooting</h1>
+
+  <h2>F.1 Common Issues</h2>
+  <table>
+    <tr><th style="width:30%;">Issue</th><th>Cause</th><th>Solution</th></tr>
+    <tr><td>Login fails with "Invalid credentials"</td><td>Incorrect email or password</td><td>Use the "Forgot Password" flow at <code>/forgot-password</code>. Check that you are using the correct organization's login URL.</td></tr>
+    <tr><td>"Data may be stale" badge appears</td><td>API response is older than the freshness threshold</td><td>The data will refresh automatically. Click refresh or navigate away and back. Check connector health if persistent.</td></tr>
+    <tr><td>Agent stuck in "Shadow" mode</td><td>Quality gates not yet passed</td><td>Check the agent's Shadow tab for gate scores. Address failing gates (accuracy, compliance, cost, latency, safety). Then request human review for the final gate.</td></tr>
+    <tr><td>Connector shows "Down" status</td><td>Authentication expired or service unreachable</td><td>Re-authenticate the connector (re-do OAuth flow or update API key). Check the external service status page.</td></tr>
+    <tr><td>Workflow run fails at a step</td><td>Missing connector, tool error, or data issue</td><td>Click the failed run to see step-level error details. Check the agent's access scopes and connector health. Retry the run after fixing the issue.</td></tr>
+    <tr><td>NL Query returns "No data available"</td><td>No relevant data in the system for the query</td><td>Ensure connectors are configured and agents have processed data. Upload documents to the Knowledge Base for domain-specific queries.</td></tr>
+    <tr><td>Invoice processing is slow</td><td>LLM API latency or large document</td><td>Check the agent's Cost tab for latency metrics. Consider switching to a faster LLM (Gemini Flash) for routine invoices.</td></tr>
+    <tr><td>CSV import fails</td><td>Invalid format or missing required columns</td><td>Download the template CSV and ensure all required columns are present. File must be .csv format, under 5 MB, and non-empty.</td></tr>
+    <tr><td>Approval items not appearing</td><td>Priority filter applied or items expired</td><td>Reset the priority filter to "All". Check the "Decided" tab for expired items.</td></tr>
+    <tr><td>Voice agent call quality is poor</td><td>Network latency or STT engine issue</td><td>Test connection quality from the Voice Setup page. Switch to a lower-latency STT engine. Ensure stable internet connection.</td></tr>
+  </table>
+
+  <h2>F.2 Log Access</h2>
+  <p>Server logs are available via:</p>
+  <ul>
+    <li><strong>Docker:</strong> <code>docker compose logs -f api</code></li>
+    <li><strong>Kubernetes:</strong> <code>kubectl logs -f deployment/agenticorg-api -n agenticorg</code></li>
+    <li><strong>GCP:</strong> Cloud Logging with filter <code>resource.type="cloud_run_revision"</code></li>
+  </ul>
+
+  <h2>F.3 Performance Tuning</h2>
+  <table>
+    <tr><th>Area</th><th>Recommendation</th></tr>
+    <tr><td>Database</td><td>Ensure pgvector extension is installed for Knowledge Base. Run <code>VACUUM ANALYZE</code> weekly. Increase shared_buffers for large deployments.</td></tr>
+    <tr><td>Redis</td><td>Monitor memory usage. Increase maxmemory if eviction is occurring. Enable persistence for critical caches.</td></tr>
+    <tr><td>API Server</td><td>Scale horizontally (increase Cloud Run max instances). Use connection pooling for database connections.</td></tr>
+    <tr><td>LLM Calls</td><td>Use Gemini Flash for routine tasks, reserve GPT-4o/Claude for complex reasoning. Enable response caching where appropriate.</td></tr>
+    <tr><td>Knowledge Base</td><td>Optimize chunk sizes (512-1024 tokens). Remove duplicate or outdated documents. Re-index after major updates.</td></tr>
+  </table>
+
+  <h2>F.4 Contacting Support</h2>
+  <p>When contacting support, please include:</p>
+  <ul>
+    <li>Your organization ID (visible in Settings)</li>
+    <li>The page/feature where the issue occurs</li>
+    <li>Steps to reproduce</li>
+    <li>Browser console errors (F12 &rarr; Console tab)</li>
+    <li>API response errors (F12 &rarr; Network tab)</li>
+    <li>Screenshots or screen recordings</li>
+  </ul>
+</div>
+
+<!-- ================================================================
+     APPENDIX G — DATA CLASSIFICATION & PRIVACY
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix G: Data Classification &amp; Privacy</h1>
+
+  <h2>G.1 Data Classification Levels</h2>
+  <table>
+    <tr><th>Level</th><th>Description</th><th>Examples</th><th>Controls</th></tr>
+    <tr><td><span class="badge badge-red">Critical</span></td><td>Data whose exposure would cause severe legal or financial damage</td><td>DSC private keys, banking credentials, Aadhaar numbers</td><td>Encrypted at rest (AES-256), PII masking, vault storage, access restricted to admin + credential manager</td></tr>
+    <tr><td><span class="badge badge-amber">Confidential</span></td><td>Business-sensitive data requiring restricted access</td><td>Financial statements, salary data, customer contracts, tax filings</td><td>Encrypted at rest, RLS isolation, role-based access, audit logging</td></tr>
+    <tr><td><span class="badge badge-blue">Internal</span></td><td>General business data not intended for public sharing</td><td>Agent configurations, workflow definitions, internal reports</td><td>RLS isolation, role-based access, audit logging</td></tr>
+    <tr><td><span class="badge badge-green">Public</span></td><td>Information that can be freely shared</td><td>Published blog posts, marketing materials, public documentation</td><td>No restrictions beyond standard access controls</td></tr>
+  </table>
+
+  <h2>G.2 DPDPA Compliance Checklist</h2>
+  <table>
+    <tr><th>Requirement</th><th>Implementation</th><th>Status</th></tr>
+    <tr><td>Lawful Purpose</td><td>All data processing tied to explicit business purposes defined in agent SOPs</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Purpose Limitation</td><td>Agents can only access data within their Grantex scope</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Data Minimization</td><td>Agents request only necessary data fields for each task</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Storage Limitation</td><td>Configurable retention periods; default 7 years for audit, 1 year for operational data</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Data Accuracy</td><td>Real-time sync with source systems; reconciliation agents verify data integrity</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Security Safeguards</td><td>Encryption, RLS, PII masking, HMAC audit, vault for credentials</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Right to Erasure</td><td>Admin can trigger data deletion for specific data subjects via Settings</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Breach Notification</td><td>Automated breach detection with configurable notification workflow (72-hour window)</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Cross-Border Transfer</td><td>Data region selection (IN/US/EU) ensures data stays within selected geography</td><td><span class="badge badge-green">Compliant</span></td></tr>
+    <tr><td>Data Protection Officer</td><td>Enterprise customers can designate a DPO with dedicated audit access</td><td><span class="badge badge-green">Compliant</span></td></tr>
+  </table>
+
+  <h2>G.3 Incident Response Procedure</h2>
+  <ol class="step-list">
+    <li><strong>Detection:</strong> Automated monitoring detects anomalous access patterns, failed auth attempts, or data exfiltration signals.</li>
+    <li><strong>Classification:</strong> Incident is classified by severity: P1 (critical data breach), P2 (potential exposure), P3 (suspicious activity), P4 (policy violation).</li>
+    <li><strong>Containment:</strong> Kill Switch activated for affected agents. Compromised API keys revoked. Affected tenant isolated.</li>
+    <li><strong>Investigation:</strong> HMAC-verified audit trail analyzed. Scope enforcement logs reviewed. Timeline reconstructed.</li>
+    <li><strong>Notification:</strong> Affected customers notified within 72 hours per DPDPA requirements. Regulatory bodies informed if required.</li>
+    <li><strong>Remediation:</strong> Root cause fixed, patches deployed, security controls strengthened, post-mortem documented.</li>
+  </ol>
+</div>
+
+<!-- ================================================================
+     APPENDIX H — ONBOARDING CHECKLIST
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix H: Onboarding Checklist</h1>
+
+  <p>Use this checklist to ensure a complete and successful deployment of AgenticOrg at your organization.</p>
+
+  <h2>H.1 Pre-Deployment Checklist</h2>
+  <table>
+    <tr><th style="width:5%;">#</th><th>Task</th><th>Owner</th><th>Status</th></tr>
+    <tr><td>1</td><td>Obtain LLM API keys (Google AI for Gemini, OpenAI for GPT-4o, or Anthropic for Claude)</td><td>IT Admin</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>2</td><td>Provision PostgreSQL database (v15+) with pgvector extension</td><td>DBA</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>3</td><td>Provision Redis instance for caching</td><td>DBA</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>4</td><td>Obtain Stripe API keys for billing (if self-hosted)</td><td>Finance</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>5</td><td>Prepare SSL certificate for custom domain</td><td>IT Admin</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>6</td><td>Configure DNS records for the platform domain</td><td>IT Admin</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>7</td><td>Obtain GSTN API credentials from GSP (Adaequare) for GST filing</td><td>Tax Team</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>8</td><td>Collect DSC details for authorized signatory</td><td>Compliance</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>9</td><td>Document current SOPs for each department to configure agents</td><td>Dept. Heads</td><td><span class="badge badge-gray">Pending</span></td></tr>
+    <tr><td>10</td><td>Identify HITL decision gates and approval thresholds</td><td>Management</td><td><span class="badge badge-gray">Pending</span></td></tr>
+  </table>
+
+  <h2>H.2 Day 1 — Setup</h2>
+  <table>
+    <tr><th style="width:5%;">#</th><th>Task</th><th>Duration</th><th>Notes</th></tr>
+    <tr><td>1</td><td>Deploy AgenticOrg (Docker/K8s/Cloud)</td><td>1 hour</td><td>Follow Appendix E deployment guide</td></tr>
+    <tr><td>2</td><td>Create admin account and organization</td><td>10 min</td><td>First user automatically gets admin role</td></tr>
+    <tr><td>3</td><td>Configure environment variables</td><td>30 min</td><td>Database, Redis, LLM keys, Stripe, etc.</td></tr>
+    <tr><td>4</td><td>Run health check</td><td>5 min</td><td><code>GET /api/v1/health/detailed</code></td></tr>
+    <tr><td>5</td><td>Connect first connector (e.g., Gmail or Slack)</td><td>15 min</td><td>Verify OAuth flow completes successfully</td></tr>
+    <tr><td>6</td><td>Invite team members with appropriate roles</td><td>15 min</td><td>Start with CFO, CHRO, COO for domain coverage</td></tr>
+  </table>
+
+  <h2>H.3 Week 1 — Shadow Mode</h2>
+  <table>
+    <tr><th style="width:5%;">#</th><th>Task</th><th>Duration</th><th>Notes</th></tr>
+    <tr><td>1</td><td>Deploy 3-5 agents in Shadow Mode</td><td>2 hours</td><td>Start with AP Processor, Bank Recon, GST Filing</td></tr>
+    <tr><td>2</td><td>Configure connectors for accounting (Tally, Zoho Books)</td><td>1 hour</td><td>Test connection before proceeding</td></tr>
+    <tr><td>3</td><td>Upload SOP documents to Knowledge Base</td><td>1 hour</td><td>Employee handbook, AP process, tax guides</td></tr>
+    <tr><td>4</td><td>Monitor Shadow Mode output daily</td><td>30 min/day</td><td>Check proposed actions match expected behavior</td></tr>
+    <tr><td>5</td><td>Configure HITL thresholds for each agent</td><td>1 hour</td><td>Set confidence floors and amount thresholds</td></tr>
+    <tr><td>6</td><td>Review agent accuracy metrics</td><td>30 min</td><td>Check Shadow tab quality gate progress</td></tr>
+  </table>
+
+  <h2>H.4 Week 2-4 — Promotion &amp; Expansion</h2>
+  <table>
+    <tr><th style="width:5%;">#</th><th>Task</th><th>Duration</th><th>Notes</th></tr>
+    <tr><td>1</td><td>Promote agents passing all 6 quality gates to Active</td><td>30 min/agent</td><td>Requires human review gate sign-off</td></tr>
+    <tr><td>2</td><td>Deploy additional agents (HR, Marketing, Ops)</td><td>2-4 hours</td><td>Follow same shadow-then-promote pattern</td></tr>
+    <tr><td>3</td><td>Configure workflow automations</td><td>2 hours</td><td>Start with Bank Recon Daily and GST Filing Monthly</td></tr>
+    <tr><td>4</td><td>Set up report schedules</td><td>1 hour</td><td>CFO Daily Briefing, CMO Weekly</td></tr>
+    <tr><td>5</td><td>Train team on approval queue workflow</td><td>1 hour</td><td>Ensure all approvers understand the HITL process</td></tr>
+    <tr><td>6</td><td>Configure budget limits per agent</td><td>30 min</td><td>Prevent unexpected LLM cost overruns</td></tr>
+    <tr><td>7</td><td>Run first compliance audit workflow</td><td>2 hours</td><td>Verify audit trail completeness</td></tr>
+  </table>
+
+  <h2>H.5 Ongoing Operations</h2>
+  <table>
+    <tr><th>Frequency</th><th>Task</th><th>Owner</th></tr>
+    <tr><td>Daily</td><td>Review approval queue; acknowledge escalations</td><td>Domain leads</td></tr>
+    <tr><td>Weekly</td><td>Check agent performance metrics and error rates</td><td>Admin</td></tr>
+    <tr><td>Weekly</td><td>Review Observatory for anomalous agent behavior</td><td>Admin</td></tr>
+    <tr><td>Monthly</td><td>Review billing usage and optimize LLM model selection</td><td>Admin</td></tr>
+    <tr><td>Monthly</td><td>Update Knowledge Base with new documents and policies</td><td>Domain leads</td></tr>
+    <tr><td>Quarterly</td><td>Audit agent scopes and remove unnecessary permissions</td><td>Security</td></tr>
+    <tr><td>Quarterly</td><td>Run compliance audit workflow and review findings</td><td>Auditor</td></tr>
+    <tr><td>Annually</td><td>Rotate API keys and review all connector credentials</td><td>IT Admin</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     APPENDIX I — BEST PRACTICES
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix I: Best Practices</h1>
+
+  <h2>I.1 Agent Configuration Best Practices</h2>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <h4>&#9656; Start with Shadow Mode</h4>
+      <p>Never deploy an agent directly to Active mode. Always start in Shadow to observe proposed actions and validate against expected outcomes for at least one full business cycle (e.g., one month for monthly processes).</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Set Appropriate Confidence Floors</h4>
+      <p>Higher floors (0.90+) are safer but generate more HITL escalations. Lower floors (0.80) give more autonomy but increase risk. Start high and lower gradually as trust builds.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Use Domain-Specific LLMs</h4>
+      <p>Assign Gemini Flash for high-volume routine tasks (ticket triage, email classification). Use GPT-4o or Claude for complex reasoning tasks (contract review, financial analysis). This optimizes cost without sacrificing quality.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Implement Least-Privilege Scopes</h4>
+      <p>Grant agents only the Grantex scopes they need. An AP Processor should not have <code>hr:payroll:write</code> access. Review and prune scopes quarterly.</p>
+    </div>
+  </div>
+
+  <h2>I.2 Workflow Best Practices</h2>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <h4>&#9656; Add HITL at Critical Junctures</h4>
+      <p>Place human checkpoints before irreversible actions: filing tax returns, sending bulk emails, making payments, or modifying employee records.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Use Schedule Triggers Wisely</h4>
+      <p>Align scheduled workflows with business rhythms. Run bank reconciliation daily, GST filing monthly, and TDS quarterly. Avoid scheduling all workflows at the same time to prevent resource contention.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Monitor Failed Runs</h4>
+      <p>Set up alerts for workflow failures. Most failures are caused by expired connector credentials, API rate limits, or data format changes. Address root causes promptly.</p>
+    </div>
+    <div class="feature-card">
+      <h4>&#9656; Test with Templates First</h4>
+      <p>Use built-in workflow templates before building custom workflows. Templates encode best practices and include appropriate HITL gates.</p>
+    </div>
+  </div>
+
+  <h2>I.3 Security Best Practices</h2>
+  <ul>
+    <li><strong>Rotate API keys every 90 days.</strong> Use expiry dates when creating keys to enforce automatic rotation.</li>
+    <li><strong>Enable PII masking.</strong> This is on by default; do not disable it unless you have a specific, documented reason.</li>
+    <li><strong>Use strong passwords.</strong> Minimum 12 characters with uppercase, lowercase, numbers, and special characters.</li>
+    <li><strong>Review the audit trail weekly.</strong> Look for unusual access patterns, failed authentication attempts, and scope violations.</li>
+    <li><strong>Limit admin accounts.</strong> Follow the principle of least privilege. Most users should have domain-specific roles (CFO, CHRO, etc.), not admin.</li>
+    <li><strong>Keep connectors updated.</strong> Re-authenticate OAuth connectors before tokens expire. Monitor connector health daily.</li>
+    <li><strong>Back up Knowledge Base regularly.</strong> Export critical documents and agent configurations periodically.</li>
+    <li><strong>Use the Kill Switch judiciously.</strong> It stops ALL agents immediately. Use agent-level pause for targeted interventions.</li>
+  </ul>
+
+  <h2>I.4 CA Firms Best Practices</h2>
+  <ul>
+    <li><strong>Onboard one client at a time.</strong> Complete the full 6-step wizard and verify all connections before onboarding the next client.</li>
+    <li><strong>Set up compliance calendar alerts.</strong> Configure 7-day, 3-day, and 1-day reminders for all filing deadlines.</li>
+    <li><strong>Use partner self-approval wisely.</strong> Enable only for routine filings (monthly GSTR-3B). Require dual approval for annual returns.</li>
+    <li><strong>Store DSC details in the credential vault.</strong> Never share DSC passwords via email or chat.</li>
+    <li><strong>Review client health scores weekly.</strong> Address red-flagged clients (score &lt;50) immediately to prevent compliance lapses.</li>
+    <li><strong>Train article clerks on the approval queue.</strong> They should understand how to review agent-proposed filings before partner sign-off.</li>
+  </ul>
+
+  <h2>I.5 Performance Optimization</h2>
+  <table>
+    <tr><th>Area</th><th>Recommendation</th><th>Expected Impact</th></tr>
+    <tr><td>LLM Costs</td><td>Use Gemini Flash for &gt;70% of agent tasks; reserve premium models for complex reasoning</td><td>40-60% cost reduction</td></tr>
+    <tr><td>Response Time</td><td>Enable Redis caching for frequently queried KPIs; cache NL query results for 5 minutes</td><td>50% faster dashboard loads</td></tr>
+    <tr><td>Knowledge Base</td><td>Keep documents under 50 pages each; split large documents into focused sections</td><td>Better retrieval accuracy</td></tr>
+    <tr><td>Workflow Speed</td><td>Parallelize independent steps; use async patterns for non-blocking operations</td><td>30% faster workflow completion</td></tr>
+    <tr><td>Connector Health</td><td>Set up proactive health checks every 5 minutes; auto-retry on transient failures</td><td>99.5% connector uptime</td></tr>
+  </table>
+</div>
+
+<!-- ================================================================
+     APPENDIX J — INDEX
+     ================================================================ -->
+<div class="page-break">
+  <h1>Appendix J: Index</h1>
+
+  <div style="columns: 3; column-gap: 20px; font-size: 9pt;">
+    <p><strong>A2A Protocol</strong> &mdash; 22.5</p>
+    <p><strong>ABM Dashboard</strong> &mdash; 17</p>
+    <p><strong>Account Aggregator</strong> &mdash; 14.1, 25.1</p>
+    <p><strong>Agent Actions</strong> &mdash; 10.4</p>
+    <p><strong>Agent Catalog</strong> &mdash; Appendix C</p>
+    <p><strong>Agent Creation</strong> &mdash; 10.2</p>
+    <p><strong>Agent Detail Page</strong> &mdash; 10.3</p>
+    <p><strong>Agent Fleet</strong> &mdash; 10.1</p>
+    <p><strong>Agent Org Chart</strong> &mdash; 10.6</p>
+    <p><strong>Air-Gapped Deployment</strong> &mdash; E.4</p>
+    <p><strong>API Keys</strong> &mdash; 20.3, 22.4</p>
+    <p><strong>API Reference</strong> &mdash; Appendix B</p>
+    <p><strong>Approvals</strong> &mdash; 13</p>
+    <p><strong>Audit Trail</strong> &mdash; 21.5</p>
+    <p><strong>Bank Reconciliation</strong> &mdash; D.1</p>
+    <p><strong>Billing</strong> &mdash; 19</p>
+    <p><strong>Budget Enforcement</strong> &mdash; 10.8</p>
+    <p><strong>CA Firms Module</strong> &mdash; 9</p>
+    <p><strong>CBO Dashboard</strong> &mdash; 8</p>
+    <p><strong>CEO Dashboard</strong> &mdash; 3</p>
+    <p><strong>CFO Dashboard</strong> &mdash; 4</p>
+    <p><strong>CHRO Dashboard</strong> &mdash; 5</p>
+    <p><strong>CMO Dashboard</strong> &mdash; 6</p>
+    <p><strong>COO Dashboard</strong> &mdash; 7</p>
+    <p><strong>Company Detail</strong> &mdash; 9.4</p>
+    <p><strong>Company Onboarding</strong> &mdash; 9.3</p>
+    <p><strong>Compliance Calendar</strong> &mdash; 9.7</p>
+    <p><strong>Composio</strong> &mdash; 14.5</p>
+    <p><strong>Connector Health</strong> &mdash; 14.4</p>
+    <p><strong>Connectors</strong> &mdash; 14</p>
+    <p><strong>Credential Vault</strong> &mdash; 9.8</p>
+    <p><strong>CRON Scheduling</strong> &mdash; 12.3</p>
+    <p><strong>CSV Import</strong> &mdash; 10.2</p>
+    <p><strong>Data Classification</strong> &mdash; G.1</p>
+    <p><strong>Demo Accounts</strong> &mdash; 2.2</p>
+    <p><strong>Deployment</strong> &mdash; Appendix E</p>
+    <p><strong>Docker Compose</strong> &mdash; E.1</p>
+    <p><strong>DPDPA</strong> &mdash; 21.8, G.2</p>
+    <p><strong>DSC</strong> &mdash; 9.3, 14.2</p>
+    <p><strong>Email Drip</strong> &mdash; C.3</p>
+    <p><strong>Engagement Tab</strong> &mdash; 5.4</p>
+    <p><strong>eNPS</strong> &mdash; 5.4</p>
+    <p><strong>Environment Variables</strong> &mdash; E.2</p>
+    <p><strong>EPFO</strong> &mdash; 5.5</p>
+    <p><strong>Escalations</strong> &mdash; 3.3, 13.4</p>
+    <p><strong>ESI</strong> &mdash; 5.5</p>
+    <p><strong>Evals</strong> &mdash; A.3</p>
+    <p><strong>FAQ</strong> &mdash; 27</p>
+    <p><strong>Fleet Limits</strong> &mdash; 20.2</p>
+    <p><strong>Getting Started</strong> &mdash; 2</p>
+    <p><strong>Glossary</strong> &mdash; 28</p>
+    <p><strong>Google Cloud</strong> &mdash; E.5</p>
+    <p><strong>Grantex</strong> &mdash; 21.6, 22.6</p>
+    <p><strong>GST Filing</strong> &mdash; 9.6, D.2</p>
+    <p><strong>Health Score</strong> &mdash; 3.1</p>
+    <p><strong>Helm Charts</strong> &mdash; E.3</p>
+    <p><strong>HITL</strong> &mdash; 13</p>
+    <p><strong>HMAC</strong> &mdash; 21.5</p>
+    <p><strong>Incident Response</strong> &mdash; G.3</p>
+    <p><strong>Industry Packs</strong> &mdash; A.1</p>
+    <p><strong>Integration Workflow</strong> &mdash; A.5</p>
+    <p><strong>Integrations Reference</strong> &mdash; 25</p>
+    <p><strong>JWT</strong> &mdash; 21.1</p>
+    <p><strong>Keyboard Shortcuts</strong> &mdash; 26</p>
+    <p><strong>Kill Switch</strong> &mdash; 10.4</p>
+    <p><strong>Knowledge Base</strong> &mdash; 24</p>
+    <p><strong>Lead Scoring</strong> &mdash; 16.3</p>
+    <p><strong>LLM Selection</strong> &mdash; 10.7</p>
+    <p><strong>MCP Server</strong> &mdash; 22.3</p>
+    <p><strong>Microsoft Connectors</strong> &mdash; 14.1</p>
+    <p><strong>Month-End Close</strong> &mdash; C.1</p>
+    <p><strong>Navigation</strong> &mdash; 2.5</p>
+    <p><strong>NL Query Bar</strong> &mdash; 15</p>
+    <p><strong>Observatory</strong> &mdash; A.4</p>
+    <p><strong>Onboarding Checklist</strong> &mdash; Appendix H</p>
+    <p><strong>Onboarding Wizard</strong> &mdash; 2.3</p>
+    <p><strong>P&amp;L Summary</strong> &mdash; 4.4</p>
+    <p><strong>Partner Dashboard</strong> &mdash; 9.9</p>
+    <p><strong>Payroll Tab</strong> &mdash; 5.2</p>
+    <p><strong>Playground</strong> &mdash; 22.9</p>
+    <p><strong>Pricing</strong> &mdash; 19.1</p>
+    <p><strong>PII Masking</strong> &mdash; 21.4</p>
+    <p><strong>Prompt Lock</strong> &mdash; 11.4</p>
+    <p><strong>Prompt Templates</strong> &mdash; 11</p>
+    <p><strong>Python SDK</strong> &mdash; 22.1</p>
+    <p><strong>Quality Gates</strong> &mdash; 10.5</p>
+    <p><strong>RAG</strong> &mdash; 24</p>
+    <p><strong>Recruitment Tab</strong> &mdash; 5.3</p>
+    <p><strong>Reports</strong> &mdash; 18</p>
+    <p><strong>RLS</strong> &mdash; 21.3</p>
+    <p><strong>Roles</strong> &mdash; 21.2</p>
+    <p><strong>RPA Scripts</strong> &mdash; 22.8</p>
+    <p><strong>Sales Pipeline</strong> &mdash; 16</p>
+    <p><strong>Schema Editor</strong> &mdash; 22.7</p>
+    <p><strong>Scope Dashboard</strong> &mdash; 21.6</p>
+    <p><strong>Settings</strong> &mdash; 20</p>
+    <p><strong>Shadow Mode</strong> &mdash; 10.5</p>
+    <p><strong>Sign Up</strong> &mdash; 2.1</p>
+    <p><strong>SLA Monitor</strong> &mdash; A.2</p>
+    <p><strong>SOC-2</strong> &mdash; 21.7</p>
+    <p><strong>SOP Upload</strong> &mdash; 10.2</p>
+    <p><strong>Support</strong> &mdash; 29</p>
+    <p><strong>TDS Filing</strong> &mdash; D.3</p>
+    <p><strong>Troubleshooting</strong> &mdash; Appendix F</p>
+    <p><strong>TypeScript SDK</strong> &mdash; 22.2</p>
+    <p><strong>Version History</strong> &mdash; 30</p>
+    <p><strong>Voice Agents</strong> &mdash; 23</p>
+    <p><strong>Webhooks</strong> &mdash; 20.5</p>
+    <p><strong>Workflow Templates</strong> &mdash; 12.1</p>
+    <p><strong>Workflows</strong> &mdash; 12</p>
+  </div>
+</div>
+
+<!-- ================================================================
+     FOOTER
+     ================================================================ -->
+<div class="doc-footer">
+  <div class="cover-bar"></div>
+  <p><strong>AgenticOrg</strong> &mdash; Complete Product User Guide v5.0</p>
+  <p>&copy; 2025-2026 Edumatica Private Limited. All rights reserved.</p>
+  <p>agenticorg.ai | sanjeev@agenticorg.ai | github.com/mishrasanjeev/agentic-org</p>
+  <p style="margin-top:6px; font-size:7.5pt; color:#94a3b8;">
+    This document was generated for internal use and customer distribution. For the latest version, visit the platform documentation at agenticorg.ai/docs.
+  </p>
+</div>
+
+</body>
+</html>
