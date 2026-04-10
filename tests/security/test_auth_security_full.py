@@ -534,7 +534,7 @@ class TestSECLLM004:
         # The gateway passes params as a dict -- the connector uses
         # parameterized queries. Verify the params were passed through
         # without being interpreted as SQL.
-        connector = gw._connectors["oracle_fusion"]
+        connector = gw._connectors[("_global", "oracle_fusion")]
         call_args = connector.execute_tool.call_args
         actual_params = call_args[0][1]  # second positional arg
         assert actual_params["po_number"] == malicious_params["po_number"]

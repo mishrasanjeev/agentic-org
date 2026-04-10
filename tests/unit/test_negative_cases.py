@@ -241,6 +241,8 @@ class TestOrgInvite:
 
 
 class TestApprovalDecide:
+    _USER_CLAIMS = {"sub": str(uuid.uuid4()), "name": "Test User"}
+
     @pytest.mark.asyncio
     async def test_decide_not_found(self):
         from api.v1.approvals import decide
@@ -253,7 +255,10 @@ class TestApprovalDecide:
         try:
             bg = MagicMock()
             with pytest.raises(HTTPException) as exc:
-                await decide(uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR)
+                await decide(
+                    uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR,
+                    user_claims=self._USER_CLAIMS, user_role="ceo", user_domains=None,
+                )
             assert exc.value.status_code == 404
         finally:
             ctx.stop()
@@ -265,6 +270,7 @@ class TestApprovalDecide:
 
         item = MagicMock()
         item.status = "decided"
+        item.assignee_role = "manager"
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=_make_result(scalar_one=item))
         mock_session.add = MagicMock()
@@ -272,7 +278,10 @@ class TestApprovalDecide:
         try:
             bg = MagicMock()
             with pytest.raises(HTTPException) as exc:
-                await decide(uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR)
+                await decide(
+                    uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR,
+                    user_claims=self._USER_CLAIMS, user_role="ceo", user_domains=None,
+                )
             assert exc.value.status_code == 409
         finally:
             ctx.stop()
@@ -284,6 +293,7 @@ class TestApprovalDecide:
 
         item = MagicMock()
         item.status = "pending"
+        item.assignee_role = "manager"
         item.expires_at = datetime(2020, 1, 1, tzinfo=UTC)
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=_make_result(scalar_one=item))
@@ -292,7 +302,10 @@ class TestApprovalDecide:
         try:
             bg = MagicMock()
             with pytest.raises(HTTPException) as exc:
-                await decide(uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR)
+                await decide(
+                    uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR,
+                    user_claims=self._USER_CLAIMS, user_role="ceo", user_domains=None,
+                )
             assert exc.value.status_code == 410
         finally:
             ctx.stop()

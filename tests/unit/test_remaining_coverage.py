@@ -1333,7 +1333,8 @@ class TestToolGateway:
     def test_register_connector(self, gateway):
         connector = MagicMock()
         gateway.register_connector("sap", connector)
-        assert "sap" in gateway._connectors
+        # Cache key is now (tenant_id, connector_name) tuple — default tenant is "_global"
+        assert ("_global", "sap") in gateway._connectors
 
 
 # =============================================================================

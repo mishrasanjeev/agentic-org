@@ -731,13 +731,29 @@ class TestApprovalsEndpoints:
         from core.schemas.api import HITLDecision
 
         item = _make_hitl(status="pending")
-        mock_session.execute.return_value = _make_result(scalar_one=item)
+        # decide() now runs 2 queries: HITL item, then Agent.domain.
+        # Side effect handles both.
+        agent_domain_result = MagicMock()
+        agent_domain_result.scalar_one_or_none.return_value = "finance"
+        mock_session.execute = AsyncMock(side_effect=[
+            _make_result(scalar_one=item),
+            agent_domain_result,
+        ])
 
         body = HITLDecision(decision="approve", notes="Looks good")
+        user_claims = {"sub": str(uuid.uuid4()), "name": "Test User", "email": "test@example.com"}
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await decide(hitl_id=item.id, body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
+            resp = await decide(
+                hitl_id=item.id,
+                body=body,
+                background_tasks=BackgroundTasks(),
+                tenant_id=tenant_id,
+                user_claims=user_claims,
+                user_role="ceo",  # CEO can decide on manager-level item
+                user_domains=None,
+            )
         finally:
             ctx.stop()
 
@@ -751,13 +767,22 @@ class TestApprovalsEndpoints:
         from api.v1.approvals import decide
         from core.schemas.api import HITLDecision
 
-        mock_session.execute.return_value = _make_result(scalar_one=None)
+        mock_session.execute = AsyncMock(return_value=_make_result(scalar_one=None))
         body = HITLDecision(decision="approve")
+        user_claims = {"sub": str(uuid.uuid4()), "name": "Test"}
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await decide(hitl_id=uuid.uuid4(), body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
+                await decide(
+                    hitl_id=uuid.uuid4(),
+                    body=body,
+                    background_tasks=BackgroundTasks(),
+                    tenant_id=tenant_id,
+                    user_claims=user_claims,
+                    user_role="ceo",
+                    user_domains=None,
+                )
             assert exc_info.value.status_code == 404
         finally:
             ctx.stop()
@@ -770,13 +795,22 @@ class TestApprovalsEndpoints:
         from core.schemas.api import HITLDecision
 
         item = _make_hitl(status="decided")
-        mock_session.execute.return_value = _make_result(scalar_one=item)
+        mock_session.execute = AsyncMock(return_value=_make_result(scalar_one=item))
         body = HITLDecision(decision="approve")
+        user_claims = {"sub": str(uuid.uuid4()), "name": "Test"}
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await decide(hitl_id=item.id, body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
+                await decide(
+                    hitl_id=item.id,
+                    body=body,
+                    background_tasks=BackgroundTasks(),
+                    tenant_id=tenant_id,
+                    user_claims=user_claims,
+                    user_role="ceo",
+                    user_domains=None,
+                )
             assert exc_info.value.status_code == 409
         finally:
             ctx.stop()
@@ -792,13 +826,22 @@ class TestApprovalsEndpoints:
             status="pending",
             expires_at=datetime(2020, 1, 1, tzinfo=UTC),  # past
         )
-        mock_session.execute.return_value = _make_result(scalar_one=item)
+        mock_session.execute = AsyncMock(return_value=_make_result(scalar_one=item))
         body = HITLDecision(decision="approve")
+        user_claims = {"sub": str(uuid.uuid4()), "name": "Test"}
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await decide(hitl_id=item.id, body=body, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
+                await decide(
+                    hitl_id=item.id,
+                    body=body,
+                    background_tasks=BackgroundTasks(),
+                    tenant_id=tenant_id,
+                    user_claims=user_claims,
+                    user_role="ceo",
+                    user_domains=None,
+                )
             assert exc_info.value.status_code == 410
         finally:
             ctx.stop()
