@@ -57,7 +57,13 @@ class TestSecretKeyHardening:
         """Production with a real secret key should work."""
         from core.config import Settings
 
-        s = Settings(env="production", secret_key="prod-secret-minimum-16-chars")
+        # Production also requires explicit non-localhost db/redis URLs
+        s = Settings(
+            env="production",
+            secret_key="prod-secret-minimum-16-chars",
+            db_url="postgresql+asyncpg://app:pw@db.prod.internal:5432/agenticorg",
+            redis_url="redis://redis.prod.internal:6379/0",
+        )
         assert s.env == "production"
 
     def test_short_key_rejected_everywhere(self):
