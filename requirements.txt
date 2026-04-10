@@ -80,7 +80,7 @@ opentelemetry-instrumentation-fastapi==0.62b0
 prometheus-client==0.24.1
 
 # ─── Document Processing & Reporting ─────────────────────────────────────────
-pypdf==6.9.2
+pypdf==6.10.0
 pyyaml==6.0.3
 jinja2==3.1.6
 defusedxml==0.7.1
