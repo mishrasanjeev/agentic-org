@@ -110,8 +110,14 @@ class TestOIDCProviderAuthorize:
         assert f"code_challenge={challenge}" in url
         assert "code_challenge_method=S256" in url
         assert "openid" in url
-        # The redirect URI is URL-encoded — check the raw host appears
-        assert "app.example.com" in url
+        # The redirect URI is URL-encoded inside the query string —
+        # decode the redirect_uri param and verify the host explicitly
+        # to avoid the "incomplete URL substring sanitization" CodeQL
+        # warning that fires on a bare ``"host" in url`` check.
+        from urllib.parse import parse_qs, unquote, urlparse
+
+        redirect_uri = parse_qs(urlparse(url).query).get("redirect_uri", [""])[0]
+        assert urlparse(unquote(redirect_uri)).hostname == "app.example.com"
 
 
 # ── OIDCProvider — code exchange (mocked token endpoint) ────────────
