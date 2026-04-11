@@ -174,33 +174,40 @@ async def create_task(
         _log.info("a2a_task_completed", task_id=task_id, agent_type=body.agent_type)
 
         # Build a response that deliberately excludes any field that
-        # could carry exception-derived data (error strings, failure
-        # traces). The runner's failure path reuses the same dict
-        # shape, so we whitelist only the safe, success-path fields
-        # AND JSON-roundtrip the output so the static taint analyzer
-        # can confirm no exception strings survive into the response.
+        # could carry exception-derived data. If the runner did NOT
+        # report a successful completion, return a constant payload
+        # with no values lifted from `result` — this way CodeQL can
+        # see that no exception strings can flow into the response.
         # Callers can always GET /tasks/{id} for the full trace.
+        if final_status != "completed":
+            return {
+                "id": task_id,
+                "status": "failed",
+                "agent_type": body.agent_type,
+                "result": {},
+            }
+
+        # On success, JSON-roundtrip the output and coerce confidence
+        # to a primitive float. The roundtrip is a CodeQL-recognized
+        # sanitization barrier; the float() cast guarantees a number.
         import json as _json
 
-        safe_output: dict[str, Any] = {}
-        if final_status == "completed":
-            raw_output = result.get("output") or {}
-            # JSON roundtrip strips object identity and acts as a
-            # CodeQL-recognized sanitization barrier.
-            try:
-                safe_output_payload = _json.loads(_json.dumps(raw_output, default=str))
-            except (TypeError, ValueError):
-                safe_output_payload = {}
-            safe_output = {
-                "output": safe_output_payload,
-                "confidence": float(result.get("confidence", 0.0)),
-            }
+        try:
+            safe_output_payload = _json.loads(
+                _json.dumps(result.get("output") or {}, default=str)
+            )
+        except (TypeError, ValueError):
+            safe_output_payload = {}
+        safe_confidence = float(result.get("confidence", 0.0) or 0.0)
 
         return {
             "id": task_id,
-            "status": final_status if final_status == "completed" else "failed",
+            "status": "completed",
             "agent_type": body.agent_type,
-            "result": safe_output,
+            "result": {
+                "output": safe_output_payload,
+                "confidence": safe_confidence,
+            },
         }
 
     except Exception as exc:
