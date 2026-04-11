@@ -133,7 +133,9 @@ def encrypt(
     ``kek_resource`` overrides the platform default — pass a customer's
     KMS resource name here to get BYOK behaviour for that payload.
     """
-    kek = kek_resource or _DEFAULT_KEK_RESOURCE
+    # Read the env var at call time (not import time) so tests can
+    # set/unset it dynamically.
+    kek = kek_resource or _DEFAULT_KEK_RESOURCE or os.getenv("AGENTICORG_PLATFORM_KEK", "")
     if not kek:
         raise RuntimeError(
             "No KEK configured. Set AGENTICORG_PLATFORM_KEK or pass kek_resource."

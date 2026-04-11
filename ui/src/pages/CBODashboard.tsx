@@ -133,12 +133,12 @@ export default function CBODashboard() {
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 p-3 md:space-y-6 md:p-6" role="main" aria-label={t("kpi.cboDashboard", "CBO Dashboard")}>
       <Helmet>
         <title>CBO Dashboard — AgenticOrg</title>
       </Helmet>
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{t("kpi.cboDashboard", "CBO Dashboard")}</h2>
+      <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
+        <h1 className="text-xl font-bold md:text-2xl">{t("kpi.cboDashboard", "CBO Dashboard")}</h1>
         {data.demo && <Badge variant="secondary">{t("kpi.demoData", "Demo Data")}</Badge>}
       </div>
 

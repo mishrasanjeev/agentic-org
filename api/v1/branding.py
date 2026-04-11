@@ -2,14 +2,23 @@
 
 Public GET for the login page (unauthenticated — we look up by host).
 Authenticated GET/PATCH for admins.
+
+Hardening (v4.7.0):
+  - Public GET is rate-limited per IP (30 req/min)
+  - Successful lookups are cached for 60 seconds in-process
+  - Public response only includes fields a browser actually needs
+    (product name, logo, colors, footer text). Internal fields like
+    tenant ID, custom-domain mapping, and admin email are stripped.
 """
 
 from __future__ import annotations
 
+import time
 import uuid
+from collections import deque
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -57,8 +66,55 @@ _DEFAULT_BRANDING = BrandingOut(
 )
 
 
+# ── Rate limit + cache for the public endpoint ─────────────────────
+#
+# We can't use the existing tool-gateway rate limiter here because the
+# request is unauthenticated and the tenant context isn't established
+# yet. A small in-process token bucket per source IP is enough — the
+# endpoint is read-only and the worst case is a noisy NAT triggering
+# 429s for legitimate users sharing the IP.
+
+_BRANDING_RPM = 30
+_branding_window: dict[str, deque[float]] = {}
+_branding_cache: dict[str, tuple[BrandingOut, float]] = {}
+_BRANDING_CACHE_TTL = 60.0
+
+
+def _check_branding_rate(ip: str) -> bool:
+    """Token-bucket: 30 req per rolling 60s per IP."""
+    now = time.time()
+    window = _branding_window.setdefault(ip, deque())
+    while window and now - window[0] > 60:
+        window.popleft()
+    if len(window) >= _BRANDING_RPM:
+        return False
+    window.append(now)
+    return True
+
+
+def _public_view(branding: BrandingOut) -> BrandingOut:
+    """Strip fields we never want unauthenticated callers to see.
+
+    Only product name, logo, colors, and the marketing footer go out.
+    Custom-domain mapping reveals tenant→domain bindings (recon hint),
+    so it's withheld from the public response. Authenticated admins
+    still see it via /admin/branding.
+    """
+    return BrandingOut(
+        product_name=branding.product_name,
+        logo_url=branding.logo_url,
+        favicon_url=branding.favicon_url,
+        primary_color=branding.primary_color,
+        accent_color=branding.accent_color,
+        support_email=None,
+        footer_text=branding.footer_text,
+        custom_domain=None,
+    )
+
+
 @public_router.get("", response_model=BrandingOut)
 async def get_public_branding(
+    request: Request,
     host: str | None = Query(None, description="Host header — used for custom-domain routing"),
     tenant_slug: str | None = Query(None, description="Tenant slug fallback"),
 ) -> BrandingOut:
@@ -68,7 +124,27 @@ async def get_public_branding(
       1. custom_domain matches the Host header
       2. tenant_slug explicitly passed
       3. default AgenticOrg branding
+
+    Hardening:
+      - Per-IP rate limit (30 req/min)
+      - 60s in-process cache
+      - Public view strips internal-only fields
     """
+    # Per-IP rate limit
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_branding_rate(client_ip):
+        logger.warning("branding_rate_limited", ip=client_ip)
+        raise HTTPException(429, "Too many branding lookups, slow down")
+
+    cache_key = f"{host or ''}:{tenant_slug or ''}"
+    now = time.time()
+    cached = _branding_cache.get(cache_key)
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
+    found = False
+    public: BrandingOut = _public_view(_DEFAULT_BRANDING)
+
     async with async_session_factory() as session:
         if host:
             result = await session.execute(
@@ -76,9 +152,10 @@ async def get_public_branding(
             )
             branding = result.scalar_one_or_none()
             if branding is not None:
-                return _to_out(branding)
+                public = _public_view(_to_out(branding))
+                found = True
 
-        if tenant_slug:
+        if not found and tenant_slug:
             from core.models.tenant import Tenant
 
             result = await session.execute(
@@ -93,9 +170,16 @@ async def get_public_branding(
                 )
                 branding = result.scalar_one_or_none()
                 if branding is not None:
-                    return _to_out(branding)
+                    public = _public_view(_to_out(branding))
 
-    return _DEFAULT_BRANDING
+    _branding_cache[cache_key] = (public, now + _BRANDING_CACHE_TTL)
+    return public
+
+
+def _clear_branding_cache() -> None:
+    """Test helper — flushes the in-process branding cache."""
+    _branding_cache.clear()
+    _branding_window.clear()
 
 
 @admin_router.get("", response_model=BrandingOut)

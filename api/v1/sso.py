@@ -66,8 +66,13 @@ async def _load_provider(provider_key: str, tenant_id: uuid.UUID | None = None) 
         if config is None:
             raise HTTPException(404, f"SSO provider {provider_key!r} not found")
         if config.provider_type != "oidc":
+            # SAML is planned for v4.8.0 — see
+            # docs/adr/0007-saml-via-xmlsec-sidecar.md
             raise HTTPException(
-                400, f"Only OIDC is supported (got {config.provider_type!r})"
+                400,
+                f"Only OIDC is supported in v4.7.0 (got {config.provider_type!r}). "
+                "SAML 2.0 ships in v4.8.0 via the xmlsec sidecar — see "
+                "docs/adr/0007-saml-via-xmlsec-sidecar.md.",
             )
 
         provider = OIDCProvider(provider_key, config.config)
