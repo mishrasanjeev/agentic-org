@@ -76,6 +76,50 @@ class RateLimitResult:
 class RateLimiter:
     """Per-connector token bucket rate limiter."""
 
+    # Per-connector default rate limits (requests per minute).
+    # Based on each vendor's published rate limits at 2026-04.
+    # Override per-tenant by setting connector_configs.config.rate_limit_rpm.
+    CONNECTOR_RPM: dict[str, int] = {
+        # CRM
+        "salesforce": 1500,        # ~25/s
+        "hubspot": 6000,           # 100/s
+        "zendesk": 400,            # vendor recommends 400/min for mid-tier
+        "zoho_crm": 600,
+        # Finance
+        "stripe": 6000,            # 100/s
+        "quickbooks": 500,
+        "netsuite": 600,           # SuiteTalk rate limit
+        "oracle_fusion": 600,
+        "sap": 600,
+        "tally": 1200,             # bridge throughput cap
+        "zoho_books": 600,
+        # HR
+        "darwinbox": 300,
+        "greenhouse": 300,
+        "keka": 300,
+        "okta": 1200,              # Okta "System Log" tier
+        # Marketing
+        "mailchimp": 600,
+        "google_ads": 600,
+        "meta_ads": 400,
+        "linkedin_ads": 400,
+        # Dev & ops
+        "jira": 600,
+        "confluence": 600,
+        "github": 5000,            # authenticated REST
+        "pagerduty": 900,
+        "servicenow": 600,
+        # India / statutory
+        "gstn": 100,               # conservative — GSTN is strict
+        "banking_aa": 200,
+        "mca_portal": 60,
+        # Comms
+        "slack": 600,
+        "twilio": 1200,
+        "sendgrid": 1800,
+        "whatsapp": 480,           # 80/s cap per phone number
+    }
+
     def __init__(self):
         self.redis: aioredis.Redis | None = None
         self._default_rpm = 60
@@ -100,7 +144,7 @@ class RateLimiter:
         if not self.redis:
             return RateLimitResult(allowed=True, remaining=0, retry_after_seconds=0)
 
-        limit = rpm or self._default_rpm
+        limit = rpm or self.CONNECTOR_RPM.get(connector_name, self._default_rpm)
         capacity = limit
         refill_rate = limit / 60.0  # tokens per second
         now = time.time()

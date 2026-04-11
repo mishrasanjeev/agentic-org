@@ -37,7 +37,7 @@ Compliance tab in the web UI.
 | Erasure (Art. 17)         | `POST /api/v1/compliance/dsar/erase`                | 30 days       |
 | Restriction (Art. 18)     | `POST /api/v1/compliance/dsar/restrict`             | 30 days       |
 | Portability (Art. 20)     | `POST /api/v1/compliance/dsar/export?format=jsonld` | 30 days       |
-| Objection (Art. 21)       | Contact `privacy@agenticorg.ai`                     | 30 days       |
+| Objection (Art. 21)       | Contact `sanjeev@agenticorg.ai`                     | 30 days       |
 
 Erasure is executed via `audit/dsar.py` which cascades across
 customer-owned tables and writes an immutable audit record. Backups
@@ -87,7 +87,7 @@ first production invoice for any EU customer.
 ## DPO contact
 
 Questions about this policy, or to exercise a right:
-- Email: `privacy@agenticorg.ai`
+- Email: `sanjeev@agenticorg.ai`
 - Post: AgenticOrg Technologies, Bangalore, India
 
 The DPO reports directly to the board.

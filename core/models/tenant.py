@@ -21,6 +21,12 @@ class Tenant(BaseModel):
     plan: Mapped[str] = mapped_column(String(50), nullable=False, default="enterprise")
     data_region: Mapped[str] = mapped_column(String(10), nullable=False, default="IN")
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # v4.7.0: BYOK/CMEK — customer-owned KMS key resource name. When set,
+    # all envelope-encrypted payloads for this tenant use this KEK instead
+    # of the platform default.  Empty string = platform-managed.
+    byok_kek_resource: Mapped[str] = mapped_column(
+        String(500), nullable=False, default=""
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )

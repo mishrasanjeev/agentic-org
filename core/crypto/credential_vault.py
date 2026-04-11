@@ -1,12 +1,11 @@
-"""Encryption utilities for credential vault.
+"""Credential vault — Fernet symmetric encryption for stored secrets.
 
-Uses Fernet symmetric encryption (AES-128-CBC with HMAC-SHA256).
-The encryption key is loaded from the AGENTICORG_VAULT_KEY environment
-variable or falls back to the main secret key (dev only).
+Used for things like GSTN portal passwords, OAuth refresh tokens, and
+other per-tenant credentials where we don't need the full envelope-
+encryption flow. The key is derived from ``AGENTICORG_VAULT_KEY`` (or
+the main ``AGENTICORG_SECRET_KEY`` in dev).
 
-In production, use GCP Secret Manager to store the vault key and
-rotate it periodically.  The encryption_key_ref column on
-gstn_credentials lets us track which key version was used.
+For large blobs and customer BYOK see ``core.crypto.envelope``.
 """
 
 from __future__ import annotations
@@ -21,26 +20,25 @@ from cryptography.fernet import Fernet
 def _get_vault_key() -> bytes:
     """Derive a Fernet-compatible key from the vault secret.
 
-    Fernet requires a 32-byte base64-encoded key.  We derive it from
+    Fernet requires a 32-byte base64-encoded key. We derive it from
     the raw secret using SHA-256 to ensure correct length.
     """
     raw = os.environ.get(
         "AGENTICORG_VAULT_KEY",
         os.environ.get("AGENTICORG_SECRET_KEY", "dev-only-vault-key"),
     )
-    # SHA-256 gives 32 bytes → base64-encode for Fernet
     digest = hashlib.sha256(raw.encode()).digest()
     return base64.urlsafe_b64encode(digest)
 
 
 def encrypt_credential(plaintext: str) -> str:
-    """Encrypt a credential string.  Returns base64-encoded ciphertext."""
+    """Encrypt a credential string. Returns base64-encoded ciphertext."""
     f = Fernet(_get_vault_key())
     return f.encrypt(plaintext.encode()).decode()
 
 
 def decrypt_credential(ciphertext: str) -> str:
-    """Decrypt a credential string.  Returns plaintext."""
+    """Decrypt a credential string. Returns plaintext."""
     f = Fernet(_get_vault_key())
     return f.decrypt(ciphertext.encode()).decode()
 

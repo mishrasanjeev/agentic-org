@@ -30,12 +30,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/demo-request",
         "/api/v1/billing/callback",  # Plural redirect callback
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
+        "/api/v1/branding",  # Public tenant branding for the login page
+        "/api/v1/status",  # Public status page
         "/docs", "/openapi.json", "/redoc",
     }
 
     EXEMPT_PREFIXES = (
         "/api/v1/evals",
         "/api/v1/billing/webhook/",  # Plural & Stripe webhooks
+        "/api/v1/auth/sso/",  # SSO login + OIDC callback (no prior session)
     )
 
     async def dispatch(self, request: Request, call_next) -> Response:

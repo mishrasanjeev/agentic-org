@@ -1,4 +1,4 @@
-Contact: mailto:security@agenticorg.ai
+Contact: mailto:sanjeev@agenticorg.ai
 Contact: https://agenticorg.ai/security
 Expires: 2027-04-11T00:00:00.000Z
 Encryption: https://agenticorg.ai/pgp-key.txt

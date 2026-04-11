@@ -389,6 +389,314 @@ async def init_db() -> None:
             );
         """))
 
+        # ── v4.6.0: Enterprise readiness — run every startup, idempotent ──
+
+        # 1. User i18n + department assignment
+        for _col, _type in [
+            ("timezone", "VARCHAR(64) NOT NULL DEFAULT 'UTC'"),
+            ("locale", "VARCHAR(10) NOT NULL DEFAULT 'en'"),
+            ("department_id", "UUID"),
+        ]:
+            await conn.execute(text(f"""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'users' AND column_name = '{_col}'
+                    ) THEN
+                        ALTER TABLE users ADD COLUMN {_col} {_type};
+                    END IF;
+                END $$;
+            """))  # noqa: S608  # nosec B608
+
+        # 2. Company.currency (ISO 4217)
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'companies' AND column_name = 'currency'
+                ) THEN
+                    ALTER TABLE companies ADD COLUMN currency CHAR(3) NOT NULL DEFAULT 'INR';
+                END IF;
+            END $$;
+        """))
+
+        # 3. Departments + cost centers (org hierarchy)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS departments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                code VARCHAR(50),
+                parent_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+                manager_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, company_id, name)
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_departments_tenant_company "
+            "ON departments(tenant_id, company_id);"
+        ))
+
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS cost_centers (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+                code VARCHAR(50) NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                budget_limit NUMERIC(14, 2),
+                fiscal_year INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, company_id, code)
+            );
+        """))
+
+        # Add FK from users.department_id to departments.id (now that the
+        # table exists).  PostgreSQL doesn't support IF NOT EXISTS on FK so
+        # we check information_schema.
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints
+                    WHERE constraint_name = 'fk_users_department'
+                      AND table_name = 'users'
+                ) THEN
+                    ALTER TABLE users
+                    ADD CONSTRAINT fk_users_department
+                    FOREIGN KEY (department_id)
+                    REFERENCES departments(id) ON DELETE SET NULL;
+                END IF;
+            END $$;
+        """))
+
+        # 4. Agent maturity + cost center pointer
+        for _col, _type in [
+            ("maturity", "VARCHAR(20) NOT NULL DEFAULT 'beta'"),
+            ("cost_center_id", "UUID"),
+        ]:
+            await conn.execute(text(f"""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'agents' AND column_name = '{_col}'
+                    ) THEN
+                        ALTER TABLE agents ADD COLUMN {_col} {_type};
+                    END IF;
+                END $$;
+            """))  # noqa: S608  # nosec B608
+
+        # 5. User delegation table (approval forwarding)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_delegations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                delegator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                delegate_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                reason VARCHAR(255),
+                starts_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                ends_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                CONSTRAINT ck_delegation_different_users CHECK (delegator_id <> delegate_id)
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_delegations_active "
+            "ON user_delegations(tenant_id, delegator_id) "
+            "WHERE revoked_at IS NULL;"
+        ))
+
+        # 6. Feature flags table
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS feature_flags (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID,
+                flag_key VARCHAR(100) NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                rollout_percentage INTEGER NOT NULL DEFAULT 0
+                    CHECK (rollout_percentage BETWEEN 0 AND 100),
+                description VARCHAR(500),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, flag_key)
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_feature_flags_key "
+            "ON feature_flags(flag_key);"
+        ))
+
+        # 7. Budget alerts table
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS budget_alerts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+                cost_center_id UUID REFERENCES cost_centers(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                period VARCHAR(20) NOT NULL,
+                threshold_usd NUMERIC(14, 2) NOT NULL,
+                warn_at_percent INTEGER NOT NULL DEFAULT 80
+                    CHECK (warn_at_percent BETWEEN 1 AND 100),
+                notify_channels VARCHAR(255) NOT NULL DEFAULT 'email',
+                last_triggered_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """))
+
+        # 8. SSO configuration per tenant
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS sso_configs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                provider_key VARCHAR(50) NOT NULL,
+                provider_type VARCHAR(20) NOT NULL DEFAULT 'oidc',
+                display_name VARCHAR(100) NOT NULL,
+                config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                jit_provisioning BOOLEAN NOT NULL DEFAULT TRUE,
+                default_role VARCHAR(50) NOT NULL DEFAULT 'analyst',
+                allowed_domains JSONB NOT NULL DEFAULT '[]'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, provider_key)
+            );
+        """))
+
+        # 8b. Tenant BYOK KEK resource — customer-managed KMS key
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'tenants' AND column_name = 'byok_kek_resource'
+                ) THEN
+                    ALTER TABLE tenants ADD COLUMN byok_kek_resource VARCHAR(500) NOT NULL DEFAULT '';
+                END IF;
+            END $$;
+        """))
+
+        # 8c. Invoices
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS invoices (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                invoice_number VARCHAR(50) NOT NULL,
+                period_start TIMESTAMPTZ NOT NULL,
+                period_end TIMESTAMPTZ NOT NULL,
+                issue_date DATE NOT NULL,
+                due_date DATE NOT NULL,
+                currency CHAR(3) NOT NULL DEFAULT 'USD',
+                subtotal NUMERIC(14, 2) NOT NULL,
+                tax NUMERIC(14, 2) NOT NULL DEFAULT 0,
+                total NUMERIC(14, 2) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                line_items JSONB NOT NULL DEFAULT '[]'::jsonb,
+                pdf_url VARCHAR(500),
+                payment_provider VARCHAR(20),
+                payment_ref VARCHAR(100),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, invoice_number)
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_invoices_tenant_period "
+            "ON invoices(tenant_id, period_start);"
+        ))
+
+        # 9. Approval policies (configurable multi-step approval chains)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS approval_policies (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description VARCHAR(500),
+                workflow_id UUID,
+                agent_id UUID,
+                is_active VARCHAR(10) NOT NULL DEFAULT 'true',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, name)
+            );
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS approval_steps (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                policy_id UUID NOT NULL REFERENCES approval_policies(id) ON DELETE CASCADE,
+                sequence INTEGER NOT NULL,
+                approver_role VARCHAR(50) NOT NULL,
+                quorum_required INTEGER NOT NULL DEFAULT 1,
+                quorum_total INTEGER NOT NULL DEFAULT 1,
+                mode VARCHAR(20) NOT NULL DEFAULT 'sequential',
+                condition VARCHAR(500),
+                step_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                UNIQUE (policy_id, sequence),
+                CHECK (quorum_required >= 1),
+                CHECK (quorum_required <= quorum_total)
+            );
+        """))
+
+        # 9a. Tenant branding (white-label)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tenant_branding (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL UNIQUE,
+                product_name VARCHAR(100) NOT NULL DEFAULT 'AgenticOrg',
+                logo_url VARCHAR(500),
+                favicon_url VARCHAR(500),
+                primary_color VARCHAR(7) NOT NULL DEFAULT '#7c3aed',
+                accent_color VARCHAR(7) NOT NULL DEFAULT '#1e293b',
+                custom_domain VARCHAR(255),
+                support_email VARCHAR(255),
+                footer_text VARCHAR(500),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """))
+
+        # 9b. Workflow A/B variants
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS workflow_variants (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                workflow_id UUID NOT NULL,
+                variant_name VARCHAR(100) NOT NULL,
+                weight INTEGER NOT NULL DEFAULT 50 CHECK (weight BETWEEN 0 AND 100),
+                definition JSONB NOT NULL DEFAULT '{}'::jsonb,
+                run_count INTEGER NOT NULL DEFAULT 0,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (workflow_id, variant_name)
+            );
+        """))
+
+        # 10. Audit log immutability trigger — rejects UPDATE/DELETE
+        await conn.execute(text("""
+            CREATE OR REPLACE FUNCTION audit_log_reject_mutation() RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION
+                  'audit_log is append-only — UPDATE/DELETE rejected'
+                  USING ERRCODE = 'insufficient_privilege';
+            END;
+            $$ LANGUAGE plpgsql;
+        """))
+        await conn.execute(text("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_log;"))
+        await conn.execute(text("""
+            CREATE TRIGGER audit_log_immutable
+            BEFORE UPDATE OR DELETE ON audit_log
+            FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation();
+        """))
+
     # Seed demo CA companies ONLY in demo/dev environments — never in production
     if os.getenv("AGENTICORG_ENV", "production").lower() in ("demo", "development", "dev"):
         try:

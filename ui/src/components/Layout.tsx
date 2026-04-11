@@ -219,7 +219,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <HITLBadge />
           </div>
         </header>
-        <main key={langKey} className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
+        <main
+          id="main-content"
+          key={langKey}
+          className="flex-1 overflow-auto p-4 sm:p-6"
+          role="main"
+          tabIndex={-1}
+        >
+          {children}
+        </main>
       </div>
 
       {/* Chat slide-out panel */}

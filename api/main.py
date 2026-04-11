@@ -16,9 +16,11 @@ from api.v1 import (
     agent_teams,
     agents,
     api_keys,
+    approval_policies,
     approvals,
     audit,
     billing,
+    branding,
     bridge,
     cdc_webhooks,
     chat,
@@ -28,12 +30,14 @@ from api.v1 import (
     config,
     connectors,
     content_safety,
+    costs,
     cron,
     delegations,
     departments,
     evals,
     feature_flags,
     health,
+    invoices,
     knowledge,
     kpis,
     mcp,
@@ -44,7 +48,9 @@ from api.v1 import (
     sales,
     schemas,
     sop,
+    sso,
     webhooks,
+    workflow_variants,
     workflows,
 )
 from api.v1 import (
@@ -52,6 +58,9 @@ from api.v1 import (
 )
 from api.v1 import demo as v1_demo
 from api.v1 import org as v1_org
+from api.v1 import (
+    status as status_mod,
+)
 from api.websocket.feed import router as ws_feed_router
 from auth.grantex_middleware import GrantexAuthMiddleware
 from bridge.server_handler import router as ws_bridge_router
@@ -141,10 +150,12 @@ app.include_router(prompt_templates.router, prefix="/api/v1", tags=["Prompt Temp
 app.include_router(sales.router, prefix="/api/v1", tags=["Sales"])
 app.include_router(agent_teams.router, prefix="/api/v1", tags=["Agent Teams"])
 app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
+app.include_router(workflow_variants.router, prefix="/api/v1", tags=["Workflows"])
 app.include_router(sop.router, prefix="/api/v1", tags=["SOP"])
 app.include_router(a2a.router, prefix="/api/v1", tags=["A2A"])
 app.include_router(mcp.router, prefix="/api/v1", tags=["MCP"])
 app.include_router(approvals.router, prefix="/api/v1", tags=["Approvals"])
+app.include_router(approval_policies.router, prefix="/api/v1", tags=["Approvals"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
@@ -173,5 +184,12 @@ app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
 app.include_router(departments.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(delegations.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(feature_flags.router, prefix="/api/v1", tags=["Feature Flags"])
+app.include_router(costs.router, prefix="/api/v1", tags=["Costs"])
+app.include_router(invoices.router, prefix="/api/v1", tags=["Billing"])
+app.include_router(branding.public_router, prefix="/api/v1", tags=["Branding"])
+app.include_router(branding.admin_router, prefix="/api/v1", tags=["Branding"])
+app.include_router(status_mod.public_router, prefix="/api/v1", tags=["Status"])
+app.include_router(sso.public_router, prefix="/api/v1", tags=["SSO"])
+app.include_router(sso.admin_router, prefix="/api/v1", tags=["SSO"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

@@ -66,6 +66,8 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/push/vapid-key",  # VAPID public key (browser needs before login)
         "/api/v1/billing/callback",  # Plural redirect callback (browser returning from gateway)
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
+        "/api/v1/branding",  # Public tenant branding for the login page
+        "/api/v1/status",  # Public status page
         "/docs", "/openapi.json", "/redoc",
     }
 
@@ -74,6 +76,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/webhooks/",
         "/api/v1/aa/consent/callback",
         "/api/v1/billing/webhook/",  # Plural & Stripe server-to-server webhooks
+        "/api/v1/auth/sso/",  # SSO login + OIDC callback (pre-session)
     )
 
     async def dispatch(self, request: Request, call_next) -> Response:

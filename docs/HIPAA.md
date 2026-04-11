@@ -13,7 +13,7 @@ place and what remains the customer's responsibility.
 
 A BAA is required before any Protected Health Information (PHI) may be
 processed. Template: `https://agenticorg.ai/legal/baa`. Contact
-`legal@agenticorg.ai` to execute.
+`sanjeev@agenticorg.ai` to execute.
 
 ## Technical safeguards (45 CFR §164.312)
 
@@ -83,5 +83,5 @@ HIPAA-specific:
 
 ## Contacts
 
-- HIPAA questions: `privacy@agenticorg.ai`
-- Security incidents: `security@agenticorg.ai`
+- HIPAA questions: `sanjeev@agenticorg.ai`
+- Security incidents: `sanjeev@agenticorg.ai`

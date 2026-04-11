@@ -57,6 +57,16 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=2, minute=0),  # daily at 2:00 AM IST
         "options": {"queue": "maintenance"},
     },
+    "run-budget-evaluator": {
+        "task": "core.tasks.budget_tasks.run_budget_evaluator",
+        "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
+    "generate-monthly-invoices": {
+        "task": "core.tasks.invoice_tasks.generate_monthly_invoices",
+        "schedule": crontab(hour=1, minute=0, day_of_month="1"),
+        "options": {"queue": "maintenance"},
+    },
     "shadow-reconciliation-report": {
         "task": "core.tasks.report_tasks.generate_report",
         "schedule": crontab(hour=8, minute=0, day_of_week="monday"),  # weekly Mon 8 AM IST

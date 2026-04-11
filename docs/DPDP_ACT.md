@@ -39,7 +39,7 @@ open model pack. See `docs/INDIA_RESIDENCY.md`.
 | Access        | `POST /api/v1/compliance/dsar/access`        |
 | Correction    | `PATCH /api/v1/users/{id}`                   |
 | Erasure       | `POST /api/v1/compliance/dsar/erase`         |
-| Grievance     | Email `grievance@agenticorg.ai`              |
+| Grievance     | Email `sanjeev@agenticorg.ai`              |
 | Nomination    | via UI: Settings → Personal Data → Nominee   |
 
 Response SLA: 30 days (DPDP s.13).
@@ -60,7 +60,7 @@ Data Fiduciary and the following additional controls apply:
 
 ## Grievance redressal
 
-- **Grievance officer**: grievance@agenticorg.ai
+- **Grievance officer**: sanjeev@agenticorg.ai
 - **Response time**: 7 days acknowledgement, 30 days resolution
 - **Escalation**: Data Protection Board of India (once notified)
 
