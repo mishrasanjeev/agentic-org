@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth } from "../contexts/AuthContext";
@@ -9,6 +9,14 @@ export default function Login() {
   const { login, loginWithGoogle } = useAuth();
   const branding = useBranding();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Honor a ?next=/some/path query so flows like the billing callback
+  // can re-route the user back to where they were after re-auth.
+  const nextPath = (() => {
+    const raw = searchParams.get("next") || "/dashboard";
+    // Allow relative app paths only — never an absolute URL.
+    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+  })();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -34,7 +42,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/dashboard");
+      navigate(nextPath);
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
@@ -47,7 +55,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithGoogle(credentialResponse.credential);
-      navigate("/dashboard");
+      navigate(nextPath);
     } catch (err: any) {
       setError(err.message || "Google login failed");
     } finally {

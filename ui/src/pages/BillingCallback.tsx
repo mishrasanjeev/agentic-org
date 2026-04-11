@@ -8,6 +8,14 @@ export default function BillingCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "failed" | "pending">("loading");
   const [orderDetails, setOrderDetails] = useState<Record<string, string>>({});
+  // Detect whether the user still has a valid local session. If not we
+  // route through /login?next=... so they can re-authenticate before
+  // landing on the billing dashboard. Without this, the "Go to Billing"
+  // button silently bounced expired-session users to /login with no
+  // explanation.
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(
+    () => !!localStorage.getItem("token"),
+  );
 
   const paymentStatus = searchParams.get("payment") || searchParams.get("status") || "";
   const orderId = searchParams.get("order_id") || searchParams.get("plural_order_id") || "";
@@ -15,6 +23,13 @@ export default function BillingCallback() {
   const provider = searchParams.get("provider") || (sessionId ? "stripe" : "plural");
   const plan = searchParams.get("plan") || "";
   const tenantId = searchParams.get("tenant_id") || localStorage.getItem("tenant_id") || "";
+
+  // The destination after the user clicks the primary button. If they
+  // are still logged in, take them to billing. If not, send them to
+  // login with the billing page as the next-hop URL.
+  const billingDest = isLoggedIn
+    ? "/dashboard/billing"
+    : `/login?next=${encodeURIComponent("/dashboard/billing")}`;
 
   useEffect(() => {
     setOrderDetails({ orderId: orderId || sessionId, plan, tenantId, provider });
@@ -34,7 +49,16 @@ export default function BillingCallback() {
         },
         body: JSON.stringify({ order_id: orderId }),
       })
-        .then((r) => r.json())
+        .then((r) => {
+          // 401 here means the local session expired during the
+          // payment round-trip — flip the logged-in flag so the
+          // primary button routes through /login.
+          if (r.status === 401) {
+            setIsLoggedIn(false);
+            localStorage.removeItem("token");
+          }
+          return r.json();
+        })
         .then((data) => {
           const s = (data.status || "").toUpperCase();
           if (s === "PROCESSED" || s === "AUTHORIZED") setStatus("success");
@@ -98,16 +122,23 @@ export default function BillingCallback() {
           </div>
         )}
 
+        {!isLoggedIn && status === "success" && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Your sign-in session expired during the payment. Sign in again to
+            view your active subscription.
+          </p>
+        )}
+
         <div className="flex gap-3 justify-center pt-4">
           <button
-            onClick={() => navigate("/dashboard/billing")}
+            onClick={() => navigate(billingDest)}
             className="px-6 py-2 rounded bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
           >
-            Go to Billing
+            {isLoggedIn ? "Go to Billing" : "Sign in to view billing"}
           </button>
           {status === "failed" && (
             <button
-              onClick={() => navigate("/dashboard/billing")}
+              onClick={() => navigate(billingDest)}
               className="px-6 py-2 rounded border text-sm font-medium hover:bg-muted"
             >
               Try Again
