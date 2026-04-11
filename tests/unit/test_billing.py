@@ -8,6 +8,7 @@ import hmac
 import json
 import time
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -730,7 +731,7 @@ class TestStripeCheckoutSession:
             )
 
         assert result["session_id"] == "cs_test_session_001"
-        assert "checkout.stripe.com" in result["checkout_url"]
+        assert urlparse(result["checkout_url"]).hostname == "checkout.stripe.com"
         assert result["customer_id"] == "cus_test123"
 
         # Verify checkout session created with correct params
@@ -878,7 +879,7 @@ class TestStripeCustomerPortal:
 
         url = create_portal_session("t1")
 
-        assert "billing.stripe.com" in url
+        assert urlparse(url).hostname == "billing.stripe.com"
         mock_stripe.billing_portal.Session.create.assert_called_once()
 
 
@@ -908,7 +909,7 @@ class TestStripeE2ECheckoutFlow:
             checkout = create_checkout_session(tenant_id="e2e_stripe", plan="pro")
 
         assert checkout["session_id"] == "cs_e2e_001"
-        assert "checkout.stripe.com" in checkout["checkout_url"]
+        assert urlparse(checkout["checkout_url"]).hostname == "checkout.stripe.com"
 
         # Step 2: User pays on Stripe... (simulated)
 

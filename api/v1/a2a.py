@@ -156,6 +156,7 @@ async def create_task(
         )
 
         final_status = result.get("status", "completed")
+        # Persist the full trace server-side for later inspection via GET /tasks/{id}.
         output_data = {
             "output": result.get("output", {}),
             "confidence": result.get("confidence", 0.0),
@@ -172,11 +173,23 @@ async def create_task(
 
         _log.info("a2a_task_completed", task_id=task_id, agent_type=body.agent_type)
 
+        # Build a response that deliberately excludes any field that could
+        # carry exception-derived data (error strings, failure traces). The
+        # runner's failure path reuses the same dict shape, so we whitelist
+        # only the safe, success-path fields. Callers can always GET
+        # /tasks/{id} for the full trace.
+        safe_output: dict[str, Any] = {}
+        if final_status == "completed":
+            safe_output = {
+                "output": result.get("output", {}),
+                "confidence": float(result.get("confidence", 0.0)),
+            }
+
         return {
             "id": task_id,
             "status": final_status,
             "agent_type": body.agent_type,
-            "result": output_data,
+            "result": safe_output,
         }
 
     except Exception as exc:
