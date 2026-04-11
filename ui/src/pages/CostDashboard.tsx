@@ -188,7 +188,11 @@ export default function CostDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
-                  <Tooltip formatter={(v: number) => USD.format(v)} />
+                  <Tooltip
+                    formatter={(value: unknown) =>
+                      USD.format(typeof value === "number" ? value : Number(value) || 0)
+                    }
+                  />
                   <Line
                     type="monotone"
                     dataKey="cost_usd"
@@ -211,7 +215,11 @@ export default function CostDashboard() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="domain" />
                     <YAxis />
-                    <Tooltip formatter={(v: number) => USD.format(v)} />
+                    <Tooltip
+                    formatter={(value: unknown) =>
+                      USD.format(typeof value === "number" ? value : Number(value) || 0)
+                    }
+                  />
                     <Bar dataKey="total" fill="#82ca9d" />
                   </BarChart>
                 </ResponsiveContainer>
