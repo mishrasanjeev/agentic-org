@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.error_handlers import register_error_handlers
+from api.middleware import DeprecationHeaderMiddleware
 from api.v1 import (
     a2a,
     aa_callback,
@@ -28,7 +29,10 @@ from api.v1 import (
     connectors,
     content_safety,
     cron,
+    delegations,
+    departments,
     evals,
+    feature_flags,
     health,
     knowledge,
     kpis,
@@ -126,6 +130,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GrantexAuthMiddleware)
+app.add_middleware(DeprecationHeaderMiddleware)
 
 register_error_handlers(app)
 
@@ -165,5 +170,8 @@ app.include_router(packs.router, prefix="/api/v1", tags=["Industry Packs"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
 app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
+app.include_router(departments.router, prefix="/api/v1", tags=["Organization"])
+app.include_router(delegations.router, prefix="/api/v1", tags=["Organization"])
+app.include_router(feature_flags.router, prefix="/api/v1", tags=["Feature Flags"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

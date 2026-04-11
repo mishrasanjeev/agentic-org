@@ -11,6 +11,7 @@ It handles:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import uuid
@@ -28,6 +29,12 @@ from core.langgraph.state import AgentState
 from core.pii.redactor import PIIRedactor
 
 logger = structlog.get_logger()
+
+# Resource limits — prevent runaway agents from exhausting budget or the
+# checkpoint store. Tuned to cover the 99th percentile of legitimate runs;
+# see docs/PERFORMANCE.md for baselines.
+MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
+MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
 
 # In-memory checkpointer for now — will switch to PostgreSQL in production
 _checkpointer = MemorySaver()
@@ -183,10 +190,16 @@ async def run_agent(
         }
     }
 
-    # Execute the graph
+    # Execute the graph — bounded by MAX_AGENT_DURATION_SEC so a runaway
+    # agent can't burn through the tenant's budget. LangGraph's recursion
+    # limit caps the step count.
     t0 = time.perf_counter()
     try:
-        result = await compiled.ainvoke(initial_state, config=config)  # type: ignore[call-overload]
+        invoke_config = {**config, "recursion_limit": MAX_AGENT_STEPS}
+        result = await asyncio.wait_for(
+            compiled.ainvoke(initial_state, config=invoke_config),  # type: ignore[call-overload]
+            timeout=MAX_AGENT_DURATION_SEC,
+        )
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
         # Extract token usage from AI messages
@@ -339,6 +352,29 @@ async def run_agent(
             "hitl_trigger": hitl_trigger,
             "error": "",
             "thread_id": config["configurable"]["thread_id"],
+            "performance": {
+                "total_latency_ms": latency_ms,
+                "llm_tokens_used": 0,
+                "llm_cost_usd": 0,
+            },
+        }
+
+    except TimeoutError:
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        logger.warning(
+            "langgraph_agent_timeout",
+            agent_id=agent_id,
+            max_duration_sec=MAX_AGENT_DURATION_SEC,
+        )
+        return {
+            "status": "failed",
+            "output": {},
+            "confidence": 0.0,
+            "reasoning_trace": ["Agent exceeded maximum allowed duration"],
+            "tool_calls_log": [],
+            "hitl_trigger": "",
+            "error": f"timeout: agent exceeded {MAX_AGENT_DURATION_SEC}s",
+            "explanation": {},
             "performance": {
                 "total_latency_ms": latency_ms,
                 "llm_tokens_used": 0,

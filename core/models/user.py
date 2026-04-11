@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,17 @@ class User(BaseModel):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # v4.6.0: i18n — per-user timezone (IANA) + locale (BCP-47 short form)
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'UTC'")
+    )
+    locale: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default=text("'en'")
+    )
+    # v4.6.0: department assignment (nullable — legacy users have no dept)
+    department_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )

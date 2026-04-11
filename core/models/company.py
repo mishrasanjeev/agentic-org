@@ -84,6 +84,11 @@ class Company(BaseModel):
     # GST auto-file flag (default OFF for safety)
     gst_auto_file: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # v4.6.0: primary currency for invoices/billing (ISO 4217)
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, server_default=text("'INR'")
+    )
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # v4.2.0: CA paid add-on fields

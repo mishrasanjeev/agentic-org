@@ -86,6 +86,15 @@ class Agent(BaseModel):
     specialization: Mapped[str | None] = mapped_column(String(500), nullable=True)
     routing_filter: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # v4.6.0: agent maturity label — ga|beta|alpha|deprecated. Used to
+    # warn enterprise customers before they enable preview features.
+    maturity: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'beta'")
+    )
+    # v4.6.0: optional cost center for charge-back (NULL = tenant-wide).
+    cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True
+    )
     system_prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     reporting_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
     org_level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
