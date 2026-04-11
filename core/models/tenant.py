@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, String, func
+from sqlalchemy import TIMESTAMP, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,8 +24,10 @@ class Tenant(BaseModel):
     # v4.7.0: BYOK/CMEK — customer-owned KMS key resource name. When set,
     # all envelope-encrypted payloads for this tenant use this KEK instead
     # of the platform default.  Empty string = platform-managed.
+    # server_default ensures legacy INSERTs that don't pass the column
+    # still get '' from Postgres rather than NULL → IntegrityError.
     byok_kek_resource: Mapped[str] = mapped_column(
-        String(500), nullable=False, default=""
+        String(500), nullable=False, default="", server_default=text("''")
     )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
