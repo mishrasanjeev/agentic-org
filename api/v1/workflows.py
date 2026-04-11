@@ -438,6 +438,28 @@ async def _execute_workflow_bg(
             _log.error("workflow_bg_error_handler_failed", error=str(inner))
     finally:
         await state_store.close()
+        # ── A/B variant outcome tracking ───────────────────────────────
+        # If this run was routed via a variant, increment the variant's
+        # success/failure counters so the operator can pick a winner.
+        try:
+            from core.workflow_ab import record_outcome
+
+            async with get_tenant_session(tenant_id) as session:
+                db_run = (
+                    await session.execute(
+                        select(WorkflowRun).where(WorkflowRun.id == run_id)
+                    )
+                ).scalar_one_or_none()
+                if db_run is not None:
+                    ab = (db_run.context or {}).get("ab") or {}
+                    variant_id = ab.get("variant_id")
+                    if variant_id:
+                        await record_outcome(
+                            _uuid.UUID(variant_id),
+                            success=db_run.status == "completed",
+                        )
+        except Exception:
+            _log.debug("workflow_ab_record_outcome_skipped", run_id=str(run_id))
 
 
 # ── POST /workflows/{wf_id}/run ─────────────────────────────────────────────
@@ -467,7 +489,29 @@ async def run_workflow(
 
         definition = wf.definition
 
-        # Count steps from definition
+        # ── A/B variant routing ────────────────────────────────────────
+        # If variants exist for this workflow, deterministically pick one
+        # by hashing (workflow_id, subject_id). The subject is the trigger
+        # payload's `user_id` if present, else the tenant id, so the same
+        # caller always sees the same variant within a campaign.
+        variant_pick = None
+        try:
+            from core.workflow_ab import pick_variant
+
+            subject = (body.payload or {}).get("user_id") or tenant_id
+            variant_pick = await pick_variant(wf.id, str(subject))
+        except Exception:
+            _log.debug("workflow_ab_pick_variant_skipped", workflow_id=str(wf_id))
+
+        ab_context: dict = {}
+        if variant_pick is not None and variant_pick.definition:
+            definition = variant_pick.definition
+            ab_context = {
+                "variant_id": str(variant_pick.variant_id),
+                "variant_name": variant_pick.variant_name,
+            }
+
+        # Count steps from definition (after variant override)
         steps_list = definition.get("steps", [])
         steps_total = len(steps_list) if isinstance(steps_list, list) else None
 
@@ -476,7 +520,7 @@ async def run_workflow(
             workflow_def_id=wf.id,
             status="running",
             trigger_payload=body.payload,
-            context={},
+            context={"ab": ab_context} if ab_context else {},
             steps_total=steps_total,
             started_at=datetime.now(UTC),
         )
@@ -493,6 +537,7 @@ async def run_workflow(
         "workflow_def_id": str(wf_id),
         "status": "running",
         "started_at": run.started_at.isoformat() if run.started_at else None,
+        "variant": variant_pick.variant_name if variant_pick else None,
     }
 
 

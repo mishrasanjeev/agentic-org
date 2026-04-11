@@ -54,6 +54,34 @@ def _redis():
         return None
 
 
+async def _check_db() -> bool:
+    """Ping the primary Postgres without going through the HTTP layer."""
+    try:
+        from sqlalchemy import text
+
+        from core.database import engine
+
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        logger.debug("status_db_check_failed")
+        return False
+
+
+async def _check_redis() -> bool:
+    """Ping Redis directly via the cached client."""
+    r = _redis()
+    if r is None:
+        return False
+    try:
+        r.ping()
+        return True
+    except Exception:
+        logger.debug("status_redis_check_failed")
+        return False
+
+
 def _load_incidents(namespace: str) -> list[Incident]:
     r = _redis()
     if r is None:
@@ -75,23 +103,14 @@ def _load_incidents(namespace: str) -> list[Incident]:
 @public_router.get("", response_model=StatusResponse)
 async def public_status() -> StatusResponse:
     """Public, unauthenticated status page payload."""
-    # Query the existing health checks, but only surface the customer-visible
-    # services. Detailed connector-by-connector state is not published here.
+    # In-process health checks — no loopback HTTP. We re-use the same
+    # primitives /api/v1/health uses, but without the auth middleware
+    # routing, which is faster and works on any port/socket.
     overall = "operational"
     services: list[ServiceStatus] = []
 
-    # Core services — checked via the internal health endpoint
-    import httpx
-
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://localhost:8000/api/v1/health")
-            health = resp.json()
-            db_ok = health.get("checks", {}).get("db") == "healthy"
-            redis_ok = health.get("checks", {}).get("redis") == "healthy"
-    except Exception:
-        db_ok = False
-        redis_ok = False
+    db_ok = await _check_db()
+    redis_ok = await _check_redis()
 
     services.append(
         ServiceStatus(

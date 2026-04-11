@@ -93,14 +93,19 @@ async def _send_notification(
     for channel in channels:
         try:
             if channel == "email":
-                from core.email import send_plain_email
+                from core.email import send_email
 
                 # Best-effort email — the billing admin for the tenant.
-                # Falls back to a configured fallback when no email is set.
-                await send_plain_email(
+                # core.email.send_email is synchronous; wrap the HTML
+                # body since that's the signature it expects.
+                html_body = (
+                    f"<h2>{subject}</h2>"
+                    f"<p>{body}</p>"
+                )
+                send_email(
                     to="sanjeev@agenticorg.ai",
                     subject=subject,
-                    body=body,
+                    html=html_body,
                 )
             elif channel == "slack":
                 import os

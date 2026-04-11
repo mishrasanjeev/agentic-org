@@ -352,6 +352,47 @@ async def decide(
 
         # P1.1: Enforce role hierarchy and domain match
         allowed, reason = _can_decide(user_role, user_domains, item.assignee_role, agent_domain)
+
+        # ── Delegation override ────────────────────────────────────────
+        # If the direct check fails, look for an active delegation FROM
+        # someone whose role *would* allow this decision TO the current
+        # user. If we find one, the user acts on behalf of the delegator.
+        delegated_from: str | None = None
+        if not allowed:
+            try:
+                from datetime import UTC as _UTC
+                from datetime import datetime as _dt
+
+                from core.models.delegation import UserDelegation
+                from core.models.user import User as UserModel
+
+                if user_id_str:
+                    now = _dt.now(_UTC)
+                    deleg_rows = await session.execute(
+                        select(UserDelegation, UserModel.role)
+                        .join(UserModel, UserModel.id == UserDelegation.delegator_id)
+                        .where(
+                            UserDelegation.tenant_id == tid,
+                            UserDelegation.delegate_id == _uuid.UUID(user_id_str),
+                            UserDelegation.revoked_at.is_(None),
+                            UserDelegation.starts_at <= now,
+                        )
+                    )
+                    for delegation, delegator_role in deleg_rows.all():
+                        ends_ok = delegation.ends_at is None or delegation.ends_at > now
+                        if not ends_ok:
+                            continue
+                        d_allowed, _ = _can_decide(
+                            delegator_role, user_domains, item.assignee_role, agent_domain
+                        )
+                        if d_allowed:
+                            allowed = True
+                            delegated_from = str(delegation.delegator_id)
+                            reason = f"acting on behalf of {delegated_from} (role={delegator_role})"
+                            break
+            except Exception:
+                _log.debug("delegation_check_failed", hitl_id=str(hitl_id))
+
         if not allowed:
             _log.warning(
                 "hitl_decide_denied",
@@ -371,11 +412,114 @@ async def decide(
             # Non-UUID sub claim — store None but log
             _log.warning("hitl_decide_non_uuid_user", user_id=user_id_str)
 
-        item.decision = body.decision
-        item.decision_notes = body.notes if body.notes else None
-        item.decision_at = datetime.now(UTC)
-        item.status = "decided"
-        workflow_run_id = item.workflow_run_id
+        # ── Multi-step approval policy resolution ──────────────────────
+        #
+        # If there's an ApprovalPolicy attached to this agent or workflow,
+        # consult the policy engine before short-circuiting to "decided".
+        # The engine tells us whether the current step has reached quorum
+        # (advance), is still collecting (collect), or was rejected.
+        #
+        # Per-item state lives in item.context["policy_state"]:
+        #   {
+        #     "policy_id": "...",
+        #     "current_sequence": 1,
+        #     "approvals_collected": 0,
+        #     "approvals": [{"user_id": ..., "decision": ..., "at": ...}, ...]
+        #   }
+        from core.approvals import (
+            apply_decision,
+            first_applicable_step,
+            next_step_after,
+            resolve_policy,
+        )
+
+        ctx = dict(item.context or {})
+        policy_state = dict(ctx.get("policy_state") or {})
+        policy_action = "advance"  # default — the legacy single-step path
+
+        try:
+            policy = await resolve_policy(
+                tenant_id=tid,
+                workflow_id=item.workflow_run_id,
+                agent_id=item.agent_id,
+            )
+        except Exception:
+            _log.debug("approval_policy_resolve_failed", hitl_id=str(hitl_id))
+            policy = None
+
+        if policy is not None:
+            # Hydrate the engine's view of the current step
+            current_seq = int(policy_state.get("current_sequence") or 0)
+            approvals_collected = int(policy_state.get("approvals_collected") or 0)
+            approvals_history = list(policy_state.get("approvals") or [])
+
+            if current_seq == 0:
+                step = await first_applicable_step(policy, ctx)
+            else:
+                # Re-fetch the current step by sequence
+                from sqlalchemy import select as _select
+
+                from core.models.approval_policy import ApprovalStep
+
+                step_res = await session.execute(
+                    _select(ApprovalStep).where(
+                        ApprovalStep.policy_id == policy.id,
+                        ApprovalStep.sequence == current_seq,
+                    )
+                )
+                step = step_res.scalar_one_or_none()
+
+            if step is not None:
+                pdec = apply_decision(step, approvals_collected, body.decision or "approve")
+                policy_action = pdec.action
+                approvals_history.append(
+                    {
+                        "user_id": user_id_str,
+                        "decision": body.decision,
+                        "at": datetime.now(UTC).isoformat(),
+                    }
+                )
+                policy_state = {
+                    "policy_id": str(policy.id),
+                    "current_sequence": step.sequence,
+                    "approvals_collected": pdec.current_step_approvals,
+                    "approvals": approvals_history,
+                    "last_action": pdec.action,
+                    "last_reason": pdec.reason,
+                }
+
+                if pdec.action == "advance":
+                    next_step = await next_step_after(policy, step.sequence, ctx)
+                    if next_step is not None:
+                        # Move to the next step — keep the item open with
+                        # the new assignee_role and reset the counter.
+                        policy_state["current_sequence"] = next_step.sequence
+                        policy_state["approvals_collected"] = 0
+                        item.assignee_role = next_step.approver_role
+                        policy_action = "collect"  # treat as still in flight
+                # collect / reject fall through to the writes below
+
+            ctx["policy_state"] = policy_state
+            item.context = ctx
+
+        if policy_action == "collect":
+            # Quorum not met yet OR moved to next step — persist the
+            # vote in the policy_state but leave the item open.
+            item.decision_notes = body.notes if body.notes else None
+            workflow_run_id = None
+        elif policy_action == "reject":
+            item.decision = body.decision
+            item.decision_notes = body.notes if body.notes else None
+            item.decision_at = datetime.now(UTC)
+            item.status = "rejected"
+            workflow_run_id = item.workflow_run_id
+        else:
+            # advance with no next step → fully decided (legacy behaviour)
+            item.decision = body.decision
+            item.decision_notes = body.notes if body.notes else None
+            item.decision_at = datetime.now(UTC)
+            item.status = "decided"
+            workflow_run_id = item.workflow_run_id
 
         # Audit log entry — captures who approved/rejected what
         audit = AuditLog(
@@ -395,6 +539,9 @@ async def decide(
                 "user_role": user_role,
                 "assignee_role": item.assignee_role,
                 "agent_domain": agent_domain,
+                "policy_action": policy_action,
+                "policy_state": policy_state if policy is not None else None,
+                "delegated_from": delegated_from,
             },
         )
         session.add(audit)
@@ -405,6 +552,7 @@ async def decide(
             user_id=user_id_str,
             user_role=user_role,
             decision=body.decision,
+            policy_action=policy_action,
         )
 
     # Resume workflow execution in background
@@ -419,7 +567,9 @@ async def decide(
     return {
         "hitl_id": str(hitl_id),
         "decision": body.decision,
-        "status": "decided",
+        "status": item.status,
         "decided_by": user_id_str,
-        "decided_at": item.decision_at.isoformat(),
+        "decided_at": item.decision_at.isoformat() if item.decision_at else None,
+        "policy_action": policy_action,
+        "policy_state": policy_state if policy_state else None,
     }

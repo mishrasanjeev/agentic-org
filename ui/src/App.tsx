@@ -60,6 +60,9 @@ const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 
 /* ── Role-specific dashboards ── */
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
+const CostDashboard = lazyRetry(() => import("./pages/CostDashboard"));
+const StatusPage = lazyRetry(() => import("./pages/Status"));
+const SSOCallback = lazyRetry(() => import("./pages/SSOCallback"));
 const CMODashboard = lazyRetry(() => import("./pages/CMODashboard"));
 const CHRODashboard = lazyRetry(() => import("./pages/CHRODashboard"));
 const COODashboard = lazyRetry(() => import("./pages/COODashboard"));
@@ -137,6 +140,8 @@ export default function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
+      <Route path="/status" element={<StatusPage />} />
+      <Route path="/sso/callback" element={<SSOCallback />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -193,6 +198,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo"]}>
             <Layout>
               <CFODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/costs"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "ceo"]}>
+            <Layout>
+              <CostDashboard />
             </Layout>
           </ProtectedRoute>
         }

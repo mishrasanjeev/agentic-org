@@ -620,11 +620,31 @@ async def init_db() -> None:
                 description VARCHAR(500),
                 workflow_id UUID,
                 agent_id UUID,
-                is_active VARCHAR(10) NOT NULL DEFAULT 'true',
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, name)
             );
+        """))
+
+        # v4.7.0 hotfix: the initial v4.7.0 ship created approval_policies
+        # with is_active as VARCHAR(10). Convert to BOOLEAN if still varchar.
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'approval_policies'
+                      AND column_name = 'is_active'
+                      AND data_type = 'character varying'
+                ) THEN
+                    ALTER TABLE approval_policies
+                        ALTER COLUMN is_active DROP DEFAULT,
+                        ALTER COLUMN is_active TYPE BOOLEAN
+                        USING (is_active::text IN ('true', 't', '1')),
+                        ALTER COLUMN is_active SET DEFAULT TRUE;
+                END IF;
+            END $$;
         """))
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS approval_steps (

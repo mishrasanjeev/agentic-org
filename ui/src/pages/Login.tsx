@@ -3,9 +3,11 @@ import { useNavigate, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth } from "../contexts/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
 
 export default function Login() {
   const { login, loginWithGoogle } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,8 +58,8 @@ export default function Login() {
   const loginForm = (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <Helmet>
-        <title>Sign In — AgenticOrg</title>
-        <meta name="description" content="Sign in to AgenticOrg to manage your AI agents, workflows, and approvals." />
+        <title>Sign In — {branding.productName}</title>
+        <meta name="description" content={`Sign in to ${branding.productName} to manage your AI agents, workflows, and approvals.`} />
         <meta name="robots" content="noindex, nofollow" />
         <link rel="canonical" href="https://agenticorg.ai/login" />
       </Helmet>
@@ -65,9 +67,16 @@ export default function Login() {
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           {/* Branding */}
           <div className="text-center mb-8">
+            {branding.logoUrl && (
+              <img
+                src={branding.logoUrl}
+                alt={`${branding.productName} logo`}
+                className="mx-auto mb-3 h-12"
+              />
+            )}
             <h1 className="text-2xl font-bold tracking-tight">
               <span className="bg-gradient-to-r from-blue-400 to-violet-500 bg-clip-text text-transparent">
-                AgenticOrg
+                {branding.productName}
               </span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">

@@ -24,6 +24,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     TIMESTAMP,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Integer,
@@ -60,8 +61,8 @@ class ApprovalPolicy(BaseModel):
     )
 
     is_active: Mapped[bool] = mapped_column(
-        String(10), nullable=False, default="true"
-    )  # kept as string for legacy-DB compat
+        Boolean, nullable=False, default=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()

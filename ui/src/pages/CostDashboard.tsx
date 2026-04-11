@@ -62,9 +62,9 @@ export default function CostDashboard() {
     setLoading(true);
     setError(null);
     Promise.all([
-      api.get<CostSummary>(`/api/v1/costs/summary?period=${period}`),
-      api.get<CostPoint[]>(`/api/v1/costs/trend?days=30`),
-      api.get<AgentCostRow[]>(`/api/v1/costs/top-agents?days=30&limit=10`),
+      api.get<CostSummary>(`/costs/summary?period=${period}`),
+      api.get<CostPoint[]>(`/costs/trend?days=30`),
+      api.get<AgentCostRow[]>(`/costs/top-agents?days=30&limit=10`),
     ])
       .then(([s, tr, ta]) => {
         if (cancelled) return;

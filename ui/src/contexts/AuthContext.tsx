@@ -18,6 +18,7 @@ interface AuthContextType {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
+  loginWithToken: (token: string) => Promise<void>;
   signup: (orgName: string, name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
@@ -90,6 +91,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(googleUser);
   }, []);
 
+  const loginWithToken = useCallback(async (newToken: string) => {
+    // Used by the SSO callback page after the OIDC redirect lands a
+    // session JWT in the URL fragment. We trust the JWT signature is
+    // already validated server-side; here we just hydrate the local
+    // session by calling /auth/me with the new token.
+    localStorage.setItem("token", newToken);
+    setToken(newToken);
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${newToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const ssoUser: AuthUser = { ...data, onboardingComplete: data.onboarding_complete ?? true };
+        localStorage.setItem("user", JSON.stringify(ssoUser));
+        setUser(ssoUser);
+      }
+    } catch {
+      // Best effort — token alone is enough for ProtectedRoute to pass.
+    }
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -98,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, login, loginWithGoogle, signup, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ token, user, login, loginWithGoogle, loginWithToken, signup, logout, isAuthenticated: !!token }}>
       {children}
     </AuthContext.Provider>
   );

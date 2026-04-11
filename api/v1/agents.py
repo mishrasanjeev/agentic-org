@@ -283,6 +283,10 @@ def _agent_to_dict(agent: Agent) -> dict:
         "specialization": agent.specialization,
         "routing_filter": agent.routing_filter,
         "is_builtin": agent.is_builtin,
+        # v4.6.0: maturity label (ga|beta|alpha|deprecated) — used by the
+        # UI to badge preview features and excluded from HIPAA scope.
+        "maturity": getattr(agent, "maturity", "beta"),
+        "cost_center_id": str(agent.cost_center_id) if getattr(agent, "cost_center_id", None) else None,
         "system_prompt_text": agent.system_prompt_text,
         "reporting_to": agent.reporting_to,
         "org_level": agent.org_level,

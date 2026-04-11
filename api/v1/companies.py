@@ -1295,7 +1295,10 @@ async def activate_ca_subscription(
 # GSTN Credential Vault schemas
 # ===========================================================================
 
-from core.crypto import decrypt_credential, encrypt_credential  # noqa: E402
+from core.crypto import (  # noqa: E402
+    decrypt_for_tenant,
+    encrypt_for_tenant,
+)
 from core.models.gstn_credential import GSTNCredential  # noqa: E402
 
 
@@ -1410,8 +1413,10 @@ async def create_gstn_credential(
         if not co.scalar_one_or_none():
             raise HTTPException(404, "Company not found")
 
-        # Encrypt the password before storage
-        encrypted_pw = encrypt_credential(body.password)
+        # Encrypt the password before storage. Uses the customer-managed
+        # KEK if the tenant has BYOK enabled, otherwise the platform KEK
+        # via Cloud KMS, otherwise legacy Fernet — all transparent.
+        encrypted_pw = await encrypt_for_tenant(body.password, tid)
 
         credential = GSTNCredential(
             tenant_id=tid,
@@ -1514,7 +1519,7 @@ async def verify_gstn_credential(
             raise HTTPException(404, "Credential not found")
 
         try:
-            decrypt_credential(credential.password_encrypted)
+            decrypt_for_tenant(credential.password_encrypted)
             success = True
         except Exception:
             success = False

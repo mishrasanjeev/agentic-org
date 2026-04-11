@@ -25,3 +25,9 @@ from core.crypto.envelope import (
 from core.crypto.envelope import (
     encrypt_to_string as encrypt_to_string,
 )
+from core.crypto.tenant_secrets import (
+    decrypt_for_tenant as decrypt_for_tenant,
+)
+from core.crypto.tenant_secrets import (
+    encrypt_for_tenant as encrypt_for_tenant,
+)
