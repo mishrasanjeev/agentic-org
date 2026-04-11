@@ -194,15 +194,26 @@ async def sso_callback(
         )
         tenant = result.scalar_one()
 
-    # Mint our own JWT — user's browser now holds an AgenticOrg session
+    # Mint our own JWT — user's browser now holds an AgenticOrg session.
+    # Shape matches the rest of api/v1/auth.py so middleware can decode it.
+    from core.rbac import get_allowed_domains
+
     scopes = get_scopes_for_role(user.role)
     token = create_access_token(
-        user_id=str(user.id),
-        tenant_id=str(tenant_id),
-        tenant_name=tenant.name,
-        email=user.email,
-        role=user.role,
-        scopes=scopes,
+        data={
+            "sub": user.email,
+            "agenticorg:user_id": str(user.id),
+            "agenticorg:tenant_id": str(tenant_id),
+            "agenticorg:tenant_name": tenant.name,
+            "grantex:scopes": scopes,
+            "name": user.name,
+            "role": user.role,
+            "domain": user.domain,
+            "agenticorg:domains": get_allowed_domains(user.role),
+            "auth_method": "sso_oidc",
+            "sso_provider": provider_key,
+        },
+        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
 
     # Redirect to UI with token in fragment (so it never hits server logs)
