@@ -94,6 +94,8 @@ def make_mock_agent(**overrides):
     agent.expires_at = overrides.get("expires_at", None)
     agent.config = overrides.get("config", {})
     agent.description = overrides.get("description", None)
+    agent.maturity = overrides.get("maturity", "beta")
+    agent.cost_center_id = overrides.get("cost_center_id", None)
     agent.created_at = overrides.get("created_at", datetime(2026, 1, 1, tzinfo=UTC))
     agent.updated_at = overrides.get("updated_at", datetime(2026, 1, 1, tzinfo=UTC))
     return agent
@@ -178,6 +180,9 @@ class TestAgentToDict:
             "specialization", "routing_filter", "is_builtin",
             "system_prompt_text", "reporting_to", "org_level",
             "prompt_amendments", "config",
+            # v4.6.0: added so the UI can show GA/BETA badges and
+            # cost-center attribution.
+            "maturity", "cost_center_id",
         }
         assert set(result.keys()) == expected_keys
 

@@ -240,11 +240,18 @@ class TestGSTNCredentialEndpoints:
     """Verify GSTN Credential endpoint logic."""
 
     def test_create_credential_encrypts_password(self):
-        """create_gstn_credential calls encrypt_credential before storage."""
+        """create_gstn_credential encrypts the password before storage.
+
+        After v4.7.0 the call was migrated from the legacy Fernet
+        ``encrypt_credential`` to the tenant-aware
+        ``encrypt_for_tenant`` helper, which automatically picks BYOK
+        envelope encryption when the tenant has a KMS key configured.
+        Either name in the source counts as wired.
+        """
         from api.v1.companies import create_gstn_credential
 
         source = inspect.getsource(create_gstn_credential)
-        assert "encrypt_credential" in source
+        assert "encrypt_for_tenant" in source or "encrypt_credential" in source
         assert "password_encrypted" in source
 
     def test_password_is_actually_encrypted(self):
@@ -265,11 +272,15 @@ class TestGSTNCredentialEndpoints:
         assert "session.delete" not in source
 
     def test_verify_endpoint_calls_decrypt(self):
-        """verify_gstn_credential calls decrypt_credential to test decryption."""
+        """verify_gstn_credential decrypts the stored ciphertext.
+
+        Migrated to ``decrypt_for_tenant`` in v4.7.0 to support
+        BYOK envelope encryption transparently. Either name counts.
+        """
         from api.v1.companies import verify_gstn_credential
 
         source = inspect.getsource(verify_gstn_credential)
-        assert "decrypt_credential" in source
+        assert "decrypt_for_tenant" in source or "decrypt_credential" in source
 
     def test_credential_unique_constraint_model(self):
         """GSTNCredential has unique constraint on (company_id, portal_type)."""

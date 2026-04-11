@@ -2,6 +2,9 @@
 plus the legacy Fernet-based credential vault."""
 
 from core.crypto.credential_vault import (
+    _get_vault_key as _get_vault_key,
+)
+from core.crypto.credential_vault import (
     decrypt_credential as decrypt_credential,
 )
 from core.crypto.credential_vault import (

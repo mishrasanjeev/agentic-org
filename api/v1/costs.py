@@ -83,7 +83,7 @@ async def summary(
         # Totals / grouped aggregates.  The WHERE clause is built from a
         # hard-coded whitelist above (tenant, company, cost center) — no
         # user input reaches the SQL string.
-        total_sql = f"SELECT COALESCE(SUM(cost_usd), 0), COUNT(*) FROM agent_task_results WHERE {where_sql}"  # noqa: S608
+        total_sql = f"SELECT COALESCE(SUM(cost_usd), 0), COUNT(*) FROM agent_task_results WHERE {where_sql}"  # noqa: S608  # nosec B608
         total_q = text(total_sql)
         row = (await session.execute(total_q, params)).first()
         total_usd = float(row[0] or 0)
@@ -91,7 +91,7 @@ async def summary(
 
         # By domain
         domain_prefix = "SELECT domain, COALESCE(SUM(cost_usd), 0) FROM agent_task_results WHERE "
-        domain_q = text(domain_prefix + where_sql + " GROUP BY domain")  # noqa: S608
+        domain_q = text(domain_prefix + where_sql + " GROUP BY domain")  # noqa: S608  # nosec B608
         by_domain = {
             (r[0] or "unknown"): float(r[1] or 0)
             for r in (await session.execute(domain_q, params)).all()
@@ -100,7 +100,7 @@ async def summary(
         # By agent (top 20)
         agent_prefix = "SELECT agent_type, COALESCE(SUM(cost_usd), 0) FROM agent_task_results WHERE "
         agent_suffix = " GROUP BY agent_type ORDER BY 2 DESC LIMIT 20"
-        agent_q = text(agent_prefix + where_sql + agent_suffix)  # noqa: S608
+        agent_q = text(agent_prefix + where_sql + agent_suffix)  # noqa: S608  # nosec B608
         by_agent = {
             (r[0] or "unknown"): float(r[1] or 0)
             for r in (await session.execute(agent_q, params)).all()
