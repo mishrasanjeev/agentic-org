@@ -137,22 +137,39 @@ async def subscribe_india(body: IndiaSubscribeRequest) -> dict[str, Any]:
 # ── Plural Callback (Redirect Return) ───────────────────────────────
 
 
-@router.get("/callback")
-async def plural_callback(
-    merchant_ref: str = "",
-    tenant_id: str = "",
-    plan: str = "",
-    order_id: str = "",
-    plural_order_id: str = "",
-) -> RedirectResponse:
+@router.api_route("/callback", methods=["GET", "POST"])
+async def plural_callback(request: Request) -> RedirectResponse:
     """Handle Plural hosted checkout redirect back to the app.
 
-    Plural redirects the user's browser here after payment.  We look up
-    the order_id via the merchant_ref, verify the actual payment status
-    with Plural's API (server-side — cannot be spoofed), and then
-    redirect to the frontend callback page with the verified result.
+    Plural redirects the user's browser here after payment — typically as
+    an HTML form POST (most common), but we also accept GET for the
+    status-check / refresh flow. Fields can come from either query
+    params or the POST form body.
+
+    We look up the order_id via the merchant_ref, verify the actual
+    payment status with Plural's API (server-side — cannot be spoofed),
+    and then redirect to the frontend callback page with the verified
+    result.
     """
     from core.billing.pinelabs_client import get_order_status, lookup_order_details
+
+    # Collect params from both query string and form body (Plural POSTs
+    # form-encoded back to the merchant URL).
+    params: dict[str, str] = dict(request.query_params)
+    if request.method == "POST":
+        try:
+            form = await request.form()
+            for k, v in form.items():
+                if k not in params and isinstance(v, str):
+                    params[k] = v
+        except Exception:
+            logger.debug("plural_callback_form_parse_failed")
+
+    merchant_ref = params.get("merchant_ref") or params.get("merchant_order_reference", "")
+    tenant_id = params.get("tenant_id", "")
+    plan = params.get("plan", "")
+    order_id = params.get("order_id", "")
+    plural_order_id = params.get("plural_order_id", "")
 
     # Resolve order details from stored mapping or params
     effective_order_id = order_id or plural_order_id

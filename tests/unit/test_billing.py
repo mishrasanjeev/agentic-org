@@ -623,6 +623,81 @@ class TestPluralE2ERedirectFlow:
 # ── Stripe SDK Tests ────────────────────────────────────────────────
 
 
+class TestPluralCallbackEndpoint:
+    """Regression: Plural POSTs form data back to /billing/callback after payment."""
+
+    def _make_app(self):
+        from fastapi import FastAPI
+
+        from api.v1.billing import router
+
+        app = FastAPI()
+        app.include_router(router, prefix="/api/v1")
+        return app
+
+    @patch("core.billing.pinelabs_client.get_order_status")
+    @patch("core.billing.pinelabs_client.lookup_order_details")
+    def test_callback_accepts_get_with_query_params(self, mock_lookup, mock_status):
+        from fastapi.testclient import TestClient
+
+        mock_lookup.return_value = {"order_id": "v1-order-1", "tenant_id": "t1", "plan": "pro"}
+        mock_status.return_value = {"status": "PROCESSED"}
+
+        client = TestClient(self._make_app(), follow_redirects=False)
+        resp = client.get(
+            "/api/v1/billing/callback",
+            params={"merchant_ref": "aoabc", "tenant_id": "t1", "plan": "pro"},
+        )
+
+        assert resp.status_code == 303
+        loc = resp.headers["location"]
+        assert "payment=success" in loc
+        assert "tenant_id=t1" in loc
+        assert "plan=pro" in loc
+
+    @patch("core.billing.pinelabs_client.get_order_status")
+    @patch("core.billing.pinelabs_client.lookup_order_details")
+    def test_callback_accepts_post_with_form_body(self, mock_lookup, mock_status):
+        """Plural posts the callback data as form-encoded body — must NOT 405."""
+        from fastapi.testclient import TestClient
+
+        mock_lookup.return_value = {"order_id": "v1-order-2", "tenant_id": "t2", "plan": "pro"}
+        mock_status.return_value = {"status": "PROCESSED"}
+
+        client = TestClient(self._make_app(), follow_redirects=False)
+        resp = client.post(
+            "/api/v1/billing/callback",
+            data={
+                "merchant_order_reference": "aoxyz",
+                "tenant_id": "t2",
+                "plan": "pro",
+            },
+        )
+
+        # The bug: this previously returned 405 Method Not Allowed
+        assert resp.status_code == 303
+        loc = resp.headers["location"]
+        assert "payment=success" in loc
+        assert "tenant_id=t2" in loc
+
+    @patch("core.billing.pinelabs_client.get_order_status")
+    @patch("core.billing.pinelabs_client.lookup_order_details")
+    def test_callback_post_falls_back_to_query_params(self, mock_lookup, mock_status):
+        """Some gateways POST with query params only (no form body)."""
+        from fastapi.testclient import TestClient
+
+        mock_lookup.return_value = {"order_id": "v1-order-3", "tenant_id": "t3", "plan": "enterprise"}
+        mock_status.return_value = {"status": "PROCESSED"}
+
+        client = TestClient(self._make_app(), follow_redirects=False)
+        resp = client.post(
+            "/api/v1/billing/callback?merchant_ref=aoqs&tenant_id=t3&plan=enterprise",
+        )
+
+        assert resp.status_code == 303
+        assert "payment=success" in resp.headers["location"]
+
+
 class TestStripeCheckoutSession:
     """Stripe Checkout Session creation and verification."""
 
