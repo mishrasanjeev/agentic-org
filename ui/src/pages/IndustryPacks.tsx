@@ -31,11 +31,118 @@ interface IndustryPack {
 }
 
 const ICON_COLORS: Record<string, string> = {
-  Healthcare: "from-red-500 to-pink-600",
-  Legal: "from-amber-500 to-orange-600",
-  Insurance: "from-blue-500 to-cyan-600",
-  Manufacturing: "from-green-500 to-emerald-600",
+  healthcare: "from-red-500 to-pink-600",
+  legal: "from-amber-500 to-orange-600",
+  insurance: "from-blue-500 to-cyan-600",
+  manufacturing: "from-green-500 to-emerald-600",
+  "ca-firm": "from-violet-500 to-fuchsia-600",
 };
+
+const ICON_LABELS: Record<string, string> = {
+  healthcare: "H",
+  legal: "L",
+  insurance: "I",
+  manufacturing: "M",
+  "ca-firm": "CA",
+};
+
+function titleCase(value: string): string {
+  return value
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeAgents(rawAgents: unknown): PackAgent[] {
+  if (!Array.isArray(rawAgents)) return [];
+  return rawAgents.map((agent, index) => {
+    if (!agent || typeof agent !== "object") {
+      const fallback = String(agent ?? `Agent ${index + 1}`);
+      return { name: fallback, type: fallback };
+    }
+    const record = agent as Record<string, unknown>;
+    const type = String(record.type || record.domain || `agent_${index + 1}`);
+    return {
+      name: String(record.name || titleCase(type)),
+      type,
+    };
+  });
+}
+
+function normalizeWorkflows(rawWorkflows: unknown): PackWorkflow[] {
+  if (!Array.isArray(rawWorkflows)) return [];
+  return rawWorkflows.map((workflow, index) => {
+    if (typeof workflow === "string") {
+      return {
+        name: titleCase(workflow),
+        description: workflow,
+      };
+    }
+    if (workflow && typeof workflow === "object") {
+      const record = workflow as Record<string, unknown>;
+      const rawName = String(record.name || record.id || `workflow_${index + 1}`);
+      return {
+        name: titleCase(rawName),
+        description: String(record.description || rawName),
+      };
+    }
+    const fallback = `workflow_${index + 1}`;
+    return { name: titleCase(fallback), description: fallback };
+  });
+}
+
+function deriveRequiredConnectors(rawPack: Record<string, unknown>, agents: PackAgent[]): string[] {
+  const explicit = rawPack.required_connectors;
+  if (Array.isArray(explicit)) {
+    return explicit.map((value) => String(value));
+  }
+
+  const rawAgents = Array.isArray(rawPack.agents) ? rawPack.agents : [];
+  const connectors = new Set<string>();
+
+  rawAgents.forEach((agent, index) => {
+    const normalized = agents[index];
+    if (normalized?.type) connectors.add(normalized.type);
+
+    if (!agent || typeof agent !== "object") return;
+    const tools = Array.isArray((agent as Record<string, unknown>).tools)
+      ? ((agent as Record<string, unknown>).tools as unknown[])
+      : [];
+
+    tools.forEach((tool) => {
+      const toolName = String(tool);
+      connectors.add(toolName.includes(":") ? toolName.split(":")[0] : toolName);
+    });
+  });
+
+  return Array.from(connectors).sort();
+}
+
+function normalizePack(rawPack: unknown, installedIds: Set<string>): IndustryPack | null {
+  if (!rawPack || typeof rawPack !== "object") return null;
+
+  const record = rawPack as Record<string, unknown>;
+  const id = String(record.id || record.name || "");
+  if (!id) return null;
+
+  const agents = normalizeAgents(record.agents);
+  const workflows = normalizeWorkflows(record.workflows);
+  const name = String(record.display_name || record.name || id);
+
+  return {
+    id,
+    name,
+    description: String(record.description || ""),
+    icon: String(record.icon || ICON_LABELS[id] || name.charAt(0).toUpperCase()),
+    agent_count:
+      typeof record.agent_count === "number" ? record.agent_count : agents.length,
+    agents,
+    workflows,
+    required_connectors: deriveRequiredConnectors(record, agents),
+    installed: installedIds.has(id),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -54,17 +161,36 @@ export default function IndustryPacks() {
         api.get("/packs"),
         api.get("/packs/installed"),
       ]);
+
       const allPacks =
         packsRes.status === "fulfilled"
-          ? Array.isArray(packsRes.value.data) ? packsRes.value.data : packsRes.value.data?.items || []
+          ? Array.isArray(packsRes.value.data)
+            ? packsRes.value.data
+            : packsRes.value.data?.packs || packsRes.value.data?.items || []
           : [];
       const installed =
         installedRes.status === "fulfilled"
-          ? Array.isArray(installedRes.value.data) ? installedRes.value.data : installedRes.value.data?.items || []
+          ? Array.isArray(installedRes.value.data)
+            ? installedRes.value.data
+            : installedRes.value.data?.installed || installedRes.value.data?.items || []
           : [];
 
-      const installedIds = new Set(installed.map((i: any) => i.id || i.name));
-      setPacks(allPacks.map((p: IndustryPack) => ({ ...p, installed: installedIds.has(p.id) })));
+      const installedIds = new Set<string>(
+        (installed as unknown[]).map((item: unknown): string => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const record = item as Record<string, unknown>;
+            return String(record.id || record.name || "");
+          }
+          return "";
+        }).filter(Boolean)
+      );
+
+      setPacks(
+        (allPacks as unknown[])
+          .map((pack: unknown) => normalizePack(pack, installedIds))
+          .filter((pack: IndustryPack | null): pack is IndustryPack => Boolean(pack))
+      );
     } catch {
       setPacks([]);
     } finally {
@@ -128,7 +254,7 @@ export default function IndustryPacks() {
           >
             <CardHeader>
               <div className="flex items-start justify-between">
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${ICON_COLORS[pack.name] || "from-gray-500 to-gray-600"} flex items-center justify-center text-white font-bold text-xl`}>
+                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${ICON_COLORS[pack.id] || "from-gray-500 to-gray-600"} flex items-center justify-center text-white font-bold text-xl`}>
                   {pack.icon}
                 </div>
                 {pack.installed && <Badge variant="success">Installed</Badge>}
@@ -170,7 +296,7 @@ export default function IndustryPacks() {
           <div className="bg-background border rounded-lg p-6 w-full max-w-2xl shadow-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${ICON_COLORS[selectedPack.name] || "from-gray-500 to-gray-600"} flex items-center justify-center text-white font-bold text-xl`}>
+                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${ICON_COLORS[selectedPack.id] || "from-gray-500 to-gray-600"} flex items-center justify-center text-white font-bold text-xl`}>
                   {selectedPack.icon}
                 </div>
                 <div>

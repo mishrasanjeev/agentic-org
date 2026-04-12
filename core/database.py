@@ -207,6 +207,24 @@ async def init_db() -> None:
                 UNIQUE (tenant_id)
             );
         """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS industry_pack_installs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id),
+                pack_name VARCHAR(100) NOT NULL,
+                installed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                agent_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                workflow_ids JSONB NOT NULL DEFAULT '[]'::jsonb
+            );
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_industry_pack_installs_tenant_id "
+            "ON industry_pack_installs(tenant_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_industry_pack_installs_pack_name "
+            "ON industry_pack_installs(pack_name)"
+        ))
 
         # v4.2.0: Ensure filing_approvals table exists.
         await conn.execute(text("""

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.agents.packs.installer import (
-    get_installed_packs,
+    get_installed_packs_async,
     get_pack_detail,
-    install_pack,
+    install_pack_async,
     list_packs,
-    uninstall_pack,
+    uninstall_pack_async,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[require_tenant_admin])
 
 
 @router.get("/packs")
@@ -25,7 +25,7 @@ async def list_available_packs():
 @router.get("/packs/installed")
 async def list_installed(tenant_id: str = Depends(get_current_tenant)):
     """List packs installed for the current tenant."""
-    return {"installed": get_installed_packs(tenant_id)}
+    return {"installed": await get_installed_packs_async(tenant_id)}
 
 
 @router.get("/packs/{name}")
@@ -41,7 +41,7 @@ async def pack_detail(name: str):
 async def install(name: str, tenant_id: str = Depends(get_current_tenant)):
     """Install an industry pack for the current tenant."""
     try:
-        result = install_pack(name, tenant_id)
+        result = await install_pack_async(name, tenant_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return result
@@ -50,5 +50,5 @@ async def install(name: str, tenant_id: str = Depends(get_current_tenant)):
 @router.delete("/packs/{name}")
 async def uninstall(name: str, tenant_id: str = Depends(get_current_tenant)):
     """Uninstall an industry pack for the current tenant."""
-    result = uninstall_pack(name, tenant_id)
+    result = await uninstall_pack_async(name, tenant_id)
     return result

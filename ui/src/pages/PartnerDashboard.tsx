@@ -27,6 +27,15 @@ interface Deadline {
   due_date: string;
 }
 
+interface PartnerSummary {
+  total_clients: number;
+  active_clients: number;
+  avg_health_score: number;
+  total_pending_filings: number;
+  total_overdue: number;
+  revenue_per_month_inr: number;
+}
+
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -51,30 +60,73 @@ function healthTextColor(score: number): string {
 export default function PartnerDashboard() {
   const [clients, setClients] = useState<ClientHealth[]>([]);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [summary, setSummary] = useState<PartnerSummary>({
+    total_clients: 0,
+    active_clients: 0,
+    avg_health_score: 0,
+    total_pending_filings: 0,
+    total_overdue: 0,
+    revenue_per_month_inr: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   const fetchPartnerData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get("/partner-dashboard");
-      const data = res.data;
-      if (data?.clients && Array.isArray(data.clients) && data.clients.length > 0) {
+      const data = (res.data || {}) as Record<string, unknown>;
+
+      setSummary({
+        total_clients: Number(data.total_clients || 0),
+        active_clients: Number(data.active_clients || 0),
+        avg_health_score: Number(data.avg_health_score || 0),
+        total_pending_filings: Number(data.total_pending_filings || 0),
+        total_overdue: Number(data.total_overdue || 0),
+        revenue_per_month_inr: Number(data.revenue_per_month_inr || 0),
+      });
+
+      if (Array.isArray(data.clients)) {
         setClients(data.clients.map((c: Record<string, unknown>) => ({
-          id: c.id || c.company_id || "",
-          name: c.name || c.company_name || "",
-          health_score: c.health_score ?? c.client_health_score ?? 0,
-          pending_filings: c.pending_filings ?? c.pending_approvals ?? 0,
-          status: c.is_active === false ? "inactive" : (c.status || "active"),
-          subscription: c.subscription || c.subscription_status || "active",
+          id: String(c.id || c.company_id || ""),
+          name: String(c.name || c.company_name || ""),
+          health_score: Number(c.health_score ?? c.client_health_score ?? 0),
+          pending_filings: Number(c.pending_filings ?? c.pending_approvals ?? 0),
+          status: c.is_active === false ? "inactive" : String(c.status || "active"),
+          subscription: String(c.subscription || c.subscription_status || "active"),
         })));
+      } else {
+        setClients([]);
       }
-      if (data?.deadlines && Array.isArray(data.deadlines) && data.deadlines.length > 0) {
-        setDeadlines(data.deadlines);
+
+      const rawDeadlines = Array.isArray(data.deadlines)
+        ? data.deadlines
+        : Array.isArray(data.upcoming_deadlines)
+          ? data.upcoming_deadlines
+          : [];
+
+      if (rawDeadlines.length > 0) {
+        setDeadlines(rawDeadlines.map((d: Record<string, unknown>, index: number) => ({
+          id: String(d.id || `${d.company_name || d.company || "company"}-${d.deadline_type || d.type || index}`),
+          type: String(d.type || d.deadline_type || ""),
+          period: String(d.period || d.filing_period || ""),
+          company: String(d.company || d.company_name || ""),
+          due_date: String(d.due_date || ""),
+        })));
+      } else {
+        setDeadlines([]);
       }
     } catch {
       // API unavailable, show empty state
       setClients([]);
       setDeadlines([]);
+      setSummary({
+        total_clients: 0,
+        active_clients: 0,
+        avg_health_score: 0,
+        total_pending_filings: 0,
+        total_overdue: 0,
+        revenue_per_month_inr: 0,
+      });
     } finally {
       setLoading(false);
     }
@@ -84,14 +136,17 @@ export default function PartnerDashboard() {
     fetchPartnerData();
   }, [fetchPartnerData]);
 
-  const totalClients = clients.length;
-  const activeClients = clients.filter((c) => c.status === "active").length;
-  const avgHealth = clients.length > 0 ? Math.round(clients.reduce((sum, c) => sum + c.health_score, 0) / clients.length) : 0;
-  const totalPending = clients.reduce((sum, c) => sum + c.pending_filings, 0);
-  const overdueCount = clients.filter((c) => c.health_score < 50).length;
+  const totalClients = summary.total_clients || clients.length;
+  const activeClients = summary.active_clients || clients.filter((c) => c.status === "active").length;
+  const avgHealth = summary.avg_health_score || (clients.length > 0 ? Math.round(clients.reduce((sum, c) => sum + c.health_score, 0) / clients.length) : 0);
+  const totalPending = summary.total_pending_filings || clients.reduce((sum, c) => sum + c.pending_filings, 0);
+  const overdueCount = summary.total_overdue || clients.filter((c) => c.health_score < 50).length;
 
   const filedCount = clients.filter((c) => c.pending_filings === 0 && c.status === "active").length;
   const pendingCount = clients.filter((c) => c.pending_filings > 0).length;
+  const filedWidth = totalClients > 0 ? (filedCount / totalClients) * 100 : 0;
+  const pendingWidth = totalClients > 0 ? (pendingCount / totalClients) * 100 : 0;
+  const overdueWidth = totalClients > 0 ? (overdueCount / totalClients) * 100 : 0;
 
   if (loading) {
     return (
@@ -112,7 +167,7 @@ export default function PartnerDashboard() {
         <div>
           <h2 className="text-2xl font-bold">Partner Dashboard</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Kumar & Associates, Chartered Accountants
+            Firm-wide compliance and client health overview
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -165,12 +220,20 @@ export default function PartnerDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Monthly Recurring Revenue</p>
-              <p className="text-3xl font-bold mt-1">INR 34,993/month</p>
-              <p className="text-xs text-muted-foreground mt-1">{totalClients} clients x INR 4,999</p>
+              <p className="text-3xl font-bold mt-1">
+                INR {summary.revenue_per_month_inr.toLocaleString("en-IN")}/month
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Based on current client portfolio and CA plan pricing
+              </p>
             </div>
             <div className="text-right">
-              <Badge variant="success">Active</Badge>
-              <p className="text-xs text-muted-foreground mt-2">Next billing: Apr 15, 2026</p>
+              <Badge variant={totalClients > 0 ? "success" : "secondary"}>
+                {totalClients > 0 ? "Active" : "No CA data"}
+              </Badge>
+              <p className="text-xs text-muted-foreground mt-2">
+                Revenue is zero until CA clients and subscription data exist
+              </p>
             </div>
           </div>
         </CardContent>
@@ -302,7 +365,7 @@ export default function PartnerDashboard() {
                 <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${(filedCount / totalClients) * 100}%` }}
+                    style={{ width: `${filedWidth}%` }}
                   />
                 </div>
               </div>
@@ -316,7 +379,7 @@ export default function PartnerDashboard() {
                 <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-amber-500 rounded-full"
-                    style={{ width: `${(pendingCount / totalClients) * 100}%` }}
+                    style={{ width: `${pendingWidth}%` }}
                   />
                 </div>
               </div>
@@ -330,7 +393,7 @@ export default function PartnerDashboard() {
                 <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-red-500 rounded-full"
-                    style={{ width: `${(overdueCount / totalClients) * 100}%` }}
+                    style={{ width: `${overdueWidth}%` }}
                   />
                 </div>
               </div>
