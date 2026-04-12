@@ -117,19 +117,22 @@ app = FastAPI(
         "AI Virtual Employee Platform — 50+ agents, 1000+ integrations, "
         "54 native connectors (340+ tools), voice agents, knowledge base"
     ),
-    version="4.0.0",
+    version="4.8.0",
     lifespan=lifespan,
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",
 )
 
-# CORS: open in dev, restricted in production
+# CORS: open in dev, fail-closed in production
+if settings.env in ("production", "staging") and not settings.cors_allowed_origins:
+    raise RuntimeError(
+        "CORS_ALLOWED_ORIGINS must be explicitly set in production/staging. "
+        "Refusing to start with a wildcard fallback."
+    )
 _cors_origins = (
     ["*"]
     if settings.env == "development"
     else [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
-    if settings.cors_allowed_origins
-    else ["*"]
 )
 app.add_middleware(
     CORSMiddleware,

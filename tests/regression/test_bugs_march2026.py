@@ -706,7 +706,7 @@ class TestIntConn015GetSecretGcp:
 
 
 class TestIntConn016HealthEndpoint:
-    """GET /health must include connector health data in its response."""
+    """Health endpoints — readiness (DB+Redis only) and diagnostics (connectors)."""
 
     @pytest.mark.asyncio
     async def test_health_liveness_returns_alive(self):
@@ -718,8 +718,13 @@ class TestIntConn016HealthEndpoint:
 
     @pytest.mark.asyncio
     async def test_health_check_includes_connectors_section(self):
-        """Full health check must include a 'connectors' key with health data."""
-        from api.v1.health import health_check
+        """Diagnostics endpoint (admin-only) includes connector health data.
+
+        The public readiness endpoint (/health) no longer includes connector
+        details — it was split in GAP-7 to prevent external outages from
+        flapping pods and to stop leaking connector posture to anonymous callers.
+        """
+        from api.v1.health import diagnostics as health_check
 
         with (
             patch("api.v1.health.async_session_factory") as mock_sf,
@@ -753,7 +758,7 @@ class TestIntConn016HealthEndpoint:
     @pytest.mark.asyncio
     async def test_health_check_reports_connector_count(self):
         """Connector section must report the correct count of registered connectors."""
-        from api.v1.health import health_check
+        from api.v1.health import diagnostics as health_check
 
         with (
             patch("api.v1.health.async_session_factory") as mock_sf,
@@ -781,7 +786,7 @@ class TestIntConn016HealthEndpoint:
     @pytest.mark.asyncio
     async def test_health_overall_degraded_when_connectors_unhealthy(self):
         """If all core checks pass but connectors fail, overall status = 'degraded'."""
-        from api.v1.health import health_check
+        from api.v1.health import diagnostics as health_check
 
         with (
             patch("api.v1.health.async_session_factory") as mock_sf,

@@ -17,12 +17,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import async_session_factory
 from core.models.invoice import Invoice
 
 logger = structlog.get_logger()
-router = APIRouter(prefix="/billing/invoices", tags=["Billing"])
+router = APIRouter(prefix="/billing/invoices", tags=["Billing"], dependencies=[require_tenant_admin])
 
 
 class InvoiceOut(BaseModel):
@@ -81,14 +81,19 @@ async def get_invoice(
 async def generate_now(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict:
-    """Manually trigger invoice generation for the previous month.
+    """Manually trigger invoice generation for the caller's tenant only.
 
-    Primarily for end-of-period reconciliation or when the scheduled
-    Celery task missed a run.
+    Admin-only (enforced by the router-level require_tenant_admin).
+    Scoped to a single tenant to prevent one admin from triggering a
+    global invoice run.
     """
+    import uuid
+
     from core.billing.invoice_generator import generate_invoices_for_period
 
-    result = await generate_invoices_for_period()
+    result = await generate_invoices_for_period(
+        tenant_filter=uuid.UUID(tenant_id),
+    )
     logger.info("invoice_manual_generate", tenant_id=tenant_id, **result)
     return result
 

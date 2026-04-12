@@ -38,6 +38,11 @@ def require_scope(scope: str):
     return Depends(checker)
 
 
+# Shared dependency: every tenant control-plane route MUST use this.
+# It verifies the caller has admin privileges before any mutation.
+require_tenant_admin = require_scope("agenticorg:admin")
+
+
 def get_user_domains(request: Request) -> list[str] | None:
     claims = getattr(request.state, "claims", {})
     return claims.get("agenticorg:domains")

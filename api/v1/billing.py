@@ -32,16 +32,15 @@ router = APIRouter(prefix="/billing", tags=["Billing"])
 
 
 class SubscribeRequest(BaseModel):
-    tenant_id: str
+    # tenant_id removed — always bound to the authenticated caller's tenant
     plan: str  # pro | enterprise
-    success_url: str = ""  # defaults to API callback for server-side verification
+    success_url: str = ""
     cancel_url: str = ""
     customer_email: str = ""
     customer_name: str = ""
 
 
 class IndiaSubscribeRequest(BaseModel):
-    tenant_id: str
     plan: str  # pro | enterprise
     amount_inr: int | None = None
     customer_email: str = ""
@@ -50,7 +49,6 @@ class IndiaSubscribeRequest(BaseModel):
 
 
 class CancelRequest(BaseModel):
-    tenant_id: str
     subscription_id: str
 
 
@@ -59,7 +57,6 @@ class OrderStatusRequest(BaseModel):
 
 
 class PortalRequest(BaseModel):
-    tenant_id: str
     return_url: str = ""
 
 
@@ -78,18 +75,16 @@ async def list_plans() -> list[dict[str, Any]]:
 
 
 @router.post("/subscribe")
-async def subscribe_stripe(body: SubscribeRequest) -> dict[str, Any]:
-    """Create a Stripe Checkout Session for subscription.
-
-    The frontend should redirect to ``checkout_url``.
-    After payment, Stripe redirects to the API callback for server-side
-    verification, then to the frontend callback page.
-    """
+async def subscribe_stripe(
+    body: SubscribeRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Create a Stripe Checkout Session for subscription."""
     from core.billing.stripe_client import create_checkout_session
 
     try:
         result = create_checkout_session(
-            tenant_id=body.tenant_id,
+            tenant_id=tenant_id,
             plan=body.plan,
             success_url=body.success_url,
             cancel_url=body.cancel_url,
@@ -100,7 +95,7 @@ async def subscribe_stripe(body: SubscribeRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("stripe_checkout_error", tenant_id=body.tenant_id)
+        logger.exception("stripe_checkout_error", tenant_id=tenant_id)
         raise HTTPException(status_code=502, detail="Payment gateway error") from exc
 
 
@@ -108,18 +103,16 @@ async def subscribe_stripe(body: SubscribeRequest) -> dict[str, Any]:
 
 
 @router.post("/subscribe/india")
-async def subscribe_india(body: IndiaSubscribeRequest) -> dict[str, Any]:
-    """Create a Plural payment order and return the hosted checkout URL.
-
-    The frontend should redirect the user to ``challenge_url``.
-    All payment methods are enabled: CARD, UPI, NETBANKING, WALLET,
-    CREDIT_EMI, DEBIT_EMI.
-    """
+async def subscribe_india(
+    body: IndiaSubscribeRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Create a Plural payment order and return the hosted checkout URL."""
     from core.billing.pinelabs_client import create_payment_order
 
     try:
         order = create_payment_order(
-            tenant_id=body.tenant_id,
+            tenant_id=tenant_id,
             plan=body.plan,
             amount_inr=body.amount_inr,
             customer_email=body.customer_email,
@@ -130,7 +123,7 @@ async def subscribe_india(body: IndiaSubscribeRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("plural_order_error", tenant_id=body.tenant_id)
+        logger.exception("plural_order_error", tenant_id=tenant_id)
         raise HTTPException(status_code=502, detail="Payment gateway error") from exc
 
 
@@ -289,23 +282,23 @@ async def stripe_callback(
 
 
 @router.post("/portal")
-async def create_portal(body: PortalRequest) -> dict[str, Any]:
-    """Create a Stripe Customer Portal session for self-service billing.
-
-    Users can update payment methods, view invoices, and cancel.
-    """
+async def create_portal(
+    body: PortalRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Create a Stripe Customer Portal session for self-service billing."""
     from core.billing.stripe_client import create_portal_session
 
     try:
         url = create_portal_session(
-            tenant_id=body.tenant_id,
+            tenant_id=tenant_id,
             return_url=body.return_url,
         )
         return {"portal_url": url}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("stripe_portal_error", tenant_id=body.tenant_id)
+        logger.exception("stripe_portal_error", tenant_id=tenant_id)
         raise HTTPException(status_code=502, detail="Portal creation failed") from exc
 
 
@@ -380,30 +373,30 @@ async def list_invoices(tenant_id: str = Depends(get_current_tenant)) -> list[di
 
 
 @router.post("/cancel")
-async def cancel_subscription(body: CancelRequest) -> dict[str, Any]:
+async def cancel_subscription(
+    body: CancelRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
     """Cancel a subscription.
 
-    Checks the tenant's billing provider (Stripe or Plural) and routes
-    the cancellation accordingly.  Plural orders are one-time payments
-    without recurring subscriptions, so cancellation only applies to Stripe.
+    Bound to the authenticated tenant — the caller cannot cancel
+    another tenant's subscription.
     """
     from core.billing.usage_tracker import _get_redis
 
     redis = _get_redis()
-    provider_raw = redis.get(f"tenant:{body.tenant_id}:billing_provider")
+    provider_raw = redis.get(f"tenant:{tenant_id}:billing_provider")
     provider = (
         provider_raw.decode() if isinstance(provider_raw, bytes) else (provider_raw or "stripe")
     )
 
     if provider == "plural":
-        # Plural is one-time payment — just downgrade to free
-        redis.set(f"tenant_tier:{body.tenant_id}", "free")
-        redis.set(f"tenant:{body.tenant_id}:plan", "free")
-        redis.delete(f"tenant:{body.tenant_id}:billing_order_id")
-        logger.info("plural_subscription_cancelled", tenant_id=body.tenant_id)
-        return {"cancelled": True, "provider": "plural", "tenant_id": body.tenant_id}
+        redis.set(f"tenant_tier:{tenant_id}", "free")
+        redis.set(f"tenant:{tenant_id}:plan", "free")
+        redis.delete(f"tenant:{tenant_id}:billing_order_id")
+        logger.info("plural_subscription_cancelled", tenant_id=tenant_id)
+        return {"cancelled": True, "provider": "plural", "tenant_id": tenant_id}
 
-    # Stripe: cancel the actual subscription
     from core.billing.stripe_client import cancel_subscription as _cancel
 
     success = _cancel(body.subscription_id)

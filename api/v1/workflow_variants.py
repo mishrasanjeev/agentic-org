@@ -9,12 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import async_session_factory
 from core.models.workflow_variant import WorkflowVariant
 
 logger = structlog.get_logger()
-router = APIRouter(prefix="/workflows/{workflow_id}/variants", tags=["Workflows"])
+router = APIRouter(prefix="/workflows/{workflow_id}/variants", tags=["Workflows"], dependencies=[require_tenant_admin])
 
 
 class VariantIn(BaseModel):

@@ -143,22 +143,23 @@ class ToolGateway:
         if not connector:
             return {"error": {"code": "E1005", "message": f"Connector not found: {connector_name}"}}
 
-        # P2.3: Mask PII in params BEFORE passing to connector — connectors may
-        # log their own params. We pass masked_params to the tool call.
-        masked_params = mask_pii(params) if isinstance(params, dict) else params
-
+        # Execute with RAW params — connectors need the real values
+        # (account numbers, emails, identifiers) to perform the business
+        # action. PII is masked ONLY for audit logging below.
         try:
-            result = await connector.execute_tool(tool_name, masked_params)
+            result = await connector.execute_tool(tool_name, params)
             latency_ms = int((time.monotonic() - start_time) * 1000)
 
-            # 5. Mask PII in result before storing/logging
+            # 5. Mask PII in params + result for audit/logging ONLY —
+            # never feed the masked version to the connector.
+            masked_params = mask_pii(params) if isinstance(params, dict) else params
             masked_result = mask_pii(result) if isinstance(result, dict) else result
 
-            # 6. Store idempotency result
+            # 6. Store idempotency result (unmasked — it's server-side)
             if idempotency_key and self.idempotency:
                 await self.idempotency.store(tenant_id, idempotency_key, result)
 
-            # 7. Audit log
+            # 7. Audit log (masked)
             if self.audit:
                 input_hash = hashlib.sha256(str(masked_params).encode()).hexdigest()[:16]
                 output_hash = hashlib.sha256(str(masked_result).encode()).hexdigest()[:16]
@@ -212,27 +213,49 @@ class ToolGateway:
             if not connector_cls:
                 return None
 
-            # Load config from database
+            # Load config from the ENCRYPTED connector_configs table first
+            # (credentials_encrypted JSONB), falling back to the legacy
+            # Connector.auth_config (plaintext) for backward compatibility.
+            # Decryption happens at execution time only — never cached in
+            # cleartext in memory.
             config: dict[str, Any] = {}
             try:
+                import json as _json
                 import uuid as _uuid
 
                 from sqlalchemy import select
 
                 from core.database import get_tenant_session
                 from core.models.connector import Connector
+                from core.models.connector_config import ConnectorConfig
 
                 tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
                 async with get_tenant_session(tid) as session:
-                    result = await session.execute(
-                        select(Connector).where(
-                            Connector.tenant_id == tid,
-                            Connector.name == connector_name,
+                    # Preferred: encrypted connector config
+                    cc_result = await session.execute(
+                        select(ConnectorConfig).where(
+                            ConnectorConfig.tenant_id == tid,
+                            ConnectorConfig.connector_name == connector_name,
                         )
                     )
-                    db_connector = result.scalar_one_or_none()
-                    if db_connector:
-                        config = db_connector.auth_config or {}
+                    cc = cc_result.scalar_one_or_none()
+                    if cc and cc.credentials_encrypted:
+                        creds = cc.credentials_encrypted
+                        if isinstance(creds, str):
+                            creds = _json.loads(creds)
+                        # Merge non-secret config with decrypted creds
+                        config = {**(cc.config or {}), **(creds or {})}
+                    else:
+                        # Fallback: legacy plaintext auth_config
+                        result = await session.execute(
+                            select(Connector).where(
+                                Connector.tenant_id == tid,
+                                Connector.name == connector_name,
+                            )
+                        )
+                        db_connector = result.scalar_one_or_none()
+                        if db_connector:
+                            config = db_connector.auth_config or {}
             except Exception as e:
                 logger.warning("connector_config_load_failed", connector=connector_name, error=str(e))
 

@@ -700,6 +700,38 @@ async def init_db() -> None:
             );
         """))
 
+        # 9c. RLS for ALL v4.7 tenant-scoped tables
+        # (Missing from the original v4.7.0 ship — found in gap analysis #6)
+        _v47_rls_tables = [
+            "sso_configs",
+            "approval_policies",
+            "invoices",
+            "tenant_branding",
+            "workflow_variants",
+        ]
+        for _rls_tbl in _v47_rls_tables:
+            await conn.execute(text(f"ALTER TABLE {_rls_tbl} ENABLE ROW LEVEL SECURITY;"))  # noqa: S608
+            await conn.execute(text(f"ALTER TABLE {_rls_tbl} FORCE ROW LEVEL SECURITY;"))  # noqa: S608
+            await conn.execute(text(
+                f"DROP POLICY IF EXISTS {_rls_tbl}_tenant_isolation ON {_rls_tbl};"  # noqa: S608
+            ))
+            await conn.execute(text(
+                f"CREATE POLICY {_rls_tbl}_tenant_isolation ON {_rls_tbl} "  # noqa: S608
+                "USING (tenant_id::text = current_setting('agenticorg.tenant_id', true));"
+            ))
+        # approval_steps is a child of approval_policies — RLS via FK cascade,
+        # but add direct policy too for defense in depth.
+        await conn.execute(text("ALTER TABLE approval_steps ENABLE ROW LEVEL SECURITY;"))
+        await conn.execute(text("ALTER TABLE approval_steps FORCE ROW LEVEL SECURITY;"))
+        await conn.execute(text("DROP POLICY IF EXISTS approval_steps_tenant_isolation ON approval_steps;"))
+        await conn.execute(text("""
+            CREATE POLICY approval_steps_tenant_isolation ON approval_steps
+            USING (policy_id IN (
+                SELECT id FROM approval_policies
+                WHERE tenant_id::text = current_setting('agenticorg.tenant_id', true)
+            ));
+        """))
+
         # 10. Audit log immutability trigger — rejects UPDATE/DELETE
         await conn.execute(text("""
             CREATE OR REPLACE FUNCTION audit_log_reject_mutation() RETURNS trigger AS $$

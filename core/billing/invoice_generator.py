@@ -216,18 +216,25 @@ async def _upload_pdf(tenant_id: uuid.UUID, invoice_number: str, data: bytes) ->
 
 async def generate_invoices_for_period(
     ref: datetime | None = None,
+    tenant_filter: uuid.UUID | None = None,
 ) -> dict[str, Any]:
-    """Iterate every tenant, generate a monthly invoice if missing."""
+    """Generate monthly invoices.
+
+    ``tenant_filter``: when set, generate for this tenant only (used by
+    the manual /generate endpoint so one admin can't trigger a global run).
+    When None (Celery beat), iterate all active tenants.
+    """
     now = ref or datetime.now(UTC)
-    start, end = _month_window(now - timedelta(days=1))  # previous calendar month
+    start, end = _month_window(now - timedelta(days=1))
 
     created = 0
     skipped = 0
 
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(Tenant).where(Tenant.deleted_at.is_(None))
-        )
+        stmt = select(Tenant).where(Tenant.deleted_at.is_(None))
+        if tenant_filter is not None:
+            stmt = stmt.where(Tenant.id == tenant_filter)
+        result = await session.execute(stmt)
         tenants = result.scalars().all()
 
     for tenant in tenants:

@@ -7,17 +7,18 @@ packages = ["core", "api", "auth", "connectors", "workflows", "scaling", "observ
 
 [project]
 name = "agenticorg"
-version = "4.0.0"
+version = "4.8.0"
 description = "AI Virtual Employee Platform — 50+ LangGraph agents, 1000+ integrations (Composio), 54 native connectors (340+ tools), voice agents, RAG knowledge base, smart LLM routing, industry packs"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [{ name = "AgenticOrg Contributors" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: FastAPI",
     "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [

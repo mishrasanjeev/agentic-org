@@ -448,6 +448,45 @@ async def logout(request: Request):
     return {"status": "logged_out"}
 
 
+@router.get("/me")
+async def get_current_user_profile(request: Request):
+    """Return the current authenticated user's profile from the JWT.
+
+    Used by the frontend after SSO login to hydrate the session. The
+    claims are already verified by the auth middleware — we just decode
+    and return them in the shape the UI expects.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Missing Authorization header")
+    token = auth_header[7:]
+    try:
+        claims = validate_local_token(token)
+    except Exception as exc:
+        raise HTTPException(401, "Invalid or expired token") from exc
+
+    # Hydrate from the DB so we get the latest role/domain/name
+    email = claims.get("sub", "")
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(User).where(User.email == email, User.status == "active")
+        )
+        user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    return {
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id),
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "domain": user.domain,
+        "mfa_enabled": user.mfa_enabled,
+        "onboarding_complete": True,
+    }
+
+
 @router.get("/config")
 async def auth_config():
     """Return public auth configuration (Google Client ID, etc.)."""

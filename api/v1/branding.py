@@ -22,14 +22,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import async_session_factory
 from core.models.branding import TenantBranding
 
 logger = structlog.get_logger()
 
 public_router = APIRouter(prefix="/branding", tags=["Branding"])
-admin_router = APIRouter(prefix="/admin/branding", tags=["Branding"])
+admin_router = APIRouter(prefix="/admin/branding", tags=["Branding"], dependencies=[require_tenant_admin])
 
 
 class BrandingOut(BaseModel):

@@ -9,6 +9,7 @@ import structlog
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from api.deps import require_scope
 from connectors.registry import ConnectorRegistry
 from core.config import settings
 from core.database import async_session_factory
@@ -17,7 +18,7 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-APP_VERSION = "4.0.0"
+APP_VERSION = "4.8.0"
 
 # Timeout for individual connector health checks (seconds)
 _CONNECTOR_HC_TIMEOUT = 5.0
@@ -41,11 +42,15 @@ async def _check_connector(connector_name: str) -> dict:
 
 
 @router.get("/health")
-async def health_check():
-    """Full health check — verifies DB, Redis, and connectors are reachable."""
-    checks: dict[str, str | dict] = {"db": "unknown", "redis": "unknown"}
+async def health_readiness():
+    """Readiness probe — checks local critical dependencies (DB + Redis).
 
-    # Check PostgreSQL
+    Does NOT check connectors (external) or expose environment details.
+    K8s readiness probes should point here so external outages don't
+    flap pods.
+    """
+    checks: dict[str, str] = {"db": "unknown", "redis": "unknown"}
+
     try:
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
@@ -53,7 +58,6 @@ async def health_check():
     except Exception as e:
         checks["db"] = f"unhealthy: {type(e).__name__}"
 
-    # Check Redis
     try:
         r = aioredis.from_url(settings.redis_url, decode_responses=True)
         await r.ping()
@@ -62,7 +66,46 @@ async def health_check():
     except Exception as e:
         checks["redis"] = f"unhealthy: {type(e).__name__}"
 
-    # Check registered connectors
+    core_healthy = checks["db"] == "healthy" and checks["redis"] == "healthy"
+    return {
+        "status": "healthy" if core_healthy else "unhealthy",
+        "version": APP_VERSION,
+        "checks": checks,
+    }
+
+
+@router.get("/health/liveness")
+async def liveness():
+    """Lightweight liveness probe — just confirms the process is running."""
+    return {"status": "alive"}
+
+
+@router.get(
+    "/health/diagnostics",
+    dependencies=[require_scope("agenticorg:admin")],
+)
+async def diagnostics():
+    """Full diagnostics — requires admin auth. Includes connector details + env.
+
+    Not used by K8s probes. Called by the SRE dashboard.
+    """
+    checks: dict[str, str | dict] = {"db": "unknown", "redis": "unknown"}
+
+    try:
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1"))
+        checks["db"] = "healthy"
+    except Exception as e:
+        checks["db"] = f"unhealthy: {type(e).__name__}"
+
+    try:
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        await r.ping()
+        await r.close()
+        checks["redis"] = "healthy"
+    except Exception as e:
+        checks["redis"] = f"unhealthy: {type(e).__name__}"
+
     connector_names = ConnectorRegistry.all_names()
     connector_checks: dict[str, dict] = {}
     if connector_names:
@@ -83,25 +126,12 @@ async def health_check():
         "details": connector_checks,
     }
 
-    # Overall status: degraded if any core check fails or any connector is unhealthy
     core_healthy = checks["db"] == "healthy" and checks["redis"] == "healthy"
-    connectors_healthy = healthy_count == total_count
-    if core_healthy and connectors_healthy:
-        overall = "healthy"
-    elif core_healthy:
-        overall = "degraded"
-    else:
-        overall = "unhealthy"
-
     return {
-        "status": overall,
+        "status": "healthy" if core_healthy and healthy_count == total_count else (
+            "degraded" if core_healthy else "unhealthy"
+        ),
         "version": APP_VERSION,
         "env": settings.env,
         "checks": checks,
     }
-
-
-@router.get("/health/liveness")
-async def liveness():
-    """Lightweight liveness probe — just confirms the process is running."""
-    return {"status": "alive"}

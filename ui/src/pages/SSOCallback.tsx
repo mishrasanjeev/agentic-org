@@ -42,6 +42,15 @@ export default function SSOCallback() {
     auth
       .loginWithToken(token)
       .then(() => {
+        // Fail closed: if loginWithToken stored the token but could
+        // not hydrate a user object (e.g. /auth/me returned 404),
+        // don't proceed to the dashboard — redirect to login.
+        const stored = localStorage.getItem("user");
+        if (!stored || stored === "null") {
+          setError("Could not verify your identity. Please sign in again.");
+          window.setTimeout(() => navigate("/login", { replace: true }), 2000);
+          return;
+        }
         // Strip the fragment from the URL so the token doesn't sit in
         // browser history, then route to the dashboard.
         window.history.replaceState(null, "", "/sso/callback");

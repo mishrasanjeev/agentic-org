@@ -21,7 +21,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from auth.jwt import create_access_token
 from auth.sso.oidc import OIDCProvider, new_nonce, new_pkce_pair, new_state
 from auth.sso.provisioning import jit_provision_user
@@ -34,7 +34,7 @@ from core.rbac import get_scopes_for_role
 logger = structlog.get_logger()
 
 public_router = APIRouter(prefix="/auth/sso", tags=["SSO"])
-admin_router = APIRouter(prefix="/sso", tags=["SSO"])
+admin_router = APIRouter(prefix="/sso", tags=["SSO"], dependencies=[require_tenant_admin])
 
 
 # ── Redis helpers for the short-lived state store ─────────────────

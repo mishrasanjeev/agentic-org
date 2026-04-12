@@ -91,7 +91,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A core.worker worker --loglevel=info --concurrency=4
+    command: celery -A core.tasks.celery_app worker --loglevel=info --concurrency=4
 
   # ── Air-gapped: Ollama (CPU) ──────────────────────────────────────
   ollama:

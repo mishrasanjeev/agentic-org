@@ -14,13 +14,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import get_tenant_session
 from core.feature_flags import clear_cache, is_enabled
 from core.models.feature_flag import FeatureFlag
 
 logger = structlog.get_logger()
-router = APIRouter(prefix="/feature-flags", tags=["Feature Flags"])
+router = APIRouter(prefix="/feature-flags", tags=["Feature Flags"], dependencies=[require_tenant_admin])
 
 
 class FlagIn(BaseModel):

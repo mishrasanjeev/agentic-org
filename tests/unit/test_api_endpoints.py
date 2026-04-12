@@ -79,7 +79,7 @@ class TestHealthEndpoints:
 
     @pytest.mark.asyncio
     async def test_health_check_all_healthy(self):
-        from api.v1.health import health_check
+        from api.v1.health import health_readiness as health_check
 
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock()
@@ -107,7 +107,7 @@ class TestHealthEndpoints:
 
     @pytest.mark.asyncio
     async def test_health_check_db_unhealthy(self):
-        from api.v1.health import health_check
+        from api.v1.health import health_readiness as health_check
 
         mock_redis = AsyncMock()
         mock_redis.ping = AsyncMock()
@@ -131,7 +131,7 @@ class TestHealthEndpoints:
 
     @pytest.mark.asyncio
     async def test_health_check_redis_unhealthy(self):
-        from api.v1.health import health_check
+        from api.v1.health import health_readiness as health_check
 
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock()
