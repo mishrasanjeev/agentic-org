@@ -384,7 +384,8 @@ async def abm_dashboard(
         tier_result = await session.execute(tier_q)
         by_tier: dict[str, int] = {"1": 0, "2": 0, "3": 0}
         for row in tier_result:
-            by_tier[row.tier] = row.count
+            tier_key = str(row.tier) if row.tier else "unclassified"
+            by_tier[tier_key] = row.count
 
         # Average intent score
         avg_q = select(func.avg(ABMAccount.intent_score)).where(ABMAccount.tenant_id == tid)
@@ -405,7 +406,7 @@ async def abm_dashboard(
                 "company_name": a.name,
                 "domain": a.domain or "",
                 "tier": a.tier or "2",
-                "intent_score": float(a.intent_score),
+                "intent_score": float(a.intent_score) if a.intent_score is not None else 0.0,
             }
             for a in top_result.scalars().all()
         ]

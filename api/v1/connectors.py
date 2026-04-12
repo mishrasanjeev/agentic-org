@@ -18,6 +18,9 @@ router = APIRouter(dependencies=[require_tenant_admin])
 
 
 def _connector_to_dict(conn: Connector) -> dict:
+    # Return a boolean flag for whether credentials are configured —
+    # NEVER return the actual auth_config (secrets) in the API response.
+    has_creds = bool(conn.auth_config) or bool(getattr(conn, "secret_ref", None))
     return {
         "id": str(conn.id),
         "connector_id": str(conn.id),  # kept for backward compat
@@ -26,6 +29,7 @@ def _connector_to_dict(conn: Connector) -> dict:
         "description": conn.description,
         "base_url": conn.base_url,
         "auth_type": conn.auth_type,
+        "has_credentials": has_creds,
         "tool_functions": conn.tool_functions,
         "data_schema_ref": conn.data_schema_ref,
         "rate_limit_rpm": conn.rate_limit_rpm,

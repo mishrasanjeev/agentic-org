@@ -429,8 +429,8 @@ class TestConnectorsEndpoints:
         d = _connector_to_dict(conn)
         expected_keys = {
             "id", "connector_id", "name", "category", "description", "base_url",
-            "auth_type", "tool_functions", "data_schema_ref", "rate_limit_rpm",
-            "timeout_ms", "status", "health_check_at", "created_at",
+            "auth_type", "has_credentials", "tool_functions", "data_schema_ref",
+            "rate_limit_rpm", "timeout_ms", "status", "health_check_at", "created_at",
         }
         assert set(d.keys()) == expected_keys
 

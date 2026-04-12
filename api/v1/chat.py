@@ -52,8 +52,9 @@ _DOMAIN_KEYWORDS: dict[str, list[str]] = {
         "commission", "territory", "forecast", "customer", "client", "contract",
     ],
     "communications": [
-        "email", "slack", "notification", "message", "announcement", "memo",
-        "newsletter", "whatsapp", "sms", "calendar", "meeting", "schedule",
+        "email", "gmail", "inbox", "outbox", "mail", "slack", "notification",
+        "message", "announcement", "memo", "newsletter", "whatsapp", "sms",
+        "calendar", "meeting", "schedule", "send email", "read email",
     ],
 }
 
@@ -197,7 +198,20 @@ def _format_agent_output(output: dict | str | Any) -> str:
         return str(output)
     # Free-text response (LLM didn't return JSON)
     if "raw_output" in output and output["raw_output"]:
-        return str(output["raw_output"])
+        raw = output["raw_output"]
+        # The raw_output may itself be a JSON string — try to parse and
+        # extract a human-readable answer from it.
+        if isinstance(raw, str):
+            try:
+                parsed = __import__("json").loads(raw)
+                if isinstance(parsed, dict):
+                    for key in ("answer", "response", "message", "summary", "result"):
+                        if key in parsed and parsed[key]:
+                            return str(parsed[key])
+                    return _format_agent_output(parsed)
+            except (ValueError, TypeError):
+                pass
+        return str(raw)
     # Standard answer/response keys
     for key in ("answer", "response", "message", "summary", "result"):
         if key in output and output[key]:

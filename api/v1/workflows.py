@@ -492,6 +492,14 @@ async def run_workflow(
 
         definition = wf.definition
 
+        # BUG-18/19: Reject 0-step workflows at run time (defense in depth)
+        steps = definition.get("steps") if isinstance(definition, dict) else None
+        if not steps or not isinstance(steps, list) or len(steps) == 0:
+            raise HTTPException(
+                400,
+                "Cannot run workflow with 0 steps. Add at least one step first.",
+            )
+
         # ── A/B variant routing ────────────────────────────────────────
         # If variants exist for this workflow, deterministically pick one
         # by hashing (workflow_id, subject_id). The subject is the trigger
