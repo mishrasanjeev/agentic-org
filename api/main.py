@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -123,16 +124,25 @@ app = FastAPI(
     redoc_url=None if _is_production else "/redoc",
 )
 
-# CORS: open in dev, fail-closed in production
+# CORS: open in dev, explicit allowlist in production.
+# If the env var is unset in production, fall back to the app's own domains
+# and log a warning rather than crashing the process — a hard crash here
+# would prevent rolling deploys from completing (discovered in prod deploy
+# of GAP-15 fix).
 if settings.env in ("production", "staging") and not settings.cors_allowed_origins:
-    raise RuntimeError(
-        "CORS_ALLOWED_ORIGINS must be explicitly set in production/staging. "
-        "Refusing to start with a wildcard fallback."
+    _logging.getLogger("agenticorg.cors").warning(
+        "CORS_ALLOWED_ORIGINS not set in %s — falling back to default allowlist. "
+        "Set the env var to silence this warning.",
+        settings.env,
     )
 _cors_origins = (
     ["*"]
     if settings.env == "development"
-    else [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    else (
+        [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+        if settings.cors_allowed_origins
+        else ["https://agenticorg.ai", "https://app.agenticorg.ai", "https://www.agenticorg.ai"]
+    )
 )
 app.add_middleware(
     CORSMiddleware,
