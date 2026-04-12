@@ -32,7 +32,7 @@ class TestHealthEndpoint:
 
     async def test_health_contains_version(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/health")
-        assert resp.json()["version"] == "4.0.0"
+        assert resp.json()["version"] == "4.8.0"
 
 
 # =========================================================================
