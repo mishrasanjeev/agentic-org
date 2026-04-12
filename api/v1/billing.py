@@ -71,6 +71,49 @@ async def list_plans() -> list[dict[str, Any]]:
     return PLAN_PRICING
 
 
+@router.get("/subscription")
+async def get_subscription(
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Return the current subscription status for the authenticated tenant.
+
+    Reads from Redis (the source of truth set by the webhook activation).
+    """
+    from core.billing.usage_tracker import _get_redis
+
+    redis = _get_redis()
+    plan_raw = redis.get(f"tenant:{tenant_id}:plan")
+    plan = (plan_raw.decode() if isinstance(plan_raw, bytes) else plan_raw) or "free"
+
+    tier_raw = redis.get(f"tenant_tier:{tenant_id}")
+    tier = (tier_raw.decode() if isinstance(tier_raw, bytes) else tier_raw) or "free"
+
+    provider_raw = redis.get(f"tenant:{tenant_id}:billing_provider")
+    provider = (provider_raw.decode() if isinstance(provider_raw, bytes) else provider_raw) or ""
+
+    order_id_raw = redis.get(f"tenant:{tenant_id}:billing_order_id")
+    order_id = (order_id_raw.decode() if isinstance(order_id_raw, bytes) else order_id_raw) or ""
+
+    return {
+        "tenant_id": tenant_id,
+        "plan": plan,
+        "tier": tier,
+        "provider": provider,
+        "order_id": order_id,
+        "is_paid": plan not in ("free", ""),
+    }
+
+
+@router.get("/usage")
+async def get_usage_endpoint(
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Return current usage counters for the authenticated tenant."""
+    from core.billing.usage_tracker import get_usage
+
+    return get_usage(tenant_id)
+
+
 # ── Stripe Subscribe ─────────────────────────────────────────────────
 
 

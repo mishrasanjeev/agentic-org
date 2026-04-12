@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import api from "@/lib/api";
 
 interface Plan {
   plan: string;
@@ -17,16 +18,13 @@ interface Usage {
   storage_bytes: number;
 }
 
-interface Invoice {
-  id: string;
-  date: string;
-  amount: number;
-  currency: string;
-  status: string;
+interface Subscription {
   plan: string;
+  tier: string;
+  provider: string;
+  order_id: string;
+  is_paid: boolean;
 }
-
-const API = import.meta.env.VITE_API_URL ?? "";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -58,57 +56,71 @@ function ProgressBar({ value, max, label }: { value: number; max: number; label:
   );
 }
 
+// Plan ordering for upgrade/downgrade detection
+const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
+
 export default function Billing() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [currency, setCurrency] = useState<"usd" | "inr">("usd");
-  const [currentPlan] = useState("free");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const tenantId = localStorage.getItem("tenant_id") || "demo";
+  const currentPlan = subscription?.plan || "free";
 
   useEffect(() => {
-    const headers: Record<string, string> = {};
-    const token = localStorage.getItem("token");
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
+    setLoading(true);
+    setError(null);
     Promise.all([
-      fetch(`${API}/api/v1/billing/plans`, { headers }).then((r) => r.json()),
-      fetch(`${API}/api/v1/billing/usage?tenant_id=${tenantId}`, { headers }).then((r) => r.json()),
-      fetch(`${API}/api/v1/billing/invoices?tenant_id=${tenantId}`, { headers }).then((r) => r.json()),
+      api.get("/billing/plans").then((r) => r.data),
+      api.get("/billing/subscription").then((r) => r.data).catch(() => null),
+      api.get("/billing/usage").then((r) => r.data).catch(() => null),
     ])
-      .then(([p, u, inv]) => {
+      .then(([p, sub, u]) => {
         setPlans(Array.isArray(p) ? p : []);
+        setSubscription(sub);
         setUsage(u);
-        setInvoices(Array.isArray(inv) ? inv : []);
       })
-      .catch(() => {})
+      .catch(() => setError("Failed to load billing data"))
       .finally(() => setLoading(false));
-  }, [tenantId]);
+  }, []);
 
   const handleSubscribe = async (plan: string) => {
-    const token = localStorage.getItem("token");
+    setActionLoading(plan);
+    setError(null);
     const isIndia = currency === "inr";
-    const endpoint = isIndia ? "/api/v1/billing/subscribe/india" : "/api/v1/billing/subscribe";
-    // Both flows use server-side callback verification — no need to pass success/cancel URLs
-    const body = { tenant_id: tenantId, plan };
+    const endpoint = isIndia ? "/billing/subscribe/india" : "/billing/subscribe";
 
     try {
-      const resp = await fetch(`${API}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-      const data = await resp.json();
-      // Plural returns challenge_url, Stripe returns checkout_url
+      const resp = await api.post(endpoint, { plan });
+      const data = resp.data;
       const url = data.challenge_url || data.checkout_url;
       if (url) window.location.href = url;
-    } catch {
-      // handled silently
+      else setError("No payment URL returned");
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to start payment");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!confirm("Are you sure you want to cancel your subscription? You'll be downgraded to the Free plan.")) {
+      return;
+    }
+    setActionLoading("cancel");
+    setError(null);
+    try {
+      await api.post("/billing/cancel", { subscription_id: subscription?.order_id || "" });
+      // Refresh subscription state
+      const sub = await api.get("/billing/subscription").then((r) => r.data);
+      setSubscription(sub);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to cancel subscription");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -120,25 +132,50 @@ export default function Billing() {
     );
   }
 
-  // Tier limits for progress bars
   const tierLimits: Record<string, { runs: number; agents: number; storage: number }> = {
     free: { runs: 1000, agents: 3, storage: 1073741824 },
     pro: { runs: 10000, agents: 15, storage: 53687091200 },
     enterprise: { runs: -1, agents: -1, storage: -1 },
   };
   const limits = tierLimits[currentPlan] || tierLimits.free;
+  const currentRank = PLAN_RANK[currentPlan] ?? 0;
+
+  const getButtonLabel = (targetPlan: string): string => {
+    const targetRank = PLAN_RANK[targetPlan] ?? 0;
+    if (targetRank > currentRank) return `Upgrade to ${targetPlan.charAt(0).toUpperCase() + targetPlan.slice(1)}`;
+    if (targetRank < currentRank) return `Downgrade to ${targetPlan.charAt(0).toUpperCase() + targetPlan.slice(1)}`;
+    return "Current plan";
+  };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8 p-3 md:p-6">
       <h1 className="text-2xl font-bold">Billing &amp; Usage</h1>
+
+      {error && (
+        <div className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+          {error}
+        </div>
+      )}
 
       {/* Current plan + usage */}
       <section className="border rounded-lg p-6" data-testid="billing-usage">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col items-start justify-between gap-3 mb-4 md:flex-row md:items-center">
           <div>
             <h2 className="text-lg font-semibold">
-              Current Plan: <span className="capitalize">{currentPlan}</span>
+              Current Plan:{" "}
+              <span className="capitalize text-primary">{currentPlan}</span>
+              {subscription?.is_paid && (
+                <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                  Active
+                </span>
+              )}
             </h2>
+            {subscription?.provider && (
+              <p className="text-xs text-muted-foreground mt-1">
+                via {subscription.provider === "plural" ? "PineLabs Plural (INR)" : "Stripe (USD)"}
+                {subscription.order_id && ` — ${subscription.order_id}`}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Currency:</span>
@@ -149,6 +186,15 @@ export default function Billing() {
             >
               {currency === "usd" ? "USD $" : "INR \u20B9"}
             </button>
+            {subscription?.is_paid && (
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading === "cancel"}
+                className="px-3 py-1 rounded border border-destructive text-destructive text-sm hover:bg-destructive/10 disabled:opacity-50"
+              >
+                {actionLoading === "cancel" ? "Cancelling..." : "Cancel plan"}
+              </button>
+            )}
           </div>
         </div>
         {usage && (
@@ -168,91 +214,80 @@ export default function Billing() {
       <section>
         <h2 className="text-lg font-semibold mb-4">Available Plans</h2>
         <div className="grid md:grid-cols-3 gap-4">
-          {plans.map((p) => (
-            <div
-              key={p.plan}
-              className={`border rounded-lg p-5 flex flex-col ${
-                p.plan === currentPlan ? "border-primary ring-2 ring-primary/20" : ""
-              }`}
-              data-testid={`plan-${p.plan}`}
-            >
-              <h3 className="text-lg font-bold mb-1">{p.label}</h3>
-              <p className="text-2xl font-semibold mb-3">
-                {currency === "usd"
-                  ? p.price_usd === 0
-                    ? "Free"
-                    : `$${p.price_usd}/mo`
-                  : p.price_inr === 0
-                    ? "Free"
-                    : `\u20B9${p.price_inr.toLocaleString("en-IN")}/mo`}
-              </p>
-              <ul className="text-sm space-y-1 flex-1 mb-4">
-                {p.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span className="text-green-500 mt-0.5">&#10003;</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              {p.plan !== "free" && p.plan !== currentPlan && (
-                <button
-                  onClick={() => handleSubscribe(p.plan)}
-                  className="w-full py-2 rounded bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
-                >
-                  {currentPlan === "free" ? "Upgrade" : "Switch"} to {p.label}
-                </button>
-              )}
-              {p.plan === currentPlan && (
-                <span className="text-center text-sm text-muted-foreground">Current plan</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+          {plans.map((p) => {
+            const isCurrent = p.plan === currentPlan;
+            const targetRank = PLAN_RANK[p.plan] ?? 0;
+            const isUpgrade = targetRank > currentRank;
+            const isDowngrade = targetRank < currentRank;
 
-      {/* Invoice history */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Invoice History</h2>
-        {invoices.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No invoices yet.</p>
-        ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm" data-testid="invoice-table">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-4 py-2">Date</th>
-                  <th className="text-left px-4 py-2">Plan</th>
-                  <th className="text-left px-4 py-2">Amount</th>
-                  <th className="text-left px-4 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr key={inv.id} className="border-t">
-                    <td className="px-4 py-2">{inv.date}</td>
-                    <td className="px-4 py-2 capitalize">{inv.plan}</td>
-                    <td className="px-4 py-2">
-                      {inv.currency === "inr"
-                        ? `\u20B9${(inv.amount / 100).toLocaleString("en-IN")}`
-                        : `$${(inv.amount / 100).toFixed(2)}`}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                          inv.status === "paid"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-yellow-100 text-yellow-700"
-                        }`}
-                      >
-                        {inv.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+            return (
+              <div
+                key={p.plan}
+                className={`border rounded-lg p-5 flex flex-col ${
+                  isCurrent ? "border-primary ring-2 ring-primary/20" : ""
+                }`}
+                data-testid={`plan-${p.plan}`}
+              >
+                <h3 className="text-lg font-bold mb-1">{p.label}</h3>
+                <p className="text-2xl font-semibold mb-3">
+                  {currency === "usd"
+                    ? p.price_usd === 0
+                      ? "Free"
+                      : `$${p.price_usd}/mo`
+                    : p.price_inr === 0
+                      ? "Free"
+                      : `\u20B9${p.price_inr.toLocaleString("en-IN")}/mo`}
+                </p>
+
+                {/* Adjustment note for upgrades/downgrades */}
+                {!isCurrent && p.plan !== "free" && subscription?.is_paid && (
+                  <p className="text-xs text-muted-foreground mb-2 bg-muted rounded px-2 py-1">
+                    {isUpgrade
+                      ? "You'll be charged the price difference for the remaining billing period."
+                      : "Your account will be credited the difference on your next invoice."}
+                  </p>
+                )}
+
+                <ul className="text-sm space-y-1 flex-1 mb-4">
+                  {p.features.map((f, i) => (
+                    <li key={i} className="flex items-start gap-1.5">
+                      <span className="text-green-500 mt-0.5">&#10003;</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+
+                {isCurrent ? (
+                  <span className="text-center text-sm font-medium text-primary py-2">
+                    Current plan
+                  </span>
+                ) : p.plan === "free" ? (
+                  subscription?.is_paid ? (
+                    <button
+                      onClick={handleCancel}
+                      disabled={actionLoading === "cancel"}
+                      className="w-full py-2 rounded border border-destructive text-destructive text-sm font-medium hover:bg-destructive/10 disabled:opacity-50"
+                    >
+                      Downgrade to Free
+                    </button>
+                  ) : null
+                ) : (
+                  <button
+                    onClick={() => handleSubscribe(p.plan)}
+                    disabled={actionLoading === p.plan}
+                    className={`w-full py-2 rounded text-sm font-medium disabled:opacity-50 ${
+                      isUpgrade
+                        ? "bg-primary text-primary-foreground hover:opacity-90"
+                        : "border border-muted-foreground text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {actionLoading === p.plan ? "Processing..." : getButtonLabel(p.plan)}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </section>
     </div>
   );

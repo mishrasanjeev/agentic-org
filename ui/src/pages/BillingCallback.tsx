@@ -8,39 +8,25 @@ export default function BillingCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "failed" | "pending">("loading");
   const [orderDetails, setOrderDetails] = useState<Record<string, string>>({});
-  // Detect whether the user still has a valid local session. If not we
-  // route through /login?next=... so they can re-authenticate before
-  // landing on the billing dashboard. Without this, the "Go to Billing"
-  // button silently bounced expired-session users to /login with no
-  // explanation.
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(
-    () => !!localStorage.getItem("token"),
-  );
+  const [countdown, setCountdown] = useState(5);
+  const isLoggedIn = !!localStorage.getItem("token");
 
   const paymentStatus = searchParams.get("payment") || searchParams.get("status") || "";
   const orderId = searchParams.get("order_id") || searchParams.get("plural_order_id") || "";
   const sessionId = searchParams.get("session_id") || "";
   const provider = searchParams.get("provider") || (sessionId ? "stripe" : "plural");
   const plan = searchParams.get("plan") || "";
-  const tenantId = searchParams.get("tenant_id") || localStorage.getItem("tenant_id") || "";
 
-  // The destination after the user clicks the primary button. If they
-  // are still logged in, take them to billing. If not, send them to
-  // login with the billing page as the next-hop URL.
   const billingDest = isLoggedIn
     ? "/dashboard/billing"
     : `/login?next=${encodeURIComponent("/dashboard/billing")}`;
 
   useEffect(() => {
-    setOrderDetails({ orderId: orderId || sessionId, plan, tenantId, provider });
+    setOrderDetails({ orderId: orderId || sessionId, plan, provider });
 
-    // Always verify with the server — never trust URL params alone.
-    // The API callback already verified before redirecting here,
-    // but we double-check for defense in depth.
     const token = localStorage.getItem("token");
 
     if (orderId && provider === "plural") {
-      // Verify Plural order status
       fetch(`${API}/api/v1/billing/order-status`, {
         method: "POST",
         headers: {
@@ -49,16 +35,7 @@ export default function BillingCallback() {
         },
         body: JSON.stringify({ order_id: orderId }),
       })
-        .then((r) => {
-          // 401 here means the local session expired during the
-          // payment round-trip — flip the logged-in flag so the
-          // primary button routes through /login.
-          if (r.status === 401) {
-            setIsLoggedIn(false);
-            localStorage.removeItem("token");
-          }
-          return r.json();
-        })
+        .then((r) => r.json())
         .then((data) => {
           const s = (data.status || "").toUpperCase();
           if (s === "PROCESSED" || s === "AUTHORIZED") setStatus("success");
@@ -67,8 +44,6 @@ export default function BillingCallback() {
         })
         .catch(() => fallbackToParam());
     } else {
-      // For Stripe: the API callback already verified the session server-side.
-      // Trust the API-verified status param.
       fallbackToParam();
     }
 
@@ -77,7 +52,18 @@ export default function BillingCallback() {
       else if (paymentStatus === "failed") setStatus("failed");
       else setStatus("pending");
     }
-  }, [paymentStatus, orderId, sessionId, provider, plan, tenantId]);
+  }, [paymentStatus, orderId, sessionId, provider, plan]);
+
+  // Auto-redirect to billing page on success after countdown
+  useEffect(() => {
+    if (status !== "success" || !isLoggedIn) return;
+    if (countdown <= 0) {
+      navigate("/dashboard/billing", { replace: true });
+      return;
+    }
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [status, isLoggedIn, countdown, navigate]);
 
   const statusConfig = {
     loading: {
@@ -122,6 +108,14 @@ export default function BillingCallback() {
           </div>
         )}
 
+        {/* Auto-redirect countdown for successful logged-in users */}
+        {status === "success" && isLoggedIn && (
+          <p className="text-sm text-muted-foreground">
+            Redirecting to billing in {countdown}s...
+          </p>
+        )}
+
+        {/* Session expired notice */}
         {!isLoggedIn && status === "success" && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             Your sign-in session expired during the payment. Sign in again to
