@@ -570,7 +570,23 @@ async def get_workflow_run(
     if not run:
         raise HTTPException(404, "Workflow run not found")
 
-    return _run_to_dict(run, include_steps=True)
+    d = _run_to_dict(run, include_steps=True)
+
+    # BUG-20: resolve workflow name so the UI doesn't show a UUID
+    try:
+        async with get_tenant_session(tid) as session:
+            wf_result = await session.execute(
+                select(WorkflowDefinition.name).where(
+                    WorkflowDefinition.id == run.workflow_def_id
+                )
+            )
+            wf_name = wf_result.scalar_one_or_none()
+            if wf_name:
+                d["workflow_name"] = wf_name
+    except Exception:
+        _log.debug("workflow_name_lookup_failed", run_id=str(run_id))
+
+    return d
 
 
 # ── GET /workflows/runs/{run_id}/replan-history ────────────────────────────

@@ -22,8 +22,8 @@ export default function Approvals() {
     try {
       // Fetch both pending and decided in parallel to ensure all items are shown
       const [pendingResp, decidedResp] = await Promise.allSettled([
-        api.get("/approvals", { params: { status: "pending" } }),
-        api.get("/approvals", { params: { status: "decided" } }),
+        api.get("/approvals", { params: { status: "pending" }, timeout: 10000 }),
+        api.get("/approvals", { params: { status: "decided" }, timeout: 10000 }),
       ]);
       const extract = (r: PromiseSettledResult<any>) =>
         r.status === "fulfilled"

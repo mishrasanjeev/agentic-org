@@ -99,10 +99,22 @@ export default function AgentDetail() {
   }
 
   async function handleRun() {
+    // BUG-08: Show input prompt before running — the API requires an
+    // action + inputs body. Running without it always 422'd.
+    const task = window.prompt(
+      `What should ${agent?.employee_name || agent?.name || "the agent"} do?\n\n` +
+      "Describe the task (e.g., 'Process today's invoices', 'Generate sales report'):"
+    );
+    if (!task) return; // user cancelled
+
     setActionLoading("run");
     setActionError(null);
     try {
-      await api.post(`/agents/${id}/run`);
+      await api.post(`/agents/${id}/run`, {
+        action: "run",
+        inputs: { task },
+      });
+      setActionError(null);
       alert("Agent run started successfully.");
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Run failed");
@@ -233,7 +245,7 @@ export default function AgentDetail() {
 
       <div className="flex gap-4 border-b pb-2">
         {(["overview", "config", "prompt", "shadow", "cost", "scopes", "learning", "voice"] as const).map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
+          <button key={tab} onClick={() => { setActiveTab(tab); setActionError(null); }} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
             {tab}
           </button>
         ))}
@@ -254,6 +266,7 @@ export default function AgentDetail() {
             open={chatOpen}
             onClose={() => setChatOpen(false)}
             agentId={id}
+            agentName={agent.employee_name || agent.name}
           />
         )}
       </Suspense>
@@ -1368,8 +1381,8 @@ function ScopesTab({ agent }: { agent: Agent }) {
         </CardHeader>
         <CardContent>
           {tools.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-2 px-2">
+              <table className="w-full min-w-[700px] text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
                     <th className="pb-2 pr-4">Tool</th>

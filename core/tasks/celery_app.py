@@ -62,6 +62,11 @@ app.conf.beat_schedule = {
         "schedule": 300.0,  # every 5 minutes
         "options": {"queue": "maintenance"},
     },
+    "refresh-expiring-tokens": {
+        "task": "core.tasks.token_refresh.refresh_expiring_tokens",
+        "schedule": 900.0,  # every 15 minutes
+        "options": {"queue": "maintenance"},
+    },
     "generate-monthly-invoices": {
         "task": "core.tasks.invoice_tasks.generate_monthly_invoices",
         "schedule": crontab(hour=1, minute=0, day_of_month="1"),

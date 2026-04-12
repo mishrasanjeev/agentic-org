@@ -527,7 +527,11 @@ async def get_org_tree(
     """Return agents as a hierarchical org tree."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        query = select(Agent).where(Agent.tenant_id == tid)
+        # BUG-28: Filter out deleted/broken agents from the org chart
+        query = select(Agent).where(
+            Agent.tenant_id == tid,
+            Agent.status.notin_(["deleted", "error", "broken"]),
+        )
         if domain:
             query = query.where(Agent.domain == domain)
         query = query.order_by(Agent.org_level.asc(), Agent.created_at.asc())

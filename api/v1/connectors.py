@@ -335,3 +335,62 @@ async def connector_health(
         else None,
         "healthy": connector.status == "active",
     }
+
+
+@router.post("/connectors/{conn_id}/test")
+async def test_connector(
+    conn_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Run a live connectivity test against the connector's API.
+
+    Uses the stored credentials to connect, run a lightweight health
+    probe, and return the result. Useful for verifying credentials
+    after initial setup.
+    """
+    import asyncio
+
+    from connectors.registry import ConnectorRegistry
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Connector).where(Connector.id == conn_id, Connector.tenant_id == tid)
+        )
+        connector = result.scalar_one_or_none()
+
+    if not connector:
+        raise HTTPException(404, "Connector not found")
+
+    connector_cls = ConnectorRegistry.get(connector.name)
+    if not connector_cls:
+        return {"tested": False, "error": f"No connector class for '{connector.name}'"}
+
+    config = connector.auth_config or {}
+    try:
+        instance = connector_cls(config)
+        await asyncio.wait_for(instance.connect(), timeout=10)
+        health = await asyncio.wait_for(instance.health_check(), timeout=10)
+        await instance.disconnect()
+
+        # Update last health check time
+        from datetime import UTC, datetime
+
+        async with get_tenant_session(tid) as session:
+            result = await session.execute(
+                select(Connector).where(Connector.id == conn_id)
+            )
+            db_conn = result.scalar_one_or_none()
+            if db_conn:
+                db_conn.health_check_at = datetime.now(UTC)
+                db_conn.status = "active" if health.get("status") == "healthy" else "error"
+
+        return {
+            "tested": True,
+            "name": connector.name,
+            "health": health,
+        }
+    except TimeoutError:
+        return {"tested": False, "name": connector.name, "error": "Connection timed out (10s)"}
+    except Exception as e:
+        return {"tested": False, "name": connector.name, "error": str(e)[:200]}

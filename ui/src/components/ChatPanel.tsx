@@ -22,10 +22,12 @@ export default function ChatPanel({
   open,
   onClose,
   agentId,
+  agentName,
 }: {
   open: boolean;
   onClose: () => void;
   agentId?: string;
+  agentName?: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -141,7 +143,7 @@ export default function ChatPanel({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
           <h2 className="text-sm font-semibold text-slate-200">
-            {agentId ? `Chat with Agent ${agentId}` : "Agent Chat"}
+            {agentName ? `Chat with ${agentName}` : agentId ? "Agent Chat" : "Ask Anything"}
           </h2>
           <button
             onClick={onClose}
