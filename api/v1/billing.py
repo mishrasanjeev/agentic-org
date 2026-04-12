@@ -105,9 +105,7 @@ async def get_subscription(
 
 
 @router.get("/usage")
-async def get_usage_endpoint(
-    tenant_id: str = Depends(get_current_tenant),
-) -> dict[str, Any]:
+async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     """Return current usage counters for the authenticated tenant."""
     from core.billing.usage_tracker import get_usage
 
