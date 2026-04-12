@@ -401,17 +401,19 @@ async def cancel_subscription(
     sub_id_raw = redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
     sub_id = (sub_id_raw.decode() if isinstance(sub_id_raw, bytes) else sub_id_raw) or ""
     if not sub_id:
-        # Fall back to the caller-supplied ID ONLY if no server-side
-        # record exists (legacy tenants that subscribed before this fix).
-        sub_id = body.subscription_id
+        # No legacy fallback — caller-supplied subscription IDs are
+        # never trusted. If the server-side mapping is missing, the
+        # tenant needs a backfill via the admin tooling, not a public
+        # API escape hatch.
         logger.warning(
-            "stripe_cancel_using_caller_sub_id",
+            "stripe_cancel_no_server_side_sub",
             tenant_id=tenant_id,
-            sub_id=sub_id,
         )
-
-    if not sub_id:
-        raise HTTPException(400, "No active Stripe subscription found for this tenant")
+        raise HTTPException(
+            400,
+            "No active Stripe subscription found for this tenant. "
+            "Contact support if you believe this is an error.",
+        )
 
     success = _cancel(sub_id)
     if not success:

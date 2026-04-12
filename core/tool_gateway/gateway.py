@@ -243,6 +243,12 @@ class ToolGateway:
                         creds = cc.credentials_encrypted
                         if isinstance(creds, str):
                             creds = _json.loads(creds)
+                        # Decrypt if wrapped by tenant-aware encryption
+                        if isinstance(creds, dict) and "_encrypted" in creds:
+                            from core.crypto import decrypt_for_tenant
+
+                            raw = decrypt_for_tenant(creds["_encrypted"])
+                            creds = _json.loads(raw)
                         # Merge non-secret config with decrypted creds
                         config = {**(cc.config or {}), **(creds or {})}
                     else:

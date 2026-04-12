@@ -604,6 +604,7 @@ async def update_replan_config(
     wf_id: UUID,
     body: ReplanConfigUpdate,
     tenant_id: str = Depends(get_current_tenant),
+    _admin_check=require_tenant_admin,
 ):
     """Toggle the replan_on_failure setting for a workflow definition."""
     tid = _uuid.UUID(tenant_id)

@@ -168,6 +168,19 @@ async def register_connector(
     tenant_id: str = Depends(get_current_tenant),
 ):
     tid = _uuid.UUID(tenant_id)
+
+    # Separate secret material from non-secret config.
+    # auth_config on the Connector model is deprecated for secrets —
+    # new writes go to connector_configs.credentials_encrypted via
+    # tenant-aware encryption.
+    secret_fields = body.auth_config or {}
+    non_secret_config = {
+        "base_url": body.base_url,
+        "auth_type": body.auth_type,
+        "data_schema_ref": body.data_schema_ref,
+        "rate_limit_rpm": body.rate_limit_rpm,
+    }
+
     async with get_tenant_session(tid) as session:
         connector = Connector(
             tenant_id=tid,
@@ -175,7 +188,7 @@ async def register_connector(
             category=body.category,
             base_url=body.base_url,
             auth_type=body.auth_type,
-            auth_config=body.auth_config,
+            auth_config={},  # no longer store secrets here
             secret_ref=body.secret_ref,
             tool_functions=body.tool_functions,
             data_schema_ref=body.data_schema_ref,
@@ -187,6 +200,26 @@ async def register_connector(
             await session.flush()
         except IntegrityError:
             raise HTTPException(409, f"Connector '{body.name}' already exists") from None
+
+        # Store secrets in the encrypted connector_configs table
+        if secret_fields:
+            from core.crypto import encrypt_for_tenant
+            from core.models.connector_config import ConnectorConfig
+
+            encrypted_creds = await encrypt_for_tenant(
+                __import__("json").dumps(secret_fields), tid
+            )
+            cc = ConnectorConfig(
+                tenant_id=tid,
+                connector_name=body.name,
+                display_name=body.name,
+                auth_type=body.auth_type or "api_key",
+                credentials_encrypted={"_encrypted": encrypted_creds},
+                config=non_secret_config,
+                status="configured",
+            )
+            session.add(cc)
+            await session.flush()
 
     return _connector_to_dict(connector)
 
@@ -228,9 +261,45 @@ async def update_connector(
         if not connector:
             raise HTTPException(404, "Connector not found")
 
+        # Prevent blind setattr on secret-bearing or internal fields.
+        # auth_config is deprecated for new writes — secrets go via
+        # connector_configs.credentials_encrypted.
+        _blocked_fields = {"id", "tenant_id", "auth_config", "secret_ref"}
         for field, value in body.model_dump(exclude_none=True).items():
-            if field not in ("id", "tenant_id"):  # prevent overwriting internal fields
-                setattr(connector, field, value)
+            if field in _blocked_fields:
+                continue
+            setattr(connector, field, value)
+
+        # If auth_config was provided in the update, store it encrypted
+        new_secrets = body.model_dump(exclude_none=True).get("auth_config")
+        if new_secrets:
+            from core.crypto import encrypt_for_tenant
+            from core.models.connector_config import ConnectorConfig
+
+            encrypted = await encrypt_for_tenant(
+                __import__("json").dumps(new_secrets), tid
+            )
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc:
+                cc.credentials_encrypted = {"_encrypted": encrypted}
+            else:
+                new_cc = ConnectorConfig(
+                    tenant_id=tid,
+                    connector_name=connector.name,
+                    display_name=connector.name,
+                    auth_type=connector.auth_type or "api_key",
+                    credentials_encrypted={"_encrypted": encrypted},
+                    config={},
+                    status="configured",
+                )
+                session.add(new_cc)
+
         await session.commit()
         await session.refresh(connector)
 

@@ -178,6 +178,36 @@ def upgrade():
     """)
 
 
+    # ── RLS for all v4.7 tenant-scoped tables ───────────────────────
+    # (Originally missing — added per gap analysis recheck)
+    _rls_tables = [
+        "sso_configs",
+        "approval_policies",
+        "invoices",
+        "tenant_branding",
+        "workflow_variants",
+    ]
+    for tbl in _rls_tables:
+        op.execute(f"ALTER TABLE {tbl} ENABLE ROW LEVEL SECURITY;")
+        op.execute(f"ALTER TABLE {tbl} FORCE ROW LEVEL SECURITY;")
+        op.execute(f"DROP POLICY IF EXISTS {tbl}_tenant_isolation ON {tbl};")
+        op.execute(
+            f"CREATE POLICY {tbl}_tenant_isolation ON {tbl} "
+            "USING (tenant_id::text = current_setting('agenticorg.tenant_id', true));"
+        )
+    # approval_steps: RLS via FK subquery
+    op.execute("ALTER TABLE approval_steps ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE approval_steps FORCE ROW LEVEL SECURITY;")
+    op.execute("DROP POLICY IF EXISTS approval_steps_tenant_isolation ON approval_steps;")
+    op.execute("""
+        CREATE POLICY approval_steps_tenant_isolation ON approval_steps
+        USING (policy_id IN (
+            SELECT id FROM approval_policies
+            WHERE tenant_id::text = current_setting('agenticorg.tenant_id', true)
+        ));
+    """)
+
+
 def downgrade():
     op.execute("DROP TABLE IF EXISTS workflow_variants;")
     op.execute("DROP TABLE IF EXISTS tenant_branding;")
