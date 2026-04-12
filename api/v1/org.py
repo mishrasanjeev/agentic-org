@@ -13,6 +13,7 @@ from jose import JWTError
 from pydantic import BaseModel
 from sqlalchemy import select, update
 
+from api.deps import require_tenant_admin
 from auth.jwt import create_access_token, validate_local_token
 from core.config import settings
 from core.database import async_session_factory
@@ -21,7 +22,7 @@ from core.models.tenant import Tenant
 from core.models.user import User
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/org", tags=["Organization"])
+router = APIRouter(prefix="/org", tags=["Organization"], dependencies=[require_tenant_admin])
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +134,16 @@ async def list_members(request: Request):
 
 @router.post("/invite", status_code=201)
 async def invite_member(body: InviteRequest, request: Request):
-    """Create a pending user and send an invite email with a JWT token."""
+    """Create a pending user and send an invite email with a JWT token.
+
+    Requires admin scope (enforced at the router level). The invited
+    role is validated to prevent privilege escalation — only admins
+    can invite other admins.
+    """
+    allowed_invite_roles = {"admin", "domain_lead", "analyst", "auditor", "developer"}
+    if body.role not in allowed_invite_roles:
+        raise HTTPException(400, f"Invalid role: {body.role}. Allowed: {', '.join(sorted(allowed_invite_roles))}")
+
     tenant_id = _get_tenant_id(request)
     inviter_email = getattr(request.state, "user_sub", "unknown")
 

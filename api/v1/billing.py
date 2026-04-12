@@ -358,56 +358,11 @@ async def check_order_status(body: OrderStatusRequest) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="Failed to check order status") from exc
 
 
-# ── Usage ────────────────────────────────────────────────────────────
-
-
-@router.get("/usage")
-async def get_usage(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """Return current usage counters for a tenant."""
-    from core.billing.usage_tracker import get_usage as _get_usage
-
-    return _get_usage(tenant_id)
-
-
-# ── Invoices ─────────────────────────────────────────────────────────
-
-
-@router.get("/invoices")
-async def list_invoices(tenant_id: str = Depends(get_current_tenant)) -> list[dict[str, Any]]:
-    """Return invoice history for a tenant from the billing_invoices table."""
-    import uuid as _uuid
-
-    from sqlalchemy import text
-
-    from core.database import get_tenant_session
-
-    tid = _uuid.UUID(tenant_id)
-    try:
-        async with get_tenant_session(tid) as session:
-            rows = (
-                await session.execute(
-                    text(
-                        "SELECT id, amount_cents, currency, status, "
-                        "external_invoice_id, paid_at, created_at "
-                        "FROM billing_invoices WHERE tenant_id = :tid "
-                        "ORDER BY created_at DESC LIMIT 50"
-                    ),
-                    {"tid": str(tid)},
-                )
-            ).fetchall()
-            return [
-                {
-                    "id": str(r[0]),
-                    "amount": r[1] or 0,
-                    "currency": r[2] or "usd",
-                    "status": r[3] or "pending",
-                    "plan": "",
-                    "date": (r[5] or r[6]).isoformat() if (r[5] or r[6]) else "",
-                }
-                for r in rows
-            ]
-    except Exception:
-        return []
+# ── Usage + Invoices ────────────────────────────────────────────────
+# NOTE: The canonical GET /billing/usage is defined above as
+# get_usage_endpoint. The canonical GET /billing/invoices is in
+# api/v1/invoices.py (admin-gated). Both legacy duplicates below
+# have been removed (RECHECK finding #5).
 
 
 # ── Cancel ───────────────────────────────────────────────────────────
@@ -438,12 +393,35 @@ async def cancel_subscription(
         logger.info("plural_subscription_cancelled", tenant_id=tenant_id)
         return {"cancelled": True, "provider": "plural", "tenant_id": tenant_id}
 
+    # Stripe: resolve subscription_id from server-side state — NEVER
+    # trust the caller-supplied ID. One tenant cannot cancel another
+    # tenant's subscription even if the Stripe sub ID leaks.
     from core.billing.stripe_client import cancel_subscription as _cancel
 
-    success = _cancel(body.subscription_id)
+    sub_id_raw = redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
+    sub_id = (sub_id_raw.decode() if isinstance(sub_id_raw, bytes) else sub_id_raw) or ""
+    if not sub_id:
+        # Fall back to the caller-supplied ID ONLY if no server-side
+        # record exists (legacy tenants that subscribed before this fix).
+        sub_id = body.subscription_id
+        logger.warning(
+            "stripe_cancel_using_caller_sub_id",
+            tenant_id=tenant_id,
+            sub_id=sub_id,
+        )
+
+    if not sub_id:
+        raise HTTPException(400, "No active Stripe subscription found for this tenant")
+
+    success = _cancel(sub_id)
     if not success:
         raise HTTPException(status_code=502, detail="Failed to cancel subscription")
-    return {"cancelled": True, "subscription_id": body.subscription_id, "provider": "stripe"}
+
+    # Downgrade tenant on successful cancellation
+    redis.set(f"tenant_tier:{tenant_id}", "free")
+    redis.set(f"tenant:{tenant_id}:plan", "free")
+    redis.delete(f"tenant:{tenant_id}:stripe_subscription_id")
+    return {"cancelled": True, "provider": "stripe", "tenant_id": tenant_id}
 
 
 # ── Webhooks ─────────────────────────────────────────────────────────

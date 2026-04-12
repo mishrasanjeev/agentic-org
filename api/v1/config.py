@@ -7,12 +7,12 @@ import uuid as _uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.tenant import Tenant
 from core.schemas.api import FleetLimits
 
-router = APIRouter()
+router = APIRouter(dependencies=[require_tenant_admin])
 
 _FLEET_LIMITS_KEY = "fleet_limits"
 

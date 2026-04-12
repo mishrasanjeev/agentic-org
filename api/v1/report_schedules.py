@@ -13,11 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.report_schedule import ReportSchedule
 
-router = APIRouter()
+router = APIRouter(dependencies=[require_tenant_admin])
 
 
 # ---------------------------------------------------------------------------

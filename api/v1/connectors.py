@@ -9,12 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.connector import Connector
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
 
-router = APIRouter()
+router = APIRouter(dependencies=[require_tenant_admin])
 
 
 def _connector_to_dict(conn: Connector) -> dict:

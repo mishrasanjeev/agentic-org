@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from api.deps import get_current_tenant, get_user_domains
+from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
@@ -96,6 +96,7 @@ def _run_to_dict(run: WorkflowRun, include_steps: bool = False) -> dict:
 async def generate_workflow_endpoint(
     body: WorkflowGenerateRequest,
     tenant_id: str = Depends(get_current_tenant),
+    _admin_check=require_tenant_admin,
 ):
     """Generate a workflow from a plain English description using LLM.
 
@@ -220,6 +221,7 @@ async def get_workflow(
 async def create_workflow(
     body: WorkflowCreate,
     tenant_id: str = Depends(get_current_tenant),
+    _admin_check=require_tenant_admin,
 ):
     # Validate definition structure
     if not body.definition or not isinstance(body.definition.get("steps"), list):
@@ -263,6 +265,7 @@ async def create_workflow(
 async def delete_workflow(
     wf_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    _admin_check=require_tenant_admin,
 ):
     """Soft-delete a workflow by setting is_active=False."""
     tid = _uuid.UUID(tenant_id)

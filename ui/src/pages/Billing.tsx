@@ -218,7 +218,6 @@ export default function Billing() {
             const isCurrent = p.plan === currentPlan;
             const targetRank = PLAN_RANK[p.plan] ?? 0;
             const isUpgrade = targetRank > currentRank;
-            const isDowngrade = targetRank < currentRank;
 
             return (
               <div

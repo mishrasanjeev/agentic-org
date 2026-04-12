@@ -278,8 +278,17 @@ jobs:
         run: echo "Production deployment approved by reviewer"
 
   deploy-production:
-    needs: [build, integration-tests, security-scan]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: [build, integration-tests, security-scan, approval-gate]
+    # approval-gate is skipped for non-tag pushes (if: startsWith...),
+    # so for main pushes this effectively waits only on the other 3.
+    # For tagged releases, it requires the manual approval.
+    if: |
+      always() &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+      needs.build.result == 'success' &&
+      needs.integration-tests.result == 'success' &&
+      needs.security-scan.result == 'success' &&
+      (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -326,7 +335,7 @@ jobs:
           PROD_URL="${{ secrets.PROD_API_URL }}"
           for i in $(seq 1 20); do
             RESP=$(curl -sf "${PROD_URL}/api/v1/health" || true)
-            if echo "$RESP" | grep -qE '"status":"(healthy|degraded|ok)"'; then
+            if echo "$RESP" | grep -qE '"status":"healthy"'; then
               echo "Production health check passed"
               echo "$RESP"
               exit 0
