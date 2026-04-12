@@ -462,11 +462,16 @@ class TestAuditBug5CollabContext:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestDeployHealthCheck:
-    def test_ci_health_check_accepts_degraded(self):
-        """CI deploy health check must accept degraded status (unconfigured connectors)."""
+    def test_ci_health_check_requires_healthy_only(self):
+        """CI deploy health check must require fully healthy status.
+
+        Changed in RECHECK finding #6: the gate previously accepted
+        "degraded" which meant connector outages could let a broken
+        deploy through. Now only "healthy" passes.
+        """
         with open(".github/workflows/deploy.yml", encoding="utf-8") as f:
             code = f.read()
 
-        assert "degraded" in code, (
-            "Deploy health check must accept degraded status"
+        assert '"status":"healthy"' in code, (
+            "Deploy health check must require healthy status"
         )
