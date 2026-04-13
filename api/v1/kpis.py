@@ -295,32 +295,19 @@ async def _build_kpi_response(
             "company_id": company_id,
         }
 
-    # Fallback: query agent_task_results
+    # Compute structured KPIs from agent_task_results.
+    # Always returns the shape the dashboards expect: agent_count,
+    # total_tasks_30d, success_rate, hitl_interventions, total_cost_usd,
+    # domain_breakdown[]. Never returns raw task_output dicts — that
+    # produced NaN in the UI when fields like "items" or "result"
+    # were passed through instead of numeric KPIs.
     domains = ROLE_DOMAIN_MAP.get(role, [])
-    results = await _query_agent_results(tenant_id, domains)
-    if results:
-        # Aggregate outputs from recent agent runs
-        aggregated: dict = {}
-        for r in results:
-            output = r.get("task_output", {})
-            if isinstance(output, dict):
-                aggregated.update(output)
-        if aggregated:
-            return {
-                **aggregated,
-                "demo": False,
-                "stale": True,
-                "source": "agent_task_results",
-                "cached_at": now_iso,
-                "company_id": company_id,
-            }
-
-    # Final fallback: compute basic metrics from agent_task_results
-    # (may return zeros if no agent has run yet — that's honest)
     basic = await _compute_basic_metrics(tenant_id, role, domains)
+    has_data = basic.get("total_tasks_30d", 0) > 0
+
     return {
         **basic,
-        "demo": not bool(results),  # True only if no data exists at all
+        "demo": not has_data,
         "stale": True,
         "source": "computed",
         "cached_at": now_iso,
