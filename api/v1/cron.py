@@ -23,6 +23,26 @@ def _verify_cron_key(x_cron_key: str = Header(default="")) -> None:
         raise HTTPException(403, "Invalid cron API key")
 
 
+@router.get("/cron/schedules")
+async def list_cron_schedules():
+    """List configured cron schedules.
+
+    Returns the Celery Beat schedule so the admin UI can show
+    what periodic tasks are running and when.
+    """
+    from core.tasks.celery_app import app as celery_app
+
+    schedules = []
+    for name, entry in (celery_app.conf.beat_schedule or {}).items():
+        schedules.append({
+            "name": name,
+            "task": entry.get("task", ""),
+            "schedule": str(entry.get("schedule", "")),
+            "queue": (entry.get("options") or {}).get("queue", "default"),
+        })
+    return {"schedules": schedules}
+
+
 @router.post("/cron/compliance-alerts")
 async def trigger_compliance_alerts(
     x_cron_key: str = Header(default=""),

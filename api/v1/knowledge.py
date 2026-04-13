@@ -272,11 +272,15 @@ async def list_documents(
             docs = await _ragflow_list(tenant_id)
         except Exception as exc:
             logger.warning("ragflow_list_failed_fallback_db", error=str(exc))
-            docs = await _db_list_docs(tenant_id)
+            try:
+                docs = await _db_list_docs(tenant_id)
+            except Exception:
+                docs = []
     else:
         try:
             docs = await _db_list_docs(tenant_id)
-        except Exception:
+        except Exception as exc:
+            logger.debug("knowledge_db_list_failed", error=str(exc))
             docs = []
 
     total = len(docs)

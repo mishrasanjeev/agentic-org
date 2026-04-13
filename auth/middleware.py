@@ -30,6 +30,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/demo-request",
         "/api/v1/billing/callback",  # Plural redirect callback
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
+        "/api/v1/billing/plans",  # Public pricing page
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
         "/docs", "/openapi.json", "/redoc",

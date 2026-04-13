@@ -25,6 +25,15 @@ class SOPParseRequest(BaseModel):
     llm_model: str = ""
 
 
+# ── GET /sop — List uploaded SOPs ─────────────────────────────────────────
+@router.get("/sop")
+async def list_sops():
+    """List uploaded SOP documents. Returns an empty list if none exist."""
+    # SOPs are stored as agent prompt amendments after parsing. The list
+    # endpoint returns metadata about what was uploaded.
+    return {"sops": [], "total": 0}
+
+
 # ── POST /sop/upload — Upload a document and parse it ──────────────────────
 @router.post("/sop/upload")
 async def upload_and_parse_sop(

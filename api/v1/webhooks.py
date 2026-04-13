@@ -106,6 +106,18 @@ def _verify_sendgrid_signature(
 # ── SendGrid Event Webhook ─────────────────────────────────────────
 
 
+@router.get("/webhooks")
+async def list_webhook_endpoints():
+    """List available webhook receiver endpoints."""
+    return {
+        "endpoints": [
+            {"path": "/webhooks/email/sendgrid", "method": "POST", "description": "SendGrid inbound email webhook"},
+            {"path": "/webhooks/email/mailchimp", "method": "POST", "description": "Mailchimp webhook events"},
+            {"path": "/webhooks/email/moengage", "method": "POST", "description": "MoEngage campaign events"},
+        ]
+    }
+
+
 @router.post("/webhooks/email/sendgrid")
 async def sendgrid_webhook(request: Request) -> dict[str, Any]:
     """Parse SendGrid Event Webhook JSON array.

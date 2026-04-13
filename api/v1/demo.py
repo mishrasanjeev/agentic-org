@@ -4,10 +4,11 @@ from __future__ import annotations
 import logging
 import uuid as _uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from api.deps import get_current_tenant, require_tenant_admin
 from core.database import async_session_factory
 from core.email import send_email
 
@@ -23,7 +24,21 @@ class DemoRequest(BaseModel):
     email: str
     company: str = ""
     role: str = ""
-    phone: str = ""
+
+
+# ── Admin: seed demo data ───────────────────────────────────────────
+
+
+@router.post("/admin/seed-demo", dependencies=[require_tenant_admin])
+async def seed_demo_data(tenant_id: str = Depends(get_current_tenant)):
+    """Populate the tenant with realistic demo data across all modules.
+
+    Admin-only. Idempotent — safe to call multiple times.
+    """
+    from core.seed_demo_data import seed_all
+
+    result = await seed_all(tenant_id)
+    return {"status": "seeded", "tenant_id": tenant_id, **result}
 
 
 def _send_email_notification(body: DemoRequest) -> None:

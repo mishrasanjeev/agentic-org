@@ -66,6 +66,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/push/vapid-key",  # VAPID public key (browser needs before login)
         "/api/v1/billing/callback",  # Plural redirect callback (browser returning from gateway)
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
+        "/api/v1/billing/plans",  # Public pricing — no tenant data
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
         "/docs", "/openapi.json", "/redoc",
