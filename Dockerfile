@@ -1,5 +1,9 @@
 FROM python:3.14-slim AS builder
 WORKDIR /app
+# Build deps for Pillow (required by presidio) and other C extensions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libjpeg-dev zlib1g-dev libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml README.md ./
 COPY core/ core/
 COPY api/ api/

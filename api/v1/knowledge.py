@@ -283,6 +283,37 @@ async def list_documents(
             logger.debug("knowledge_db_list_failed", error=str(exc))
             docs = []
 
+    # Also include knowledge_documents (seeded CA/GST compliance content)
+    try:
+        from uuid import UUID as _UUID
+
+        from sqlalchemy import text as _sqtext
+
+        from core.database import get_tenant_session as _gts
+
+        tid = _UUID(tenant_id)
+        async with _gts(tid) as session:
+            kd_result = await session.execute(
+                _sqtext(
+                    "SELECT id, title, category, file_type, token_count, created_at "
+                    "FROM knowledge_documents "
+                    "WHERE tenant_id = :tid AND status = 'ready' "
+                    "ORDER BY created_at DESC"
+                ),
+                {"tid": str(tid)},
+            )
+            for row in kd_result.fetchall():
+                docs.append({
+                    "document_id": str(row[0]),
+                    "filename": row[1],
+                    "content_type": row[3] or "text",
+                    "size_bytes": (row[4] or 0) * 4,
+                    "status": "ready",
+                    "created_at": row[5].isoformat() if row[5] else "",
+                })
+    except Exception:
+        logger.debug("knowledge_documents_query_skipped")
+
     total = len(docs)
     start = (page - 1) * per_page
     page_items = docs[start : start + per_page]

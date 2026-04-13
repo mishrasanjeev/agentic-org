@@ -53,6 +53,56 @@ _BUILTIN_SCRIPTS: dict[str, dict[str, Any]] = {
         },
         "estimated_duration_s": 30,
     },
+    "generic_portal": {
+        "name": "Generic Portal Automator",
+        "description": (
+            "Automate any web portal that doesn't have APIs. "
+            "Provide the login URL, credentials, and what to do after login. "
+            "Supports auto-detection of login forms, data extraction, file downloads, and screenshots."
+        ),
+        "category": "general",
+        "params_schema": {
+            "portal_url": {"type": "string", "label": "Portal Login URL", "required": True},
+            "username": {"type": "string", "label": "Username / Email", "required": True},
+            "password": {"type": "password", "label": "Password", "required": True},
+            "username_field": {
+                "type": "string",
+                "label": "Username field CSS selector (leave blank for auto-detect)",
+                "required": False,
+            },
+            "password_field": {
+                "type": "string",
+                "label": "Password field CSS selector (leave blank for auto-detect)",
+                "required": False,
+            },
+            "login_button": {
+                "type": "string",
+                "label": "Login button CSS selector (leave blank for auto-detect)",
+                "required": False,
+            },
+            "target_url": {
+                "type": "string",
+                "label": "URL to navigate after login (optional)",
+                "required": False,
+            },
+            "action": {
+                "type": "string",
+                "label": "Action: screenshot / extract / download",
+                "required": False,
+            },
+            "extract_selector": {
+                "type": "string",
+                "label": "CSS selector to extract text from (for action=extract)",
+                "required": False,
+            },
+            "download_link": {
+                "type": "string",
+                "label": "CSS selector for download link (for action=download)",
+                "required": False,
+            },
+        },
+        "estimated_duration_s": 60,
+    },
 }
 
 # In-memory execution history (per-process; Redis-backed in production)
