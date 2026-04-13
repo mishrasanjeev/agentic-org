@@ -103,5 +103,90 @@
     "chroDashboard": "CHRO Dashboard",
     "cooDashboard": "COO Dashboard",
     "cboDashboard": "CBO Dashboard"
+  },
+  "companies": {
+    "title": "Companies",
+    "onboard": "Onboard Company",
+    "name": "Company Name",
+    "gstin": "GSTIN",
+    "pan": "PAN",
+    "state": "State",
+    "industry": "Industry",
+    "address": "Address",
+    "signatory": "Authorized Signatory",
+    "compliance": "Compliance",
+    "deadlines": "Compliance Deadlines",
+    "filings": "Filings",
+    "approvals": "Approvals",
+    "settings": "Settings",
+    "overview": "Overview",
+    "banking": "Banking",
+    "tallyConnection": "Tally Connection",
+    "reviewConfirm": "Review & Confirm",
+    "rejectReason": "Rejection Reason",
+    "noCompanies": "No companies yet. Click 'Onboard' to add a new company."
+  },
+  "connectors": {
+    "title": "Connectors",
+    "native": "Native Connectors",
+    "marketplace": "Marketplace",
+    "category": "Category",
+    "allCategories": "All Categories",
+    "healthCheck": "Health Check",
+    "authType": "Auth Type",
+    "baseUrl": "Base URL",
+    "rateLimit": "Rate Limit",
+    "tools": "Tools",
+    "noConnectors": "No connectors found."
+  },
+  "agents": {
+    "title": "Agents",
+    "create": "Create Agent",
+    "name": "Name",
+    "domain": "Domain",
+    "status": "Status",
+    "accuracy": "Accuracy",
+    "shadow": "Shadow Mode",
+    "active": "Active",
+    "promote": "Promote",
+    "noAgents": "No agents found."
+  },
+  "workflows": {
+    "title": "Workflows",
+    "create": "Create Workflow",
+    "generate": "Generate from NLP",
+    "name": "Name",
+    "description": "Description",
+    "steps": "Steps",
+    "trigger": "Trigger",
+    "noWorkflows": "No workflows found."
+  },
+  "sales": {
+    "title": "Sales Pipeline",
+    "addLead": "Add Lead",
+    "importCsv": "Import CSV",
+    "name": "Name",
+    "email": "Email",
+    "company": "Company",
+    "stage": "Stage",
+    "dealValue": "Deal Value",
+    "noLeads": "No leads found."
+  },
+  "chat": {
+    "placeholder": "Type your question...",
+    "send": "Send",
+    "history": "History",
+    "noHistory": "No chat history yet."
+  },
+  "common": {
+    "actions": "Actions",
+    "search": "Search",
+    "noData": "No data available",
+    "tryAgain": "Try Again",
+    "yes": "Yes",
+    "no": "No",
+    "close": "Close",
+    "details": "Details",
+    "all": "All"
   }
 }

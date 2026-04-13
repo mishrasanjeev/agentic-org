@@ -1256,8 +1256,8 @@ async def run_agent(
             )
             session.add(hitl_entry)
 
-    # 6c. Increment shadow sample count if agent is in shadow mode (atomic SQL)
-    if agent_config.get("status") == "shadow" and task_status in ("completed", "hitl_triggered"):
+    # 6c. Track running accuracy for shadow AND active agents (atomic SQL)
+    if agent_config.get("status") in ("shadow", "active") and task_status in ("completed", "hitl_triggered"):
         async with get_tenant_session(tid) as session:
             from sqlalchemy import text as sql_text
             # Atomic increment to avoid race conditions between concurrent runs

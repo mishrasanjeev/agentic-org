@@ -180,6 +180,14 @@ async def _save_session(key: str, entries: list[dict]) -> None:
 # Output formatting helper (BUG TC-002)
 # ---------------------------------------------------------------------------
 
+# Internal/security fields that should never appear in chat output
+_INTERNAL_FIELDS = {
+    "status", "confidence", "trace", "tool_calls", "signature",
+    "sig_hash", "hash", "hmac", "token", "access_token", "refresh_token",
+    "secret", "password", "api_key", "correlation_id", "thread_id",
+    "trace_id", "request_id", "tenant_id", "agent_id",
+}
+
 
 def _format_agent_output(output: dict | str | Any) -> str:
     """Convert a LangGraph agent output dict into a human-readable string.
@@ -217,10 +225,10 @@ def _format_agent_output(output: dict | str | Any) -> str:
         if key in output and output[key]:
             val = output[key]
             return val if isinstance(val, str) else str(val)
-    # Format remaining structured output as readable text
+    # Format remaining structured output as readable text.
     lines = []
     for k, v in output.items():
-        if k in ("status", "confidence", "trace", "tool_calls"):
+        if k in _INTERNAL_FIELDS:
             continue
         if isinstance(v, (dict, list)):
             continue  # skip nested structures
@@ -236,6 +244,7 @@ def _format_agent_output(output: dict | str | Any) -> str:
 class ChatQueryRequest(BaseModel):
     query: str
     company_id: str = ""
+    agent_id: str = ""
 
 
 class ChatQueryResponse(BaseModel):
@@ -267,10 +276,38 @@ async def chat_query(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
-    domain = _classify_domain(body.query)
-    agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
-        domain, tenant_id,
-    )
+    # If the caller specified an agent_id, look it up directly instead of
+    # relying on keyword-based domain classification.
+    if body.agent_id:
+        try:
+            aid = _uuid.UUID(body.agent_id)
+            tid = _uuid.UUID(tenant_id)
+            async with get_tenant_session(tid) as session:
+                agent = (await session.execute(
+                    select(Agent).where(Agent.id == aid, Agent.tenant_id == tid)
+                )).scalar_one_or_none()
+                if agent:
+                    domain = agent.domain or "general"
+                    agent_name = agent.employee_name or agent.name
+                    agent_id: str | None = str(agent.id)
+                    agent_type = agent.agent_type
+                    agent_tools = agent.authorized_tools or []
+                    if not agent_tools:
+                        agent_tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
+                            agent.agent_type,
+                            _DOMAIN_DEFAULT_TOOLS.get(domain, []),
+                        )
+                else:
+                    domain = _classify_domain(body.query)
+                    agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(domain, tenant_id)
+        except (ValueError, Exception):
+            domain = _classify_domain(body.query)
+            agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(domain, tenant_id)
+    else:
+        domain = _classify_domain(body.query)
+        agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
+            domain, tenant_id,
+        )
     # Default confidence based on whether we matched a domain at all
     tools_used = False
     confidence = 0.6 if domain == "general" else 0.85

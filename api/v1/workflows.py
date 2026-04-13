@@ -125,7 +125,20 @@ async def generate_workflow_endpoint(
         definition = await generate_workflow(body.description, tenant_id)
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from None
+    except ImportError as exc:
+        _log.error("workflow_generation_import_error", error=str(exc))
+        raise HTTPException(
+            503,
+            detail="Workflow generation is not available. LLM backend may not be configured.",
+        ) from None
     except Exception as exc:
+        error_msg = str(exc)
+        if "API key" in error_msg or "authentication" in error_msg.lower():
+            _log.error("workflow_generation_auth_error", error=error_msg[:200])
+            raise HTTPException(
+                503,
+                detail="Workflow generation requires LLM configuration. Please ensure API keys are set.",
+            ) from None
         _log.exception("workflow_generation_failed", description=body.description[:100])
         raise HTTPException(
             502,

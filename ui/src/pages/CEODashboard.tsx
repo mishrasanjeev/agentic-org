@@ -88,17 +88,19 @@ export default function CEODashboard() {
     );
   }
 
+  // API returns success_rate as a percentage (e.g., 86.2), not a fraction
+  const rate = data.success_rate ?? 0;
   const successColor =
-    data.success_rate >= 0.9
+    rate >= 90
       ? "text-green-600"
-      : data.success_rate >= 0.7
+      : rate >= 70
         ? "text-yellow-600"
         : "text-red-600";
 
   const topMetrics = [
     { label: t("kpi.agents", "Agents"), value: formatNumber(data.agent_count), color: "text-blue-600" },
     { label: t("kpi.totalTasks", "Total Tasks (30d)"), value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
-    { label: t("kpi.successRate", "Success Rate"), value: `${(data.success_rate * 100).toFixed(1)}%`, color: successColor },
+    { label: t("kpi.successRate", "Success Rate"), value: `${rate.toFixed(1)}%`, color: successColor },
     { label: t("kpi.hitlInterventions", "HITL Interventions"), value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
     { label: t("kpi.totalCost", "Total Cost (USD)"), value: USD.format(data.total_cost_usd), color: "text-purple-600" },
   ];

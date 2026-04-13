@@ -38,6 +38,11 @@ export default function ConnectorDetailPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [baseUrlError, setBaseUrlError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(60);
+  // OAuth2-specific fields
+  const [oauth2ClientId, setOauth2ClientId] = useState("");
+  const [oauth2TokenUrl, setOauth2TokenUrl] = useState("");
+  const [oauth2RedirectUri, setOauth2RedirectUri] = useState("");
+  const [testing, setTesting] = useState(false);
 
   function validateBaseUrl(url: string): boolean {
     if (!url.trim()) return true; // empty is allowed (optional field)
@@ -79,6 +84,12 @@ export default function ConnectorDetailPage() {
       };
       if (secretRef.trim()) update.secret_ref = secretRef.trim();
       const authConfig = buildAuthConfig(authType, authToken);
+      // Add OAuth2-specific fields
+      if (authType === "oauth2") {
+        if (oauth2ClientId.trim()) authConfig.client_id = oauth2ClientId.trim();
+        if (oauth2TokenUrl.trim()) authConfig.token_url = oauth2TokenUrl.trim();
+        if (oauth2RedirectUri.trim()) authConfig.redirect_uri = oauth2RedirectUri.trim();
+      }
       if (Object.keys(authConfig).length > 0) update.auth_config = authConfig;
 
       const { data } = await api.put(`/connectors/${id}`, update);
@@ -104,6 +115,19 @@ export default function ConnectorDetailPage() {
     }
   }
 
+  async function handleTestConnection() {
+    setTesting(true);
+    setFeedback(null);
+    try {
+      const { data } = await api.post(`/connectors/${id}/test`);
+      setFeedback({ type: data.success ? "success" : "error", msg: data.message || (data.success ? "Connection test passed" : "Connection test failed") });
+    } catch (e: unknown) {
+      setFeedback({ type: "error", msg: extractApiError(e, "Connection test failed") });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   if (loading) return <p className="text-muted-foreground p-6">Loading connector...</p>;
   if (!connector) return (
     <div className="space-y-4 p-6">
@@ -121,6 +145,7 @@ export default function ConnectorDetailPage() {
           <Badge variant="outline">{connector.category}</Badge>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={handleTestConnection} disabled={testing}>{testing ? "Testing..." : "Test Connection"}</Button>
           <Button variant="outline" onClick={handleHealthCheck}>Health Check</Button>
           <Button variant="outline" onClick={() => navigate("/dashboard/connectors")}>Back</Button>
         </div>
@@ -187,6 +212,22 @@ export default function ConnectorDetailPage() {
                 </div>
                 {authType !== "none" && (
                   <>
+                    {authType === "oauth2" && (
+                      <>
+                        <div>
+                          <label className="text-sm font-medium">Client ID</label>
+                          <input type="text" value={oauth2ClientId} onChange={(e) => setOauth2ClientId(e.target.value)} placeholder="OAuth2 Client ID" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Token URL</label>
+                          <input type="url" value={oauth2TokenUrl} onChange={(e) => setOauth2TokenUrl(e.target.value)} placeholder="https://accounts.google.com/o/oauth2/token" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Redirect URI</label>
+                          <input type="url" value={oauth2RedirectUri} onChange={(e) => setOauth2RedirectUri(e.target.value)} placeholder="https://app.agenticorg.ai/callback" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                        </div>
+                      </>
+                    )}
                     <div>
                       <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
                       <input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Enter new credential (leave blank to keep existing)" className="border rounded px-3 py-2 text-sm w-full mt-1" />

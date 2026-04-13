@@ -103,5 +103,90 @@
     "chroDashboard": "CHRO डैशबोर्ड",
     "cooDashboard": "COO डैशबोर्ड",
     "cboDashboard": "CBO डैशबोर्ड"
+  },
+  "companies": {
+    "title": "कंपनियां",
+    "onboard": "नई कंपनी जोड़ें",
+    "name": "कंपनी का नाम",
+    "gstin": "GSTIN",
+    "pan": "PAN",
+    "state": "राज्य",
+    "industry": "उद्योग",
+    "address": "पता",
+    "signatory": "अधिकृत हस्ताक्षरकर्ता",
+    "compliance": "अनुपालन",
+    "deadlines": "अनुपालन समय सीमा",
+    "filings": "फाइलिंग",
+    "approvals": "अनुमोदन",
+    "settings": "सेटिंग्स",
+    "overview": "अवलोकन",
+    "banking": "बैंकिंग",
+    "tallyConnection": "Tally कनेक्शन",
+    "reviewConfirm": "समीक्षा और पुष्टि",
+    "rejectReason": "अस्वीकृति का कारण",
+    "noCompanies": "अभी तक कोई कंपनी नहीं। नई कंपनी जोड़ने के लिए 'जोड़ें' पर क्लिक करें।"
+  },
+  "connectors": {
+    "title": "कनेक्टर",
+    "native": "नेटिव कनेक्टर",
+    "marketplace": "मार्केटप्लेस",
+    "category": "श्रेणी",
+    "allCategories": "सभी श्रेणियां",
+    "healthCheck": "स्वास्थ्य जांच",
+    "authType": "प्रमाणीकरण प्रकार",
+    "baseUrl": "बेस URL",
+    "rateLimit": "दर सीमा",
+    "tools": "उपकरण",
+    "noConnectors": "कोई कनेक्टर नहीं मिला।"
+  },
+  "agents": {
+    "title": "एजेंट",
+    "create": "एजेंट बनाएं",
+    "name": "नाम",
+    "domain": "डोमेन",
+    "status": "स्थिति",
+    "accuracy": "सटीकता",
+    "shadow": "छाया मोड",
+    "active": "सक्रिय",
+    "promote": "प्रमोट करें",
+    "noAgents": "कोई एजेंट नहीं मिला।"
+  },
+  "workflows": {
+    "title": "वर्कफ़्लो",
+    "create": "वर्कफ़्लो बनाएं",
+    "generate": "NLP से जनरेट करें",
+    "name": "नाम",
+    "description": "विवरण",
+    "steps": "चरण",
+    "trigger": "ट्रिगर",
+    "noWorkflows": "कोई वर्कफ़्लो नहीं मिला।"
+  },
+  "sales": {
+    "title": "बिक्री पाइपलाइन",
+    "addLead": "लीड जोड़ें",
+    "importCsv": "CSV आयात",
+    "name": "नाम",
+    "email": "ईमेल",
+    "company": "कंपनी",
+    "stage": "चरण",
+    "dealValue": "डील वैल्यू",
+    "noLeads": "कोई लीड नहीं मिली।"
+  },
+  "chat": {
+    "placeholder": "अपना प्रश्न लिखें...",
+    "send": "भेजें",
+    "history": "इतिहास",
+    "noHistory": "अभी तक कोई चैट इतिहास नहीं।"
+  },
+  "common": {
+    "actions": "कार्रवाइयां",
+    "search": "खोजें",
+    "noData": "कोई डेटा उपलब्ध नहीं",
+    "tryAgain": "पुनः प्रयास करें",
+    "yes": "हां",
+    "no": "नहीं",
+    "close": "बंद करें",
+    "details": "विवरण",
+    "all": "सभी"
   }
 }
