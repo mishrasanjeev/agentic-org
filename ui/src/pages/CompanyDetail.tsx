@@ -217,6 +217,10 @@ export default function CompanyDetail() {
   const [creatingApproval, setCreatingApproval] = useState(false);
   const [creatingCredential, setCreatingCredential] = useState(false);
 
+  // Rejection dialog state (replaces window.prompt for embedded browser safety)
+  const [rejectDialogId, setRejectDialogId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   const [editForm, setEditForm] = useState({
     name: "",
     state_code: "",
@@ -490,14 +494,19 @@ export default function CompanyDetail() {
     }
   };
 
-  const handleReject = async (approvalId: string) => {
-    if (!id) return;
-    const reason = window.prompt("Rejection reason", "") ?? "";
-    setApprovalBusyId(approvalId);
+  const openRejectDialog = (approvalId: string) => {
+    setRejectDialogId(approvalId);
+    setRejectReason("");
+  };
+
+  const confirmReject = async () => {
+    if (!id || !rejectDialogId) return;
+    setApprovalBusyId(rejectDialogId);
     setError(null);
+    setRejectDialogId(null);
     try {
-      await api.post(`/companies/${id}/approvals/${approvalId}/reject`, null, {
-        params: { reason },
+      await api.post(`/companies/${id}/approvals/${rejectDialogId}/reject`, null, {
+        params: { reason: rejectReason },
       });
       await refreshWithNotice("Approval rejected.");
     } catch (err) {
@@ -1042,7 +1051,7 @@ export default function CompanyDetail() {
                                   size="sm"
                                   variant="outline"
                                   disabled={approvalBusyId === approval.id}
-                                  onClick={() => void handleReject(approval.id)}
+                                  onClick={() => openRejectDialog(approval.id)}
                                 >
                                   Reject
                                 </Button>
@@ -1325,6 +1334,25 @@ export default function CompanyDetail() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+      {/* Rejection reason dialog (replaces window.prompt) */}
+      {rejectDialogId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h3 className="text-lg font-semibold mb-3">Rejection Reason</h3>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter the reason for rejection..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => setRejectDialogId(null)}>Cancel</Button>
+              <Button variant="destructive" size="sm" onClick={() => void confirmReject()}>Reject</Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

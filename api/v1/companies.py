@@ -103,17 +103,22 @@ class CompanyOnboard(BaseModel):
     pan: str = Field(..., max_length=10)
     tan: str | None = Field(None, max_length=10)
     cin: str | None = Field(None, max_length=21)
-    state_code: str | None = Field(None, max_length=2)
+    state_code: str | None = Field(None, max_length=50)
     industry: str | None = Field(None, max_length=100)
     registered_address: str | None = None
     signatory_name: str | None = Field(None, max_length=255)
     signatory_designation: str | None = Field(None, max_length=100)
+    signatory_email: str | None = Field(None, max_length=255)
     compliance_email: str | None = Field(None, max_length=255)
+    dsc_serial: str | None = None
+    dsc_expiry: str | None = None
     bank_name: str | None = None
     bank_account_number: str | None = None
     bank_ifsc: str | None = None
     pf_registration: str | None = None
     esi_registration: str | None = None
+    pt_registration: str | None = None
+    gst_auto_file: bool = False
 
 
 class RoleMapping(BaseModel):
@@ -600,6 +605,8 @@ async def onboard_company(
             bank_ifsc=body.bank_ifsc,
             pf_registration=body.pf_registration,
             esi_registration=body.esi_registration,
+            pt_registration=body.pt_registration,
+            gst_auto_file=body.gst_auto_file,
             tally_config=default_tally,
             user_roles=user_roles,
             # India FY defaults
@@ -623,6 +630,46 @@ async def onboard_company(
             )
         await session.refresh(company)
         out = _company_to_out(company)
+        company_id_str = str(company.id)
+
+    # Auto-generate compliance deadlines for the next 3 months
+    try:
+        import calendar as _cal
+
+        from core.models.compliance_deadline import ComplianceDeadline as CDModel
+
+        deadline_cal: dict[str, int] = {
+            "gstr1": 11, "gstr3b": 20, "tds_26q": 31, "tds_24q": 31,
+            "pf_ecr": 15, "esi_return": 15,
+        }
+        today = datetime.now(tz=__import__("datetime").timezone.utc).date()
+        async with get_tenant_session(tid) as session:
+            for offset in range(3):
+                month = today.month + offset
+                year = today.year
+                while month > 12:
+                    month -= 12
+                    year += 1
+                filing_period = f"{year}-{month:02d}"
+                for dtype, day in deadline_cal.items():
+                    from datetime import date as _d
+                    max_day = _cal.monthrange(year, month)[1]
+                    due = _d(year, month, min(day, max_day))
+                    dl = CDModel(
+                        tenant_id=tid,
+                        company_id=_uuid.UUID(company_id_str),
+                        deadline_type=dtype,
+                        filing_period=filing_period,
+                        due_date=due,
+                        filed=False,
+                    )
+                    session.add(dl)
+            try:
+                await session.flush()
+            except Exception:
+                logger.debug("Duplicate deadline skipped during onboard auto-generate")
+    except Exception:
+        logger.warning("Failed to auto-generate compliance deadlines for %s", body.name)
 
     logger.info("Onboarded company %s (%s) for tenant %s", body.name, body.gstin, tenant_id)
     return out

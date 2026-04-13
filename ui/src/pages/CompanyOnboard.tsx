@@ -223,7 +223,31 @@ export default function CompanyOnboard() {
     setSubmitError("");
     setSubmitting(true);
     try {
-      await api.post("/companies/onboard", form);
+      // Map UI field names to backend schema field names
+      const payload = {
+        name: form.name,
+        gstin: form.gstin || undefined,
+        pan: form.pan,
+        tan: form.tan || undefined,
+        cin: form.cin || undefined,
+        state_code: form.state || undefined,
+        industry: form.industry || undefined,
+        registered_address: form.address || undefined,
+        signatory_name: form.signatory_name || undefined,
+        signatory_designation: form.signatory_designation || undefined,
+        signatory_email: form.signatory_email || undefined,
+        compliance_email: form.compliance_email || undefined,
+        dsc_serial: form.dsc_serial || undefined,
+        dsc_expiry: form.dsc_expiry || undefined,
+        bank_name: form.bank_name || undefined,
+        bank_account_number: form.account_number || undefined,
+        bank_ifsc: form.ifsc || undefined,
+        pf_registration: form.pf_reg || undefined,
+        esi_registration: form.esi_reg || undefined,
+        pt_registration: form.pt_reg || undefined,
+        gst_auto_file: form.gst_auto_file,
+      };
+      await api.post("/companies/onboard", payload);
       navigate("/dashboard/companies");
     } catch (e: any) {
       const detail = e?.response?.data?.detail;
@@ -491,6 +515,7 @@ export default function CompanyOnboard() {
                   <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{form.tan || "—"}</span></div>
                   <div><span className="text-muted-foreground">State:</span> {form.state || "—"}</div>
                   <div><span className="text-muted-foreground">Industry:</span> {form.industry || "—"}</div>
+                  <div className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {form.address || "—"}</div>
                 </div>
               </div>
 

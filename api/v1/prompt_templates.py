@@ -171,12 +171,14 @@ async def create_prompt_template(
 
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        # TC-005: Check for existing template with same (tenant_id, name, agent_type)
+        # TC-005: Check for existing ACTIVE template with same name + agent_type.
+        # Soft-deleted templates (is_active=False) should not block reuse.
         existing = await session.execute(
             select(PromptTemplate).where(
                 PromptTemplate.tenant_id == tid,
                 PromptTemplate.name == body.name,
                 PromptTemplate.agent_type == body.agent_type,
+                PromptTemplate.is_active.is_(True),
             )
         )
         if existing.scalar_one_or_none() is not None:

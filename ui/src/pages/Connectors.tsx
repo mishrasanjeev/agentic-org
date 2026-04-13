@@ -147,7 +147,7 @@ export default function Connectors() {
   }
 
   const filtered = connectors.filter(
-    (c) => categoryFilter === "all" || c.category === categoryFilter
+    (c) => categoryFilter === "all" || c.category?.toLowerCase() === categoryFilter.toLowerCase()
   );
 
   const stats = {
@@ -278,7 +278,7 @@ export default function Connectors() {
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                 {NATIVE_CONNECTOR_CATALOG
-                  .filter((c) => categoryFilter === "all" || c.category === categoryFilter)
+                  .filter((c) => categoryFilter === "all" || c.category?.toLowerCase() === categoryFilter.toLowerCase())
                   .map((c) => {
                     const alreadyRegistered = connectors.some((existing) =>
                       existing.id === c.id || (existing as any).connector_id === c.id || existing.name?.toLowerCase() === c.name.toLowerCase()

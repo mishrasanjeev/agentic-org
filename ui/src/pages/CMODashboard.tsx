@@ -118,7 +118,7 @@ export default function CMODashboard() {
   const kpiCards = [
     { label: t("kpi.agents", "Agents"), value: formatNumber(data.agent_count), color: "text-blue-600" },
     { label: t("kpi.totalTasks", "Total Tasks (30d)"), value: formatNumber(data.total_tasks_30d), color: "text-emerald-600" },
-    { label: t("kpi.successRate", "Success Rate"), value: `${(data.success_rate * 100).toFixed(1)}%`, color: "text-purple-600" },
+    { label: t("kpi.successRate", "Success Rate"), value: `${(data.success_rate ?? 0).toFixed(1)}%`, color: "text-purple-600" },
     { label: t("kpi.hitlInterventions", "HITL Interventions"), value: formatNumber(data.hitl_interventions), color: "text-orange-600" },
     { label: t("kpi.totalCost", "Total Cost (USD)"), value: USD.format(data.total_cost_usd), color: "text-rose-600" },
   ];

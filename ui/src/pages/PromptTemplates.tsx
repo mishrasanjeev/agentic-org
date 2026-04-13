@@ -162,15 +162,23 @@ export default function PromptTemplates() {
                     <Badge variant="outline">Built-in (read-only)</Badge>
                     <Button variant="outline" size="sm" onClick={async () => {
                       try {
-                        await promptTemplatesApi.create({
+                        const { data: created } = await promptTemplatesApi.create({
                           name: `${selected.name}_custom`,
                           agent_type: selected.agent_type,
                           domain: selected.domain,
                           template_text: selected.template_text,
                           description: `Custom copy of ${selected.name}`,
                         });
-                        fetchTemplates();
-                      } catch { /* ignore */ }
+                        await fetchTemplates();
+                        // Select the newly created clone so the user can start editing
+                        if (created?.id) setSelectedId(created.id);
+                        setEditing(true);
+                        setEditText(selected.template_text);
+                      } catch (err: unknown) {
+                        const e = err as { response?: { data?: { detail?: string } } };
+                        const detail = e?.response?.data?.detail;
+                        setCreateError(typeof detail === "string" ? detail : "Clone failed. A custom copy may already exist.");
+                      }
                     }}>Clone to Edit</Button>
                   </>
                 ) : (

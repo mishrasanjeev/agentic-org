@@ -35,7 +35,7 @@ router = APIRouter()
 
 class LeadCreate(BaseModel):
     name: str = Field(..., max_length=255)
-    email: str = Field(..., max_length=255)
+    email: str = Field(..., max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     company: str = ""
     role: str = ""
     phone: str = ""

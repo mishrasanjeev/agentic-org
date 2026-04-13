@@ -50,6 +50,8 @@ export default function SalesPipeline() {
   const [showAddLead, setShowAddLead] = useState(false);
   const [newLead, setNewLead] = useState({ name: "", email: "", company: "", role: "", deal_value_usd: "" });
   const [addingLead, setAddingLead] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -107,6 +109,28 @@ export default function SalesPipeline() {
     finally { setAddingLead(false); }
   }
 
+  async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportingCsv(true);
+    setImportMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post("/sales/import-csv", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const count = data.imported?.length ?? 0;
+      setImportMsg({ type: "success", msg: `Imported ${count} lead${count !== 1 ? "s" : ""} from CSV` });
+      await fetchData();
+    } catch {
+      setImportMsg({ type: "error", msg: "CSV import failed. Ensure columns: name, email, company, role" });
+    } finally {
+      setImportingCsv(false);
+      e.target.value = "";  // reset file input
+    }
+  }
+
   const scoreColor = (score: number) =>
     score >= 70 ? "text-emerald-600" : score >= 40 ? "text-amber-600" : "text-slate-500";
 
@@ -125,9 +149,19 @@ export default function SalesPipeline() {
           <Button onClick={() => setShowAddLead(!showAddLead)} variant={showAddLead ? "outline" : "default"} size="sm">
             {showAddLead ? "Cancel" : "Add Lead"}
           </Button>
+          <Button variant="outline" size="sm" disabled={importingCsv} onClick={() => document.getElementById("csv-import-input")?.click()}>
+            {importingCsv ? "Importing..." : "Import CSV"}
+          </Button>
+          <input id="csv-import-input" type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
           <Button onClick={fetchData} variant="outline" size="sm">Refresh</Button>
         </div>
       </div>
+
+      {importMsg && (
+        <div className={`rounded-lg px-4 py-3 text-sm ${importMsg.type === "success" ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+          {importMsg.msg}
+        </div>
+      )}
 
       {/* Add Lead Form */}
       {showAddLead && (
