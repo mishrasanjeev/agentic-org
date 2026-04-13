@@ -76,16 +76,16 @@ async def _find_element(page: Any, selectors: list[str], custom: str = "") -> st
             el = page.locator(custom)
             if await el.count() > 0:
                 return custom
-        except Exception:
-            pass
+        except Exception:  # noqa: S110, BLE001
+            pass  # selector may not exist — try next
 
     for sel in selectors:
         try:
             el = page.locator(sel)
             if await el.count() > 0:
                 return sel
-        except Exception:
-            continue
+        except Exception:  # noqa: S110, S112, BLE001
+            continue  # selector may not exist — try next
     return None
 
 
@@ -164,7 +164,7 @@ async def run(page: Any, params: dict[str, Any]) -> dict[str, Any]:
     if wait_for:
         try:
             await page.wait_for_selector(wait_for, timeout=15000)
-        except Exception:
+        except Exception:  # noqa: BLE001
             result["error"] = f"Login may have failed — wait_for selector '{wait_for}' not found after login"
             result["page_title"] = await page.title()
             result["current_url"] = page.url
@@ -181,8 +181,8 @@ async def run(page: Any, params: dict[str, Any]) -> dict[str, Any]:
                     err_text = await el.first.text_content()
                     result["error"] = f"Login failed: {err_text}"
                     return result
-            except Exception:
-                continue
+            except Exception:  # noqa: S112, BLE001
+                continue  # error selector not found — try next
 
     result["logged_in"] = True
     result["page_title"] = await page.title()
