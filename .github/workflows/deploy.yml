@@ -185,7 +185,13 @@ jobs:
 
   e2e-tests:
     needs: deploy-production
-    if: github.ref == 'refs/heads/main'
+    # deploy-production can still succeed when approval-gate is skipped on main
+    # pushes, so gate these jobs on the actual deploy result instead of the
+    # default implicit status chain.
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.deploy-production.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -348,7 +354,10 @@ jobs:
 
   submit-indexing:
     needs: deploy-production
-    if: github.ref == 'refs/heads/main'
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.deploy-production.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
