@@ -4,6 +4,14 @@ metadata:
   name: {{ .Release.Name }}-api
 spec:
   replicas: {{ .Values.replicaCount.api }}
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 900
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
     matchLabels:
       app: agenticorg-api
@@ -12,6 +20,7 @@ spec:
       labels:
         app: agenticorg-api
     spec:
+      terminationGracePeriodSeconds: 45
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

@@ -329,12 +329,43 @@ jobs:
 
       - name: Verify production rollout
         run: |
-          kubectl rollout status deployment/agenticorg-api \
-            --namespace agenticorg \
-            --timeout=300s
-          kubectl rollout status deployment/agenticorg-ui \
-            --namespace agenticorg \
-            --timeout=300s
+          set -euo pipefail
+
+          dump_rollout_debug() {
+            local deployment_name="$1"
+            local app_label="$2"
+
+            echo "::group::${deployment_name} rollout diagnostics"
+            kubectl get deployment "${deployment_name}" --namespace agenticorg -o wide || true
+            kubectl describe deployment "${deployment_name}" --namespace agenticorg || true
+            kubectl rollout history deployment/"${deployment_name}" --namespace agenticorg || true
+            kubectl get rs --namespace agenticorg -l "app=${app_label}" -o wide || true
+            kubectl get pods --namespace agenticorg -l "app=${app_label}" -o wide || true
+
+            for pod in $(kubectl get pods --namespace agenticorg -l "app=${app_label}" -o name); do
+              kubectl describe --namespace agenticorg "${pod}" || true
+              kubectl logs --namespace agenticorg "${pod}" --all-containers --tail=200 || true
+              kubectl logs --namespace agenticorg "${pod}" --all-containers --previous --tail=200 || true
+            done
+
+            kubectl get events --namespace agenticorg --sort-by=.metadata.creationTimestamp | tail -n 50 || true
+            echo "::endgroup::"
+          }
+
+          check_rollout() {
+            local deployment_name="$1"
+            local app_label="$2"
+
+            if ! kubectl rollout status deployment/"${deployment_name}" \
+              --namespace agenticorg \
+              --timeout=600s; then
+              dump_rollout_debug "${deployment_name}" "${app_label}"
+              exit 1
+            fi
+          }
+
+          check_rollout agenticorg-api agenticorg-api
+          check_rollout agenticorg-ui agenticorg-ui
 
       - name: Post-deploy production health check
         run: |
