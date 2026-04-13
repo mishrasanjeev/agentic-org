@@ -81,7 +81,7 @@ v4 = [
 ]
 dev = [
     "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.0.0",
     "respx>=0.22.0",
     "testcontainers[postgres,redis]>=4.8.0",
