@@ -1,25 +1,17 @@
-# AgenticOrg v4.0.0 — AI Virtual Employees for Enterprise
+# AgenticOrg — AI Virtual Employees for Enterprise
 
-> AgenticOrg lets you create AI virtual employees or deploy 50+ pre-built agents across 6 domains + 4 industry packs — Finance, HR, Marketing, Operations, Back Office, and Communications — with 1000+ integrations, voice agents, RAG knowledge base, smart LLM routing, PII redaction, browser RPA, and human-in-the-loop governance on every critical decision.
+> AgenticOrg lets you create AI virtual employees or deploy 26 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 50+ pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 1000+ integrations (via Composio, MIT) plus 54 native enterprise connectors (340+ native tools) and executes domain-specific tasks with human approval on every critical decision. Includes voice agents (LiveKit + Pipecat), RAG knowledge base (RAGFlow), smart LLM routing (RouteLLM, 85% cost savings), pre-LLM PII redaction (Microsoft Presidio), browser RPA (Playwright), 4 industry packs (Healthcare, Legal, Insurance, Manufacturing), air-gapped deployment (Ollama/vLLM), A/B testing, email drip engine, ABM with intent data (Bombora/G2/TrustRadius), web push HITL notifications, and billing for hosted tier (Stripe + PineLabs).
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 26 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 54 enterprise systems (339 tools) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
 - **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
 - **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
-- **50+ Pre-Built AI Agents**: Includes 50+ agents across Finance, HR, Marketing, Ops, Back Office, Comms + industry packs (Healthcare, Legal, Insurance, Manufacturing) + voice/support deflection agents
-- **1000+ Integrations** (via Composio, MIT) + **54 Native Connectors (340+ native tools)**:
-- **Knowledge Base (RAG)**: Upload PDF/Word/Excel, agents query via semantic search. Powered by RAGFlow (Apache 2.0)
-- **Voice Agents**: Real-time voice AI with STT (Whisper) + TTS (Piper) + SIP telephony. Powered by LiveKit (Apache 2.0) + Pipecat (BSD-2)
-- **Smart LLM Routing**: 3-tier routing via RouteLLM (Apache 2.0) — Economy (Gemini Flash, free), Standard (Gemini Pro), Premium (Claude/GPT-4o). 85% cost reduction. Air-gapped: Ollama/vLLM
-- **Pre-LLM PII Redaction**: Microsoft Presidio (MIT) scrubs Aadhaar, PAN, GSTIN, UPI, email, phone before LLM sees data
-- **Industry Packs**: Healthcare, Legal, Insurance, Manufacturing — one-click install via API
-- **Browser RPA**: Playwright-based automation for legacy portals (EPFO, MCA, Income Tax). Sandboxed Docker execution
-- **Billing**: Self-hosted free forever. Hosted: Free / Pro $49/mo / Enterprise $299/mo. India: Rs 999/mo / Rs 4999/mo
-- **54 Native Connectors**: Banking Aa (7 tools), Gstn (8 tools), Income Tax India (7 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (6 tools), Tally (6 tools), Zoho Books (6 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Brandwatch (5 tools), Buffer (4 tools), Google Ads (5 tools), Hubspot (13 tools), Linkedin Ads (4 tools), Meta Ads (5 tools), Mixpanel (5 tools), Salesforce (6 tools), Bombora (4 tools), G2 (4 tools), TrustRadius (4 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (9 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), Object Storage (6 tools), Sendgrid (5 tools), Slack (6 tools), Twilio (5 tools), Whatsapp (5 tools)
+- **26 Pre-Built AI Agents**: Ap Processor, Ar Collections, Close Agent, Fpa Agent, Recon Agent, Tax Compliance, Ld Coordinator, Offboarding Agent, Onboarding Agent, Payroll Engine, Performance Coach, Talent Acquisition, Brand Monitor, Campaign Pilot, Content Factory, Crm Intelligence, Seo Strategist, Compliance Guard, Contract Intelligence, It Operations, Support Deflector, Support Triage, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
+- **54 Enterprise Connectors (339 tools)**: Banking Aa (5 tools), Gstn (8 tools), Gstn Sandbox (0 tools), Income Tax India (7 tools), Netsuite (8 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (8 tools), Tally (6 tools), Zoho Books (7 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Bombora (4 tools), Brandwatch (5 tools), Buffer (5 tools), G2 (4 tools), Ga4 (6 tools), Google Ads (5 tools), Hubspot (13 tools), Linkedin Ads (4 tools), Mailchimp (10 tools), Meta Ads (5 tools), Mixpanel (5 tools), Moengage (6 tools), Salesforce (6 tools), Trustradius (4 tools), Wordpress (7 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (9 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), S3 (6 tools), Sendgrid (7 tools), Slack (7 tools), Twilio (5 tools), Twitter (6 tools), Whatsapp (5 tools), Youtube (6 tools)
 - **Agents That Act**: Agents don't just generate text — they call real external APIs via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back
 - **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
 - **Shadow Mode**: Test agents against real data before promoting to production
@@ -54,10 +46,11 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - Crm Intelligence (confidence: 0.88)
 - Seo Strategist (confidence: 0.9)
 
-### Operations (5 agents, COO oversight)
+### Operations (6 agents, COO oversight)
 - Compliance Guard (confidence: 0.95)
 - Contract Intelligence (confidence: 0.82)
 - It Operations (confidence: 0.88)
+- Support Deflector (confidence: 0.7)
 - Support Triage (confidence: 0.85)
 - Vendor Manager (confidence: 0.88)
 
@@ -72,16 +65,15 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
 
 ## Pricing
 
-- Free (self-hosted, $0): 50+ AI agents, all connectors, unlimited
-- Free (hosted): 3 agents, 500 tasks/day
-- Pro ($49/month, Rs 999/mo India): Unlimited agents, 1000+ integrations, unlimited tasks
-- Enterprise ($299/month, Rs 4999/mo India): Unlimited everything + SLA
+- Free ($0/month): 50+ AI agents, 20 connectors, 500 tasks/day
+- Pro ($499/month): Unlimited AI agents, 54 connectors, Unlimited tasks
+- Enterprise (Custom): Unlimited AI agents, 54 connectors, Unlimited everything
 
 ## Developer SDKs & Integration
 
 - **Python SDK**: `pip install agenticorg` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
 - **TypeScript SDK**: `npm i agenticorg-sdk` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: `npx agenticorg-mcp-server` — expose 50+ agents and 1000+ tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **MCP Server**: `npx agenticorg-mcp-server` — expose 50+ agents and 340+ native tools to ChatGPT, Claude Desktop, Cursor ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
 - **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop deploy`
 - **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use `ao_sk_` prefix, bcrypt-hashed, scoped, revocable
 - **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at `/api/v1/a2a/agent-card`
@@ -96,6 +88,11 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
 - Evaluation Matrix: https://agenticorg.ai/evals
 - Integration Workflow: https://agenticorg.ai/integration-workflow
 - Blog: https://agenticorg.ai/blog
+  - How AI Agents Are Transforming CA Firms: GST, TDS, and Bank Reconciliation on Autopilot: https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation
+  - Why Your Month-End Close Takes 5 Days (And How AI Cuts It to 1.5): https://agenticorg.ai/blog/why-month-end-close-takes-5-days
+  - Measuring Real ROI from AI Agents: Our Honest Framework: https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents
+  - How a 200-Person IT Company's CFO Runs Finance with 3 People and 10 AI Agents: https://agenticorg.ai/blog/200-person-it-company-cfo-ai-agents
+  - How a CA Firm Goes Live with AI Agents: Invoice to Tally in 8 Days: https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end
   - AI Invoice Processing for Indian Enterprises: GSTN, 3-Way Matching, and Beyond: https://agenticorg.ai/blog/ai-invoice-processing-india
   - AI Virtual Employees vs RPA Bots: Why the Enterprise is Moving Beyond Robotic Process Automation: https://agenticorg.ai/blog/virtual-employee-vs-rpa
   - Automated Bank Reconciliation: How AI Achieves 99.7% Match Rates: https://agenticorg.ai/blog/automated-bank-reconciliation

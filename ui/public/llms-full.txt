@@ -1,6 +1,6 @@
-# AgenticOrg v4.0.0 — Complete Product Documentation for LLMs
+# AgenticOrg — Complete Product Documentation for LLMs
 
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 50+ pre-built agents across 6 domains + 4 industry packs: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 1000+ integrations (via Composio) plus 54 native enterprise connectors (340+ native tools). v4.0.0 adds: voice agents (LiveKit + Pipecat), RAG knowledge base (RAGFlow), smart LLM routing (RouteLLM, 85% cost savings), pre-LLM PII redaction (Presidio), browser RPA (Playwright), industry packs (Healthcare/Legal/Insurance/Manufacturing), air-gapped deployment (Ollama/vLLM), and hosted billing tier. Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 26 pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 54 enterprise systems (339 tools). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
 
 ## Product Overview
 
@@ -35,7 +35,7 @@ AgenticOrg treats AI agents as virtual employees — named personas that admins 
 ### Agent Creator (No-Code Wizard)
 5-step wizard available to admin/CEO users:
 1. **Persona**: Employee name, designation, avatar, domain
-2. **Role**: Agent type (pick from 25 built-in or create custom), specialization, routing filters
+2. **Role**: Agent type (pick from 26 built-in or create custom), specialization, routing filters
 3. **Prompt**: Select from production-tested prompt templates or write custom instructions, fill in template variables
 4. **Behavior**: Confidence floor, HITL conditions, LLM model, max retries
 5. **Review**: Summary and deploy as Shadow
@@ -51,7 +51,7 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 
 ---
 
-## All 25 Agents — Detailed
+## All 26 Agents — Detailed
 
 ### Finance Domain (6 agents, CFO oversight)
 
@@ -127,7 +127,7 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 - Domain: Marketing
 - Confidence floor: 90%
 
-### Operations Domain (5 agents, COO oversight)
+### Operations Domain (6 agents, COO oversight)
 
 #### Compliance Guard (compliance_guard)
 - Domain: Operations
@@ -140,6 +140,10 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 #### It Operations (it_operations)
 - Domain: Operations
 - Confidence floor: 88%
+
+#### Support Deflector (support_deflector)
+- Domain: Operations
+- Confidence floor: 70%
 
 #### Support Triage (support_triage)
 - Domain: Operations
@@ -165,19 +169,21 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 
 ---
 
-## 54 Enterprise Connectors (340+ total tools)
+## 54 Enterprise Connectors (339 total tools)
 
-### Finance (10 connectors)
-- Banking Aa: 7 tools (aa_oauth2)
+### Finance (12 connectors)
+- Banking Aa: 5 tools (aa_oauth2)
 - Gstn: 8 tools (gsp_dsc)
+- Gstn Sandbox: 0 tools (api_key)
 - Income Tax India: 7 tools (dsc)
-- Oracle Fusion: 10 tools (rest_soap)
-- Pinelabs Plural: 6 tools (api_key)
+- Netsuite: 8 tools (token)
+- Oracle Fusion: 10 tools (basic)
+- Pinelabs Plural: 6 tools (oauth2)
 - Quickbooks: 6 tools (oauth2)
 - Sap: 7 tools (odata_oauth2)
-- Stripe: 6 tools (api_key)
-- Tally: 6 tools (tdl_rest)
-- Zoho Books: 6 tools (oauth2)
+- Stripe: 8 tools (api_key)
+- Tally: 6 tools (tdl_xml)
+- Zoho Books: 7 tools (oauth2)
 
 ### HR (8 connectors)
 - Darwinbox: 10 tools (api_key_oauth2)
@@ -189,19 +195,23 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 - Okta: 8 tools (scim_oauth2)
 - Zoom: 6 tools (oauth2)
 
-### Marketing (12 connectors)
+### Marketing (16 connectors)
 - Ahrefs: 5 tools (api_token)
+- Bombora: 4 tools (api_key)
 - Brandwatch: 5 tools (oauth2)
-- Buffer: 4 tools (oauth2)
+- Buffer: 5 tools (oauth2)
+- G2: 4 tools (api_key)
+- Ga4: 6 tools (oauth2)
 - Google Ads: 5 tools (oauth2)
 - Hubspot: 13 tools (oauth2)
 - Linkedin Ads: 4 tools (oauth2)
+- Mailchimp: 10 tools (basic)
 - Meta Ads: 5 tools (oauth2)
-- Mixpanel: 5 tools (api_key)
-- Salesforce: 6 tools (oauth2_soap)
-- Bombora: 4 tools (api_key)
-- G2: 4 tools (api_key)
-- TrustRadius: 4 tools (api_key)
+- Mixpanel: 5 tools (basic)
+- Moengage: 6 tools (basic)
+- Salesforce: 6 tools (oauth2)
+- Trustradius: 4 tools (api_key)
+- Wordpress: 7 tools (basic)
 
 ### Operations (7 connectors)
 - Confluence: 6 tools (oauth2)
@@ -212,16 +222,18 @@ Each agent can have monthly cost caps. Before every execution, the system checks
 - Servicenow: 6 tools (rest_oauth2)
 - Zendesk: 8 tools (api_token)
 
-### Communications & Cloud (9 connectors)
+### Communications & Cloud (11 connectors)
 - Github: 9 tools (pat_oauth2)
 - Gmail: 4 tools (oauth2)
 - Google Calendar: 5 tools (oauth2)
 - Langsmith: 5 tools (api_key)
-- Object Storage: 6 tools (service_account)
-- Sendgrid: 5 tools (api_key)
-- Slack: 6 tools (bolt_bot_token)
+- S3: 6 tools (service_account)
+- Sendgrid: 7 tools (api_key)
+- Slack: 7 tools (bolt_bot_token)
 - Twilio: 5 tools (api_key_secret)
+- Twitter: 6 tools (oauth2)
 - Whatsapp: 5 tools (meta_business)
+- Youtube: 6 tools (oauth2)
 
 ---
 
@@ -268,7 +280,7 @@ Shadow agents have configurable limits: minimum sample count (default 100), accu
 
 ## MCP Registry
 
-AgenticOrg is listed in the official MCP Registry (registry.modelcontextprotocol.io) as `io.github.mishrasanjeev/agenticorg`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 12 tools and 1000+ integrations via stdio transport. Install: npx agenticorg-mcp-server
+AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name `agenticorg-mcp-server`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 10 tools and 339 connector tools via stdio transport.
 
 ---
 
@@ -353,6 +365,11 @@ AgenticOrg is listed in the official MCP Registry (registry.modelcontextprotocol
 
 ## Blog
 
+- [How AI Agents Are Transforming CA Firms: GST, TDS, and Bank Reconciliation on Autopilot](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
+- [Why Your Month-End Close Takes 5 Days (And How AI Cuts It to 1.5)](https://agenticorg.ai/blog/why-month-end-close-takes-5-days)
+- [Measuring Real ROI from AI Agents: Our Honest Framework](https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents)
+- [How a 200-Person IT Company's CFO Runs Finance with 3 People and 10 AI Agents](https://agenticorg.ai/blog/200-person-it-company-cfo-ai-agents)
+- [How a CA Firm Goes Live with AI Agents: Invoice to Tally in 8 Days](https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end)
 - [AI Invoice Processing for Indian Enterprises: GSTN, 3-Way Matching, and Beyond](https://agenticorg.ai/blog/ai-invoice-processing-india)
 - [AI Virtual Employees vs RPA Bots: Why the Enterprise is Moving Beyond Robotic Process Automation](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
 - [Automated Bank Reconciliation: How AI Achieves 99.7% Match Rates](https://agenticorg.ai/blog/automated-bank-reconciliation)
@@ -408,7 +425,7 @@ AgenticOrg is listed in the official MCP Registry (registry.modelcontextprotocol
 
 ### MCP Server (npm)
 - Install: `npx agenticorg-mcp-server`
-- Exposes 12 tools: list_agents, run_agent, get_agent_details, create_agent, create_agent_from_sop, list_connectors, call_connector_tool, list_workflows, run_workflow, search_knowledge_base, list_mcp_tools, get_agent_card
+- Exposes 10 tools: list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, call_connector_tool, list_mcp_tools, discover_agents_a2a, get_agent_card
 - Works with ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client
 - Package: https://www.npmjs.com/package/agenticorg-mcp-server
 
@@ -421,7 +438,7 @@ AgenticOrg is listed in the official MCP Registry (registry.modelcontextprotocol
 
 ### Integration Protocols
 - **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at `/api/v1/a2a/agent-card`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. 340+ tools exposed via stdio transport. Listed in official MCP Registry
+- **MCP (Model Context Protocol)**: Anthropic's protocol. 339 tools exposed via stdio transport. Listed in official MCP Registry
 - **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
 
 ---
