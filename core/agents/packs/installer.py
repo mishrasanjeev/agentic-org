@@ -24,6 +24,7 @@ from core.models.agent import (
     ShadowComparison,
 )
 from core.models.audit import AuditLog
+from core.models.ca_subscription import CASubscription
 from core.models.company import Company
 from core.models.hitl import HITLQueue
 from core.models.prompt_template import PromptEditHistory
@@ -650,6 +651,30 @@ async def is_pack_installed_for_session(session, tid: UUID, pack_name: str) -> b
         {"tenant_id": tid, "pack_name": pack_name},
     )
     return existing.scalar_one_or_none() is not None
+
+
+async def ensure_ca_pack_subscription_sync_async(tenant_id: str) -> bool:
+    """Install the CA pack when an active or trial CA subscription exists.
+
+    Returns ``True`` when a missing ``ca-firm`` install was repaired, otherwise
+    ``False``. This heals tenants that were provisioned with CA subscription
+    state before the pack install lifecycle became durable.
+    """
+    tid = UUID(tenant_id)
+
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(CASubscription).where(CASubscription.tenant_id == tid)
+        )
+        subscription = result.scalar_one_or_none()
+        if not subscription or subscription.status not in {"trial", "active"}:
+            return False
+
+        if await is_pack_installed_for_session(session, tid, _ca_id):
+            return False
+
+    await install_pack_async(_ca_id, tenant_id)
+    return True
 
 
 async def _merge_install_assets(

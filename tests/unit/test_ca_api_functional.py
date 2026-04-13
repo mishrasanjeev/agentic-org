@@ -536,6 +536,13 @@ class TestSubscriptionEndpoints:
         assert '"expired"' in source
         assert '"active"' in source
 
+    def test_activate_reconciles_ca_pack_install(self):
+        """activate_ca_subscription repairs missing ca-firm install state."""
+        from api.v1.companies import activate_ca_subscription
+
+        source = inspect.getsource(activate_ca_subscription)
+        assert "_ensure_ca_pack_ready" in source
+
     def test_subscription_model_defaults(self):
         """CASubscription model has correct defaults."""
         from core.models.ca_subscription import CASubscription
@@ -604,6 +611,31 @@ class TestPartnerDashboardSchemas:
         source = inspect.getsource(get_partner_dashboard)
         assert "4999" in source
         assert "revenue_per_month_inr" in source
+
+    def test_partner_dashboard_reconciles_ca_pack_install(self):
+        """get_partner_dashboard repairs missing ca-firm install state."""
+        from api.v1.companies import get_partner_dashboard
+
+        source = inspect.getsource(get_partner_dashboard)
+        assert "_ensure_ca_pack_ready" in source
+
+
+class TestCACompanyEndpointReconciliation:
+    """Verify CA company endpoints self-heal pack install drift."""
+
+    def test_list_companies_reconciles_ca_pack_install(self):
+        """list_companies repairs missing ca-firm install state."""
+        from api.v1.companies import list_companies
+
+        source = inspect.getsource(list_companies)
+        assert "_ensure_ca_pack_ready" in source
+
+    def test_get_company_reconciles_ca_pack_install(self):
+        """get_company repairs missing ca-firm install state."""
+        from api.v1.companies import get_company
+
+        source = inspect.getsource(get_company)
+        assert "_ensure_ca_pack_ready" in source
 
 
 # ============================================================================

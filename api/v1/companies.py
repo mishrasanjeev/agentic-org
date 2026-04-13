@@ -211,6 +211,13 @@ def _company_to_out(c: Company) -> CompanyOut:
     )
 
 
+async def _ensure_ca_pack_ready(tenant_id: str) -> None:
+    """Keep CA pack state aligned with active or trial CA subscriptions."""
+    from core.agents.packs.installer import ensure_ca_pack_subscription_sync_async
+
+    await ensure_ca_pack_subscription_sync_async(tenant_id)
+
+
 # ---------------------------------------------------------------------------
 # LIST
 # ---------------------------------------------------------------------------
@@ -226,6 +233,7 @@ async def list_companies(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """List all companies for the current tenant with optional filters."""
+    await _ensure_ca_pack_ready(tenant_id)
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         base = select(Company).where(Company.tenant_id == tid)
@@ -344,6 +352,7 @@ async def get_company(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Get details of a specific company."""
+    await _ensure_ca_pack_ready(tenant_id)
     tid = _uuid.UUID(tenant_id)
     try:
         cid = _uuid.UUID(company_id)
@@ -1232,6 +1241,7 @@ async def get_ca_subscription(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Get the current tenant's CA subscription."""
+    await _ensure_ca_pack_ready(tenant_id)
     tid = _uuid.UUID(tenant_id)
 
     async with get_tenant_session(tid) as session:
@@ -1314,6 +1324,7 @@ async def activate_ca_subscription(
         await session.refresh(sub)
         out = _subscription_to_out(sub)
 
+    await _ensure_ca_pack_ready(tenant_id)
     return out
 
 
@@ -2010,6 +2021,7 @@ async def get_partner_dashboard(
     Queries companies, filing_approvals (pending count), and
     compliance_deadlines (upcoming + overdue).
     """
+    await _ensure_ca_pack_ready(tenant_id)
     tid = _uuid.UUID(tenant_id)
     today = datetime.now(tz=UTC).date()
 

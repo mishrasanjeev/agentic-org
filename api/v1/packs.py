@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_current_tenant, require_tenant_admin
 from core.agents.packs.installer import (
+    ensure_ca_pack_subscription_sync_async,
     get_installed_packs_async,
     get_pack_detail,
     install_pack_async,
@@ -25,6 +26,7 @@ async def list_available_packs():
 @router.get("/packs/installed")
 async def list_installed(tenant_id: str = Depends(get_current_tenant)):
     """List packs installed for the current tenant."""
+    await ensure_ca_pack_subscription_sync_async(tenant_id)
     return {"installed": await get_installed_packs_async(tenant_id)}
 
 
