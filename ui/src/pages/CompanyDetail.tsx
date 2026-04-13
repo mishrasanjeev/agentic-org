@@ -128,7 +128,7 @@ type TabKey =
   | "compliance"
   | "agents"
   | "workflows"
-  | "activity"
+  | "audit"
   | "approvals"
   | "settings";
 
@@ -204,6 +204,7 @@ export default function CompanyDetail() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [agents, setAgents] = useState<AutomationAgent[]>([]);
   const [workflows, setWorkflows] = useState<AutomationWorkflow[]>([]);
+  const [auditEntries, setAuditEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -261,6 +262,7 @@ export default function CompanyDetail() {
       credentialsResult,
       agentsResult,
       workflowsResult,
+      auditResult,
     ] = await Promise.allSettled([
       api.get(`/companies/${id}`),
       api.get(`/companies/${id}/approvals`),
@@ -270,6 +272,7 @@ export default function CompanyDetail() {
       api.get(`/companies/${id}/credentials`),
       api.get("/agents", { params: { page: 1, per_page: 200, domain: "finance", company_id: id } }),
       api.get("/workflows", { params: { page: 1, per_page: 200, company_id: id } }),
+      api.get("/audit", { params: { page: 1, per_page: 200, company_id: id } }),
     ]);
 
     if (companyResult.status === "rejected") {
@@ -365,6 +368,21 @@ export default function CompanyDetail() {
       setWorkflows([]);
     }
 
+    if (auditResult.status === "fulfilled") {
+      const auditItems = itemsFromResponse<Record<string, unknown>>(auditResult.value.data);
+      setAuditEntries(
+        auditItems.map((record) => ({
+          id: `audit-${String(record.id || crypto.randomUUID())}`,
+          timestamp: String(record.created_at || record.timestamp || ""),
+          action: String(record.action || record.event_type || "Audit event"),
+          actor: String(record.actor_id || record.actor_type || "system"),
+          outcome: String(record.outcome || "recorded"),
+        })),
+      );
+    } else {
+      setAuditEntries([]);
+    }
+
     setLoading(false);
   }, [id]);
 
@@ -403,17 +421,19 @@ export default function CompanyDetail() {
       outcome: upload.status,
     }));
 
-    return [...approvalActivity, ...deadlineActivity, ...uploadActivity].sort(
+    const merged = [...auditEntries, ...approvalActivity, ...deadlineActivity, ...uploadActivity];
+    const deduped = merged.filter((entry, index, items) => items.findIndex((candidate) => candidate.id === entry.id) === index);
+    return deduped.sort(
       (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
     );
-  }, [approvals, deadlines, uploads]);
+  }, [approvals, auditEntries, deadlines, uploads]);
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "compliance", label: "Compliance" },
     { key: "agents", label: "Agents" },
     { key: "workflows", label: "Workflows" },
-    { key: "activity", label: "Activity" },
+    { key: "audit", label: "Audit Log" },
     { key: "approvals", label: "Approvals" },
     { key: "settings", label: "Settings" },
   ];
@@ -714,11 +734,11 @@ export default function CompanyDetail() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Recent Compliance Activity</CardTitle>
+                <CardTitle className="text-base">Recent Audit & Activity</CardTitle>
               </CardHeader>
               <CardContent>
                 {activities.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No company activity recorded yet.</p>
+                  <p className="text-sm text-muted-foreground">No company audit events recorded yet.</p>
                 ) : (
                   <div className="space-y-3">
                     {activities.slice(0, 5).map((activity) => (
@@ -907,13 +927,13 @@ export default function CompanyDetail() {
         </div>
       )}
 
-      {activeTab === "activity" && (
-        <Card>
-          <CardContent className="pt-4">
-            {activities.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
+        {activeTab === "audit" && (
+          <Card>
+            <CardContent className="pt-4">
+              {activities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No audit events recorded yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">

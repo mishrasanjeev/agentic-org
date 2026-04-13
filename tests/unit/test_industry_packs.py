@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from core.agents.packs.installer import (
@@ -84,3 +86,11 @@ def test_installed_packs_per_tenant():
 
     assert "legal" in get_installed_packs("tenant-B")
     assert "healthcare" not in get_installed_packs("tenant-B")
+
+
+def test_list_installed_repairs_ca_subscription_drift():
+    """The packs API self-heals missing ca-firm installs for active CA tenants."""
+    from api.v1.packs import list_installed
+
+    source = inspect.getsource(list_installed)
+    assert "ensure_ca_pack_subscription_sync_async" in source
