@@ -18,7 +18,9 @@ COPY migrations/ migrations/
 RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 
 FROM python:3.14-slim
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl libjpeg62-turbo zlib1g \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
