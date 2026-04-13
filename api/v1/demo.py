@@ -24,6 +24,7 @@ class DemoRequest(BaseModel):
     email: str
     company: str = ""
     role: str = ""
+    phone: str = ""
 
 
 # ── Admin: seed demo data ───────────────────────────────────────────
