@@ -50,6 +50,7 @@ def make_mock_agent(**overrides):
     agent.tenant_id = overrides.get(
         "tenant_id", uuid.UUID("00000000-0000-0000-0000-000000000001")
     )
+    agent.company_id = overrides.get("company_id", None)
     agent.name = overrides.get("name", "Test Agent")
     agent.employee_name = overrides.get("employee_name", "Test Employee")
     agent.agent_type = overrides.get("agent_type", "ap_processor")
@@ -160,13 +161,21 @@ class TestAgentToDict:
         result = _agent_to_dict(agent)
         assert result["id"] == str(aid)
 
+    def test_company_id_is_string_when_present(self):
+        from api.v1.agents import _agent_to_dict
+
+        company_id = uuid.uuid4()
+        agent = make_mock_agent(company_id=company_id)
+        result = _agent_to_dict(agent)
+        assert result["company_id"] == str(company_id)
+
     def test_all_expected_keys_present(self):
         from api.v1.agents import _agent_to_dict
 
         agent = make_mock_agent()
         result = _agent_to_dict(agent)
         expected_keys = {
-            "id", "name", "agent_type", "domain", "status", "version",
+            "id", "company_id", "name", "agent_type", "domain", "status", "version",
             "description", "system_prompt_ref", "prompt_variables",
             "llm_model", "llm_fallback", "llm_config",
             "confidence_floor", "hitl_condition", "max_retries",

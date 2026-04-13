@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
 from core.database import get_tenant_session
+from core.models.company import Company
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
 
@@ -42,6 +43,7 @@ class WorkflowGenerateRequest(BaseModel):
 def _wf_to_dict(wf: WorkflowDefinition) -> dict:
     return {
         "id": str(wf.id),
+        "company_id": str(wf.company_id) if getattr(wf, "company_id", None) else None,
         "name": wf.name,
         "version": wf.version,
         "description": wf.description,
@@ -75,6 +77,7 @@ def _run_to_dict(run: WorkflowRun, include_steps: bool = False) -> dict:
     d = {
         "run_id": str(run.id),
         "workflow_def_id": str(run.workflow_def_id),
+        "company_id": str(run.company_id) if getattr(run, "company_id", None) else None,
         "status": run.status,
         "trigger_payload": run.trigger_payload,
         "context": run.context,
@@ -89,6 +92,19 @@ def _run_to_dict(run: WorkflowRun, include_steps: bool = False) -> dict:
     if include_steps:
         d["steps"] = [_step_to_dict(s) for s in (run.steps or [])]
     return d
+
+
+def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
+    if company_id in (None, ""):
+        return None
+    if isinstance(company_id, _uuid.UUID):
+        return company_id
+    if not isinstance(company_id, str):
+        return None
+    try:
+        return _uuid.UUID(company_id)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, "Invalid company_id format") from exc
 
 
 # ── POST /workflows/generate ─────────────────────────────────────────────────
@@ -124,6 +140,7 @@ async def generate_workflow_endpoint(
         async with get_tenant_session(tid) as session:
             wf = WorkflowDefinition(
                 tenant_id=tid,
+                company_id=None,
                 name=definition.get("name", "Generated Workflow"),
                 version=definition.get("version", "1.0"),
                 description=definition.get("description", ""),
@@ -156,6 +173,7 @@ async def generate_workflow_endpoint(
 async def list_workflows(
     page: int = 1,
     per_page: int = 20,
+    company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
@@ -163,6 +181,7 @@ async def list_workflows(
         raise HTTPException(422, "page must be >= 1")
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(company_id)
     async with get_tenant_session(tid) as session:
         count_q = (
             select(func.count())
@@ -176,6 +195,9 @@ async def list_workflows(
         if user_domains is not None:
             query = query.where(WorkflowDefinition.domain.in_(user_domains))
             count_q = count_q.where(WorkflowDefinition.domain.in_(user_domains))
+        if company_uuid is not None:
+            query = query.where(WorkflowDefinition.company_id == company_uuid)
+            count_q = count_q.where(WorkflowDefinition.company_id == company_uuid)
 
         total = (await session.execute(count_q)).scalar() or 0
 
@@ -232,6 +254,7 @@ async def create_workflow(
         raise HTTPException(400, "Workflow must have at least one step")
 
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(body.company_id)
 
     # Inject replan_on_failure into the definition dict so the engine sees it
     definition = body.definition
@@ -239,8 +262,16 @@ async def create_workflow(
         definition = {**definition, "replan_on_failure": True}
 
     async with get_tenant_session(tid) as session:
+        if company_uuid is not None:
+            company_exists = await session.execute(
+                select(Company.id).where(Company.id == company_uuid, Company.tenant_id == tid)
+            )
+            if company_exists.scalar_one_or_none() is None:
+                raise HTTPException(404, "Company not found")
+
         wf = WorkflowDefinition(
             tenant_id=tid,
+            company_id=company_uuid,
             name=body.name,
             version=body.version,
             description=body.description,
@@ -255,6 +286,7 @@ async def create_workflow(
 
     return {
         "workflow_id": str(wf.id),
+        "company_id": str(wf.company_id) if wf.company_id else None,
         "name": wf.name,
         "version": wf.version,
     }
@@ -528,6 +560,7 @@ async def run_workflow(
 
         run = WorkflowRun(
             tenant_id=tid,
+            company_id=wf.company_id,
             workflow_def_id=wf.id,
             status="running",
             trigger_payload=body.payload,
@@ -546,6 +579,7 @@ async def run_workflow(
     return {
         "run_id": str(run.id),
         "workflow_def_id": str(wf_id),
+        "company_id": str(run.company_id) if run.company_id else None,
         "status": "running",
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "variant": variant_pick.variant_name if variant_pick else None,

@@ -1285,6 +1285,7 @@ class TestSchemasEndpoints:
 def _make_audit_entry(**overrides):
     entry = MagicMock()
     entry.id = overrides.get("id", uuid.uuid4())
+    entry.company_id = overrides.get("company_id", None)
     entry.event_type = overrides.get("event_type", "agent.action")
     entry.actor_type = overrides.get("actor_type", "agent")
     entry.actor_id = overrides.get("actor_id", "finance-bot")
@@ -1313,8 +1314,9 @@ class TestAuditEndpoints:
 
     def test_audit_to_dict_nullable_fields(self):
         from api.v1.audit import _audit_to_dict
-        entry = _make_audit_entry(agent_id=None, workflow_run_id=None, created_at=None)
+        entry = _make_audit_entry(company_id=None, agent_id=None, workflow_run_id=None, created_at=None)
         d = _audit_to_dict(entry)
+        assert d["company_id"] is None
         assert d["agent_id"] is None
         assert d["workflow_run_id"] is None
         assert d["created_at"] is None
@@ -1324,7 +1326,7 @@ class TestAuditEndpoints:
         entry = _make_audit_entry()
         d = _audit_to_dict(entry)
         expected_keys = {
-            "id", "event_type", "actor_type", "actor_id", "agent_id",
+            "id", "company_id", "event_type", "actor_type", "actor_id", "agent_id",
             "workflow_run_id", "resource_type", "resource_id", "action",
             "outcome", "details", "trace_id", "created_at",
         }
@@ -1492,6 +1494,7 @@ class TestAuditEndpoints:
 def _make_workflow_def(**overrides):
     wf = MagicMock()
     wf.id = overrides.get("id", uuid.uuid4())
+    wf.company_id = overrides.get("company_id", None)
     wf.name = overrides.get("name", "Invoice Processing")
     wf.version = overrides.get("version", "1.0")
     wf.description = overrides.get("description", "Process invoices")
@@ -1527,6 +1530,7 @@ def _make_workflow_run(**overrides):
     run = MagicMock()
     run.id = overrides.get("id", uuid.uuid4())
     run.workflow_def_id = overrides.get("workflow_def_id", uuid.uuid4())
+    run.company_id = overrides.get("company_id", None)
     run.status = overrides.get("status", "running")
     run.trigger_payload = overrides.get("trigger_payload", {})
     run.context = overrides.get("context", {})
@@ -1551,6 +1555,14 @@ class TestWorkflowsEndpoints:
         assert d["name"] == "Invoice Processing"
         assert d["is_active"] is True
         assert d["domain"] == "finance"
+
+    def test_wf_to_dict_company_id(self):
+        from api.v1.workflows import _wf_to_dict
+
+        company_id = uuid.uuid4()
+        wf = _make_workflow_def(company_id=company_id)
+        d = _wf_to_dict(wf)
+        assert d["company_id"] == str(company_id)
 
     def test_wf_to_dict_none_created_at(self):
         from api.v1.workflows import _wf_to_dict
@@ -1584,6 +1596,14 @@ class TestWorkflowsEndpoints:
         d = _run_to_dict(run, include_steps=False)
         assert "steps" not in d
         assert d["status"] == "running"
+
+    def test_run_to_dict_company_id(self):
+        from api.v1.workflows import _run_to_dict
+
+        company_id = uuid.uuid4()
+        run = _make_workflow_run(company_id=company_id)
+        d = _run_to_dict(run, include_steps=False)
+        assert d["company_id"] == str(company_id)
 
     def test_run_to_dict_with_steps(self):
         from api.v1.workflows import _run_to_dict

@@ -20,6 +20,7 @@ router = APIRouter()
 def _audit_to_dict(entry: AuditLog) -> dict:
     return {
         "id": str(entry.id),
+        "company_id": str(entry.company_id) if getattr(entry, "company_id", None) else None,
         "event_type": entry.event_type,
         "actor_type": entry.actor_type,
         "actor_id": entry.actor_id,
@@ -35,11 +36,25 @@ def _audit_to_dict(entry: AuditLog) -> dict:
     }
 
 
+def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
+    if company_id in (None, ""):
+        return None
+    if isinstance(company_id, _uuid.UUID):
+        return company_id
+    if not isinstance(company_id, str):
+        return None
+    try:
+        return _uuid.UUID(company_id)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, "Invalid company_id format") from exc
+
+
 # ── GET /audit ───────────────────────────────────────────────────────────────
 @router.get("/audit", response_model=PaginatedResponse)
 async def query_audit(
     event_type: str | None = None,
     agent_id: str | None = None,
+    company_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     page: int = 1,
@@ -52,6 +67,7 @@ async def query_audit(
         raise HTTPException(422, "page must be >= 1")
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(company_id)
     async with get_tenant_session(tid) as session:
         base = select(AuditLog).where(AuditLog.tenant_id == tid)
         count_base = select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tid)
@@ -82,6 +98,10 @@ async def query_audit(
                 raise HTTPException(400, "Invalid agent_id format") from e
             base = base.where(AuditLog.agent_id == agent_uuid)
             count_base = count_base.where(AuditLog.agent_id == agent_uuid)
+
+        if company_uuid is not None:
+            base = base.where(AuditLog.company_id == company_uuid)
+            count_base = count_base.where(AuditLog.company_id == company_uuid)
 
         if date_from:
             try:

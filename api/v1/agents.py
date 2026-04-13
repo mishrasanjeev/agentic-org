@@ -18,6 +18,7 @@ from api.deps import get_current_tenant, get_user_domains
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
+from core.models.company import Company
 from core.models.hitl import HITLQueue
 from core.models.prompt_template import PromptEditHistory
 from core.models.tenant import Tenant
@@ -242,6 +243,7 @@ def _agent_to_dict(agent: Agent) -> dict:
     """Convert an Agent ORM instance to a JSON-serialisable dict."""
     return {
         "id": str(agent.id),
+        "company_id": str(agent.company_id) if getattr(agent, "company_id", None) else None,
         "name": agent.name,
         "agent_type": agent.agent_type,
         "domain": agent.domain,
@@ -295,6 +297,19 @@ def _agent_to_dict(agent: Agent) -> dict:
     }
 
 
+def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
+    if company_id in (None, ""):
+        return None
+    if isinstance(company_id, _uuid.UUID):
+        return company_id
+    if not isinstance(company_id, str):
+        return None
+    try:
+        return _uuid.UUID(company_id)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, "Invalid company_id format") from exc
+
+
 def _validate_authorized_tools(tools: list[str]) -> list[str]:
     """Validate that every tool in the list exists in the connector tool_index.
 
@@ -310,6 +325,7 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
 @router.post("/agents", status_code=201)
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(body.company_id)
 
     initial_status = body.initial_status or "shadow"
 
@@ -344,6 +360,12 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             logger.warning("tool_validation_skipped", agent_type=body.agent_type)
 
     async with get_tenant_session(tid) as session:
+        if company_uuid is not None:
+            company_exists = await session.execute(
+                select(Company.id).where(Company.id == company_uuid, Company.tenant_id == tid)
+            )
+            if company_exists.scalar_one_or_none() is None:
+                raise HTTPException(404, "Company not found")
         # ── SET-008: Enforce shadow agent limit ────────────────────────
         if initial_status == "shadow":
             try:
@@ -363,6 +385,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 
         agent = Agent(
             tenant_id=tid,
+            company_id=company_uuid,
             name=body.name,
             agent_type=body.agent_type,
             domain=body.domain,
@@ -420,6 +443,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
         # Audit log for agent creation
         audit_entry = AuditLog(
             tenant_id=tid,
+            company_id=company_uuid,
             event_type="agent.create",
             actor_type="user",
             actor_id=str(tid),
@@ -457,6 +481,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 
     return {
         "agent_id": str(agent.id),
+        "company_id": str(agent.company_id) if agent.company_id else None,
         "status": agent.status,
         "version": agent.version,
         "token_issued": True,
@@ -470,6 +495,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 async def list_agents(
     domain: str | None = None,
     status: str | None = None,
+    company_id: str | None = None,
     page: int = 1,
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
@@ -480,6 +506,7 @@ async def list_agents(
     per_page = min(max(per_page, 1), 100)
 
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(company_id)
     async with get_tenant_session(tid) as session:
         query = select(Agent).where(Agent.tenant_id == tid)
         count_query = select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
@@ -495,6 +522,9 @@ async def list_agents(
         if status:
             query = query.where(Agent.status == status)
             count_query = count_query.where(Agent.status == status)
+        if company_uuid is not None:
+            query = query.where(Agent.company_id == company_uuid)
+            count_query = count_query.where(Agent.company_id == company_uuid)
 
         total_result = await session.execute(count_query)
         total = total_result.scalar() or 0
@@ -856,6 +886,7 @@ async def generate_agent(
             # Audit log
             audit_entry = AuditLog(
                 tenant_id=tid,
+                company_id=agent.company_id,
                 event_type="agent.generate_deploy",
                 actor_type="user",
                 actor_id=str(tid),
@@ -1180,6 +1211,7 @@ async def run_agent(
     async with get_tenant_session(tid) as session:
         audit_entry = AuditLog(
             tenant_id=tid,
+            company_id=_parse_company_id(agent_config.get("company_id")),
             event_type="agent.run",
             actor_type="agent",
             actor_id=str(agent_id),
@@ -1932,6 +1964,7 @@ async def delete_agent(
         # Audit log entry before deletion (all NOT NULL fields populated)
         audit = AuditLog(
             tenant_id=tid,
+            company_id=agent.company_id,
             event_type="agent.deleted",
             actor_type="user",
             actor_id="api",

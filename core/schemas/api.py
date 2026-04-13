@@ -72,6 +72,7 @@ class AgentCreate(BaseModel):
     parent_agent_id: str | None = None
     reporting_to: str | None = None
     org_level: int | None = None
+    company_id: str | None = None
 
 
 class AgentUpdate(BaseModel):
@@ -107,6 +108,7 @@ class AgentResponse(BaseModel):
     confidence_floor: float
     shadow_sample_count: int = 0
     shadow_accuracy_current: float | None = None
+    company_id: UUID | None = None
     created_at: datetime
 
 
@@ -130,6 +132,7 @@ class WorkflowCreate(BaseModel):
     trigger_type: str | None = None
     trigger_config: dict[str, Any] | None = None
     replan_on_failure: bool = False
+    company_id: str | None = None
 
 
 class WorkflowRunTrigger(BaseModel):
@@ -142,6 +145,7 @@ class WorkflowResponse(BaseModel):
     version: str
     is_active: bool
     trigger_type: str | None
+    company_id: UUID | None = None
     created_at: datetime
 
 

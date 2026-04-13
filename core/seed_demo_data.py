@@ -134,10 +134,13 @@ async def seed_connectors(tenant_id: uuid.UUID) -> int:
             category = getattr(cls, "category", "general") if cls else "general"
 
             await session.execute(
-                text("""
-                    INSERT INTO connectors (id, tenant_id, name, category, auth_type, auth_config, status, created_at)
-                    VALUES (:id, :tid, :name, :category, 'api_key', '{}'::jsonb, 'configured', now())
-                """),
+                text(
+                    "INSERT INTO connectors "
+                    "(id, tenant_id, name, category, auth_type, "
+                    "auth_config, tool_functions, status, created_at) "
+                    "VALUES (:id, :tid, :name, :category, 'api_key', "
+                    "'{}'::jsonb, '[]'::jsonb, 'configured', now())"
+                ),
                 {
                     "id": str(uuid.uuid4()),
                     "tid": str(tenant_id),

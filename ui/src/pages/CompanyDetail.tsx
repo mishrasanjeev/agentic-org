@@ -1,46 +1,116 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useNavigate, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import api, { extractApiError } from "@/lib/api";
 
 interface CompanyInfo {
   id: string;
   name: string;
-  gstin?: string;
-  pan?: string;
-  tan?: string;
-  cin?: string;
-  industry?: string;
-  state?: string;
-  status?: string;
-  address?: string;
-  created_at?: string;
-  pf_reg?: string;
-  esi_reg?: string;
-  pt_reg?: string;
-  fy_start?: string;
-  fy_end?: string;
-  signatory_name?: string;
-  signatory_designation?: string;
-  signatory_email?: string;
-  bank_name?: string;
-  account_number?: string;
-  ifsc?: string;
-  branch?: string;
-  tally_bridge_url?: string;
-  tally_company_name?: string;
+  gstin?: string | null;
+  pan?: string | null;
+  tan?: string | null;
+  cin?: string | null;
+  state_code?: string | null;
+  industry?: string | null;
+  registered_address?: string | null;
+  signatory_name?: string | null;
+  signatory_designation?: string | null;
+  signatory_email?: string | null;
+  compliance_email?: string | null;
+  pf_registration?: string | null;
+  esi_registration?: string | null;
+  pt_registration?: string | null;
+  bank_name?: string | null;
+  bank_account_number?: string | null;
+  bank_ifsc?: string | null;
+  bank_branch?: string | null;
   gst_auto_file?: boolean;
+  is_active?: boolean;
   subscription_status?: string;
+  client_health_score?: number | null;
+  document_vault_enabled?: boolean;
+  created_at?: string;
+  updated_at?: string | null;
 }
 
-interface AuditEntry {
+interface FilingApproval {
+  id: string;
+  company_id: string;
+  filing_type: string;
+  filing_period: string;
+  filing_data?: Record<string, unknown>;
+  status: string;
+  requested_by: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
+  auto_approved?: boolean;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+interface ComplianceDeadline {
+  id: string;
+  company_id: string;
+  deadline_type: string;
+  filing_period: string;
+  due_date: string;
+  filed: boolean;
+  filed_at?: string | null;
+  created_at: string;
+}
+
+interface GSTNUpload {
+  id: string;
+  company_id: string;
+  upload_type: string;
+  filing_period: string;
+  file_name: string;
+  file_path?: string | null;
+  file_size_bytes?: number | null;
+  status: string;
+  gstn_arn?: string | null;
+  uploaded_at?: string | null;
+  uploaded_by?: string | null;
+  created_at: string;
+}
+
+interface RoleEntry {
+  user_id: string;
+  role: string;
+}
+
+interface Credential {
+  id: string;
+  company_id: string;
+  gstin: string;
+  username: string;
+  portal_type: string;
+  is_active: boolean;
+  last_verified_at?: string | null;
+  created_at: string;
+}
+
+interface AutomationAgent {
+  id: string;
+  name: string;
+  domain: string;
+  status: string;
+  designation?: string | null;
+}
+
+interface AutomationWorkflow {
+  id: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at?: string | null;
+}
+
+interface ActivityEntry {
   id: string;
   timestamp: string;
   action: string;
@@ -48,169 +118,472 @@ interface AuditEntry {
   outcome: string;
 }
 
-interface AgentAssignment {
-  id: string;
-  name: string;
-  domain: string;
-  status: string;
+interface RoleResponse {
+  roles?: RoleEntry[];
+  valid_roles?: string[];
 }
 
-interface WorkflowRun {
-  id: string;
-  name: string;
-  status: string;
-  started_at: string;
+type TabKey =
+  | "overview"
+  | "compliance"
+  | "agents"
+  | "workflows"
+  | "activity"
+  | "approvals"
+  | "settings";
+
+function itemsFromResponse<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === "object" && Array.isArray((data as { items?: unknown[] }).items)) {
+    return (data as { items: T[] }).items;
+  }
+  return [];
 }
 
-interface RoleMember {
-  email: string;
-  role: string;
+function formatDate(value?: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-
-/* ------------------------------------------------------------------ */
-/*  GST Calendar helpers                                               */
-/* ------------------------------------------------------------------ */
-
-const MONTHS = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
-
-type FilingStatus = "filed" | "pending" | "overdue";
-
-function getFilingStatus(monthIndex: number): FilingStatus {
-  // Mock: filed for months 0-8, pending for 9, overdue for 10-11
-  if (monthIndex < 9) return "filed";
-  if (monthIndex === 9) return "pending";
-  return "overdue";
+function formatDateTime(value?: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-const STATUS_COLORS: Record<FilingStatus, string> = {
-  filed: "bg-emerald-500 text-white",
-  pending: "bg-amber-400 text-amber-900",
-  overdue: "bg-red-500 text-white",
-};
+function statusVariant(status: string): "success" | "warning" | "destructive" | "secondary" {
+  const normalized = status.toLowerCase();
+  if (["approved", "active", "filed", "uploaded", "acknowledged", "success"].includes(normalized)) {
+    return "success";
+  }
+  if (["pending", "trial", "downloaded", "generated"].includes(normalized)) {
+    return "warning";
+  }
+  if (["rejected", "overdue", "inactive", "failed", "expired", "cancelled"].includes(normalized)) {
+    return "destructive";
+  }
+  return "secondary";
+}
 
-/* ------------------------------------------------------------------ */
-/*  Industry colors                                                    */
-/* ------------------------------------------------------------------ */
+function healthColor(score: number): string {
+  if (score >= 80) return "text-emerald-600";
+  if (score >= 50) return "text-amber-600";
+  return "text-red-600";
+}
 
-const INDUSTRY_COLORS: Record<string, string> = {
-  Manufacturing: "from-blue-500 to-cyan-600",
-  Export: "from-emerald-500 to-teal-600",
-  Healthcare: "from-red-500 to-pink-600",
-  "IT Services": "from-purple-500 to-indigo-600",
-  Textile: "from-amber-500 to-orange-600",
-  Logistics: "from-slate-500 to-slate-600",
-};
+function deadlineStatus(deadline: ComplianceDeadline): string {
+  if (deadline.filed) return "filed";
+  const due = new Date(deadline.due_date);
+  const today = new Date();
+  return due.getTime() < today.getTime() ? "overdue" : "pending";
+}
 
-const DOMAIN_COLORS: Record<string, string> = {
-  finance: "bg-emerald-100 text-emerald-800",
-  hr: "bg-violet-100 text-violet-800",
-  marketing: "bg-blue-100 text-blue-800",
-  ops: "bg-orange-100 text-orange-800",
-};
-
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
-
-type TabKey = "overview" | "compliance" | "agents" | "workflows" | "audit" | "approvals" | "settings";
+function deadlineSortValue(deadline: ComplianceDeadline): number {
+  return new Date(deadline.due_date).getTime();
+}
 
 export default function CompanyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [company, setCompany] = useState<CompanyInfo | null>(null);
+  const [approvals, setApprovals] = useState<FilingApproval[]>([]);
+  const [deadlines, setDeadlines] = useState<ComplianceDeadline[]>([]);
+  const [uploads, setUploads] = useState<GSTNUpload[]>([]);
+  const [roles, setRoles] = useState<RoleEntry[]>([]);
+  const [validRoles, setValidRoles] = useState<string[]>(["partner", "manager", "associate", "audit_reviewer"]);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [agents, setAgents] = useState<AutomationAgent[]>([]);
+  const [workflows, setWorkflows] = useState<AutomationWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [agents] = useState<AgentAssignment[]>([]);
-  const [workflows] = useState<WorkflowRun[]>([]);
-  const [auditLog] = useState<AuditEntry[]>([]);
-  const [roles, setRoles] = useState<RoleMember[]>([]);
-  const [editForm, setEditForm] = useState<Partial<CompanyInfo>>({});
-  const [saving, setSaving] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
+  const [savingRoles, setSavingRoles] = useState(false);
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+  const [deadlineBusyId, setDeadlineBusyId] = useState<string | null>(null);
+  const [credentialBusyId, setCredentialBusyId] = useState<string | null>(null);
+  const [creatingApproval, setCreatingApproval] = useState(false);
+  const [creatingCredential, setCreatingCredential] = useState(false);
 
-  /* Approvals data -- shared between overview metrics and approvals tab */
-  const filingApprovals = [
-    { id: "fa1", filing_type: "GSTR-1", period: "Mar 2026", status: "approved", requested_by: "GST Agent", approved_by: "partner@cafirm.com", date: "2026-04-05" },
-    { id: "fa2", filing_type: "GSTR-3B", period: "Mar 2026", status: "pending", requested_by: "GST Agent", approved_by: null as string | null, date: "2026-04-07" },
-    { id: "fa3", filing_type: "TDS 26Q", period: "Q4 FY26", status: "approved", requested_by: "TDS Agent", approved_by: "partner@cafirm.com", date: "2026-04-06" },
-    { id: "fa4", filing_type: "GSTR-9", period: "FY 2025-26", status: "pending", requested_by: "GST Agent", approved_by: null as string | null, date: "2026-04-08" },
-  ];
-  const pendingFilingsCount = filingApprovals.filter((a) => a.status === "pending").length;
-  const [newRoleEmail, setNewRoleEmail] = useState("");
-  const [newRoleValue, setNewRoleValue] = useState("auditor");
+  const [editForm, setEditForm] = useState({
+    name: "",
+    state_code: "",
+    industry: "",
+    registered_address: "",
+    signatory_name: "",
+    signatory_designation: "",
+    signatory_email: "",
+    compliance_email: "",
+    gst_auto_file: false,
+  });
 
-  /* Credential Vault state */
-  const [credUsername, setCredUsername] = useState("");
-  const [credPassword, setCredPassword] = useState("");
-  const [credPortalType, setCredPortalType] = useState("GSTN");
-  const [gstnAutoUpload, setGstnAutoUpload] = useState(false);
-  const [storedCreds] = useState([
-    { gstin: "29AABCU9603R1ZM", username: "acme_gst_user", portal: "GSTN", status: "active", last_verified: "2026-04-05", },
-    { gstin: "29AABCU9603R1ZM", username: "acme_it_user", portal: "Income Tax", status: "active", last_verified: "2026-03-20", },
-  ]);
+  const [newApproval, setNewApproval] = useState({
+    filing_type: "gstr3b",
+    filing_period: "",
+  });
+  const [newRoleUserId, setNewRoleUserId] = useState("");
+  const [newRoleValue, setNewRoleValue] = useState("associate");
+  const [credentialForm, setCredentialForm] = useState({
+    gstin: "",
+    username: "",
+    password: "",
+    portal_type: "gstn",
+  });
 
-  const fetchCompany = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    if (!id) {
+      setCompany(null);
+      setError("Company id is missing.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    try {
-      const res = await api.get(`/companies/${id}`);
-      if (res.status && res.status >= 400) {
-        setError(`Server returned ${res.status}.`);
-        setCompany(null);
-        setEditForm({});
-      } else if (res.data?.id) {
-        setCompany(res.data);
-        setEditForm(res.data);
-      } else {
-        setError("No data returned from API.");
-        setCompany(null);
-        setEditForm({});
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 502) {
-        setError("502 Bad Gateway -- API is temporarily unavailable.");
-      } else {
-        setError(`Failed to load company: ${msg}.`);
-      }
+
+    const [
+      companyResult,
+      approvalsResult,
+      deadlinesResult,
+      uploadsResult,
+      rolesResult,
+      credentialsResult,
+      agentsResult,
+      workflowsResult,
+    ] = await Promise.allSettled([
+      api.get(`/companies/${id}`),
+      api.get(`/companies/${id}/approvals`),
+      api.get(`/companies/${id}/deadlines`),
+      api.get(`/companies/${id}/gstn-uploads`),
+      api.get(`/companies/${id}/roles`),
+      api.get(`/companies/${id}/credentials`),
+      api.get("/agents", { params: { page: 1, per_page: 200, domain: "finance", company_id: id } }),
+      api.get("/workflows", { params: { page: 1, per_page: 200, company_id: id } }),
+    ]);
+
+    if (companyResult.status === "rejected") {
       setCompany(null);
-      setEditForm({});
-    } finally {
+      setError(extractApiError(companyResult.reason, "Failed to load company."));
       setLoading(false);
+      return;
     }
+
+    const companyData = companyResult.value.data as CompanyInfo;
+    setCompany(companyData);
+    setEditForm({
+      name: companyData.name || "",
+      state_code: companyData.state_code || "",
+      industry: companyData.industry || "",
+      registered_address: companyData.registered_address || "",
+      signatory_name: companyData.signatory_name || "",
+      signatory_designation: companyData.signatory_designation || "",
+      signatory_email: companyData.signatory_email || "",
+      compliance_email: companyData.compliance_email || "",
+      gst_auto_file: Boolean(companyData.gst_auto_file),
+    });
+    setCredentialForm((current) => ({
+      ...current,
+      gstin: companyData.gstin || current.gstin,
+    }));
+
+    setApprovals(
+      approvalsResult.status === "fulfilled"
+        ? itemsFromResponse<FilingApproval>(approvalsResult.value.data)
+        : []
+    );
+    setDeadlines(
+      deadlinesResult.status === "fulfilled"
+        ? itemsFromResponse<ComplianceDeadline>(deadlinesResult.value.data).sort(
+            (left, right) => deadlineSortValue(left) - deadlineSortValue(right),
+          )
+        : []
+    );
+    setUploads(
+      uploadsResult.status === "fulfilled"
+        ? itemsFromResponse<GSTNUpload>(uploadsResult.value.data)
+        : []
+    );
+
+    if (rolesResult.status === "fulfilled") {
+      const payload = (rolesResult.value.data || {}) as RoleResponse;
+      setRoles(Array.isArray(payload.roles) ? payload.roles : []);
+      setValidRoles(
+        Array.isArray(payload.valid_roles) && payload.valid_roles.length > 0
+          ? payload.valid_roles
+          : ["partner", "manager", "associate", "audit_reviewer"]
+      );
+    } else {
+      setRoles([]);
+    }
+
+    setCredentials(
+      credentialsResult.status === "fulfilled"
+        ? itemsFromResponse<Credential>(credentialsResult.value.data)
+        : []
+    );
+
+    if (agentsResult.status === "fulfilled") {
+      const agentItems = itemsFromResponse<Record<string, unknown>>(agentsResult.value.data);
+      setAgents(
+        agentItems
+          .map((record) => ({
+            id: String(record.id || ""),
+            name: String(record.employee_name || record.name || ""),
+            domain: String(record.domain || "finance"),
+            status: String(record.status || "shadow"),
+            designation: String(record.designation || ""),
+          }))
+      );
+    } else {
+      setAgents([]);
+    }
+
+    if (workflowsResult.status === "fulfilled") {
+      const workflowItems = itemsFromResponse<Record<string, unknown>>(workflowsResult.value.data);
+      setWorkflows(
+        workflowItems
+          .map((record) => ({
+            id: String(record.id || ""),
+            name: String(record.name || ""),
+            description: String(record.description || ""),
+            is_active: Boolean(record.is_active),
+            created_at: String(record.created_at || ""),
+          }))
+      );
+    } else {
+      setWorkflows([]);
+    }
+
+    setLoading(false);
   }, [id]);
 
   useEffect(() => {
-    fetchCompany();
-  }, [fetchCompany]);
+    void fetchData();
+  }, [fetchData]);
 
-  const handleSaveSettings = async () => {
-    setSaving(true);
+  const pendingApprovals = approvals.filter((approval) => approval.status === "pending").length;
+  const overdueDeadlines = deadlines.filter((deadline) => deadlineStatus(deadline) === "overdue").length;
+  const upcomingDeadlines = deadlines.filter((deadline) => deadlineStatus(deadline) === "pending").length;
+  const activeCredentials = credentials.filter((credential) => credential.is_active).length;
+  const healthScore = company?.client_health_score ?? 0;
+
+  const activities = useMemo<ActivityEntry[]>(() => {
+    const approvalActivity = approvals.map((approval) => ({
+      id: `approval-${approval.id}`,
+      timestamp: approval.approved_at || approval.updated_at || approval.created_at,
+      action: `${approval.filing_type} ${approval.filing_period}`,
+      actor: approval.approved_by || approval.requested_by || "system",
+      outcome: approval.status,
+    }));
+
+    const deadlineActivity = deadlines.map((deadline) => ({
+      id: `deadline-${deadline.id}`,
+      timestamp: deadline.filed_at || deadline.created_at || deadline.due_date,
+      action: `${deadline.deadline_type} ${deadline.filing_period}`,
+      actor: deadline.filed ? "compliance filing" : "compliance calendar",
+      outcome: deadlineStatus(deadline),
+    }));
+
+    const uploadActivity = uploads.map((upload) => ({
+      id: `upload-${upload.id}`,
+      timestamp: upload.uploaded_at || upload.created_at,
+      action: `${upload.upload_type} ${upload.filing_period}`,
+      actor: upload.uploaded_by || "manual upload",
+      outcome: upload.status,
+    }));
+
+    return [...approvalActivity, ...deadlineActivity, ...uploadActivity].sort(
+      (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+    );
+  }, [approvals, deadlines, uploads]);
+
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "compliance", label: "Compliance" },
+    { key: "agents", label: "Agents" },
+    { key: "workflows", label: "Workflows" },
+    { key: "activity", label: "Activity" },
+    { key: "approvals", label: "Approvals" },
+    { key: "settings", label: "Settings" },
+  ];
+
+  const refreshWithNotice = async (message: string) => {
+    setNotice(message);
+    await fetchData();
+  };
+
+  const handleSaveCompany = async () => {
+    if (!id) return;
+    setSavingCompany(true);
+    setError(null);
     try {
       await api.patch(`/companies/${id}`, editForm);
-      setCompany({ ...company, ...editForm } as CompanyInfo);
-    } catch {
-      // Silently fail for demo
+      await refreshWithNotice("Company settings updated.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to save company settings."));
     } finally {
-      setSaving(false);
+      setSavingCompany(false);
+    }
+  };
+
+  const handleCreateApproval = async () => {
+    if (!id || !newApproval.filing_type.trim() || !newApproval.filing_period.trim()) return;
+    setCreatingApproval(true);
+    setError(null);
+    try {
+      await api.post(`/companies/${id}/approvals`, {
+        filing_type: newApproval.filing_type.trim(),
+        filing_period: newApproval.filing_period.trim(),
+        filing_data: {},
+      });
+      setNewApproval({ filing_type: "gstr3b", filing_period: "" });
+      await refreshWithNotice("Approval request created.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to create filing approval."));
+    } finally {
+      setCreatingApproval(false);
+    }
+  };
+
+  const handleApprove = async (approvalId: string) => {
+    if (!id) return;
+    setApprovalBusyId(approvalId);
+    setError(null);
+    try {
+      await api.post(`/companies/${id}/approvals/${approvalId}/approve`);
+      await refreshWithNotice("Approval marked approved.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to approve filing."));
+    } finally {
+      setApprovalBusyId(null);
+    }
+  };
+
+  const handleReject = async (approvalId: string) => {
+    if (!id) return;
+    const reason = window.prompt("Rejection reason", "") ?? "";
+    setApprovalBusyId(approvalId);
+    setError(null);
+    try {
+      await api.post(`/companies/${id}/approvals/${approvalId}/reject`, null, {
+        params: { reason },
+      });
+      await refreshWithNotice("Approval rejected.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to reject filing."));
+    } finally {
+      setApprovalBusyId(null);
+    }
+  };
+
+  const handleMarkFiled = async (deadlineId: string) => {
+    if (!id) return;
+    setDeadlineBusyId(deadlineId);
+    setError(null);
+    try {
+      await api.patch(`/companies/${id}/deadlines/${deadlineId}/filed`);
+      await refreshWithNotice("Deadline marked filed.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to mark deadline filed."));
+    } finally {
+      setDeadlineBusyId(null);
     }
   };
 
   const handleAddRole = () => {
-    if (!newRoleEmail.trim()) return;
-    setRoles([...roles, { email: newRoleEmail.trim(), role: newRoleValue }]);
-    setNewRoleEmail("");
+    const userId = newRoleUserId.trim();
+    if (!userId) return;
+    setRoles((current) => {
+      const existingIndex = current.findIndex((role) => role.user_id === userId);
+      if (existingIndex >= 0) {
+        return current.map((role) => (
+          role.user_id === userId ? { ...role, role: newRoleValue } : role
+        ));
+      }
+      return [...current, { user_id: userId, role: newRoleValue }];
+    });
+    setNewRoleUserId("");
   };
 
-  const handleRemoveRole = (email: string) => {
-    setRoles(roles.filter((r) => r.email !== email));
+  const handleSaveRoles = async () => {
+    if (!id) return;
+    setSavingRoles(true);
+    setError(null);
+    try {
+      await api.put(`/companies/${id}/roles`, { roles });
+      await refreshWithNotice("Company roles updated.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to update company roles."));
+    } finally {
+      setSavingRoles(false);
+    }
+  };
+
+  const handleCreateCredential = async () => {
+    if (!id) return;
+    if (!credentialForm.gstin.trim() || !credentialForm.username.trim() || !credentialForm.password.trim()) {
+      return;
+    }
+    setCreatingCredential(true);
+    setError(null);
+    try {
+      await api.post(`/companies/${id}/credentials`, credentialForm);
+      setCredentialForm((current) => ({
+        ...current,
+        username: "",
+        password: "",
+      }));
+      await refreshWithNotice("Credential stored successfully.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to store credential."));
+    } finally {
+      setCreatingCredential(false);
+    }
+  };
+
+  const handleVerifyCredential = async (credentialId: string) => {
+    if (!id) return;
+    setCredentialBusyId(credentialId);
+    setError(null);
+    try {
+      const response = await api.post(`/companies/${id}/credentials/${credentialId}/verify`);
+      const verified = Boolean(response.data?.verified);
+      await refreshWithNotice(verified ? "Credential verified." : "Credential verification failed.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to verify credential."));
+    } finally {
+      setCredentialBusyId(null);
+    }
+  };
+
+  const handleDeactivateCredential = async (credentialId: string) => {
+    if (!id) return;
+    setCredentialBusyId(credentialId);
+    setError(null);
+    try {
+      await api.delete(`/companies/${id}/credentials/${credentialId}`);
+      await refreshWithNotice("Credential deactivated.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to deactivate credential."));
+    } finally {
+      setCredentialBusyId(null);
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex min-h-[50vh] items-center justify-center">
         <p className="text-muted-foreground">Loading company...</p>
       </div>
     );
@@ -220,25 +593,17 @@ export default function CompanyDetail() {
     return (
       <div className="space-y-4">
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
           </div>
         )}
         <p className="text-muted-foreground">Company not found.</p>
-        <Button variant="outline" onClick={() => navigate("/dashboard/companies")}>Back to Companies</Button>
+        <Button variant="outline" onClick={() => navigate("/dashboard/companies")}>
+          Back to Companies
+        </Button>
       </div>
     );
   }
-
-  const tabs: { key: TabKey; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "compliance", label: "Compliance" },
-    { key: "agents", label: "Agents" },
-    { key: "workflows", label: "Workflows" },
-    { key: "audit", label: "Audit Log" },
-    { key: "approvals", label: "Approvals" },
-    { key: "settings", label: "Settings" },
-  ];
 
   return (
     <div className="space-y-6">
@@ -246,45 +611,41 @@ export default function CompanyDetail() {
         <title>{company.name} | AgenticOrg</title>
       </Helmet>
 
-      {/* Error banner */}
       {error && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-          <p className="text-sm text-amber-700 dark:text-amber-300">{error}</p>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {notice}
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${INDUSTRY_COLORS[company.industry || ""] || "from-gray-500 to-gray-600"} flex items-center justify-center text-white font-bold text-lg`}>
-            {company.name.charAt(0)}
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">{company.name}</h2>
-            <div className="flex items-center gap-3 mt-1">
-              {company.gstin && <span className="text-sm font-mono text-muted-foreground">{company.gstin}</span>}
-              {company.industry && <Badge variant="outline">{company.industry}</Badge>}
-              <Badge variant={
-                (company.subscription_status || "trial") === "active" ? "success" :
-                (company.subscription_status || "trial") === "expired" ? "destructive" : "warning"
-              }>
-                {(company.subscription_status || "trial").charAt(0).toUpperCase() + (company.subscription_status || "trial").slice(1)}
-              </Badge>
-              <Badge variant={company.status === "active" ? "success" : "secondary"}>
-                {company.status || "active"}
-              </Badge>
-            </div>
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-2xl font-bold">{company.name}</h2>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {company.gstin && <span className="font-mono">{company.gstin}</span>}
+            {company.industry && <Badge variant="outline">{company.industry}</Badge>}
+            <Badge variant={company.is_active ? "success" : "secondary"}>
+              {company.is_active ? "active" : "inactive"}
+            </Badge>
+            <Badge variant={statusVariant(company.subscription_status || "trial")}>
+              {company.subscription_status || "trial"}
+            </Badge>
           </div>
         </div>
-        <Button variant="outline" onClick={() => navigate("/dashboard/companies")}>Back to Companies</Button>
+        <Button variant="outline" onClick={() => navigate("/dashboard/companies")}>
+          Back to Companies
+        </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b overflow-x-auto">
+      <div className="flex overflow-x-auto border-b">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -296,91 +657,82 @@ export default function CompanyDetail() {
         ))}
       </div>
 
-      {/* ==================== Overview Tab ==================== */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* Metrics row */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
             <Card>
               <CardContent className="pt-4 pb-4">
-                <p className="text-2xl font-bold text-amber-600">{pendingFilingsCount}</p>
-                <p className="text-xs text-muted-foreground">Pending Filings</p>
+                <p className="text-2xl font-bold text-amber-600">{pendingApprovals}</p>
+                <p className="text-xs text-muted-foreground">Pending Approvals</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 pb-4">
-                <p className="text-2xl font-bold text-blue-600">12</p>
-                <p className="text-xs text-muted-foreground">Recon Items</p>
+                <p className="text-2xl font-bold text-red-600">{overdueDeadlines}</p>
+                <p className="text-xs text-muted-foreground">Overdue Deadlines</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 pb-4">
-                <p className="text-2xl font-bold text-emerald-600">47</p>
-                <p className="text-xs text-muted-foreground">Agent Runs (30d)</p>
+                <p className="text-2xl font-bold text-blue-600">{upcomingDeadlines}</p>
+                <p className="text-xs text-muted-foreground">Upcoming Deadlines</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 pb-4">
-                <p className="text-2xl font-bold text-purple-600">99.2%</p>
-                <p className="text-xs text-muted-foreground">Success Rate</p>
+                <p className="text-2xl font-bold text-emerald-600">{activeCredentials}</p>
+                <p className="text-xs text-muted-foreground">Active Credentials</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4 pb-4">
-                {(() => {
-                  const healthScore = 92;
-                  const color = healthScore >= 80 ? "text-emerald-600" : healthScore >= 50 ? "text-amber-600" : "text-red-600";
-                  return (
-                    <>
-                      <p className={`text-2xl font-bold ${color}`}>{healthScore}</p>
-                      <p className="text-xs text-muted-foreground">Client Health Score</p>
-                    </>
-                  );
-                })()}
+                <p className={`text-2xl font-bold ${healthColor(healthScore)}`}>{healthScore}</p>
+                <p className="text-xs text-muted-foreground">Client Health Score</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Info card */}
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Company Information</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><span className="text-muted-foreground">PAN:</span> <span className="font-mono">{company.pan || "—"}</span></div>
-                  <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{company.tan || "—"}</span></div>
-                  <div><span className="text-muted-foreground">CIN:</span> <span className="font-mono">{company.cin || "—"}</span></div>
-                  <div><span className="text-muted-foreground">State:</span> {company.state || "—"}</div>
-                  <div className="col-span-2"><span className="text-muted-foreground">Address:</span> {company.address || "—"}</div>
-                  <div><span className="text-muted-foreground">FY:</span> {company.fy_start || "—"} to {company.fy_end || "—"}</div>
-                  <div><span className="text-muted-foreground">Signatory:</span> {company.signatory_name || "—"}</div>
+                  <div><span className="text-muted-foreground">PAN:</span> <span className="font-mono">{company.pan || "-"}</span></div>
+                  <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{company.tan || "-"}</span></div>
+                  <div><span className="text-muted-foreground">CIN:</span> <span className="font-mono">{company.cin || "-"}</span></div>
+                  <div><span className="text-muted-foreground">State:</span> {company.state_code || "-"}</div>
+                  <div className="col-span-2"><span className="text-muted-foreground">Address:</span> {company.registered_address || "-"}</div>
+                  <div><span className="text-muted-foreground">Signatory:</span> {company.signatory_name || "-"}</div>
+                  <div><span className="text-muted-foreground">Compliance Email:</span> {company.compliance_email || "-"}</div>
+                  <div><span className="text-muted-foreground">Created:</span> {formatDate(company.created_at)}</div>
+                  <div><span className="text-muted-foreground">Updated:</span> {formatDate(company.updated_at)}</div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Recent Agent Runs</CardTitle>
+                <CardTitle className="text-base">Recent Compliance Activity</CardTitle>
               </CardHeader>
               <CardContent>
-                {auditLog.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No data yet.</p>
+                {activities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No company activity recorded yet.</p>
                 ) : (
-                <div className="space-y-3">
-                  {auditLog.slice(0, 4).map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-medium">{entry.action}</p>
-                        <p className="text-xs text-muted-foreground">{entry.actor}</p>
+                  <div className="space-y-3">
+                    {activities.slice(0, 5).map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between text-sm">
+                        <div>
+                          <p className="font-medium">{activity.action}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {activity.actor} - {formatDateTime(activity.timestamp)}
+                          </p>
+                        </div>
+                        <Badge variant={statusVariant(activity.outcome)}>{activity.outcome}</Badge>
                       </div>
-                      <Badge variant={entry.outcome === "success" ? "success" : "warning"} className="text-[10px]">
-                        {entry.outcome}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -388,352 +740,312 @@ export default function CompanyDetail() {
         </div>
       )}
 
-      {/* ==================== Compliance Tab ==================== */}
       {activeTab === "compliance" && (
         <div className="space-y-6">
-          {/* GST Filing Calendar */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">GST Filing Calendar (FY 2025-26)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-2">
-                {MONTHS.map((month, i) => {
-                  const status = getFilingStatus(i);
-                  return (
-                    <div
-                      key={month}
-                      className={`rounded-lg p-3 text-center ${STATUS_COLORS[status]} cursor-default`}
-                      title={`${month}: ${status}`}
-                    >
-                      <p className="text-xs font-bold">{month}</p>
-                      <p className="text-[10px] mt-0.5 capitalize">{status}</p>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex items-center gap-4 mt-4 text-xs">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500" /> Filed</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-400" /> Pending</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500" /> Overdue</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* TDS Quarterly Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">TDS Quarterly Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-4 gap-4">
-                {[
-                  { quarter: "Q1 (Apr-Jun)", form: "26Q", status: "filed" as FilingStatus },
-                  { quarter: "Q2 (Jul-Sep)", form: "26Q", status: "filed" as FilingStatus },
-                  { quarter: "Q3 (Oct-Dec)", form: "26Q", status: "filed" as FilingStatus },
-                  { quarter: "Q4 (Jan-Mar)", form: "26Q", status: "pending" as FilingStatus },
-                ].map((q) => (
-                  <div key={q.quarter} className="border rounded-lg p-4 text-center">
-                    <p className="text-sm font-semibold">{q.quarter}</p>
-                    <p className="text-xs text-muted-foreground mb-2">Form {q.form}</p>
-                    <Badge variant={q.status === "filed" ? "success" : q.status === "pending" ? "warning" : "destructive"}>
-                      {q.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Compliance Details */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Compliance Registrations</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">PF Registration:</span> {company.pf_reg || "—"}</div>
-                <div><span className="text-muted-foreground">ESI Registration:</span> {company.esi_reg || "—"}</div>
-                <div><span className="text-muted-foreground">PT Registration:</span> {company.pt_reg || "—"}</div>
-                <div><span className="text-muted-foreground">GST Auto-File:</span> {company.gst_auto_file ? <Badge variant="warning">Enabled</Badge> : "Disabled"}</div>
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <div><span className="text-muted-foreground">PF Registration:</span> {company.pf_registration || "-"}</div>
+                <div><span className="text-muted-foreground">ESI Registration:</span> {company.esi_registration || "-"}</div>
+                <div><span className="text-muted-foreground">PT Registration:</span> {company.pt_registration || "-"}</div>
+                <div>
+                  <span className="text-muted-foreground">GST Auto-File:</span>{" "}
+                  <Badge variant={company.gst_auto_file ? "warning" : "secondary"}>
+                    {company.gst_auto_file ? "enabled" : "disabled"}
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* GSTN Manual Upload */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">GSTN Manual Upload</CardTitle>
+              <CardTitle className="text-base">Compliance Deadlines</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-xs text-muted-foreground mb-4 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                For companies with auto-filing disabled, download the JSON and upload manually to the GSTN portal.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Type</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Period</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { id: "gu1", type: "GSTR-1 JSON", period: "Mar 2026", status: "downloaded", file_name: "GSTR1_27AABCS1234F1Z5_032026.json" },
-                      { id: "gu2", type: "GSTR-3B JSON", period: "Mar 2026", status: "generated", file_name: "GSTR3B_27AABCS1234F1Z5_032026.json" },
-                    ].map((file) => (
-                      <tr key={file.id} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-medium">{file.type}</td>
-                        <td className="py-2 px-3 text-muted-foreground">{file.period}</td>
-                        <td className="py-2 px-3">
-                          <Badge variant={file.status === "downloaded" ? "success" : "secondary"}>
-                            {file.status}
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-3">
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => alert(`Downloading ${file.file_name}`)}>
-                              Download
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => {
-                              const arn = prompt("Enter GSTN ARN after uploading to portal:");
-                              if (arn) alert(`Marked as uploaded with ARN: ${arn}`);
-                            }}>
-                              Mark as Uploaded
-                            </Button>
-                          </div>
-                        </td>
+              {deadlines.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No deadlines generated yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Period</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Due Date</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {deadlines.map((deadline) => {
+                        const status = deadlineStatus(deadline);
+                        return (
+                          <tr key={deadline.id} className="border-b last:border-0">
+                            <td className="px-3 py-2 font-medium">{deadline.deadline_type}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{deadline.filing_period}</td>
+                            <td className="px-3 py-2">{formatDate(deadline.due_date)}</td>
+                            <td className="px-3 py-2">
+                              <Badge variant={statusVariant(status)}>{status}</Badge>
+                            </td>
+                            <td className="px-3 py-2">
+                              {!deadline.filed && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={deadlineBusyId === deadline.id}
+                                  onClick={() => void handleMarkFiled(deadline.id)}
+                                >
+                                  {deadlineBusyId === deadline.id ? "Saving..." : "Mark Filed"}
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Compliance Calendar */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Compliance Calendar</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => alert("Generating compliance deadlines for this company...")}>
-                  Generate Deadlines
-                </Button>
-              </div>
+              <CardTitle className="text-base">GSTN Upload History</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Type</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Period</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Due Date</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Alert Status</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Filed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { type: "GSTR-3B", period: "Apr 2026", due: "2026-04-20", alert_7d: true, alert_1d: false, filed: false },
-                      { type: "GSTR-1", period: "Apr 2026", due: "2026-05-11", alert_7d: false, alert_1d: false, filed: false },
-                      { type: "TDS 26Q", period: "Q1 FY27", due: "2026-07-31", alert_7d: false, alert_1d: false, filed: false },
-                      { type: "PF ECR", period: "Apr 2026", due: "2026-05-15", alert_7d: true, alert_1d: false, filed: false },
-                      { type: "PT", period: "Apr 2026", due: "2026-04-30", alert_7d: true, alert_1d: true, filed: false },
-                    ].map((dl, idx) => (
-                      <tr key={idx} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-medium">{dl.type}</td>
-                        <td className="py-2 px-3 text-muted-foreground">{dl.period}</td>
-                        <td className="py-2 px-3 text-xs">{dl.due}</td>
-                        <td className="py-2 px-3">
-                          <div className="flex items-center gap-1">
-                            {dl.alert_7d && <Badge variant="warning" className="text-[10px]">7d sent</Badge>}
-                            {dl.alert_1d && <Badge variant="destructive" className="text-[10px]">1d sent</Badge>}
-                            {!dl.alert_7d && !dl.alert_1d && <span className="text-xs text-muted-foreground">Not yet</span>}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3">
-                          <Badge variant={dl.filed ? "success" : "secondary"}>
-                            {dl.filed ? "Filed" : "Pending"}
-                          </Badge>
-                        </td>
+              {uploads.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No GSTN upload records yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Upload Type</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Period</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">File</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Updated</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {uploads.map((upload) => (
+                        <tr key={upload.id} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-medium">{upload.upload_type}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{upload.filing_period}</td>
+                          <td className="px-3 py-2">{upload.file_name}</td>
+                          <td className="px-3 py-2">
+                            <Badge variant={statusVariant(upload.status)}>{upload.status}</Badge>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {formatDateTime(upload.uploaded_at || upload.created_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* ==================== Agents Tab ==================== */}
       {activeTab === "agents" && (
         <div className="space-y-4">
-          {agents.length === 0 && (
-            <p className="text-muted-foreground text-sm">No data yet. Agents will appear once assigned to this company.</p>
-          )}
-          {agents.map((agent) => (
-            <Card key={agent.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs bg-gradient-to-br ${
-                      agent.domain === "finance" ? "from-emerald-500 to-teal-600" :
-                      agent.domain === "hr" ? "from-violet-500 to-indigo-600" :
-                      "from-blue-500 to-cyan-600"
-                    }`}>
-                      {agent.name.charAt(0)}
-                    </div>
+          {agents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No CA pack agents are provisioned for this tenant yet. Install the Chartered Accountant Firm Pack to create live firm automations.
+            </p>
+          ) : (
+            agents.map((agent) => (
+              <Card key={agent.id}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-sm">{agent.name}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${DOMAIN_COLORS[agent.domain] || "bg-gray-100 text-gray-800"}`}>
-                        {agent.domain}
-                      </span>
+                      <p className="font-medium">{agent.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {agent.designation || agent.domain}
+                      </p>
                     </div>
+                    <Badge variant={statusVariant(agent.status)}>{agent.status}</Badge>
                   </div>
-                  <Badge variant={agent.status === "active" ? "success" : "secondary"}>
-                    {agent.status}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       )}
 
-      {/* ==================== Workflows Tab ==================== */}
       {activeTab === "workflows" && (
         <div className="space-y-4">
-          {workflows.length === 0 && (
-            <p className="text-muted-foreground text-sm">No data yet. Workflow runs will appear once triggered.</p>
-          )}
-          {workflows.map((wf) => (
-            <Card key={wf.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">{wf.name}</p>
-                    <p className="text-xs text-muted-foreground">Started: {new Date(wf.started_at).toLocaleString()}</p>
+          {workflows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No CA pack workflows are provisioned for this tenant yet. Installed packs now create live workflow definitions, but this tenant does not have CA workflows provisioned yet.
+            </p>
+          ) : (
+            workflows.map((workflow) => (
+              <Card key={workflow.id}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium">{workflow.name}</p>
+                      <p className="text-xs text-muted-foreground">{workflow.description || "No description."}</p>
+                    </div>
+                    <Badge variant={workflow.is_active ? "success" : "secondary"}>
+                      {workflow.is_active ? "active" : "inactive"}
+                    </Badge>
                   </div>
-                  <Badge variant={
-                    wf.status === "completed" ? "success" :
-                    wf.status === "running" ? "default" :
-                    "secondary"
-                  }>
-                    {wf.status}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       )}
 
-      {/* ==================== Audit Log Tab ==================== */}
-      {activeTab === "audit" && (
+      {activeTab === "activity" && (
         <Card>
           <CardContent className="pt-4">
-            {auditLog.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No data yet. Audit entries will appear as agents perform actions.</p>
+            {activities.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
             ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">Timestamp</th>
-                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">Action</th>
-                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">Actor</th>
-                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">Outcome</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLog.map((entry) => (
-                    <tr key={entry.id} className="border-b last:border-0">
-                      <td className="py-2 px-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(entry.timestamp).toLocaleString()}
-                      </td>
-                      <td className="py-2 px-3">{entry.action}</td>
-                      <td className="py-2 px-3 text-muted-foreground">{entry.actor}</td>
-                      <td className="py-2 px-3">
-                        <Badge variant={entry.outcome === "success" ? "success" : "warning"} className="text-[10px]">
-                          {entry.outcome}
-                        </Badge>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Timestamp</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Action</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Actor</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Outcome</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {activities.map((activity) => (
+                      <tr key={activity.id} className="border-b last:border-0">
+                        <td className="px-3 py-2 text-xs text-muted-foreground">{formatDateTime(activity.timestamp)}</td>
+                        <td className="px-3 py-2 font-medium">{activity.action}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{activity.actor}</td>
+                        <td className="px-3 py-2">
+                          <Badge variant={statusVariant(activity.outcome)}>{activity.outcome}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* ==================== Approvals Tab ==================== */}
       {activeTab === "approvals" && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Filing Approvals</h3>
-            <Button onClick={() => alert("Approval request sent to partner for review.")}>
-              Request Filing Approval
-            </Button>
-          </div>
           <Card>
-            <CardContent className="pt-4">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Filing Type</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Period</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Requested By</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Approved By</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Date</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filingApprovals.map((req) => (
-                      <tr key={req.id} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-medium">{req.filing_type}</td>
-                        <td className="py-2 px-3 text-muted-foreground">{req.period}</td>
-                        <td className="py-2 px-3">
-                          <Badge variant={
-                            req.status === "approved" ? "success" :
-                            req.status === "pending" ? "warning" :
-                            req.status === "rejected" ? "destructive" : "default"
-                          }>
-                            {req.status}
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-3 text-muted-foreground">{req.requested_by}</td>
-                        <td className="py-2 px-3 text-muted-foreground">{req.approved_by || "—"}</td>
-                        <td className="py-2 px-3 text-xs text-muted-foreground">{req.date}</td>
-                        <td className="py-2 px-3">
-                          {req.status === "pending" && (
-                            <Button size="sm" onClick={() => alert(`Approved: ${req.filing_type} for ${req.period}`)}>
-                              Approve
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <CardHeader>
+              <CardTitle className="text-base">Request New Filing Approval</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Filing Type</label>
+                  <input
+                    value={newApproval.filing_type}
+                    onChange={(event) => setNewApproval((current) => ({ ...current, filing_type: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Filing Period</label>
+                  <input
+                    value={newApproval.filing_period}
+                    onChange={(event) => setNewApproval((current) => ({ ...current, filing_period: event.target.value }))}
+                    placeholder="2026-04 or Q4 FY26"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button disabled={creatingApproval} onClick={() => void handleCreateApproval()}>
+                    {creatingApproval ? "Creating..." : "Request Approval"}
+                  </Button>
+                </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Filing Approvals</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {approvals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No filing approvals for this company yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Filing Type</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Period</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Requested By</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Updated</th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {approvals.map((approval) => (
+                        <tr key={approval.id} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-medium">{approval.filing_type}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{approval.filing_period}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{approval.requested_by}</td>
+                          <td className="px-3 py-2">
+                            <Badge variant={statusVariant(approval.status)}>{approval.status}</Badge>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {formatDateTime(approval.approved_at || approval.updated_at || approval.created_at)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {approval.status === "pending" ? (
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  disabled={approvalBusyId === approval.id}
+                                  onClick={() => void handleApprove(approval.id)}
+                                >
+                                  {approvalBusyId === approval.id ? "Saving..." : "Approve"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={approvalBusyId === approval.id}
+                                  onClick={() => void handleReject(approval.id)}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {approval.approved_by || approval.rejection_reason || "-"}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* ==================== Settings Tab ==================== */}
       {activeTab === "settings" && (
         <div className="space-y-6">
-          {/* Edit form */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Company Settings</CardTitle>
@@ -741,79 +1053,114 @@ export default function CompanyDetail() {
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Company Name</label>
+                  <label className="mb-1 block text-sm font-medium">Company Name</label>
                   <input
-                    value={editForm.name || ""}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={editForm.name}
+                    onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">State</label>
+                  <label className="mb-1 block text-sm font-medium">State Code</label>
                   <input
-                    value={editForm.state || ""}
-                    onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={editForm.state_code}
+                    onChange={(event) => setEditForm((current) => ({ ...current, state_code: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Industry</label>
+                  <label className="mb-1 block text-sm font-medium">Industry</label>
                   <input
-                    value={editForm.industry || ""}
-                    onChange={(e) => setEditForm({ ...editForm, industry: e.target.value })}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={editForm.industry}
+                    onChange={(event) => setEditForm((current) => ({ ...current, industry: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Address</label>
+                  <label className="mb-1 block text-sm font-medium">Compliance Email</label>
                   <input
-                    value={editForm.address || ""}
-                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={editForm.compliance_email}
+                    onChange={(event) => setEditForm((current) => ({ ...current, compliance_email: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Signatory Name</label>
+                  <input
+                    value={editForm.signatory_name}
+                    onChange={(event) => setEditForm((current) => ({ ...current, signatory_name: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Signatory Designation</label>
+                  <input
+                    value={editForm.signatory_designation}
+                    onChange={(event) => setEditForm((current) => ({ ...current, signatory_designation: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <Button onClick={handleSaveSettings} disabled={saving}>
-                    {saving ? "Saving..." : "Save Changes"}
+                  <label className="mb-1 block text-sm font-medium">Registered Address</label>
+                  <textarea
+                    value={editForm.registered_address}
+                    onChange={(event) => setEditForm((current) => ({ ...current, registered_address: event.target.value }))}
+                    rows={3}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-3 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={editForm.gst_auto_file}
+                      onChange={(event) => setEditForm((current) => ({ ...current, gst_auto_file: event.target.checked }))}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    Enable GST auto-file
+                  </label>
+                </div>
+                <div className="sm:col-span-2">
+                  <Button disabled={savingCompany} onClick={() => void handleSaveCompany()}>
+                    {savingCompany ? "Saving..." : "Save Company Settings"}
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Role Management */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Role Management</CardTitle>
+              <CardTitle className="text-base">Company Role Mapping</CardTitle>
             </CardHeader>
             <CardContent>
+              <p className="mb-4 text-xs text-muted-foreground">
+                The current API supports role add and role update. Role removal is not supported yet, so this screen only edits or adds mappings.
+              </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Email</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Role</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Actions</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">User Email / ID</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Role</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {roles.map((r) => (
-                      <tr key={r.email} className="border-b last:border-0">
-                        <td className="py-2 px-3">{r.email}</td>
-                        <td className="py-2 px-3">
+                    {roles.map((role) => (
+                      <tr key={role.user_id} className="border-b last:border-0">
+                        <td className="px-3 py-2">{role.user_id}</td>
+                        <td className="px-3 py-2">
                           <select
-                            value={r.role}
-                            onChange={(e) => setRoles(roles.map((m) => m.email === r.email ? { ...m, role: e.target.value } : m))}
+                            value={role.role}
+                            onChange={(event) => setRoles((current) => current.map((entry) => (
+                              entry.user_id === role.user_id ? { ...entry, role: event.target.value } : entry
+                            )))}
                             className="h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                           >
-                            <option value="admin">Admin</option>
-                            <option value="cfo">CFO</option>
-                            <option value="auditor">Auditor</option>
-                            <option value="coo">COO</option>
+                            {validRoles.map((value) => (
+                              <option key={value} value={value}>{value}</option>
+                            ))}
                           </select>
-                        </td>
-                        <td className="py-2 px-3">
-                          <Button variant="outline" size="sm" onClick={() => handleRemoveRole(r.email)}>Remove</Button>
                         </td>
                       </tr>
                     ))}
@@ -821,143 +1168,140 @@ export default function CompanyDetail() {
                 </table>
               </div>
 
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+              <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row">
                 <input
-                  type="email"
-                  placeholder="user@company.com"
-                  value={newRoleEmail}
-                  onChange={(e) => setNewRoleEmail(e.target.value)}
-                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  type="text"
+                  placeholder="user@company.com or user id"
+                  value={newRoleUserId}
+                  onChange={(event) => setNewRoleUserId(event.target.value)}
+                  className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 />
                 <select
                   value={newRoleValue}
-                  onChange={(e) => setNewRoleValue(e.target.value)}
+                  onChange={(event) => setNewRoleValue(event.target.value)}
                   className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="admin">Admin</option>
-                  <option value="cfo">CFO</option>
-                  <option value="auditor">Auditor</option>
-                  <option value="coo">COO</option>
+                  {validRoles.map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
                 </select>
-                <Button onClick={handleAddRole}>Add</Button>
+                <Button variant="outline" onClick={handleAddRole}>Add / Update</Button>
+                <Button disabled={savingRoles} onClick={() => void handleSaveRoles()}>
+                  {savingRoles ? "Saving..." : "Save Roles"}
+                </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* GSTN Portal Credentials Vault */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">GSTN Portal Credentials</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Credentials are encrypted at rest using AES-256. Never shared or logged.
-                </p>
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Credentials are stored through the backend credential vault. Passwords are never returned to the UI.
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium mb-1">GSTIN</label>
+                  <label className="mb-1 block text-sm font-medium">GSTIN</label>
                   <input
-                    value={company.gstin || ""}
-                    disabled
-                    className="w-full h-9 rounded-md border border-input bg-muted px-3 text-sm"
+                    value={credentialForm.gstin}
+                    onChange={(event) => setCredentialForm((current) => ({ ...current, gstin: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Username</label>
-                  <input
-                    value={credUsername}
-                    onChange={(e) => setCredUsername(e.target.value)}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="Portal username"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Password</label>
-                  <input
-                    type="password"
-                    value={credPassword}
-                    onChange={(e) => setCredPassword(e.target.value)}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="Portal password"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Portal Type</label>
+                  <label className="mb-1 block text-sm font-medium">Portal Type</label>
                   <select
-                    value={credPortalType}
-                    onChange={(e) => setCredPortalType(e.target.value)}
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={credentialForm.portal_type}
+                    onChange={(event) => setCredentialForm((current) => ({ ...current, portal_type: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="GSTN">GSTN</option>
-                    <option value="Income Tax">Income Tax</option>
-                    <option value="EPFO">EPFO</option>
+                    <option value="gstn">gstn</option>
+                    <option value="income_tax">income_tax</option>
+                    <option value="epfo">epfo</option>
                   </select>
                 </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Username</label>
+                  <input
+                    value={credentialForm.username}
+                    onChange={(event) => setCredentialForm((current) => ({ ...current, username: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Password</label>
+                  <input
+                    type="password"
+                    value={credentialForm.password}
+                    onChange={(event) => setCredentialForm((current) => ({ ...current, password: event.target.value }))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
                 <div className="sm:col-span-2">
-                  <Button onClick={() => alert("Credentials saved (encrypted)")}>Save Credentials</Button>
+                  <Button disabled={creatingCredential} onClick={() => void handleCreateCredential()}>
+                    {creatingCredential ? "Saving..." : "Save Credential"}
+                  </Button>
                 </div>
               </div>
 
-              {/* Stored credentials table */}
-              <div className="overflow-x-auto mt-6 pt-4 border-t">
+              <div className="mt-6 overflow-x-auto border-t pt-4">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">GSTIN</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Username</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Portal</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Last Verified</th>
-                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Actions</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">GSTIN</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Username</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Portal</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Last Verified</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {storedCreds.map((cred, idx) => (
-                      <tr key={idx} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-mono text-xs">{cred.gstin}</td>
-                        <td className="py-2 px-3">{cred.username}</td>
-                        <td className="py-2 px-3">{cred.portal}</td>
-                        <td className="py-2 px-3">
-                          <Badge variant={cred.status === "active" ? "success" : "secondary"}>
-                            {cred.status}
+                    {credentials.map((credential) => (
+                      <tr key={credential.id} className="border-b last:border-0">
+                        <td className="px-3 py-2 font-mono text-xs">{credential.gstin}</td>
+                        <td className="px-3 py-2">{credential.username}</td>
+                        <td className="px-3 py-2">{credential.portal_type}</td>
+                        <td className="px-3 py-2">
+                          <Badge variant={credential.is_active ? "success" : "secondary"}>
+                            {credential.is_active ? "active" : "inactive"}
                           </Badge>
                         </td>
-                        <td className="py-2 px-3 text-xs text-muted-foreground">{cred.last_verified}</td>
-                        <td className="py-2 px-3">
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => alert(`Verifying ${cred.portal} credentials...`)}>
+                        <td className="px-3 py-2 text-muted-foreground">{formatDateTime(credential.last_verified_at)}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={credentialBusyId === credential.id}
+                              onClick={() => void handleVerifyCredential(credential.id)}
+                            >
                               Verify
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => alert(`Deactivating ${cred.portal} credentials`)}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={credentialBusyId === credential.id || !credential.is_active}
+                              onClick={() => void handleDeactivateCredential(credential.id)}
+                            >
                               Deactivate
                             </Button>
                           </div>
                         </td>
                       </tr>
                     ))}
+                    {credentials.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-4 text-sm text-muted-foreground">
+                          No GSTN credentials stored for this company.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-              </div>
-
-              {/* Auto-upload toggle */}
-              <div className="mt-4 pt-4 border-t">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={gstnAutoUpload}
-                    onChange={(e) => setGstnAutoUpload(e.target.checked)}
-                    className="w-4 h-4 rounded border-input"
-                  />
-                  <span className="text-sm font-medium">Enable auto-upload to GSTN</span>
-                </label>
-                {gstnAutoUpload && (
-                  <p className="text-xs text-amber-600 mt-1 ml-7">
-                    Filings will be auto-uploaded to the GSTN portal using stored credentials.
-                  </p>
-                )}
               </div>
             </CardContent>
           </Card>

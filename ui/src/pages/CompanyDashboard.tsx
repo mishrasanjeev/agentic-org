@@ -4,7 +4,7 @@ import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -17,12 +17,20 @@ interface Company {
   pan?: string;
   industry?: string;
   state?: string;
+  state_code?: string;
   status?: string;
   is_active?: boolean;
   created_at?: string;
   health_score?: number;
   client_health_score?: number;
   pending_approvals?: number;
+}
+
+interface CompanySummary {
+  total_clients: number;
+  active_clients: number;
+  total_pending_filings: number;
+  total_overdue: number;
 }
 
 
@@ -43,18 +51,49 @@ export default function CompanyDashboard() {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
+  const [summary, setSummary] = useState<CompanySummary>({
+    total_clients: 0,
+    active_clients: 0,
+    total_pending_filings: 0,
+    total_overdue: 0,
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await api.get("/companies");
-      const data = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.items) ? res.data.items : [];
+      const [companiesRes, summaryRes] = await Promise.all([
+        api.get("/companies"),
+        api.get("/partner-dashboard"),
+      ]);
+
+      const data = Array.isArray(companiesRes.data)
+        ? companiesRes.data
+        : Array.isArray(companiesRes.data?.items)
+          ? companiesRes.data.items
+          : [];
       setCompanies(data);
-    } catch {
+
+      const summaryData = (summaryRes.data || {}) as Record<string, unknown>;
+      setSummary({
+        total_clients: Number(summaryData.total_clients || data.length || 0),
+        active_clients: Number(summaryData.active_clients || 0),
+        total_pending_filings: Number(summaryData.total_pending_filings || 0),
+        total_overdue: Number(summaryData.total_overdue || 0),
+      });
+    } catch (err) {
       setCompanies([]);
+      setSummary({
+        total_clients: 0,
+        active_clients: 0,
+        total_pending_filings: 0,
+        total_overdue: 0,
+      });
+      setError(extractApiError(err, "Failed to load companies."));
     } finally {
       setLoading(false);
     }
@@ -65,18 +104,19 @@ export default function CompanyDashboard() {
   }, [fetchData]);
 
   const industries = [...new Set(companies.map((c) => c.industry).filter(Boolean))];
-  const states = [...new Set(companies.map((c) => c.state).filter(Boolean))];
+  const states = [...new Set(companies.map((c) => c.state || c.state_code).filter(Boolean))];
 
   const filtered = companies.filter((c) => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.gstin || "").toLowerCase().includes(search.toLowerCase());
     const matchIndustry = !industryFilter || c.industry === industryFilter;
-    const matchState = !stateFilter || c.state === stateFilter;
+    const matchState = !stateFilter || (c.state || c.state_code) === stateFilter;
     return matchSearch && matchIndustry && matchState;
   });
 
   const isActive = (c: Company) => c.status === "active" || c.is_active === true || (c.is_active !== false && !c.status);
-  const activeCount = companies.filter(isActive).length;
-  const inactiveCount = companies.length - activeCount;
+  const activeCount = summary.active_clients || companies.filter(isActive).length;
+  const totalCount = summary.total_clients || companies.length;
+  const inactiveCount = Math.max(totalCount - activeCount, 0);
 
   if (loading) {
     return (
@@ -92,12 +132,18 @@ export default function CompanyDashboard() {
         <title>Companies | AgenticOrg</title>
       </Helmet>
 
+      {error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold">Companies</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {companies.length} total &middot; {activeCount} active &middot; {inactiveCount} inactive
+            {totalCount} total &middot; {activeCount} active &middot; {inactiveCount} inactive
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -115,7 +161,7 @@ export default function CompanyDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-2xl font-bold">{companies.length}</p>
+            <p className="text-2xl font-bold">{totalCount}</p>
             <p className="text-xs text-muted-foreground">Total Clients</p>
           </CardContent>
         </Card>
@@ -127,14 +173,14 @@ export default function CompanyDashboard() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-2xl font-bold text-amber-600">{companies.reduce((sum, c) => sum + (c.pending_approvals ?? 0), 0) || Math.max(1, Math.floor(activeCount * 0.6))}</p>
+            <p className="text-2xl font-bold text-amber-600">{summary.total_pending_filings}</p>
             <p className="text-xs text-muted-foreground">Pending Filings</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-2xl font-bold text-blue-600">{Math.floor(activeCount * 0.8)}</p>
-            <p className="text-xs text-muted-foreground">Recon Complete</p>
+            <p className="text-2xl font-bold text-red-600">{summary.total_overdue}</p>
+            <p className="text-xs text-muted-foreground">Overdue</p>
           </CardContent>
         </Card>
       </div>
@@ -223,8 +269,8 @@ export default function CompanyDashboard() {
                     {company.industry && (
                       <Badge variant="outline" className="text-[10px]">{company.industry}</Badge>
                     )}
-                    {company.state && (
-                      <span className="text-[10px] text-muted-foreground">{company.state}</span>
+                    {(company.state || company.state_code) && (
+                      <span className="text-[10px] text-muted-foreground">{company.state || company.state_code}</span>
                     )}
                   </div>
                 </div>

@@ -314,6 +314,19 @@ async def create_company(
         )
         session.add(company)
         await session.flush()
+        from core.agents.packs.installer import (
+            is_pack_installed_for_session,
+            sync_company_pack_assets_for_session,
+        )
+
+        if await is_pack_installed_for_session(session, tid, "ca-firm"):
+            await sync_company_pack_assets_for_session(
+                session,
+                tid,
+                "ca-firm",
+                company.id,
+                company.name,
+            )
         await session.refresh(company)
         out = _company_to_out(company)
 
@@ -586,6 +599,19 @@ async def onboard_company(
         )
         session.add(company)
         await session.flush()
+        from core.agents.packs.installer import (
+            is_pack_installed_for_session,
+            sync_company_pack_assets_for_session,
+        )
+
+        if await is_pack_installed_for_session(session, tid, "ca-firm"):
+            await sync_company_pack_assets_for_session(
+                session,
+                tid,
+                "ca-firm",
+                company.id,
+                company.name,
+            )
         await session.refresh(company)
         out = _company_to_out(company)
 
