@@ -36,7 +36,7 @@ jobs:
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v6
 
   integration-tests:
     needs: unit-tests
