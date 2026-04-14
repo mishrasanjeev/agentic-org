@@ -53,6 +53,16 @@ def _reset_schema() -> None:
     engine.dispose()
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _reset_after_module():
+    """Every test here mutates the public schema (drops tables, fakes
+    legacy state). Leave the schema clean at module exit so downstream
+    integration tests that rely on ORMBase.metadata.create_all don't see
+    a tenants table without the slug column, etc."""
+    yield
+    _reset_schema()
+
+
 def _run_migrate_wrapper() -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["AGENTICORG_DB_URL"] = _DB_URL
