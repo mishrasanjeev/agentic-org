@@ -107,18 +107,6 @@ async def _schema_ready() -> AsyncGenerator[str, None]:
         _db_mod.async_session_factory.configure(bind=original_engine)
 
 
-# Tests that depend on tables only defined in raw SQL (kpi_cache,
-# industry_pack_installs, etc.) or that traverse the packs installer
-# code path. The hermetic fixture above only creates ORM-modelled
-# tables. Running init_db() inside the fixture to pick up the raw-SQL
-# tables caused a hang (see CI run 24408376921). Mark these as skip
-# until a dedicated follow-up either (a) adds ORM models for the
-# raw-SQL tables or (b) stands up an alembic-stamped test DB.
-_HANG_SKIP_REASON = (
-    "Requires raw-SQL tables (kpi_cache, industry_pack_installs) not "
-    "covered by BaseModel.metadata.create_all. Follow-up: add ORM "
-    "models or run alembic upgrade in the fixture."
-)
 
 
 @pytest_asyncio.fixture
@@ -155,7 +143,6 @@ async def client(app, _schema_ready) -> AsyncGenerator[AsyncClient, None]:
 class TestCFOJourney:
     """End-to-end CFO user flow."""
 
-    @pytest.mark.skip(reason=_HANG_SKIP_REASON)
     @pytest.mark.asyncio
     async def test_cfo_kpis_return_valid_data(self, client: AsyncClient):
         """CFO KPI dashboard returns all required metrics (basic metrics shape)."""
@@ -201,7 +188,6 @@ class TestCFOJourney:
         schedule_ids = [s["id"] for s in schedules]
         assert schedule["id"] in schedule_ids
 
-    @pytest.mark.skip(reason=_HANG_SKIP_REASON)
     @pytest.mark.asyncio
     async def test_company_switcher_lists_companies(self, client: AsyncClient):
         """Company switcher returns list after creating companies."""
@@ -231,7 +217,6 @@ class TestCFOJourney:
                     "get_balance_sheet", "get_cash_position"}
         assert expected == set(DEFAULT_TOOLS)
 
-    @pytest.mark.skip(reason=_HANG_SKIP_REASON)
     @pytest.mark.asyncio
     async def test_cfo_kpis_with_company_filter(self, client: AsyncClient):
         """CFO KPIs accept company_id parameter."""
@@ -240,7 +225,6 @@ class TestCFOJourney:
         data = resp.json()
         assert data["company_id"] == "test-company"
 
-    @pytest.mark.skip(reason=_HANG_SKIP_REASON)
     @pytest.mark.asyncio
     async def test_create_and_retrieve_company(self, client: AsyncClient):
         """Full company lifecycle: create -> retrieve -> verify fields."""
@@ -268,7 +252,6 @@ class TestCFOJourney:
 class TestCMOJourney:
     """End-to-end CMO user flow."""
 
-    @pytest.mark.skip(reason=_HANG_SKIP_REASON)
     @pytest.mark.asyncio
     async def test_cmo_kpis_return_valid_data(self, client: AsyncClient):
         """CMO KPI dashboard returns all required metrics (basic metrics shape)."""
