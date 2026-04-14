@@ -51,20 +51,25 @@ def app():
 
 @pytest_asyncio.fixture(scope="module")
 async def _schema_ready() -> AsyncGenerator[str, None]:
-    """Swap core.database.engine for a NullPool engine, create tables
-    against the test DB, seed a tenant row.
+    """Point the module-level engine/factory at the test DB, run
+    init_db() to get every table (including the ones only defined in
+    raw SQL — kpi_cache, industry_pack_installs, etc.), and seed a
+    tenant row.
 
-    Running the setup on pytest_asyncio's module event loop means the
-    engine, all handler queries, and the httpx.AsyncClient share a
-    single loop — no cross-loop asyncpg reuse.
+    We reconfigure the existing async_session_factory in place rather
+    than reassigning the module attribute, so any module that did
+    ``from core.database import async_session_factory`` at import time
+    automatically follows us to the test engine. Without that, those
+    callers would keep using the original pooled engine, whose asyncpg
+    connections end up on a different loop from the test and raise
+    "Future attached to a different loop".
     """
     from sqlalchemy import text as _text
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import NullPool
 
     import core.database as _db_mod
     import core.models  # noqa: F401 — register every ORM model
-    from core.models.base import BaseModel
 
     db_url = os.getenv("AGENTICORG_DB_URL")
     if not db_url:
@@ -72,15 +77,27 @@ async def _schema_ready() -> AsyncGenerator[str, None]:
 
     test_engine = create_async_engine(db_url, echo=False, poolclass=NullPool)
     original_engine = _db_mod.engine
-    original_factory = _db_mod.async_session_factory
-    _db_mod.engine = test_engine
-    _db_mod.async_session_factory = async_sessionmaker(
-        test_engine, expire_on_commit=False
-    )
 
+    # Point core.database.engine at the test engine and reconfigure the
+    # sessionmaker in place so cached imports of async_session_factory
+    # start using the test engine too.
+    _db_mod.engine = test_engine
+    _db_mod.async_session_factory.configure(bind=test_engine)
+
+    # Run init_db() to produce the raw-SQL tables (kpi_cache,
+    # industry_pack_installs, approval_* , tenant_branding, etc.) on
+    # top of what ORM metadata.create_all would give us. init_db()
+    # short-circuits when AGENTICORG_DDL_MANAGED_BY_ALEMBIC is truthy,
+    # so clear it for this setup.
+    prior_flag = os.environ.pop("AGENTICORG_DDL_MANAGED_BY_ALEMBIC", None)
     try:
+        from core.models.base import BaseModel
+
         async with test_engine.begin() as conn:
             await conn.run_sync(BaseModel.metadata.create_all)
+        # init_db writes to tenants/companies/etc. and assumes they exist.
+        await _db_mod.init_db()
+        async with test_engine.begin() as conn:
             await conn.execute(
                 _text(
                     "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
@@ -98,15 +115,20 @@ async def _schema_ready() -> AsyncGenerator[str, None]:
     except Exception as exc:
         await test_engine.dispose()
         _db_mod.engine = original_engine
-        _db_mod.async_session_factory = original_factory
+        _db_mod.async_session_factory.configure(bind=original_engine)
+        if prior_flag is not None:
+            os.environ["AGENTICORG_DDL_MANAGED_BY_ALEMBIC"] = prior_flag
         pytest.skip(f"DB-backed E2E fixture unavailable: {exc}")
+    finally:
+        if prior_flag is not None:
+            os.environ["AGENTICORG_DDL_MANAGED_BY_ALEMBIC"] = prior_flag
 
     try:
         yield _SHARED_TENANT_ID
     finally:
         await test_engine.dispose()
         _db_mod.engine = original_engine
-        _db_mod.async_session_factory = original_factory
+        _db_mod.async_session_factory.configure(bind=original_engine)
 
 
 @pytest_asyncio.fixture
