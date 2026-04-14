@@ -395,7 +395,7 @@ async def test_connector(
                     creds = _cjson.loads(decrypt_for_tenant(creds["_encrypted"]))
                 config = {**(cc.config or {}), **(creds or {})}
     except Exception:
-        _log.debug("connector_test_encrypted_creds_load_failed", conn_id=str(conn_id))
+        _log.debug("connector_test_encrypted_creds_load_failed conn_id=%s", conn_id)
     if not config:
         config = connector.auth_config or {}
     try:
