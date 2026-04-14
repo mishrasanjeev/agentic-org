@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
+import { INDIAN_STATES, stateNameFromCode } from "@/lib/indianStates";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -63,16 +64,6 @@ const STEPS = [
   "Banking",
   "Tally Connection",
   "Review & Confirm",
-];
-
-const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
-  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
-  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
-  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
-  "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi", "Jammu & Kashmir",
-  "Ladakh", "Chandigarh", "Puducherry", "Lakshadweep", "Andaman & Nicobar",
 ];
 
 const INDUSTRIES = [
@@ -331,7 +322,7 @@ export default function CompanyOnboard() {
                 <label className={labelClass}>State <span className="text-red-500">*</span></label>
                 <select value={form.state} onChange={(e) => update("state", e.target.value)} className={fieldClass("state")}>
                   <option value="">Select state</option>
-                  {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {INDIAN_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
                 </select>
                 {errors.state && <p className="text-xs text-red-500 mt-1">{errors.state}</p>}
               </div>
@@ -513,7 +504,7 @@ export default function CompanyOnboard() {
                   <div><span className="text-muted-foreground">GSTIN:</span> <span className="font-mono">{form.gstin || "—"}</span></div>
                   <div><span className="text-muted-foreground">PAN:</span> <span className="font-mono">{form.pan || "—"}</span></div>
                   <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{form.tan || "—"}</span></div>
-                  <div><span className="text-muted-foreground">State:</span> {form.state || "—"}</div>
+                  <div><span className="text-muted-foreground">State:</span> {stateNameFromCode(form.state) || "—"}</div>
                   <div><span className="text-muted-foreground">Industry:</span> {form.industry || "—"}</div>
                   <div className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {form.address || "—"}</div>
                 </div>
