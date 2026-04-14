@@ -103,7 +103,10 @@ class CompanyOnboard(BaseModel):
     pan: str = Field(..., max_length=10)
     tan: str | None = Field(None, max_length=10)
     cin: str | None = Field(None, max_length=21)
-    state_code: str | None = Field(None, max_length=50)
+    # Must match the companies.state_code VARCHAR(2) column; accepting a
+    # longer string here silently passed a full state name to the DB and
+    # failed the insert at the column-length boundary.
+    state_code: str | None = Field(None, max_length=2)
     industry: str | None = Field(None, max_length=100)
     registered_address: str | None = None
     signatory_name: str | None = Field(None, max_length=255)

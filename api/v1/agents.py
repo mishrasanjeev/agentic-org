@@ -1195,8 +1195,28 @@ async def run_agent(
             connector_config=agent_config.get("config"),
         )
     except Exception as exc:
-        logger.error("agent_run_error", agent_id=str(agent_id), error=str(exc))
-        raise HTTPException(500, "Agent execution failed. Check server logs for details.") from None
+        # Surface enough information for the caller to act on without
+        # leaking secrets from the exception message. The full traceback
+        # stays server-side, correlated by trace_id.
+        trace_id = _uuid.uuid4().hex[:12]
+        logger.exception(
+            "agent_run_error",
+            agent_id=str(agent_id),
+            trace_id=trace_id,
+            error_type=type(exc).__name__,
+        )
+        # Classify to a short, safe hint.
+        err_type = type(exc).__name__
+        hint = {
+            "TimeoutError": "upstream LLM or tool timed out",
+            "PermissionError": "agent lacks permission for a required tool",
+            "ValueError": "invalid task input",
+            "KeyError": "missing required configuration",
+        }.get(err_type, "internal agent runtime error")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Agent execution failed: {hint} ({err_type}). trace_id={trace_id}",
+        ) from None
 
     task_status = lg_result.get("status", "completed")
     task_confidence = lg_result.get("confidence", 0.0)

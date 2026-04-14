@@ -40,6 +40,12 @@ export default function AgentDetail() {
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  // Run-task dialog (replaces window.prompt, which is blocked in
+  // embedded browsers and some desktop shells).
+  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [runTask, setRunTask] = useState("");
 
   async function handlePromote() {
     setActionLoading("promote");
@@ -98,24 +104,27 @@ export default function AgentDetail() {
     }
   }
 
-  async function handleRun() {
-    // BUG-08: Show input prompt before running — the API requires an
-    // action + inputs body. Running without it always 422'd.
-    const task = window.prompt(
-      `What should ${agent?.employee_name || agent?.name || "the agent"} do?\n\n` +
-      "Describe the task (e.g., 'Process today's invoices', 'Generate sales report'):"
-    );
-    if (!task) return; // user cancelled
+  function openRunDialog() {
+    setRunTask("");
+    setActionError(null);
+    setActionNotice(null);
+    setRunDialogOpen(true);
+  }
 
+  async function submitRun() {
+    const task = runTask.trim();
+    if (!task) return;
+
+    setRunDialogOpen(false);
     setActionLoading("run");
     setActionError(null);
+    setActionNotice(null);
     try {
       await api.post(`/agents/${id}/run`, {
         action: "run",
         inputs: { task },
       });
-      setActionError(null);
-      alert("Agent run started successfully.");
+      setActionNotice("Agent run started successfully.");
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Run failed");
     } finally {
@@ -213,7 +222,7 @@ export default function AgentDetail() {
             <Button
               variant="default"
               size="sm"
-              onClick={handleRun}
+              onClick={openRunDialog}
               disabled={actionLoading !== null}
             >
               {actionLoading === "run" ? "Running..." : "Run Agent"}
@@ -227,6 +236,7 @@ export default function AgentDetail() {
             </Button>
           </div>
           {actionError && <p className="text-xs text-destructive">{actionError}</p>}
+          {actionNotice && <p className="text-xs text-emerald-600">{actionNotice}</p>}
         </div>
       </div>
 
@@ -270,6 +280,40 @@ export default function AgentDetail() {
           />
         )}
       </Suspense>
+
+      {runDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h3 className="text-lg font-semibold mb-1">
+              Run {agent?.employee_name || agent?.name || "agent"}
+            </h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              Describe the task (e.g., &ldquo;Process today&apos;s invoices&rdquo;,
+              &ldquo;Generate sales report&rdquo;).
+            </p>
+            <textarea
+              value={runTask}
+              onChange={(e) => setRunTask(e.target.value)}
+              placeholder="What should the agent do?"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => setRunDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => void submitRun()}
+                disabled={!runTask.trim()}
+              >
+                Run
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

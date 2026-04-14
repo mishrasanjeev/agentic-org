@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import api, { extractApiError } from "@/lib/api";
+import { stateNameFromCode } from "@/lib/indianStates";
 
 interface CompanyInfo {
   id: string;
@@ -731,7 +732,7 @@ export default function CompanyDetail() {
                   <div><span className="text-muted-foreground">PAN:</span> <span className="font-mono">{company.pan || "-"}</span></div>
                   <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{company.tan || "-"}</span></div>
                   <div><span className="text-muted-foreground">CIN:</span> <span className="font-mono">{company.cin || "-"}</span></div>
-                  <div><span className="text-muted-foreground">State:</span> {company.state_code || "-"}</div>
+                  <div><span className="text-muted-foreground">State:</span> {stateNameFromCode(company.state_code) || "-"}</div>
                   <div className="col-span-2"><span className="text-muted-foreground">Address:</span> {company.registered_address || "-"}</div>
                   <div><span className="text-muted-foreground">Signatory:</span> {company.signatory_name || "-"}</div>
                   <div><span className="text-muted-foreground">Compliance Email:</span> {company.compliance_email || "-"}</div>

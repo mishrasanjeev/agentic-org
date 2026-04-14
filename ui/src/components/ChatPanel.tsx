@@ -18,6 +18,31 @@ interface ChatQueryResponse {
   domain: string;
 }
 
+// Some LangGraph agents return a JSON-shaped answer (e.g.
+// `{"answer":"...", "signature":"abc..."}`) as a raw string. The
+// backend tries to unwrap this but a few paths still slip through.
+// Unwrap defensively before rendering so users never see raw JSON.
+const READABLE_KEYS = ["answer", "response", "message", "summary", "result"] as const;
+
+function extractReadableText(raw: unknown): string {
+  if (typeof raw !== "string") return String(raw ?? "");
+  const trimmed = raw.trim();
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return raw;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const key of READABLE_KEYS) {
+        const v = (parsed as Record<string, unknown>)[key];
+        if (typeof v === "string" && v.trim()) return v;
+      }
+    }
+    // Structured data without a readable key — fall back to the original.
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 export default function ChatPanel({
   open,
   onClose,
@@ -96,7 +121,7 @@ export default function ChatPanel({
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        text: res.data.answer,
+        text: extractReadableText(res.data.answer),
         agent: res.data.agent,
         confidence: res.data.confidence,
         domain: res.data.domain,
