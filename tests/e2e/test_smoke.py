@@ -9,7 +9,12 @@ import time
 import httpx
 import pytest
 
-BASE_URL = os.getenv("AGENTICORG_E2E_BASE_URL", "http://localhost:8000")
+pytestmark = pytest.mark.skipif(
+    not os.getenv("AGENTICORG_E2E_BASE_URL"),
+    reason="requires AGENTICORG_E2E_BASE_URL for deployed-environment smoke tests",
+)
+
+BASE_URL = os.getenv("AGENTICORG_E2E_BASE_URL", "")
 TOKEN = os.getenv("AGENTICORG_E2E_TOKEN", "")
 
 MAX_RETRIES = 5

@@ -112,6 +112,14 @@ def _to_response(row: ReportSchedule) -> ReportScheduleResponse:
     )
 
 
+def _parse_schedule_id(schedule_id: str) -> _uuid.UUID:
+    """Parse schedule ids while preserving 404 semantics for bad ids."""
+    try:
+        return _uuid.UUID(schedule_id)
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise HTTPException(status_code=404, detail="Schedule not found") from exc
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -179,7 +187,7 @@ async def update_report_schedule(
 ) -> ReportScheduleResponse:
     """Update an existing report schedule (partial update)."""
     tid = _uuid.UUID(tenant_id)
-    sid = _uuid.UUID(schedule_id)
+    sid = _parse_schedule_id(schedule_id)
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -243,7 +251,7 @@ async def delete_report_schedule(
 ) -> None:
     """Delete a report schedule."""
     tid = _uuid.UUID(tenant_id)
-    sid = _uuid.UUID(schedule_id)
+    sid = _parse_schedule_id(schedule_id)
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -265,7 +273,7 @@ async def run_report_now(
 ) -> dict[str, Any]:
     """Trigger immediate generation for a schedule (ignores cron timing)."""
     tid = _uuid.UUID(tenant_id)
-    sid = _uuid.UUID(schedule_id)
+    sid = _parse_schedule_id(schedule_id)
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(

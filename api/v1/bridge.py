@@ -52,6 +52,9 @@ async def register_bridge(
     tenant_id: str = Depends(get_current_tenant),
 ) -> BridgeRegisterResponse:
     """Register a new bridge agent for a tenant."""
+    if req.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant mismatch")
+
     bridge_id = str(_uuid.uuid4())
     bridge_token = secrets.token_urlsafe(48)
     ws_url = f"wss://app.agenticorg.ai/api/v1/ws/bridge/{bridge_id}"
@@ -143,13 +146,14 @@ async def list_bridges(
         live = get_bridge_status(reg.bridge_id)
         bridges.append({
             "bridge_id": reg.bridge_id,
-            "bridge_token": meta.get("bridge_token", ""),
             "tenant_id": str(reg.tenant_id),
             "connector_type": reg.bridge_type,
             "tally_port": meta.get("tally_port", 9000),
             "label": meta.get("label", ""),
             "registered_at": reg.created_at.isoformat(),
             "connected": live.get("connected", False),
+            "tally_healthy": live.get("tally_healthy", False),
+            "last_heartbeat": live.get("last_heartbeat"),
         })
     return bridges
 

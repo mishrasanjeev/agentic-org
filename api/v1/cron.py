@@ -10,26 +10,39 @@ import logging
 import os
 
 from fastapi import APIRouter, Header, HTTPException
+from core.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-CRON_API_KEY = os.environ.get("AGENTICORG_CRON_API_KEY", "dev-cron-key")
+
+def _get_cron_api_key() -> str:
+    """Return the configured cron API key, with a dev-only fallback."""
+    configured = os.environ.get("AGENTICORG_CRON_API_KEY", "").strip()
+    if configured:
+        return configured
+    if settings.env.lower() in {"development", "dev", "test"}:
+        return "dev-cron-key"
+    raise HTTPException(status_code=503, detail="Cron API key not configured")
 
 
 def _verify_cron_key(x_cron_key: str = Header(default="")) -> None:
     """Verify cron API key from header."""
-    if x_cron_key != CRON_API_KEY:
+    if x_cron_key != _get_cron_api_key():
         raise HTTPException(403, "Invalid cron API key")
 
 
 @router.get("/cron/schedules")
-async def list_cron_schedules():
+async def list_cron_schedules(
+    x_cron_key: str = Header(default=""),
+):
     """List configured cron schedules.
 
     Returns the Celery Beat schedule so the admin UI can show
     what periodic tasks are running and when.
     """
+    _verify_cron_key(x_cron_key)
+
     from core.tasks.celery_app import app as celery_app
 
     schedules = []

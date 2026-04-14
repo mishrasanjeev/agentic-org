@@ -38,6 +38,10 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+codex-pytest-cache/
+codex-pytest-basetemp/
+codex-pytest-temp/
+codex-pytest-artifacts/
 cover/
 .env
 .env.local

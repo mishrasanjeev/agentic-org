@@ -1,31 +1,30 @@
-"""Cloud-side WebSocket handler for bridge connections.
-
-Accepts incoming WebSocket connections from bridge agents running
-on CA machines, authenticates them, and provides a routing function
-that other code (like TallyConnector) can call to send requests
-through the bridge tunnel.
-"""
+"""Cloud-side WebSocket handler for bridge connections."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+
+from core.database import async_session_factory
+from core.models.bridge import BridgeRegistration
 
 logger = structlog.get_logger()
 
 router = APIRouter()
 
-# Active bridge connections: bridge_id → BridgeConnection
+# Active bridge connections: bridge_id -> BridgeConnection
 _active_bridges: dict[str, BridgeConnection] = {}
 
-# Pending request futures: request_id → asyncio.Future
-_pending_requests: dict[str, asyncio.Future] = {}
+# Pending request futures: request_id -> (bridge_id, asyncio.Future)
+_pending_requests: dict[str, tuple[str, asyncio.Future]] = {}
 
 
 class BridgeConnection:
@@ -49,12 +48,20 @@ class BridgeConnection:
         }
 
 
+async def _get_bridge_registration(bridge_id: str) -> BridgeRegistration | None:
+    """Load the bridge registration row used for auth."""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(BridgeRegistration).where(BridgeRegistration.bridge_id == bridge_id)
+        )
+        return result.scalar_one_or_none()
+
+
 @router.websocket("/ws/bridge/{bridge_id}")
 async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
     """WebSocket endpoint for bridge agent connections."""
     await websocket.accept()
 
-    # Authenticate: expect auth message first
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
         auth_msg = json.loads(raw)
@@ -69,8 +76,6 @@ async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
         await websocket.close()
         return
 
-    # Token validation — in production, verify against DB
-    # For now, accept any token that was provided
     token = auth_msg.get("token", "")
     if not token:
         await websocket.send_text(json.dumps({
@@ -80,9 +85,23 @@ async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
         await websocket.close()
         return
 
+    registration = await _get_bridge_registration(bridge_id)
+    expected_token = ((registration.metadata_ or {}) if registration else {}).get("bridge_token", "")
+    if (
+        registration is None
+        or registration.status != "active"
+        or not expected_token
+        or not secrets.compare_digest(token, expected_token)
+    ):
+        await websocket.send_text(json.dumps({
+            "type": "auth_error",
+            "error": "Invalid bridge token",
+        }))
+        await websocket.close()
+        return
+
     await websocket.send_text(json.dumps({"type": "auth_ok"}))
 
-    # Register the connection
     conn = BridgeConnection(bridge_id, websocket)
     _active_bridges[bridge_id] = conn
     logger.info("bridge_connected", bridge_id=bridge_id)
@@ -98,14 +117,15 @@ async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
                 await websocket.send_text(json.dumps({"type": "heartbeat_ack"}))
 
             elif msg_type == "response":
-                # Response to a request we sent through the bridge
                 request_id = msg.get("request_id")
-                future = _pending_requests.pop(request_id, None)
-                if future and not future.done():
-                    future.set_result(msg)
+                pending = _pending_requests.pop(request_id, None)
+                if pending:
+                    _, future = pending
+                    if not future.done():
+                        future.set_result(msg)
 
             elif msg_type == "pong":
-                pass  # Response to our ping
+                pass
 
             else:
                 logger.warning("bridge_unknown_msg", bridge_id=bridge_id, type=msg_type)
@@ -114,8 +134,10 @@ async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
         logger.info("bridge_disconnected", bridge_id=bridge_id)
     finally:
         _active_bridges.pop(bridge_id, None)
-        # Fail any pending requests for this bridge
-        for _req_id, future in list(_pending_requests.items()):
+        for request_id, (pending_bridge_id, future) in list(_pending_requests.items()):
+            if pending_bridge_id != bridge_id:
+                continue
+            _pending_requests.pop(request_id, None)
             if not future.done():
                 future.set_exception(RuntimeError("Bridge disconnected"))
 
@@ -125,23 +147,15 @@ async def route_to_bridge(
     xml_body: str,
     timeout: float = 30.0,
 ) -> dict[str, Any]:
-    """Route an XML request through a bridge to the CA's local Tally.
-
-    Called by TallyConnector when bridge mode is active.
-    Returns the bridge response dict with status and xml_response.
-
-    Raises:
-        RuntimeError: If bridge is not connected or request times out.
-    """
+    """Route an XML request through a bridge to the CA's local Tally."""
     conn = _active_bridges.get(bridge_id)
     if not conn:
         raise RuntimeError(f"Bridge {bridge_id} is not connected")
 
     request_id = str(uuid.uuid4())
-    future: asyncio.Future = asyncio.get_event_loop().create_future()
-    _pending_requests[request_id] = future
+    future: asyncio.Future = asyncio.get_running_loop().create_future()
+    _pending_requests[request_id] = (bridge_id, future)
 
-    # Send request to bridge
     await conn.websocket.send_text(json.dumps({
         "type": "post_xml",
         "request_id": request_id,
