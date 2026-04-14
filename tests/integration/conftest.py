@@ -151,16 +151,13 @@ def _patch_jwt_validation(monkeypatch: pytest.MonkeyPatch) -> None:
         return TEST_JWKS
 
     monkeypatch.setattr(auth_jwt_module, "_fetch_jwks", _fake_fetch_jwks)
-    # Clear rate limiter state between tests
-    import auth.middleware as mw
+    # Clear rate limiter state between tests. REQ-04 moved auth failure
+    # tracking to core.auth_state; only the in-memory fallback dicts remain.
+    from core.auth_state import _mem_blocked, _mem_failures
 
-    mw._failed_attempts.clear()
-    mw._blocked_ips.clear()
-    # Also clear the new Grantex middleware rate limiter
+    _mem_failures.clear()
+    _mem_blocked.clear()
     import auth.grantex_middleware as gx_mw
-
-    gx_mw._failed_attempts.clear()
-    gx_mw._blocked_ips.clear()
 
     # Override _is_grantex_token to always return False in tests
     # so RS256 test tokens go through the legacy path (which is patched above)

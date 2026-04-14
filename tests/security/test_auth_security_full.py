@@ -5,19 +5,28 @@ JWT alg:none attack, HITL bypass via prompt injection, scope elevation,
 non-CFO HITL approval, cross-tenant access, and all 6 LLM-security scenarios.
 """
 
+import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from auth.middleware import (
-    BLOCK_DURATION,
-    MAX_FAILURES,
-    AuthMiddleware,
-    _blocked_ips,
-    _failed_attempts,
-)
 from auth.scopes import check_scope
+from core.auth_state import (
+    AUTH_BLOCK_DURATION as BLOCK_DURATION,
+)
+from core.auth_state import (
+    AUTH_MAX_FAILURES as MAX_FAILURES,
+)
+from core.auth_state import (
+    _mem_blocked as _blocked_ips,
+)
+from core.auth_state import (
+    _mem_failures as _failed_attempts,
+)
+from core.auth_state import (
+    record_auth_failure,
+)
 from core.schemas.errors import ERROR_META, ErrorCode
 from core.tool_gateway.gateway import ToolGateway
 from core.tool_gateway.rate_limiter import RateLimitResult
@@ -72,18 +81,15 @@ class TestSECAUTH001:
         """SEC-AUTH-001: After 10 failed auth attempts within the failure window,
         the IP must be blocked for 15 minutes.
         """
-        middleware = AuthMiddleware(app=MagicMock())
         test_ip = "192.168.1.100"
 
-        # Record 10 failures
-        for _ in range(MAX_FAILURES):
-            middleware._record_failure(test_ip)
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
+            for _ in range(MAX_FAILURES):
+                asyncio.run(record_auth_failure(test_ip))
 
-        # IP must now be blocked
         assert test_ip in _blocked_ips, "IP should be blocked after MAX_FAILURES"
         block_until = _blocked_ips[test_ip]
         expected_block = time.time() + BLOCK_DURATION
-        # Block time should be approximately 15 min from now
         assert abs(block_until - expected_block) < 5.0, (
             f"Block duration incorrect: expected ~{BLOCK_DURATION}s"
         )
@@ -92,13 +98,13 @@ class TestSECAUTH001:
         """SEC-AUTH-001: 50 rapid invalid attempts should trigger the block
         mechanism after the 10th attempt.
         """
-        middleware = AuthMiddleware(app=MagicMock())
         test_ip = "10.0.0.50"
 
-        for i in range(50):
-            middleware._record_failure(test_ip)
-            if i >= MAX_FAILURES - 1:
-                assert test_ip in _blocked_ips, f"IP should be blocked after attempt {i + 1}"
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
+            for i in range(50):
+                asyncio.run(record_auth_failure(test_ip))
+                if i >= MAX_FAILURES - 1:
+                    assert test_ip in _blocked_ips, f"IP should be blocked after attempt {i + 1}"
 
 
 # ===================================================================

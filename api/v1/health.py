@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import redis.asyncio as aioredis
 import structlog
@@ -124,6 +125,17 @@ async def diagnostics():
         "healthy": healthy_count,
         "unhealthy": total_count - healthy_count,
         "details": connector_checks,
+    }
+
+    try:
+        import composio  # noqa: F401
+
+        composio_sdk_loaded = True
+    except ImportError:
+        composio_sdk_loaded = False
+    checks["composio"] = {
+        "sdk_loaded": composio_sdk_loaded,
+        "api_key_configured": bool(os.getenv("COMPOSIO_API_KEY", "")),
     }
 
     core_healthy = checks["db"] == "healthy" and checks["redis"] == "healthy"

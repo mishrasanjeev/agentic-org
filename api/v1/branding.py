@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.models.branding import TenantBranding
 
 logger = structlog.get_logger()
@@ -187,7 +187,7 @@ async def get_tenant_branding(
     tenant_id: str = Depends(get_current_tenant),
 ) -> BrandingOut:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(TenantBranding).where(TenantBranding.tenant_id == tid)
         )
@@ -203,7 +203,7 @@ async def upsert_tenant_branding(
     tenant_id: str = Depends(get_current_tenant),
 ) -> BrandingOut:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(TenantBranding).where(TenantBranding.tenant_id == tid)
         )
@@ -231,7 +231,7 @@ async def reset_branding(
     tenant_id: str = Depends(get_current_tenant),
 ) -> None:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(TenantBranding).where(TenantBranding.tenant_id == tid)
         )

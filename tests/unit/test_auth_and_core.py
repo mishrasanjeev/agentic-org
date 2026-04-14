@@ -686,9 +686,10 @@ class TestAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_missing_auth_header_returns_401(self):
-        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
         middleware = AuthMiddleware(app=MagicMock())
         request = self._make_request(auth_header=None, client_ip="10.0.0.1")
         call_next = AsyncMock()
@@ -698,9 +699,10 @@ class TestAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_invalid_bearer_prefix_returns_401(self):
-        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
         middleware = AuthMiddleware(app=MagicMock())
         request = self._make_request(auth_header="Basic abc", client_ip="10.0.0.2")
         call_next = AsyncMock()
@@ -709,9 +711,10 @@ class TestAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_valid_token_sets_request_state(self):
-        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
         middleware = AuthMiddleware(app=MagicMock())
 
         mock_claims = {
@@ -733,9 +736,10 @@ class TestAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_invalid_token_returns_401(self):
-        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
         middleware = AuthMiddleware(app=MagicMock())
         request = self._make_request(
             auth_header="Bearer bad-token", client_ip="10.0.0.4"
@@ -752,37 +756,36 @@ class TestAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_rate_limiting_blocks_after_max_failures(self):
-        from auth.middleware import (
-            MAX_FAILURES,
-            AuthMiddleware,
-            _blocked_ips,
-            _failed_attempts,
-        )
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import AUTH_MAX_FAILURES, _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
         middleware = AuthMiddleware(app=MagicMock())
         client_ip = "10.0.0.99"
 
-        # Simulate MAX_FAILURES failures
-        for _ in range(MAX_FAILURES):
-            request = self._make_request(auth_header=None, client_ip=client_ip)
-            await middleware.dispatch(request, AsyncMock())
+        # Force in-memory path so the test does not depend on a live Redis.
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
+            # Simulate AUTH_MAX_FAILURES failures
+            for _ in range(AUTH_MAX_FAILURES):
+                request = self._make_request(auth_header=None, client_ip=client_ip)
+                await middleware.dispatch(request, AsyncMock())
 
-        # Next request from same IP should be 429
-        request = self._make_request(
-            auth_header="Bearer valid-token", client_ip=client_ip
-        )
-        response = await middleware.dispatch(request, AsyncMock())
-        assert response.status_code == 429
+            # Next request from same IP should be 429
+            request = self._make_request(
+                auth_header="Bearer valid-token", client_ip=client_ip
+            )
+            response = await middleware.dispatch(request, AsyncMock())
+            assert response.status_code == 429
 
     @pytest.mark.asyncio
     async def test_block_expires_after_duration(self):
-        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
 
         # Manually set a block that has expired
-        _blocked_ips["10.0.0.50"] = time.time() - 1  # already expired
+        _mem_blocked["10.0.0.50"] = time.time() - 1  # already expired
 
         middleware = AuthMiddleware(app=MagicMock())
         mock_claims = {"sub": "u@t.io", "agenticorg:tenant_id": TENANT_ID, "grantex:scopes": []}
@@ -791,17 +794,19 @@ class TestAuthMiddleware:
         )
         call_next = AsyncMock(return_value=MagicMock(status_code=200))
 
-        with patch("auth.middleware.validate_token", new_callable=AsyncMock, return_value=mock_claims):
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None), \
+             patch("auth.middleware.validate_token", new_callable=AsyncMock, return_value=mock_claims):
             await middleware.dispatch(request, call_next)
             # Block should be cleared, request proceeds
-            assert "10.0.0.50" not in _blocked_ips
+            assert "10.0.0.50" not in _mem_blocked
             call_next.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_tenant_mismatch_returns_403(self):
-        from auth.middleware import AuthMiddleware, _blocked_ips, _failed_attempts
-        _failed_attempts.clear()
-        _blocked_ips.clear()
+        from auth.middleware import AuthMiddleware
+        from core.auth_state import _mem_blocked, _mem_failures
+        _mem_failures.clear()
+        _mem_blocked.clear()
         middleware = AuthMiddleware(app=MagicMock())
 
         mock_claims = {

@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-import time
-from collections import defaultdict
-
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
-
-# Rate limiting: track failed attempts per IP
-_failed_attempts: dict[str, list[float]] = defaultdict(list)
-_blocked_ips: dict[str, float] = {}
-BLOCK_DURATION = 900  # 15 minutes
-MAX_FAILURES = 10
-FAILURE_WINDOW = 60  # 1 minute
+from core.auth_state import clear_auth_failures, is_ip_blocked, record_auth_failure
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -49,18 +40,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         client_ip = request.client.host if request.client else "unknown"
 
-        # Check if IP is blocked
-        if client_ip in _blocked_ips:
-            if time.time() < _blocked_ips[client_ip]:
-                return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
-            else:
-                del _blocked_ips[client_ip]
-                _failed_attempts.pop(client_ip, None)
+        # Check if IP is blocked (Redis-backed)
+        if await is_ip_blocked(client_ip):
+            return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
 
         # Extract token
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            self._record_failure(client_ip)
+            await record_auth_failure(client_ip)
             return JSONResponse(
                 status_code=401, content={"detail": "Missing or invalid Authorization header"}
             )
@@ -69,7 +56,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             claims = await validate_token(token)
         except ValueError:
-            self._record_failure(client_ip)
+            await record_auth_failure(client_ip)
             return JSONResponse(
                 status_code=401, content={"detail": "Invalid or expired token"}
             )
@@ -90,18 +77,5 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"error": {"code": "E4004", "message": "Tenant mismatch"}},
             )
 
-        self._clear_failures(client_ip)
+        await clear_auth_failures(client_ip)
         return await call_next(request)
-
-    def _record_failure(self, ip: str) -> None:
-        now = time.time()
-        attempts = _failed_attempts[ip]
-        # Remove old attempts
-        _failed_attempts[ip] = [t for t in attempts if now - t < FAILURE_WINDOW]
-        _failed_attempts[ip].append(now)
-        if len(_failed_attempts[ip]) >= MAX_FAILURES:
-            _blocked_ips[ip] = now + BLOCK_DURATION
-
-    def _clear_failures(self, ip: str) -> None:
-        """Clear failure history for an IP after successful authentication."""
-        _failed_attempts.pop(ip, None)

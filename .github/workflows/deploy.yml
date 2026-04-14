@@ -30,9 +30,16 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install uv && uv pip install --system -e ".[dev]"
+      - name: Enforce migration for schema changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          BASE_REF=origin/${{ github.base_ref }} HEAD_REF=HEAD \
+            python scripts/check_migration_required.py
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
@@ -249,8 +256,8 @@ jobs:
             echo "Attempt $attempt: HTTP $HTTP_CODE — retrying in 10s..."
             sleep 10
           done
-          echo "::warning::Could not acquire E2E auth token — Playwright auth tests will be skipped"
-          echo "token=" >> $GITHUB_OUTPUT
+          echo "::error::Could not acquire E2E auth token after 5 attempts — failing pipeline"
+          exit 1
 
       - name: Install Playwright
         run: cd ui && npm install --legacy-peer-deps && npx playwright install --with-deps chromium
@@ -316,6 +323,22 @@ jobs:
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_PRODUCTION }} \
             --region ${{ env.GCP_REGION }} \
             --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Run Alembic migrations pre-rollout
+        run: |
+          kubectl run agenticorg-migrate-${{ github.run_id }} \
+            --namespace agenticorg \
+            --restart=Never \
+            --image=${{ env.GAR_REGISTRY }}/agenticorg:${{ github.sha }} \
+            --env="AGENTICORG_DDL_MANAGED_BY_ALEMBIC=true" \
+            --env-from=secret/agenticorg-env \
+            --command -- python scripts/alembic_migrate.py
+          kubectl wait --namespace agenticorg \
+            --for=jsonpath='{.status.phase}'=Succeeded \
+            pod/agenticorg-migrate-${{ github.run_id }} \
+            --timeout=300s
+          kubectl logs --namespace agenticorg pod/agenticorg-migrate-${{ github.run_id }} | tail -60
+          kubectl delete pod --namespace agenticorg agenticorg-migrate-${{ github.run_id }} --wait=false || true
 
       - name: Update production images
         run: |

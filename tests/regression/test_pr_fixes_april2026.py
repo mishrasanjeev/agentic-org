@@ -145,6 +145,18 @@ TENANT_ID = "00000000-0000-0000-0000-000000000001"
 class TestGrantexMiddlewareFailureClearing:
     """Successful auth must clear prior failure counters for the IP."""
 
+    @pytest.fixture(autouse=True)
+    def _force_in_memory_auth_state(self):
+        """REQ-04 routed failure tracking through Redis. In CI the Redis
+        service is reachable, so record_auth_failure would write there and
+        bypass the in-memory assertions below. Force the in-memory path."""
+        with patch(
+            "core.auth_state._get_redis",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            yield
+
     def _make_request(self, auth_header="", client_ip="10.0.0.1"):
         request = MagicMock()
         request.url.path = "/api/v1/agents"
@@ -157,11 +169,9 @@ class TestGrantexMiddlewareFailureClearing:
     @pytest.mark.asyncio
     async def test_legacy_token_success_clears_failures(self):
         """Successful legacy JWT auth clears prior failure history."""
-        from auth.grantex_middleware import (
-            GrantexAuthMiddleware,
-            _blocked_ips,
-            _failed_attempts,
-        )
+        from auth.grantex_middleware import GrantexAuthMiddleware
+        from core.auth_state import _mem_blocked as _blocked_ips
+        from core.auth_state import _mem_failures as _failed_attempts
 
         _failed_attempts.clear()
         _blocked_ips.clear()
@@ -197,11 +207,9 @@ class TestGrantexMiddlewareFailureClearing:
     @pytest.mark.asyncio
     async def test_failed_auth_records_failure(self):
         """Failed legacy JWT auth records a failure."""
-        from auth.grantex_middleware import (
-            GrantexAuthMiddleware,
-            _blocked_ips,
-            _failed_attempts,
-        )
+        from auth.grantex_middleware import GrantexAuthMiddleware
+        from core.auth_state import _mem_blocked as _blocked_ips
+        from core.auth_state import _mem_failures as _failed_attempts
 
         _failed_attempts.clear()
         _blocked_ips.clear()
@@ -231,11 +239,9 @@ class TestGrantexMiddlewareFailureClearing:
     @pytest.mark.asyncio
     async def test_block_expiry_clears_stale_failures(self):
         """When an IP block expires, stale failure counters are also cleared."""
-        from auth.grantex_middleware import (
-            GrantexAuthMiddleware,
-            _blocked_ips,
-            _failed_attempts,
-        )
+        from auth.grantex_middleware import GrantexAuthMiddleware
+        from core.auth_state import _mem_blocked as _blocked_ips
+        from core.auth_state import _mem_failures as _failed_attempts
 
         _failed_attempts.clear()
         _blocked_ips.clear()
@@ -272,11 +278,9 @@ class TestGrantexMiddlewareFailureClearing:
     @pytest.mark.asyncio
     async def test_missing_auth_header_records_failure(self):
         """Missing Authorization header records a failure."""
-        from auth.grantex_middleware import (
-            GrantexAuthMiddleware,
-            _blocked_ips,
-            _failed_attempts,
-        )
+        from auth.grantex_middleware import GrantexAuthMiddleware
+        from core.auth_state import _mem_blocked as _blocked_ips
+        from core.auth_state import _mem_failures as _failed_attempts
 
         _failed_attempts.clear()
         _blocked_ips.clear()
@@ -292,30 +296,29 @@ class TestGrantexMiddlewareFailureClearing:
         assert client_ip in _failed_attempts
 
     @pytest.mark.asyncio
-    async def test_clear_failures_method(self):
-        """_clear_failures removes IP from tracking dict."""
-        from auth.grantex_middleware import (
-            GrantexAuthMiddleware,
-            _failed_attempts,
-        )
+    async def test_clear_auth_failures_removes_ip(self):
+        """core.auth_state.clear_auth_failures removes IP from fallback state.
 
-        _failed_attempts.clear()
+        REQ-04 moved failure tracking out of the middleware into
+        core.auth_state; the private _clear_failures method no longer
+        exists. This covers the equivalent behavior via the public helper.
+        """
+        from core.auth_state import _mem_failures, clear_auth_failures
+
+        _mem_failures.clear()
         client_ip = "10.0.0.104"
-        _failed_attempts[client_ip] = [time.time()]
+        _mem_failures[client_ip] = [time.time()]
 
-        middleware = GrantexAuthMiddleware(app=MagicMock())
-        middleware._clear_failures(client_ip)
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
+            await clear_auth_failures(client_ip)
 
-        assert client_ip not in _failed_attempts
+        assert client_ip not in _mem_failures
 
     @pytest.mark.asyncio
-    async def test_clear_failures_noop_for_unknown_ip(self):
-        """_clear_failures does not raise for unknown IPs."""
-        from auth.grantex_middleware import (
-            GrantexAuthMiddleware,
-            _failed_attempts,
-        )
+    async def test_clear_auth_failures_noop_for_unknown_ip(self):
+        """clear_auth_failures does not raise for unknown IPs."""
+        from core.auth_state import _mem_failures, clear_auth_failures
 
-        _failed_attempts.clear()
-        middleware = GrantexAuthMiddleware(app=MagicMock())
-        middleware._clear_failures("192.168.1.1")  # Should not raise
+        _mem_failures.clear()
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
+            await clear_auth_failures("192.168.1.1")  # Should not raise

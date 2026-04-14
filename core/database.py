@@ -73,10 +73,26 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Run on startup — verify connectivity and apply safe schema additions."""
+    """Run on startup — verify connectivity and (legacy) apply schema additions.
+
+    When ``AGENTICORG_DDL_MANAGED_BY_ALEMBIC`` is truthy (preferred), this
+    only verifies DB connectivity; schema evolution must come from
+    ``alembic upgrade head`` in the deploy pipeline.
+
+    The legacy DDL blocks below are kept as a safety net during the
+    cutover for existing environments that have not yet been stamped.
+    """
+    alembic_managed = os.getenv("AGENTICORG_DDL_MANAGED_BY_ALEMBIC", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
+    if alembic_managed:
+        return
 
+    async with engine.begin() as conn:
         # v4.0.0: Ensure prompt_amendments column exists on agents table.
         # Safe to run every startup (IF NOT EXISTS check).
         await conn.execute(text("""

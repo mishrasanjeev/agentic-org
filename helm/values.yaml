@@ -104,3 +104,5 @@ env:
   AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.88"
   AGENTICORG_LLM_PRIMARY: gemini-2.5-flash           # Switch to claude-sonnet-4-20250514 when needed
   AGENTICORG_LLM_FALLBACK: gemini-2.5-flash-preview-05-20     # Switch to gpt-4o-2024-11-20 when needed
+  # Alembic is the schema authority. init_db() skips legacy DDL when this is true.
+  AGENTICORG_DDL_MANAGED_BY_ALEMBIC: "true"

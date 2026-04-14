@@ -26,7 +26,7 @@ from auth.jwt import create_access_token
 from auth.sso.oidc import OIDCProvider, new_nonce, new_pkce_pair, new_state
 from auth.sso.provisioning import jit_provision_user
 from core.config import settings
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.models.sso_config import SSOConfig
 from core.models.tenant import Tenant
 from core.rbac import get_scopes_for_role
@@ -40,13 +40,9 @@ admin_router = APIRouter(prefix="/sso", tags=["SSO"], dependencies=[require_tena
 # ── Redis helpers for the short-lived state store ─────────────────
 
 
-def _redis():
-    try:
-        from core.billing.usage_tracker import _get_redis
-
-        return _get_redis()
-    except Exception:
-        return None
+async def _redis():
+    from core.async_redis import get_async_redis
+    return await get_async_redis()
 
 
 def _state_key(provider_key: str, state: str) -> str:
@@ -136,13 +132,11 @@ async def sso_login(
         "verifier": verifier,
         "return_to": return_to,
     }
-    r = _redis()
+    r = await _redis()
     if r is None:
-        # Fallback: put it in a signed cookie would be nicer, but for now
-        # fail loudly rather than silently accepting state.
         raise HTTPException(503, "SSO state store unavailable (Redis required)")
     try:
-        r.setex(_state_key(provider_key, state), 600, json.dumps(payload))
+        await r.setex(_state_key(provider_key, state), 600, json.dumps(payload))
     except Exception as exc:
         logger.exception("sso_state_store_failed")
         raise HTTPException(503, "Failed to persist SSO state") from exc
@@ -158,17 +152,17 @@ async def sso_callback(
     state: str = Query(...),
     request: Request = None,  # noqa: ARG001  (unused placeholder)
 ) -> RedirectResponse:
-    r = _redis()
+    r = await _redis()
     if r is None:
         raise HTTPException(503, "SSO state store unavailable")
-    raw = r.get(_state_key(provider_key, state))
+    raw = await r.get(_state_key(provider_key, state))
     if not raw:
         raise HTTPException(400, "Invalid or expired state")
 
     if isinstance(raw, bytes):
         raw = raw.decode()
     payload = json.loads(raw)
-    r.delete(_state_key(provider_key, state))  # one-shot
+    await r.delete(_state_key(provider_key, state))  # one-shot
 
     tenant_id = uuid.UUID(payload["tenant_id"])
     nonce = payload["nonce"]
@@ -262,7 +256,7 @@ async def list_configs(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[SSOConfigOut]:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(SSOConfig).where(SSOConfig.tenant_id == tid)
         )
@@ -288,7 +282,7 @@ async def upsert_config(
     tenant_id: str = Depends(get_current_tenant),
 ) -> SSOConfigOut:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(SSOConfig).where(
                 SSOConfig.tenant_id == tid,
@@ -344,7 +338,7 @@ async def delete_config(
     tenant_id: str = Depends(get_current_tenant),
 ) -> None:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(SSOConfig).where(
                 SSOConfig.tenant_id == tid, SSOConfig.provider_key == provider_key

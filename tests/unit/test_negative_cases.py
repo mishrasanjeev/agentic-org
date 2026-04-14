@@ -136,20 +136,25 @@ class TestAuthSignup:
 
     @pytest.mark.asyncio
     async def test_signup_rate_limit(self):
-        from api.v1 import auth as auth_mod
         from api.v1.auth import SignupRequest, signup
 
         ip = f"signup-rl-{uuid.uuid4().hex[:8]}"
         request = MagicMock()
         request.client.host = ip
-        auth_mod._signup_attempts[ip] = [time.time()] * 5
-        with pytest.raises(HTTPException) as exc:
-            await signup(
-                SignupRequest(org_name="O", admin_name="A", admin_email="a@a.com", password="Pass1234"),
-                request,
-            )
+
+        # Signup rate limiting moved to core.auth_state.check_signup_rate (REQ-04).
+        # Patch it to return True (rate-limited) so signup returns 429.
+        with patch(
+            "core.auth_state.check_signup_rate",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await signup(
+                    SignupRequest(org_name="O", admin_name="A", admin_email="a@a.com", password="Pass1234"),
+                    request,
+                )
         assert exc.value.status_code == 429
-        del auth_mod._signup_attempts[ip]
 
 
 class TestForgotPassword:
