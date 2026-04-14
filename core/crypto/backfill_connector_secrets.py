@@ -16,13 +16,14 @@ import asyncio
 import json
 import logging
 
+import structlog
 from sqlalchemy import select, update
 
 from core.database import async_session_factory
 from core.models.connector import Connector
 from core.models.connector_config import ConnectorConfig
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def backfill() -> dict[str, int]:
@@ -54,10 +55,10 @@ async def backfill() -> dict[str, int]:
 
         # Encrypt and store
         try:
-            from core.crypto import encrypt_for_tenant
+            from core.crypto.tenant_secrets import encrypt_for_tenant
 
             plaintext = json.dumps(conn.auth_config)
-            encrypted = encrypt_for_tenant(plaintext)
+            encrypted = await encrypt_for_tenant(plaintext, conn.tenant_id)
 
             async with async_session_factory() as session:
                 cc = ConnectorConfig(

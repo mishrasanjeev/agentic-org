@@ -86,8 +86,8 @@ async def summary(
         total_sql = f"SELECT COALESCE(SUM(cost_usd), 0), COUNT(*) FROM agent_task_results WHERE {where_sql}"  # noqa: S608  # nosec B608
         total_q = text(total_sql)
         row = (await session.execute(total_q, params)).first()
-        total_usd = float(row[0] or 0)
-        task_count = int(row[1] or 0)
+        total_usd = float(row[0] or 0) if row else 0.0
+        task_count = int(row[1] or 0) if row else 0
 
         # By domain
         domain_prefix = "SELECT domain, COALESCE(SUM(cost_usd), 0) FROM agent_task_results WHERE "
