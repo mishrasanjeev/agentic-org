@@ -1,7 +1,9 @@
 {
   "name": "agenticorg-ui",
-  "version": "2.0.0",
+  "version": "4.8.0",
   "private": true,
+  "description": "AgenticOrg UI — Enterprise AI Virtual Employee Platform",
+  "homepage": "https://agenticorg.ai",
   "type": "module",
   "scripts": {
     "dev": "vite",

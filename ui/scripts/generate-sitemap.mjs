@@ -33,6 +33,17 @@ const staticPages = [
   { loc: "/integration-workflow", priority: "0.9", changefreq: "monthly" },
   { loc: "/blog", priority: "0.8", changefreq: "weekly" },
   { loc: "/resources", priority: "0.8", changefreq: "weekly" },
+  // CxO solution pages
+  { loc: "/solutions/ca-firms", priority: "0.8", changefreq: "monthly" },
+  { loc: "/solutions/cfo", priority: "0.8", changefreq: "monthly" },
+  { loc: "/solutions/chro", priority: "0.8", changefreq: "monthly" },
+  { loc: "/solutions/cmo", priority: "0.8", changefreq: "monthly" },
+  { loc: "/solutions/coo", priority: "0.8", changefreq: "monthly" },
+  { loc: "/solutions/cbo", priority: "0.8", changefreq: "monthly" },
+  // Google Ads landing pages
+  { loc: "/solutions/ai-invoice-processing", priority: "0.7", changefreq: "monthly" },
+  { loc: "/solutions/automated-bank-reconciliation", priority: "0.7", changefreq: "monthly" },
+  { loc: "/solutions/payroll-automation", priority: "0.7", changefreq: "monthly" },
 ];
 
 // ── Build URL entries ───────────────────────────────────────────────────────

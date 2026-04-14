@@ -1,6 +1,6 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 50+ LangGraph agents, 1000+ integrations (via Composio), 54 native connectors, 340+ native tools. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. Voice agents, RAG knowledge base, smart LLM routing, industry packs, PII redaction, browser RPA, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — 50+ LangGraph agents, 1000+ integrations (via Composio), 57 native connectors, 340+ native tools. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. Voice agents, RAG knowledge base, smart LLM routing, industry packs, PII redaction, browser RPA, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -10,7 +10,7 @@
 [![E2E](https://img.shields.io/badge/E2E-17_Playwright_specs-brightgreen.svg)](ui/e2e/)
 [![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
 [![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
-[![Version](https://img.shields.io/badge/Version-4.3.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.8.0-green.svg)](CHANGELOG.md)
 
 **Live**: https://agenticorg.ai | **App**: https://app.agenticorg.ai | **Playground**: https://agenticorg.ai/playground
 
@@ -24,9 +24,9 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 
 | Metric | Value |
 |--------|-------|
-| Pre-built Agents | **50+** across 6 domains + 4 industry packs |
+| Pre-built Agents | **36** across 6 domains + 4 industry packs |
 | Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
-| Enterprise Connectors | **1000+ integrations** (via Composio) + **54 native connectors, 340+ native tools** — ALL with real API endpoints |
+| Enterprise Connectors | **1000+ integrations** (via Composio) + **57 native connectors, 340+ native tools** — ALL with real API endpoints |
 | Dashboards | CFO Dashboard + CMO Dashboard (role-specific KPI views) |
 | NL Query | Cmd+K search bar + slide-out chat panel with agent attribution |
 | Multi-Company | Company switcher for CA firms managing multiple client entities |
@@ -88,7 +88,7 @@ App Dashboard
     └── Report Scheduler (create, manage, toggle, run-now scheduled reports)
     |
 FastAPI Backend
-    ├── Agent Registry (50+ agents) → Smart LLM Router (RouteLLM)
+    ├── Agent Registry (36 agents) → Smart LLM Router (RouteLLM)
     │       ↓ tool_calls                    ↑ synthesis
     │   Tool Gateway → 1000+ Integrations (Composio) + 54 Native Connectors (340+ tools)
     │       ├── Jira (11 tools) ← verified, creates real tickets
@@ -134,7 +134,7 @@ PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 | **Industry Packs** | 16 | Healthcare (4), Legal (4), Insurance (4), Manufacturing (4) — one-click install |
 | **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
 
-> **50+ pre-built agents across 6 domains + 4 industry packs. 1000+ integrations (Composio) + 54 native connectors with 340+ tools. All endpoints real.**
+> **50+ pre-built agents across 6 domains + 4 industry packs. 1000+ integrations (Composio) + 57 native connectors with 340+ tools. All endpoints real.**
 
 ---
 
