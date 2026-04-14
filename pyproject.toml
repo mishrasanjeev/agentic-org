@@ -46,6 +46,7 @@ dependencies = [
     "opentelemetry-sdk>=1.29.0",
     "opentelemetry-exporter-otlp>=1.41.0",
     "opentelemetry-instrumentation-fastapi>=0.50b0",
+    "wrapt>=1.16.0",
     "prometheus-client>=0.21.0",
     "langgraph>=1.1.0",
     "langchain>=0.3.0",
