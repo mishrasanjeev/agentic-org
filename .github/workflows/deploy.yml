@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
+      - run: pip install uv && uv pip install --system -e ".[dev]"
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
+      - run: pip install uv && uv pip install --system -e ".[dev]"
       - run: pytest tests/integration/ tests/regression/ -v
         env:
           AGENTICORG_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
@@ -205,7 +205,7 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: Install Python deps
-        run: pip install -e ".[dev]"
+        run: pip install uv && uv pip install --system -e ".[dev]"
 
       - name: Wait for production to stabilize after deploy
         run: |
