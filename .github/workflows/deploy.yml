@@ -409,16 +409,41 @@ jobs:
             echo "::endgroup::"
           }
 
+          # Re-check actual deployment readiness after a rollout-status
+          # timeout. GKE Autopilot occasionally reports the watch as timed
+          # out even when the deployment has reconciled to all-new + ready.
+          deployment_is_fully_rolled() {
+            local deployment_name="$1"
+            local desired updated available
+            desired=$(kubectl get deployment "${deployment_name}" -n agenticorg \
+              -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+            updated=$(kubectl get deployment "${deployment_name}" -n agenticorg \
+              -o jsonpath='{.status.updatedReplicas}' 2>/dev/null || echo "0")
+            available=$(kubectl get deployment "${deployment_name}" -n agenticorg \
+              -o jsonpath='{.status.availableReplicas}' 2>/dev/null || echo "0")
+            [ "$desired" = "$updated" ] && [ "$desired" = "$available" ] && [ "$desired" != "0" ]
+          }
+
           check_rollout() {
             local deployment_name="$1"
             local app_label="$2"
 
-            if ! kubectl rollout status deployment/"${deployment_name}" \
+            # 900s matches the deployment's progressDeadlineSeconds in helm.
+            if kubectl rollout status deployment/"${deployment_name}" \
               --namespace agenticorg \
-              --timeout=600s; then
-              dump_rollout_debug "${deployment_name}" "${app_label}"
-              exit 1
+              --timeout=900s; then
+              echo "${deployment_name} rollout reported success"
+              return 0
             fi
+
+            echo "::warning::${deployment_name} rollout status reported timeout — re-checking actual readiness"
+            if deployment_is_fully_rolled "${deployment_name}"; then
+              echo "${deployment_name} is in fact fully rolled (replicas == updated == available); accepting"
+              return 0
+            fi
+
+            dump_rollout_debug "${deployment_name}" "${app_label}"
+            exit 1
           }
 
           check_rollout agenticorg-api agenticorg-api
