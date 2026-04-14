@@ -7,22 +7,33 @@ Run: pytest tests/synthetic_data/test_synthetic_flows.py -v
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import httpx
 import pytest
 
-BASE = "https://app.agenticorg.ai/api/v1"
+pytestmark = pytest.mark.skipif(
+    os.getenv("AGENTICORG_ENABLE_LIVE_TESTS") != "1" or not os.getenv("AGENTICORG_E2E_BASE_URL"),
+    reason="live synthetic tests are opt-in; set AGENTICORG_ENABLE_LIVE_TESTS=1 and AGENTICORG_E2E_BASE_URL",
+)
+
+BASE = f"{os.getenv('AGENTICORG_E2E_BASE_URL', '').rstrip('/')}/api/v1"
 DATA_DIR = Path(__file__).parent
 
-# Use the demo tenant CEO for testing
-CEO_EMAIL = "ceo@agenticorg.local"
-CEO_PASS = "ceo123!"
+CEO_EMAIL = os.getenv("AGENTICORG_E2E_EMAIL", "")
+CEO_PASS = os.getenv("AGENTICORG_E2E_PASSWORD", "")
+STATIC_TOKEN = os.getenv("AGENTICORG_E2E_TOKEN", "")
 
 @pytest.fixture(scope="module")
 def token():
-    """Get auth token from production."""
+    """Get auth token for the live environment."""
+    if STATIC_TOKEN:
+        return STATIC_TOKEN
+    if not CEO_EMAIL or not CEO_PASS:
+        pytest.skip("set AGENTICORG_E2E_TOKEN or AGENTICORG_E2E_EMAIL/AGENTICORG_E2E_PASSWORD")
     r = httpx.post(f"{BASE}/auth/login", json={"email": CEO_EMAIL, "password": CEO_PASS})
+    r.raise_for_status()
     return r.json()["access_token"]
 
 

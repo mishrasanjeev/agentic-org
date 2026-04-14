@@ -21,20 +21,14 @@ from sqlalchemy.ext.asyncio import (
 )
 
 # ---------------------------------------------------------------------------
-# Environment defaults (CI service containers or local dev)
+# Environment defaults (explicit opt-in only)
 # ---------------------------------------------------------------------------
-DB_URL = os.getenv(
-    "AGENTICORG_DB_URL",
-    "postgresql+asyncpg://test:test@localhost:5432/test",
-)
-REDIS_URL = os.getenv(
-    "AGENTICORG_REDIS_URL",
-    "redis://localhost:6379/0",
-)
+DB_URL = os.getenv("AGENTICORG_DB_URL")
+REDIS_URL = os.getenv("AGENTICORG_REDIS_URL")
 
-# Ensure the application picks up the test DB/Redis URLs and a valid secret key
-os.environ.setdefault("AGENTICORG_DB_URL", DB_URL)
-os.environ.setdefault("AGENTICORG_REDIS_URL", REDIS_URL)
+# Keep only non-routing test defaults here. DB/Redis env should stay explicit
+# so importing this conftest does not accidentally make unrelated tests think
+# integration infrastructure is configured.
 os.environ.setdefault("AGENTICORG_SECRET_KEY", "integration-test-secret-key-32chars")
 os.environ.setdefault("AGENTICORG_ENV", "test")
 
@@ -111,6 +105,8 @@ def _make_jwt(
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def db_engine() -> AsyncEngine:
+    if not DB_URL:
+        pytest.skip("integration tests require AGENTICORG_DB_URL")
     return create_async_engine(DB_URL, echo=False, pool_size=5, max_overflow=2)
 
 
@@ -191,6 +187,9 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     (the root cause of "Future attached to a different loop" errors when
     BaseHTTPMiddleware spawns internal tasks).
     """
+    if not DB_URL:
+        pytest.skip("integration tests require AGENTICORG_DB_URL")
+
     from sqlalchemy.pool import NullPool
 
     import core.database as db_mod

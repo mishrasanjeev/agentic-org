@@ -17,6 +17,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
@@ -67,7 +68,7 @@ def _account_to_dict(acct: ABMAccount) -> dict[str, Any]:
         "industry": acct.industry or "",
         "revenue": acct.revenue or "",
         "tier": acct.tier or "2",
-        "intent_score": float(acct.intent_score),
+        "intent_score": float(acct.intent_score or 0),
         "intent_data": metadata.get("intent_data"),
         "campaigns": metadata.get("campaigns", []),
         "created_at": acct.created_at.isoformat() if acct.created_at else None,
@@ -96,6 +97,14 @@ def _campaign_to_dict(camp: ABMCampaign) -> dict[str, Any]:
             "spend_usd": 0.0,
         }),
     }
+
+
+def _parse_account_id(account_id: str) -> _uuid.UUID:
+    """Parse account_id while preserving 404 semantics for bad ids."""
+    try:
+        return _uuid.UUID(account_id)
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise HTTPException(status_code=404, detail="Account not found") from exc
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────
@@ -216,30 +225,32 @@ async def create_account(
 ) -> dict[str, Any]:
     """Add a single target account."""
     tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            dup_query = select(ABMAccount).where(
+                ABMAccount.tenant_id == tid,
+                func.lower(ABMAccount.domain) == body.domain.lower(),
+            )
+            existing = (await session.execute(dup_query)).scalar_one_or_none()
+            if existing:
+                raise HTTPException(409, f"Account with domain {body.domain} already exists")
 
-    async with get_tenant_session(tid) as session:
-        # Check duplicate domain
-        dup_query = select(ABMAccount).where(
-            ABMAccount.tenant_id == tid,
-            func.lower(ABMAccount.domain) == body.domain.lower(),
-        )
-        existing = (await session.execute(dup_query)).scalar_one_or_none()
-        if existing:
-            raise HTTPException(409, f"Account with domain {body.domain} already exists")
+            acct = ABMAccount(
+                tenant_id=tid,
+                name=body.company_name,
+                domain=body.domain,
+                industry=body.industry or None,
+                revenue=body.revenue or None,
+                tier=body.tier,
+            )
+            session.add(acct)
+            await session.flush()
+            result = _account_to_dict(acct)
+    except IntegrityError as exc:
+        raise HTTPException(409, f"Account with domain {body.domain} already exists") from exc
 
-        acct = ABMAccount(
-            tenant_id=tid,
-            name=body.company_name,
-            domain=body.domain,
-            industry=body.industry or None,
-            revenue=body.revenue or None,
-            tier=body.tier,
-        )
-        session.add(acct)
-        await session.flush()
-
-        logger.info("abm_account_created", tenant=tenant_id, account_id=str(acct.id))
-        return _account_to_dict(acct)
+    logger.info("abm_account_created", tenant=tenant_id, account_id=result["id"])
+    return result
 
 
 @router.get("/accounts/{account_id}")
@@ -249,7 +260,7 @@ async def get_account(
 ) -> dict[str, Any]:
     """Get a single account by ID."""
     tid = _uuid.UUID(tenant_id)
-    acct_uuid = _uuid.UUID(account_id)
+    acct_uuid = _parse_account_id(account_id)
 
     async with get_tenant_session(tid) as session:
         query = select(ABMAccount).where(
@@ -273,7 +284,7 @@ async def get_account_intent(
     composite intent score.  The score is cached on the account record.
     """
     tid = _uuid.UUID(tenant_id)
-    acct_uuid = _uuid.UUID(account_id)
+    acct_uuid = _parse_account_id(account_id)
 
     async with get_tenant_session(tid) as session:
         query = select(ABMAccount).where(
@@ -315,7 +326,7 @@ async def launch_campaign(
 ) -> dict[str, Any]:
     """Launch a targeted campaign for a specific account."""
     tid = _uuid.UUID(tenant_id)
-    acct_uuid = _uuid.UUID(account_id)
+    acct_uuid = _parse_account_id(account_id)
 
     async with get_tenant_session(tid) as session:
         query = select(ABMAccount).where(

@@ -13,8 +13,14 @@ import uuid
 from datetime import UTC, datetime
 
 import httpx
+import pytest
 
-BASE = os.getenv("AGENTICORG_TEST_BASE", "https://app.agenticorg.ai")
+pytestmark = pytest.mark.skipif(
+    os.getenv("AGENTICORG_ENABLE_FULL_PROD_E2E") != "1" or not os.getenv("AGENTICORG_TEST_BASE"),
+    reason="full production E2E is opt-in; set AGENTICORG_ENABLE_FULL_PROD_E2E=1 and AGENTICORG_TEST_BASE",
+)
+
+BASE = os.getenv("AGENTICORG_TEST_BASE", "")
 API = f"{BASE}/api/v1"
 UNIQUE = uuid.uuid4().hex[:8]
 ORG_NAME = f"E2E Test Corp {UNIQUE}"

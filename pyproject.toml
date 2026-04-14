@@ -113,7 +113,8 @@ extend-immutable-calls = ["fastapi.Depends", "Depends"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
-addopts = "--cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-report=xml --cov-report=term-missing"
+cache_dir = "codex-pytest-cache"
+addopts = "--basetemp=codex-pytest-basetemp --cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-report=xml --cov-report=term-missing"
 
 [tool.mypy]
 python_version = "3.12"
