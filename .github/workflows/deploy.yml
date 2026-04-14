@@ -325,20 +325,67 @@ jobs:
             --project ${{ env.GCP_PROJECT_ID }}
 
       - name: Run Alembic migrations pre-rollout
+        env:
+          JOB_NAME: agenticorg-migrate-${{ github.run_id }}
+          IMAGE: ${{ env.GAR_REGISTRY }}/agenticorg:${{ github.sha }}
         run: |
-          kubectl run agenticorg-migrate-${{ github.run_id }} \
-            --namespace agenticorg \
-            --restart=Never \
-            --image=${{ env.GAR_REGISTRY }}/agenticorg:${{ github.sha }} \
-            --env="AGENTICORG_DDL_MANAGED_BY_ALEMBIC=true" \
-            --env-from=secret/agenticorg-env \
-            --command -- python scripts/alembic_migrate.py
-          kubectl wait --namespace agenticorg \
-            --for=jsonpath='{.status.phase}'=Succeeded \
-            pod/agenticorg-migrate-${{ github.run_id }} \
-            --timeout=300s
-          kubectl logs --namespace agenticorg pod/agenticorg-migrate-${{ github.run_id }} | tail -60
-          kubectl delete pod --namespace agenticorg agenticorg-migrate-${{ github.run_id }} --wait=false || true
+          set -euo pipefail
+          # Resolve the actual secret name from the running API deployment
+          # so the migrate Job uses the same env/secret wiring. Falls back
+          # to 'agenticorg-secrets' (helm default) if we cannot introspect.
+          SECRET_NAME=$(kubectl get deployment agenticorg-api -n agenticorg \
+              -o jsonpath='{.spec.template.spec.containers[0].envFrom[0].secretRef.name}' 2>/dev/null || true)
+          SECRET_NAME="${SECRET_NAME:-agenticorg-secrets}"
+          echo "Using secret: ${SECRET_NAME}"
+
+          cat <<EOF | kubectl apply -n agenticorg -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: ${JOB_NAME}
+          spec:
+            backoffLimit: 0
+            ttlSecondsAfterFinished: 600
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: migrate
+                    image: ${IMAGE}
+                    command: ["python", "scripts/alembic_migrate.py"]
+                    envFrom:
+                      - secretRef:
+                          name: ${SECRET_NAME}
+                    env:
+                      - name: AGENTICORG_DDL_MANAGED_BY_ALEMBIC
+                        value: "true"
+          EOF
+
+          # Poll until the job finishes (complete or failed) or we time out.
+          for i in $(seq 1 60); do
+            SUCCEEDED=$(kubectl get job ${JOB_NAME} -n agenticorg -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")
+            FAILED=$(kubectl get job ${JOB_NAME} -n agenticorg -o jsonpath='{.status.failed}' 2>/dev/null || echo "")
+            if [ "$SUCCEEDED" = "1" ]; then
+              echo "Migration job succeeded"
+              break
+            fi
+            if [ -n "$FAILED" ] && [ "$FAILED" != "0" ]; then
+              echo "Migration job failed (failed=$FAILED)"
+              break
+            fi
+            sleep 5
+          done
+
+          echo "::group::Alembic migrate logs"
+          kubectl logs --namespace agenticorg job/${JOB_NAME} --tail=100 || true
+          echo "::endgroup::"
+
+          FINAL_SUCCEEDED=$(kubectl get job ${JOB_NAME} -n agenticorg -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")
+          kubectl delete job --namespace agenticorg ${JOB_NAME} --wait=false || true
+          if [ "$FINAL_SUCCEEDED" != "1" ]; then
+            echo "::error::Alembic migration did not complete successfully"
+            exit 1
+          fi
 
       - name: Update production images
         run: |
