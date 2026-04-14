@@ -202,6 +202,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      # In-process TestClient paths in tests/e2e/ need a real DB+Redis so
+      # the handlers' DB queries return 200 with zeros instead of 500.
+      postgres:
+        image: "pgvector/pgvector:pg16"
+        env: { POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test }
+        ports: ["5432:5432"]
+      redis:
+        image: "redis:7-alpine"
+        ports: ["6379:6379"]
     steps:
       - uses: actions/checkout@v6
 
@@ -227,6 +237,8 @@ jobs:
         run: pytest tests/e2e/ -v
         env:
           AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
+          AGENTICORG_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
+          AGENTICORG_REDIS_URL: redis://localhost:6379/0
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
 
       - name: Run Synthetic Agent Quality tests (non-blocking — tests LLM behavior)

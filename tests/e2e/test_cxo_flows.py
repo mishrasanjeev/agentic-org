@@ -31,10 +31,56 @@ def app():
     return _app
 
 
+@pytest.fixture(scope="module")
+def _schema_ready():
+    """Initialise the test DB schema + seed a tenant row once per module.
+
+    The in-process TestClient's handlers reach the real DB
+    (see AGENTICORG_DB_URL in .github/workflows/deploy.yml). Without
+    this, queries via get_tenant_session/async_session_factory bubble
+    up as 500s."""
+    import asyncio
+
+    from sqlalchemy import text as _text
+
+    import core.models  # noqa: F401 — register every ORM model
+    from core.database import async_session_factory, engine
+    from core.models.base import BaseModel
+
+    async def _setup():
+        async with engine.begin() as conn:
+            await conn.run_sync(BaseModel.metadata.create_all)
+        # Tenant row for FK and /kpis/* queries.
+        async with async_session_factory() as session:
+            await session.execute(
+                _text(
+                    "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
+                    "VALUES (:id, :name, :slug, :plan, :region, '{}'::jsonb) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "id": _SHARED_TENANT_ID,
+                    "name": "e2e-tenant",
+                    "slug": f"e2e-{_SHARED_TENANT_ID[:8]}",
+                    "plan": "enterprise",
+                    "region": "IN",
+                },
+            )
+            await session.commit()
+
+    asyncio.run(_setup())
+    return _SHARED_TENANT_ID
+
+
+# Module-scoped UUID — tenants.id is UUID, and get_tenant_session()
+# rejects anything that doesn't match the UUID format.
+_SHARED_TENANT_ID = str(uuid.uuid4())
+
+
 @pytest.fixture
-def client(app):
+def client(app, _schema_ready):
     """TestClient with auth middleware bypassed and admin scopes granted."""
-    test_tenant_id = f"e2e-tenant-{uuid.uuid4().hex[:8]}"
+    test_tenant_id = _schema_ready  # valid UUID from the schema fixture
 
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
@@ -229,16 +275,28 @@ class TestCMOJourney:
         output = gen.generate(report_type="cmo_weekly", params={})
         assert isinstance(output, ReportOutput)
         assert output.report_type == "cmo_weekly"
-        assert "ROAS" in output.content_html or "roas" in output.content_html.lower()
+        # The report now uses the basic-metrics contract (same shape as
+        # /kpis/cmo) — agent_count, total_tasks_30d, success_rate, etc.
+        # ROAS / channel breakdown have been out of this report since the
+        # KPI unification; don't re-require them here.
+        assert "CMO Weekly Report" in output.content_html
+        for key in ("Agents", "Tasks (30d)", "Success Rate", "Domain Breakdown"):
+            assert key in output.content_html, f"CMO report missing section: {key}"
 
     def test_campaign_report_generation(self):
-        """Campaign performance report contains marketing metrics."""
+        """Campaign performance report returns the basic-metrics contract."""
         from core.reports.generator import ReportGenerator
         gen = ReportGenerator()
         output = gen.generate(report_type="campaign_report", params={})
         data = output.content_data
-        assert "roas_by_channel" in data
-        assert "social_engagement" in data
+        # Current campaign_report uses _fetch_cmo_kpis, i.e. the unified
+        # basic-metrics shape. The legacy roas_by_channel /
+        # social_engagement fields were removed when /kpis/cmo stopped
+        # fabricating dashboards from raw task_output.
+        required = ("agent_count", "total_tasks_30d", "success_rate",
+                    "hitl_interventions", "total_cost_usd", "domain_breakdown")
+        for key in required:
+            assert key in data, f"campaign_report missing: {key}"
 
     def test_email_marketing_agent_registered(self):
         """Email marketing agent is registered in the platform."""
