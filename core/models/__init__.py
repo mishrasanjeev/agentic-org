@@ -29,7 +29,9 @@ from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.gstn_credential import GSTNCredential as GSTNCredential
 from core.models.gstn_upload import GSTNUpload as GSTNUpload
 from core.models.hitl import HITLQueue as HITLQueue
+from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
 from core.models.invoice import Invoice as Invoice
+from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
 from core.models.organization import CostCenter as CostCenter
