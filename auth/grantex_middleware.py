@@ -12,8 +12,6 @@ The middleware detects the token type by checking the JWT header algorithm:
 from __future__ import annotations
 
 import os
-import time
-from collections import defaultdict
 
 import structlog
 from fastapi import Request, Response
@@ -21,15 +19,9 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
+from core.auth_state import clear_auth_failures, is_ip_blocked, record_auth_failure
 
 logger = structlog.get_logger()
-
-# Rate limiting
-_failed_attempts: dict[str, list[float]] = defaultdict(list)
-_blocked_ips: dict[str, float] = {}
-BLOCK_DURATION = 900
-MAX_FAILURES = 10
-FAILURE_WINDOW = 60
 
 
 def _is_grantex_token(token: str) -> bool:
@@ -86,18 +78,14 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
 
         client_ip = request.client.host if request.client else "unknown"
 
-        # Check IP block
-        if client_ip in _blocked_ips:
-            if time.time() < _blocked_ips[client_ip]:
-                return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
-            else:
-                del _blocked_ips[client_ip]
-                _failed_attempts.pop(client_ip, None)  # Clear stale failures when block expires
+        # Check IP block (Redis-backed)
+        if await is_ip_blocked(client_ip):
+            return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
 
         # Extract token
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            self._record_failure(client_ip)
+            await record_auth_failure(client_ip)
             return JSONResponse(
                 status_code=401, content={"detail": "Missing or invalid Authorization header"}
             )
@@ -143,14 +131,14 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                     break
 
             if not matched_key:
-                self._record_failure(client_ip)
+                await record_auth_failure(client_ip)
                 return JSONResponse(
                     status_code=401, content={"detail": "Invalid API key"}
                 )
 
             # Check expiry
             if matched_key.expires_at and matched_key.expires_at < datetime.now(UTC):
-                self._record_failure(client_ip)
+                await record_auth_failure(client_ip)
                 return JSONResponse(
                     status_code=401, content={"detail": "API key expired"}
                 )
@@ -176,12 +164,12 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.user_sub = f"apikey:{matched_key.prefix}"
             request.state.auth_mode = "api_key"
 
-            self._clear_failures(client_ip)
+            await clear_auth_failures(client_ip)
             return await call_next(request)
 
         except Exception:
             logger.exception("API key validation error")
-            self._record_failure(client_ip)
+            await record_auth_failure(client_ip)
             return JSONResponse(
                 status_code=401, content={"detail": "API key validation failed"}
             )
@@ -216,11 +204,11 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.grant_token = token
             request.state.auth_mode = "grantex"
 
-            self._clear_failures(client_ip)
+            await clear_auth_failures(client_ip)
             return await call_next(request)
 
         except Exception:
-            self._record_failure(client_ip)
+            await record_auth_failure(client_ip)
             return JSONResponse(
                 status_code=401, content={"detail": "Invalid or expired grant token"}
             )
@@ -232,7 +220,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         try:
             claims = await validate_token(token)
         except ValueError:
-            self._record_failure(client_ip)
+            await record_auth_failure(client_ip)
             return JSONResponse(
                 status_code=401, content={"detail": "Invalid or expired token"}
             )
@@ -253,17 +241,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 content={"error": {"code": "E4004", "message": "Tenant mismatch"}},
             )
 
-        self._clear_failures(client_ip)
+        await clear_auth_failures(client_ip)
         return await call_next(request)
 
-    def _record_failure(self, ip: str) -> None:
-        now = time.time()
-        attempts = _failed_attempts[ip]
-        _failed_attempts[ip] = [t for t in attempts if now - t < FAILURE_WINDOW]
-        _failed_attempts[ip].append(now)
-        if len(_failed_attempts[ip]) >= MAX_FAILURES:
-            _blocked_ips[ip] = now + BLOCK_DURATION
-
-    def _clear_failures(self, ip: str) -> None:
-        """Clear failure history for an IP after successful authentication."""
-        _failed_attempts.pop(ip, None)
+    # Auth failure tracking is now in core.auth_state (Redis-backed)

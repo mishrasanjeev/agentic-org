@@ -226,7 +226,6 @@ class ToolGateway:
                 from sqlalchemy import select
 
                 from core.database import get_tenant_session
-                from core.models.connector import Connector
                 from core.models.connector_config import ConnectorConfig
 
                 tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
@@ -251,17 +250,8 @@ class ToolGateway:
                             creds = _json.loads(raw)
                         # Merge non-secret config with decrypted creds
                         config = {**(cc.config or {}), **(creds or {})}
-                    else:
-                        # Fallback: legacy plaintext auth_config
-                        result = await session.execute(
-                            select(Connector).where(
-                                Connector.tenant_id == tid,
-                                Connector.name == connector_name,
-                            )
-                        )
-                        db_connector = result.scalar_one_or_none()
-                        if db_connector:
-                            config = db_connector.auth_config or {}
+                    # No fallback to plaintext Connector.auth_config — all
+                    # secrets must be in encrypted ConnectorConfig after backfill.
             except Exception as e:
                 logger.warning("connector_config_load_failed", connector=connector_name, error=str(e))
 

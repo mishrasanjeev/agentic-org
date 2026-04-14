@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 
 from api.deps import get_current_tenant, require_tenant_admin
-from core.database import async_session_factory
+from core.database import get_tenant_session
 from core.models.invoice import Invoice
 
 logger = structlog.get_logger()
@@ -48,7 +48,7 @@ async def list_invoices(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[InvoiceOut]:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(Invoice)
             .where(Invoice.tenant_id == tid)
@@ -65,7 +65,7 @@ async def get_invoice(
     tenant_id: str = Depends(get_current_tenant),
 ) -> InvoiceOut:
     tid = uuid.UUID(tenant_id)
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(Invoice).where(
                 Invoice.tenant_id == tid, Invoice.id == invoice_id

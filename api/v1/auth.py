@@ -28,12 +28,7 @@ from core.seed_tenant import seed_tenant_defaults
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-# ---------------------------------------------------------------------------
-# Rate limiting for signup (max 5 per IP per hour)
-# ---------------------------------------------------------------------------
-_signup_attempts: dict[str, list[float]] = defaultdict(list)
-_SIGNUP_MAX = 5
-_SIGNUP_WINDOW = 3600  # 1 hour
+# Signup rate limiting now in core.auth_state (Redis-backed)
 
 
 # ---------------------------------------------------------------------------
@@ -83,15 +78,11 @@ def _make_slug(name: str) -> str:
 @router.post("/signup", response_model=LoginResponse, status_code=201)
 async def signup(body: SignupRequest, request: Request):
     """Register a new organization and admin user."""
-    # Rate-limit signups per IP
+    # Rate-limit signups per IP (Redis-backed)
     client_ip = request.client.host if request.client else "unknown"
-    now = time.time()
-    _signup_attempts[client_ip] = [
-        t for t in _signup_attempts[client_ip] if now - t < _SIGNUP_WINDOW
-    ]
-    if len(_signup_attempts[client_ip]) >= _SIGNUP_MAX:
+    from core.auth_state import check_signup_rate
+    if await check_signup_rate(client_ip):
         raise HTTPException(status_code=429, detail="Too many signup attempts — try again later")
-    _signup_attempts[client_ip].append(now)
 
     # Password policy
     _validate_password(body.password)

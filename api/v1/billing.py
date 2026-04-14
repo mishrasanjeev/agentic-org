@@ -79,19 +79,24 @@ async def get_subscription(
 
     Reads from Redis (the source of truth set by the webhook activation).
     """
-    from core.billing.usage_tracker import _get_redis
+    from core.async_redis import get_async_redis
 
-    redis = _get_redis()
-    plan_raw = redis.get(f"tenant:{tenant_id}:plan")
+    redis = await get_async_redis()
+    if redis is None:
+        return {
+            "tenant_id": tenant_id, "plan": "free", "tier": "free",
+            "provider": "", "order_id": "", "is_paid": False,
+        }
+    plan_raw = await redis.get(f"tenant:{tenant_id}:plan")
     plan = (plan_raw.decode() if isinstance(plan_raw, bytes) else plan_raw) or "free"
 
-    tier_raw = redis.get(f"tenant_tier:{tenant_id}")
+    tier_raw = await redis.get(f"tenant_tier:{tenant_id}")
     tier = (tier_raw.decode() if isinstance(tier_raw, bytes) else tier_raw) or "free"
 
-    provider_raw = redis.get(f"tenant:{tenant_id}:billing_provider")
+    provider_raw = await redis.get(f"tenant:{tenant_id}:billing_provider")
     provider = (provider_raw.decode() if isinstance(provider_raw, bytes) else provider_raw) or ""
 
-    order_id_raw = redis.get(f"tenant:{tenant_id}:billing_order_id")
+    order_id_raw = await redis.get(f"tenant:{tenant_id}:billing_order_id")
     order_id = (order_id_raw.decode() if isinstance(order_id_raw, bytes) else order_id_raw) or ""
 
     return {
@@ -378,37 +383,32 @@ async def cancel_subscription(
     Bound to the authenticated tenant — the caller cannot cancel
     another tenant's subscription.
     """
-    from core.billing.usage_tracker import _get_redis
+    from core.async_redis import get_async_redis
 
-    redis = _get_redis()
-    provider_raw = redis.get(f"tenant:{tenant_id}:billing_provider")
+    redis = await get_async_redis()
+    if redis is None:
+        raise HTTPException(503, "Billing state store unavailable")
+
+    provider_raw = await redis.get(f"tenant:{tenant_id}:billing_provider")
     provider = (
         provider_raw.decode() if isinstance(provider_raw, bytes) else (provider_raw or "stripe")
     )
 
     if provider == "plural":
-        redis.set(f"tenant_tier:{tenant_id}", "free")
-        redis.set(f"tenant:{tenant_id}:plan", "free")
-        redis.delete(f"tenant:{tenant_id}:billing_order_id")
+        await redis.set(f"tenant_tier:{tenant_id}", "free")
+        await redis.set(f"tenant:{tenant_id}:plan", "free")
+        await redis.delete(f"tenant:{tenant_id}:billing_order_id")
         logger.info("plural_subscription_cancelled", tenant_id=tenant_id)
         return {"cancelled": True, "provider": "plural", "tenant_id": tenant_id}
 
     # Stripe: resolve subscription_id from server-side state — NEVER
-    # trust the caller-supplied ID. One tenant cannot cancel another
-    # tenant's subscription even if the Stripe sub ID leaks.
+    # trust the caller-supplied ID.
     from core.billing.stripe_client import cancel_subscription as _cancel
 
-    sub_id_raw = redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
+    sub_id_raw = await redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
     sub_id = (sub_id_raw.decode() if isinstance(sub_id_raw, bytes) else sub_id_raw) or ""
     if not sub_id:
-        # No legacy fallback — caller-supplied subscription IDs are
-        # never trusted. If the server-side mapping is missing, the
-        # tenant needs a backfill via the admin tooling, not a public
-        # API escape hatch.
-        logger.warning(
-            "stripe_cancel_no_server_side_sub",
-            tenant_id=tenant_id,
-        )
+        logger.warning("stripe_cancel_no_server_side_sub", tenant_id=tenant_id)
         raise HTTPException(
             400,
             "No active Stripe subscription found for this tenant. "
@@ -420,9 +420,9 @@ async def cancel_subscription(
         raise HTTPException(status_code=502, detail="Failed to cancel subscription")
 
     # Downgrade tenant on successful cancellation
-    redis.set(f"tenant_tier:{tenant_id}", "free")
-    redis.set(f"tenant:{tenant_id}:plan", "free")
-    redis.delete(f"tenant:{tenant_id}:stripe_subscription_id")
+    await redis.set(f"tenant_tier:{tenant_id}", "free")
+    await redis.set(f"tenant:{tenant_id}:plan", "free")
+    await redis.delete(f"tenant:{tenant_id}:stripe_subscription_id")
     return {"cancelled": True, "provider": "stripe", "tenant_id": tenant_id}
 
 
