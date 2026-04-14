@@ -74,7 +74,7 @@ google-auth==2.49.2
 # ─── Observability & Monitoring ──────────────────────────────────────────────
 structlog==25.5.0
 opentelemetry-api==1.41.0
-opentelemetry-sdk==1.40.0
+opentelemetry-sdk==1.41.0
 opentelemetry-exporter-otlp==1.41.0
 opentelemetry-instrumentation-fastapi==0.62b0
 prometheus-client==0.25.0
