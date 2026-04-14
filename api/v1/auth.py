@@ -186,18 +186,56 @@ _login_attempts: dict[str, list[float]] = defaultdict(list)
 _LOGIN_MAX = 5
 _LOGIN_WINDOW = 60  # 1 minute
 
+# Redis-backed throttling (cross-pod consistent)
+_throttle_redis = None
 
-@router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, request: Request):
-    # Rate-limit login attempts per IP
-    client_ip = request.client.host if request.client else "unknown"
+
+async def _get_throttle_redis():
+    """Lazy-init async Redis client for login throttling."""
+    global _throttle_redis
+    if _throttle_redis is not None:
+        return _throttle_redis
+    try:
+        import redis.asyncio as aioredis
+
+        url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        _throttle_redis = aioredis.from_url(url, decode_responses=True)
+        await _throttle_redis.ping()
+        return _throttle_redis
+    except Exception:
+        _throttle_redis = None
+        return None
+
+
+async def _check_rate_limit(client_ip: str) -> bool:
+    """Check and increment login rate limit. Returns True if blocked."""
+    redis = await _get_throttle_redis()
+    if redis:
+        try:
+            key = f"auth:login_attempts:{client_ip}"
+            count = await redis.incr(key)
+            if count == 1:
+                await redis.expire(key, _LOGIN_WINDOW)
+            return count > _LOGIN_MAX
+        except Exception:
+            logger.debug("Redis throttle unavailable, using in-memory fallback")
+    # In-memory fallback
     now = time.time()
     _login_attempts[client_ip] = [
         t for t in _login_attempts[client_ip] if now - t < _LOGIN_WINDOW
     ]
     if len(_login_attempts[client_ip]) >= _LOGIN_MAX:
-        raise HTTPException(status_code=429, detail="Too many login attempts — try again in 1 minute")
+        return True
     _login_attempts[client_ip].append(now)
+    return False
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(body: LoginRequest, request: Request):
+    # Rate-limit login attempts per IP (Redis-backed, in-memory fallback)
+    client_ip = request.client.host if request.client else "unknown"
+    if await _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many login attempts — try again in 1 minute")
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -475,6 +513,19 @@ async def get_current_user_profile(request: Request):
     if not user:
         raise HTTPException(404, "User not found")
 
+    # Read onboarding_complete from tenant settings (same as /login)
+    onboarding_complete = True
+    try:
+        async with async_session_factory() as session:
+            tenant_result = await session.execute(
+                select(Tenant).where(Tenant.id == user.tenant_id)
+            )
+            tenant = tenant_result.scalar_one_or_none()
+            if tenant:
+                onboarding_complete = tenant.settings.get("onboarding_complete", False)
+    except Exception:
+        logger.debug("Tenant lookup for onboarding_complete failed, defaulting to True")
+
     return {
         "user_id": str(user.id),
         "tenant_id": str(user.tenant_id),
@@ -483,7 +534,7 @@ async def get_current_user_profile(request: Request):
         "role": user.role,
         "domain": user.domain,
         "mfa_enabled": user.mfa_enabled,
-        "onboarding_complete": True,
+        "onboarding_complete": onboarding_complete,
     }
 
 

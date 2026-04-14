@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid as _uuid
 from uuid import UUID
 
@@ -13,6 +14,8 @@ from api.deps import get_current_tenant, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.connector import Connector
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[require_tenant_admin])
 
@@ -366,7 +369,35 @@ async def test_connector(
     if not connector_cls:
         return {"tested": False, "error": f"No connector class for '{connector.name}'"}
 
-    config = connector.auth_config or {}
+    # Load credentials from ENCRYPTED connector_configs first,
+    # falling back to legacy plaintext auth_config for backward compat.
+    config: dict = {}
+    try:
+        from core.models.connector_config import ConnectorConfig
+
+        async with get_tenant_session(tid) as session:
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc and cc.credentials_encrypted:
+                import json as _cjson
+
+                creds = cc.credentials_encrypted
+                if isinstance(creds, str):
+                    creds = _cjson.loads(creds)
+                if isinstance(creds, dict) and "_encrypted" in creds:
+                    from core.crypto import decrypt_for_tenant
+
+                    creds = _cjson.loads(decrypt_for_tenant(creds["_encrypted"]))
+                config = {**(cc.config or {}), **(creds or {})}
+    except Exception:
+        _log.debug("connector_test_encrypted_creds_load_failed", conn_id=str(conn_id))
+    if not config:
+        config = connector.auth_config or {}
     try:
         instance = connector_cls(config)
         await asyncio.wait_for(instance.connect(), timeout=10)
