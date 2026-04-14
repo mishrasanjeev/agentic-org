@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from auth.middleware import AuthMiddleware
 from auth.scopes import check_scope
 from core.auth_state import (
     AUTH_BLOCK_DURATION as BLOCK_DURATION,
