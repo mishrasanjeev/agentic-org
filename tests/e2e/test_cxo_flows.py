@@ -1,28 +1,46 @@
 """E2E tests for CFO and CMO user flows.
 
-Tests complete user journeys using the FastAPI TestClient, verifying
-that the platform works end-to-end from KPIs through NL queries,
-report scheduling, and agent tool verification.
+Tests complete user journeys using an in-process ASGI client
+(httpx.AsyncClient + ASGITransport), verifying that the platform works
+end-to-end from KPIs through NL queries, report scheduling, and agent
+tool verification.
+
+Why async not sync TestClient:
+    FastAPI's sync TestClient spins up a fresh asyncio loop per request.
+    Combined with SQLAlchemy's pooled async engine, asyncpg connections
+    get bound to one loop and re-used from another, crashing with
+    'Event loop is closed'. An httpx.AsyncClient on
+    pytest_asyncio's loop keeps the engine, connections, and test
+    coroutines on a single loop for the whole session.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+# Module-scoped UUID — tenants.id is UUID, and get_tenant_session()
+# rejects anything that doesn't match the UUID format.
+_SHARED_TENANT_ID = str(uuid.uuid4())
+
+
 @pytest.fixture(scope="module")
 def app():
     from api.main import app as _app
 
-    # Replace lifespan to skip DB init
+    # Replace lifespan to skip DB init — we'll create the schema in the
+    # session-scoped fixture below.
     @asynccontextmanager
     async def _test_lifespan(app):
         yield
@@ -31,28 +49,39 @@ def app():
     return _app
 
 
-@pytest.fixture(scope="module")
-def _schema_ready():
-    """Initialise the test DB schema + seed a tenant row once per module.
+@pytest_asyncio.fixture(scope="module")
+async def _schema_ready() -> AsyncGenerator[str, None]:
+    """Swap core.database.engine for a NullPool engine, create tables
+    against the test DB, seed a tenant row.
 
-    The in-process TestClient's handlers reach the real DB
-    (see AGENTICORG_DB_URL in .github/workflows/deploy.yml). Without
-    this, queries via get_tenant_session/async_session_factory bubble
-    up as 500s."""
-    import asyncio
-
+    Running the setup on pytest_asyncio's module event loop means the
+    engine, all handler queries, and the httpx.AsyncClient share a
+    single loop — no cross-loop asyncpg reuse.
+    """
     from sqlalchemy import text as _text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
 
+    import core.database as _db_mod
     import core.models  # noqa: F401 — register every ORM model
-    from core.database import async_session_factory, engine
     from core.models.base import BaseModel
 
-    async def _setup():
-        async with engine.begin() as conn:
+    db_url = os.getenv("AGENTICORG_DB_URL")
+    if not db_url:
+        pytest.skip("requires AGENTICORG_DB_URL for DB-backed E2E tests")
+
+    test_engine = create_async_engine(db_url, echo=False, poolclass=NullPool)
+    original_engine = _db_mod.engine
+    original_factory = _db_mod.async_session_factory
+    _db_mod.engine = test_engine
+    _db_mod.async_session_factory = async_sessionmaker(
+        test_engine, expire_on_commit=False
+    )
+
+    try:
+        async with test_engine.begin() as conn:
             await conn.run_sync(BaseModel.metadata.create_all)
-        # Tenant row for FK and /kpis/* queries.
-        async with async_session_factory() as session:
-            await session.execute(
+            await conn.execute(
                 _text(
                     "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
                     "VALUES (:id, :name, :slug, :plan, :region, '{}'::jsonb) "
@@ -66,21 +95,24 @@ def _schema_ready():
                     "region": "IN",
                 },
             )
-            await session.commit()
+    except Exception as exc:
+        await test_engine.dispose()
+        _db_mod.engine = original_engine
+        _db_mod.async_session_factory = original_factory
+        pytest.skip(f"DB-backed E2E fixture unavailable: {exc}")
 
-    asyncio.run(_setup())
-    return _SHARED_TENANT_ID
+    try:
+        yield _SHARED_TENANT_ID
+    finally:
+        await test_engine.dispose()
+        _db_mod.engine = original_engine
+        _db_mod.async_session_factory = original_factory
 
 
-# Module-scoped UUID — tenants.id is UUID, and get_tenant_session()
-# rejects anything that doesn't match the UUID format.
-_SHARED_TENANT_ID = str(uuid.uuid4())
-
-
-@pytest.fixture
-def client(app, _schema_ready):
-    """TestClient with auth middleware bypassed and admin scopes granted."""
-    test_tenant_id = _schema_ready  # valid UUID from the schema fixture
+@pytest_asyncio.fixture
+async def client(app, _schema_ready) -> AsyncGenerator[AsyncClient, None]:
+    """httpx.AsyncClient with auth middleware bypassed and admin scopes granted."""
+    test_tenant_id = _schema_ready
 
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
@@ -92,13 +124,13 @@ def client(app, _schema_ready):
             "agenticorg:scopes": ["agenticorg:admin"],
         }
 
-    with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
-        with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=["agenticorg:admin"]):
-                with TestClient(app, raise_server_exceptions=False) as c:
-                    c.headers["Authorization"] = "Bearer fake-e2e-token"
-                    c._test_tenant_id = test_tenant_id
-                    yield c
+    with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate), \
+         patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id), \
+         patch("auth.grantex_middleware.extract_scopes", return_value=["agenticorg:admin"]):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            ac.headers["Authorization"] = "Bearer fake-e2e-token"
+            yield ac
 
     app.dependency_overrides.pop(get_current_tenant, None)
 
@@ -111,12 +143,12 @@ def client(app, _schema_ready):
 class TestCFOJourney:
     """End-to-end CFO user flow."""
 
-    def test_cfo_kpis_return_valid_data(self, client):
+    @pytest.mark.asyncio
+    async def test_cfo_kpis_return_valid_data(self, client: AsyncClient):
         """CFO KPI dashboard returns all required metrics (basic metrics shape)."""
-        resp = client.get("/api/v1/kpis/cfo")
-        assert resp.status_code == 200
+        resp = await client.get("/api/v1/kpis/cfo")
+        assert resp.status_code == 200, resp.text
         data = resp.json()
-        # Current KPI contract uses basic metrics shape
         required_keys = [
             "agent_count", "total_tasks_30d", "success_rate",
             "hitl_interventions", "total_cost_usd", "domain_breakdown",
@@ -124,48 +156,49 @@ class TestCFOJourney:
         for key in required_keys:
             assert key in data, f"CFO KPI missing: {key}"
 
-    def test_nl_query_finance_routes_correctly(self, client):
+    @pytest.mark.asyncio
+    async def test_nl_query_finance_routes_correctly(self, client: AsyncClient):
         """NL query with finance question routes to finance domain."""
-        resp = client.post("/api/v1/chat/query", json={
-            "query": "What is our accounts receivable aging and cash flow position?"
+        resp = await client.post("/api/v1/chat/query", json={
+            "query": "What is our accounts receivable aging and cash flow position?",
         })
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         assert data["domain"] == "finance"
         assert data["confidence"] >= 0.7
 
-    def test_report_schedule_created_successfully(self, client):
+    @pytest.mark.asyncio
+    async def test_report_schedule_created_successfully(self, client: AsyncClient):
         """CFO can create a report schedule that persists."""
-        resp = client.post("/api/v1/report-schedules", json={
+        resp = await client.post("/api/v1/report-schedules", json={
             "report_type": "cfo_daily",
             "cron_expression": "daily",
             "delivery_channels": [{"type": "email", "target": "cfo@company.com"}],
             "format": "pdf",
             "is_active": True,
         })
-        assert resp.status_code == 201
+        assert resp.status_code == 201, resp.text
         schedule = resp.json()
         assert schedule["report_type"] == "cfo_daily"
         assert schedule["is_active"] is True
 
-        # Verify it appears in the list
-        list_resp = client.get("/api/v1/report-schedules")
+        list_resp = await client.get("/api/v1/report-schedules")
         assert list_resp.status_code == 200
         schedules = list_resp.json()
         schedule_ids = [s["id"] for s in schedules]
         assert schedule["id"] in schedule_ids
 
-    def test_company_switcher_lists_companies(self, client):
+    @pytest.mark.asyncio
+    async def test_company_switcher_lists_companies(self, client: AsyncClient):
         """Company switcher returns list after creating companies."""
-        # Create companies with required fields (pan is mandatory)
-        client.post("/api/v1/companies", json={
+        await client.post("/api/v1/companies", json={
             "name": "Test Corp A", "pan": "AABCA0001A", "industry": "IT",
         })
-        client.post("/api/v1/companies", json={
+        await client.post("/api/v1/companies", json={
             "name": "Test Corp B", "pan": "AABCB0002B", "industry": "Finance",
         })
-        resp = client.get("/api/v1/companies")
-        assert resp.status_code == 200
+        resp = await client.get("/api/v1/companies")
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         items = data if isinstance(data, list) else data.get("items", [])
         assert len(items) >= 2
@@ -184,25 +217,27 @@ class TestCFOJourney:
                     "get_balance_sheet", "get_cash_position"}
         assert expected == set(DEFAULT_TOOLS)
 
-    def test_cfo_kpis_with_company_filter(self, client):
+    @pytest.mark.asyncio
+    async def test_cfo_kpis_with_company_filter(self, client: AsyncClient):
         """CFO KPIs accept company_id parameter."""
-        resp = client.get("/api/v1/kpis/cfo?company_id=test-company")
-        assert resp.status_code == 200
+        resp = await client.get("/api/v1/kpis/cfo?company_id=test-company")
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         assert data["company_id"] == "test-company"
 
-    def test_create_and_retrieve_company(self, client):
+    @pytest.mark.asyncio
+    async def test_create_and_retrieve_company(self, client: AsyncClient):
         """Full company lifecycle: create -> retrieve -> verify fields."""
-        create_resp = client.post("/api/v1/companies", json={
+        create_resp = await client.post("/api/v1/companies", json={
             "name": "Sharma Manufacturing",
             "gstin": "27AABCS9999F1Z5",
             "pan": "AABCS9999F",
             "industry": "Manufacturing",
         })
-        assert create_resp.status_code == 201
+        assert create_resp.status_code == 201, create_resp.text
         company = create_resp.json()
 
-        get_resp = client.get(f"/api/v1/companies/{company['id']}")
+        get_resp = await client.get(f"/api/v1/companies/{company['id']}")
         assert get_resp.status_code == 200
         fetched = get_resp.json()
         assert fetched["name"] == "Sharma Manufacturing"
@@ -217,10 +252,11 @@ class TestCFOJourney:
 class TestCMOJourney:
     """End-to-end CMO user flow."""
 
-    def test_cmo_kpis_return_valid_data(self, client):
+    @pytest.mark.asyncio
+    async def test_cmo_kpis_return_valid_data(self, client: AsyncClient):
         """CMO KPI dashboard returns all required metrics (basic metrics shape)."""
-        resp = client.get("/api/v1/kpis/cmo")
-        assert resp.status_code == 200
+        resp = await client.get("/api/v1/kpis/cmo")
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         required_keys = [
             "agent_count", "total_tasks_30d", "success_rate",
@@ -229,12 +265,13 @@ class TestCMOJourney:
         for key in required_keys:
             assert key in data, f"CMO KPI missing: {key}"
 
-    def test_nl_query_marketing_routes_correctly(self, client):
+    @pytest.mark.asyncio
+    async def test_nl_query_marketing_routes_correctly(self, client: AsyncClient):
         """NL query with marketing question routes to marketing domain."""
-        resp = client.post("/api/v1/chat/query", json={
-            "query": "Show me the latest SEO rankings and campaign conversion rates"
+        resp = await client.post("/api/v1/chat/query", json={
+            "query": "Show me the latest SEO rankings and campaign conversion rates",
         })
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         assert data["domain"] == "marketing"
         assert data["confidence"] >= 0.7
@@ -328,19 +365,21 @@ class TestCMOJourney:
 class TestCrossDomainIntegration:
     """Verify cross-domain features work together."""
 
-    def test_a2a_agent_card_returns_skills(self, client):
+    @pytest.mark.asyncio
+    async def test_a2a_agent_card_returns_skills(self, client: AsyncClient):
         """A2A agent card lists available agent skills."""
-        resp = client.get("/api/v1/a2a/.well-known/agent.json")
-        assert resp.status_code == 200
+        resp = await client.get("/api/v1/a2a/.well-known/agent.json")
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         assert "skills" in data
         assert isinstance(data["skills"], list)
         assert len(data["skills"]) > 0
 
-    def test_a2a_agent_list(self, client):
+    @pytest.mark.asyncio
+    async def test_a2a_agent_list(self, client: AsyncClient):
         """A2A agents endpoint lists all available agents."""
-        resp = client.get("/api/v1/a2a/agents")
-        assert resp.status_code == 200
+        resp = await client.get("/api/v1/a2a/agents")
+        assert resp.status_code == 200, resp.text
         data = resp.json()
         assert "agents" in data
 
@@ -360,7 +399,6 @@ class TestCrossDomainIntegration:
         }
         for domain, module_path in domain_connectors.items():
             mod = importlib.import_module(module_path)
-            # Find the connector class in the module
             connector_cls = None
             for attr_name in dir(mod):
                 attr = getattr(mod, attr_name)
