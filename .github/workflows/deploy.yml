@@ -218,7 +218,6 @@ jobs:
 
       - name: Run Python E2E tests (against production)
         run: pytest tests/e2e/ -v
-        continue-on-error: true
         env:
           AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
@@ -232,7 +231,6 @@ jobs:
 
       - name: Get fresh E2E auth token
         id: auth
-        continue-on-error: true
         run: |
           for attempt in 1 2 3 4 5; do
             RESP=$(curl -s -w "\n%{http_code}" -X POST "https://app.agenticorg.ai/api/v1/auth/login" \
@@ -259,7 +257,6 @@ jobs:
 
       - name: Run ALL Playwright E2E regression suite against production
         run: cd ui && npx playwright test --config=e2e/regression.config.ts
-        continue-on-error: true
         env:
           BASE_URL: https://app.agenticorg.ai
           E2E_TOKEN: ${{ steps.auth.outputs.token }}
@@ -337,18 +334,8 @@ jobs:
 
             echo "::group::${deployment_name} rollout diagnostics"
             kubectl get deployment "${deployment_name}" --namespace agenticorg -o wide || true
-            kubectl describe deployment "${deployment_name}" --namespace agenticorg || true
             kubectl rollout history deployment/"${deployment_name}" --namespace agenticorg || true
-            kubectl get rs --namespace agenticorg -l "app=${app_label}" -o wide || true
-            kubectl get pods --namespace agenticorg -l "app=${app_label}" -o wide || true
-
-            for pod in $(kubectl get pods --namespace agenticorg -l "app=${app_label}" -o name); do
-              kubectl describe --namespace agenticorg "${pod}" || true
-              kubectl logs --namespace agenticorg "${pod}" --all-containers --tail=200 || true
-              kubectl logs --namespace agenticorg "${pod}" --all-containers --previous --tail=200 || true
-            done
-
-            kubectl get events --namespace agenticorg --sort-by=.metadata.creationTimestamp | tail -n 50 || true
+            kubectl get pods --namespace agenticorg -l "app=${app_label}" --no-headers -o custom-columns="NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount" || true
             echo "::endgroup::"
           }
 

@@ -97,32 +97,37 @@ export default function CFODashboard() {
   }
 
   const domainBreakdown = data.domain_breakdown ?? [];
-  const isEmpty = data.agent_count === 0 && data.total_tasks_30d === 0;
+  const agentCount = data.agent_count ?? 0;
+  const totalTasks = data.total_tasks_30d ?? 0;
+  const successRate = data.success_rate ?? 0;
+  const hitl = data.hitl_interventions ?? 0;
+  const totalCost = data.total_cost_usd ?? 0;
+  const isEmpty = agentCount === 0 && totalTasks === 0;
 
   const topMetrics = [
     {
       label: t("kpi.agents", "Agents"),
-      value: data.agent_count.toLocaleString(),
+      value: agentCount.toLocaleString(),
       color: "text-blue-600",
     },
     {
       label: t("kpi.totalTasks", "Total Tasks (30d)"),
-      value: data.total_tasks_30d.toLocaleString(),
+      value: totalTasks.toLocaleString(),
       color: "text-indigo-600",
     },
     {
       label: t("kpi.successRate", "Success Rate"),
-      value: `${data.success_rate.toFixed(1)}%`,
+      value: `${successRate.toFixed(1)}%`,
       color: "text-emerald-600",
     },
     {
       label: t("kpi.hitlInterventions", "HITL Interventions"),
-      value: data.hitl_interventions.toLocaleString(),
+      value: hitl.toLocaleString(),
       color: "text-orange-600",
     },
     {
       label: t("kpi.totalCost", "Total Cost (USD)"),
-      value: USD.format(data.total_cost_usd),
+      value: USD.format(totalCost),
       color: "text-purple-600",
     },
   ];
