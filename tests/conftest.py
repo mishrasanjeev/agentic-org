@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 _TEST_TMPDIR = Path.cwd() / "codex-pytest-temp"
 _TEST_TMPDIR.mkdir(parents=True, exist_ok=True)
 tempfile.tempdir = str(_TEST_TMPDIR)

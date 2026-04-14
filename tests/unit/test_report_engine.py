@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 _ARTIFACT_DIR = Path.cwd() / "codex-pytest-artifacts"
 _ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
