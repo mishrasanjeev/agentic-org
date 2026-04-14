@@ -1,4 +1,4 @@
-"""Tests for v4.9.0 P0 requirements: REQ-03, REQ-04, REQ-05, REQ-07."""
+"""Tests for v4.9.0 P0 requirements: REQ-01, REQ-02, REQ-03, REQ-04, REQ-05, REQ-07."""
 
 from __future__ import annotations
 
@@ -162,3 +162,104 @@ class TestREQ07ConnectorSecrets:
         # The test endpoint should reference ConnectorConfig
         assert "ConnectorConfig" in content
         assert "credentials_encrypted" in content
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REQ-01: Composio marketplace runtime deps
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestREQ01ComposioRuntime:
+    """Verify Composio SDK is installable and declared in runtime path."""
+
+    def test_composio_core_in_v4_extras(self):
+        """composio-core must be in [project.optional-dependencies].v4."""
+        from pathlib import Path
+        content = Path("pyproject.toml").read_text()
+        assert "composio-core" in content, "composio-core must be a declared dep"
+
+    def test_dockerfile_installs_v4_extras(self):
+        """Dockerfile must install the v4 extras so composio-core is in the image."""
+        from pathlib import Path
+        content = Path("Dockerfile").read_text()
+        assert '".[v4]"' in content, "Dockerfile must install .[v4] extras"
+
+    def test_dockerfile_runtime_has_libjpeg(self):
+        """Runtime stage must include libjpeg62-turbo for Pillow (composio dep)."""
+        from pathlib import Path
+        content = Path("Dockerfile").read_text()
+        # libjpeg62-turbo must be in the runtime apt-get (after the second FROM)
+        runtime = content.split("FROM python")[-1]
+        assert "libjpeg62-turbo" in runtime, "runtime stage must include libjpeg62-turbo"
+
+    def test_composio_sdk_importable(self):
+        """composio SDK must import cleanly in the test env (matches runtime)."""
+        try:
+            import composio  # noqa: F401
+        except ImportError:
+            pytest.skip("composio-core not installed in this test env")
+
+    def test_health_diagnostics_exposes_composio(self):
+        """Admin diagnostics endpoint must surface composio sdk/api_key state."""
+        from pathlib import Path
+        content = Path("api/v1/health.py").read_text()
+        assert "composio" in content.lower()
+        assert "sdk_loaded" in content
+        assert "api_key_configured" in content
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REQ-02: Alembic as sole DDL delivery path
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestREQ02AlembicDDL:
+    """Verify Alembic is wired as the schema authority."""
+
+    def test_alembic_ini_exists(self):
+        """alembic.ini must exist at repo root."""
+        from pathlib import Path
+        assert Path("alembic.ini").exists(), "alembic.ini must exist"
+
+    def test_alembic_env_exists(self):
+        """migrations/env.py must exist and reference BaseModel.metadata."""
+        from pathlib import Path
+        env = Path("migrations/env.py")
+        assert env.exists(), "migrations/env.py must exist"
+        content = env.read_text()
+        assert "target_metadata" in content
+        assert "BaseModel" in content or "Base.metadata" in content
+
+    def test_ci_migration_guard_exists(self):
+        """CI must enforce that model changes ship with a migration."""
+        from pathlib import Path
+        guard = Path("scripts/check_migration_required.py")
+        assert guard.exists(), "migration guard script must exist"
+
+    def test_alembic_migrate_wrapper_exists(self):
+        """Idempotent migrate wrapper used by deploy pipeline."""
+        from pathlib import Path
+        wrapper = Path("scripts/alembic_migrate.py")
+        assert wrapper.exists(), "scripts/alembic_migrate.py must exist"
+        content = wrapper.read_text()
+        assert "BASELINE_REVISION" in content
+        assert "stamp" in content
+        assert "upgrade" in content
+
+    def test_deploy_uses_migrate_wrapper(self):
+        """deploy.yml must invoke the wrapper, not raw 'alembic upgrade'."""
+        from pathlib import Path
+        content = Path(".github/workflows/deploy.yml").read_text()
+        assert "scripts/alembic_migrate.py" in content
+
+    def test_init_db_respects_alembic_flag(self):
+        """init_db() must short-circuit when AGENTICORG_DDL_MANAGED_BY_ALEMBIC is truthy."""
+        from pathlib import Path
+        content = Path("core/database.py").read_text()
+        assert "AGENTICORG_DDL_MANAGED_BY_ALEMBIC" in content
+
+    def test_helm_sets_alembic_flag(self):
+        """Helm production values must enable alembic-managed DDL."""
+        from pathlib import Path
+        content = Path("helm/values.yaml").read_text()
+        assert 'AGENTICORG_DDL_MANAGED_BY_ALEMBIC: "true"' in content

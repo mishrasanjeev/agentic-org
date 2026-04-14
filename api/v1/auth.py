@@ -504,8 +504,11 @@ async def get_current_user_profile(request: Request):
     if not user:
         raise HTTPException(404, "User not found")
 
-    # Read onboarding_complete from tenant settings (same as /login)
-    onboarding_complete = True
+    # Read onboarding_complete from tenant settings — must match /login and
+    # /signup so routing is identical across all session hydration paths.
+    # Fail closed: default to False on missing tenant or lookup failure so
+    # the UI guides the user through onboarding rather than silently skipping.
+    onboarding_complete = False
     try:
         async with async_session_factory() as session:
             tenant_result = await session.execute(
@@ -515,7 +518,7 @@ async def get_current_user_profile(request: Request):
             if tenant:
                 onboarding_complete = tenant.settings.get("onboarding_complete", False)
     except Exception:
-        logger.debug("Tenant lookup for onboarding_complete failed, defaulting to True")
+        logger.debug("Tenant lookup for onboarding_complete failed, defaulting to False")
 
     return {
         "user_id": str(user.id),
