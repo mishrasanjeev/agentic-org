@@ -161,9 +161,12 @@ def build_agent_graph(
                 "reasoning_trace": [*trace, "ERROR: No AI message found"],
             }
 
-        # Parse output
+        # Parse output — _parse_json_output guarantees a dict, but be
+        # defensive for any future caller that builds output differently.
         content = last_ai.content or ""
         output = _parse_json_output(content)
+        if not isinstance(output, dict):
+            output = {"raw_output": output, "status": "completed"}
 
         # Compute variable confidence from observable signals (not a fixed default)
         # Signals: tool success rate, output structure, output length, error presence
@@ -320,7 +323,15 @@ def build_agent_graph(
 
 
 def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
-    """Parse JSON from LLM output, handling markdown code blocks."""
+    """Parse JSON from LLM output, handling markdown code blocks.
+
+    Always returns a dict. If the LLM emitted a valid JSON array or
+    scalar (instead of an object), wrap it in ``raw_output`` so every
+    downstream call to ``output.get(...)`` is safe. The previous
+    version returned whatever ``json.loads`` produced, so a JSON list
+    crashed the graph with ``AttributeError: 'list' object has no
+    attribute 'get'`` in evaluate/_extract_confidence.
+    """
     # Handle list content (multiple messages) — join into single string
     if isinstance(content, list):
         content = "\n".join(str(item) for item in content)
@@ -332,9 +343,13 @@ def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
         lines = [ln for ln in lines if not ln.strip().startswith("```")]
         text = "\n".join(lines).strip()
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
     except json.JSONDecodeError:
         return {"raw_output": content, "status": "completed"}
+    if isinstance(parsed, dict):
+        return parsed
+    # Valid JSON but not an object — wrap to preserve our dict contract.
+    return {"raw_output": parsed, "status": "completed"}
 
 
 def _extract_confidence(output: dict[str, Any], content_length: int = 0) -> float:
@@ -347,6 +362,8 @@ def _extract_confidence(output: dict[str, Any], content_length: int = 0) -> floa
 
     Never returns a hardcoded default — confidence varies based on real signals.
     """
+    if not isinstance(output, dict):
+        output = {}
     raw = output.get("confidence") or output.get("agent_confidence")
     if raw is not None:
         try:
