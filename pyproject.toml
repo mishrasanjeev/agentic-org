@@ -85,7 +85,7 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.3.0",
-    "pytest-timeout>=2.3.0",
+    "pytest-timeout>=2.4.0",
     "respx>=0.23.1",
     # Pinned <4.14 because testcontainers[redis]>=4.14 transitively
     # pulls redis>=7, conflicting with celery[redis]>=5.4 (which needs
