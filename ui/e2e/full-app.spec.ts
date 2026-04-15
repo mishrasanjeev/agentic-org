@@ -14,7 +14,7 @@ async function authenticate(page: Page) {
   await page.goto(`${APP}/login`);
   await page.evaluate((token) => {
     localStorage.setItem("token", token);
-  }, E2E_TOKEN);
+    localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));  }, E2E_TOKEN);
 }
 
 // ---------------------------------------------------------------------------

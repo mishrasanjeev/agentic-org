@@ -38,7 +38,10 @@ test.describe("Video Flows: Platform Overview (auth required)", () => {
   test.beforeEach(async ({ page }) => {
     test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+    await page.evaluate((t) => {
+      localStorage.setItem("token", t);
+      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+    }, E2E_TOKEN);
   });
 
   test("dashboard loads", async ({ page }) => {
@@ -80,7 +83,10 @@ test.describe("Video Flows: CFO Finance (auth required)", () => {
   test.beforeEach(async ({ page }) => {
     test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+    await page.evaluate((t) => {
+      localStorage.setItem("token", t);
+      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+    }, E2E_TOKEN);
   });
 
   test("agents page loads with agent content", async ({ page }) => {
@@ -102,7 +108,10 @@ test.describe("Video Flows: CHRO HR (auth required)", () => {
   test.beforeEach(async ({ page }) => {
     test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+    await page.evaluate((t) => {
+      localStorage.setItem("token", t);
+      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+    }, E2E_TOKEN);
   });
 
   test("agents page loads", async ({ page }) => {
@@ -124,7 +133,10 @@ test.describe("Video Flows: CMO Marketing (auth required)", () => {
   test.beforeEach(async ({ page }) => {
     test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+    await page.evaluate((t) => {
+      localStorage.setItem("token", t);
+      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+    }, E2E_TOKEN);
   });
 
   test("agents page loads for marketing agents", async ({ page }) => {
@@ -141,7 +153,10 @@ test.describe("Video Flows: COO Operations (auth required)", () => {
   test.beforeEach(async ({ page }) => {
     test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => localStorage.setItem("token", t), E2E_TOKEN);
+    await page.evaluate((t) => {
+      localStorage.setItem("token", t);
+      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+    }, E2E_TOKEN);
   });
 
   test("agents page loads for ops agents", async ({ page }) => {

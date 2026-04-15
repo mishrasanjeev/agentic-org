@@ -87,7 +87,7 @@ test.describe("Login Page — Auth Flow", () => {
     await page.goto(`${APP}/login`);
     await page.evaluate((token) => {
       localStorage.setItem("token", token);
-    }, E2E_TOKEN);
+    localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));    }, E2E_TOKEN);
     await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
     await expect(page.getByText("Dashboard").first()).toBeVisible({ timeout: 10000 });
   });

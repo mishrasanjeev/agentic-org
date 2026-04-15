@@ -19,7 +19,7 @@ async function injectAuth(page: Page): Promise<void> {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.evaluate((t) => {
     localStorage.setItem("token", t);
-  }, token);
+    localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));  }, token);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
