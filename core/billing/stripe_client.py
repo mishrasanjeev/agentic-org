@@ -45,7 +45,7 @@ PLAN_AMOUNT_USD: dict[str, int] = {
     "enterprise": 499_00,  # $499/mo
 }
 
-_APP_BASE_URL = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.com")
+_APP_BASE_URL = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
 
 _API_CALLBACK_URL = os.getenv(
     "STRIPE_CALLBACK_URL",
