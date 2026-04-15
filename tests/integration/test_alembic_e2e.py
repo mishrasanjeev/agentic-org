@@ -108,8 +108,21 @@ def _table_names() -> set[str]:
 
 
 def test_legacy_db_gets_stamped_at_baseline():
-    """A legacy-shaped DB (no alembic_version) must be stamped and
-    leave alembic_version = v480_baseline."""
+    """A legacy-shaped DB (no alembic_version) must be stamped at the
+    baseline and then upgraded to the current head.
+
+    The wrapper runs ``stamp v480_baseline`` followed by
+    ``upgrade head``, so the resulting version is whatever the Alembic
+    head is today, not necessarily the baseline. Read the expected
+    head dynamically so this test does not regress every time a new
+    migration file is added."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config("alembic.ini")
+    expected_head = ScriptDirectory.from_config(cfg).get_current_head()
+    assert expected_head, "Alembic has no head revision"
+
     _reset_schema()
     _build_legacy_schema()
     tables = _table_names()
@@ -123,7 +136,7 @@ def test_legacy_db_gets_stamped_at_baseline():
         version = conn.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar()
-    assert version == "v480_baseline"
+    assert version == expected_head
 
 
 def test_already_managed_db_is_noop():
