@@ -106,3 +106,8 @@ env:
   AGENTICORG_LLM_FALLBACK: gemini-2.5-flash-preview-05-20     # Switch to gpt-4o-2024-11-20 when needed
   # Alembic is the schema authority. init_db() skips legacy DDL when this is true.
   AGENTICORG_DDL_MANAGED_BY_ALEMBIC: "true"
+  # Public app URL — used in billing callback URLs (Stripe + Plural),
+  # invite emails, password-reset emails, etc. MUST match the actual
+  # production hostname; a wrong value silently breaks payment redirects
+  # (Stripe redirected to a non-existent .com host before this was set).
+  AGENTICORG_APP_URL: "https://app.agenticorg.ai"
