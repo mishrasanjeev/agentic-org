@@ -85,6 +85,7 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.3.0",
+    "pytest-timeout>=2.3.0",
     "respx>=0.23.1",
     # Pinned <4.14 because testcontainers[redis]>=4.14 transitively
     # pulls redis>=7, conflicting with celery[redis]>=5.4 (which needs
@@ -117,6 +118,11 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
 cache_dir = "codex-pytest-cache"
+# 60s per test. E2E tests that hang (see CI run 24431646301) fail with a
+# traceback pointing to the exact frame instead of stalling the CI job.
+# Integration/unit tests should complete in well under 60s each.
+timeout = 60
+timeout_method = "thread"
 addopts = "--basetemp=codex-pytest-basetemp --cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-report=xml --cov-report=term-missing"
 
 [tool.mypy]
