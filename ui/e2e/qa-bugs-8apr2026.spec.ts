@@ -23,7 +23,7 @@ async function authenticate(page: Page): Promise<void> {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.evaluate((token) => {
     localStorage.setItem("token", token);
-    localStorage.setItem(
+    localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));    localStorage.setItem(
       "user",
       JSON.stringify({
         email: "e2e@agenticorg.ai",
