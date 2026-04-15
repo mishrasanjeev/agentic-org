@@ -47,6 +47,8 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
     if not grant_token:
         return {}  # No Grantex token — legacy auth mode, no-op
 
+    if not messages:
+        return {}
     last_ai = messages[-1]
     if not isinstance(last_ai, AIMessage) or not last_ai.tool_calls:
         return {}
@@ -58,7 +60,15 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
     index = _build_tool_index()
 
     for tc in last_ai.tool_calls:
-        tool_name = tc["name"]
+        # tc is normally a dict with 'name'/'args'/'id'; handle legacy
+        # tuple/object shapes defensively so scope validation can't crash
+        # the whole graph on a provider quirk.
+        if isinstance(tc, dict):
+            tool_name = tc.get("name", "")
+        else:
+            tool_name = getattr(tc, "name", "")
+        if not tool_name:
+            continue
 
         # Resolve connector name from tool index
         match = index.get(tool_name)
@@ -405,6 +415,12 @@ def _check_hitl_trigger(
     """Check if HITL should be triggered. Returns trigger reason or empty string."""
     if confidence < confidence_floor:
         return f"confidence {confidence:.3f} < floor {confidence_floor}"
+
+    # Defensive: every caller passes state.get("output", {}), but a
+    # downstream node could legally store a non-dict here (shadow run
+    # trace_id=ecc5d00364a0 hit this).
+    if not isinstance(output, dict):
+        output = {}
 
     if hitl_condition and output:
         # Evaluate simple threshold expressions like "amount > 500000"

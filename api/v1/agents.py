@@ -1198,21 +1198,40 @@ async def run_agent(
         # Surface enough information for the caller to act on without
         # leaking secrets from the exception message. The full traceback
         # stays server-side, correlated by trace_id.
+        import traceback as _tb
+
         trace_id = _uuid.uuid4().hex[:12]
+        err_type = type(exc).__name__
+        # Extract the innermost user-code frame from the traceback so we
+        # can report "which attribute on what object" without leaking
+        # secrets. For AttributeError this turns the opaque "internal
+        # agent runtime error" into an actionable hint like
+        # "'NoneType' object has no attribute 'tool_calls'".
+        tb_frame = ""
+        try:
+            tb = _tb.extract_tb(exc.__traceback__)
+            if tb:
+                last = tb[-1]
+                tb_frame = f"{last.filename.rsplit('/', 1)[-1]}:{last.lineno}"
+        except Exception:  # noqa: BLE001, S110  # diagnostic extraction is best-effort
+            pass
+        exc_msg = str(exc)[:200].replace("\n", " ")
         logger.exception(
             "agent_run_error",
             agent_id=str(agent_id),
             trace_id=trace_id,
-            error_type=type(exc).__name__,
+            error_type=err_type,
+            frame=tb_frame,
+            exc_msg=exc_msg,
         )
         # Classify to a short, safe hint.
-        err_type = type(exc).__name__
         hint = {
             "TimeoutError": "upstream LLM or tool timed out",
             "PermissionError": "agent lacks permission for a required tool",
             "ValueError": "invalid task input",
             "KeyError": "missing required configuration",
-        }.get(err_type, "internal agent runtime error")
+            "AttributeError": f"missing attribute in agent runtime at {tb_frame}",
+        }.get(err_type, f"internal agent runtime error at {tb_frame}")
         raise HTTPException(
             status_code=500,
             detail=f"Agent execution failed: {hint} ({err_type}). trace_id={trace_id}",
