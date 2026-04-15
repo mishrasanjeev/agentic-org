@@ -196,6 +196,19 @@ class TestAgentGraph:
         assert 0.0 <= _extract_confidence("unexpected") <= 1.0
         assert 0.0 <= _extract_confidence(None) <= 1.0
 
+    def test_check_hitl_trigger_non_dict_output(self):
+        """_check_hitl_trigger must not crash on non-dict output.
+        Shadow-run regression trace_id=ecc5d00364a0."""
+        from core.langgraph.agent_graph import _check_hitl_trigger
+
+        # confidence above floor + non-dict output: no trigger, no crash
+        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", None) == ""
+        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", [1, 2]) == ""
+        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", "str") == ""
+        # Below floor still triggers regardless of output type
+        trigger = _check_hitl_trigger(0.5, 0.88, "", None)
+        assert "confidence" in trigger
+
     def test_extract_confidence_numeric(self):
         from core.langgraph.agent_graph import _extract_confidence
 
