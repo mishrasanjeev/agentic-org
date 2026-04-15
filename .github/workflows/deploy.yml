@@ -267,6 +267,12 @@ jobs:
         run: cd ui && npm install --legacy-peer-deps && npx playwright install --with-deps chromium
 
       - name: Run ALL Playwright E2E regression suite against production
+        # Hard 45-min cap. Regression suite has 438 tests, workers: 1,
+        # retries: 2 — typical pass completes in 20-30 min. Anything
+        # beyond 45 min is flake-loop territory and should fail fast
+        # so the team sees the signal instead of the runner wedging
+        # (see PR #132 run 24435533758 which went 1h+).
+        timeout-minutes: 45
         run: cd ui && npx playwright test --config=e2e/regression.config.ts
         env:
           BASE_URL: https://app.agenticorg.ai
