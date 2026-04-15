@@ -167,6 +167,35 @@ class TestAgentGraph:
         result = _parse_json_output("not json at all")
         assert result["raw_output"] == "not json at all"
 
+    def test_parse_json_output_list_wrapped_as_dict(self):
+        """A valid JSON list must not leak through — downstream code
+        calls .get() on the result. Shadow-run AttributeError regression
+        (trace_id=bea65adb4cca)."""
+        from core.langgraph.agent_graph import _parse_json_output
+
+        result = _parse_json_output("[1, 2, 3]")
+        assert isinstance(result, dict)
+        assert result["raw_output"] == [1, 2, 3]
+        assert result["status"] == "completed"
+
+    def test_parse_json_output_scalar_wrapped_as_dict(self):
+        """A bare JSON scalar (number, string, bool) must also be wrapped."""
+        from core.langgraph.agent_graph import _parse_json_output
+
+        result = _parse_json_output("42")
+        assert isinstance(result, dict)
+        assert result["raw_output"] == 42
+
+    def test_extract_confidence_non_dict_input(self):
+        """_extract_confidence must tolerate a non-dict output silently
+        instead of raising AttributeError."""
+        from core.langgraph.agent_graph import _extract_confidence
+
+        # Should not raise
+        assert 0.0 <= _extract_confidence([1, 2, 3]) <= 1.0
+        assert 0.0 <= _extract_confidence("unexpected") <= 1.0
+        assert 0.0 <= _extract_confidence(None) <= 1.0
+
     def test_extract_confidence_numeric(self):
         from core.langgraph.agent_graph import _extract_confidence
 
