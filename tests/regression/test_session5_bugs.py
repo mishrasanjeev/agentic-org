@@ -144,7 +144,7 @@ class TestVoiceValidation:
         assert msg
 
     def test_sip_uri_accepts_canonical(self):
-        from api.v1.voice import _validate_provider_credentials, VoiceCredentials
+        from api.v1.voice import VoiceCredentials, _validate_provider_credentials
 
         creds = VoiceCredentials(custom_url="sip:trunk@example.com:5060")
         assert _validate_provider_credentials("custom", creds)[0]
@@ -160,7 +160,7 @@ class TestVoiceValidation:
         ],
     )
     def test_sip_uri_rejects_bad(self, bad_url):
-        from api.v1.voice import _validate_provider_credentials, VoiceCredentials
+        from api.v1.voice import VoiceCredentials, _validate_provider_credentials
 
         ok, _ = _validate_provider_credentials("custom", VoiceCredentials(custom_url=bad_url))
         assert not ok
@@ -175,7 +175,7 @@ class TestGoogleTtsRequiresKey:
     def test_save_without_tts_key_raises_422(self):
         from fastapi import HTTPException
 
-        from api.v1.voice import _validate_voice_config, VoiceConfig, VoiceCredentials
+        from api.v1.voice import VoiceConfig, VoiceCredentials, _validate_voice_config
 
         cfg = VoiceConfig(
             sip_provider="twilio",
@@ -191,7 +191,7 @@ class TestGoogleTtsRequiresKey:
         assert "api key" in (ei.value.detail or "").lower()
 
     def test_save_with_tts_key_passes(self):
-        from api.v1.voice import _validate_voice_config, VoiceConfig, VoiceCredentials
+        from api.v1.voice import VoiceConfig, VoiceCredentials, _validate_voice_config
 
         cfg = VoiceConfig(
             sip_provider="twilio",
