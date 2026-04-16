@@ -12,7 +12,6 @@ from sqlalchemy import (
     Index,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -23,8 +22,19 @@ from core.models.base import BaseModel
 
 class PromptTemplate(BaseModel):
     __tablename__ = "prompt_templates"
+    # Session 5 TC-003: uniqueness is enforced at the DB layer by a partial
+    # unique index that excludes soft-deleted rows (is_active = false).
+    # See migrations/versions/v4_8_3_prompt_template_partial_unique.py.
+    # The index is declared here so Alembic autogenerate stays in sync.
     __table_args__ = (
-        UniqueConstraint("tenant_id", "name", "agent_type"),
+        Index(
+            "ux_prompt_templates_tenant_name_type_active",
+            "tenant_id",
+            "name",
+            "agent_type",
+            unique=True,
+            postgresql_where="is_active = true",
+        ),
         Index("idx_prompt_templates_type", "tenant_id", "agent_type"),
         Index("idx_prompt_templates_domain", "tenant_id", "domain"),
     )

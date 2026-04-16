@@ -51,6 +51,7 @@ from api.v1 import (
     schemas,
     sop,
     sso,
+    voice,
     webhooks,
     workflow_variants,
     workflows,
@@ -206,5 +207,6 @@ app.include_router(branding.admin_router, prefix="/api/v1", tags=["Branding"])
 app.include_router(status_mod.public_router, prefix="/api/v1", tags=["Status"])
 app.include_router(sso.public_router, prefix="/api/v1", tags=["SSO"])
 app.include_router(sso.admin_router, prefix="/api/v1", tags=["SSO"])
+app.include_router(voice.router, prefix="/api/v1", tags=["Voice"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

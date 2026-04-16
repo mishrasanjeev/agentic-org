@@ -507,11 +507,68 @@ async def import_leads_csv(
     """Import leads from CSV. Expected columns: name, email, company, role, phone (optional).
 
     If auto_process=true, triggers sales agent on each new lead after import.
+
+    Session 5 TC-002 / TC-005: validate the upload shape before parsing so an
+    invalid file returns HTTP 422 with an actionable message instead of the
+    misleading "Imported 0 leads from CSV" success banner.
     """
     tid = _uuid.UUID(tenant_id)
+
+    # Session 5 TC-005: reject non-CSV uploads.
+    filename = (file.filename or "").lower()
+    if filename and not filename.endswith(".csv"):
+        raise HTTPException(
+            422,
+            detail={
+                "error": "invalid_file_type",
+                "message": "Only .csv files are supported for lead import.",
+            },
+        )
+
     content = await file.read()
-    text_content = content.decode("utf-8-sig")  # Handle BOM
+    if not content.strip():
+        raise HTTPException(
+            422,
+            detail={
+                "error": "empty_file",
+                "message": "The uploaded CSV is empty.",
+            },
+        )
+
+    try:
+        text_content = content.decode("utf-8-sig")  # Handle BOM
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "invalid_encoding",
+                "message": (
+                    "CSV must be UTF-8 encoded (with or without BOM). "
+                    f"Decoder rejected the file: {exc}."
+                ),
+            },
+        ) from exc
+
     reader = csv.DictReader(io.StringIO(text_content))
+    # Session 5 TC-005: reject CSVs that don't have the minimum required
+    # headers. Accept any casing and the ``full_name`` alias used today.
+    required_headers_lower = {"name", "email"}
+    alt_name_headers = {"full_name"}
+    header_set = {(h or "").strip().lower() for h in (reader.fieldnames or [])}
+    has_name = bool(header_set & (required_headers_lower | alt_name_headers))
+    has_email = "email" in header_set
+    if not (has_name and has_email):
+        raise HTTPException(
+            422,
+            detail={
+                "error": "missing_required_headers",
+                "message": (
+                    "CSV is missing required headers. Expected at minimum "
+                    "`name` (or `full_name`) and `email`."
+                ),
+                "headers_seen": sorted(header_set),
+            },
+        )
 
     imported = []
     skipped = []
