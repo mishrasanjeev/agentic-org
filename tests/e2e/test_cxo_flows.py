@@ -46,8 +46,36 @@ def app():
 
 @pytest.fixture
 def client(app):
-    """TestClient with auth middleware bypassed and admin scopes granted."""
-    test_tenant_id = f"e2e-tenant-{uuid.uuid4().hex[:8]}"
+    """TestClient with auth middleware bypassed and admin scopes granted.
+
+    Uses a real UUID for tenant_id and persists a matching ``tenants`` row
+    so FK constraints on tables like ``companies``, ``agents``, and
+    ``approval_policies`` resolve. The prior version used an
+    f"e2e-tenant-{hex}" string which bypassed the FK (UUID column) and
+    produced HTTP 500 / 400 from every mutating endpoint.
+    """
+    import asyncio
+
+    from sqlalchemy import text as _sql_text
+
+    from core.database import engine
+
+    test_tenant_uuid = uuid.uuid4()
+    test_tenant_id = str(test_tenant_uuid)
+
+    # Insert the tenant row so child tables can reference it via FK.
+    async def _seed_tenant() -> None:
+        async with engine.begin() as conn:
+            await conn.execute(
+                _sql_text(
+                    "INSERT INTO tenants (id, name, created_at, settings) "
+                    "VALUES (:id, :name, now(), '{}'::jsonb) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {"id": test_tenant_id, "name": f"E2E Tenant {test_tenant_id[:8]}"},
+            )
+
+    asyncio.run(_seed_tenant())
 
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
