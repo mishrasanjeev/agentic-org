@@ -90,7 +90,7 @@ dev = [
     # Pinned <4.14 because testcontainers[redis]>=4.14 transitively
     # pulls redis>=7, conflicting with celery[redis]>=5.4 (which needs
     # redis<6.5 via kombu 5.6). See CI run 24411076696.
-    "testcontainers[postgres,redis]>=4.8.0,<4.14.0",
+    "testcontainers[postgres,redis]>=4.14.2,<4.15.0",
     "factory-boy>=3.3.0",
     "ruff>=0.15.10",
     "mypy>=1.20.1",
