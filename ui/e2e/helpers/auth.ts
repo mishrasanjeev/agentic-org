@@ -54,11 +54,12 @@ export async function authenticate(page: Page): Promise<void> {
 }
 
 /**
- * Fetch the live profile from /auth/me using the E2E token. Cached.
+ * Fetch the live profile from /auth/me using the E2E token.
  *
- * Falls back to a known-good admin shape if the API is unreachable so a
- * transient network blip during test setup does not cascade across the
- * whole regression suite.
+ * Only caches on successful API response. A transient network blip returns
+ * the fallback without poisoning subsequent calls, so the next test (or
+ * retry) still gets a fresh shot at the real profile — otherwise one bad
+ * request at setup time could lock the whole run to the wrong identity.
  */
 export async function getProfile(page: Page): Promise<AuthUser> {
   if (_cachedProfile) return _cachedProfile;
@@ -79,9 +80,9 @@ export async function getProfile(page: Page): Promise<AuthUser> {
       return _cachedProfile;
     }
   } catch {
-    // fall through
+    // fall through to fallback, but don't cache — next call retries the API.
   }
-  _cachedProfile = {
+  return {
     email: "demo@cafirm.agenticorg.ai",
     name: "Demo Partner",
     role: "admin",
@@ -89,15 +90,16 @@ export async function getProfile(page: Page): Promise<AuthUser> {
     tenant_id: "58483c90-494b-445d-85c6-245a727fe372",
     onboardingComplete: true,
   };
-  return _cachedProfile;
 }
 
 /**
- * Fetch the first real company id for the authed tenant. Cached.
+ * Fetch the first real company id for the authed tenant.
  *
- * Specs MUST use this instead of hardcoding `c1` — `c1` does not exist in
- * the demo tenant, so CompanyDetail renders an empty shell and every
- * downstream selector fails.
+ * Only caches on successful API response with a non-empty list. A
+ * hardcoded UUID fallback would be wrong for any other tenant/environment
+ * and would turn a transient list-endpoint blip into persistent false
+ * negatives across the suite. When the API cannot answer, throw — the
+ * caller's spec fails cleanly and retries on the next attempt.
  */
 export async function getCompanyId(page: Page): Promise<string> {
   if (_cachedCompanyId) return _cachedCompanyId;
@@ -115,10 +117,13 @@ export async function getCompanyId(page: Page): Promise<string> {
       }
     }
   } catch {
-    // fall through
+    // Fall through — we'd rather raise a clean error than silently
+    // return a cross-tenant UUID.
   }
-  // Known-good fallback so the spec can still run if the list endpoint blips.
-  return "b3611f2b-9906-4ae5-b525-c034bb823282";
+  throw new Error(
+    "getCompanyId: /api/v1/companies returned no usable id. " +
+      "Seed the demo tenant with at least one company before running the suite.",
+  );
 }
 
 /**

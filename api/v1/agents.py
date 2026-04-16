@@ -1102,31 +1102,43 @@ async def run_agent(
     authorized_tools = agent_config.get("authorized_tools", []) or []
     correlation_id = f"run_{_uuid.uuid4().hex[:12]}"
 
-    # Pre-flight: surface unresolvable tools before the graph runs so callers
-    # get an actionable 400 instead of a runtime AttributeError / silent tool
-    # failure (Session 4 BUGs 013/014/015). The tool index is built from
-    # connector manifests; a tool missing here means the required connector
-    # is not registered for this deployment.
+    # Pre-flight: filter out unresolvable tools so the graph runs with what
+    # the registry can actually dispatch (Session 4 BUGs 013/014/015). Many
+    # auto-populated defaults in _AGENT_TYPE_DEFAULT_TOOLS are not registered
+    # as connector tools today, so a hard 400 on any missing name would
+    # regress newly-created default agents. Only fail if *every* authorized
+    # tool is unresolvable and the agent had some to begin with — an empty
+    # toolset after filtering means the agent genuinely can't do its job.
     if authorized_tools:
         try:
             missing_tools = _validate_authorized_tools(authorized_tools)
         except Exception:  # noqa: BLE001 - validation is best-effort
             missing_tools = []
         if missing_tools:
-            linked_connectors = agent_config.get("connector_ids") or []
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "tools_unavailable",
-                    "message": (
-                        "Agent authorized_tools cannot be resolved because the "
-                        "underlying connector is not linked. Link the required "
-                        "connector to this agent before running it."
-                    ),
-                    "missing_tools": missing_tools,
-                    "linked_connector_ids": linked_connectors,
-                },
+            resolvable = [t for t in authorized_tools if t not in set(missing_tools)]
+            logger.warning(
+                "agent_run_tools_filtered",
+                agent_id=str(agent_id),
+                missing=missing_tools,
+                kept=resolvable,
             )
+            if not resolvable:
+                linked_connectors = agent_config.get("connector_ids") or []
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "tools_unavailable",
+                        "message": (
+                            "Agent has no resolvable tools — every entry in "
+                            "authorized_tools is missing from the connector "
+                            "registry. Link a connector or update the tool list."
+                        ),
+                        "missing_tools": missing_tools,
+                        "linked_connector_ids": linked_connectors,
+                    },
+                )
+            authorized_tools = resolvable
+            agent_config["authorized_tools"] = resolvable
 
     # Resolve system prompt — custom text or load from prompt file
     system_prompt = agent_config.get("system_prompt_text") or ""
