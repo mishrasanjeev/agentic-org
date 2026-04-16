@@ -20,9 +20,17 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(scope="module")
 def app():
-    from api.main import app as _app
+    import asyncio
 
-    # Replace lifespan to skip DB init
+    from api.main import app as _app
+    from core.database import init_db
+
+    # Run init_db once so the FastAPI TestClient talks to a schema-populated
+    # Postgres. Replace the production lifespan afterwards with a no-op so
+    # TestClient setup/teardown does not try to re-run startup hooks that
+    # depend on Redis, background workers, or Grantex.
+    asyncio.run(init_db())
+
     @asynccontextmanager
     async def _test_lifespan(app):
         yield

@@ -207,14 +207,18 @@ jobs:
       # which drives the FastAPI app via TestClient and needs a real
       # DB behind it. Cheap to start, isolated from production.
       postgres:
+        # Use the credentials the app's default Settings expects so the
+        # FastAPI TestClient path works without any env-var plumbing:
+        #   core/config.py:20 db_url default =
+        #     postgresql+asyncpg://agenticorg:agenticorg_dev@localhost:5432/agenticorg
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_DB: agenticorg_e2e
-          POSTGRES_USER: e2e
-          POSTGRES_PASSWORD: e2e
+          POSTGRES_DB: agenticorg
+          POSTGRES_USER: agenticorg
+          POSTGRES_PASSWORD: agenticorg_dev
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U e2e -d agenticorg_e2e"
+          --health-cmd "pg_isready -U agenticorg -d agenticorg"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -291,7 +295,9 @@ jobs:
         env:
           AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
           AGENTICORG_E2E_TOKEN: ${{ steps.auth.outputs.token }}
-          AGENTICORG_DATABASE_URL: postgresql+asyncpg://e2e:e2e@localhost:5432/agenticorg_e2e
+          # Correct env-var names: `db_url`/`redis_url` fields in Settings
+          # map to AGENTICORG_DB_URL/AGENTICORG_REDIS_URL (env_prefix).
+          AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@localhost:5432/agenticorg
           AGENTICORG_REDIS_URL: redis://localhost:6379/0
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
 
