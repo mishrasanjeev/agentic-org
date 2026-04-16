@@ -87,7 +87,7 @@ test.describe("Login Page — Auth Flow", () => {
     await page.goto(`${APP}/login`);
     await page.evaluate((token) => {
       localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));    }, E2E_TOKEN);
+    localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));    }, E2E_TOKEN);
     await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
     await expect(page.getByText("Dashboard").first()).toBeVisible({ timeout: 10000 });
   });

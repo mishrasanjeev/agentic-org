@@ -40,7 +40,7 @@ test.describe("Video Flows: Platform Overview (auth required)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
-      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+      localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));
     }, E2E_TOKEN);
   });
 
@@ -85,7 +85,7 @@ test.describe("Video Flows: CFO Finance (auth required)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
-      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+      localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));
     }, E2E_TOKEN);
   });
 
@@ -110,7 +110,7 @@ test.describe("Video Flows: CHRO HR (auth required)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
-      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+      localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));
     }, E2E_TOKEN);
   });
 
@@ -135,7 +135,7 @@ test.describe("Video Flows: CMO Marketing (auth required)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
-      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+      localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));
     }, E2E_TOKEN);
   });
 
@@ -155,7 +155,7 @@ test.describe("Video Flows: COO Operations (auth required)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
-      localStorage.setItem("user", JSON.stringify({ email: "ceo@agenticorg.local", name: "CEO", role: "ceo", domain: "general", tenant_id: "e2e-tenant", onboardingComplete: true }));
+      localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));
     }, E2E_TOKEN);
   });
 
