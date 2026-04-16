@@ -61,7 +61,7 @@ langgraph==1.1.6
 langchain==1.2.15
 langchain-google-genai==4.2.1
 langchain-anthropic==1.4.0
-langchain-openai==1.1.12
+langchain-openai==1.1.13
 langgraph-checkpoint-postgres==3.0.5
 langsmith==0.7.30
 
