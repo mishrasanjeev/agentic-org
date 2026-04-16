@@ -116,6 +116,30 @@ This repository is a multi-tenant enterprise AI platform. Optimize for correct, 
 4. Verify with the smallest meaningful checks.
 5. Report what changed, how it was verified, and any remaining risks.
 
+## Required Before Every Push
+
+Before **any** `git push`, run the local preflight gate. It mirrors every blocking check in CI so the push-and-pray loop ends.
+
+```
+bash scripts/preflight.sh
+```
+
+Fast backend-only iteration:
+
+```
+SKIP_UI=1 bash scripts/preflight.sh
+```
+
+The gate checks: branch safety (never main), `ruff check .` (whole tree), `bandit -ll -iii` on api/auth/core, alembic revision IDs ≤ 32 chars, `verify=False` scan in production code, `pytest tests/regression/ tests/unit/`, `tsc --noEmit`, and `npm run build`.
+
+Git hooks enforce this automatically — run once per clone:
+
+```
+bash scripts/install_hooks.sh
+```
+
+After that, `git commit` refuses direct-to-main commits, and `git push` runs the preflight. Emergency bypass when absolutely required: `git push --no-verify`.
+
 ## Required Verification by Change Type
 
 ### Backend Python changes

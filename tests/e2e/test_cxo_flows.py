@@ -94,7 +94,11 @@ def client(app):
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
             with patch("auth.grantex_middleware.extract_scopes", return_value=["agenticorg:admin"]):
-                with TestClient(app, raise_server_exceptions=False) as c:
+                # raise_server_exceptions=True so server tracebacks surface
+                # in the pytest output. Without it, every 500 looks the
+                # same — which is why these tests took several CI cycles
+                # to debug.
+                with TestClient(app, raise_server_exceptions=True) as c:
                     c.headers["Authorization"] = "Bearer fake-e2e-token"
                     c._test_tenant_id = test_tenant_id
                     yield c
