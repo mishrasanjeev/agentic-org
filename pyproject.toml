@@ -91,7 +91,7 @@ dev = [
     # pulls redis>=7, conflicting with celery[redis]>=5.4 (which needs
     # redis<6.5 via kombu 5.6). See CI run 24411076696.
     "testcontainers[postgres,redis]>=4.8.0,<4.14.0",
-    "factory-boy>=3.3.0",
+    "factory-boy>=3.3.3",
     "ruff>=0.15.10",
     "mypy>=1.20.1",
     "bandit>=1.9.4",
