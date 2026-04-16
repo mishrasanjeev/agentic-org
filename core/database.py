@@ -93,6 +93,15 @@ async def init_db() -> None:
         return
 
     async with engine.begin() as conn:
+        # Serialize startup DDL across concurrently-booting pods with a
+        # transaction-scoped advisory lock. Without this, a rolling deploy
+        # that restarts N pods at once has them racing on ALTER TABLE ...
+        # ENABLE ROW LEVEL SECURITY (AccessExclusiveLock) and deadlocking
+        # against each other — the April 16 outage. The lock is released
+        # automatically when this BEGIN..COMMIT transaction ends. Any
+        # magic int64 works; the constant below is arbitrary but stable.
+        await conn.execute(text("SELECT pg_advisory_xact_lock(4815162342);"))
+
         # v4.0.0: Ensure prompt_amendments column exists on agents table.
         # Safe to run every startup (IF NOT EXISTS check).
         await conn.execute(text("""
