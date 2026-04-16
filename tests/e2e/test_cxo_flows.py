@@ -18,9 +18,16 @@ from fastapi.testclient import TestClient
 # Fixtures
 # ---------------------------------------------------------------------------
 
+# Module-level tenant UUID so every test in this module shares the same
+# FK-satisfying tenants row. See the app() fixture for the INSERT.
+_TEST_TENANT_ID = str(uuid.uuid4())
+
+
 @pytest.fixture(scope="module")
 def app():
     import asyncio
+
+    from sqlalchemy import text as _sql_text
 
     from api.main import app as _app
     from core.database import engine, init_db
@@ -33,6 +40,26 @@ def app():
         async with engine.begin() as conn:
             await conn.run_sync(BaseModel.metadata.create_all)
         await init_db()
+        # Seed a single tenants row that every test client will reuse.
+        # Include every NOT NULL column with a safe default — missing
+        # `slug` previously caused NotNullViolationError at every test.
+        # Doing this once in the module fixture (which runs asyncio.run
+        # exactly once) avoids "Future attached to a different loop"
+        # errors that hit us when the per-test client tried to call
+        # asyncio.run() again with the shared engine.
+        async with engine.begin() as conn:
+            await conn.execute(
+                _sql_text(
+                    "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
+                    "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "id": _TEST_TENANT_ID,
+                    "name": f"E2E Tenant {_TEST_TENANT_ID[:8]}",
+                    "slug": f"e2e-{_TEST_TENANT_ID[:8]}",
+                },
+            )
 
     asyncio.run(_setup())
 
@@ -48,34 +75,11 @@ def app():
 def client(app):
     """TestClient with auth middleware bypassed and admin scopes granted.
 
-    Uses a real UUID for tenant_id and persists a matching ``tenants`` row
-    so FK constraints on tables like ``companies``, ``agents``, and
-    ``approval_policies`` resolve. The prior version used an
-    f"e2e-tenant-{hex}" string which bypassed the FK (UUID column) and
-    produced HTTP 500 / 400 from every mutating endpoint.
+    Shares the module-scoped tenant UUID so FK constraints on companies,
+    agents, approval_policies, etc. resolve without any per-test DB work
+    (which would trip pytest-asyncio's per-test event loop).
     """
-    import asyncio
-
-    from sqlalchemy import text as _sql_text
-
-    from core.database import engine
-
-    test_tenant_uuid = uuid.uuid4()
-    test_tenant_id = str(test_tenant_uuid)
-
-    # Insert the tenant row so child tables can reference it via FK.
-    async def _seed_tenant() -> None:
-        async with engine.begin() as conn:
-            await conn.execute(
-                _sql_text(
-                    "INSERT INTO tenants (id, name, created_at, settings) "
-                    "VALUES (:id, :name, now(), '{}'::jsonb) "
-                    "ON CONFLICT (id) DO NOTHING"
-                ),
-                {"id": test_tenant_id, "name": f"E2E Tenant {test_tenant_id[:8]}"},
-            )
-
-    asyncio.run(_seed_tenant())
+    test_tenant_id = _TEST_TENANT_ID
 
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
