@@ -28,20 +28,37 @@ def app():
     import asyncio
 
     from sqlalchemy import text as _sql_text
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
 
     from api.main import app as _app
-    from core.database import engine, init_db
+    from core import database as _db
+    from core.database import init_db
     from core.models.base import BaseModel
 
+    # Replace the process-wide engine with a ``NullPool`` engine for the
+    # lifetime of this module. NullPool opens a fresh asyncpg connection
+    # per checkout and closes it on release, which sidesteps the
+    # "Future attached to a different loop" errors that show up when
+    # Starlette's BaseHTTPMiddleware spawns child tasks — without
+    # pooling, no connection ever crosses an event loop boundary.
+    test_engine = create_async_engine(
+        _db.settings.db_url,
+        poolclass=NullPool,
+        pool_pre_ping=True,
+    )
+    original_engine = _db.engine
+    original_factory = _db.async_session_factory
+    _db.engine = test_engine
+    _db.async_session_factory = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
     async def _setup() -> None:
-        # Create every ORM-declared table. init_db() assumes tables exist
-        # and only adds columns / RLS policies / indexes on top — in CI we
-        # start from a bare Postgres, so create_all must run first.
-        async with engine.begin() as conn:
+        async with test_engine.begin() as conn:
             await conn.run_sync(BaseModel.metadata.create_all)
         await init_db()
-        # Seed a single tenants row that every test client will reuse.
-        async with engine.begin() as conn:
+        async with test_engine.begin() as conn:
             await conn.execute(
                 _sql_text(
                     "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
@@ -56,30 +73,33 @@ def app():
             )
 
     asyncio.run(_setup())
-
-    # ``asyncio.run`` closed its event loop on exit, and the async engine's
-    # pool still holds connections that were created inside that loop.  The
-    # next request comes in via Starlette's TestClient on a brand-new loop,
-    # and asyncpg will refuse to reuse those connections with
-    # "Future attached to a different loop". Dispose the pool synchronously
-    # so every subsequent request opens a fresh connection on its own loop.
-    asyncio.run(engine.dispose())
+    asyncio.run(test_engine.dispose())
 
     @asynccontextmanager
     async def _test_lifespan(app):
         yield
 
     _app.router.lifespan_context = _test_lifespan
-    return _app
+    try:
+        yield _app
+    finally:
+        # Restore the production engine so other modules that import
+        # core.database don't see the test replacement.
+        _db.engine = original_engine
+        _db.async_session_factory = original_factory
 
 
 @pytest.fixture
 def client(app):
     """TestClient with auth middleware bypassed and admin scopes granted.
 
-    Shares the module-scoped tenant UUID so FK constraints on companies,
-    agents, approval_policies, etc. resolve without any per-test DB work
-    (which would trip pytest-asyncio's per-test event loop).
+    Shares the module-scoped tenant UUID so FK constraints resolve, and
+    disposes the shared engine's connection pool before each test to
+    sidestep Starlette's ``BaseHTTPMiddleware`` sub-task loop-binding
+    quirk. Multi-request tests (company_switcher, create_and_retrieve)
+    spawn a child task inside that middleware which re-enters asyncpg
+    with a Future born in the previous test's loop; disposing the pool
+    forces fresh connections bound to the current test's loop.
     """
     test_tenant_id = _TEST_TENANT_ID
 
