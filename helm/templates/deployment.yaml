@@ -36,20 +36,38 @@ spec:
             {{- end }}
           resources:
             {{- toYaml (.Values.resources.api | default dict) | nindent 12 }}
+          # Startup probe: allows up to ~3 minutes for the 3.2 GB image to
+          # import LangGraph + 54 connectors and bind port 8000 on cold-
+          # started Autopilot nodes. While this probe is passing, the
+          # livenessProbe is disabled — kubelet cannot kill the container
+          # for slow startup. Once startup succeeds, liveness takes over.
+          # Prior config (initialDelaySeconds: 10, failureThreshold: 3)
+          # gave only 100s before kubelet SIGKILLed the container, which
+          # took production offline during the April 16 deploy storm.
+          startupProbe:
+            httpGet:
+              path: /api/v1/health/liveness
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
           livenessProbe:
             httpGet:
               path: /api/v1/health/liveness
               port: 8000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 90
             periodSeconds: 30
-            timeoutSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /api/v1/health
               port: 8000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
+            failureThreshold: 3
 ---
 apiVersion: apps/v1
 kind: Deployment
