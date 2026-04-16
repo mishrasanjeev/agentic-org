@@ -973,7 +973,17 @@ export default function CompanyDetail() {
           });
           const exportCsv = () => {
             const header = ["Timestamp", "Action", "Actor", "Outcome"];
-            const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+            // Neutralize CSV formula injection: any cell whose first
+            // character can be interpreted as a spreadsheet formula
+            // (=, +, -, @, CR, LF, TAB) is prefixed with a single quote
+            // so Excel/Sheets render it as text. Action and Actor fields
+            // carry user-controlled strings (filing types, emails), so
+            // without this an exported audit log could execute formulas
+            // on the reviewer's machine.
+            const csvEscape = (v: string) => {
+              const guarded = /^[=+\-@\r\n\t]/.test(v) ? `'${v}` : v;
+              return `"${guarded.replace(/"/g, '""')}"`;
+            };
             const rows = filteredActivities.map((a) => [
               a.timestamp,
               a.action,
