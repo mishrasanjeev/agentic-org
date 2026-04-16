@@ -222,6 +222,14 @@ export default function CompanyDetail() {
   const [rejectDialogId, setRejectDialogId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  // Agent and workflow detail modals
+  const [agentDetail, setAgentDetail] = useState<AutomationAgent | null>(null);
+  const [workflowDetail, setWorkflowDetail] = useState<AutomationWorkflow | null>(null);
+
+  // Audit log filter / export controls
+  const [auditQuery, setAuditQuery] = useState("");
+  const [auditOutcome, setAuditOutcome] = useState<string>("all");
+
   const [editForm, setEditForm] = useState({
     name: "",
     state_code: "",
@@ -472,7 +480,7 @@ export default function CompanyDetail() {
         filing_period: newApproval.filing_period.trim(),
         filing_data: {},
       });
-      setNewApproval({ filing_type: "gstr3b", filing_period: "" });
+      setNewApproval({ filing_type: "", filing_period: "" });
       await refreshWithNotice("Approval request created.");
     } catch (err) {
       setError(extractApiError(err, "Failed to create filing approval."));
@@ -893,7 +901,14 @@ export default function CompanyDetail() {
             </p>
           ) : (
             agents.map((agent) => (
-              <Card key={agent.id}>
+              <Card
+                key={agent.id}
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer hover:bg-muted/40 transition-colors"
+                onClick={() => setAgentDetail(agent)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAgentDetail(agent); } }}
+              >
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -919,7 +934,14 @@ export default function CompanyDetail() {
             </p>
           ) : (
             workflows.map((workflow) => (
-              <Card key={workflow.id}>
+              <Card
+                key={workflow.id}
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer hover:bg-muted/40 transition-colors"
+                onClick={() => setWorkflowDetail(workflow)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWorkflowDetail(workflow); } }}
+              >
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
@@ -937,11 +959,72 @@ export default function CompanyDetail() {
         </div>
       )}
 
-        {activeTab === "audit" && (
+        {activeTab === "audit" && (() => {
+          const auditOutcomes = Array.from(new Set(activities.map((a) => a.outcome))).sort();
+          const q = auditQuery.trim().toLowerCase();
+          const filteredActivities = activities.filter((a) => {
+            if (auditOutcome !== "all" && a.outcome !== auditOutcome) return false;
+            if (!q) return true;
+            return (
+              a.action.toLowerCase().includes(q) ||
+              a.actor.toLowerCase().includes(q) ||
+              a.outcome.toLowerCase().includes(q)
+            );
+          });
+          const exportCsv = () => {
+            const header = ["Timestamp", "Action", "Actor", "Outcome"];
+            const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+            const rows = filteredActivities.map((a) => [
+              a.timestamp,
+              a.action,
+              a.actor,
+              a.outcome,
+            ].map(csvEscape).join(","));
+            const csv = [header.join(","), ...rows].join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `audit-${company.name}-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          };
+          return (
           <Card>
             <CardContent className="pt-4">
-              {activities.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No audit events recorded yet.</p>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  value={auditQuery}
+                  onChange={(e) => setAuditQuery(e.target.value)}
+                  placeholder="Filter by action, actor, or outcome"
+                  className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <select
+                  value={auditOutcome}
+                  onChange={(e) => setAuditOutcome(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="all">All outcomes</option>
+                  {auditOutcomes.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportCsv}
+                  disabled={filteredActivities.length === 0}
+                >
+                  Export CSV
+                </Button>
+              </div>
+              {filteredActivities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {activities.length === 0
+                    ? "No audit events recorded yet."
+                    : "No audit events match the current filter."}
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -954,7 +1037,7 @@ export default function CompanyDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activities.map((activity) => (
+                    {filteredActivities.map((activity) => (
                       <tr key={activity.id} className="border-b last:border-0">
                         <td className="px-3 py-2 text-xs text-muted-foreground">{formatDateTime(activity.timestamp)}</td>
                         <td className="px-3 py-2 font-medium">{activity.action}</td>
@@ -970,7 +1053,8 @@ export default function CompanyDetail() {
             )}
           </CardContent>
         </Card>
-      )}
+          );
+        })()}
 
       {activeTab === "approvals" && (
         <div className="space-y-6">
@@ -1337,6 +1421,80 @@ export default function CompanyDetail() {
           </Card>
         </div>
       )}
+      {/* Agent detail modal */}
+      {agentDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setAgentDetail(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-3">{agentDetail.name}</h3>
+            <div className="space-y-2 text-sm">
+              <div><span className="text-muted-foreground">Designation:</span> {agentDetail.designation || "-"}</div>
+              <div><span className="text-muted-foreground">Domain:</span> {agentDetail.domain}</div>
+              <div>
+                <span className="text-muted-foreground">Status:</span>{" "}
+                <Badge variant={statusVariant(agentDetail.status)}>{agentDetail.status}</Badge>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => setAgentDetail(null)}>Close</Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const aid = agentDetail.id;
+                  setAgentDetail(null);
+                  navigate(`/dashboard/agents/${aid}`);
+                }}
+              >
+                Manage Agent
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workflow detail modal */}
+      {workflowDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setWorkflowDetail(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-3">{workflowDetail.name}</h3>
+            <div className="space-y-2 text-sm">
+              <div><span className="text-muted-foreground">Description:</span> {workflowDetail.description || "No description."}</div>
+              <div>
+                <span className="text-muted-foreground">Status:</span>{" "}
+                <Badge variant={workflowDetail.is_active ? "success" : "secondary"}>
+                  {workflowDetail.is_active ? "active" : "inactive"}
+                </Badge>
+              </div>
+              <div><span className="text-muted-foreground">Created:</span> {formatDate(workflowDetail.created_at)}</div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => setWorkflowDetail(null)}>Close</Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const wid = workflowDetail.id;
+                  setWorkflowDetail(null);
+                  navigate(`/dashboard/workflows/${wid}`);
+                }}
+              >
+                Open Workflow
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Rejection reason dialog (replaces window.prompt) */}
       {rejectDialogId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

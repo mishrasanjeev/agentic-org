@@ -73,6 +73,12 @@ class AgentCreate(BaseModel):
     reporting_to: str | None = None
     org_level: int | None = None
     company_id: str | None = None
+    # Tenant-scoped Connector IDs this agent is linked to. Required when
+    # authorized_tools reference a connector whose instance must be provisioned
+    # for the tenant (e.g. Gmail oauth).  Empty list means "use tenant-default
+    # connector lookup" -- tools may still fail at call time if no instance is
+    # linked, but the agent can be created.
+    connector_ids: list[str] = []
 
 
 class AgentUpdate(BaseModel):
@@ -96,6 +102,7 @@ class AgentUpdate(BaseModel):
     reporting_to: str | None = None
     org_level: int | None = None
     change_reason: str | None = None
+    connector_ids: list[str] | None = None
 
 
 class AgentResponse(BaseModel):

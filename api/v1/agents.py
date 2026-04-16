@@ -294,6 +294,11 @@ def _agent_to_dict(agent: Agent) -> dict:
         "org_level": agent.org_level,
         "prompt_amendments": getattr(agent, "prompt_amendments", None) or [],
         "config": agent.config,
+        # v4.3.0: connector_ids persists which tenant Connector instances this
+        # agent is linked to. Surfaced here so run_agent can scope tools, the
+        # UI can render them, and consumers can detect "Gmail tool requested
+        # but no Gmail connector linked" before the agent crashes at runtime.
+        "connector_ids": getattr(agent, "connector_ids", None) or [],
     }
 
 
@@ -422,6 +427,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             parent_agent_id=(
                 _uuid.UUID(body.parent_agent_id) if body.parent_agent_id else None
             ),
+            connector_ids=list(body.connector_ids) if body.connector_ids else [],
         )
         session.add(agent)
         await session.flush()  # populate agent.id
@@ -1045,6 +1051,8 @@ async def update_agent(
         if "parent_agent_id" in update_data:
             pid = update_data["parent_agent_id"]
             agent.parent_agent_id = _uuid.UUID(pid) if pid else None
+        if "connector_ids" in update_data and update_data["connector_ids"] is not None:
+            agent.connector_ids = list(update_data["connector_ids"])
 
         # Audit trail for prompt edits
         new_prompt = agent.system_prompt_text
@@ -1091,8 +1099,34 @@ async def run_agent(
         agent_config = _agent_to_dict(agent_row)
 
     # 2. Prepare execution config
-    authorized_tools = agent_config.get("authorized_tools", [])
+    authorized_tools = agent_config.get("authorized_tools", []) or []
     correlation_id = f"run_{_uuid.uuid4().hex[:12]}"
+
+    # Pre-flight: surface unresolvable tools before the graph runs so callers
+    # get an actionable 400 instead of a runtime AttributeError / silent tool
+    # failure (Session 4 BUGs 013/014/015). The tool index is built from
+    # connector manifests; a tool missing here means the required connector
+    # is not registered for this deployment.
+    if authorized_tools:
+        try:
+            missing_tools = _validate_authorized_tools(authorized_tools)
+        except Exception:  # noqa: BLE001 - validation is best-effort
+            missing_tools = []
+        if missing_tools:
+            linked_connectors = agent_config.get("connector_ids") or []
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "tools_unavailable",
+                    "message": (
+                        "Agent authorized_tools cannot be resolved because the "
+                        "underlying connector is not linked. Link the required "
+                        "connector to this agent before running it."
+                    ),
+                    "missing_tools": missing_tools,
+                    "linked_connector_ids": linked_connectors,
+                },
+            )
 
     # Resolve system prompt — custom text or load from prompt file
     system_prompt = agent_config.get("system_prompt_text") or ""
