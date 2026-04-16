@@ -54,7 +54,7 @@ dnspython==2.8.0
 # ─── LLM Providers ──────────────────────────────────────────────────────────
 google-genai==1.73.1
 anthropic==0.95.0
-openai==2.31.0
+openai==2.32.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
 langgraph==1.1.6
