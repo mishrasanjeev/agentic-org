@@ -11,7 +11,7 @@ import uuid as _uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user
@@ -33,6 +33,46 @@ class CompanyRole(enum.StrEnum):
     senior_associate = "senior_associate"
     associate = "associate"
     audit_reviewer = "audit_reviewer"
+
+
+# Lookup table: 2-char state codes and their display names.
+# Kept in sync with ui/src/lib/indianStates.ts.
+_STATE_CODES: dict[str, str] = {
+    "AN": "Andaman & Nicobar", "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh",
+    "AS": "Assam", "BR": "Bihar", "CG": "Chhattisgarh", "CH": "Chandigarh",
+    "DL": "Delhi", "GA": "Goa", "GJ": "Gujarat", "HP": "Himachal Pradesh",
+    "HR": "Haryana", "JH": "Jharkhand", "JK": "Jammu & Kashmir", "KA": "Karnataka",
+    "KL": "Kerala", "LA": "Ladakh", "LD": "Lakshadweep", "MH": "Maharashtra",
+    "ML": "Meghalaya", "MN": "Manipur", "MP": "Madhya Pradesh", "MZ": "Mizoram",
+    "NL": "Nagaland", "OD": "Odisha", "PB": "Punjab", "PY": "Puducherry",
+    "RJ": "Rajasthan", "SK": "Sikkim", "TG": "Telangana", "TN": "Tamil Nadu",
+    "TR": "Tripura", "UK": "Uttarakhand", "UP": "Uttar Pradesh", "WB": "West Bengal",
+}
+_STATE_NAME_TO_CODE: dict[str, str] = {v.lower(): k for k, v in _STATE_CODES.items()}
+
+
+def _normalize_state_code(value: str | None) -> str | None:
+    """Accept either a 2-char state code or a full state name; return the code.
+
+    Protects the DB insert (state_code VARCHAR(2)) from callers that send the
+    full state name (historical 500 error).
+    """
+    if value is None:
+        return None
+    v = value.strip()
+    if not v:
+        return None
+    upper = v.upper()
+    if len(upper) == 2 and upper in _STATE_CODES:
+        return upper
+    lookup = _STATE_NAME_TO_CODE.get(v.lower())
+    if lookup:
+        return lookup
+    if len(upper) == 2:
+        return upper
+    raise ValueError(
+        f"state_code must be a 2-char code or known Indian state name, got {value!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -103,10 +143,10 @@ class CompanyOnboard(BaseModel):
     pan: str = Field(..., max_length=10)
     tan: str | None = Field(None, max_length=10)
     cin: str | None = Field(None, max_length=21)
-    # Must match the companies.state_code VARCHAR(2) column; accepting a
-    # longer string here silently passed a full state name to the DB and
-    # failed the insert at the column-length boundary.
-    state_code: str | None = Field(None, max_length=2)
+    # companies.state_code is VARCHAR(2). Accept either the 2-char code or a
+    # full state name from older clients and normalize to the code so the DB
+    # insert does not fail at the column-length boundary (prior 500 error).
+    state_code: str | None = Field(None, max_length=64)
     industry: str | None = Field(None, max_length=100)
     registered_address: str | None = None
     signatory_name: str | None = Field(None, max_length=255)
@@ -122,6 +162,11 @@ class CompanyOnboard(BaseModel):
     esi_registration: str | None = None
     pt_registration: str | None = None
     gst_auto_file: bool = False
+
+    @field_validator("state_code", mode="before")
+    @classmethod
+    def _normalize_state(cls, value: str | None) -> str | None:
+        return _normalize_state_code(value)
 
 
 class RoleMapping(BaseModel):
@@ -906,8 +951,10 @@ async def create_filing_approval(
 ):
     """Create a filing approval request.
 
-    If the company has gst_auto_file=True, the approval is auto-approved
-    immediately.
+    Always creates in ``pending`` state so the approval workflow runs as
+    designed. Auto-filing (``company.gst_auto_file``) is a downstream
+    filing concern, not an approval-creation short-circuit -- creating
+    pre-approved records here skipped the partner review UI entirely.
     """
     tid = _uuid.UUID(tenant_id)
     try:
@@ -927,20 +974,17 @@ async def create_filing_approval(
         if not company:
             raise HTTPException(404, "Company not found")
 
-        # Determine auto-approval
-        is_auto = company.gst_auto_file is True
-
         approval = FilingApproval(
             tenant_id=tid,
             company_id=cid,
             filing_type=body.filing_type,
             filing_period=body.filing_period,
             filing_data=body.filing_data,
-            status="approved" if is_auto else "pending",
+            status="pending",
             requested_by=user_email,
-            approved_by=user_email if is_auto else None,
-            approved_at=datetime.utcnow() if is_auto else None,  # noqa: DTZ003
-            auto_approved=is_auto,
+            approved_by=None,
+            approved_at=None,
+            auto_approved=False,
         )
         session.add(approval)
         await session.flush()

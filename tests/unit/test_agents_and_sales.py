@@ -192,6 +192,9 @@ class TestAgentToDict:
             # v4.6.0: added so the UI can show GA/BETA badges and
             # cost-center attribution.
             "maturity", "cost_center_id",
+            # Session 4 BUG-013: surfaced so the UI can scope tools to
+            # linked tenant Connector instances.
+            "connector_ids",
         }
         assert set(result.keys()) == expected_keys
 

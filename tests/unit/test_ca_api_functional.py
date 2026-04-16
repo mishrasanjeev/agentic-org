@@ -107,21 +107,20 @@ class TestFilingApprovalEndpoints:
         assert "session.add" in source
         assert "session.flush" in source
 
-    def test_auto_approval_when_gst_auto_file_true(self):
-        """create_filing_approval source checks gst_auto_file for auto-approval."""
+    def test_create_always_pending(self):
+        """create_filing_approval must always create in pending state.
+
+        Session 4 BUG-002: auto-approval on create skipped the partner review
+        UI entirely, which broke the approval workflow. Auto-filing is now a
+        downstream concern, not an approval-creation short-circuit.
+        """
         from api.v1.companies import create_filing_approval
 
         source = inspect.getsource(create_filing_approval)
-        assert "gst_auto_file" in source
-        assert '"approved"' in source
-        assert "auto_approved" in source
-
-    def test_manual_approval_when_gst_auto_file_false(self):
-        """create_filing_approval defaults to pending when not auto-filing."""
-        from api.v1.companies import create_filing_approval
-
-        source = inspect.getsource(create_filing_approval)
-        assert '"pending"' in source
+        assert 'status="pending"' in source
+        assert "auto_approved=False" in source
+        # Must NOT branch status on gst_auto_file at creation time.
+        assert '"approved" if is_auto' not in source
 
     def test_partner_self_approval_checks_role(self):
         """approve_filing checks that user has partner role."""
