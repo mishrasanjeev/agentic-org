@@ -41,12 +41,6 @@ def app():
             await conn.run_sync(BaseModel.metadata.create_all)
         await init_db()
         # Seed a single tenants row that every test client will reuse.
-        # Include every NOT NULL column with a safe default — missing
-        # `slug` previously caused NotNullViolationError at every test.
-        # Doing this once in the module fixture (which runs asyncio.run
-        # exactly once) avoids "Future attached to a different loop"
-        # errors that hit us when the per-test client tried to call
-        # asyncio.run() again with the shared engine.
         async with engine.begin() as conn:
             await conn.execute(
                 _sql_text(
@@ -62,6 +56,14 @@ def app():
             )
 
     asyncio.run(_setup())
+
+    # ``asyncio.run`` closed its event loop on exit, and the async engine's
+    # pool still holds connections that were created inside that loop.  The
+    # next request comes in via Starlette's TestClient on a brand-new loop,
+    # and asyncpg will refuse to reuse those connections with
+    # "Future attached to a different loop". Dispose the pool synchronously
+    # so every subsequent request opens a fresh connection on its own loop.
+    asyncio.run(engine.dispose())
 
     @asynccontextmanager
     async def _test_lifespan(app):
