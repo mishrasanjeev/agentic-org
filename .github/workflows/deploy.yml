@@ -202,6 +202,25 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      # Ephemeral Postgres used only by tests/e2e/test_cxo_flows.py,
+      # which drives the FastAPI app via TestClient and needs a real
+      # DB behind it. Cheap to start, isolated from production.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: agenticorg_e2e
+          POSTGRES_USER: e2e
+          POSTGRES_PASSWORD: e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U e2e -d agenticorg_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
     steps:
       - uses: actions/checkout@v6
 
@@ -223,23 +242,11 @@ jobs:
             sleep 10
           done
 
-      - name: Run Python E2E tests (against production)
-        # Global 5-minute cap — the previous fixture-teardown hang wedged
-        # a runner past 25 min (CI runs 24432641344 and 24433193853),
-        # cancel requests did not propagate. This puts a hard ceiling.
-        timeout-minutes: 5
-        run: pytest tests/e2e/ -v
-        env:
-          AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
-          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
-
-      - name: Run Synthetic Agent Quality tests (non-blocking — tests LLM behavior)
-        run: pytest tests/synthetic_data/ -v || echo "::warning::Synthetic agent tests failed — LLM behavior issue, not code bug"
-        continue-on-error: true
-        env:
-          AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
-          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
-
+      # Acquire the auth token FIRST so every downstream step (pytest e2e,
+      # synthetic tests, Playwright) sees the same AGENTICORG_E2E_TOKEN.
+      # Previously this step ran after the pytest steps, which forced the
+      # 21 token-gated test cases in tests/e2e/test_smoke.py and
+      # tests/synthetic_data/ to skip.
       - name: Get fresh E2E auth token
         id: auth
         run: |
@@ -263,24 +270,53 @@ jobs:
           echo "::error::Could not acquire E2E auth token after 5 attempts — failing pipeline"
           exit 1
 
+      - name: Seed demo tenant with an AP Processor agent (idempotent)
+        # Several synthetic tests look up an agent of type ``ap_processor``
+        # and skip if none exists. The demo tenant ships with other
+        # finance agents but not AP Processor, so the tests were always
+        # skipping. Create one here if absent; the endpoint is a no-op
+        # when a shadow agent of that type already exists (caught by the
+        # fleet-limit guard + 409 -> treated as success).
+        run: |
+          python3 scripts/seed_e2e_demo_agents.py \
+            --base-url https://app.agenticorg.ai \
+            --token "${{ steps.auth.outputs.token }}"
+
+      - name: Run Python E2E tests (against production)
+        # Global 5-minute cap — the previous fixture-teardown hang wedged
+        # a runner past 25 min (CI runs 24432641344 and 24433193853),
+        # cancel requests did not propagate. This puts a hard ceiling.
+        timeout-minutes: 5
+        run: pytest tests/e2e/ -v
+        env:
+          AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
+          AGENTICORG_E2E_TOKEN: ${{ steps.auth.outputs.token }}
+          AGENTICORG_DATABASE_URL: postgresql+asyncpg://e2e:e2e@localhost:5432/agenticorg_e2e
+          AGENTICORG_REDIS_URL: redis://localhost:6379/0
+          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
+
+      - name: Run Synthetic Agent Quality tests (LLM behavior)
+        # Now blocking. With AGENTICORG_ENABLE_LIVE_TESTS=1 + a real token
+        # + seeded AP Processor agent, every assertion should resolve.
+        # If this step starts flaking on legitimate LLM non-determinism,
+        # split the non-deterministic cases into an explicitly-marked
+        # suite — do not reintroduce ``continue-on-error``.
+        run: pytest tests/synthetic_data/ -v
+        env:
+          AGENTICORG_E2E_BASE_URL: https://app.agenticorg.ai
+          AGENTICORG_E2E_TOKEN: ${{ steps.auth.outputs.token }}
+          AGENTICORG_ENABLE_LIVE_TESTS: "1"
+          AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
+
       - name: Install Playwright
         run: cd ui && npm install --legacy-peer-deps && npx playwright install --with-deps chromium
 
       - name: Run ALL Playwright E2E regression suite against production
-        # Non-blocking. The suite is a 438-test post-deploy canary against
-        # live production. It runs for every deploy, uploads a report as
-        # an artifact, and surfaces drift — but it does not gate CI.
-        #
-        # Why non-blocking: the suite has accumulated contract-drift
-        # against the current UI over many releases (expected KPI card
-        # counts, specific INR amounts, demo tenant seed rows, etc.),
-        # and fixing every spec is a dedicated multi-week effort, not
-        # a deploy-time concern. Production safety is enforced by the
-        # blocking gates above: lint, unit, security, integration,
-        # build, deploy-production's rollout check, and the post-deploy
-        # pytest e2e step (5-min cap).
+        # Blocking. PR #151 (Phase 1 auth role) and #152 (Phase 2 cxo
+        # rewrite) fixed the systemic drift that had been hidden by
+        # continue-on-error. If a spec fails here, fix the spec or the
+        # product — do not reintroduce continue-on-error.
         timeout-minutes: 45
-        continue-on-error: true
         run: cd ui && npx playwright test --config=e2e/regression.config.ts
         env:
           BASE_URL: https://app.agenticorg.ai
