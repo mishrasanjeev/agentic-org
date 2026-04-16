@@ -23,13 +23,18 @@ def app():
     import asyncio
 
     from api.main import app as _app
-    from core.database import init_db
+    from core.database import engine, init_db
+    from core.models.base import BaseModel
 
-    # Run init_db once so the FastAPI TestClient talks to a schema-populated
-    # Postgres. Replace the production lifespan afterwards with a no-op so
-    # TestClient setup/teardown does not try to re-run startup hooks that
-    # depend on Redis, background workers, or Grantex.
-    asyncio.run(init_db())
+    async def _setup() -> None:
+        # Create every ORM-declared table. init_db() assumes tables exist
+        # and only adds columns / RLS policies / indexes on top — in CI we
+        # start from a bare Postgres, so create_all must run first.
+        async with engine.begin() as conn:
+            await conn.run_sync(BaseModel.metadata.create_all)
+        await init_db()
+
+    asyncio.run(_setup())
 
     @asynccontextmanager
     async def _test_lifespan(app):

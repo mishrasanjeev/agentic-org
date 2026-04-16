@@ -120,11 +120,37 @@ export default function SalesPipeline() {
       const { data } = await api.post("/sales/import-csv", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      const count = data.imported?.length ?? 0;
-      setImportMsg({ type: "success", msg: `Imported ${count} lead${count !== 1 ? "s" : ""} from CSV` });
+      // Backend returns `imported` as an integer count and `leads` as the
+      // inserted rows. TC-002 regression: this used to read
+      // `data.imported?.length` which is undefined on a number and
+      // silently collapsed to 0 regardless of how many leads imported.
+      const count =
+        typeof data.imported === "number"
+          ? data.imported
+          : Array.isArray(data.leads)
+            ? data.leads.length
+            : 0;
+      const skipped = typeof data.skipped === "number" ? data.skipped : 0;
+      const suffix = skipped > 0 ? ` (${skipped} skipped)` : "";
+      setImportMsg({
+        type: count > 0 ? "success" : "error",
+        msg: count > 0
+          ? `Imported ${count} lead${count !== 1 ? "s" : ""} from CSV${suffix}`
+          : "No valid leads found in CSV. Check headers (name, email) and row values.",
+      });
       await fetchData();
-    } catch {
-      setImportMsg({ type: "error", msg: "CSV import failed. Ensure columns: name, email, company, role" });
+    } catch (e: unknown) {
+      // TC-005: surface the server's 422 detail so the user sees *why*
+      // instead of the generic "CSV import failed".
+      const resp = (e as { response?: { data?: { detail?: { message?: string } | string } } })?.response;
+      const detail = resp?.data?.detail;
+      const msg =
+        typeof detail === "object" && detail?.message
+          ? detail.message
+          : typeof detail === "string"
+            ? detail
+            : "CSV import failed. Ensure columns: name, email, company, role";
+      setImportMsg({ type: "error", msg });
     } finally {
       setImportingCsv(false);
       e.target.value = "";  // reset file input

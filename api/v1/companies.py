@@ -2082,6 +2082,87 @@ async def tally_detect(
         )
 
 
+# ---------------------------------------------------------------------------
+# TALLY TEST CONNECTION -- POST
+# Session 5 BUG-S5-001: onboarding wizard's Test Connection button calls
+# POST /companies/test-tally. The route did not exist, so Test Connection
+# returned HTTP 405. This is a thin connectivity probe — no persistence —
+# and is intentionally separate from /tally-detect (which also pulls
+# company metadata) so the UI can show "connection OK" before the user
+# cares about auto-detected values.
+# ---------------------------------------------------------------------------
+
+
+class TallyTestRequest(BaseModel):
+    bridge_url: str
+    bridge_id: str | None = None
+    company_name: str | None = None
+
+
+class TallyTestResponse(BaseModel):
+    success: bool
+    message: str
+    bridge_version: str | None = None
+
+
+@router.post(
+    "/companies/test-tally",
+    response_model=TallyTestResponse,
+)
+async def test_tally(
+    body: TallyTestRequest,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Probe a Tally bridge for reachability.
+
+    Returns success=True when the bridge responds to /api/health (or
+    /api/company-info as a fallback) with 2xx. Returns success=False and
+    a human-readable message on any failure. Does not persist anything.
+    """
+    if not body.bridge_url:
+        raise HTTPException(422, "bridge_url is required")
+
+    import httpx
+
+    url = body.bridge_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{url}/api/health")
+            if resp.status_code < 400:
+                bridge_version = None
+                try:
+                    bridge_version = resp.json().get("version")
+                except Exception:  # noqa: S110
+                    pass
+                return TallyTestResponse(
+                    success=True,
+                    message="Bridge reachable",
+                    bridge_version=bridge_version,
+                )
+            # Some bridge versions don't expose /api/health; probe company-info.
+            resp = await client.get(f"{url}/api/company-info")
+            resp.raise_for_status()
+            return TallyTestResponse(success=True, message="Bridge reachable")
+    except httpx.ConnectError:
+        return TallyTestResponse(
+            success=False,
+            message=(
+                f"Could not reach bridge at {url} — verify the URL and that "
+                "the AgenticOrg Tally Bridge is running."
+            ),
+        )
+    except httpx.HTTPStatusError as exc:
+        return TallyTestResponse(
+            success=False,
+            message=f"Bridge responded with HTTP {exc.response.status_code}",
+        )
+    except Exception as exc:  # noqa: BLE001 — return user-friendly text
+        return TallyTestResponse(
+            success=False,
+            message=f"Bridge connection failed: {type(exc).__name__}",
+        )
+
+
 # ===========================================================================
 # Partner Dashboard KPI schemas
 # ===========================================================================

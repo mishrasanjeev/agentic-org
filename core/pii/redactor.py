@@ -68,6 +68,14 @@ class PIIRedactor:
     _lock = threading.Lock()
     _initialized: bool = False
 
+    # Class-level defaults so `self._analyzer`/`self._anonymizer` always
+    # exist from first attribute access. Without these, a second thread
+    # that sees ``_initialized=True`` before the first thread finishes
+    # ``__init__`` would hit AttributeError on ``_analyzer`` — the exact
+    # crash reported in Session 5 BUG-S5-005 during agent sample generation.
+    _analyzer: Any = None
+    _anonymizer: Any = None
+
     def __new__(cls) -> PIIRedactor:
         if cls._instance is None:
             with cls._lock:
@@ -79,27 +87,40 @@ class PIIRedactor:
         return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
-            return
-        self._initialized = True
+        # Lock the whole __init__ so two concurrent `PIIRedactor()` calls
+        # cannot race on partial initialization. The _initialized flag
+        # inside the lock is what makes this safe under multi-threaded
+        # startup (uvicorn workers, LangGraph concurrent nodes).
+        with self._lock:
+            if self._initialized:
+                return
+            if not _PRESIDIO_AVAILABLE:
+                logger.warning("presidio_not_installed", msg="PII redaction will be a no-op")
+                # Defensive explicit assignment even though class-level
+                # defaults already cover this. Keeps the intent obvious.
+                self._analyzer = None
+                self._anonymizer = None
+                self._initialized = True
+                return
 
-        if not _PRESIDIO_AVAILABLE:
-            logger.warning("presidio_not_installed", msg="PII redaction will be a no-op")
-            self._analyzer: Any = None
-            self._anonymizer: Any = None
-            return
+            # Build analyzer with custom India recognizers
+            self._analyzer = AnalyzerEngine()
+            self._anonymizer = AnonymizerEngine()
 
-        # Build analyzer with custom India recognizers
-        self._analyzer = AnalyzerEngine()
-        self._anonymizer = AnonymizerEngine()
+            # Register India-specific recognizers (kept inside the lock so
+            # _initialized only flips to True after the analyzer is fully
+            # populated — otherwise a second thread could find a half-built
+            # analyzer with no recognizers).
+            from core.pii.india_recognizers import ALL_INDIA_RECOGNIZERS
 
-        # Register India-specific recognizers
-        from core.pii.india_recognizers import ALL_INDIA_RECOGNIZERS
+            for recognizer_cls in ALL_INDIA_RECOGNIZERS:
+                self._analyzer.registry.add_recognizer(recognizer_cls())
 
-        for recognizer_cls in ALL_INDIA_RECOGNIZERS:
-            self._analyzer.registry.add_recognizer(recognizer_cls())
-
-        logger.info("pii_redactor_initialized", recognizer_count=len(self._analyzer.registry.recognizers))
+            logger.info(
+                "pii_redactor_initialized",
+                recognizer_count=len(self._analyzer.registry.recognizers),
+            )
+            self._initialized = True
 
     # ------------------------------------------------------------------
     # Public API

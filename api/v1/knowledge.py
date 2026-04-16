@@ -240,13 +240,18 @@ async def upload_document(
         except Exception as exc:
             logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
             doc["status"] = "ready"
-            await _db_store_doc(tenant_id, doc)
     else:
         doc["status"] = "ready"
-        try:
-            await _db_store_doc(tenant_id, doc)
-        except Exception as exc:
-            logger.warning("db_store_doc_failed", error=str(exc))
+
+    # Session 5 TC-013: always mirror metadata to Postgres so the document
+    # list survives a RAGFlow outage or a RAGFlow-side search lag. Without
+    # this, documents uploaded via the RAGFlow path disappeared from the UI
+    # after a page refresh whenever /knowledge/documents fell back to the
+    # DB listing (first mirror was only created on RAGFlow upload failure).
+    try:
+        await _db_store_doc(tenant_id, doc)
+    except Exception as exc:
+        logger.warning("db_store_doc_failed", error=str(exc))
 
     return DocumentOut(
         document_id=doc["document_id"],
@@ -265,23 +270,34 @@ async def list_documents(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """List documents in the knowledge base."""
-    docs: list[dict[str, Any]] = []
+    # Session 5 TC-013: merge the RAGFlow list with the DB mirror so a
+    # just-uploaded document remains visible even if RAGFlow's search
+    # index hasn't caught up yet or the connection is flapping. Without
+    # this, uploads disappeared after a page refresh.
+    rf_docs: list[dict[str, Any]] = []
+    db_docs: list[dict[str, Any]] = []
 
     if _ragflow_available():
         try:
-            docs = await _ragflow_list(tenant_id)
+            rf_docs = await _ragflow_list(tenant_id)
         except Exception as exc:
-            logger.warning("ragflow_list_failed_fallback_db", error=str(exc))
-            try:
-                docs = await _db_list_docs(tenant_id)
-            except Exception:
-                docs = []
-    else:
-        try:
-            docs = await _db_list_docs(tenant_id)
-        except Exception as exc:
-            logger.debug("knowledge_db_list_failed", error=str(exc))
-            docs = []
+            logger.warning("ragflow_list_failed_fallback_db_only", error=str(exc))
+
+    try:
+        db_docs = await _db_list_docs(tenant_id)
+    except Exception as exc:
+        logger.debug("knowledge_db_list_failed", error=str(exc))
+
+    # Merge on document_id — prefer the RAGFlow record when both have it,
+    # since RAGFlow carries the current chunk/index status.
+    seen: set[str] = set()
+    docs: list[dict[str, Any]] = []
+    for record in (*rf_docs, *db_docs):
+        key = str(record.get("document_id") or record.get("id") or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        docs.append(record)
 
     # Also include knowledge_documents (seeded CA/GST compliance content)
     try:
