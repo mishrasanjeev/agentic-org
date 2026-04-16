@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# pre-push — run the full preflight gate. Blocks pushing code that would
+# fail CI. Bypass (in emergencies only): git push --no-verify
+#
+# Reads the same env knobs as scripts/preflight.sh:
+#   FAST=1, SKIP_UI=1, SKIP_BANDIT=1, SKIP_PYTEST=1
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+remote="$1"
+url="$2"
+
+# Only gate pushes to the public remote (dev can force-push a sandbox
+# remote without paying the preflight cost). If that distinction is not
+# useful, simplify to: always run.
+if [[ -z "$remote" ]]; then
+  remote="origin"
+fi
+
+# Refuse to push to the default branch from a hook — the pre-commit hook
+# should have caught it, but be defensive.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$remote_ref" == "refs/heads/main" || "$remote_ref" == "refs/heads/master" ]]; then
+    echo ""
+    echo "  ✗ pushing directly to $remote_ref is not allowed."
+    echo "  Open a PR instead. Emergency bypass: git push --no-verify"
+    echo ""
+    exit 1
+  fi
+done
+
+echo ""
+echo "  Running preflight gate before push..."
+echo "  (skip individual checks with SKIP_UI=1 / SKIP_BANDIT=1 / SKIP_PYTEST=1)"
+echo ""
+
+bash "$REPO_ROOT/scripts/preflight.sh"
+rc=$?
+if [[ $rc -ne 0 ]]; then
+  echo ""
+  echo "  Push blocked by preflight. Fix the failing gate and retry."
+  echo "  Emergency bypass: git push --no-verify"
+  echo ""
+fi
+exit $rc

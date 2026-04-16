@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# pre-commit — block commits that land directly on main/master.
+# Bypass (in emergencies only): git commit --no-verify -m '...'
+#
+# Intentionally cheap — heavy gates live in pre-push so they don't slow
+# the commit-by-commit loop.
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+  echo ""
+  echo "  ✗ commits direct to '$branch' are not allowed."
+  echo ""
+  echo "  Create a feature branch first:"
+  echo "     git checkout -b fix/<short-name>"
+  echo ""
+  echo "  If this is a real emergency, bypass with:"
+  echo "     git commit --no-verify ..."
+  echo ""
+  exit 1
+fi
+
+exit 0
