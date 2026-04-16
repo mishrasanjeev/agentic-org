@@ -194,25 +194,57 @@ async def test_connection(
                 message="Could not reach Vonage — check egress/DNS",
             )
 
-    # custom SIP — OPTIONS on the trunk URL.
+    # custom SIP — TCP reachability only. HTTP libraries don't speak SIP
+    # (UDP/5060 + TLS/5061), so we just confirm the host:port is open.
+    # No SSL bypass / no HTTP request — the real SIP handshake happens
+    # via the voice connector when the agent starts.
+    import asyncio as _asyncio
+    import socket
+    import urllib.parse
+
     target = body.credentials.custom_url.strip()
-    # Map sip://host -> http://host for the probe, since HTTP libraries
-    # don't speak SIP directly. This is just a reachability check.
-    probe = re.sub(r"^sips?:", "https://", target)
-    probe = re.sub(r"^sip:", "http://", probe)
+    # Strip scheme so urlparse-like splitting works on sip:user@host:port.
+    scheme_stripped = re.sub(r"^sips?:", "", target)
+    scheme_stripped = scheme_stripped.lstrip("/")
+    # user@host:port[;params]  ->  host:port
+    host_part = scheme_stripped.split("@", 1)[-1]
+    host_part = host_part.split(";", 1)[0].split("?", 1)[0]
+    if ":" in host_part:
+        host, _, port_str = host_part.partition(":")
+        try:
+            port = int(port_str)
+        except ValueError:
+            port = 5060
+    else:
+        host = host_part
+        port = 5061 if target.startswith("sips:") else 5060
+
+    if not host:
+        return VoiceTestResponse(
+            status="invalid_credentials",
+            message="SIP endpoint could not be parsed — missing host.",
+        )
+
+    loop = _asyncio.get_event_loop()
+
+    def _probe_tcp() -> str:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(5)
+            s.connect((urllib.parse.unquote(host), port))
+        return "ok"
+
     try:
-        async with httpx.AsyncClient(timeout=10, verify=False) as client:  # noqa: S501 - reachability only
-            resp = await client.request("OPTIONS", probe)
+        await loop.run_in_executor(None, _probe_tcp)
         return VoiceTestResponse(
             status="ok",
-            message=f"SIP endpoint reachable (HTTP {resp.status_code})",
+            message=f"SIP endpoint {host}:{port} is reachable (TCP)",
         )
-    except httpx.ConnectError:
+    except (TimeoutError, socket.gaierror, OSError) as exc:
         return VoiceTestResponse(
             status="network_error",
-            message=f"Could not reach SIP endpoint at {target}",
+            message=f"Could not reach SIP endpoint {host}:{port}: {type(exc).__name__}",
         )
-    except Exception as exc:  # noqa: BLE001 — report shape, not trace
+    except Exception as exc:  # noqa: BLE001 — user-facing probe response
         return VoiceTestResponse(
             status="network_error",
             message=f"SIP probe failed: {type(exc).__name__}",

@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from alembic import op
 
-# Alembic identifiers
-revision = "v483_prompt_template_partial_unique"
+# Alembic identifiers — kept <=32 chars (alembic_version.version_num size).
+revision = "v483_prompt_tpl_partial_uniq"
 down_revision = "v482_init_db_advisory_lock"
 branch_labels = None
 depends_on = None
