@@ -32,6 +32,43 @@ from core.models.tool_call import ToolCall
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 
 _PACKS_DIR = Path(__file__).resolve().parent
+_PACK_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,63}$")
+
+
+def _safe_pack_child(root: Path, name: str) -> Path | None:
+    """Resolve `name` as a direct child of `root` with no traversal.
+
+    Rejects any value that contains path separators, is absolute, or resolves
+    outside `root`. Returns the resolved path or None if unsafe.
+    """
+    if not name or not isinstance(name, str):
+        return None
+    if not _PACK_NAME_RE.match(name):
+        return None
+    candidate = (root / name).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def _safe_pack_file(pack_dir: Path, relative: str) -> Path | None:
+    """Resolve `relative` against `pack_dir`, keeping it inside the pack.
+
+    Allows nested paths but rejects traversal, absolute paths, and symlinks
+    that would escape `pack_dir`.
+    """
+    if not relative or not isinstance(relative, str):
+        return None
+    if relative.startswith(("/", "\\")) or ".." in Path(relative).parts:
+        return None
+    candidate = (pack_dir / relative).resolve()
+    try:
+        candidate.relative_to(pack_dir.resolve())
+    except ValueError:
+        return None
+    return candidate
 
 # Registry of programmatically-defined packs (supplement YAML-based discovery).
 _ca_id: str = str(CA_PACK["id"])
@@ -73,13 +110,14 @@ def _normalize_tool_names(tools: list[str]) -> list[str]:
 
 
 def _resolve_pack_dir(pack_name: str) -> Path | None:
-    direct = _PACKS_DIR / pack_name
-    if direct.is_dir():
+    direct = _safe_pack_child(_PACKS_DIR, pack_name)
+    if direct and direct.is_dir():
         return direct
 
-    if pack_name in _DIR_TO_REGISTERED:
-        mapped = _PACKS_DIR / _DIR_TO_REGISTERED.get(pack_name, "")
-        if mapped.is_dir():
+    mapped_name = _DIR_TO_REGISTERED.get(pack_name)
+    if mapped_name:
+        mapped = _safe_pack_child(_PACKS_DIR, mapped_name)
+        if mapped and mapped.is_dir():
             return mapped
 
     for pack_dir in _discover_pack_dirs():
@@ -138,8 +176,8 @@ def _read_pack_prompt(pack_name: str, agent_cfg: dict[str, Any]) -> str:
     if not pack_dir:
         return ""
 
-    prompt_path = pack_dir / prompt_file
-    if not prompt_path.exists():
+    prompt_path = _safe_pack_file(pack_dir, prompt_file)
+    if not prompt_path or not prompt_path.is_file():
         return ""
     return prompt_path.read_text(encoding="utf-8").strip()
 

@@ -423,5 +423,6 @@ async def test_connector(
         }
     except TimeoutError:
         return {"tested": False, "name": connector.name, "error": "Connection timed out (10s)"}
-    except Exception as e:
-        return {"tested": False, "name": connector.name, "error": str(e)[:200]}
+    except Exception:
+        _log.exception("connector_test_failed conn_id=%s name=%s", conn_id, connector.name)
+        return {"tested": False, "name": connector.name, "error": "Connector test failed"}
