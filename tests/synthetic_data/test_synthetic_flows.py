@@ -79,11 +79,14 @@ def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
     Handles empty or non-JSON responses gracefully by returning a dict
     with an ``"error"`` key instead of raising.
     """
+    # 60s client timeout: cold-start + PII-redactor warm-up + Claude Sonnet
+    # response can push past 30s on the first call after a pod rollout.
+    # Bumping client-side only — the server still enforces its own ceiling.
     r = httpx.post(
         f"{BASE}/agents/{agent_id}/run",
         headers=headers,
         json={"action": action, "inputs": inputs},
-        timeout=30,
+        timeout=60,
     )
     try:
         return r.json()
