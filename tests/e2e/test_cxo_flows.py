@@ -270,9 +270,29 @@ class TestCFOJourney:
 class TestCMOJourney:
     """End-to-end CMO user flow."""
 
-    def test_cmo_kpis_return_valid_data(self, client):
-        """CMO KPI dashboard returns all required metrics (basic metrics shape)."""
-        resp = client.get("/api/v1/kpis/cmo")
+    def test_cmo_kpis_return_valid_data(self):
+        """CMO KPI dashboard returns all required metrics (basic metrics shape).
+
+        Hits the deployed production API instead of the in-process TestClient
+        for the same reason as ``test_cfo_kpis_with_company_filter`` (#171) —
+        Starlette's ``BaseHTTPMiddleware`` spawns anyio child tasks that bind
+        asyncpg Futures to the TestClient thread-loop, and the first
+        DB-backed test after a class boundary trips "Future attached to a
+        different loop". Hitting production via httpx sidesteps TestClient.
+        """
+        import os
+
+        import httpx
+
+        base = os.getenv("AGENTICORG_E2E_BASE_URL", "")
+        token = os.getenv("AGENTICORG_E2E_TOKEN", "")
+        if not base or not token:
+            pytest.skip("requires AGENTICORG_E2E_BASE_URL + AGENTICORG_E2E_TOKEN")
+        resp = httpx.get(
+            f"{base}/api/v1/kpis/cmo",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
         assert resp.status_code == 200
         data = resp.json()
         required_keys = [
