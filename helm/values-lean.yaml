@@ -23,12 +23,19 @@ imageUI:
 # ── Lean resource requests (Autopilot bills on requests, not limits) ──
 resources:
   api:
+    # Bumped from 512Mi/1Gi after OOM-eviction on 2026-04-17.
+    # spaCy + Presidio NLP pipeline pushes each uvicorn worker to
+    # ~700MB resident; with 2 workers the pod was steady-state ~1.5GB
+    # and got evicted when the node was under memory pressure.
+    # Pair this with ``--workers 1`` in the Dockerfile CMD so the pod
+    # runs a single Python process and Autopilot bills on the lower
+    # request.
     requests:
       cpu: 250m
-      memory: 512Mi
+      memory: 1Gi
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 2Gi
   orchestrator:
     requests:
       cpu: 250m
