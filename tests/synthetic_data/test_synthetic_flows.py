@@ -59,10 +59,16 @@ def contracts():
 
 
 def _get_agent_id(headers: dict, agent_type: str) -> str:
-    """Find the first active/shadow agent of given type."""
+    """Find the first runnable (non-retired) agent of given type.
+
+    Retired agents still appear in the list but the ``/run`` endpoint
+    rejects them with 409 ("Cannot run a retired agent"), which would
+    turn a seed-cleanup artifact into a spurious test failure. Skip
+    retired entries and pick the first shadow/active/paused one.
+    """
     r = httpx.get(f"{BASE}/agents?per_page=100", headers=headers)
     for a in r.json().get("items", []):
-        if a["agent_type"] == agent_type:
+        if a.get("agent_type") == agent_type and a.get("status") != "retired":
             return a["id"]
     return ""
 
