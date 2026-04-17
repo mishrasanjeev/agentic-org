@@ -73,16 +73,25 @@ def _normalize_tool_names(tools: list[str]) -> list[str]:
 
 
 def _resolve_pack_dir(pack_name: str) -> Path | None:
-    direct = _PACKS_DIR / pack_name
-    if direct.is_dir():
-        return direct
+    # Resolve by string-matching against directories we discover ourselves.
+    # `pack_name` never flows into a path expression — the set of discovered
+    # pack directories is the allowlist, and we only return Paths we built.
+    if not pack_name or not isinstance(pack_name, str):
+        return None
 
-    if pack_name in _DIR_TO_REGISTERED:
-        mapped = _PACKS_DIR / _DIR_TO_REGISTERED.get(pack_name, "")
-        if mapped.is_dir():
-            return mapped
+    discovered = _discover_pack_dirs()
 
-    for pack_dir in _discover_pack_dirs():
+    for pack_dir in discovered:
+        if pack_dir.name == pack_name:
+            return pack_dir
+
+    for dir_name, reg_id in _DIR_TO_REGISTERED.items():
+        if pack_name == reg_id:
+            for pack_dir in discovered:
+                if pack_dir.name == dir_name:
+                    return pack_dir
+
+    for pack_dir in discovered:
         cfg = _load_yaml(pack_dir / "config.yaml")
         if cfg.get("name") == pack_name:
             return pack_dir
@@ -138,10 +147,20 @@ def _read_pack_prompt(pack_name: str, agent_cfg: dict[str, Any]) -> str:
     if not pack_dir:
         return ""
 
-    prompt_path = pack_dir / prompt_file
-    if not prompt_path.exists():
+    # Enumerate the real files under the pack directory and match by
+    # relative posix path — pure string lookup, so `prompt_file` never
+    # flows into a path expression.
+    pack_root = pack_dir.resolve()
+    prompt_file_posix = prompt_file.replace("\\", "/").lstrip("/")
+    known_files = {
+        p.relative_to(pack_root).as_posix(): p
+        for p in pack_root.rglob("*")
+        if p.is_file()
+    }
+    match = known_files.get(prompt_file_posix)
+    if match is None:
         return ""
-    return prompt_path.read_text(encoding="utf-8").strip()
+    return match.read_text(encoding="utf-8").strip()
 
 
 def _build_system_prompt(pack_name: str, detail: dict[str, Any], agent_cfg: dict[str, Any], index: int) -> str:
