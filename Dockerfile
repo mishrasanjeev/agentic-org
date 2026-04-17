@@ -17,6 +17,12 @@ COPY schemas/ schemas/
 COPY migrations/ migrations/
 RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 
+# Presidio (installed via the [v4] extra) uses spaCy for NER-based PII
+# detection. Without a language model the AnalyzerEngine constructor raises
+# OSError and every agent run 500s with "util.py:531 (OSError)". Bake the
+# smallest English model into the image so PII redaction actually runs.
+RUN python -m spacy download en_core_web_sm
+
 FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl libjpeg62-turbo zlib1g \

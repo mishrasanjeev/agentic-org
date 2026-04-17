@@ -103,9 +103,45 @@ class PIIRedactor:
                 self._initialized = True
                 return
 
-            # Build analyzer with custom India recognizers
-            self._analyzer = AnalyzerEngine()
-            self._anonymizer = AnonymizerEngine()
+            # Build analyzer with custom India recognizers. AnalyzerEngine()
+            # constructs a spaCy NLP pipeline eagerly and raises OSError when
+            # the language model isn't installed — which is how the
+            # production image shipped before this fix. Rather than crashing
+            # the agent runtime with a 500 ("util.py:531 OSError"), degrade
+            # to regex-only redaction: the India recognizers (Aadhaar, PAN,
+            # GSTIN, UPI) are pattern-based and remain effective without
+            # spaCy.
+            #
+            # Presidio's default is ``en_core_web_lg`` (~500MB). Point it at
+            # ``en_core_web_sm`` (~15MB) via NlpEngineProvider — the Dockerfile
+            # installs this smaller model, which keeps image size reasonable
+            # while still covering English NER.
+            try:
+                from presidio_analyzer.nlp_engine import NlpEngineProvider
+
+                nlp_engine = NlpEngineProvider(
+                    nlp_configuration={
+                        "nlp_engine_name": "spacy",
+                        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+                    }
+                ).create_engine()
+                self._analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
+                self._anonymizer = AnonymizerEngine()
+            except OSError as exc:
+                logger.error(
+                    "presidio_spacy_model_missing",
+                    error=str(exc),
+                    msg=(
+                        "Presidio is installed but its spaCy model failed to "
+                        "load. PII redaction will be a no-op for this process. "
+                        "Ensure the Docker image runs `python -m spacy download "
+                        "en_core_web_sm`."
+                    ),
+                )
+                self._analyzer = None
+                self._anonymizer = None
+                self._initialized = True
+                return
 
             # Register India-specific recognizers (kept inside the lock so
             # _initialized only flips to True after the analyzer is fully
