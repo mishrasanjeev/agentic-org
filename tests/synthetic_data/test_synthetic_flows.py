@@ -96,21 +96,14 @@ def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
         return {"error": "empty_or_invalid_response", "raw": r.text, "status_code": r.status_code}
 
 
-# Textual markers that indicate the agent in this environment isn't
-# configured to handle the test's action (wrong tool list, wrong prompt,
-# missing connector). The test skips rather than asserting, because we're
-# validating agent behavior, not the seeded demo-tenant config.
-_TOOLS_NOT_CONFIGURED_PATTERNS = (
-    "cannot fulfill",
-    "tools lack",
-    # Claude / GPT phrasing when the requested action isn't in the
-    # agent's allowed-actions list (seeded demo agents often ship with a
-    # narrower action surface than the synthetic tests exercise).
-    "not a supported action",
-    "not a valid action",
-    "is not supported",
-    "allowed list",
-)
+# Narrow set of markers that indicate the agent explicitly said it cannot
+# carry out the task with its current tool set. Previously we also
+# skipped on "not a supported action" / "is not supported" / "allowed
+# list", but those phrases appear in a false-positive way inside the
+# signed response envelope (base64 substrings and LLM self-narrative),
+# which caused ``test_renewal_approaching`` to skip spuriously even
+# though the agent had produced a valid answer.
+_TOOLS_NOT_CONFIGURED_PATTERNS = ("cannot fulfill", "tools lack")
 
 
 def _skip_if_tools_missing(result: dict) -> None:
@@ -124,13 +117,6 @@ def _skip_if_tools_missing(result: dict) -> None:
     # Also skip on empty / unparseable responses
     if result.get("error") == "empty_or_invalid_response":
         pytest.skip("Agent returned empty or non-JSON response")
-    # Skip when the server-side exception handler wraps any runtime error
-    # into a 500 detail. These are infrastructure issues (e.g. missing
-    # deps, LLM provider outage) — legitimate tests should not be the ones
-    # to report them, they'd have to be filed as bugs.
-    detail = result.get("detail")
-    if isinstance(detail, str) and "agent execution failed" in detail.lower():
-        pytest.skip(f"Agent runtime error: {detail[:120]}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
