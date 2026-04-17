@@ -114,3 +114,4 @@ scripts/gen_bugfix*.py
 scripts/generate_*pdf*
 scripts/generate_*doc*
 scripts/marketing*
+.tmp_lc/
