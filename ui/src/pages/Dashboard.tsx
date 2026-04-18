@@ -113,12 +113,31 @@ export default function Dashboard() {
   // Pending approval items
   const pendingItems = approvals.filter((a) => a.status === "pending");
 
+  // P6.1 (Enterprise Readiness): every metric is derived from real data
+  // pulled above. The old hardcoded "Deflection Rate 73%" card was removed
+  // — it was a fabricated KPI with no backing API, exactly the decorative
+  // state the plan bans. "Approvals Resolved" is a real ratio computed
+  // from the approvals we already fetched.
+  const resolvedApprovals = approvals.filter(
+    (a) => a.status !== "pending" && a.status !== "expired",
+  ).length;
+  const resolvedPct = approvals.length > 0
+    ? Math.round((resolvedApprovals / approvals.length) * 100)
+    : 0;
+
   const metrics = [
     { label: "Total Agents", value: totalAgents, color: "text-foreground", subtitle: "" },
     { label: "Active Agents", value: activeAgents, color: "text-green-600", subtitle: "" },
     { label: "Pending Approvals", value: pendingApprovals, color: "text-red-600", subtitle: "" },
     { label: "Shadow Agents", value: shadowAgents, color: "text-yellow-600", subtitle: "" },
-    { label: "Deflection Rate", value: "73%", color: "text-green-600", subtitle: "Auto-resolved support tickets" },
+    {
+      label: "Approvals Resolved",
+      value: approvals.length > 0 ? `${resolvedPct}%` : "—",
+      color: "text-green-600",
+      subtitle: approvals.length > 0
+        ? `${resolvedApprovals}/${approvals.length} decisions`
+        : "No approvals logged",
+    },
   ];
 
   if (loading) {
