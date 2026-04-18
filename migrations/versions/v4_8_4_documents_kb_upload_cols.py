@@ -17,7 +17,6 @@ the legacy NOT NULL constraints on s3_bucket / s3_key so metadata-only
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 # Alembic identifiers — kept <=32 chars (alembic_version.version_num size).
@@ -28,16 +27,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Additive columns used by the KB upload path.
-    op.add_column("documents", sa.Column("filename", sa.String(500), nullable=True))
-    op.add_column("documents", sa.Column("content_type", sa.String(100), nullable=True))
-    op.add_column(
-        "documents",
-        sa.Column("size_bytes", sa.BigInteger, nullable=False, server_default="0"),
+    # Additive columns used by the KB upload path. Use ADD COLUMN IF NOT
+    # EXISTS (repo convention — see v4_6_0_enterprise_readiness) so the
+    # migration is idempotent against environments where the updated
+    # ORM's metadata.create_all already provisioned these columns
+    # (notably the test_alembic_e2e legacy-schema fixture).
+    op.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS filename VARCHAR(500)")
+    op.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_type VARCHAR(100)")
+    op.execute(
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS size_bytes BIGINT NOT NULL DEFAULT 0"
     )
-    op.add_column(
-        "documents",
-        sa.Column("status", sa.String(30), nullable=False, server_default="ready"),
+    op.execute(
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'ready'"
     )
 
     # Backfill filename from the existing `name` for any legacy rows, so a
@@ -48,19 +49,20 @@ def upgrade() -> None:
 
     # Relax the legacy S3 NOT NULLs so metadata-only KB uploads (which
     # have no S3 artifact) are representable without sentinel empty
-    # strings leaking through the schema.
-    op.alter_column("documents", "s3_bucket", nullable=True)
-    op.alter_column("documents", "s3_key", nullable=True)
+    # strings leaking through the schema. DROP NOT NULL is a no-op when
+    # the column is already nullable, so no explicit guard is needed.
+    op.execute("ALTER TABLE documents ALTER COLUMN s3_bucket DROP NOT NULL")
+    op.execute("ALTER TABLE documents ALTER COLUMN s3_key DROP NOT NULL")
 
 
 def downgrade() -> None:
     # Reinstate NOT NULL — rollback expects any rows to have populated
     # s3_bucket/s3_key, so if this is used in an environment with real
     # KB uploads it will need a manual backfill first.
-    op.alter_column("documents", "s3_bucket", nullable=False)
-    op.alter_column("documents", "s3_key", nullable=False)
+    op.execute("ALTER TABLE documents ALTER COLUMN s3_bucket SET NOT NULL")
+    op.execute("ALTER TABLE documents ALTER COLUMN s3_key SET NOT NULL")
 
-    op.drop_column("documents", "status")
-    op.drop_column("documents", "size_bytes")
-    op.drop_column("documents", "content_type")
-    op.drop_column("documents", "filename")
+    op.execute("ALTER TABLE documents DROP COLUMN IF EXISTS status")
+    op.execute("ALTER TABLE documents DROP COLUMN IF EXISTS size_bytes")
+    op.execute("ALTER TABLE documents DROP COLUMN IF EXISTS content_type")
+    op.execute("ALTER TABLE documents DROP COLUMN IF EXISTS filename")
