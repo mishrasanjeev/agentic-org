@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
 import type { Agent, HITLItem, AuditEntry } from "@/types";
+import { useProductFacts } from "@/lib/productFacts";
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchWarnings, setFetchWarnings] = useState<string[]>([]);
+  const { facts } = useProductFacts();
 
   useEffect(() => {
     fetchAll();
@@ -171,7 +173,13 @@ export default function Dashboard() {
               <span className="text-lg font-bold">LangGraph</span>
               <span className="text-xs text-muted-foreground">v1.1</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">50+ agents, 54 native connectors + 1000+ via Composio, 340+ tools</p>
+            <p className="text-xs text-muted-foreground mt-1" data-testid="dashboard-counts">
+              {facts.agent_count > 0 ? `${facts.agent_count} agents` : "Agents"}
+              {", "}
+              {facts.connector_count > 0 ? `${facts.connector_count} native connectors` : "Native connectors"}
+              {" + 1000+ via Composio, "}
+              {facts.tool_count > 0 ? `${facts.tool_count} tools` : "Tools"}
+            </p>
           </CardContent>
         </Card>
         <Card>

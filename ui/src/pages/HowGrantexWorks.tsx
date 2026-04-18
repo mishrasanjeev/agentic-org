@@ -671,7 +671,7 @@ export default function HowGrantexWorks() {
                       { text: "Manifest-based: each tool declares its required permission", detail: "No guessing. delete_contact = DELETE. Period." },
                       { text: "Offline JWT verification at the LangGraph boundary", detail: "No network call needed. Tokens are self-contained." },
                       { text: "Sub-millisecond enforcement on every tool call", detail: "<1ms overhead. Your agents stay fast." },
-                      { text: "53 connector manifests covering 269 tools", detail: "Every tool in every connector is mapped and enforced." },
+                      { text: "Connector manifests for every native integration", detail: "Every tool in every connector is mapped and enforced." },
                     ].map((item, i) => (
                       <div key={i} className="flex gap-3">
                         <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />

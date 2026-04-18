@@ -19,7 +19,12 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-APP_VERSION = "4.8.0"
+# Version is derived from pyproject.toml via product_facts — the one source
+# of truth. Keeping a hardcoded constant here previously led to README,
+# Landing, health, and pyproject all drifting apart.
+from api.v1.product_facts import _version_from_pyproject as _pv  # noqa: E402
+
+APP_VERSION = _pv()
 
 # Timeout for individual connector health checks (seconds)
 _CONNECTOR_HC_TIMEOUT = 5.0

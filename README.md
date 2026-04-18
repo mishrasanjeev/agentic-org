@@ -1,13 +1,14 @@
 # AgenticOrg
 
-**AI Virtual Employee Platform** — 50+ LangGraph agents, 1000+ integrations (via Composio), 57 native connectors, 340+ native tools. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. Voice agents, RAG knowledge base, smart LLM routing, industry packs, PII redaction, browser RPA, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
+**AI Virtual Employee Platform** — LangGraph agents, 1000+ integrations (via Composio), native connectors and tools. Agents call real APIs (Jira, HubSpot, GitHub, GSTN, Tally, Banking AA) — not just generate text. Voice agents, RAG knowledge base, smart LLM routing, industry packs, PII redaction, browser RPA, CFO/CMO dashboards, ABM dashboard, NL Query (Cmd+K), multi-company support, scheduled reports, A/B testing, email drip engine, web push HITL, Python/TypeScript SDKs, MCP server, human-in-the-loop governance, no-code builder.
+
+**Live counts** for agents, connectors, tools, and product version come from `GET /api/v1/product-facts`. Anywhere a count appears in the UI it is fetched from that endpoint — do not hand-edit numbers in docs or pages; they will drift.
 
 [![Live](https://img.shields.io/badge/Live-agenticorg.ai-blue)](https://agenticorg.ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-green.svg)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Tests-1931%2B_passing-brightgreen.svg)](tests/)
-[![E2E](https://img.shields.io/badge/E2E-17_Playwright_specs-brightgreen.svg)](ui/e2e/)
+[![E2E](https://img.shields.io/badge/E2E-Playwright_against_production-brightgreen.svg)](ui/e2e/)
 [![PyPI](https://img.shields.io/badge/PyPI-agenticorg-blue.svg)](https://pypi.org/project/agenticorg/)
 [![npm](https://img.shields.io/badge/npm-agenticorg--sdk-blue.svg)](https://www.npmjs.com/package/agenticorg-sdk)
 [![Version](https://img.shields.io/badge/Version-4.8.0-green.svg)](CHANGELOG.md)
@@ -24,21 +25,21 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 
 | Metric | Value |
 |--------|-------|
-| Pre-built Agents | **36** across 6 domains + 4 industry packs |
-| Custom Agents | 37+ created on demo tenant (unlimited via no-code wizard) |
-| Enterprise Connectors | **1000+ integrations** (via Composio) + **57 native connectors, 340+ native tools** — ALL with real API endpoints |
+| Pre-built Agents | See `GET /api/v1/product-facts` `agent_count` — live from registry |
+| Custom Agents | Unlimited via no-code wizard |
+| Enterprise Connectors | **1000+ integrations** (via Composio) + native connectors (`connector_count` on `/product-facts`), `tool_count` total tools — all with real API endpoints |
 | Dashboards | CFO Dashboard + CMO Dashboard (role-specific KPI views) |
 | NL Query | Cmd+K search bar + slide-out chat panel with agent attribution |
 | Multi-Company | Company switcher for CA firms managing multiple client entities |
 | Scheduled Reports | Celery beat --> PDF/Excel --> email/Slack/WhatsApp delivery |
-| Workflow Templates | **20+** production-ready templates |
-| Prompt Templates | 27 production-tested |
-| Automated Tests | **1,931+** backend + **93** frontend vitest + **17** Playwright E2E spec files |
-| CI E2E | Enabled against production |
+| Workflow Templates | Production-ready templates in `core/workflows/templates` |
+| Prompt Templates | Managed via `/api/v1/prompt-templates` |
+| Automated Tests | Backend pytest + frontend vitest + Playwright E2E against production (no skipped tests) |
+| CI E2E | Enabled against production on every push to `main` |
 | SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
 | LLM | Smart routing via RouteLLM: Gemini Flash (free) / Gemini Pro / Claude/GPT-4o. Air-gapped: Ollama/vLLM |
 | Deployment | GKE Autopilot, ~$95/month |
-| Version | **4.3.0** |
+| Version | Sourced from `pyproject.toml` / `GET /api/v1/product-facts` |
 
 ### What It Does
 
@@ -134,7 +135,7 @@ PostgreSQL (Cloud SQL) + Redis + GCS + GCP Secret Manager
 | **Industry Packs** | 16 | Healthcare (4), Legal (4), Insurance (4), Manufacturing (4) — one-click install |
 | **Custom** | 37+ on demo | Create via 5-step no-code wizard — unlimited |
 
-> **50+ pre-built agents across 6 domains + 4 industry packs. 1000+ integrations (Composio) + 57 native connectors with 340+ tools. All endpoints real.**
+> **Pre-built agents across 6 domains + 4 industry packs. 1000+ integrations (via Composio) + native connectors with tools. All endpoints real. Live counts: `GET /api/v1/product-facts`.**
 
 ---
 
@@ -240,7 +241,7 @@ Configurable confidence floors, trigger conditions, escalation chains, and timeo
 ### Sales Agent
 Automated lead qualification, personalized email outreach, follow-up sequences (Day 1/3/7/14), Gmail inbox monitoring, and pipeline dashboard. Demo request form → instant personalized response.
 
-### 54 Enterprise Connectors (340+ Tools) — All Real API Endpoints
+### Native Enterprise Connectors — All Real API Endpoints
 Finance (11): Oracle Fusion, SAP, Tally (XML/TDL + bridge), GSTN (Adaequare 2-step + DSC), Stripe, QuickBooks, Zoho Books, Banking AA (RBI consent), Income Tax India, Pine Labs (Plural), NetSuite
 HR (8): Darwinbox, Okta, Greenhouse, LinkedIn Talent, DocuSign, Keka, Zoom, EPFO
 Marketing (19): Salesforce, HubSpot, Google Ads, LinkedIn Ads, Meta Ads, Ahrefs, Mixpanel, Buffer, Brandwatch, GA4, MoEngage, WordPress, Twitter/X, YouTube, Mailchimp, Semrush, Bombora, G2, TrustRadius
@@ -395,7 +396,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | PATCH | /report-schedules/{id} | JWT | Update scheduled report |
 | POST | /report-schedules/{id}/run-now | JWT | Trigger immediate report run |
 | DELETE | /report-schedules/{id} | JWT | Delete scheduled report |
-| GET | /connectors | JWT | List 54 connectors |
+| GET | /connectors | JWT | List native connectors (count from `/product-facts`) |
 | GET | /connectors/registry | JWT | Connector registry (all registered connectors + tool counts) |
 | GET | /connectors/{id}/health | JWT | Connector health check |
 | GET | /connectors/{id} | JWT | Connector details |
@@ -591,7 +592,7 @@ python tests/test_production_connectors.py
 
 | Suite | Tests | What It Covers |
 |-------|-------|---------------|
-| Backend (pytest) | **1,931+** | Unit, security, connector harness (54 connectors × 340+ tools), synthetic data, regression, integration, voice, RAG, RPA, packs |
+| Backend (pytest) | See CI | Unit, security, connector harness (every native connector × exposed tools), synthetic data, regression, integration, voice, RAG, RPA, packs |
 | Frontend (vitest) | **93** | Component tests, hooks, utilities |
 | Playwright E2E | **17 spec files** | Full browser flows: login, onboarding, agents, workflows, approvals, landing, SOP, dashboards, ABM, drip, A/B, push |
 | CI E2E | Enabled | Runs against production on every merge to main |
@@ -635,7 +636,7 @@ agenticorg/
 ├── tests/
 │   ├── unit/               # Unit tests
 │   ├── security/           # Security tests
-│   ├── connector_harness/  # Connector tests (54 connectors × tools)
+│   ├── connector_harness/  # Connector tests (every native connector × exposed tools)
 │   ├── regression/         # Regression tests
 │   ├── integration/        # Integration tests
 │   ├── synthetic_data/     # Invoice, resume, contract test data
