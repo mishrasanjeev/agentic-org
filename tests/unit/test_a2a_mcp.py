@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi import HTTPException
 
@@ -51,6 +53,14 @@ class TestA2ATask:
                 "00000000-0000-0000-0000-000000000001",
             )
         assert exc.value.status_code == 400
+
+    # TODO(PR-D3-followup): this test hits a real a2a_tasks table. Keep
+    # opt-in via the same flag as the other DB unit tests until the
+    # async engine/event-loop teardown race across TestClients is fixed.
+    @pytest.mark.skipif(
+        os.getenv("AGENTICORG_ENABLE_DB_UNIT_TESTS") != "1",
+        reason="DB-backed unit test pending rewrite — see PR-D3 follow-up",
+    )
     @pytest.mark.asyncio
     async def test_get_task_not_found(self):
         from api.v1.a2a import get_task

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -736,6 +737,10 @@ class TestNewConnectors:
 # ═══════════════════════════════════════════════════════════════════════════
 #  ABM API
 # ═══════════════════════════════════════════════════════════════════════════
+@pytest.mark.skipif(
+    os.getenv("AGENTICORG_ENABLE_DB_UNIT_TESTS") != "1",
+    reason="DB-backed unit tests pending rewrite — see PR-D3 follow-up",
+)
 class TestABMApi:
     """Tests for ABM (Account-Based Marketing) API endpoints — requires DB."""
 

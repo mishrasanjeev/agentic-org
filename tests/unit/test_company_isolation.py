@@ -7,6 +7,7 @@ FastAPI dependency_overrides race condition.
 
 from __future__ import annotations
 
+import os
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import patch
@@ -205,6 +206,10 @@ class TestChatIsolation:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedule Isolation
 # ═══════════════════════════════════════════════════════════════════════════
+@pytest.mark.skipif(
+    os.getenv("AGENTICORG_ENABLE_DB_UNIT_TESTS") != "1",
+    reason="DB-backed unit tests pending rewrite — see PR-D3 follow-up",
+)
 class TestReportScheduleIsolation:
 
     def test_schedule_created_by_a_invisible_to_b(self, app, tenant_a, tenant_b):
