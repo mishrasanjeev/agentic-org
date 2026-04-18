@@ -46,12 +46,16 @@ def _connector_to_dict(conn: Connector) -> dict:
 # ── GET /connectors/registry ────────────────────────────────────────────────
 @router.get("/connectors/registry")
 async def list_registry_connectors(category: str | None = None):
-    """Return available connectors from the code registry (not tenant-specific).
+    """Return the native connector catalog from the runtime registry.
 
-    This provides a catalogue of all connectors that can be registered,
-    useful as a fallback when no tenant connectors exist yet.
+    Each item combines the registry truth (class-level `name`, `category`,
+    `auth_type`, `tools`, etc.) with display metadata from
+    `connectors/catalog_meta.py`. The UI consumes this via PR-B2 instead
+    of a hardcoded `NATIVE_CONNECTOR_CATALOG` array — adding / renaming /
+    re-categorising a native connector no longer requires a UI code edit.
     """
     import connectors  # noqa: F401, F811
+    from connectors.catalog_meta import get_meta
     from connectors.registry import ConnectorRegistry
 
     if category:
@@ -68,12 +72,14 @@ async def list_registry_connectors(category: str | None = None):
         tools = []
         if hasattr(cls, "tools") and cls.tools:
             tools = [t if isinstance(t, str) else getattr(t, "name", str(t)) for t in cls.tools]
+        meta = get_meta(cls.name)
         items.append({
             "id": f"registry-{cls.name}",
             "connector_id": f"registry-{cls.name}",
             "name": cls.name,
+            "display_name": meta["display_name"],
             "category": cls.category,
-            "description": getattr(cls, "description", "") or f"{cls.name} connector",
+            "description": meta["description"],
             "base_url": cls.base_url,
             "auth_type": cls.auth_type,
             "tool_functions": tools,
@@ -83,6 +89,9 @@ async def list_registry_connectors(category: str | None = None):
             "health_check_at": None,
             "created_at": None,
         })
+
+    # Deterministic ordering so the UI is stable across renders.
+    items.sort(key=lambda x: x["display_name"].lower())
 
     return {"items": items, "total": len(items)}
 
