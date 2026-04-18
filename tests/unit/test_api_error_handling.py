@@ -41,28 +41,21 @@ def app():
 @pytest.fixture
 def auth_client(app):
     """TestClient with auth middleware bypassed (authenticated)."""
-    # Valid UUID — endpoints call uuid.UUID(tenant_id) and would 400
-    # on a friendly-name string like "test-tenant-xyz".
-    test_tenant_id = str(uuid.uuid4())
+    test_tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
 
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
 
     async def _fake_validate(token):
-        # admin scope so routers that bind `dependencies=[require_tenant_admin]`
-        # (e.g. /report-schedules) reach their body/handler. These tests
-        # exercise validation / error handling, not the admin gate —
-        # gating is covered separately by tests/security/test_admin_gate*.
         return {
             "sub": "test-user",
             "agenticorg:tenant_id": test_tenant_id,
-            "agenticorg:scopes": ["agenticorg:admin"],
+            "agenticorg:scopes": [],
         }
 
-    admin_scopes = ["agenticorg:admin"]
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
+            with patch("auth.grantex_middleware.extract_scopes", return_value=[]):
                 with TestClient(app, raise_server_exceptions=False) as c:
                     c.headers["Authorization"] = "Bearer fake-test-token"
                     c._test_tenant_id = test_tenant_id
