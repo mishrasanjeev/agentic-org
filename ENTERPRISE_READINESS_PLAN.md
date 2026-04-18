@@ -173,6 +173,12 @@ Status: not started
 
 Status: not started
 
+**Known failing e2e specs that Phase 5 must fix:**
+- `qa-bugs-regression.spec.ts:935` CONN-SLACK-007 — ConnectorCreate shows auth_config fields for `bolt_bot_token`.
+- `qa-bugs-regression.spec.ts:990` CONN-SLACK-007 — Connector detail page loads and shows Edit button.
+
+(Currently failing on main; surfaced after P1.2 zero-skip elimination. Real feature gaps in the Connector detail UI.)
+
 ### P5.1 — Lifecycle model + data-driven catalog
 
 - [ ] Connector lifecycle states defined: `not_configured | requires_auth | configured | healthy | degraded | error | syncing`. Persisted on `connector_configs` (already present per sprint2 memory — verify schema).
@@ -221,6 +227,13 @@ Status: not started
 ## Phase 7 — Explainability + Workflow Operations
 
 Status: not started
+
+**Known failing e2e specs that Phase 7 must fix:**
+- `qa-bugs-regression.spec.ts:723` HITL-COUNT-004 — Decided tab shows decision status, not action buttons.
+- `qa-bugs-regression.spec.ts:840` WF-CONN-006 — Workflow create page shows `email_received` trigger option.
+- `qa-bugs-regression.spec.ts:870` WF-CONN-006 — Workflow create page shows `api_event` trigger option.
+
+(Currently failing on main; surfaced after P1.2 zero-skip elimination. Real feature gaps in HITL + Workflow Create UI.)
 
 ### P7.1 — Kill mock explainability, wire real trace
 
