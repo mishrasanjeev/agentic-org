@@ -37,6 +37,7 @@ from api.v1 import (
     departments,
     evals,
     feature_flags,
+    governance,
     health,
     invoices,
     knowledge,
@@ -178,6 +179,7 @@ app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
+app.include_router(governance.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
 app.include_router(v1_org.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])

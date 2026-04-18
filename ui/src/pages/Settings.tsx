@@ -28,11 +28,25 @@ const DEFAULT_LIMITS: FleetLimits = {
   max_replicas_per_type: 20,
 };
 
+type DataRegion = "IN" | "EU" | "US";
+
+interface GovernanceConfig {
+  pii_masking: boolean;
+  data_region: DataRegion;
+  audit_retention_years: number;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
 export default function Settings() {
   const [limits, setLimits] = useState<FleetLimits>(DEFAULT_LIMITS);
   const [piiMasking, setPiiMasking] = useState(true);
-  const [dataRegion, setDataRegion] = useState("IN");
+  const [dataRegion, setDataRegion] = useState<DataRegion>("IN");
   const [auditRetention, setAuditRetention] = useState(7);
+  const [governanceLoading, setGovernanceLoading] = useState(true);
+  const [governanceSaving, setGovernanceSaving] = useState(false);
+  const [governanceSaved, setGovernanceSaved] = useState(false);
+  const [governanceError, setGovernanceError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -48,6 +62,7 @@ export default function Settings() {
 
   useEffect(() => {
     fetchSettings();
+    fetchGovernance();
     fetchApiKeys();
   }, []);
 
@@ -57,6 +72,44 @@ export default function Settings() {
       if (data.max_active_agents) setLimits(data);
     } catch {
       // Use defaults
+    }
+  }
+
+  async function fetchGovernance() {
+    setGovernanceLoading(true);
+    try {
+      const { data } = await api.get<GovernanceConfig>("/governance/config");
+      setPiiMasking(!!data.pii_masking);
+      setDataRegion(data.data_region);
+      setAuditRetention(data.audit_retention_years);
+    } catch {
+      // Keep local defaults — the PUT endpoint will create the row on first write.
+    } finally {
+      setGovernanceLoading(false);
+    }
+  }
+
+  async function saveGovernance() {
+    setGovernanceSaving(true);
+    setGovernanceSaved(false);
+    setGovernanceError(null);
+    try {
+      await api.put<GovernanceConfig>("/governance/config", {
+        pii_masking: piiMasking,
+        data_region: dataRegion,
+        audit_retention_years: auditRetention,
+      });
+      setGovernanceSaved(true);
+      setTimeout(() => setGovernanceSaved(false), 3000);
+    } catch (e: unknown) {
+      const resp = (e as { response?: { status?: number; data?: { detail?: string } } })?.response;
+      if (resp?.status === 403) {
+        setGovernanceError("You must be a tenant admin to change governance settings.");
+      } else {
+        setGovernanceError(resp?.data?.detail || "Failed to save governance settings.");
+      }
+    } finally {
+      setGovernanceSaving(false);
     }
   }
 
@@ -154,20 +207,32 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-testid="governance-card">
         <CardHeader><CardTitle>Compliance & Data</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium">PII Masking</label>
-              <select value={piiMasking ? "enabled" : "disabled"} onChange={(e) => setPiiMasking(e.target.value === "enabled")} className="border rounded px-3 py-2 text-sm w-full mt-1">
+              <select
+                data-testid="governance-pii-masking"
+                disabled={governanceLoading || governanceSaving}
+                value={piiMasking ? "enabled" : "disabled"}
+                onChange={(e) => setPiiMasking(e.target.value === "enabled")}
+                className="border rounded px-3 py-2 text-sm w-full mt-1"
+              >
                 <option value="enabled">Enabled (required for production)</option>
                 <option value="disabled">Disabled (dev only)</option>
               </select>
             </div>
             <div>
               <label className="text-sm font-medium">Data Region</label>
-              <select value={dataRegion} onChange={(e) => setDataRegion(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+              <select
+                data-testid="governance-data-region"
+                disabled={governanceLoading || governanceSaving}
+                value={dataRegion}
+                onChange={(e) => setDataRegion(e.target.value as DataRegion)}
+                className="border rounded px-3 py-2 text-sm w-full mt-1"
+              >
                 <option value="IN">India (asia-south1)</option>
                 <option value="EU">EU (europe-west1)</option>
                 <option value="US">US (us-central1)</option>
@@ -175,8 +240,36 @@ export default function Settings() {
             </div>
             <div>
               <label className="text-sm font-medium">Audit Retention (years)</label>
-              <input type="number" value={auditRetention} onChange={(e) => setAuditRetention(Number(e.target.value))} min={1} max={10} className="border rounded px-3 py-2 text-sm w-full mt-1" />
+              <input
+                data-testid="governance-audit-retention"
+                disabled={governanceLoading || governanceSaving}
+                type="number"
+                value={auditRetention}
+                onChange={(e) => setAuditRetention(Number(e.target.value))}
+                min={1}
+                max={10}
+                className="border rounded px-3 py-2 text-sm w-full mt-1"
+              />
             </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              data-testid="governance-save"
+              onClick={saveGovernance}
+              disabled={governanceLoading || governanceSaving}
+            >
+              {governanceSaving ? "Saving…" : "Save Compliance Settings"}
+            </Button>
+            {governanceSaved && (
+              <span data-testid="governance-saved" className="text-sm text-emerald-600">
+                Saved — audit entry written.
+              </span>
+            )}
+            {governanceError && (
+              <span data-testid="governance-error" className="text-sm text-red-600">
+                {governanceError}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
