@@ -181,6 +181,23 @@ async def generate_workflow_endpoint(
     }
 
 
+# ── GET /workflows/templates ────────────────────────────────────────────────
+@router.get("/workflows/templates")
+async def list_workflow_templates(domain: str | None = None):
+    """Return the workflow-template catalog, optionally filtered by domain.
+
+    Source of truth is `core/workflows/template_catalog.py`. Before
+    PR-C3 (Enterprise Readiness Phase 7.2) this catalog was a
+    hardcoded array in `ui/src/pages/Workflows.tsx`; the UI now fetches
+    from here so adding / renaming a template no longer needs a UI
+    code change and a deploy.
+    """
+    from core.workflows.template_catalog import list_templates
+
+    items = list_templates(domain=domain)
+    return {"items": items, "total": len(items)}
+
+
 # ── GET /workflows ───────────────────────────────────────────────────────────
 @router.get("/workflows", response_model=PaginatedResponse)
 async def list_workflows(

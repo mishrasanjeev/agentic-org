@@ -6,6 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
 import type { Workflow } from "@/types";
 
+/**
+ * Workflow template catalog item — shape returned by
+ * `GET /api/v1/workflows/templates` (Enterprise Readiness P7.2 / PR-C3).
+ * Pre-PR-C3 the UI embedded a 21-entry hardcoded array that drifted
+ * away from the backend. The catalog is now backend-served so adding
+ * / renaming a template doesn't require a UI code change.
+ */
 interface WorkflowTemplate {
   id: string;
   name: string;
@@ -14,30 +21,6 @@ interface WorkflowTemplate {
   steps: number;
   trigger: string;
 }
-
-const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
-  { id: "tpl-invoice-processing", name: "Invoice Processing", description: "Automatically extract, validate, and route invoices for approval based on amount thresholds.", domain: "finance", steps: 5, trigger: "api_event" },
-  { id: "tpl-bank-reconciliation", name: "Bank Reconciliation", description: "Match bank statement entries with ledger transactions and flag discrepancies for review.", domain: "finance", steps: 4, trigger: "schedule" },
-  { id: "tpl-month-end-close", name: "Month-End Close", description: "Orchestrate journal entries, accruals, reconciliations, and reporting for month-end close.", domain: "finance", steps: 8, trigger: "schedule" },
-  { id: "tpl-gst-filing", name: "GST Filing", description: "Collect sales and purchase data, compute GST liability, and prepare GSTR-1/3B filings.", domain: "finance", steps: 6, trigger: "schedule" },
-  { id: "tpl-expense-approval", name: "Expense Approval", description: "Route expense reports through policy checks and multi-level approval chains.", domain: "finance", steps: 4, trigger: "api_event" },
-  { id: "tpl-payroll-processing", name: "Payroll Processing", description: "Calculate salaries, deductions, taxes, and generate payslips for all employees.", domain: "hr", steps: 6, trigger: "schedule" },
-  { id: "tpl-employee-onboarding", name: "Employee Onboarding", description: "Provision accounts, assign equipment, schedule orientation, and notify stakeholders in parallel.", domain: "hr", steps: 7, trigger: "api_event" },
-  { id: "tpl-leave-approval", name: "Leave Approval", description: "Validate leave balance, check team coverage, and route to manager for approval.", domain: "hr", steps: 3, trigger: "api_event" },
-  { id: "tpl-performance-review", name: "Performance Review Cycle", description: "Initiate self-assessments, collect manager ratings, calibrate scores, and finalize reviews.", domain: "hr", steps: 6, trigger: "schedule" },
-  { id: "tpl-talent-screening", name: "Talent Screening", description: "Parse resumes, score candidates against job requirements, and shortlist for interviews.", domain: "hr", steps: 5, trigger: "api_event" },
-  { id: "tpl-campaign-launch", name: "Campaign Launch", description: "Coordinate creative assets, audience targeting, channel setup, and launch across platforms.", domain: "marketing", steps: 6, trigger: "manual" },
-  { id: "tpl-lead-scoring", name: "Lead Scoring", description: "Evaluate inbound leads using firmographic, behavioral, and engagement signals.", domain: "marketing", steps: 4, trigger: "api_event" },
-  { id: "tpl-content-publishing", name: "Content Publishing", description: "Draft, review, optimize for SEO, and publish content across blog and social channels.", domain: "marketing", steps: 5, trigger: "manual" },
-  { id: "tpl-social-media-calendar", name: "Social Media Calendar", description: "Plan, schedule, and auto-publish posts across social media platforms on a weekly cadence.", domain: "marketing", steps: 4, trigger: "schedule" },
-  { id: "tpl-email-drip-campaign", name: "Email Drip Campaign", description: "Enroll contacts, send sequenced emails, track engagement, and branch based on actions.", domain: "marketing", steps: 5, trigger: "api_event" },
-  { id: "tpl-support-ticket-triage", name: "Support Ticket Triage", description: "Classify incoming tickets by urgency and topic, then route to the appropriate support tier.", domain: "ops", steps: 4, trigger: "api_event" },
-  { id: "tpl-it-asset-provisioning", name: "IT Asset Provisioning", description: "Allocate laptops, software licenses, and cloud accounts for new hires or role changes.", domain: "ops", steps: 5, trigger: "api_event" },
-  { id: "tpl-vendor-onboarding", name: "Vendor Onboarding", description: "Collect vendor documents, verify compliance, set up payment details, and approve registration.", domain: "ops", steps: 5, trigger: "manual" },
-  { id: "tpl-contract-renewal", name: "Contract Renewal", description: "Track contract expiry dates, notify stakeholders, negotiate terms, and execute renewals.", domain: "ops", steps: 5, trigger: "schedule" },
-  { id: "tpl-compliance-audit", name: "Compliance Audit", description: "Gather evidence, run control checks, flag exceptions, and generate audit reports.", domain: "ops", steps: 6, trigger: "schedule" },
-  { id: "tpl-report-generation", name: "Report Generation", description: "Aggregate data from multiple sources, generate formatted reports, and distribute to stakeholders.", domain: "ops", steps: 4, trigger: "schedule" },
-];
 
 type WorkflowsTab = "my-workflows" | "templates";
 
@@ -48,8 +31,13 @@ export default function Workflows() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<WorkflowsTab>("my-workflows");
 
+  // PR-C3: template catalog now sourced from GET /workflows/templates.
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+
   useEffect(() => {
     fetchWorkflows();
+    fetchTemplates();
   }, []);
 
   async function fetchWorkflows() {
@@ -62,6 +50,20 @@ export default function Workflows() {
       setWorkflows([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchTemplates() {
+    setTemplatesLoading(true);
+    try {
+      const { data } = await api.get<{ items: WorkflowTemplate[]; total: number }>(
+        "/workflows/templates",
+      );
+      setTemplates(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      setTemplates([]);
+    } finally {
+      setTemplatesLoading(false);
     }
   }
 
@@ -166,9 +168,19 @@ export default function Workflows() {
       )}
 
       {/* Templates tab */}
-      {activeTab === "templates" && (
+      {activeTab === "templates" && templatesLoading && templates.length === 0 && (
+        <p className="text-sm text-muted-foreground" data-testid="templates-loading">
+          Loading templates…
+        </p>
+      )}
+      {activeTab === "templates" && !templatesLoading && templates.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No templates available. Check that /api/v1/workflows/templates is reachable.
+        </p>
+      )}
+      {activeTab === "templates" && templates.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="templates-grid">
-          {WORKFLOW_TEMPLATES.map((tpl) => (
+          {templates.map((tpl) => (
             <Card key={tpl.id} className="hover:shadow-md transition-shadow flex flex-col">
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
