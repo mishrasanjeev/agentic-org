@@ -26,7 +26,7 @@
  * component change rather than keeping stale assertions around.
  */
 import { expect, test } from "@playwright/test";
-import { APP, authenticate, canAuth } from "./helpers/auth";
+import { APP, authenticate, canAuth, requireAuth } from "./helpers/auth";
 
 const DASHBOARDS = [
   { title: "CEO Dashboard", path: "/dashboard/ceo" },
@@ -48,7 +48,7 @@ const SHARED_KPIS = [
 for (const { title, path } of DASHBOARDS) {
   test.describe(title, () => {
     test.beforeEach(async ({ page }) => {
-      test.skip(!canAuth, "E2E_TOKEN required");
+      requireAuth();
       await authenticate(page);
       await page.goto(`${APP}${path}`, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle").catch(() => {});
@@ -85,7 +85,7 @@ for (const { title, path } of DASHBOARDS) {
 // test which asserted a CEO-dashboard layout the app no longer renders.
 test.describe("CxO sidebar navigation", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});

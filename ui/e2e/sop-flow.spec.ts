@@ -9,6 +9,12 @@ import { test, expect } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SOP Page — Auth Required
@@ -16,7 +22,7 @@ const canAuth = !!E2E_TOKEN;
 
 test.describe("SOP: Page Access (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
@@ -57,7 +63,7 @@ test.describe("SOP: Page Access (auth required)", () => {
 
 test.describe("SOP: API Parse (auth required)", () => {
   test.beforeEach(async () => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
   });
 
   test("parse text SOP returns draft config via API", async ({ request }) => {
@@ -143,7 +149,7 @@ test.describe("SOP: A2A + MCP Integration (public)", () => {
 
 test.describe("SOP: Dashboard v3.0 (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);

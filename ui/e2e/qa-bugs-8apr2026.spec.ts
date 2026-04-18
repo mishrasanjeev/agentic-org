@@ -14,6 +14,12 @@ import { test, expect, Page } from "@playwright/test";
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // Auth helper -- localStorage token injection
@@ -57,7 +63,7 @@ async function assertNoGarbageText(page: Page): Promise<void> {
 test.describe("Ramesh Backend Regression", () => {
   // Bug #1: Connector config loaded from DB -- chat query returns agent with tools
   test("chat query returns agent with tools (not empty)", async ({ request }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     const resp = await request.get(`${APP}/api/v1/agents`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });
@@ -78,7 +84,7 @@ test.describe("Ramesh Backend Regression", () => {
 
   // Bug #2: authorized_tools populated -- chat response has non-zero confidence
   test("chat response has non-zero confidence", async ({ request }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     const agentsResp = await request.get(`${APP}/api/v1/agents`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });
@@ -104,7 +110,7 @@ test.describe("Ramesh Backend Regression", () => {
 
   // Bug #7: PATCH agents accepts description field
   test("PATCH /agents/{id} with description returns 200", async ({ request }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     const agentsResp = await request.get(`${APP}/api/v1/agents`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });
@@ -126,7 +132,7 @@ test.describe("Ramesh Backend Regression", () => {
 
   // Bug #9: Chat button exists on agent detail page
   test("agent detail page has Chat with Agent button", async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
     await goTo(page, "/dashboard/agents");
 
@@ -148,7 +154,7 @@ test.describe("Ramesh Backend Regression", () => {
 
   // Bug #10: ChatPanel sends agent_id in request
   test("ChatPanel sends agent_id in request", async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
     await goTo(page, "/dashboard/agents");
 
@@ -204,7 +210,7 @@ test.describe("Ramesh Backend Regression", () => {
 
 test.describe("Ramesh UI Regression", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -375,7 +381,7 @@ test.describe("Ramesh UI Regression", () => {
 
 test.describe("Aishwarya Regression", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -643,7 +649,7 @@ test.describe("Aishwarya Regression", () => {
 
 test.describe("Proactive Regression - Similar Issues", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -729,7 +735,7 @@ test.describe("Proactive Regression - Similar Issues", () => {
 
   // API KPIs all return 200
   test("all 6 KPI endpoints return 200", async ({ request }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     const kpiPaths = [
       "/api/v1/kpis/ceo",
       "/api/v1/kpis/cfo",
@@ -807,7 +813,7 @@ test.describe("Proactive Regression - Similar Issues", () => {
 
   // Agents list API returns valid JSON array
   test("agents list API returns valid array with ids", async ({ request }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     const resp = await request.get(`${APP}/api/v1/agents`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });

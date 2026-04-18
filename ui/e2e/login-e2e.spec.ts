@@ -10,6 +10,12 @@ const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const MARKETING = "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 test.describe("Login Page — Rendering & Validation", () => {
   test("login page renders with email and password fields", async ({ page }) => {
@@ -83,7 +89,7 @@ test.describe("Login Page — Auth Flow", () => {
   });
 
   test("authenticated user can access dashboard via token", async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await page.goto(`${APP}/login`);
     await page.evaluate((token) => {
       localStorage.setItem("token", token);

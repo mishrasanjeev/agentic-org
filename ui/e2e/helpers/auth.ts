@@ -20,6 +20,22 @@ export const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 export const E2E_TOKEN = process.env.E2E_TOKEN || "";
 export const canAuth = !!E2E_TOKEN;
 
+/**
+ * Assert that the suite has authentication available. Throws if not.
+ *
+ * Policy: we do not skip tests on missing E2E_TOKEN — skipping silently
+ * hides real coverage gaps in CI. A missing token is a configuration
+ * failure that should fail the run loudly. Call this from beforeEach or
+ * at the top of any spec that drives auth-gated flows.
+ */
+export function requireAuth(): void {
+  if (!canAuth) {
+    throw new Error(
+      "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+    );
+  }
+}
+
 interface AuthUser {
   email: string;
   name: string;
@@ -41,7 +57,7 @@ let _cachedCompanyId: string | null = null;
  * critically, the real `role` so sidebar filtering works.
  */
 export async function authenticate(page: Page): Promise<void> {
-  if (!E2E_TOKEN) return;
+  requireAuth();
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   const profile = await getProfile(page);
   await page.evaluate(

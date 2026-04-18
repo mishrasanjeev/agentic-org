@@ -164,6 +164,9 @@ async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
         db_doc = Document(
             id=_UUID(doc["document_id"]),
             tenant_id=tid,
+            # `name` is the legacy NOT NULL column — mirror filename into it
+            # so rows are queryable from either generation of schema.
+            name=doc["filename"],
             filename=doc["filename"],
             content_type=doc.get("content_type"),
             size_bytes=doc["size_bytes"],

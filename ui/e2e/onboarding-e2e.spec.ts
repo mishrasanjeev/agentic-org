@@ -8,6 +8,12 @@ import { test, expect, Page } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 const UNIQUE = Date.now().toString(36);
 
 // ---------------------------------------------------------------------------
@@ -136,7 +142,7 @@ test.describe("Onboarding Wizard", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     // Override onboardingComplete to false so onboarding page renders
@@ -170,7 +176,7 @@ test.describe("Onboarding Wizard", () => {
 
 test.describe("Org Management API", () => {
   test("GET /org/profile returns tenant info", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(`${baseURL}/api/v1/org/profile`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });
@@ -181,7 +187,7 @@ test.describe("Org Management API", () => {
   });
 
   test("GET /org/members returns team list", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(`${baseURL}/api/v1/org/members`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });
@@ -196,7 +202,7 @@ test.describe("Org Management API", () => {
   });
 
   test("POST /org/invite sends invitation", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.post(`${baseURL}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
@@ -219,7 +225,7 @@ test.describe("Org Management API", () => {
   });
 
   test("PUT /org/onboarding updates state", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.put(`${baseURL}/api/v1/org/onboarding`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
@@ -237,7 +243,7 @@ test.describe("Org Management API", () => {
 
 test.describe("SLA Monitor", () => {
   test("SLA page loads for admin", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/sla`, {
@@ -257,7 +263,7 @@ test.describe("SLA Monitor", () => {
 
 test.describe("Evidence Export", () => {
   test("Audit page has export buttons", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/audit`, {

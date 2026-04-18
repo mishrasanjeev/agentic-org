@@ -11,6 +11,12 @@ import { test, expect, Page } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // Auth helper — token-based only
@@ -109,7 +115,7 @@ test.describe("AUTH: Signup validation", () => {
 
 test.describe("API: 404 responses", () => {
   test("Non-existent agent does not return 500", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(
       `${baseURL}/api/v1/agents/00000000-0000-0000-0000-000000000000`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
@@ -120,7 +126,7 @@ test.describe("API: 404 responses", () => {
   });
 
   test("Non-existent workflow does not return 500", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(
       `${baseURL}/api/v1/workflows/00000000-0000-0000-0000-000000000000`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
@@ -129,7 +135,7 @@ test.describe("API: 404 responses", () => {
   });
 
   test("Non-existent connector returns 404", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(
       `${baseURL}/api/v1/connectors/00000000-0000-0000-0000-000000000000`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
@@ -141,7 +147,7 @@ test.describe("API: 404 responses", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.post(
       `${baseURL}/api/v1/approvals/00000000-0000-0000-0000-000000000000/decide`,
       {
@@ -159,7 +165,7 @@ test.describe("API: 404 responses", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     await page.goto(
       `${baseURL}/dashboard/agents/00000000-0000-0000-0000-000000000000`,
@@ -218,7 +224,7 @@ test.describe("API: 401 unauthorized", () => {
 
 test.describe("API: Input validation", () => {
   test("Workflow with empty steps returns 400", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.post(`${baseURL}/api/v1/workflows`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
@@ -235,7 +241,7 @@ test.describe("API: Input validation", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.post(`${baseURL}/api/v1/workflows`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
@@ -247,7 +253,7 @@ test.describe("API: Input validation", () => {
   });
 
   test("Duplicate connector name returns 409", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const ts = Date.now();
     const name = `dup-conn-${ts}`;
 
@@ -272,7 +278,7 @@ test.describe("API: Input validation", () => {
   });
 
   test("Invalid audit date_from returns 400", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(
       `${baseURL}/api/v1/audit?date_from=not-a-date`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
@@ -281,7 +287,7 @@ test.describe("API: Input validation", () => {
   });
 
   test("Invalid audit agent_id returns 400", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const resp = await page.request.get(
       `${baseURL}/api/v1/audit?agent_id=not-a-uuid`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
@@ -299,7 +305,7 @@ test.describe("UI: Error display", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     await page.goto(`${baseURL}/dashboard/workflows/new`, {
       waitUntil: "domcontentloaded",
