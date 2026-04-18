@@ -7,7 +7,6 @@ FastAPI dependency_overrides race condition.
 
 from __future__ import annotations
 
-import os
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import patch
@@ -198,12 +197,6 @@ class TestChatIsolation:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedule Isolation
 # ═══════════════════════════════════════════════════════════════════════════
-
-
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="report schedules now backed by PostgreSQL",
-)
 class TestReportScheduleIsolation:
 
     def test_schedule_created_by_a_invisible_to_b(self, app, tenant_a, tenant_b):

@@ -28,6 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # PR-D3: provision postgres + redis so unit tests that hit the ORM
+    # can actually run instead of `@pytest.mark.skipif`-ing themselves
+    # out of existence. Schema is created by tests/unit/conftest.py on
+    # first use via BaseModel.metadata.create_all — same pattern as
+    # tests/integration/conftest.py.
+    services:
+      postgres: { image: "pgvector/pgvector:pg16", env: { POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test }, ports: ["5432:5432"] }
+      redis: { image: "redis:7-alpine", ports: ["6379:6379"] }
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
@@ -42,6 +50,8 @@ jobs:
             python scripts/check_migration_required.py
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml
         env:
+          AGENTICORG_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
+          AGENTICORG_REDIS_URL: redis://localhost:6379/0
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
       - uses: codecov/codecov-action@v6
 

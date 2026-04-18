@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -737,12 +736,6 @@ class TestNewConnectors:
 # ═══════════════════════════════════════════════════════════════════════════
 #  ABM API
 # ═══════════════════════════════════════════════════════════════════════════
-
-
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="ABM endpoints require PostgreSQL (set AGENTICORG_DB_URL)",
-)
 class TestABMApi:
     """Tests for ABM (Account-Based Marketing) API endpoints — requires DB."""
 

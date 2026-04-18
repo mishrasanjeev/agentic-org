@@ -13,7 +13,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import patch
@@ -354,12 +353,6 @@ class TestCompaniesErrors:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedules Endpoints — Error Handling
 # ═══════════════════════════════════════════════════════════════════════════
-
-
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="report schedules now backed by PostgreSQL",
-)
 class TestReportScheduleErrors:
     """Report Schedule CRUD error paths."""
 
