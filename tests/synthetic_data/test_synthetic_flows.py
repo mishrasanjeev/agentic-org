@@ -138,8 +138,11 @@ class TestAPInvoiceProcessing:
         """INV-SYNTH-001: Clean invoice, PO matches within tolerance."""
         inv = invoices[0]
         agent_id = _get_agent_id(headers, "ap_processor")
-        if not agent_id:
-            pytest.skip("No AP Processor agent found")
+        assert agent_id, (
+    "No AP Processor agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "process_invoice", {
             "invoice": inv["ocr_extracted"],
@@ -160,8 +163,11 @@ class TestAPInvoiceProcessing:
         """INV-SYNTH-002: Invoice vs PO mismatch — should flag the delta."""
         inv = invoices[1]
         agent_id = _get_agent_id(headers, "ap_processor")
-        if not agent_id:
-            pytest.skip("No AP Processor agent found")
+        assert agent_id, (
+    "No AP Processor agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "process_invoice", {
             "invoice": inv["ocr_extracted"],
@@ -187,8 +193,11 @@ class TestAPInvoiceProcessing:
         """INV-SYNTH-003: Invalid GSTIN — should fail validation."""
         inv = invoices[2]
         agent_id = _get_agent_id(headers, "ap_processor")
-        if not agent_id:
-            pytest.skip("No AP Processor agent found")
+        assert agent_id, (
+    "No AP Processor agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "process_invoice", {
             "invoice": inv["ocr_extracted"],
@@ -209,8 +218,11 @@ class TestAPInvoiceProcessing:
         """INV-SYNTH-004: ₹29.5L invoice — should mention high value."""
         inv = invoices[3]
         agent_id = _get_agent_id(headers, "ap_processor")
-        if not agent_id:
-            pytest.skip("No AP Processor agent found")
+        assert agent_id, (
+    "No AP Processor agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "process_invoice", {
             "invoice": inv["ocr_extracted"],
@@ -231,8 +243,11 @@ class TestAPInvoiceProcessing:
         """INV-SYNTH-005: Missing required fields — should flag incomplete."""
         inv = invoices[4]
         agent_id = _get_agent_id(headers, "ap_processor")
-        if not agent_id:
-            pytest.skip("No AP Processor agent found")
+        assert agent_id, (
+    "No AP Processor agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "process_invoice", {
             "invoice": inv["ocr_extracted"],
@@ -253,8 +268,11 @@ class TestAPInvoiceProcessing:
         """INV-SYNTH-006: Duplicate invoice ID — should detect."""
         inv = invoices[5]
         agent_id = _get_agent_id(headers, "ap_processor")
-        if not agent_id:
-            pytest.skip("No AP Processor agent found")
+        assert agent_id, (
+    "No AP Processor agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "process_invoice", {
             "invoice": inv["ocr_extracted"],
@@ -278,8 +296,11 @@ class TestResumeScreening:
         candidates, job, rubric = resumes
         candidate = candidates[0]
         agent_id = _get_agent_id(headers, "talent_acquisition")
-        if not agent_id:
-            pytest.skip("No Talent Acquisition agent found")
+        assert agent_id, (
+    "No Talent Acquisition agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "screen_resume", {
             "candidate": candidate["parsed_data"],
@@ -305,8 +326,11 @@ class TestResumeScreening:
         candidates, job, rubric = resumes
         candidate = candidates[1]
         agent_id = _get_agent_id(headers, "talent_acquisition")
-        if not agent_id:
-            pytest.skip("No Talent Acquisition agent found")
+        assert agent_id, (
+    "No Talent Acquisition agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "screen_resume", {
             "candidate": candidate["parsed_data"],
@@ -337,8 +361,11 @@ class TestResumeScreening:
         candidates, job, rubric = resumes
         candidate = candidates[2]
         agent_id = _get_agent_id(headers, "talent_acquisition")
-        if not agent_id:
-            pytest.skip("No Talent Acquisition agent found")
+        assert agent_id, (
+    "No Talent Acquisition agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "screen_resume", {
             "candidate": candidate["parsed_data"],
@@ -364,8 +391,11 @@ class TestResumeScreening:
         candidates, job, rubric = resumes
         candidate = candidates[3]
         agent_id = _get_agent_id(headers, "talent_acquisition")
-        if not agent_id:
-            pytest.skip("No Talent Acquisition agent found")
+        assert agent_id, (
+    "No Talent Acquisition agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "screen_resume", {
             "candidate": candidate["parsed_data"],
@@ -381,8 +411,11 @@ class TestResumeScreening:
         candidates, job, rubric = resumes
         candidate = candidates[4]
         agent_id = _get_agent_id(headers, "talent_acquisition")
-        if not agent_id:
-            pytest.skip("No Talent Acquisition agent found")
+        assert agent_id, (
+    "No Talent Acquisition agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "screen_resume", {
             "candidate": candidate["parsed_data"],
@@ -417,8 +450,11 @@ class TestContractAnalysis:
         """CTR-SYNTH-001: Standard SaaS contract — should index without issues."""
         contract = contracts[0]
         agent_id = _get_agent_id(headers, "contract_intelligence")
-        if not agent_id:
-            pytest.skip("No Contract Intelligence agent found")
+        assert agent_id, (
+    "No Contract Intelligence agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "analyze_contract", {
             "contract": contract["parsed_data"],
@@ -432,8 +468,11 @@ class TestContractAnalysis:
         """CTR-SYNTH-002: Unlimited indemnification + non-compete — should escalate."""
         contract = contracts[1]
         agent_id = _get_agent_id(headers, "contract_intelligence")
-        if not agent_id:
-            pytest.skip("No Contract Intelligence agent found")
+        assert agent_id, (
+    "No Contract Intelligence agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "analyze_contract", {
             "contract": contract["parsed_data"],
@@ -457,8 +496,11 @@ class TestContractAnalysis:
         """CTR-SYNTH-003: ₹3.5Cr contract — should flag for review."""
         contract = contracts[2]
         agent_id = _get_agent_id(headers, "contract_intelligence")
-        if not agent_id:
-            pytest.skip("No Contract Intelligence agent found")
+        assert agent_id, (
+    "No Contract Intelligence agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "analyze_contract", {
             "contract": contract["parsed_data"],
@@ -475,8 +517,11 @@ class TestContractAnalysis:
         """CTR-SYNTH-004: Contract expiring in 45 days — should flag renewal."""
         contract = contracts[3]
         agent_id = _get_agent_id(headers, "contract_intelligence")
-        if not agent_id:
-            pytest.skip("No Contract Intelligence agent found")
+        assert agent_id, (
+    "No Contract Intelligence agent found — the demo tenant must have this agent seeded. "
+    "Run scripts/seed_e2e_demo_agents.py against the target environment. "
+    "Skipping this assertion would hide real product regressions."
+)
 
         result = _run_agent(headers, agent_id, "analyze_contract", {
             "contract": contract["parsed_data"],
