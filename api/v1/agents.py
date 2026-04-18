@@ -1978,6 +1978,114 @@ async def list_agent_feedback(
     return {"agent_id": str(agent_id), "feedback": entries, "count": len(entries)}
 
 
+# ── GET /agents/{id}/explanation/latest ─────────────────────────────────────
+@router.get("/agents/{agent_id}/explanation/latest")
+async def get_latest_explanation(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Derive a real, human-readable explanation of the agent's most recent
+    run from stored `AgentTaskResult` data.
+
+    Replaces the mock explanation that used to live in the UI
+    (`ui/src/pages/AgentDetail.tsx`, removed in PR-C1). Returns the empty
+    state when the agent hasn't run yet — callers must handle
+    ``has_run: false`` rather than fabricating bullets.
+
+    Response shape:
+      {
+        "has_run": bool,
+        "run_id": str | None,
+        "status": str | None,
+        "confidence": float | None,
+        "bullets": list[str],     # derived from hitl, confidence, tool usage
+        "tools_cited": list[str], # unique tool names from tool_calls
+        "hitl_required": bool,
+        "hitl_decision": str | None,
+        "duration_ms": int,
+        "completed_at": ISO str | None,
+      }
+    """
+    from core.models.agent_task_result import AgentTaskResult
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                select(AgentTaskResult)
+                .where(
+                    AgentTaskResult.agent_id == agent_id,
+                    AgentTaskResult.tenant_id == tid,
+                )
+                .order_by(AgentTaskResult.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+    if row is None:
+        return {
+            "has_run": False,
+            "run_id": None,
+            "status": None,
+            "confidence": None,
+            "bullets": [],
+            "tools_cited": [],
+            "hitl_required": False,
+            "hitl_decision": None,
+            "duration_ms": 0,
+            "completed_at": None,
+        }
+
+    # Derive bullets from real trace — no hardcoded filler.
+    bullets: list[str] = []
+    tool_calls_list = row.tool_calls or []
+    tools_cited = sorted(
+        {
+            (tc.get("tool") if isinstance(tc, dict) else None) or ""
+            for tc in tool_calls_list
+        }
+        - {""}
+    )
+
+    if tools_cited:
+        bullets.append(
+            f"Called {len(tool_calls_list)} tool invocation"
+            f"{'s' if len(tool_calls_list) != 1 else ''} "
+            f"across {len(tools_cited)} distinct tool"
+            f"{'s' if len(tools_cited) != 1 else ''}: "
+            + ", ".join(tools_cited)
+        )
+    else:
+        bullets.append("No tool calls were required for this run.")
+
+    if row.confidence is not None:
+        pct = int(round(row.confidence * 100))
+        bullets.append(f"Confidence was {pct}% ({row.status}).")
+
+    if row.hitl_required:
+        decision = row.hitl_decision or "pending review"
+        bullets.append(f"HITL gate triggered — {decision}.")
+    else:
+        bullets.append("No HITL gate conditions were met.")
+
+    if row.error_message:
+        # Constant summary (no exception text in the response body).
+        bullets.append("The run ended with an error — see the audit log.")
+
+    return {
+        "has_run": True,
+        "run_id": str(row.id),
+        "status": row.status,
+        "confidence": row.confidence,
+        "bullets": bullets,
+        "tools_cited": tools_cited,
+        "hitl_required": row.hitl_required,
+        "hitl_decision": row.hitl_decision,
+        "duration_ms": row.duration_ms,
+        "completed_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
 # ── POST /agents/{id}/feedback/analyze ──────────────────────────────────────
 @router.post("/agents/{agent_id}/feedback/analyze")
 async def analyze_agent_feedback(
