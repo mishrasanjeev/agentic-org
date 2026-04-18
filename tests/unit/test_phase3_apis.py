@@ -39,17 +39,19 @@ def client(app):
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
 
-    # Patch the legacy token validator to accept any token
+    # Patch the legacy token validator to accept any token. Grant admin
+    # scope so admin-gated routers (e.g. /report-schedules) reach their
+    # handlers — these tests exercise API behaviour, not the admin gate.
     async def _fake_validate(token):
         return {
             "sub": "test-user",
             "agenticorg:tenant_id": test_tenant_id,
-            "agenticorg:scopes": [],
+            "agenticorg:scopes": ["agenticorg:admin"],
         }
 
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=[]):
+            with patch("auth.grantex_middleware.extract_scopes", return_value=["agenticorg:admin"]):
                 with TestClient(app, raise_server_exceptions=False) as c:
                     # Add a Bearer token header so middleware doesn't reject outright
                     c.headers["Authorization"] = "Bearer fake-test-token"

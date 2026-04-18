@@ -760,15 +760,17 @@ class TestABMApi:
         app.dependency_overrides[get_current_tenant] = lambda: test_tenant
 
         async def _fake_validate(token):
+            # admin scope so admin-gated routers reach their handlers —
+            # these tests verify feature behaviour, not the admin gate.
             return {
                 "sub": "test-user",
                 "agenticorg:tenant_id": test_tenant,
-                "agenticorg:scopes": [],
+                "agenticorg:scopes": ["agenticorg:admin"],
             }
 
         with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
             with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant):
-                with patch("auth.grantex_middleware.extract_scopes", return_value=[]):
+                with patch("auth.grantex_middleware.extract_scopes", return_value=["agenticorg:admin"]):
                     with TestClient(app, raise_server_exceptions=False) as c:
                         c.headers["Authorization"] = "Bearer fake-test-token"
                         yield c

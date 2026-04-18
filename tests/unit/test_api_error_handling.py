@@ -46,15 +46,20 @@ def auth_client(app):
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id
 
     async def _fake_validate(token):
+        # admin scope so routers that bind `dependencies=[require_tenant_admin]`
+        # (e.g. /report-schedules) reach their body/handler. These tests
+        # exercise validation / error handling, not the admin gate —
+        # gating is covered separately by tests/security/test_admin_gate*.
         return {
             "sub": "test-user",
             "agenticorg:tenant_id": test_tenant_id,
-            "agenticorg:scopes": [],
+            "agenticorg:scopes": ["agenticorg:admin"],
         }
 
+    admin_scopes = ["agenticorg:admin"]
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=[]):
+            with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
                 with TestClient(app, raise_server_exceptions=False) as c:
                     c.headers["Authorization"] = "Bearer fake-test-token"
                     c._test_tenant_id = test_tenant_id
