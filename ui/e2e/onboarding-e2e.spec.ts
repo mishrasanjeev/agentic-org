@@ -205,7 +205,11 @@ test.describe("Org Management API", () => {
       data: {
         email: `invite-${UNIQUE}@test.agenticorg.local`,
         name: "Invited User",
-        role: "cfo",
+        // Allowed values on /org/invite are the system roles
+        // (admin, analyst, auditor, developer, domain_lead). The
+        // earlier "cfo" was a CxO persona, not a role — server-side
+        // role validation now rejects it with a 400.
+        role: "analyst",
         domain: "finance",
       },
     });
