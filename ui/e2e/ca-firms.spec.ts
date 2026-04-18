@@ -439,19 +439,22 @@ test.describe("Landing Page -- CA Firms Section", () => {
   });
 
   test("For CA Firms section renders with CTA buttons", async ({ page }) => {
-    // The landing page has a section titled "Built for Chartered Accountant Firms"
-    await expect(
-      page.getByText("Built for Chartered Accountant Firms").first()
-    ).toBeVisible({ timeout: 15000 });
+    // The CA-firms block is lazy-loaded below the fold on the marketing
+    // landing; scroll it into view before asserting so Intersection
+    // Observers (if any) fire, and allow a longer timeout since the
+    // marketing CDN occasionally serves the first paint slowly.
+    const heading = page.getByText("Built for Chartered Accountant Firms").first();
+    await heading.scrollIntoViewIfNeeded().catch(() => {});
+    await expect(heading).toBeVisible({ timeout: 30000 });
 
     // CA Pack badge
     await expect(
       page.getByText("CA Pack").first()
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
     // CTA: "Learn More" links to /solutions/ca-firms
     const learnMore = page.getByRole("link", { name: /Learn More/i }).first();
-    await expect(learnMore).toBeVisible({ timeout: 10000 });
+    await expect(learnMore).toBeVisible({ timeout: 15000 });
     await expect(learnMore).toHaveAttribute("href", /ca-firms/);
   });
 
@@ -530,14 +533,28 @@ test.describe("Filing Approvals", () => {
 
   test("Approvals tab is visible on CompanyDetail", async ({ page }) => {
     const companyId = await getCompanyId(page);
+
+    // Sync on the /companies/{id} GET so we only assert after the detail
+    // page's primary data load has returned — avoids racing the tab bar
+    // against the Loading… state when prod is slow.
+    const companyLoaded = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/api/v1/companies/${companyId}`) &&
+        !r.url().includes("/approvals") &&
+        !r.url().includes("/deadlines") &&
+        !r.url().includes("/credentials") &&
+        !r.url().includes("/roles") &&
+        r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`${APP}/dashboard/companies/${companyId}`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await companyLoaded;
 
     // The Approvals tab should be in the tab bar
     const approvalsTab = page.locator("main button").filter({ hasText: /^Approvals$/ }).first();
-    await expect(approvalsTab).toBeVisible({ timeout: 10000 });
+    await expect(approvalsTab).toBeVisible({ timeout: 15000 });
   });
 
   test("Approvals tab shows filing requests", async ({ page }) => {
@@ -661,10 +678,21 @@ test.describe("Subscription Status", () => {
 
   test("Company detail shows subscription badge", async ({ page }) => {
     const companyId = await getCompanyId(page);
+
+    const companyLoaded = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/api/v1/companies/${companyId}`) &&
+        !r.url().includes("/approvals") &&
+        !r.url().includes("/deadlines") &&
+        !r.url().includes("/credentials") &&
+        !r.url().includes("/roles") &&
+        r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`${APP}/dashboard/companies/${companyId}`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await companyLoaded;
 
     // The company header should show a subscription status badge
     // Valid values: Trial, Active, Expired
@@ -672,7 +700,7 @@ test.describe("Subscription Status", () => {
     let foundBadge = false;
     for (const badge of subscriptionBadges) {
       const el = page.getByText(badge, { exact: true }).first();
-      if (await el.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
         foundBadge = true;
         break;
       }
@@ -697,15 +725,26 @@ test.describe("Client Health Score", () => {
 
   test("Company detail overview shows health score", async ({ page }) => {
     const companyId = await getCompanyId(page);
+
+    const companyLoaded = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/api/v1/companies/${companyId}`) &&
+        !r.url().includes("/approvals") &&
+        !r.url().includes("/deadlines") &&
+        !r.url().includes("/credentials") &&
+        !r.url().includes("/roles") &&
+        r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`${APP}/dashboard/companies/${companyId}`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await companyLoaded;
 
     // The overview tab (default) should show "Client Health Score" metric
     await expect(
       page.getByText("Client Health Score").first()
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
     // The health score value should be a number (e.g. 92)
     const body = (await page.locator("body").textContent()) || "";
@@ -714,10 +753,18 @@ test.describe("Client Health Score", () => {
   });
 
   test("Company dashboard cards show health indicator", async ({ page }) => {
+    // Sync on the companies list fetch so the assertions don't race the
+    // initial loading skeleton.
+    const listLoaded = page.waitForResponse(
+      (r) =>
+        /\/api\/v1\/companies(\?|$)/.test(r.url()) &&
+        r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`${APP}/dashboard/companies`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await listLoaded;
 
     // The dashboard should show company cards with status indicators
     // At minimum, active/inactive badges should be visible
@@ -757,10 +804,18 @@ test.describe("Partner Dashboard", () => {
   });
 
   test("shows aggregate KPI cards", async ({ page }) => {
+    // Sync on /partner-dashboard so we don't assert against the "Loading
+    // partner dashboard…" skeleton.
+    const dashboardLoaded = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/v1/partner-dashboard") &&
+        r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`${APP}/dashboard/partner`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await dashboardLoaded;
 
     // Partner dashboard should show KPI cards with metrics
     const kpiLabels = ["Total Clients", "Active", "Filings Due", "Health Score", "Revenue"];
