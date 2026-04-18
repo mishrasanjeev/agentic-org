@@ -101,16 +101,26 @@ async def call_tool(
     if not body.name:
         raise HTTPException(400, "Either 'name' or 'tool' field is required")
 
-    # Parse agent type from tool name
+    # Unknown-tool contract (see docs/mcp-product-model.md). We return a
+    # 404 with a structured body so MCP clients can programmatically
+    # distinguish "typo" from "server error" and guide users toward the
+    # supported discovery path.
+    _unknown_payload = {
+        "error": "unknown_tool",
+        "name": body.name,
+        "supported_prefix": "agenticorg_",
+        "hint": "Call GET /api/v1/mcp/tools for the current catalog",
+    }
+
     if not body.name.startswith("agenticorg_"):
-        raise HTTPException(400, f"Unknown tool: {body.name}. Tools must start with 'agenticorg_'")
+        raise HTTPException(status_code=404, detail=_unknown_payload)
 
     agent_type = body.name.removeprefix("agenticorg_")
 
     from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
 
     if agent_type not in _AGENT_TYPE_DEFAULT_TOOLS:
-        raise HTTPException(400, f"Unknown agent type: {agent_type}")
+        raise HTTPException(status_code=404, detail=_unknown_payload)
 
     # Load agent prompt and validate tools exist
     system_prompt = _load_agent_prompt(agent_type)

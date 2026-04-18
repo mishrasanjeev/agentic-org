@@ -32,7 +32,26 @@ These apply to every PR under this plan.
 | **P8** | QA Baseline Restoration (backend skips, deterministic env) | 2 | 4 | none (runs in parallel) |
 | **P9** | Enterprise Readiness Gate | 2 | 3 | all prior |
 
-Total: ~22 PRs, ~40 working days (≈ 8 weeks with parallelism).
+## Batched PR Plan (revised 2026-04-18)
+
+Rather than 22 sequential PRs, batch related phases and don't wait for main CI between pushes. `scripts/local_e2e.sh` gates every push locally (~3 min); main CI runs in the background as a net. Review stays reviewable (each batched PR is 1-3 days of work, not all phases at once). Target: enterprise-procurement-ready in ~3 weeks.
+
+| PR | Contents | Phases | Parallel with | Est. days |
+|---|---|---|---|---|
+| **PR-A** | SDK canonical contract + MCP model decision | P2 + P3 | PR-D | 3 |
+| **PR-B** | Governance persistence + connector control plane | P4 + P5 | PR-D | 7 |
+| **PR-C** | Dashboard/IA truth + explainability + workflow ops | P6 + P7 | PR-D | 6 |
+| **PR-D** | QA baseline (backend unskip, coverage floor, critical-path tags) | P8 | A, B, C | 3-4 |
+| **PR-E** | Enterprise readiness gate (consistency sweep + eval scripts + go/no-go) | P9 | none | 2 |
+
+### Push discipline for every PR
+
+1. `bash scripts/local_e2e.sh <relevant-spec>` — must pass locally before push.
+2. `bash scripts/preflight.sh` — already enforced by the pre-push hook.
+3. `@codex please review` in the PR body — non-negotiable.
+4. Merge on branch-CI-green (don't wait for main CI e2e); next PR starts immediately; main CI is the post-merge safety net.
+
+Total: ~5 PRs, ~21 working days with parallelism (≈ 3 weeks).
 
 ## Current State Snapshot (2026-04-18)
 

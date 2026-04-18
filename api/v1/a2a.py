@@ -179,19 +179,16 @@ async def create_task(
         # with no values lifted from `result` — this way CodeQL can
         # see that no exception strings can flow into the response.
         # Callers can always GET /tasks/{id} for the full trace.
-        if final_status != "completed":
-            return {
-                "id": task_id,
-                "status": "failed",
-                "agent_type": body.agent_type,
-                "result": {},
-            }
-
-        # On success, JSON-roundtrip the output and coerce confidence
-        # to a primitive float. The roundtrip is a CodeQL-recognized
-        # sanitization barrier; the float() cast guarantees a number.
+        # Canonical AgentRunResult shape — see docs/api/agent-run-contract.md.
+        # `id` and `result: {output, confidence}` stay as deprecated aliases
+        # during the v4.8 → v5.0 transition window so existing clients don't
+        # break; `run_id`, top-level `output`, and top-level `confidence` are
+        # the new canonical fields.
         import json as _json
 
+        # JSON-roundtrip the output and coerce confidence to a primitive
+        # float. The roundtrip is a CodeQL-recognized sanitization barrier;
+        # the float() cast guarantees a number.
         try:
             safe_output_payload = _json.loads(
                 _json.dumps(result.get("output") or {}, default=str)
@@ -200,14 +197,49 @@ async def create_task(
             safe_output_payload = {}
         safe_confidence = float(result.get("confidence", 0.0) or 0.0)
 
+        # CodeQL sanitization: for the failed branch we lift NO fields from
+        # `result` that could carry exception-derived strings. `error` is a
+        # constant; `reasoning_trace` / `tool_calls` / `performance` /
+        # `explanation` / `hitl_trigger` are intentionally empty. Callers
+        # can always GET /tasks/{id} for the full trace.
+        if final_status != "completed":
+            return {
+                "run_id": task_id,
+                "id": task_id,  # deprecated alias, removed in v5.0
+                "agent_id": None,
+                "agent_type": body.agent_type,
+                "correlation_id": None,
+                "status": "failed",
+                "output": {},
+                "confidence": 0.0,
+                "reasoning_trace": [],
+                "tool_calls": [],
+                "runtime": "a2a",
+                "performance": None,
+                "explanation": None,
+                "hitl_trigger": None,
+                "error": "agent_run_failed",
+                "result": {"output": {}, "confidence": 0.0},
+            }
+
         return {
-            "id": task_id,
-            "status": "completed",
+            "run_id": task_id,
+            "id": task_id,  # deprecated alias, removed in v5.0
+            "agent_id": None,
             "agent_type": body.agent_type,
-            "result": {
-                "output": safe_output_payload,
-                "confidence": safe_confidence,
-            },
+            "correlation_id": result.get("correlation_id"),
+            "status": "completed",
+            "output": safe_output_payload,
+            "confidence": safe_confidence,
+            "reasoning_trace": list(result.get("reasoning_trace", []) or []),
+            "tool_calls": list(result.get("tool_calls", []) or []),
+            "runtime": "a2a",
+            "performance": result.get("performance") or None,
+            "explanation": result.get("explanation") or None,
+            "hitl_trigger": result.get("hitl_trigger") or None,
+            "error": None,
+            # Deprecated alias matching the old {output, confidence} nesting.
+            "result": {"output": safe_output_payload, "confidence": safe_confidence},
         }
 
     except Exception as exc:

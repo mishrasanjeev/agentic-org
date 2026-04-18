@@ -1399,28 +1399,30 @@ async def run_agent(
             task_trace.append(f"WARNING: cost ledger write failed — {exc}")
             hitl_trigger = hitl_trigger or "budget_tracking_failed"
 
-    # 7. Return result
+    # 7. Return result — canonical AgentRunResult shape.
+    # See docs/api/agent-run-contract.md. `task_id` stays as a deprecated
+    # alias for `run_id` during the v4.8 → v5.0 transition window.
     response = {
-        "task_id": msg_id,
+        "run_id": msg_id,
+        "task_id": msg_id,  # deprecated alias, removed in v5.0
         "agent_id": str(agent_id),
+        "agent_type": None,  # this endpoint invokes by id; type path is /a2a/tasks
         "correlation_id": correlation_id,
         "status": task_status,
         "output": task_output,
         "confidence": task_confidence,
         "reasoning_trace": task_trace,
+        "tool_calls": lg_result.get("tool_calls", []),
         "runtime": "langgraph",
-        "explanation": lg_result.get("explanation", {}),
+        "explanation": lg_result.get("explanation") or None,
         "performance": {
             "total_latency_ms": perf.get("total_latency_ms", 0),
             "llm_tokens_used": perf.get("llm_tokens_used", 0),
             "llm_cost_usd": perf.get("llm_cost_usd", 0),
         },
+        "hitl_trigger": hitl_trigger or None,
+        "error": task_error or None,
     }
-    if hitl_trigger:
-        response["hitl_trigger"] = hitl_trigger
-    if task_error:
-        response["error"] = task_error
-
     return response
 
 
