@@ -43,6 +43,7 @@ from api.v1 import (
     kpis,
     mcp,
     packs,
+    product_facts,
     prompt_templates,
     push,
     report_schedules,
@@ -117,10 +118,10 @@ _is_production = settings.env == "production"
 app = FastAPI(
     title="AgenticOrg",
     description=(
-        "AI Virtual Employee Platform — 50+ agents, 1000+ integrations, "
-        "54 native connectors (340+ tools), voice agents, knowledge base"
+        "AI Virtual Employee Platform. "
+        "Real-time counts: GET /api/v1/product-facts."
     ),
-    version="4.8.0",
+    version=product_facts._version_from_pyproject(),
     lifespan=lifespan,
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",
@@ -159,6 +160,7 @@ app.add_middleware(DeprecationHeaderMiddleware)
 register_error_handlers(app)
 
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
+app.include_router(product_facts.router, prefix="/api/v1", tags=["Product Facts"])
 app.include_router(v1_auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 app.include_router(prompt_templates.router, prefix="/api/v1", tags=["Prompt Templates"])

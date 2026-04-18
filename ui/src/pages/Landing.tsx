@@ -7,6 +7,7 @@ import AgentsInAction from "../components/AgentsInAction";
 import WorkflowAnimation from "../components/WorkflowAnimation";
 import InteractiveDemo from "../components/InteractiveDemo";
 import SocialProof from "../components/SocialProof";
+import { useProductFacts } from "@/lib/productFacts";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -322,6 +323,11 @@ export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const location = useLocation();
+  const { facts } = useProductFacts();
+  const connectorsText = facts.connector_count > 0 ? `${facts.connector_count}` : "50+";
+  const agentsText = facts.agent_count > 0 ? `${facts.agent_count}` : "25+";
+  const toolsText = facts.tool_count > 0 ? `${facts.tool_count}+` : "250+";
+  const versionText = facts.version ? `v${facts.version}` : "";
 
   // Scroll to hash anchor on navigation (e.g. /#developers from another page)
   useEffect(() => {
@@ -434,7 +440,9 @@ export default function Landing() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-slate-300 text-sm">v4.0.0 &mdash; 1000+ Integrations, 50+ AI Agents, Voice, Knowledge Base, Industry Packs</span>
+              <span className="text-slate-300 text-sm" data-testid="landing-version-badge">
+                {versionText ? `${versionText} — ` : ""}1000+ Integrations, {agentsText} AI Agents, Voice, Knowledge Base, Industry Packs
+              </span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
@@ -497,9 +505,9 @@ export default function Landing() {
           >
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
               {/* Version badge */}
-              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse">
+              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse" data-testid="landing-version-pill">
                 <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                v4.0.0
+                {versionText || "v…"}
               </span>
 
               {/* Description */}
@@ -618,7 +626,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                50+ pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. 54 native connectors + 1000+ via Composio (340+ native tools), A/B testing, email drip, ABM with intent data, SDK/MCP/API access. Not chatbots. Virtual employees.
+                {agentsText} pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. {connectorsText} native connectors + 1000+ via Composio ({toolsText} native tools), A/B testing, email drip, ABM with intent data, SDK/MCP/API access. Not chatbots. Virtual employees.
               </p>
             </div>
           </FadeIn>
@@ -898,8 +906,8 @@ export default function Landing() {
 
             <div className="grid md:grid-cols-3 gap-12">
               {[
-                { num: "1", title: "Create or pick your agents", desc: "Choose from 50+ pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard." },
-                { num: "2", title: "Connect your systems", desc: "54 connectors with 340+ tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events." },
+                { num: "1", title: "Create or pick your agents", desc: `Choose from ${agentsText} pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard.` },
+                { num: "2", title: "Connect your systems", desc: `${connectorsText} connectors with ${toolsText} tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events.` },
                 { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK (pip install agenticorg), TypeScript SDK (npm i agenticorg-sdk), CLI, or ChatGPT/Claude via MCP Server." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
@@ -1423,14 +1431,14 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">MCP (Model Context Protocol)</h3>
-                <p className="text-sm text-slate-400">Anthropic's MCP. Expose 340+ tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
+                <p className="text-sm text-slate-400">Anthropic's MCP. Expose {toolsText} tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
               </div>
               <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
                   <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">Grantex Scope Enforcement</h3>
-                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against 53 connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read. Now with 1000+ tool manifests, voice agent security, and PII redaction before LLM.</p>
+                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against {connectorsText} connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read. Now with 1000+ tool manifests, voice agent security, and PII redaction before LLM.</p>
                 <Link to="/how-grantex-works" className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 font-medium mt-2 transition-colors">
                   Learn how it works <span aria-hidden="true">&rarr;</span>
                 </Link>
@@ -1536,7 +1544,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              50+ agents that act. 1000+ integrations. 340+ native tools. 855+ tests passing. Free to start.
+              {agentsText} agents that act. 1000+ integrations. {toolsText} native tools. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

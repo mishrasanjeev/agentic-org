@@ -9,7 +9,8 @@ import type { Connector } from "@/types";
 
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
 
-// Full catalog of all 54+ native connectors
+// Hardcoded native-connector catalog. Phase 5 replaces this with a backend-
+// served catalog so connector metadata changes do not require UI edits.
 const NATIVE_CONNECTOR_CATALOG: Array<{ id: string; name: string; category: string; description: string }> = [
   { id: "salesforce", name: "Salesforce", category: "comms", description: "CRM and sales management" },
   { id: "hubspot", name: "HubSpot", category: "marketing", description: "Inbound marketing and CRM" },

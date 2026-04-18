@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { useProductFacts } from "@/lib/productFacts";
 
 /* ------------------------------------------------------------------ */
 /*  CheckIcon                                                          */
@@ -119,67 +120,71 @@ function DemoModal({ onClose }: { onClose: () => void }) {
 /* ------------------------------------------------------------------ */
 /*  Tier data                                                          */
 /* ------------------------------------------------------------------ */
-const TIERS = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "/month",
-    description: "Get started with core AI agents and see results immediately.",
-    highlight: false,
-    cta: "Start Free",
-    ctaLink: "/login",
-    features: [
-      "50+ AI agents",
-      "20 connectors",
-      "500 tasks/day",
-      "Community support",
-      "Shadow mode testing",
-      "Basic audit log",
-      "Single workspace",
-    ],
-  },
-  {
-    name: "Pro",
-    price: "$499",
-    period: "/month",
-    description: "Scale your operations with advanced agents and priority support.",
-    highlight: true,
-    cta: "Start Pro",
-    ctaLink: "demo",
-    features: [
-      "Unlimited AI agents",
-      "54 connectors",
-      "Unlimited tasks",
-      "Email support",
-      "Custom workflows",
-      "Priority HITL queue",
-      "Advanced analytics",
-      "API access",
-      "Team workspaces",
-    ],
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    period: "",
-    description: "Full platform with dedicated support, SLA, and custom deployments.",
-    highlight: false,
-    cta: "Contact Sales",
-    ctaLink: "demo",
-    features: [
-      "Unlimited AI agents",
-      "54 connectors",
-      "Unlimited everything",
-      "Dedicated support",
-      "99.9% SLA guarantee",
-      "Custom connectors",
-      "On-premise option",
-      "SSO / SAML",
-      "Custom integrations",
-      "Dedicated CSM",
-    ],
-  },
-];
+// Tier content parametrized on runtime connector/agent counts so it never
+// drifts from the backend registry.
+function buildTiers(agentsText: string, connectorsText: string) {
+  return [
+    {
+      name: "Free",
+      price: "$0",
+      period: "/month",
+      description: "Get started with core AI agents and see results immediately.",
+      highlight: false,
+      cta: "Start Free",
+      ctaLink: "/login",
+      features: [
+        `${agentsText} AI agents`,
+        "20 connectors",
+        "500 tasks/day",
+        "Community support",
+        "Shadow mode testing",
+        "Basic audit log",
+        "Single workspace",
+      ],
+    },
+    {
+      name: "Pro",
+      price: "$499",
+      period: "/month",
+      description: "Scale your operations with advanced agents and priority support.",
+      highlight: true,
+      cta: "Start Pro",
+      ctaLink: "demo",
+      features: [
+        "Unlimited AI agents",
+        `${connectorsText} connectors`,
+        "Unlimited tasks",
+        "Email support",
+        "Custom workflows",
+        "Priority HITL queue",
+        "Advanced analytics",
+        "API access",
+        "Team workspaces",
+      ],
+    },
+    {
+      name: "Enterprise",
+      price: "Custom",
+      period: "",
+      description: "Full platform with dedicated support, SLA, and custom deployments.",
+      highlight: false,
+      cta: "Contact Sales",
+      ctaLink: "demo",
+      features: [
+        "Unlimited AI agents",
+        `${connectorsText} connectors`,
+        "Unlimited everything",
+        "Dedicated support",
+        "99.9% SLA guarantee",
+        "Custom connectors",
+        "On-premise option",
+        "SSO / SAML",
+        "Custom integrations",
+        "Dedicated CSM",
+      ],
+    },
+  ];
+}
 
 /* ------------------------------------------------------------------ */
 /*  Feature comparison table data                                      */
@@ -191,9 +196,10 @@ interface ComparisonRow {
   enterprise: string | boolean;
 }
 
-const COMPARISON: ComparisonRow[] = [
-  { feature: "AI Agents", free: "35", pro: "Unlimited", enterprise: "Unlimited" },
-  { feature: "Connectors", free: "20", pro: "43", enterprise: "43" },
+function buildComparison(agentsText: string, connectorsText: string): ComparisonRow[] {
+  return [
+  { feature: "AI Agents", free: agentsText, pro: "Unlimited", enterprise: "Unlimited" },
+  { feature: "Connectors", free: "20", pro: connectorsText, enterprise: connectorsText },
   { feature: "Tasks per day", free: "500", pro: "Unlimited", enterprise: "Unlimited" },
   { feature: "Shadow mode", free: true, pro: true, enterprise: true },
   { feature: "Custom workflows", free: false, pro: true, enterprise: true },
@@ -207,7 +213,8 @@ const COMPARISON: ComparisonRow[] = [
   { feature: "SLA guarantee", free: false, pro: false, enterprise: "99.9%" },
   { feature: "Support", free: "Community", pro: "Email", enterprise: "Dedicated" },
   { feature: "Dedicated CSM", free: false, pro: false, enterprise: true },
-];
+  ];
+}
 
 /* ------------------------------------------------------------------ */
 /*  FAQ data                                                           */
@@ -227,7 +234,7 @@ const FAQS = [
   },
   {
     q: "What connectors are included?",
-    a: "Free includes 20 core connectors (Oracle, SAP, Salesforce, Slack, GSTN, and more). Pro and Enterprise include all 54 connectors (Darwinbox, Stripe, HubSpot, EPFO, Jira, and more). Enterprise adds custom integrations.",
+    a: "Free includes 20 core connectors (Oracle, SAP, Salesforce, Slack, GSTN, and more). Pro and Enterprise include every native connector (Darwinbox, Stripe, HubSpot, EPFO, Jira, and more). Enterprise adds custom integrations.",
   },
   {
     q: "Is my data secure?",
@@ -281,6 +288,11 @@ function CellValue({ value }: { value: string | boolean }) {
 /* ================================================================== */
 export default function Pricing() {
   const [showDemo, setShowDemo] = useState(false);
+  const { facts } = useProductFacts();
+  const connectorsText = facts.connector_count > 0 ? `${facts.connector_count}` : "50+";
+  const agentsText = facts.agent_count > 0 ? `${facts.agent_count}` : "25+";
+  const TIERS = buildTiers(agentsText, connectorsText);
+  const COMPARISON = buildComparison(agentsText, connectorsText);
 
   return (
     <div className="min-h-screen bg-white">
