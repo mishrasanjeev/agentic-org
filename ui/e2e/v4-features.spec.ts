@@ -19,6 +19,12 @@ const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const MARKETING = "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ── Helper: authenticate via localStorage token ────────────────────────
 async function authenticate(page: Page): Promise<void> {
@@ -36,7 +42,7 @@ test.describe("v4 — Knowledge Base", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -109,7 +115,7 @@ test.describe("v4 — Voice Setup", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -171,7 +177,7 @@ test.describe("v4 — RPA Scripts", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -235,7 +241,7 @@ test.describe("v4 — Industry Packs", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -301,7 +307,7 @@ test.describe("v4 — Billing", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -395,7 +401,7 @@ test.describe("v4 — Sidebar Navigation", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -462,7 +468,7 @@ test.describe("v4 — Language Picker", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -495,7 +501,7 @@ test.describe("v4 — Data Quality (no NaN / undefined)", () => {
   ];
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 

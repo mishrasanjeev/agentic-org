@@ -7,7 +7,7 @@
  * mutate delete what they create at the end.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { APP, authenticate, canAuth } from "./helpers/auth";
+import { APP, authenticate, canAuth, requireAuth } from "./helpers/auth";
 
 /**
  * Selector helper — scope to <main> so the sidebar "Voice Agents" /
@@ -24,7 +24,7 @@ function mainButton(page: Page, name: string | RegExp) {
 
 test.describe("Voice Setup regression", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
     await page.goto(`${APP}/dashboard/voice-setup`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -131,7 +131,7 @@ test.describe("Voice Setup regression", () => {
 
 test.describe("Sales Pipeline CSV import", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
     await page.goto(`${APP}/dashboard/sales`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -145,7 +145,13 @@ test.describe("Sales Pipeline CSV import", () => {
       `QA Test 2,qa2-${Date.now()}@example.invalid,AcmeCo`,
     ].join("\n");
 
-    // Set the hidden input directly — the visible button only opens a picker.
+    // Sync on the actual network boundary — the banner only appears after
+    // POST /sales/import-csv resolves, and the request can take >30s against
+    // production, so DOM-only polling flakes.
+    const importResp = page.waitForResponse(
+      (r) => r.url().includes("/sales/import-csv") && r.request().method() === "POST",
+      { timeout: 60000 },
+    );
     await page.setInputFiles(
       "#csv-import-input",
       {
@@ -154,10 +160,12 @@ test.describe("Sales Pipeline CSV import", () => {
         buffer: Buffer.from(csv, "utf-8"),
       },
     );
+    const resp = await importResp;
+    expect(resp.status(), "POST /sales/import-csv").toBeLessThan(400);
 
     // The success banner must not say "0" when we uploaded 2 rows.
     const banner = page.locator("text=/Imported \\d+ leads? from CSV/").first();
-    await expect(banner).toBeVisible({ timeout: 30000 });
+    await expect(banner).toBeVisible({ timeout: 15000 });
     const text = (await banner.textContent()) || "";
     expect(text).not.toMatch(/Imported 0 leads/);
   });
@@ -188,7 +196,7 @@ test.describe("Sales Pipeline CSV import", () => {
 
 test.describe("Knowledge Base regression", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
     await page.goto(`${APP}/dashboard/knowledge`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -244,7 +252,7 @@ test.describe("Knowledge Base regression", () => {
 
 test.describe("Tally test-connection", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN required");
+    requireAuth();
     await authenticate(page);
   });
 

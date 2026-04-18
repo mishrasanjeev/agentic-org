@@ -9,6 +9,12 @@ import { test, expect } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Public: Landing page (all demo videos start here)
@@ -36,7 +42,7 @@ test.describe("Video Flows: Landing Page", () => {
 
 test.describe("Video Flows: Platform Overview (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
@@ -81,7 +87,7 @@ test.describe("Video Flows: Platform Overview (auth required)", () => {
 
 test.describe("Video Flows: CFO Finance (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
@@ -106,7 +112,7 @@ test.describe("Video Flows: CFO Finance (auth required)", () => {
 
 test.describe("Video Flows: CHRO HR (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
@@ -131,7 +137,7 @@ test.describe("Video Flows: CHRO HR (auth required)", () => {
 
 test.describe("Video Flows: CMO Marketing (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);
@@ -151,7 +157,7 @@ test.describe("Video Flows: CMO Marketing (auth required)", () => {
 
 test.describe("Video Flows: COO Operations (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);

@@ -12,6 +12,12 @@ import { test, expect, Page } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // Auth helper -- token-based only
@@ -150,7 +156,7 @@ test.describe("D2: Promote & Rollback Buttons", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/agents`, {
@@ -162,10 +168,7 @@ test.describe("D2: Promote & Rollback Buttons", () => {
     const agentCard = page
       .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
       .first();
-    if (!(await agentCard.isVisible({ timeout: 10000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
+    await expect(agentCard).toBeVisible({ timeout: 10000 });
     await agentCard.click();
     await page.waitForURL("**/agents/**", { timeout: 15000 });
     await page.waitForLoadState("networkidle");
@@ -173,14 +176,11 @@ test.describe("D2: Promote & Rollback Buttons", () => {
     const promoteBtn = page.getByRole("button", { name: /Promote/i });
     const rollbackBtn = page.getByRole("button", { name: /Rollback/i });
 
-    const hasPromote = await promoteBtn.isVisible({ timeout: 10000 }).catch(() => false);
-    const hasRollback = await rollbackBtn.isVisible({ timeout: 5000 }).catch(() => false);
-
-    if (!hasPromote && !hasRollback) {
-      // Agent detail page may not show these buttons for all agent states
-      test.skip();
-      return;
-    }
+    // The agent detail page must surface at least one of Promote/Rollback.
+    // If neither is visible the page is degraded and the test should fail.
+    await expect(promoteBtn.or(rollbackBtn).first()).toBeVisible({ timeout: 10000 });
+    const hasPromote = await promoteBtn.isVisible().catch(() => false);
+    const hasRollback = await rollbackBtn.isVisible().catch(() => false);
 
     if (hasPromote) {
       // Click Promote -- should show response (error or success)
@@ -208,7 +208,7 @@ test.describe("E1: Playground Shows Custom Agents", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard`, {
@@ -236,7 +236,7 @@ test.describe("E2: HITL in Approvals", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     const ts = Date.now();
 
@@ -294,7 +294,7 @@ test.describe("G4/G5: Template Edit & Delete", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     const ts = Date.now();
 
@@ -333,7 +333,7 @@ test.describe("G4/G5: Template Edit & Delete", () => {
   });
 
   test("Edit opens textarea and Save works", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     const ts = Date.now();
 
@@ -370,7 +370,7 @@ test.describe("G4/G5: Template Edit & Delete", () => {
   });
 
   test("Delete button visible on template detail (production-safe: no actual delete)", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     // Just verify the template list page renders and has templates
@@ -409,7 +409,7 @@ test.describe("G6: Built-in Template Clone", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/prompt-templates`, {
@@ -458,7 +458,7 @@ test.describe("G6: Built-in Template Clone", () => {
   });
 
   test("Clone creates a custom copy", async ({ page, baseURL }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/prompt-templates`, {
@@ -611,7 +611,7 @@ test.describe("ORG-INV-002: Invite Token Issuer", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     const ts = Date.now();
@@ -660,7 +660,7 @@ test.describe("AGENT-CONFIG-003: Agent Tools Auto-populate", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/agents/new`, {
@@ -682,7 +682,7 @@ test.describe("AGENT-CONFIG-003: Agent Tools Auto-populate", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     const ts = Date.now();
 
@@ -724,7 +724,7 @@ test.describe("HITL-COUNT-004: Decided Tab UI", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     const ts = Date.now();
 
@@ -811,7 +811,7 @@ test.describe("HITL-EXP-005: Expired HITL Filtering", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
 
     const pendingResp = await page.request.get(
       `${baseURL}/api/v1/approvals?status=pending`,
@@ -841,7 +841,7 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/workflows/new`, {
@@ -871,7 +871,7 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/workflows/new`, {
@@ -900,7 +900,7 @@ test.describe("WF-CONN-006: Email Trigger in Workflow UI", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/workflows/new`, {
@@ -936,7 +936,7 @@ test.describe("CONN-SLACK-007: Slack Connector Config", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/connectors/new`, {
@@ -960,7 +960,7 @@ test.describe("CONN-SLACK-007: Slack Connector Config", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const ts = Date.now();
 
     const createResp = await page.request.post(
@@ -991,7 +991,7 @@ test.describe("CONN-SLACK-007: Slack Connector Config", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     const ts = Date.now();
 
@@ -1032,7 +1032,7 @@ test.describe("CONN-SLACK-007: Slack Connector Config", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const ts = Date.now();
 
     const createResp = await page.request.post(
@@ -1076,18 +1076,19 @@ test.describe("CONN-SLACK-007: Slack Connector Config", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
 
-    // Verify agents API is accessible and returns valid data
+    // Verify agents API is accessible and returns valid data. A 401 here
+    // means the CI E2E_TOKEN is expired — surface that as a loud failure
+    // rather than a silent skip so it gets rotated.
     const listResp = await page.request.get(
       `${baseURL}/api/v1/agents`,
       { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
     );
-    // Skip gracefully if token expired (401) — test requires valid auth
-    if (!listResp.ok()) {
-      test.skip(true, `agents API returned ${listResp.status()} — token may be expired`);
-      return;
-    }
+    expect(
+      listResp.ok(),
+      `GET /api/v1/agents returned ${listResp.status()} — token may be expired; rotate E2E_TOKEN`,
+    ).toBe(true);
     const data = await listResp.json();
     const agents = Array.isArray(data) ? data : data.agents || data.items || [];
 

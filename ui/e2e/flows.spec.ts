@@ -10,6 +10,12 @@ const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const MARKETING = "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // Helper: authenticate via localStorage token
 async function authenticate(page: import("@playwright/test").Page) {
@@ -27,7 +33,7 @@ test.describe("Agents — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -132,7 +138,7 @@ test.describe("Workflows — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -195,7 +201,7 @@ test.describe("Approvals — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -243,7 +249,7 @@ test.describe("Connectors — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -296,7 +302,7 @@ test.describe("Schemas — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -355,7 +361,7 @@ test.describe("Audit — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -393,7 +399,7 @@ test.describe("Settings — Production Flow", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -421,7 +427,7 @@ test.describe("Data Integrity — All Pages", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 

@@ -10,6 +10,12 @@ import { test, expect, Page } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // Auth helper — token-based only, no hardcoded credentials
@@ -56,7 +62,7 @@ test.describe("404 Page Handling", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/nonexistent-page-xyz`, {
@@ -98,7 +104,7 @@ test.describe("404 Page Handling", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/dashboard/cfo/blah`, {
@@ -219,16 +225,13 @@ test.describe("XSS Prevention", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
     const input = page.locator('input[placeholder*="Ask anything"]');
-    if (!(await input.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
+    await expect(input).toBeVisible({ timeout: 5000 });
 
     let alertCalled = false;
     page.on("dialog", (dialog) => {
@@ -248,16 +251,13 @@ test.describe("XSS Prevention", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
     const input = page.locator('input[placeholder*="Ask anything"]');
-    if (!(await input.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
+    await expect(input).toBeVisible({ timeout: 5000 });
 
     let alertCalled = false;
     page.on("dialog", (dialog) => {
@@ -304,16 +304,13 @@ test.describe("Large Input Handling", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
     const input = page.locator('input[placeholder*="Ask anything"]');
-    if (!(await input.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
+    await expect(input).toBeVisible({ timeout: 5000 });
 
     const largeInput = "A".repeat(10000);
     await input.fill(largeInput);
@@ -353,7 +350,7 @@ test.describe("Network Error Handling", () => {
   }) => {
     // Offline mode cannot be reliably tested against production.
     // Instead, verify the page loads and does not crash on reload.
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     await ensureAuth(page, baseURL!);
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
@@ -377,7 +374,7 @@ test.describe("No Unhandled Errors", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
       if (msg.type() === "error") {
@@ -411,7 +408,7 @@ test.describe("No Unhandled Errors", () => {
     page,
     baseURL,
   }) => {
-    test.skip(!canAuth, "requires E2E_TOKEN");
+    requireAuth();
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
       if (msg.type() === "error") {

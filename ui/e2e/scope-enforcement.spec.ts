@@ -14,6 +14,12 @@ import { test, expect, Page } from "@playwright/test";
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 async function authenticate(page: Page) {
   await page.goto(`${APP}/login`);
@@ -30,7 +36,7 @@ test.describe("Scope Enforcement — UI", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token — set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 

@@ -10,6 +10,12 @@ import { test, expect } from "@playwright/test";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Public pages — no auth needed
@@ -61,7 +67,7 @@ test.describe("CFO Demo: Public Pages", () => {
 
 test.describe("CFO Demo: Dashboard (auth required)", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "E2E_TOKEN not set — skipping auth-gated tests");
+    requireAuth();
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.evaluate((t) => {
       localStorage.setItem("token", t);

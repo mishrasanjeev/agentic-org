@@ -13,6 +13,14 @@ const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const MARKETING = "https://agenticorg.ai";
 const HAS_AUTH = Boolean(process.env.E2E_TOKEN);
 
+function requireAuth(): void {
+  if (!HAS_AUTH) {
+    throw new Error(
+      "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+    );
+  }
+}
+
 // ── Helper: authenticate via localStorage token ──────────────────────
 async function injectAuth(page: Page): Promise<void> {
   const token = process.env.E2E_TOKEN!;
@@ -214,7 +222,7 @@ test.describe("Auth Flow", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 test.describe("Dashboard (authenticated)", () => {
-  test.skip(!HAS_AUTH, "Skipping: E2E_TOKEN not set");
+  requireAuth();
 
   test.beforeEach(async ({ page }) => {
     await injectAuth(page);
@@ -387,7 +395,7 @@ test.describe("Responsive -- Tablet (768px)", () => {
   test.use({ viewport: { width: 768, height: 1024 } });
 
   test("Dashboard at 768px -- sidebar collapses", async ({ page }) => {
-    test.skip(!HAS_AUTH, "Skipping: E2E_TOKEN not set");
+    requireAuth();
     await injectAuth(page);
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -404,7 +412,7 @@ test.describe("Responsive -- Tablet (768px)", () => {
 
 test.describe("Navigation", () => {
   test("All sidebar dashboard links resolve without 404", async ({ page }) => {
-    test.skip(!HAS_AUTH, "Skipping: E2E_TOKEN not set");
+    requireAuth();
     await injectAuth(page);
     const paths = [
       "/dashboard",

@@ -17,6 +17,12 @@ const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const MARKETING = "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+function requireAuth(): void {
+  if (!canAuth) throw new Error(
+    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+  );
+}
+
 
 // -- Helper: authenticate via localStorage token --
 async function authenticate(page: Page): Promise<void> {
@@ -137,7 +143,7 @@ test.describe("CA Firms Solution Page", () => {
 
 test.describe("Company Dashboard", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -201,7 +207,7 @@ test.describe("Company Dashboard", () => {
 
 test.describe("Company Onboard Wizard", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -310,7 +316,7 @@ test.describe("Company Onboard Wizard", () => {
 
 test.describe("Company Detail", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -395,7 +401,7 @@ test.describe("Company Detail", () => {
 
 test.describe("Company Switcher", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -518,7 +524,7 @@ test.describe("CA Demo Login Flow", () => {
 
 test.describe("Filing Approvals", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -589,7 +595,7 @@ test.describe("Filing Approvals", () => {
 
 test.describe("GSTN Manual Upload", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -649,7 +655,7 @@ test.describe("GSTN Manual Upload", () => {
 
 test.describe("Subscription Status", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -685,7 +691,7 @@ test.describe("Subscription Status", () => {
 
 test.describe("Client Health Score", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -731,7 +737,7 @@ test.describe("Client Health Score", () => {
 
 test.describe("Partner Dashboard", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -810,7 +816,7 @@ test.describe("Partner Dashboard", () => {
 
 test.describe("GSTN Credential Vault", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -889,7 +895,7 @@ test.describe("GSTN Credential Vault", () => {
 
 test.describe("Tally Auto-Detect", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -917,7 +923,7 @@ test.describe("Tally Auto-Detect", () => {
 
 test.describe("Compliance Calendar", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -977,7 +983,7 @@ test.describe("Compliance Calendar", () => {
 
 test.describe("Bulk Approval", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -1036,7 +1042,7 @@ test.describe("Bulk Approval", () => {
 
 test.describe("Form Validation", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -1177,7 +1183,7 @@ test.describe("Form Validation", () => {
 
 test.describe("CompanyDetail Tab Content", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -1295,7 +1301,7 @@ test.describe("CompanyDetail Tab Content", () => {
 
 test.describe("Partner Dashboard Details", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -1368,7 +1374,7 @@ test.describe("Partner Dashboard Details", () => {
 
 test.describe("Compliance Alerts Configuration", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
@@ -1422,7 +1428,7 @@ test.describe("Compliance Alerts Configuration", () => {
 
 test.describe("CxO Dashboard Nav Links in Layout", () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(!canAuth, "requires auth token -- set E2E_TOKEN env var");
+    requireAuth();
     await authenticate(page);
   });
 
