@@ -31,18 +31,28 @@ def upgrade() -> None:
     # already created by migrations/001_extensions.sql in fresh envs and
     # can be enabled on hosted Postgres (e.g. Cloud SQL flag).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    op.execute(
-        "ALTER TABLE knowledge_documents "
-        "ADD COLUMN IF NOT EXISTS embedding vector(384)"
-    )
-    # IVFFlat cosine index. `lists = 100` is a reasonable default for a
-    # catalogue of hundreds to a few thousand documents. Rebuild (REINDEX)
-    # is only needed when the row count grows by >10x.
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_knowledge_documents_embedding "
-        "ON knowledge_documents USING ivfflat (embedding vector_cosine_ops) "
-        "WITH (lists = 100)"
-    )
+    # knowledge_documents is created by the v400_apex migration. When the
+    # alembic_e2e test stamps a legacy DB at v480_baseline (*after*
+    # v400_apex) the table doesn't exist in that path. Guard the
+    # ALTER + INDEX in a DO-block so a missing table is a no-op instead
+    # of a hard failure.
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'knowledge_documents'
+            ) THEN
+                ALTER TABLE knowledge_documents
+                    ADD COLUMN IF NOT EXISTS embedding vector(384);
+                CREATE INDEX IF NOT EXISTS ix_knowledge_documents_embedding
+                    ON knowledge_documents
+                    USING ivfflat (embedding vector_cosine_ops)
+                    WITH (lists = 100);
+            END IF;
+        END
+        $$;
+    """)
 
 
 def downgrade() -> None:
