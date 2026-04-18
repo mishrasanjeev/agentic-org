@@ -714,11 +714,14 @@ test.describe("Proactive Regression - Similar Issues", () => {
       { email: "chro@agenticorg.local", pw: "chro123!" },
       { email: "auditor@agenticorg.local", pw: "audit123!" },
     ];
-    for (const a of accounts) {
+    for (const [i, a] of accounts.entries()) {
+      // Prod login has a rate limiter; space the attempts out so a fast-running
+      // suite doesn't hit 429 on accounts 5–7.
+      if (i > 0) await new Promise((r) => setTimeout(r, 800));
       const resp = await request.post(`${APP}/api/v1/auth/login`, {
         data: { email: a.email, password: a.pw },
       });
-      expect(resp.status()).toBe(200);
+      expect(resp.status(), `login for ${a.email}`).toBe(200);
       const body = await resp.json();
       expect(body.token || body.access_token).toBeTruthy();
     }

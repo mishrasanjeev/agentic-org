@@ -58,15 +58,18 @@ test.describe("Voice Setup regression", () => {
     await page.getByRole("button", { name: "Next" }).click();
 
     const phoneInput = page.locator('input[type="tel"]');
-    await phoneInput.fill("phone-number-abc");
-    // Next should be disabled or show an inline error on click.
     const nextBtn = page.getByRole("button", { name: "Next" });
-    await nextBtn.click({ trial: true }).catch(() => {});
-    // The field-level error appears after validateStep fires.
-    await nextBtn.click();
-    await expect(
-      page.locator("text=Invalid phone number").first(),
-    ).toBeVisible({ timeout: 5000 });
+
+    // Sanity: a valid E.164 number enables Next.
+    await phoneInput.fill("+919876543210");
+    await expect(nextBtn).toBeEnabled();
+
+    // The real test: a non-numeric phone must keep the user on Step 3.
+    // VoiceSetup guards forward navigation by disabling Next when
+    // validateStep(step) returns errors, so clicking would be a no-op
+    // — we assert the disabled state directly.
+    await phoneInput.fill("phone-number-abc");
+    await expect(nextBtn).toBeDisabled();
   });
 
   test("TC-011 Google TTS shows an API key field on selection", async ({ page }) => {
@@ -197,18 +200,40 @@ test.describe("Knowledge Base regression", () => {
 
     // The upload input is discoverable by its accept=".pdf,.txt..." attr.
     const uploadInput = page.locator('input[type="file"]').first();
+
+    // Sync on the actual network boundary rather than DOM polling — after
+    // upload the KB page flips into a "Loading knowledge base…" state while
+    // /knowledge/documents refreshes, so `text=` assertions race the refetch.
+    const uploadResp = page.waitForResponse(
+      (r) => r.url().includes("/knowledge/upload") && r.request().method() === "POST",
+      { timeout: 45000 },
+    );
     await uploadInput.setInputFiles({
       name: unique,
       mimeType: "text/plain",
       buffer,
     });
+    const resp = await uploadResp;
+    expect(resp.status(), "POST /knowledge/upload").toBeLessThan(400);
 
-    // Wait for the entry to appear.
+    // Now wait for the follow-up documents refetch the component issues.
+    await page
+      .waitForResponse(
+        (r) => r.url().includes("/knowledge/documents") && r.request().method() === "GET",
+        { timeout: 30000 },
+      )
+      .catch(() => {});
+
     await expect(page.locator(`text=${unique}`).first()).toBeVisible({ timeout: 30000 });
 
-    // Refresh — the document must still be there.
+    // Refresh — the document must still be there (backend persistence check).
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await page
+      .waitForResponse(
+        (r) => r.url().includes("/knowledge/documents") && r.request().method() === "GET",
+        { timeout: 30000 },
+      )
+      .catch(() => {});
     await expect(page.locator(`text=${unique}`).first()).toBeVisible({ timeout: 30000 });
   });
 });
