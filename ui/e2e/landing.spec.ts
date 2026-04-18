@@ -44,11 +44,27 @@ test.describe("Landing Page — Core Rendering", () => {
     ).toBeVisible();
   });
 
-  test("stats bar shows current platform metrics", async ({ page }) => {
-    // Updated metrics: 50+ agents, 1000+ integrations, 340+ tools
+  test("stats bar shows current platform metrics", async ({ page, request }) => {
+    // Stat counts are sourced from /product-facts (Phase 1 Truth Freeze).
+    // Assert the landing body references the live tool_count — fetching
+    // from the endpoint instead of hardcoding "340" avoids drift whenever
+    // the connector registry grows.
+    const app = process.env.BASE_URL || "https://app.agenticorg.ai";
+    const factsResp = await request.get(`${app}/api/v1/product-facts`);
+    expect(factsResp.status(), "GET /product-facts").toBe(200);
+    const facts = await factsResp.json();
+
+    // Vocabulary — these English strings are not counts, they should remain.
     await expect(page.getByText(/agent/i).first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/connector/i).first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/340/).first()).toBeVisible({ timeout: 10000 });
+
+    // Give useProductFacts a beat to hydrate the rendered DOM.
+    await page.waitForTimeout(1500);
+    const body = (await page.textContent("body")) || "";
+    expect(
+      body.includes(`${facts.tool_count}`),
+      `landing body should reference the live tool_count ${facts.tool_count}`,
+    ).toBe(true);
   });
 });
 
