@@ -33,7 +33,9 @@ def app():
 @pytest.fixture
 def client(app):
     """TestClient with auth middleware bypassed via mocked validate_token."""
-    test_tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
+    # Valid UUID — endpoints call uuid.UUID(tenant_id) which rejects
+    # friendly-name strings with a 400.
+    test_tenant_id = str(uuid.uuid4())
 
     # Override the dependency so it returns our test tenant
     from api.deps import get_current_tenant

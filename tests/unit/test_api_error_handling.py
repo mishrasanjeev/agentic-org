@@ -40,7 +40,9 @@ def app():
 @pytest.fixture
 def auth_client(app):
     """TestClient with auth middleware bypassed (authenticated)."""
-    test_tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
+    # Valid UUID — endpoints call uuid.UUID(tenant_id) and would 400
+    # on a friendly-name string like "test-tenant-xyz".
+    test_tenant_id = str(uuid.uuid4())
 
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: test_tenant_id

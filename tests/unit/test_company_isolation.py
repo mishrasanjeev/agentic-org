@@ -55,12 +55,13 @@ def tenant_client(app, tenant_id: str):
 
 @pytest.fixture
 def tenant_a():
-    return f"iso-a-{uuid.uuid4().hex[:8]}"
+    # Valid UUID — endpoints call uuid.UUID(tenant_id).
+    return str(uuid.uuid4())
 
 
 @pytest.fixture
 def tenant_b():
-    return f"iso-b-{uuid.uuid4().hex[:8]}"
+    return str(uuid.uuid4())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
