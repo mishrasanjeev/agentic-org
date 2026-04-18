@@ -13,10 +13,21 @@ from pathlib import Path
 import httpx
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("AGENTICORG_ENABLE_LIVE_TESTS") != "1" or not os.getenv("AGENTICORG_E2E_BASE_URL"),
-    reason="live synthetic tests are opt-in; set AGENTICORG_ENABLE_LIVE_TESTS=1 and AGENTICORG_E2E_BASE_URL",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        os.getenv("AGENTICORG_ENABLE_LIVE_TESTS") != "1"
+        or not os.getenv("AGENTICORG_E2E_BASE_URL"),
+        reason=(
+            "live synthetic tests are opt-in; set AGENTICORG_ENABLE_LIVE_TESTS=1"
+            " and AGENTICORG_E2E_BASE_URL"
+        ),
+    ),
+    # Each synthetic test includes a live Claude Sonnet round-trip, plus
+    # PII redaction and a possible retry on cold-start 502. 180s covers
+    # the P99 without hiding a real hang — pyproject.toml's default 60s
+    # was biting the first test after a fresh pod rollout.
+    pytest.mark.timeout(180),
+]
 
 BASE = f"{os.getenv('AGENTICORG_E2E_BASE_URL', '').rstrip('/')}/api/v1"
 DATA_DIR = Path(__file__).parent
@@ -89,13 +100,13 @@ def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
             f"{BASE}/agents/{agent_id}/run",
             headers=headers,
             json={"action": action, "inputs": inputs},
-            timeout=60,
+            timeout=45,
         )
         try:
             return r.json()
         except Exception:
             if attempt == 0:
-                _time.sleep(3)
+                _time.sleep(2)
                 continue
             raise
 
