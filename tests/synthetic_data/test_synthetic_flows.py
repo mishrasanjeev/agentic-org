@@ -76,47 +76,43 @@ def _get_agent_id(headers: dict, agent_type: str) -> str:
 def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
     """Run an agent and return the full response.
 
-    Handles empty or non-JSON responses gracefully by returning a dict
-    with an ``"error"`` key instead of raising.
+    Retries once on an empty/non-JSON response — the first call after a
+    pod rollout occasionally hits a cold worker that returns 502 before
+    FastAPI comes up. A single retry after a short back-off clears that
+    without hiding real regressions (repeated empties will still bubble
+    up as JSONDecodeError or a failing assertion).
     """
-    # 60s client timeout: cold-start + PII-redactor warm-up + Claude Sonnet
-    # response can push past 30s on the first call after a pod rollout.
-    # Bumping client-side only — the server still enforces its own ceiling.
-    r = httpx.post(
-        f"{BASE}/agents/{agent_id}/run",
-        headers=headers,
-        json={"action": action, "inputs": inputs},
-        timeout=60,
-    )
-    try:
-        return r.json()
-    except Exception:
-        # Empty body or non-JSON — return a synthetic error dict so tests
-        # can still inspect it without blowing up with JSONDecodeError.
-        return {"error": "empty_or_invalid_response", "raw": r.text, "status_code": r.status_code}
+    import time as _time
 
-
-# Narrow set of markers that indicate the agent explicitly said it cannot
-# carry out the task with its current tool set. Previously we also
-# skipped on "not a supported action" / "is not supported" / "allowed
-# list", but those phrases appear in a false-positive way inside the
-# signed response envelope (base64 substrings and LLM self-narrative),
-# which caused ``test_renewal_approaching`` to skip spuriously even
-# though the agent had produced a valid answer.
-_TOOLS_NOT_CONFIGURED_PATTERNS = ("cannot fulfill", "tools lack")
+    for attempt in range(2):
+        r = httpx.post(
+            f"{BASE}/agents/{agent_id}/run",
+            headers=headers,
+            json={"action": action, "inputs": inputs},
+            timeout=60,
+        )
+        try:
+            return r.json()
+        except Exception:
+            if attempt == 0:
+                _time.sleep(3)
+                continue
+            raise
 
 
 def _skip_if_tools_missing(result: dict) -> None:
-    """Skip the current test when the agent reports that required tools are
-    not connected in this environment."""
-    # Check all textual fields the agent might use to report the problem
-    haystack = json.dumps(result).lower()
-    for pattern in _TOOLS_NOT_CONFIGURED_PATTERNS:
-        if pattern in haystack:
-            pytest.skip("Agent tools not configured in this environment")
-    # Also skip on empty / unparseable responses
-    if result.get("error") == "empty_or_invalid_response":
-        pytest.skip("Agent returned empty or non-JSON response")
+    """Kept as a harmless stub for backward compat.
+
+    Previously this gated tests on "cannot fulfill"/"tools lack" refusal
+    phrases in the agent response so a misconfigured demo tenant would
+    skip rather than assert. With the seeded prompts now explicitly
+    telling the agents never to refuse, and the tests acting as a
+    regression check for prompt quality, skipping on those phrases
+    turned into a way for intermittent LLM refusals to hide a real
+    regression. Let every test assert against the real agent output —
+    if the LLM refuses we want to see the failure, not a quiet skip.
+    """
+    return
 
 
 # ═══════════════════════════════════════════════════════════════════════════
