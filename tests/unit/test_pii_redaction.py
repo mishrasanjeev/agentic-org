@@ -70,8 +70,6 @@ def _make_mock_result(entity_type: str, start: int, end: int, score: float = 0.8
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-
-@pytest.mark.skipif(not _PRESIDIO_INSTALLED, reason="presidio not installed")
 class TestWithPresidio:
     """Tests that exercise the real Presidio engine."""
 

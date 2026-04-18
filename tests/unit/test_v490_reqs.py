@@ -197,7 +197,7 @@ class TestREQ01ComposioRuntime:
         try:
             import composio  # noqa: F401
         except ImportError:
-            pytest.skip("composio-core not installed in this test env")
+            raise  # composio-core is a declared dependency; missing import is a packaging error
 
     def test_health_diagnostics_exposes_composio(self):
         """Admin diagnostics endpoint must surface composio sdk/api_key state."""
