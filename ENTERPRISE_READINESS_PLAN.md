@@ -44,6 +44,13 @@ Rather than 22 sequential PRs, batch related phases and don't wait for main CI b
 | **PR-D** | QA baseline (backend unskip, coverage floor, critical-path tags) | P8 | A, B, C | 3-4 |
 | **PR-E** | Enterprise readiness gate (consistency sweep + eval scripts + go/no-go) | P9 | none | 2 |
 
+### Deferred / addendum PRs (added during execution)
+
+| PR | Contents | Phase | Queue | Est. days |
+|---|---|---|---|---|
+| **PR-B3** | Connector Connect-flow + detail Edit (original P5 slice 3) | P5 | Deferred — local e2e confirmed CONN-SLACK-007 passes against post-PR-B2 stack (32/32), blocking failure was prod-state flake; refile if main CI regresses | 2 |
+| **PR-B4** | Native embeddings for KB — `BAAI/bge-small-en-v1.5` (384 dim, MIT) via `fastembed` (ONNX), embedding column on `knowledge_documents` with ivfflat cosine index, `/knowledge/search` fallback now runs a pgvector cosine query instead of returning `[]` | P5 extension | **In progress** — initial ship uses bge-small; bge-m3 multilingual upgrade deferred to follow-up once the pipeline is proven in CI | 2-3 |
+
 ### Push discipline for every PR
 
 1. `bash scripts/local_e2e.sh <relevant-spec>` — must pass locally before push.

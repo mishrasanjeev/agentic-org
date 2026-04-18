@@ -219,8 +219,9 @@ Practice Areas:
 async def seed_knowledge_base(tenant_id_str: str) -> dict:
     """Populate the knowledge base with CA/GST compliance documents.
 
-    Stores content as text metadata in the documents table. When
-    RAGFlow is available, these will be vectorized for semantic search.
+    Stores content as text in knowledge_documents along with a 384-dim
+    BGE embedding so /knowledge/search has something real to query even
+    when RAGFlow is disabled.
     """
     from sqlalchemy import text
 
@@ -228,7 +229,9 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
 
     tid = uuid.UUID(tenant_id_str)
 
-    # Ensure the knowledge_documents table exists with the right schema
+    # Ensure the knowledge_documents table exists with the right schema.
+    # The embedding column is added by migration v486_knowledge_embedding;
+    # mirror it here so legacy-SQL-only bootstraps still work.
     async with engine.begin() as conn:
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS knowledge_documents (
@@ -244,10 +247,29 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
                 created_at TIMESTAMPTZ DEFAULT now()
             )
         """))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text(
+            "ALTER TABLE knowledge_documents "
+            "ADD COLUMN IF NOT EXISTS embedding vector(384)"
+        ))
+
+    # Compute embeddings for the curated corpus once, up front.
+    # title + short lead of the content gives a semantically strong vector
+    # that still fits in the BGE 512-token window.
+    try:
+        from core.embeddings import embed as _embed
+
+        payloads = [
+            f"{d['title']}\n\n{d['content'][:1500]}" for d in _KNOWLEDGE_DOCUMENTS
+        ]
+        vectors: list[list[float]] | None = _embed(payloads)
+    except Exception as exc:
+        logger.warning("seed_knowledge_embedding_skipped", error=str(exc))
+        vectors = None
 
     created = 0
     async with get_tenant_session(tid) as session:
-        for doc in _KNOWLEDGE_DOCUMENTS:
+        for idx, doc in enumerate(_KNOWLEDGE_DOCUMENTS):
             # Check if already exists
             r = await session.execute(
                 text(
@@ -261,14 +283,19 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
 
             content = doc["content"]
             token_estimate = len(content.split()) * 2  # rough token count
+            vector_literal = (
+                "[" + ",".join(f"{x:.6f}" for x in vectors[idx]) + "]"
+                if vectors is not None
+                else None
+            )
 
             await session.execute(
                 text(
                     "INSERT INTO knowledge_documents "
                     "(id, tenant_id, title, content, category, source, "
-                    "file_type, status, token_count, created_at) "
+                    "file_type, status, token_count, embedding, created_at) "
                     "VALUES (:id, :tid, :title, :content, :cat, :src, "
-                    "'text', 'ready', :tokens, now())"
+                    "'text', 'ready', :tokens, CAST(:emb AS vector), now())"
                 ),
                 {
                     "id": str(uuid.uuid4()),
@@ -278,6 +305,7 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
                     "cat": doc.get("category", "general"),
                     "src": "CBIC/CBDT/ICAI public guidelines",
                     "tokens": token_estimate,
+                    "emb": vector_literal,
                 },
             )
             created += 1

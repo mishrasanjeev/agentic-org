@@ -383,12 +383,89 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
         return {"ok": False, "detail": "Document not found"}
 
 
+async def _native_semantic_search(
+    tenant_id: str, query: str, top_k: int,
+) -> list[SearchResult]:
+    """Semantic search over knowledge_documents using pgvector + BGE.
+
+    Falls back to an ILIKE keyword match if the embedding model or the
+    pgvector column is unavailable in the current environment. Never
+    raises — callers expect a best-effort result list.
+    """
+    from uuid import UUID as _UUID
+
+    from sqlalchemy import text as _sqtext
+
+    from core.database import get_tenant_session
+
+    tid = _UUID(tenant_id)
+
+    # Try the vector path first.
+    try:
+        from core.embeddings import embed_one
+
+        qvec = embed_one(query)
+        vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
+        async with get_tenant_session(tid) as session:
+            rows = (await session.execute(
+                _sqtext(
+                    "SELECT title, content, "
+                    "1 - (embedding <=> CAST(:q AS vector)) AS score "
+                    "FROM knowledge_documents "
+                    "WHERE tenant_id = :tid AND embedding IS NOT NULL "
+                    "ORDER BY embedding <=> CAST(:q AS vector) "
+                    "LIMIT :k"
+                ),
+                {"q": vector_literal, "tid": str(tid), "k": top_k},
+            )).fetchall()
+        if rows:
+            return [
+                SearchResult(
+                    chunk_text=(r[1] or "")[:300],
+                    score=round(float(r[2] or 0.0), 4),
+                    document_name=r[0] or "",
+                )
+                for r in rows
+            ]
+    except Exception as exc:
+        logger.debug("native_semantic_search_skipped", error=str(exc))
+
+    # Keyword fallback — surfaces something useful when embeddings are
+    # unavailable (e.g. fastembed cache missing in a restricted CI env).
+    try:
+        async with get_tenant_session(tid) as session:
+            rows = (await session.execute(
+                _sqtext(
+                    "SELECT title, content FROM knowledge_documents "
+                    "WHERE tenant_id = :tid AND "
+                    "(title ILIKE :like OR content ILIKE :like) "
+                    "LIMIT :k"
+                ),
+                {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+            )).fetchall()
+        return [
+            SearchResult(
+                chunk_text=(r[1] or "")[:300],
+                score=0.0,
+                document_name=r[0] or "",
+            )
+            for r in rows
+        ]
+    except Exception as exc:
+        logger.debug("keyword_fallback_failed", error=str(exc))
+        return []
+
+
 @router.post("/knowledge/search", response_model=SearchResponse)
 async def search_knowledge(
     req: SearchRequest,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Search the knowledge base using vector similarity (RAGFlow) or keyword fallback."""
+    """Search the knowledge base using vector similarity.
+
+    Order: RAGFlow (if configured) → native pgvector + BGE embeddings →
+    keyword fallback. All three paths return the same SearchResult shape.
+    """
     if _ragflow_available():
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
@@ -396,9 +473,8 @@ async def search_knowledge(
         except Exception as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
-    # Fallback: basic keyword search against DB documents
-    # (No vector embeddings — just returns empty for now)
-    return SearchResponse(results=[])
+    results = await _native_semantic_search(tenant_id, req.query, req.top_k)
+    return SearchResponse(results=results)
 
 
 @router.get("/knowledge/stats", response_model=StatsResponse)
