@@ -63,7 +63,7 @@ Status: **in progress** (started 2026-04-18)
 - [x] README header, badges, Key Numbers table, tests section, connector section → point to `/product-facts` instead of stale numbers.
 - [x] `api/main.py` FastAPI app + `api/v1/health.py` APP_VERSION → derived from pyproject.
 - [x] Playwright spec `ui/e2e/product-claims.spec.ts` — asserts Landing version pill, Dashboard counts strip, and hero text match `/product-facts`; drift-guard asserts stale `54 native connectors` / `v4.0.0` / `v4.3.0` don't appear.
-- [ ] PR title: `fix(truth): single source of truth for product claims` — PR open, awaiting CI + merge.
+- [x] PR #196 — `feat(truth): single source of truth for product claims — Phase 1.1`. Merged 2026-04-18. Residual CA-firms e2e failures fixed in PR #197 (`test(e2e): fix last 2 CA-firms failures — case-insensitive + render sync`, merged 2026-04-18).
 
 **Acceptance:** zero mismatched claims across README, Landing, Pricing, Dashboard, app shell.
 
@@ -173,6 +173,12 @@ Status: not started
 
 Status: not started
 
+**Known failing e2e specs that Phase 5 must fix:**
+- `qa-bugs-regression.spec.ts:935` CONN-SLACK-007 — ConnectorCreate shows auth_config fields for `bolt_bot_token`.
+- `qa-bugs-regression.spec.ts:990` CONN-SLACK-007 — Connector detail page loads and shows Edit button.
+
+(Currently failing on main; surfaced after P1.2 zero-skip elimination. Real feature gaps in the Connector detail UI.)
+
 ### P5.1 — Lifecycle model + data-driven catalog
 
 - [ ] Connector lifecycle states defined: `not_configured | requires_auth | configured | healthy | degraded | error | syncing`. Persisted on `connector_configs` (already present per sprint2 memory — verify schema).
@@ -222,6 +228,13 @@ Status: not started
 
 Status: not started
 
+**Known failing e2e specs that Phase 7 must fix:**
+- `qa-bugs-regression.spec.ts:723` HITL-COUNT-004 — Decided tab shows decision status, not action buttons.
+- `qa-bugs-regression.spec.ts:840` WF-CONN-006 — Workflow create page shows `email_received` trigger option.
+- `qa-bugs-regression.spec.ts:870` WF-CONN-006 — Workflow create page shows `api_event` trigger option.
+
+(Currently failing on main; surfaced after P1.2 zero-skip elimination. Real feature gaps in HITL + Workflow Create UI.)
+
 ### P7.1 — Kill mock explainability, wire real trace
 
 - [ ] Delete the `setExplanation({ bullets: [...], confidence: 0.92, ... })` block in `AgentDetail.tsx`.
@@ -250,6 +263,18 @@ Status: not started
 ## Phase 8 — QA Baseline
 
 Runs in parallel with any other phase. Status: not started.
+
+### P8.0 — Local docker-based e2e (pulled forward)
+
+Sanjeev has Docker on his workstation; pull this ahead of the formal Phase 8 so every subsequent PR is pre-validated locally instead of discovered broken after the 25-min main-deploy round trip.
+
+- [x] `scripts/local_e2e.sh` — bash wrapper validated end-to-end on Windows 11 docker-desktop, 2026-04-18. Flow: (1) `docker compose -f docker-compose.yml -f docker-compose.local-e2e.yml up -d postgres redis minio` under a dedicated `COMPOSE_PROJECT_NAME=agenticorg_local_e2e`, using Docker-assigned random host ports read back via `docker compose port` (no collisions with the host's existing Postgres/Redis zoo); (2) pg_isready + host-side asyncpg probe for bootstrap readiness (Docker Desktop Windows TCP-accept-before-ready race guard); (3) ORM `create_all` + `scripts/alembic_migrate.py` to stamp baseline + upgrade; (4) `seed_ca_demo` to create the demo tenant + user; (5) uvicorn on host (reuses `.venv`, no 30-min ML-deps Docker build); (6) login as `demo@cafirm.agenticorg.ai` to mint `E2E_TOKEN`; (7) `scripts/seed_e2e_demo_agents.py`; (8) vite dev server on `:5173` which proxies `/api` → `:8000`; (9) `npx playwright test` against `BASE_URL=http://localhost:5173`; (10) trap cleanup tears down vite + uvicorn + compose. Honors `RESET=1` / `KEEP_UP=1` / `SKIP_BUILD=1` / `LOCAL_UI_PORT` / `LOCAL_API_PORT` / `PYTHON_BIN`.
+- [x] `docker-compose.local-e2e.yml` — override with `!override` ports (so the base file's `6379:6379` doesn't leak), drops the `./migrations:/docker-entrypoint-initdb.d` mount that baked `CREATE EXTENSION "pgvector"` (wrong name — real name is `vector`).
+- [x] **Real P1.1 bugs caught during self-test** (would otherwise have shipped):
+  - `/api/v1/product-facts` was accidentally auth-gated — added to `EXEMPT_PATHS` in both `auth/middleware.py` and `auth/grantex_middleware.py` so Landing/Pricing (unauthenticated) can fetch it.
+  - `ui/index.html` static SEO meta + JSON-LD still contained `57 native connectors` / `36 AI agents` / `340+ tools` — my P1.1 PR fixed the React components but missed the static HTML. All stripped to generic "native connectors" / "pre-built AI agents" / "1000+ tools".
+- [ ] Shipped as part of PR #198 — `chore(dev): scripts/local_e2e.sh for docker-based Playwright runs`.
+- [ ] Follow-up: Playwright project tagging `@local` vs `@prod` so external-SaaS-dependent specs can be excluded from local runs without using `skip` primitives (they become tag-filtered).
 
 ### P8.1 — Backend baseline green + zero skips
 

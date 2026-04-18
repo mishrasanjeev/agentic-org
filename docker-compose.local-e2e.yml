@@ -1,0 +1,39 @@
+# docker-compose.local-e2e.yml — override file for scripts/local_e2e.sh.
+#
+# Use a dedicated compose project name ("agenticorg_local_e2e") so this
+# run's containers and named volumes never collide with anything else
+# (you already have `caseops-postgres-1`, system Postgres on 5432/5433,
+# and a valkey container on 6379).
+#
+# Ports: declare only the container-side port. Docker picks a random
+# available host port; scripts/local_e2e.sh reads it back with
+# `docker compose port <service> <container-port>` and passes the real
+# port into AGENTICORG_DB_URL / AGENTICORG_REDIS_URL /
+# AGENTICORG_STORAGE_ENDPOINT.
+#
+# postgres.volumes: we disable the base file's `./migrations:/docker-
+# entrypoint-initdb.d` mount. Those legacy SQL files include
+# `CREATE EXTENSION "pgvector"` which fails on modern pgvector images
+# (the extension name is `vector`, not `pgvector`) and abort Postgres
+# bootstrap. Schema setup happens via `init_db()` in the API lifespan
+# instead, which is the path that runs in CI and prod — so skipping
+# initdb.d here makes local match production.
+#
+# The API (uvicorn on host) is pointed at these ports via env vars in
+# scripts/local_e2e.sh. The `api` / `worker` containers from
+# docker-compose.yml are NOT started — the script runs uvicorn on the
+# host to reuse the existing .venv.
+
+services:
+  postgres:
+    volumes: !override
+      - pgdata:/var/lib/postgresql/data
+    ports: !override
+      - "5432"
+  redis:
+    ports: !override
+      - "6379"
+  minio:
+    ports: !override
+      - "9000"
+      - "9001"

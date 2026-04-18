@@ -382,14 +382,24 @@ test.describe("v4 — Landing Page Updates", () => {
     expect(hasV4).toBeTruthy();
   });
 
-  test("landing_shows_updated_stats", async ({ page }) => {
+  test("landing_shows_updated_stats", async ({ page, request }) => {
+    // Stat counts are the single source of truth served by /product-facts
+    // (Phase 1 Truth Freeze). Instead of hardcoding "50+", fetch the real
+    // count and assert the landing page references it.
+    const factsResp = await request.get(`${APP}/api/v1/product-facts`);
+    expect(factsResp.status(), "GET /product-facts").toBe(200);
+    const facts = await factsResp.json();
+
     await page.goto(MARKETING, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
+    // Give useProductFacts a beat to resolve in the rendered DOM.
+    await page.waitForTimeout(1500);
 
     const body = (await page.textContent("body")) || "";
-    // v4 bumps the agent count to 50+
-    const has50Agents = /50\+/.test(body);
-    expect(has50Agents).toBeTruthy();
+    expect(
+      body.includes(`${facts.agent_count}`),
+      `landing body should contain the live agent count ${facts.agent_count}`,
+    ).toBe(true);
   });
 });
 

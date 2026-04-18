@@ -61,6 +61,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/billing/plans",  # Public pricing — no tenant data
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
+        "/api/v1/product-facts",  # Public product counts/version for README, Landing, Pricing
         "/docs", "/openapi.json", "/redoc",
     }
 
