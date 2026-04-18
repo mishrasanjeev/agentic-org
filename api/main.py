@@ -39,6 +39,7 @@ from api.v1 import (
     feature_flags,
     governance,
     health,
+    integrations_status,
     invoices,
     knowledge,
     kpis,
@@ -162,6 +163,7 @@ register_error_handlers(app)
 
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(product_facts.router, prefix="/api/v1", tags=["Product Facts"])
+app.include_router(integrations_status.router, prefix="/api/v1", tags=["Integrations"])
 app.include_router(v1_auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 app.include_router(prompt_templates.router, prefix="/api/v1", tags=["Prompt Templates"])

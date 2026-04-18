@@ -38,6 +38,12 @@ interface GovernanceConfig {
   updated_at: string | null;
 }
 
+interface IntegrationsStatus {
+  grantex_configured: boolean;
+  composio_configured: boolean;
+  ragflow_configured: boolean;
+}
+
 export default function Settings() {
   const [limits, setLimits] = useState<FleetLimits>(DEFAULT_LIMITS);
   const [piiMasking, setPiiMasking] = useState(true);
@@ -50,6 +56,11 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Integration status (Grantex/Composio/RAGFlow) — loaded from
+  // /integrations/status so the badges reflect real deployment config
+  // instead of a hardcoded "Configured" dot.
+  const [integrations, setIntegrations] = useState<IntegrationsStatus | null>(null);
 
   // API Keys state
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
@@ -64,7 +75,17 @@ export default function Settings() {
     fetchSettings();
     fetchGovernance();
     fetchApiKeys();
+    fetchIntegrations();
   }, []);
+
+  async function fetchIntegrations() {
+    try {
+      const { data } = await api.get<IntegrationsStatus>("/integrations/status");
+      setIntegrations(data);
+    } catch {
+      setIntegrations(null);
+    }
+  }
 
   async function fetchSettings() {
     try {
@@ -406,9 +427,26 @@ npx agenticorg-mcp-server`}</code></pre>
             </div>
             <div>
               <label className="text-sm font-medium">API Key Status</label>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                <span className="text-sm">Configured (stored in GCP Secret Manager)</span>
+              <div
+                className="flex items-center gap-2 mt-2"
+                data-testid="grantex-api-key-status"
+              >
+                {integrations === null ? (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                    <span className="text-sm text-muted-foreground">Checking…</span>
+                  </>
+                ) : integrations.grantex_configured ? (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                    <span className="text-sm">Configured (GRANTEX_API_KEY set)</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <span className="text-sm">Not configured — set GRANTEX_API_KEY to enable</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
