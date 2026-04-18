@@ -54,12 +54,9 @@ class TestA2ATask:
             )
         assert exc.value.status_code == 400
 
-    # TODO(PR-D3-followup): this test hits a real a2a_tasks table. Keep
-    # opt-in via the same flag as the other DB unit tests until the
-    # async engine/event-loop teardown race across TestClients is fixed.
     @pytest.mark.skipif(
-        os.getenv("AGENTICORG_ENABLE_DB_UNIT_TESTS") != "1",
-        reason="DB-backed unit test pending rewrite — see PR-D3 follow-up",
+        not os.getenv("AGENTICORG_DB_URL"),
+        reason="requires DB (a2a tasks now backed by PostgreSQL)",
     )
     @pytest.mark.asyncio
     async def test_get_task_not_found(self):

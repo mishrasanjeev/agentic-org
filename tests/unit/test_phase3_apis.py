@@ -366,8 +366,8 @@ class TestCompanies:
 # Report Schedules CRUD
 # ═══════════════════════════════════════════════════════════════════════════
 @pytest.mark.skipif(
-    os.getenv("AGENTICORG_ENABLE_DB_UNIT_TESTS") != "1",
-    reason="DB-backed unit tests pending rewrite — see PR-D3 follow-up",
+    not os.getenv("AGENTICORG_DB_URL"),
+    reason="report schedules now backed by PostgreSQL",
 )
 class TestReportSchedules:
     """CRUD + run-now + toggle for report schedules."""

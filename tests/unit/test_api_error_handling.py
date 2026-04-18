@@ -363,15 +363,9 @@ class TestCompaniesErrors:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-# TODO(PR-D3-followup): these tests were unskipped in PR-D3's initial
-# push but surfaced three deeper issues (admin scope, non-UUID tenant,
-# async engine teardown across TestClients) that each require test
-# rewrites, not just fixture tweaks. Keep them opt-in via a dedicated
-# flag so the PR still ships CI Postgres+Redis + conftest bootstrap;
-# a follow-up will port the tests cleanly and flip the flag on.
 @pytest.mark.skipif(
-    os.getenv("AGENTICORG_ENABLE_DB_UNIT_TESTS") != "1",
-    reason="DB-backed unit tests pending rewrite — see PR-D3 follow-up",
+    not os.getenv("AGENTICORG_DB_URL"),
+    reason="report schedules now backed by PostgreSQL",
 )
 class TestReportScheduleErrors:
     """Report Schedule CRUD error paths."""
