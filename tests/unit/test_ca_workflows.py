@@ -237,8 +237,15 @@ class TestAllWorkflowsCompanyScoped:
     )
     def test_company_scoped_flag(self, filename: str):
         path = WORKFLOWS_DIR / filename
-        if not path.exists():
-            pytest.skip(f"{filename} not found")
+        # Zero-skip rule: a missing workflow template is a real product
+        # regression, not something to hide with `pytest.skip`. The CA
+        # workflow library shipped these filenames; absence means a
+        # refactor forgot one.
+        assert path.exists(), (
+            f"{filename} must exist in core/workflows/templates — "
+            "the CA pack advertises these workflows and losing one is "
+            "a silent feature deletion."
+        )
         wf = _load_yaml(path)
         assert wf.get("company_scoped") is True, (
             f"{filename} must have company_scoped: true"
