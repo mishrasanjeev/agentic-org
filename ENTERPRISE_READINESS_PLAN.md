@@ -63,7 +63,7 @@ Status: **in progress** (started 2026-04-18)
 - [x] README header, badges, Key Numbers table, tests section, connector section → point to `/product-facts` instead of stale numbers.
 - [x] `api/main.py` FastAPI app + `api/v1/health.py` APP_VERSION → derived from pyproject.
 - [x] Playwright spec `ui/e2e/product-claims.spec.ts` — asserts Landing version pill, Dashboard counts strip, and hero text match `/product-facts`; drift-guard asserts stale `54 native connectors` / `v4.0.0` / `v4.3.0` don't appear.
-- [ ] PR title: `fix(truth): single source of truth for product claims` — PR open, awaiting CI + merge.
+- [x] PR #196 — `feat(truth): single source of truth for product claims — Phase 1.1`. Merged 2026-04-18. Residual CA-firms e2e failures fixed in PR #197 (`test(e2e): fix last 2 CA-firms failures — case-insensitive + render sync`, merged 2026-04-18).
 
 **Acceptance:** zero mismatched claims across README, Landing, Pricing, Dashboard, app shell.
 
@@ -250,6 +250,14 @@ Status: not started
 ## Phase 8 — QA Baseline
 
 Runs in parallel with any other phase. Status: not started.
+
+### P8.0 — Local docker-based e2e (pulled forward)
+
+Sanjeev has Docker on his workstation; pull this ahead of the formal Phase 8 so every subsequent PR is pre-validated locally instead of discovered broken after the 25-min main-deploy round trip.
+
+- [x] `scripts/local_e2e.sh` — bash wrapper that (1) `docker compose up` postgres + redis + minio + api + worker, (2) waits for `/api/v1/health`, (3) mints an E2E token via `/auth/login` with the demo CEO (seeded by `init_db`), (4) runs `scripts/seed_e2e_demo_agents.py`, (5) starts vite (`npm run dev` which proxies `/api` → `:8000`), (6) runs `npx playwright test` with `BASE_URL=http://localhost:5173`, (7) tears down vite + compose on exit. Honors `KEEP_UP=1` / `SKIP_BUILD=1`. `LOCAL_UI_PORT` / `LOCAL_API_PORT` overridable.
+- [ ] Shipped as part of PR (forthcoming chore/local-e2e-script) — `chore(dev): scripts/local_e2e.sh for docker-based Playwright runs`.
+- [ ] Follow-up: Playwright project tagging `@local` vs `@prod` so external-SaaS-dependent specs can be excluded from local runs without using `skip` primitives (they become tag-filtered).
 
 ### P8.1 — Backend baseline green + zero skips
 
