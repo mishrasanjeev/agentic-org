@@ -694,22 +694,17 @@ test.describe("Subscription Status", () => {
     });
     await companyLoaded;
 
-    // The company header should show a subscription status badge
-    // Valid values: Trial, Active, Expired
-    const subscriptionBadges = ["Trial", "Active", "Expired"];
-    let foundBadge = false;
-    for (const badge of subscriptionBadges) {
-      const el = page.getByText(badge, { exact: true }).first();
-      if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
-        foundBadge = true;
-        break;
-      }
-    }
-
-    // Fallback: check the header area for any subscription-related text
+    // The company header should show a subscription status badge. The
+    // backend model stores the value lowercase (`trial | active | expired`
+    // — see core/models/company.py) and the UI renders it verbatim, so
+    // match case-insensitively.
+    const subscriptionPattern = /trial|active|expired/i;
+    const badge = page.getByText(subscriptionPattern).first();
+    await expect(badge).toBeVisible({ timeout: 15000 });
     const body = (await page.locator("body").textContent()) || "";
-    const hasSubscriptionText = body.includes("Trial") || body.includes("Active") || body.includes("Expired");
-    expect(foundBadge || hasSubscriptionText).toBeTruthy();
+    expect(body, "company detail body should reference subscription state").toMatch(
+      subscriptionPattern,
+    );
   });
 });
 
@@ -766,15 +761,24 @@ test.describe("Client Health Score", () => {
     });
     await listLoaded;
 
-    // The dashboard should show company cards with status indicators
-    // At minimum, active/inactive badges should be visible
+    // Wait for React to flush the companies list into the DOM. The
+    // summary line ("N total · N active · N inactive") is rendered
+    // unconditionally once the fetch resolves, so use it as the sync
+    // point between network arrival and rendered DOM.
+    await expect(
+      page.getByText(/total.*active.*inactive/i).first(),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Either an explicit status badge, a summary badge count, or the
+    // active/inactive text in the rendered body should be present.
     const statusBadges = page.locator('[class*="badge"], [class*="Badge"]');
     const badgeCount = await statusBadges.count().catch(() => 0);
-
-    // Should have at least one badge visible (status indicators)
     const body = (await page.locator("body").textContent()) || "";
-    const hasHealthIndicator = body.includes("active") || body.includes("Active") || body.includes("inactive");
-    expect(badgeCount > 0 || hasHealthIndicator).toBeTruthy();
+    const hasHealthIndicator = /\bactive\b|\binactive\b/i.test(body);
+    expect(
+      badgeCount > 0 || hasHealthIndicator,
+      "companies dashboard should render status badges or active/inactive text",
+    ).toBeTruthy();
   });
 });
 
