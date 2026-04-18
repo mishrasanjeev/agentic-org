@@ -234,6 +234,35 @@ def _ensure_agent(
     resp.raise_for_status()
 
 
+def _ensure_company(client: httpx.Client) -> None:
+    """Idempotently ensure at least one company exists in the demo tenant.
+
+    Playwright's ``getCompanyId`` raises when the list is empty. Without a
+    company the entire CompanyDetail suite fails before it can assert.
+    """
+    resp = client.get("/api/v1/companies", params={"page": 1, "per_page": 1})
+    try:
+        data = resp.json()
+    except Exception:
+        print(f"[seed] company list returned non-JSON: {resp.text[:200]}")
+        return
+    items = data.get("items") if isinstance(data, dict) else data
+    if items:
+        print(f"[seed] company already present (id={items[0].get('id')}) — skipping")
+        return
+    payload: dict[str, Any] = {
+        "name": "Acme Industries E2E",
+        "gstin": "27AAACE1234F1Z5",
+        "pan": "AAACE1234F",
+        "industry": "Manufacturing",
+    }
+    r = client.post("/api/v1/companies", json=payload)
+    if r.status_code in (200, 201):
+        print(f"[seed] created company id={r.json().get('id', 'unknown')}")
+        return
+    print(f"[seed] company create returned {r.status_code}, continuing: {r.text[:200]}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
@@ -245,6 +274,12 @@ def main() -> int:
         "Content-Type": "application/json",
     }
     with httpx.Client(base_url=args.base_url.rstrip("/"), headers=headers, timeout=30) as client:
+        # Ensure at least one company exists. The Playwright CA Firms /
+        # CompanyDetail suite calls ``getCompanyId`` which throws on an
+        # empty list — a freshly cleaned demo tenant otherwise fails
+        # every CompanyDetail test before the first assertion.
+        _ensure_company(client)
+
         resp = client.get("/api/v1/agents", params={"page": 1, "per_page": 200})
         resp.raise_for_status()
         items = resp.json().get("items", [])
