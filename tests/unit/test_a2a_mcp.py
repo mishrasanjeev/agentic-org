@@ -89,7 +89,7 @@ class TestMCPTools:
             assert "description" in tool
 
     @pytest.mark.asyncio
-    async def test_call_unknown_tool_returns_400(self):
+    async def test_call_unknown_tool_returns_404(self):
         from api.v1.mcp import MCPCallRequest, call_tool
 
         request = type("R", (), {"state": type("S", (), {"grant_token": ""})()})()
@@ -99,10 +99,15 @@ class TestMCPTools:
                 request,
                 "00000000-0000-0000-0000-000000000001",
             )
-        assert exc.value.status_code == 400
+        # PR-A changed unknown tools from 400 → 404 with a structured body.
+        # See docs/mcp-product-model.md.
+        assert exc.value.status_code == 404
+        assert isinstance(exc.value.detail, dict)
+        assert exc.value.detail.get("error") == "unknown_tool"
+        assert exc.value.detail.get("supported_prefix") == "agenticorg_"
 
     @pytest.mark.asyncio
-    async def test_call_invalid_prefix_returns_400(self):
+    async def test_call_invalid_prefix_returns_404(self):
         from api.v1.mcp import MCPCallRequest, call_tool
 
         request = type("R", (), {"state": type("S", (), {"grant_token": ""})()})()
@@ -112,7 +117,11 @@ class TestMCPTools:
                 request,
                 "00000000-0000-0000-0000-000000000001",
             )
-        assert exc.value.status_code == 400
+        # PR-A: unknown prefix → 404 unknown_tool (was 400).
+        assert exc.value.status_code == 404
+        assert isinstance(exc.value.detail, dict)
+        assert exc.value.detail.get("error") == "unknown_tool"
+        assert exc.value.detail.get("name") == "some_other_tool"
 
 
 class TestA2AHelpers:

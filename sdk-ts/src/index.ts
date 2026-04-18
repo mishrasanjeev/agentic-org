@@ -23,16 +23,81 @@ export interface RunOptions {
   context?: Record<string, unknown>;
 }
 
-export interface AgentResult {
-  task_id: string;
-  agent_id: string;
-  status: string;
+/**
+ * Canonical response shape for every agent-execution endpoint.
+ * Mirrors `docs/api/agent-run-contract.md`. Both `/agents/{id}/run`
+ * (canonical after PR-A) and `/a2a/tasks` (legacy-wrapped
+ * `{id, result:{output,confidence}}`) normalize into this via
+ * {@link toAgentRunResult}.
+ */
+export interface AgentRunResult {
+  run_id: string;
+  status: string; // completed | failed | hitl_triggered | budget_exceeded
   output: Record<string, unknown>;
   confidence: number;
   reasoning_trace: string[];
-  runtime?: string;
-  hitl_trigger?: string;
-  error?: string;
+  tool_calls: Array<Record<string, unknown>>;
+  runtime: string;
+  agent_id: string | null;
+  agent_type: string | null;
+  correlation_id: string | null;
+  performance: Record<string, unknown> | null;
+  explanation: Record<string, unknown> | null;
+  hitl_trigger: string | null;
+  error: string | null;
+  /** Raw response body, for power users / legacy-field access. */
+  raw: Record<string, unknown>;
+}
+
+/** @deprecated — use {@link AgentRunResult}. Kept as an alias during the v4.8 → v5.0 window. */
+export type AgentResult = AgentRunResult;
+
+/**
+ * Normalize any agent-run response body into the canonical
+ * {@link AgentRunResult}. Accepts three input shapes:
+ *  1. Canonical: top-level `run_id`, `output`, `confidence`.
+ *  2. Legacy `/agents/{id}/run`: `task_id` instead of `run_id`.
+ *  3. Legacy `/a2a/tasks`: `id` + nested `result: {output, confidence}`.
+ */
+export function toAgentRunResult(payload: Record<string, unknown>): AgentRunResult {
+  const p = payload ?? {};
+  const runId = (p.run_id ?? p.task_id ?? p.id ?? "") as string;
+
+  let output: Record<string, unknown>;
+  if ("output" in p) {
+    output = (p.output as Record<string, unknown>) ?? {};
+  } else {
+    const nested = (p.result as Record<string, unknown>) ?? {};
+    output = (nested.output as Record<string, unknown>) ?? {};
+  }
+
+  let confidence: number;
+  if ("confidence" in p) {
+    confidence = Number(p.confidence ?? 0);
+  } else {
+    const nested = (p.result as Record<string, unknown>) ?? {};
+    confidence = Number(nested.confidence ?? 0);
+  }
+
+  return {
+    run_id: String(runId),
+    status: String(p.status ?? ""),
+    output,
+    confidence,
+    reasoning_trace: Array.isArray(p.reasoning_trace) ? (p.reasoning_trace as string[]) : [],
+    tool_calls: Array.isArray(p.tool_calls)
+      ? (p.tool_calls as Array<Record<string, unknown>>)
+      : [],
+    runtime: String(p.runtime ?? ""),
+    agent_id: (p.agent_id as string | null | undefined) ?? null,
+    agent_type: (p.agent_type as string | null | undefined) ?? null,
+    correlation_id: (p.correlation_id as string | null | undefined) ?? null,
+    performance: (p.performance as Record<string, unknown> | null | undefined) ?? null,
+    explanation: (p.explanation as Record<string, unknown> | null | undefined) ?? null,
+    hitl_trigger: (p.hitl_trigger as string | null | undefined) ?? null,
+    error: (p.error as string | null | undefined) ?? null,
+    raw: p,
+  };
 }
 
 export interface AgentSkill {
@@ -110,20 +175,26 @@ class AgentsResource {
     return (await this.http.get(`/api/v1/agents/${agentId}`)) as Record<string, unknown>;
   }
 
-  async run(agentIdOrType: string, options: RunOptions = {}): Promise<AgentResult> {
+  async run(agentIdOrType: string, options: RunOptions = {}): Promise<AgentRunResult> {
     const payload = {
       action: options.action ?? "process",
       inputs: options.inputs ?? {},
       context: options.context ?? {},
     };
 
+    let raw: Record<string, unknown>;
     if (agentIdOrType.includes("-") && agentIdOrType.length > 30) {
-      return (await this.http.post(`/api/v1/agents/${agentIdOrType}/run`, payload)) as AgentResult;
+      raw = (await this.http.post(
+        `/api/v1/agents/${agentIdOrType}/run`,
+        payload,
+      )) as Record<string, unknown>;
+    } else {
+      raw = (await this.http.post("/api/v1/a2a/tasks", {
+        agent_type: agentIdOrType,
+        ...payload,
+      })) as Record<string, unknown>;
     }
-    return (await this.http.post("/api/v1/a2a/tasks", {
-      agent_type: agentIdOrType,
-      ...payload,
-    })) as AgentResult;
+    return toAgentRunResult(raw);
   }
 
   async create(data: Record<string, unknown>): Promise<Record<string, unknown>> {

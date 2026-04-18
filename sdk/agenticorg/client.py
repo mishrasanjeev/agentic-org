@@ -3,9 +3,82 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+
+
+@dataclass
+class AgentRunResult:
+    """Canonical response shape for every agent-execution endpoint.
+
+    Mirrors docs/api/agent-run-contract.md. Both /agents/{id}/run (canonical
+    already after PR-A) and /a2a/tasks (legacy shape was {id, result:{…}})
+    normalize into this single dataclass via :func:`_to_agent_run_result`.
+    """
+
+    run_id: str
+    status: str  # completed | failed | hitl_triggered | budget_exceeded
+    output: dict[str, Any] = field(default_factory=dict)
+    confidence: float = 0.0
+    reasoning_trace: list[str] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    runtime: str = ""
+    agent_id: str | None = None
+    agent_type: str | None = None
+    correlation_id: str | None = None
+    performance: dict[str, Any] | None = None
+    explanation: dict[str, Any] | None = None
+    hitl_trigger: str | None = None
+    error: str | None = None
+    # Raw response dict for power users / legacy fields.
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+def _to_agent_run_result(payload: dict[str, Any]) -> AgentRunResult:
+    """Normalize any agent-run response shape (canonical or legacy) into
+    :class:`AgentRunResult`. Tolerates:
+
+    - canonical shape (PR-A forward): top-level ``run_id``, ``output``,
+      ``confidence``, etc.
+    - legacy ``/agents/{id}/run`` shape (pre-PR-A): ``task_id`` instead
+      of ``run_id``.
+    - legacy ``/a2a/tasks`` shape (pre-PR-A): ``id`` + nested
+      ``result: {output, confidence}``.
+    """
+    # Prefer canonical, fall back to legacy aliases.
+    run_id = payload.get("run_id") or payload.get("task_id") or payload.get("id") or ""
+
+    # Output + confidence: top-level first, then unwrap legacy `result` nest.
+    if "output" in payload:
+        output = payload.get("output") or {}
+    else:
+        nested = payload.get("result") or {}
+        output = nested.get("output") if isinstance(nested, dict) else {} or {}
+    if "confidence" in payload:
+        confidence = float(payload.get("confidence") or 0.0)
+    else:
+        nested = payload.get("result") or {}
+        confidence = float(nested.get("confidence") or 0.0) if isinstance(nested, dict) else 0.0
+
+    return AgentRunResult(
+        run_id=str(run_id),
+        status=str(payload.get("status") or ""),
+        output=output if isinstance(output, dict) else {},
+        confidence=confidence,
+        reasoning_trace=list(payload.get("reasoning_trace") or []),
+        tool_calls=list(payload.get("tool_calls") or []),
+        runtime=str(payload.get("runtime") or ""),
+        agent_id=payload.get("agent_id"),
+        agent_type=payload.get("agent_type"),
+        correlation_id=payload.get("correlation_id"),
+        performance=payload.get("performance") or None,
+        explanation=payload.get("explanation") or None,
+        hitl_trigger=payload.get("hitl_trigger") or None,
+        error=payload.get("error") or None,
+        raw=payload,
+    )
 
 
 class AgenticOrg:
@@ -92,18 +165,23 @@ class _AgentsResource:
         action: str = "process",
         inputs: dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Run an agent.
+    ) -> AgentRunResult:
+        """Run an agent and return the canonical :class:`AgentRunResult`.
 
         Args:
-            agent_id_or_type: Agent UUID or agent type (e.g., "ap_processor").
-                If a type is given, uses the A2A task endpoint.
-            action: Action to perform (default: "process").
+            agent_id_or_type: Agent UUID or agent type (e.g. ``"ap_processor"``).
+                UUIDs use ``POST /agents/{id}/run``; agent types use
+                ``POST /a2a/tasks``. Both shapes normalize into the same
+                ``AgentRunResult``.
+            action: Action to perform (default ``"process"``).
             inputs: Task input data.
             context: Additional context.
 
         Returns:
-            Execution result with status, output, confidence, trace.
+            Canonical :class:`AgentRunResult` — see
+            ``docs/api/agent-run-contract.md``. Access ``result.output``,
+            ``result.confidence``, ``result.status``, etc. Raw response
+            dict available as ``result.raw`` for power users.
         """
         payload: dict[str, Any] = {
             "action": action,
@@ -122,7 +200,7 @@ class _AgentsResource:
             })
 
         resp.raise_for_status()
-        return resp.json()
+        return _to_agent_run_result(resp.json())
 
     def create(self, **kwargs: Any) -> dict[str, Any]:
         """Create a new agent."""

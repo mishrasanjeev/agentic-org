@@ -8,7 +8,7 @@ Quickstart:
     result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
 """
 
-from agenticorg.client import AgenticOrg
+from agenticorg.client import AgenticOrg, AgentRunResult
 
-__all__ = ["AgenticOrg"]
+__all__ = ["AgenticOrg", "AgentRunResult"]
 __version__ = "0.1.0"

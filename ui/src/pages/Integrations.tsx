@@ -51,11 +51,14 @@ export default function Integrations() {
 
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wide">Run an Agent (3 lines)</label>
-                <pre className="bg-muted rounded p-3 text-sm font-mono mt-1 whitespace-pre-wrap">{`from agenticorg import AgenticOrg
+                <pre className="bg-muted rounded p-3 text-sm font-mono mt-1 whitespace-pre-wrap" data-testid="sdk-snippet-python">{`from agenticorg import AgenticOrg, AgentRunResult
 
 client = AgenticOrg(api_key="your-key")
-result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
-print(result["output"])  # structured agent result`}</pre>
+result: AgentRunResult = client.agents.run(
+    "ap_processor",
+    inputs={"invoice_id": "INV-001"},
+)
+print(result.status, result.confidence, result.output)`}</pre>
               </div>
 
               <div>

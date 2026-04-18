@@ -159,36 +159,25 @@ server.tool(
 
 server.tool(
   "list_connectors",
-  "List all 54 available connectors (SAP, Oracle, Jira, HubSpot, GSTN, Darwinbox, etc.) and their status.",
+  "List the AgenticOrg native connectors and their status. Note: connectors are NOT directly callable as MCP tools — see docs/mcp-product-model.md (we ship agents-as-tools, not connectors-as-tools). Use this for discovery only.",
   async () => {
     const data = await apiGet("/api/v1/connectors");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
   },
 );
 
-// ── Tool: call_connector_tool ───────────────────────────────────────────
-
-server.tool(
-  "call_connector_tool",
-  "Call a specific connector tool (e.g. 'jira_create_issue', 'hubspot_get_contacts', 'slack_send_message'). Use list_mcp_tools to discover available tools.",
-  {
-    tool_name: z.string().describe("Tool name, e.g. 'jira_create_issue', 'slack_send_message'"),
-    arguments: z.record(z.string(), z.unknown()).optional().default({}).describe("Tool arguments"),
-  },
-  async ({ tool_name, arguments: args }) => {
-    const result = await apiPost("/api/v1/mcp/call", {
-      name: tool_name,
-      arguments: args,
-    });
-    return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
-  },
-);
+// NOTE: `call_connector_tool` was removed in PR-A (Enterprise Readiness P3).
+// The backend /api/v1/mcp/call only accepts agent tool names prefixed
+// `agenticorg_<agent_type>` — direct connector invocation was never
+// supported. See docs/mcp-product-model.md for the product decision.
+// External callers should invoke the agent that wraps the connector action
+// via `run_agent` instead.
 
 // ── Tool: list_mcp_tools ────────────────────────────────────────────────
 
 server.tool(
   "list_mcp_tools",
-  "List all 340+ available MCP tools across 54 connectors. Each tool has a name, description, and input schema.",
+  "List every AgenticOrg agent exposed as an MCP tool (naming: agenticorg_<agent_type>). Each entry has name, description, and inputSchema. Invoke with `run_agent` or call /api/v1/mcp/call directly.",
   async () => {
     const data = await apiGet("/api/v1/mcp/tools");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
