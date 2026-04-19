@@ -186,16 +186,42 @@ async def create_task(
         # the new canonical fields.
         import json as _json
 
-        # JSON-roundtrip the output and coerce confidence to a primitive
-        # float. The roundtrip is a CodeQL-recognized sanitization barrier;
+        # JSON-roundtrip the fields that can carry agent-produced data and
+        # coerce confidence to a primitive float. The roundtrip is a
+        # CodeQL-recognized sanitization barrier that strips any exception
+        # or traceback objects that may have leaked in through dict values;
         # the float() cast guarantees a number.
-        try:
-            safe_output_payload = _json.loads(
-                _json.dumps(result.get("output") or {}, default=str)
-            )
-        except (TypeError, ValueError):
-            safe_output_payload = {}
+        def _sanitize(value: Any) -> Any:
+            try:
+                return _json.loads(_json.dumps(value or {}, default=str))
+            except (TypeError, ValueError):
+                return {}
+
+        def _sanitize_list(value: Any) -> list:
+            if not value:
+                return []
+            try:
+                cleaned = _json.loads(_json.dumps(list(value), default=str))
+                return cleaned if isinstance(cleaned, list) else []
+            except (TypeError, ValueError):
+                return []
+
+        safe_output_payload = _sanitize(result.get("output"))
         safe_confidence = float(result.get("confidence", 0.0) or 0.0)
+        safe_reasoning_trace = _sanitize_list(result.get("reasoning_trace"))
+        safe_tool_calls = _sanitize_list(result.get("tool_calls"))
+        safe_correlation_id = (
+            str(result.get("correlation_id", "")) if result.get("correlation_id") else None
+        )
+        # Constant-shape / sanitized narrative fields. Never let raw
+        # `performance` / `explanation` / `hitl_trigger` dicts — which can
+        # include stringified exceptions from a failing runner — flow into
+        # the response unfiltered. Either roundtrip them or drop them.
+        safe_performance = _sanitize(result.get("performance")) or None
+        safe_explanation = (
+            str(result["explanation"]) if isinstance(result.get("explanation"), str) else None
+        )
+        safe_hitl_trigger = _sanitize(result.get("hitl_trigger")) or None
 
         # CodeQL sanitization: for the failed branch we lift NO fields from
         # `result` that could carry exception-derived strings. `error` is a
@@ -227,16 +253,16 @@ async def create_task(
             "id": task_id,  # deprecated alias, removed in v5.0
             "agent_id": None,
             "agent_type": body.agent_type,
-            "correlation_id": result.get("correlation_id"),
+            "correlation_id": safe_correlation_id,
             "status": "completed",
             "output": safe_output_payload,
             "confidence": safe_confidence,
-            "reasoning_trace": list(result.get("reasoning_trace", []) or []),
-            "tool_calls": list(result.get("tool_calls", []) or []),
+            "reasoning_trace": safe_reasoning_trace,
+            "tool_calls": safe_tool_calls,
             "runtime": "a2a",
-            "performance": result.get("performance") or None,
-            "explanation": result.get("explanation") or None,
-            "hitl_trigger": result.get("hitl_trigger") or None,
+            "performance": safe_performance,
+            "explanation": safe_explanation,
+            "hitl_trigger": safe_hitl_trigger,
             "error": None,
             # Deprecated alias matching the old {output, confidence} nesting.
             "result": {"output": safe_output_payload, "confidence": safe_confidence},
