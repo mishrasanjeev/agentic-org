@@ -378,7 +378,7 @@ export default function CBOSolution() {
               <FadeIn key={kpi.label} delay={i * 100}>
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300">
                   <p className="text-sm text-slate-500 mb-1">{kpi.label}</p>
-                  <p className="text-3xl font-bold text-slate-900 mb-2">{kpi.value}</p>
+                  <p className="text-3xl font-bold text-slate-900 mb-2 tabular-nums">{kpi.value}</p>
                   <span className={`inline-flex items-center gap-1 text-sm font-medium ${kpi.positive ? "text-emerald-600" : "text-red-600"}`}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={kpi.positive ? "M5 10l7-7m0 0l7 7m-7-7v18" : "M19 14l-7 7m0 0l-7-7m7 7V3"} />

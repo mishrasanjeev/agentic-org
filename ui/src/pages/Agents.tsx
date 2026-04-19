@@ -146,7 +146,7 @@ export default function Agents() {
         {Object.entries(stats).map(([label, value]) => (
           <Card key={label}>
             <CardHeader><CardTitle className="text-sm text-muted-foreground capitalize">{label}</CardTitle></CardHeader>
-            <CardContent><p className="text-3xl font-bold">{value}</p></CardContent>
+            <CardContent><p className="text-3xl font-bold tabular-nums">{value}</p></CardContent>
           </Card>
         ))}
       </div>
