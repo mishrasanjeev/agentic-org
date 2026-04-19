@@ -7,6 +7,15 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
+// Self-hosted fonts — loaded via Vite bundler so there is no external
+// CSS request that a strict CSP (style-src) would block. See the
+// impeccable pass 1 notes in docs/impeccable-applied.md.
+import "@fontsource/geist/400.css";
+import "@fontsource/geist/500.css";
+import "@fontsource/geist/600.css";
+import "@fontsource/geist/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
 import "./globals.css";
 
 const queryClient = new QueryClient({

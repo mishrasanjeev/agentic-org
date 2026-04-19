@@ -305,19 +305,11 @@
   </script>
 
   <!-- Preconnect for performance -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
   <link rel="dns-prefetch" href="https://accounts.google.com" />
 
-  <!-- Typography: Geist for UI, JetBrains Mono for code. Chosen over the
-       generic system stack / Inter default per the impeccable design
-       skill (docs/frontend-design-workflow.md). -->
-  <link rel="preconnect" href="https://rsms.me/" />
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-  />
+  <!-- Typography: Geist + JetBrains Mono, self-hosted via @fontsource
+       so production CSP's `style-src` directive doesn't need to
+       include fonts.googleapis.com. Imported in src/main.tsx. -->
   <style>
     body {
       font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -328,7 +320,6 @@
       font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
         Consolas, monospace;
     }
-    @font-face { font-display: swap; }
   </style>
 
   <!-- Dashboard screenshots load on-demand from landing page -->
