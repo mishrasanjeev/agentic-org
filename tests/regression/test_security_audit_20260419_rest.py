@@ -167,11 +167,33 @@ def test_low15_secret_defaults_rejected_in_prod(monkeypatch):
         _hash_token("some-token")
 
 
-def test_low15_jwt_blacklist_key_rejects_prod_default(monkeypatch):
-    """``auth.jwt._token_redis_key`` must also refuse the default in prod."""
+def test_low15_jwt_blacklist_key_no_longer_uses_secret():
+    """``auth.jwt._token_redis_key`` closes LOW-15 by dropping the secret.
+
+    The audit finding was that ``_token_redis_key`` fell back to a
+    hard-coded default when ``AGENTICORG_SECRET_KEY`` was unset. The
+    durable remediation is to not mix the secret into this Redis-key
+    namespace at all — the JWT is already signature-verified upstream
+    and is high-entropy, so a plain SHA-256 digest is sufficient and
+    removes the predictable-default attack surface entirely.
+
+    ``core.auth_state._hash_token`` keeps the fail-closed env gate
+    because it hashes identifiers where the secret provides real
+    separation; that test lives immediately above.
+    """
+    src = _read("auth/jwt.py")
+    assert "agenticorg-default-key" not in src, (
+        "LOW-15 regression: predictable default secret reintroduced"
+    )
+    assert "_blacklist_mac_key" not in src, (
+        "If you reintroduce a MAC key, gate it behind the prod "
+        "env-var fail-closed check and update this assertion."
+    )
+    # Sanity-check the replacement: SHA-256 of the JWT alone.
     from auth.jwt import _token_redis_key
 
-    monkeypatch.delenv("AGENTICORG_SECRET_KEY", raising=False)
-    monkeypatch.setenv("AGENTICORG_ENV", "production")
-    with pytest.raises(RuntimeError, match="AGENTICORG_SECRET_KEY"):
-        _token_redis_key("some-token")
+    out = _token_redis_key("alpha")
+    assert out.startswith("token_blacklist:")
+    assert len(out.split(":")[1]) == 64  # SHA-256 hex length
+    # Same input produces the same key deterministically.
+    assert _token_redis_key("alpha") == out

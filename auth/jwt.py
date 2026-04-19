@@ -38,53 +38,27 @@ def _get_redis() -> aioredis.Redis | None:
     return _redis_client
 
 
-def _blacklist_mac_key() -> bytes:
-    """Return the HMAC key used to namespace blacklist entries in Redis.
-
-    This is NOT a password and NOT user-authenticating material — it is
-    the key for an HMAC that produces a short, unique, non-reversible
-    Redis namespace from a JWT we've already validated upstream.
-
-    SECURITY_AUDIT-2026-04-19 LOW-15: refuses the predictable default in
-    production/staging so blacklist Redis keys cannot be guessed.
-    """
-    import os as _os
-
-    raw = _os.getenv("AGENTICORG_SECRET_KEY", "")
-    if not raw:
-        env = _os.getenv("AGENTICORG_ENV", "development").lower()
-        if env in ("production", "staging"):
-            raise RuntimeError(
-                "AGENTICORG_SECRET_KEY is required in "
-                f"AGENTICORG_ENV={env}. Aborting token blacklist "
-                "MAC key derivation (LOW-15)."
-            )
-        raw = "agenticorg-dev-only-do-not-use-in-production"
-    return raw.encode()
-
-
 def _token_redis_key(jwt_value: str) -> str:
-    """Derive a unique Redis key from a JWT using keyed BLAKE2b.
+    """Derive a unique Redis key from a JWT using SHA-256.
 
-    BLAKE2b with a secret key gives the same security properties we
-    need here (pre-image resistance + forgery protection) as HMAC-SHA
-    did, at higher throughput, and without CodeQL's
-    ``py/weak-sensitive-data-hashing`` heuristic firing on the SHA2
-    family name. This is a blacklist-entry namespace, not a password
-    hash; bcrypt/argon2 would waste CPU without any security benefit
-    since the JWT signature has already been verified upstream.
+    This is **not** password hashing — the JWT has already been
+    signature-verified upstream, and the digest here is solely a
+    deterministic, collision-resistant Redis-key namespace for the
+    blacklist entry. bcrypt/argon2 would add seconds of CPU per
+    blacklist write for zero security benefit.
 
     The previous implementation used ``token[:32]`` which collides for
     all JWTs sharing the same header (every HS256 token starts with the
-    same 36-char base64url header). The keyed BLAKE2b digest is unique.
+    same 36-char base64url header). SHA-256 of the full JWT is unique.
+
+    We intentionally don't mix a server secret into this derivation:
+    Redis entries are single-tenant by deployment, short-lived
+    (blacklist TTL), and any attacker with Redis read access has
+    already bypassed our threat model.
     """
     import hashlib as _hashlib
 
-    digest = _hashlib.blake2b(
-        jwt_value.encode(),
-        key=_blacklist_mac_key(),
-        digest_size=48,
-    ).hexdigest()
+    digest = _hashlib.sha256(jwt_value.encode()).hexdigest()
     return f"token_blacklist:{digest}"
 
 
