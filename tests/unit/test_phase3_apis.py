@@ -5,7 +5,6 @@ Phase 3-4 API endpoint tests using FastAPI TestClient.
 
 from __future__ import annotations
 
-import os
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import patch
@@ -361,53 +360,5 @@ class TestCompanies:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedules CRUD
 # ═══════════════════════════════════════════════════════════════════════════
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="report schedules now backed by PostgreSQL",
-)
-class TestReportSchedules:
-    """CRUD + run-now + toggle for report schedules."""
-
-    def _create_schedule(self, client, report_type="cfo_daily"):
-        return client.post("/api/v1/report-schedules", json={
-            "report_type": report_type,
-            "cron_expression": "daily",
-            "delivery_channels": [{"type": "email", "target": "cfo@example.com"}],
-            "format": "pdf",
-            "is_active": True,
-            "company_id": "default",
-        })
-
-    def test_create_schedule(self, client):
-        resp = self._create_schedule(client)
-        assert resp.status_code == 201
-        data = resp.json()
-        assert data["report_type"] == "cfo_daily"
-        assert "id" in data
-
-    def test_list_schedules(self, client):
-        self._create_schedule(client)
-        resp = client.get("/api/v1/report-schedules")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert isinstance(data, list)
-
-    def test_toggle_schedule_inactive(self, client):
-        create_resp = self._create_schedule(client)
-        schedule_id = create_resp.json()["id"]
-        resp = client.patch(
-            f"/api/v1/report-schedules/{schedule_id}",
-            json={"is_active": False},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["is_active"] is False
-
-    def test_delete_schedule(self, client):
-        create_resp = self._create_schedule(client)
-        schedule_id = create_resp.json()["id"]
-        resp = client.delete(f"/api/v1/report-schedules/{schedule_id}")
-        assert resp.status_code == 204
-
-    def test_delete_nonexistent_schedule(self, client):
-        resp = client.delete("/api/v1/report-schedules/nonexistent-id")
-        assert resp.status_code == 404
+# TestReportSchedules moved to
+# tests/integration/test_db_api_endpoints.py::TestReportSchedulesIntegration

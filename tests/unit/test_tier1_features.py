@@ -11,10 +11,7 @@ All external services (Redis, Celery, HTTP APIs) are mocked.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
-import os
-import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -737,126 +734,5 @@ class TestNewConnectors:
 # ═══════════════════════════════════════════════════════════════════════════
 #  ABM API
 # ═══════════════════════════════════════════════════════════════════════════
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="ABM APIs require DB (backed by PostgreSQL)",
-)
-class TestABMApi:
-    """Tests for ABM (Account-Based Marketing) API endpoints — requires DB."""
-
-    @pytest.fixture(scope="class")
-    def app(self):
-        from api.main import app as _app
-
-        @asynccontextmanager
-        async def _noop_lifespan(app):
-            yield
-
-        _app.router.lifespan_context = _noop_lifespan
-        return _app
-
-    @pytest.fixture
-    def client(self, app):
-        from fastapi.testclient import TestClient
-
-        from api.deps import get_current_tenant
-
-        test_tenant = str(uuid.uuid4())
-        app.dependency_overrides[get_current_tenant] = lambda: test_tenant
-
-        async def _fake_validate(token):
-            return {
-                "sub": "test-user",
-                "agenticorg:tenant_id": test_tenant,
-                "agenticorg:scopes": [],
-            }
-
-        with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
-            with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant):
-                with patch("auth.grantex_middleware.extract_scopes", return_value=[]):
-                    with TestClient(app, raise_server_exceptions=False) as c:
-                        c.headers["Authorization"] = "Bearer fake-test-token"
-                        yield c
-
-        app.dependency_overrides.pop(get_current_tenant, None)
-
-    def test_create_account(self, client):
-        resp = client.post("/api/v1/abm/accounts", json={
-            "company_name": "Test Corp",
-            "domain": "testcorp.com",
-            "industry": "Technology",
-            "tier": "1",
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["company_name"] == "Test Corp"
-        assert "id" in data
-
-    def test_list_accounts(self, client):
-        # Create an account first
-        client.post("/api/v1/abm/accounts", json={
-            "company_name": "Listed Corp",
-            "domain": "listedcorp.com",
-        })
-        resp = client.get("/api/v1/abm/accounts")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "accounts" in data
-        assert "total" in data
-
-    def test_upload_csv(self, client):
-        csv_content = "company_name,domain,industry,tier\nCSV Corp,csvcorp.com,Finance,2\n"
-        files = {"file": ("accounts.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-        resp = client.post("/api/v1/abm/accounts/upload", files=files)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["created"] == 1
-
-    def test_dashboard_returns_metrics(self, client):
-        # Seed an account
-        client.post("/api/v1/abm/accounts", json={
-            "company_name": "Dashboard Corp",
-            "domain": "dashcorp.com",
-            "tier": "1",
-        })
-        resp = client.get("/api/v1/abm/dashboard")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "total_accounts" in data
-        assert "by_tier" in data
-        assert "avg_intent_score" in data
-        assert "top_10_by_intent" in data
-
-    def test_get_account_not_found(self, client):
-        resp = client.get("/api/v1/abm/accounts/nonexistent-id")
-        assert resp.status_code == 404
-
-    def test_duplicate_domain_rejected(self, client):
-        client.post("/api/v1/abm/accounts", json={
-            "company_name": "Dup Corp",
-            "domain": "dupcorp.com",
-        })
-        resp = client.post("/api/v1/abm/accounts", json={
-            "company_name": "Dup Corp 2",
-            "domain": "dupcorp.com",
-        })
-        assert resp.status_code == 409
-
-    def test_upload_csv_missing_columns(self, client):
-        csv_content = "name,url\nBad Corp,badcorp.com\n"
-        files = {"file": ("bad.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-        resp = client.post("/api/v1/abm/accounts/upload", files=files)
-        assert resp.status_code == 400
-
-    def test_upload_non_csv_rejected(self, client):
-        files = {"file": ("data.json", io.BytesIO(b"{}"), "application/json")}
-        resp = client.post("/api/v1/abm/accounts/upload", files=files)
-        assert resp.status_code == 400
-
-    def test_dashboard_empty_state(self, client):
-        # Fresh tenant -- no accounts
-        resp = client.get("/api/v1/abm/dashboard")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total_accounts"] >= 0
-        assert data["avg_intent_score"] >= 0
+# TestABMApi moved to
+# tests/integration/test_db_api_endpoints.py::TestABMApiIntegration
