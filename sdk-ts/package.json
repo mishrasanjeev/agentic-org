@@ -1,6 +1,6 @@
 {
   "name": "agenticorg-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript SDK for AgenticOrg — run AI agents, create from SOP, A2A/MCP access",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
