@@ -178,7 +178,14 @@ describe("CompanyDetail", () => {
     expect(
       screen.getByText("Synchronized Chartered Accountant Firm Pack assets for Acme Manufacturing Pvt Ltd"),
     ).toBeInTheDocument();
-    expect(screen.getByText("success")).toBeInTheDocument();
+    // "success" appears twice on this page — once as a filter option in
+    // the status select, once as the outcome badge on the row we just
+    // clicked. Scope the assertion to the row badge so it still proves
+    // the audit event rendered, without colliding with the filter UI.
+    const successBadges = screen.getAllByText("success");
+    expect(successBadges.length).toBeGreaterThanOrEqual(1);
+    const badge = successBadges.find((el) => el.className.includes("bg-green"));
+    expect(badge).toBeInTheDocument();
   });
 
   it("requests company-scoped agents, workflows, and audit records", async () => {

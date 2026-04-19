@@ -722,7 +722,7 @@ export default function Landing() {
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 mb-2">CSV Bulk Import</h3>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Upload your org chart and create 50+ agents in seconds. A single CSV defines the full hierarchy &mdash; VPs, Directors, Managers, Analysts &mdash; with parent-child relationships and escalation chains built automatically.
+                  Upload your org chart and create every role in seconds. A single CSV defines the full hierarchy &mdash; VPs, Directors, Managers, Analysts &mdash; with parent-child relationships and escalation chains built automatically.
                 </p>
               </div>
             </FadeIn>
@@ -940,7 +940,7 @@ export default function Landing() {
               <div className="grid md:grid-cols-3 gap-6 text-center">
                 <div>
                   <div className="text-2xl font-bold text-slate-900">Free</div>
-                  <p className="text-sm text-slate-500 mt-1">50+ agents, 20 connectors, 500 tasks/day</p>
+                  <p className="text-sm text-slate-500 mt-1">{agentsText} agents, 20 connectors, 500 tasks/day</p>
                   <Link to="/signup" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Start Free →</Link>
                 </div>
                 <div className="border-x border-slate-200 px-6">
