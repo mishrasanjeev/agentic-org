@@ -1,5 +1,15 @@
-"""ORM models for AgenticOrg."""
+"""ORM models for AgenticOrg.
 
+Every ORM class is re-exported here so that
+`BaseModel.metadata.create_all` (used by `tests/unit/conftest.py` and
+`tests/integration/conftest.py`) sees the full table set. If you add a
+new `core.models.xxx` file, import it here or its table won't be
+created against the CI Postgres service.
+"""
+
+from core.models.a2a_task import A2ATask as A2ATask
+from core.models.abm import ABMAccount as ABMAccount
+from core.models.abm import ABMCampaign as ABMCampaign
 from core.models.agent import Agent as Agent
 from core.models.agent import AgentCostLedger as AgentCostLedger
 from core.models.agent import AgentLifecycleEvent as AgentLifecycleEvent
@@ -16,6 +26,7 @@ from core.models.base import BaseModel as BaseModel
 from core.models.base import TenantMixin as TenantMixin
 from core.models.base import TimestampMixin as TimestampMixin
 from core.models.branding import TenantBranding as TenantBranding
+from core.models.bridge import BridgeRegistration as BridgeRegistration
 from core.models.budget_alert import BudgetAlert as BudgetAlert
 from core.models.ca_subscription import CASubscription as CASubscription
 from core.models.company import Company as Company
@@ -39,6 +50,7 @@ from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
+from core.models.report_schedule import ReportSchedule as ReportSchedule
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry
 from core.models.sso_config import SSOConfig as SSOConfig
 from core.models.tenant import Tenant as Tenant

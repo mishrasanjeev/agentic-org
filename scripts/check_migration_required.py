@@ -20,6 +20,13 @@ import sys
 MODEL_PREFIXES = ("core/models/", "core/database.py")
 MIGRATION_PREFIX = "migrations/versions/"
 
+# Files under MODEL_PREFIXES that never carry schema DDL. Re-export-only
+# packages can be touched without a migration — adding them here keeps
+# the guard honest instead of forcing meaningless empty migrations.
+IGNORED_MODEL_FILES = frozenset({
+    "core/models/__init__.py",
+})
+
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()  # noqa: S603, S607
@@ -52,7 +59,10 @@ def main() -> int:
     added = _added_files(base, head)
 
     model_touched = [
-        f for f in changed if any(f.startswith(p) or f == p for p in MODEL_PREFIXES)
+        f
+        for f in changed
+        if any(f.startswith(p) or f == p for p in MODEL_PREFIXES)
+        and f not in IGNORED_MODEL_FILES
     ]
     migration_added = [f for f in added if f.startswith(MIGRATION_PREFIX) and f.endswith(".py")]
 

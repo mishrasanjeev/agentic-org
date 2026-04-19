@@ -361,8 +361,6 @@ class TestCompanies:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedules CRUD
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @pytest.mark.skipif(
     not os.getenv("AGENTICORG_DB_URL"),
     reason="report schedules now backed by PostgreSQL",

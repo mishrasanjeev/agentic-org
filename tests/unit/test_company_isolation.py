@@ -198,8 +198,6 @@ class TestChatIsolation:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedule Isolation
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @pytest.mark.skipif(
     not os.getenv("AGENTICORG_DB_URL"),
     reason="report schedules now backed by PostgreSQL",

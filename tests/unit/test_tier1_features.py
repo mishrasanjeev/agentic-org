@@ -737,11 +737,9 @@ class TestNewConnectors:
 # ═══════════════════════════════════════════════════════════════════════════
 #  ABM API
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @pytest.mark.skipif(
     not os.getenv("AGENTICORG_DB_URL"),
-    reason="ABM endpoints require PostgreSQL (set AGENTICORG_DB_URL)",
+    reason="ABM APIs require DB (backed by PostgreSQL)",
 )
 class TestABMApi:
     """Tests for ABM (Account-Based Marketing) API endpoints — requires DB."""

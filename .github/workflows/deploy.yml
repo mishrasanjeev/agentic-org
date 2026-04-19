@@ -28,6 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # PR-D3 follow-up will provision Postgres + Redis services and flip
+    # AGENTICORG_DB_URL on once the affected tests own their async
+    # lifecycle cleanly. Defining those services without setting the
+    # env vars still breaks tests: e.g. /auth/login's rate-limit path
+    # hits real Redis when it's reachable, bypasses the in-memory
+    # fallback that the test patches, and then fails on the real DB
+    # query with InvalidPasswordError. Keeping the job service-less so
+    # unit tests behave exactly as on main.
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
