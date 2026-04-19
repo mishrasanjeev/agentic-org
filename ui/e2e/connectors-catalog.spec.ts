@@ -47,7 +47,7 @@ async function seedSession(page: import("@playwright/test").Page): Promise<void>
   }, E2E_TOKEN);
 }
 
-test.describe("Native-connector catalog", () => {
+test.describe("Native-connector catalog @connector", () => {
   test.beforeEach(async ({ page }) => {
     requireAuth();
     await seedSession(page);

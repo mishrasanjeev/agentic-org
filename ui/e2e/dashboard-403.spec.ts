@@ -82,7 +82,7 @@ test.describe("Dashboard metrics — no hardcoded KPIs", () => {
   });
 });
 
-test.describe("403 Access Denied page", () => {
+test.describe("403 Access Denied page @tenancy", () => {
   test("Non-auditor role hitting /dashboard/audit lands on /dashboard/access-denied", async ({
     page,
   }) => {

@@ -115,9 +115,12 @@ scheduled.
   today. PR-D3 shipped the staging infra (re-exports, migration-check
   allowlist, no-op conftest); the follow-up rewrites these to own their
   async lifecycle + asserts real shapes.
-- [ ] **Critical-path regression tags** (`@auth @tenancy @sdk @mcp
-  @hitl @connector @governance @audit`). Deferred from PR-D4 — once
-  applied, CI enforces that every release has coverage on each tag.
+- [x] **Critical-path regression tags — shipped 2026-04-19 (PR-F3).**
+  `@auth @tenancy @sdk @mcp @hitl @connector @governance @audit` are
+  applied to existing describes (`login-e2e`, `dashboard-403`,
+  `sdk-examples`, `ca-firms` Filing Approvals, `connectors-catalog`,
+  `settings-governance`). `scripts/check_critical_path_tags.py`
+  asserts every tag appears in at least one spec (preflight gate).
 - [ ] **bge-m3 multilingual embeddings upgrade.** bge-small is English+
   only; bge-m3 is 2.3 GB multilingual. Deferred until the pipeline has
   proven itself in CI.
