@@ -26,14 +26,16 @@
   top: 0;
 }
 
-/* Universal visible focus ring so keyboard users always see where they are */
+/* Universal visible focus ring so keyboard users always see where they
+ * are. Uses the --primary token so the ring auto-adapts to theme
+ * changes without needing an explicit .dark override. Per
+ * impeccable/interaction-design.md: focus rings must be visible,
+ * 2–3px thick, offset from element, consistent across all interactive
+ * elements, and at least 3:1 contrast against adjacent surface. */
 :focus-visible {
-  outline: 2px solid hsl(222 47% 11%);
+  outline: 2px solid hsl(var(--primary));
   outline-offset: 2px;
   border-radius: 3px;
-}
-.dark :focus-visible {
-  outline-color: hsl(210 40% 98%);
 }
 
 /* Larger tap targets on touch devices (WCAG 2.5.5 target size) */
