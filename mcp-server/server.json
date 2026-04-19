@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mishrasanjeev/agenticorg",
-  "description": "50+ AI agents, 1000+ integrations, voice, RAG, LLM routing. Finance/HR/Marketing/Ops.",
+  "description": "AgenticOrg AI agents + native connectors + 1000+ Composio integrations, voice, RAG, LLM routing. Finance/HR/Marketing/Ops.",
   "repository": {
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
@@ -18,17 +18,17 @@
     }
   ],
   "tools": [
-    { "name": "list_agents", "description": "List 50+ AI agents across Finance, HR, Marketing, Ops — filter by domain, status, type" },
+    { "name": "list_agents", "description": "List every AgenticOrg AI agent across Finance, HR, Marketing, Ops — filter by domain, status, type" },
     { "name": "run_agent", "description": "Execute any AI agent (ap_processor, payroll_engine, campaign_pilot, support_triage, etc.) with real tool calls" },
     { "name": "get_agent_details", "description": "Get agent config, scopes, tools, confidence floor, HITL conditions, shadow status" },
     { "name": "create_agent", "description": "Create a new AI agent from natural language description or manual config" },
     { "name": "create_agent_from_sop", "description": "Parse an SOP/policy document (PDF/Word) and auto-generate an AI agent" },
-    { "name": "list_connectors", "description": "List 54 native connectors + 1000+ via Composio (SAP, Oracle, Jira, HubSpot, Salesforce, GSTN, Tally, Stripe, Gmail, Slack, Teams)" },
-    { "name": "call_connector_tool", "description": "Call any of 340+ connector tools — create Jira tickets, send emails, query CRM, file GST returns, process payments" },
+    { "name": "list_connectors", "description": "List native connectors + 1000+ via Composio (SAP, Oracle, Jira, HubSpot, Salesforce, GSTN, Tally, Stripe, Gmail, Slack, Teams)" },
+    { "name": "call_connector_tool", "description": "Call any connector tool — create Jira tickets, send emails, query CRM, file GST returns, process payments" },
     { "name": "list_workflows", "description": "List 20+ workflow templates — invoice_to_pay, month_end_close, campaign_launch, incident_response" },
     { "name": "run_workflow", "description": "Trigger a multi-step workflow with parallel agents, HITL approval gates, and adaptive replanning" },
     { "name": "search_knowledge_base", "description": "Search company documents (PDF, Word, Excel) via RAG — agents answer from your uploaded policies and SOPs" },
-    { "name": "list_mcp_tools", "description": "Discover all available MCP tools across 54 native connectors and 1000+ Composio integrations" },
+    { "name": "list_mcp_tools", "description": "Discover all available MCP tools across native connectors and 1000+ Composio integrations" },
     { "name": "get_agent_card", "description": "Get the A2A protocol Agent Card for cross-platform agent discovery" }
   ],
   "environmentVariables": [

@@ -501,7 +501,7 @@ AgenticOrg implements Google's A2A protocol for cross-platform agent discovery a
 - `POST /a2a/tasks` — execute tasks via A2A protocol (JWT or Grantex auth)
 
 ### MCP (Model Context Protocol)
-Full MCP server exposing all 340+ connector tools to any MCP-compatible client:
+Full MCP server exposing the live connector tools to any MCP-compatible client (see /api/v1/product-facts.tool_count):
 - `GET /mcp/tools` — list all available MCP tools (no auth required)
 - `POST /mcp/call` — call any MCP tool (JWT or Grantex auth)
 

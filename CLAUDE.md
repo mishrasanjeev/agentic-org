@@ -101,6 +101,7 @@ This repository is a multi-tenant enterprise AI platform. Optimize for correct, 
 - Do not mark a user "authenticated enough" unless the session can be validated and hydrated safely.
 - Prefer typed API helpers and explicit error states over silent fallbacks.
 - If a frontend change affects auth, routing, billing, or admin workflows, run at least targeted UI tests and a build.
+- **Design quality pass (impeccable skill):** Every UI-touching PR must invoke `/audit`, `/critique`, and `/polish` from the impeccable skill pack against the changed components before push. Record the output summary in the PR description. The skill lives at `~/.claude/skills/` (see `docs/frontend-design-workflow.md` for the playbook). This catches generic LLM aesthetic patterns (overused fonts, gray-on-colored text, nested cards, bounce easing) that Playwright correctness tests don't.
 
 ### Delivery and Release Safety
 
