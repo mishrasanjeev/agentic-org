@@ -103,12 +103,14 @@ enterprise-ready and should be flagged in residual-risk review.
 These are explicit carry-overs, not hidden debt. Each is tracked and
 scheduled.
 
-- [ ] **Coverage floor** (70 % global, 85 % on auth/tenancy/billing/
-  connectors/migrations). Current baseline ~57 %. Not yet enforced in
-  CI because a cut-off below baseline is meaningless and a cut-off at
-  70 % would block every PR until more tests are written. **Plan:**
-  run coverage in CI for two weeks, pick the 10th-percentile value, set
-  `--cov-fail-under` to that value, raise over time.
+- [x] **Coverage floor — shipped 2026-04-19 (PR-F1).** Global baseline
+  is 57 %, pinned to `--cov-fail-under=55` in `pyproject.toml` as a
+  regression guard. Per-module floors (`auth/*` 70 %, `api/v1/auth.py`
+  50 %, `api/v1/governance.py` 35 %, `api/v1/mcp.py` 45 %,
+  `core/database.py` 30 %) enforced by
+  `scripts/check_module_coverage.py` (preflight gate #9). The 70 %
+  global / 85 % critical-module target from Phase 8 is surfaced as a
+  warning next to every module; raise floors as real suite catches up.
 - [ ] **DB-backed unit tests** (5 classes: TestReportScheduleErrors,
   TestReportScheduleIsolation, TestReportSchedules, TestABMApi,
   TestA2ATask.test_get_task_not_found). Gated on `AGENTICORG_DB_URL`
