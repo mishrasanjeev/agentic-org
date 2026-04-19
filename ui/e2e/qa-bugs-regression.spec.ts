@@ -634,15 +634,25 @@ test.describe("ORG-INV-002: Invite Token Issuer", () => {
     const inviteLink = inviteData.invite_link;
     expect(inviteLink).toBeTruthy();
 
-    const inviteToken = new URL(inviteLink).searchParams.get("token");
-    expect(inviteToken).toBeTruthy();
+    // MEDIUM-10: invite URLs now carry an opaque ?code= instead of a raw
+    // JWT ?token=. Legacy ?token= links still work, so accept either.
+    const linkParams = new URL(inviteLink).searchParams;
+    const inviteCode = linkParams.get("code");
+    const inviteToken = linkParams.get("token");
+    expect(inviteCode || inviteToken).toBeTruthy();
 
     // Accept the invite -- should NOT return "Invalid issuer"
+    const acceptPayload: Record<string, string> = {
+      password: "TestPass@2026",
+    };
+    if (inviteCode) acceptPayload.code = inviteCode;
+    else if (inviteToken) acceptPayload.token = inviteToken;
+
     const acceptResp = await page.request.post(
       `${baseURL}/api/v1/org/accept-invite`,
       {
         headers: { "Content-Type": "application/json" },
-        data: { token: inviteToken, password: "TestPass@2026" },
+        data: acceptPayload,
       },
     );
     expect(acceptResp.ok()).toBeTruthy();
