@@ -282,7 +282,7 @@ export default function AgentDetail() {
       </Suspense>
 
       {runDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
           <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
             <h3 className="text-lg font-semibold mb-1">
               Run {agent?.employee_name || agent?.name || "agent"}

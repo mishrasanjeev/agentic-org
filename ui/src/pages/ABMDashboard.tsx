@@ -368,7 +368,7 @@ export default function ABMDashboard() {
 
       {/* Campaign launch modal */}
       {campaignAccountId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
           <div className="bg-background rounded-xl border shadow-xl w-full max-w-md p-6 space-y-4">
             <h2 className="text-lg font-bold">Launch Campaign</h2>
 

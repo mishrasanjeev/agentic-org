@@ -182,7 +182,7 @@ export default function RPAScripts() {
       {/* Run dialog */}
       {dialogScript && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+          className="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center"
           onClick={() => setDialogScript(null)}
         >
           <div

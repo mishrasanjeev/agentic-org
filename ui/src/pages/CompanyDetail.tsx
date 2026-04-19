@@ -1434,7 +1434,7 @@ export default function CompanyDetail() {
       {/* Agent detail modal */}
       {agentDetail && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60"
           onClick={() => setAgentDetail(null)}
         >
           <div
@@ -1470,7 +1470,7 @@ export default function CompanyDetail() {
       {/* Workflow detail modal */}
       {workflowDetail && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60"
           onClick={() => setWorkflowDetail(null)}
         >
           <div
@@ -1507,7 +1507,7 @@ export default function CompanyDetail() {
 
       {/* Rejection reason dialog (replaces window.prompt) */}
       {rejectDialogId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
           <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
             <h3 className="text-lg font-semibold mb-3">Rejection Reason</h3>
             <textarea

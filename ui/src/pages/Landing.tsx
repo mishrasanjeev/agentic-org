@@ -113,7 +113,7 @@ const ROLE_CARDS = [
   },
   {
     role: "CMO",
-    gradient: "from-purple-500 to-pink-600",
+    gradient: "from-blue-600 to-emerald-500",
     pain: "Launch campaigns while you sleep",
     description: "9 marketing agents run Campaign Management, A/B Testing, Email Drip Sequences, ABM with Intent Data (Bombora/G2/TrustRadius), Content Generation, SEO Optimization, CRM Nurturing, Brand Monitoring, and Competitive Intel.",
     agents: ["Campaign Mgmt", "A/B Testing", "Email Drip", "ABM + Intent", "Content Gen", "SEO", "CRM Nurture", "Brand Monitor", "Competitive Intel"],
@@ -190,7 +190,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       role="dialog"
       aria-modal="true"
@@ -357,7 +357,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
               AO
             </div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
@@ -728,8 +728,8 @@ export default function Landing() {
             </FadeIn>
 
             <FadeIn delay={300}>
-              <div className="bg-gradient-to-br from-slate-50 to-purple-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4">
+              <div className="bg-gradient-to-br from-slate-50 to-teal-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-emerald-500 flex items-center justify-center mb-4">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
@@ -1126,7 +1126,7 @@ export default function Landing() {
       <section className="py-24 bg-slate-50 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-3xl border border-slate-200 overflow-hidden p-8 sm:p-12">
+            <div className="bg-gradient-to-br from-blue-50 via-white to-teal-50 rounded-3xl border border-slate-200 overflow-hidden p-8 sm:p-12">
               <div className="grid lg:grid-cols-2 gap-12 items-center">
                 <div>
                   <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
@@ -1246,7 +1246,7 @@ export default function Landing() {
                 role: "CHRO",
                 title: "Virtual HR Team",
                 description: "Screen 500 resumes/hr, day-1 onboarding, zero-error payroll, and EPFO/ESI compliance.",
-                gradient: "from-violet-500 to-purple-600",
+                gradient: "from-blue-500 to-teal-600",
                 icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
                 link: "/solutions/chro",
               },
@@ -1254,7 +1254,7 @@ export default function Landing() {
                 role: "CMO",
                 title: "Virtual Marketing Team",
                 description: "3.2x ROAS, 42% lower CAC, AI content factory, and multi-channel campaign automation.",
-                gradient: "from-pink-500 to-rose-600",
+                gradient: "from-emerald-500 to-teal-600",
                 icon: "M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z",
                 link: "/solutions/cmo",
               },
@@ -1384,7 +1384,7 @@ $ agenticorg sop deploy \\
   }
 }`,
                 link: "https://www.npmjs.com/package/agenticorg-mcp-server",
-                color: "from-purple-500 to-purple-600",
+                color: "from-blue-500 to-blue-600",
               },
             ].map((sdk, i) => (
               <FadeIn key={sdk.title} delay={i * 100}>
@@ -1456,7 +1456,7 @@ $ agenticorg sop deploy \\
                 </div>
                 <Link
                   to="/integration-workflow"
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-purple-600 hover:to-pink-700 transition-all shadow-lg whitespace-nowrap"
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-emerald-600 transition-all shadow-lg whitespace-nowrap"
                 >
                   View Full Workflow
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
@@ -1574,7 +1574,7 @@ $ agenticorg sop deploy \\
             {/* Brand */}
             <div className="lg:col-span-1">
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
                   AO
                 </div>
                 <span className="text-white font-semibold">AgenticOrg</span>
