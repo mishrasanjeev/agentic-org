@@ -241,9 +241,19 @@ export default function Connectors() {
               {filtered.map((connector) => (
                 <div key={connector.id} className="relative">
                   <ConnectorCard connector={connector} />
-                  <Button variant="outline" size="sm" className="absolute bottom-3 right-3" onClick={() => healthCheck(connector.id)}>
-                    Health Check
-                  </Button>
+                  <div className="absolute bottom-3 right-3 flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/dashboard/connectors/${connector.id}`)}
+                      data-testid={`connector-edit-${connector.name || connector.id}`}
+                    >
+                      Edit
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => healthCheck(connector.id)}>
+                      Health Check
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
