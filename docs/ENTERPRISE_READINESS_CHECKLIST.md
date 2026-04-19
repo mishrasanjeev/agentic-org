@@ -129,9 +129,13 @@ scheduled.
   best English). `docs/embeddings-upgrade.md` documents the column-dim
   rotation procedure (ADD vector(N) → re-embed → RENAME + index swap).
   Default stays bge-small for CI friendliness.
-- [ ] **Connector Connect-flow + detail Edit** (PR-B3, original P5
-  slice 3). Deferred — local e2e confirmed the connector list page
-  works end-to-end post-PR-B2; actual OAuth handoff still stubs.
+- [x] **Connector detail + Edit — shipped 2026-04-19 (PR-F5).**
+  Every connector card now renders an Edit button that navigates to
+  `/dashboard/connectors/<id>`; the existing `ConnectorDetail` page
+  exposes auth-type, base URL, rate-limit, and OAuth2 fields.
+  Drift guard: `ui/e2e/connector-edit.spec.ts`. OAuth handoff against
+  specific providers still uses the marketplace Demo labels — the
+  Connect-flow-against-production work remains deferred.
 
 ---
 
