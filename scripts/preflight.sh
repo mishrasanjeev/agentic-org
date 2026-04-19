@@ -166,6 +166,18 @@ ui_build() {
 }
 
 # ---------------------------------------------------------------------------
+# 8. Cross-surface consistency sweep — version agreement, runtime
+# registry counts, no stale public claims, MCP vs LangGraph tool index.
+# ---------------------------------------------------------------------------
+consistency_sweep() {
+  if [[ "$SKIP_CONSISTENCY" == "1" ]]; then
+    echo "[preflight] skipped (SKIP_CONSISTENCY=1)"
+    return 0
+  fi
+  python scripts/consistency_sweep.py
+}
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 run_step "branch safety"          branch_check
@@ -176,6 +188,7 @@ run_step "verify=False scan"      verify_false_scan
 run_step "pytest regression+unit" pytest_check
 run_step "ui tsc"                 ui_check
 run_step "ui build"               ui_build
+run_step "consistency sweep"      consistency_sweep
 
 summary
 echo -e "${GRN}[preflight] all gates passed. Safe to push.${NC}"
