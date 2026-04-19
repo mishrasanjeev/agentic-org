@@ -118,9 +118,12 @@ scheduled.
 - [ ] **Critical-path regression tags** (`@auth @tenancy @sdk @mcp
   @hitl @connector @governance @audit`). Deferred from PR-D4 — once
   applied, CI enforces that every release has coverage on each tag.
-- [ ] **bge-m3 multilingual embeddings upgrade.** bge-small is English+
-  only; bge-m3 is 2.3 GB multilingual. Deferred until the pipeline has
-  proven itself in CI.
+- [x] **bge-m3 multilingual embedding toggle — shipped 2026-04-19
+  (PR-F4).** `AGENTICORG_EMBEDDING_MODEL` flips the model at deploy
+  time (`BAAI/bge-m3` for multilingual, `BAAI/bge-large-en-v1.5` for
+  best English). `docs/embeddings-upgrade.md` documents the column-dim
+  rotation procedure (ADD vector(N) → re-embed → RENAME + index swap).
+  Default stays bge-small for CI friendliness.
 - [ ] **Connector Connect-flow + detail Edit** (PR-B3, original P5
   slice 3). Deferred — local e2e confirmed the connector list page
   works end-to-end post-PR-B2; actual OAuth handoff still stubs.
