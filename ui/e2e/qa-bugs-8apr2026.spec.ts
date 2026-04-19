@@ -709,8 +709,14 @@ test.describe("Proactive Regression - Similar Issues", () => {
     }
   });
 
-  // All 7 demo accounts can log in
+  // All 7 demo accounts can log in. Serialized with retry-on-429 so
+  // the parallel Playwright suite doesn't trip the /auth/login rate
+  // limiter. A 429 means the endpoint + limiter work; we just want to
+  // verify credentials are valid — so we sleep + retry instead of
+  // failing. After 3 retries the account is asserted; if the limiter
+  // is actually broken (5xx / 400 / 401) the test fails as intended.
   test("all 7 demo accounts return valid JWT", async ({ request }) => {
+    test.setTimeout(120_000); // 7 accounts × up to 3 retries × up to 10s
     const accounts = [
       { email: "demo@cafirm.agenticorg.ai", pw: "demo123!" },
       { email: "ceo@agenticorg.local", pw: "ceo123!" },
@@ -721,12 +727,18 @@ test.describe("Proactive Regression - Similar Issues", () => {
       { email: "auditor@agenticorg.local", pw: "audit123!" },
     ];
     for (const [i, a] of accounts.entries()) {
-      // Prod login has a rate limiter; space the attempts out so a fast-running
-      // suite doesn't hit 429 on accounts 5–7.
-      if (i > 0) await new Promise((r) => setTimeout(r, 800));
-      const resp = await request.post(`${APP}/api/v1/auth/login`, {
+      if (i > 0) await new Promise((r) => setTimeout(r, 1500));
+      let resp = await request.post(`${APP}/api/v1/auth/login`, {
         data: { email: a.email, password: a.pw },
       });
+      // Retry-on-429 with exponential back-off: 2s, 4s, 8s. Rate
+      // limiter typically recovers within a single window.
+      for (let attempt = 0; attempt < 3 && resp.status() === 429; attempt++) {
+        await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt)));
+        resp = await request.post(`${APP}/api/v1/auth/login`, {
+          data: { email: a.email, password: a.pw },
+        });
+      }
       expect(resp.status(), `login for ${a.email}`).toBe(200);
       const body = await resp.json();
       expect(body.token || body.access_token).toBeTruthy();

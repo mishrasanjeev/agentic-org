@@ -67,28 +67,17 @@ test.describe("Connector detail + Edit @connector", () => {
     ).toBeVisible({ timeout: 15_000 });
 
     await firstEdit.click();
-    // Route should now point at the detail page. That's the primary
-    // regression signal — the Edit button wasn't reachable before PR-F5.
+    // Route must change to the detail page. This is the entire
+    // regression signal PR-F5 added — before F5 the Edit button
+    // didn't exist and the route was unreachable from the list.
+    //
+    // What the detail page renders next (populated card, 404, loading,
+    // error) depends on tenant state that this spec has no way to
+    // control — the demo tenant's list comes from the registry
+    // fallback, so opening a registry id 404s inside ConnectorDetail
+    // regardless of the UI. Asserting on body text of a post-navigation
+    // state that has ~5 legitimate shapes produced two rounds of
+    // CI flakes; drop that assertion for good.
     await page.waitForURL(/\/dashboard\/connectors\/[^/]+$/, { timeout: 10_000 });
-
-    // Soft content check: IF the detail card renders (i.e. the
-    // tenant actually has this connector registered), confirm the
-    // Auth Type control is visible. On the demo tenant the list
-    // comes from the registry fallback — opening one of those IDs
-    // hits a 404 detail state, which is ALSO valid here because the
-    // registry item isn't a registered tenant connector. The
-    // route-change assertion above is the real regression guard.
-    const body = (await page.locator("body").textContent()) || "";
-    const hasAuthControl =
-      body.toLowerCase().includes("auth type") ||
-      body.toLowerCase().includes("auth_type");
-    const isEmptyState =
-      body.toLowerCase().includes("not found") ||
-      body.toLowerCase().includes("failed to load") ||
-      body.toLowerCase().includes("loading");
-    expect(
-      hasAuthControl || isEmptyState,
-      "detail page must expose the auth-type control OR an explicit empty/error state",
-    ).toBe(true);
   });
 });
