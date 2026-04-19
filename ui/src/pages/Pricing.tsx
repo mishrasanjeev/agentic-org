@@ -78,7 +78,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
             <p className="text-slate-600">We will contact you within 24 hours.</p>
             <button
               onClick={onClose}
-              className="mt-6 bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all"
+              className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all"
             >
               Close
             </button>
@@ -105,7 +105,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all disabled:opacity-50"
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all disabled:opacity-50"
               >
                 {submitting ? "Sending..." : "Request Demo"}
               </button>
@@ -332,7 +332,7 @@ export default function Pricing() {
             </Link>
             <button
               onClick={() => setShowDemo(true)}
-              className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+              className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
             >
               Book a Demo
             </button>
@@ -372,7 +372,7 @@ export default function Pricing() {
               {/* Popular badge */}
               {tier.highlight && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-blue-500 to-violet-600 text-white text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider">
+                  <span className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider">
                     Most Popular
                   </span>
                 </div>
@@ -393,7 +393,7 @@ export default function Pricing() {
                   onClick={() => setShowDemo(true)}
                   className={`w-full py-3 rounded-lg text-sm font-semibold transition-all mb-8 ${
                     tier.highlight
-                      ? "bg-gradient-to-r from-blue-500 to-violet-600 text-white hover:from-blue-600 hover:to-violet-700 shadow-lg shadow-blue-500/25"
+                      ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/25"
                       : "bg-slate-900 text-white hover:bg-slate-800"
                   }`}
                 >
@@ -404,7 +404,7 @@ export default function Pricing() {
                   to={tier.ctaLink}
                   className={`w-full py-3 rounded-lg text-sm font-semibold transition-all mb-8 block text-center ${
                     tier.highlight
-                      ? "bg-gradient-to-r from-blue-500 to-violet-600 text-white hover:from-blue-600 hover:to-violet-700 shadow-lg shadow-blue-500/25"
+                      ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/25"
                       : "bg-slate-900 text-white hover:bg-slate-800"
                   }`}
                 >
@@ -502,7 +502,7 @@ export default function Pricing() {
             </Link>
             <button
               onClick={() => setShowDemo(true)}
-              className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+              className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
             >
               Book a Demo
             </button>

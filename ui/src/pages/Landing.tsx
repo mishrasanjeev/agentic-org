@@ -105,7 +105,7 @@ const ROLE_CARDS = [
   },
   {
     role: "CHRO",
-    gradient: "from-blue-500 to-indigo-600",
+    gradient: "from-blue-500 to-cyan-500",
     pain: "Onboard in hours, not weeks",
     description: "6 HR agents manage Onboarding, Payroll (847 employees), Talent Acquisition, Performance Reviews, L&D, and Offboarding.",
     agents: ["Onboarding", "Payroll", "Talent Acquisition", "Performance", "L&D", "Offboarding"],
@@ -186,7 +186,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
   };
 
   const fieldClass =
-    "w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all";
+    "w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200 ease-out-quart";
 
   return (
     <div
@@ -219,7 +219,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
             <p className="text-slate-600">We'll contact you within 24 hours.</p>
             <button
               onClick={onClose}
-              className="mt-6 inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all"
+              className="mt-6 inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 ease-out-quart"
             >
               Close
             </button>
@@ -304,7 +304,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {submitting ? "Submitting..." : "Request Demo"}
               </button>
@@ -378,13 +378,13 @@ export default function Landing() {
           <div className="flex items-center gap-3">
             <Link
               to="/login"
-              className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-out-quart"
             >
               Sign In
             </Link>
             <button
               onClick={() => setShowDemo(true)}
-              className="hidden sm:inline-flex bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+              className="hidden sm:inline-flex bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
             >
               Book a Demo
             </button>
@@ -409,7 +409,7 @@ export default function Landing() {
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <a href="#developers" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Developers</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
-            <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
+            <button onClick={() => { closeMobile(); setShowDemo(true); }} className="block w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-medium text-center">Book a Demo</button>
           </div>
         )}
       </nav>
@@ -461,13 +461,13 @@ export default function Landing() {
             <div className="mt-8 flex flex-col sm:flex-row items-start gap-4">
               <Link
                 to="/signup"
-                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
                 Start Free →
               </Link>
               <a
                 href="#demo"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all duration-200 ease-out-quart"
               >
                 Watch Demo
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -505,7 +505,7 @@ export default function Landing() {
           >
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
               {/* Version badge */}
-              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse" data-testid="landing-version-pill">
+              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse" data-testid="landing-version-pill">
                 <span className="w-1.5 h-1.5 bg-white rounded-full" />
                 {versionText || "v…"}
               </span>
@@ -572,7 +572,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {PAIN_STATS.map((s, i) => (
               <FadeIn key={s.value} delay={i * 150}>
-                <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center hover:shadow-lg transition-all duration-300">
+                <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center hover:shadow-lg transition-all duration-300 ease-out-quart">
                   <div className={`text-4xl sm:text-5xl font-extrabold ${s.color} mb-3`}>{s.value}</div>
                   <p className="text-slate-600">{s.label}</p>
                 </div>
@@ -680,7 +680,7 @@ export default function Landing() {
             {/* Agent Creator */}
             <FadeIn delay={450}>
               <div className="space-y-4">
-                <div className="rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-gradient-to-br from-blue-600 to-violet-700 p-8 flex flex-col items-center justify-center min-h-[200px]">
+                <div className="rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-gradient-to-br from-blue-600 to-cyan-600 p-8 flex flex-col items-center justify-center min-h-[200px]">
                   <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-4">
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -700,7 +700,7 @@ export default function Landing() {
           {/* Org Chart Hierarchy — 3-card row */}
           <div className="grid md:grid-cols-3 gap-8 mt-16">
             <FadeIn delay={0}>
-              <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+              <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 ease-out-quart h-full">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-4">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -714,7 +714,7 @@ export default function Landing() {
             </FadeIn>
 
             <FadeIn delay={150}>
-              <div className="bg-gradient-to-br from-slate-50 to-emerald-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+              <div className="bg-gradient-to-br from-slate-50 to-emerald-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 ease-out-quart h-full">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-4">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -728,7 +728,7 @@ export default function Landing() {
             </FadeIn>
 
             <FadeIn delay={300}>
-              <div className="bg-gradient-to-br from-slate-50 to-teal-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 h-full">
+              <div className="bg-gradient-to-br from-slate-50 to-teal-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 ease-out-quart h-full">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-emerald-500 flex items-center justify-center mb-4">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -844,7 +844,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 gap-8">
             {ROLE_CARDS.map((card, i) => (
               <FadeIn key={card.role} delay={i * 100}>
-                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 h-full">
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 ease-out-quart h-full">
                   <div className={`h-2 bg-gradient-to-r ${card.gradient}`} />
                   <div className="p-8">
                     <div className="flex items-center gap-3 mb-4">
@@ -912,7 +912,7 @@ export default function Landing() {
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
                   <div className="text-center">
-                    <div className="relative z-10 w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg mx-auto mb-6 shadow-lg shadow-blue-500/25">
+                    <div className="relative z-10 w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-lg mx-auto mb-6 shadow-lg shadow-blue-500/25">
                       {step.num}
                     </div>
                     <h3 className="text-lg font-bold text-slate-900 mb-3">{step.title}</h3>
@@ -985,13 +985,13 @@ export default function Landing() {
             <div className="text-center mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 to="/playground"
-                className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
                 Try It Yourself — Playground
               </Link>
               <Link
                 to="/login"
-                className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
+                className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all duration-200 ease-out-quart"
               >
                 Login to Full Dashboard
               </Link>
@@ -1055,7 +1055,7 @@ export default function Landing() {
               },
             ].map((f, i) => (
               <FadeIn key={f.title} delay={i * 100}>
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all duration-300 h-full">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all duration-300 ease-out-quart h-full">
                   <div className="mb-4">{f.icon}</div>
                   <h3 className="font-bold text-slate-900 mb-2">{f.title}</h3>
                   <p className="text-sm text-slate-500 leading-relaxed">{f.desc}</p>
@@ -1169,13 +1169,13 @@ export default function Landing() {
                   <div className="flex flex-col sm:flex-row gap-3">
                     <Link
                       to="/solutions/ca-firms"
-                      className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                      className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
                     >
                       Learn More
                     </Link>
                     <Link
                       to="/login?demo=true"
-                      className="inline-flex items-center justify-center border border-slate-300 text-slate-700 px-6 py-3 rounded-xl text-sm font-semibold hover:bg-slate-100 transition-all"
+                      className="inline-flex items-center justify-center border border-slate-300 text-slate-700 px-6 py-3 rounded-xl text-sm font-semibold hover:bg-slate-100 transition-all duration-200 ease-out-quart"
                     >
                       Try Demo
                     </Link>
@@ -1184,7 +1184,7 @@ export default function Landing() {
                 <div className="hidden lg:block">
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 space-y-4">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">CA</div>
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">CA</div>
                       <div>
                         <p className="font-semibold text-slate-900">CA Firm Dashboard</p>
                         <p className="text-xs text-slate-500">7 clients &middot; 3 pending filings &middot; Health: 92%</p>
@@ -1290,7 +1290,7 @@ export default function Landing() {
                   </div>
                   <h3 className="text-base font-bold text-slate-900 mb-2">{card.title}</h3>
                   <p className="text-sm text-slate-600 leading-relaxed mb-4">{card.description}</p>
-                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 group-hover:gap-2 transition-all">
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 group-hover:gap-2 transition-all duration-200 ease-out-quart">
                     Learn More
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1472,7 +1472,7 @@ $ agenticorg sop deploy \\
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link
                   to="/signup"
-                  className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                  className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
                 >
                   Get API Key — Free
                 </Link>
@@ -1480,7 +1480,7 @@ $ agenticorg sop deploy \\
                   href="https://github.com/mishrasanjeev/agentic-org"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
+                  className="inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all duration-200 ease-out-quart"
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" /></svg>
                   View on GitHub
@@ -1550,13 +1550,13 @@ $ agenticorg sop deploy \\
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 to="/signup"
-                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
+                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
                 Start Free →
               </Link>
               <button
                 onClick={() => setShowDemo(true)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all duration-200 ease-out-quart"
               >
                 Book a Demo
               </button>
