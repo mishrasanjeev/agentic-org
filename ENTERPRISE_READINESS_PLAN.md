@@ -347,7 +347,25 @@ Status: not started
 
 Every completed item is dated and links to the PR.
 
-_(empty — updates appended below as work lands)_
+- 2026-04-18 — PR-A #199 SDK canonical AgentRunResult + MCP agents-as-tools model (P2 + P3).
+- 2026-04-18 — PR-B1 #200 Governance persistence (PII masking / data region / audit retention) (P4).
+- 2026-04-18 — PR-B2 #202 Connector catalog sourced from backend (`/connectors/registry`) (P5 slice 1).
+- 2026-04-18 — PR-D1 #204 16 pytest skip-violations removed in `tests/synthetic_data/` (P8 slice).
+- 2026-04-18 — PR-C1 #203 Real explainability from AgentTaskResult trace; mock removed (P7.1).
+- 2026-04-18 — PR-C2 #205 Real Dashboard KPIs + explicit `/access-denied` 403 page (P6).
+- 2026-04-18 — PR-D2 #206 4 dep-missing skipif guards deleted (P8 slice).
+- 2026-04-18 — PR-C3 #207 Backend-driven workflow template catalog (P7.2).
+- 2026-04-18 — PR-D3 #208 CI infra for DB-backed tests: model re-exports, migration-check allowlist, conftest schema bootstrap (P8 infra).
+- 2026-04-18 — PR-B4 #209 Native pgvector embeddings (`BAAI/bge-small-en-v1.5` via fastembed); `/knowledge/search` fallback no longer returns `[]`.
+- 2026-04-18 — PR-D4 #210 Grantex status wired to `/integrations/status`; marketplace Connect button labelled Demo (P1.2 finish).
+- 2026-04-19 — PR-E Consistency sweep script + readiness checklist + 5 evaluation walkthroughs (P9). Sweep added to preflight.
+
+Residual risks (known-deferred, tracked in `docs/ENTERPRISE_READINESS_CHECKLIST.md`):
+  - Coverage floor (70%/85%): baseline ~57%, follow-up enforces after CI-measured baseline.
+  - DB-backed unit tests (5 classes): staged in PR-D3, follow-up rewrites for async-lifecycle ownership.
+  - Critical-path regression tags (@auth/@tenancy/@sdk/@mcp/@hitl/@connector/@governance/@audit).
+  - bge-m3 multilingual embeddings upgrade (bge-small ships first).
+  - PR-B3 Connector Connect-flow + detail Edit (deferred; refile if main CI regresses).
 
 ---
 

@@ -346,7 +346,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — 50+ pre-built agents across 6 domains, 54 native connectors + 1000+ via Composio (340+ native tools), CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
+        <meta name="description" content="AI agents that reason AND act — pre-built agents across 6 domains, native connectors + 1000+ via Composio, CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 

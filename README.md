@@ -91,7 +91,7 @@ App Dashboard
 FastAPI Backend
     ├── Agent Registry (36 agents) → Smart LLM Router (RouteLLM)
     │       ↓ tool_calls                    ↑ synthesis
-    │   Tool Gateway → 1000+ Integrations (Composio) + 54 Native Connectors (340+ tools)
+    │   Tool Gateway → 1000+ Integrations (Composio) + Native Connectors (see /api/v1/product-facts for counts)
     │       ├── Jira (11 tools) ← verified, creates real tickets
     │       ├── HubSpot (13 tools) ← verified, reads real CRM
     │       ├── GitHub (9 tools) ← verified, reads real repos
@@ -111,7 +111,7 @@ FastAPI Backend
     ├── RouteLLM → Smart model routing → 3-tier cost optimization
     ├── Presidio → Pre-LLM PII redaction → Aadhaar/PAN/GSTIN scrubbing
     ├── Composio → 1000+ tool marketplace → OAuth bridge
-    ├── MCP Server → 340+ tools exposed to Claude/Cursor/ChatGPT
+    ├── MCP Server → native tools exposed to Claude/Cursor/ChatGPT (see /api/v1/product-facts.tool_count)
     ├── API Key Manager → ao_sk_ keys → SDK/CLI/MCP auth
     ├── SOP Parser → Upload SOPs → Deploy as agents
     └── Sales Agent → Gmail API → Email Sequences
@@ -406,7 +406,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | DELETE | /org/api-keys/{id} | Admin | Revoke API key |
 | GET | /a2a/agent-card | No | A2A agent discovery card |
 | POST | /a2a/tasks | JWT/Grantex | Execute A2A task |
-| GET | /mcp/tools | No | List MCP tools (340+ tools) |
+| GET | /mcp/tools | No | List MCP tools (see /api/v1/product-facts.tool_count) |
 | POST | /mcp/call | JWT/Grantex | Call MCP tool |
 | POST | /sop/upload | JWT | Upload and parse SOP document |
 | POST | /sop/parse-text | JWT | Parse SOP text |
@@ -518,7 +518,7 @@ OAuth2-based authorization with manifest-based scope enforcement (Grantex SDK v0
 - Custom manifests: place JSON/YAML files in `GRANTEX_MANIFESTS_DIR` for custom connectors
 - **Environment variables**: `GRANTEX_API_KEY` (required), `GRANTEX_BASE_URL` (optional), `GRANTEX_MANIFESTS_DIR` (optional)
 
-### v4.0.0 Environment Variables
+### Environment Variables
 ```
 COMPOSIO_API_KEY              — 1000+ tool integrations (optional)
 AGENTICORG_LLM_ROUTING        — auto | tier1 | tier2 | tier3 | disabled
@@ -616,7 +616,7 @@ agenticorg/
 │   ├── tool_gateway/       # Scope enforcement, rate limiting, PII masking, audit
 │   ├── gmail_agent.py      # Gmail API integration (inbox monitor, send replies)
 │   └── email.py            # SMTP email sending
-├── connectors/             # 54 enterprise connectors (340+ tools)
+├── connectors/             # Native enterprise connectors (counts: /api/v1/product-facts)
 │   ├── finance/            # Oracle, SAP, GSTN, Stripe, Tally, Banking AA, NetSuite... (11)
 │   ├── hr/                 # Darwinbox, Okta, Greenhouse, EPFO, Zoom... (8)
 │   ├── marketing/          # Salesforce, HubSpot, Google Ads, GA4, MoEngage, Bombora, G2, TrustRadius... (19)
@@ -658,7 +658,7 @@ agenticorg/
 | Landing page | https://agenticorg.ai | 39 URLs in sitemap |
 | Blog (8 articles) | /blog | Invoice processing, RPA vs AI, reconciliation, HITL, no-code, month-end close, ROI measurement, CFO story |
 | Resources (26 pages) | /resources | 7 topic clusters, FAQ schemas, internal linking |
-| llms.txt | /llms.txt | v4.0.0 product summary for AI crawlers |
+| llms.txt | /llms.txt | Product summary for AI crawlers (version from pyproject) |
 | llms-full.txt | /llms-full.txt | 18.7KB complete documentation |
 | JSON-LD | 7 schemas | Organization, Product, FAQ, Breadcrumb, SoftwareCompany, WebSite, SoftwareApplication |
 | AI crawlers | robots.txt | GPTBot, ClaudeBot, PerplexityBot, ChatGPT-User, OAI-SearchBot, cohere-ai, Applebot-Extended |
