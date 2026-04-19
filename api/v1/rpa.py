@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
@@ -105,8 +105,17 @@ _BUILTIN_SCRIPTS: dict[str, dict[str, Any]] = {
     },
 }
 
-# In-memory execution history (per-process; Redis-backed in production)
-_execution_history: list[dict[str, Any]] = []
+# In-memory per-tenant execution history (per-process; Redis-backed in production).
+# SECURITY_AUDIT-2026-04-19 HIGH-08: pre-fix this was a single global list
+# shared across tenants, so any caller could read every tenant's history.
+_execution_history: dict[str, list[dict[str, Any]]] = {}
+
+
+# Generic portal RPA has no domain allowlist. It can be pointed at any
+# URL, login with arbitrary credentials, and navigate to any target —
+# SECURITY_AUDIT-2026-04-19 HIGH-09 flagged this as SSRF-like server-side
+# automation. Gate it behind tenant admin until a real allowlist lands.
+_ADMIN_ONLY_SCRIPTS: frozenset[str] = frozenset({"generic_portal"})
 
 
 # ── Schemas ──────────────────────────────────────────────────────────
@@ -177,11 +186,15 @@ async def list_history(
     limit: int = 50,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[RPAExecutionOut]:
-    """Return recent RPA execution history."""
-    # Filter by tenant (future: when executions are DB-backed)
+    """Return the caller's tenant RPA execution history.
+
+    HIGH-08 fix: the store is keyed by tenant and this endpoint will only
+    ever return entries tagged with the caller's authenticated tenant_id.
+    """
+    tenant_history = _execution_history.get(str(tenant_id), [])
     return [
         RPAExecutionOut(**h)
-        for h in reversed(_execution_history[-limit:])
+        for h in reversed(tenant_history[-limit:])
     ]
 
 
@@ -189,18 +202,40 @@ async def list_history(
 async def run_script(
     script_id: str,
     body: RPARunRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ) -> RPAExecutionOut:
     """Execute an RPA script and return the result.
 
     The script runs in a headless Chromium browser via Playwright.
     Requires ``playwright`` to be installed on the server.
+
+    HIGH-09: scripts in ``_ADMIN_ONLY_SCRIPTS`` (currently just
+    ``generic_portal``) require tenant admin because they can be
+    pointed at arbitrary URLs and are therefore a server-side
+    automation/SSRF surface.
     """
     # Resolve script key
     script_key = script_id.replace("builtin-", "") if script_id.startswith("builtin-") else script_id
 
     if script_key not in _BUILTIN_SCRIPTS:
         raise HTTPException(404, f"RPA script '{script_key}' not found")
+
+    if script_key in _ADMIN_ONLY_SCRIPTS:
+        scopes = getattr(request.state, "scopes", []) or []
+        claims = getattr(request.state, "claims", {}) or {}
+        is_admin = (
+            "agenticorg:admin" in scopes
+            or any(s.startswith("agenticorg:admin") for s in scopes)
+            or claims.get("role") == "admin"
+        )
+        if not is_admin:
+            raise HTTPException(
+                403,
+                f"RPA script '{script_key}' requires tenant admin — "
+                "it can be pointed at arbitrary URLs and is gated to "
+                "privileged operators.",
+            )
 
     meta = _BUILTIN_SCRIPTS[script_key]
     execution_id = str(uuid.uuid4())
@@ -240,7 +275,7 @@ async def run_script(
             tenant_id=tenant_id,
         )
 
-    _execution_history.append(execution.model_dump())
+    _execution_history.setdefault(str(tenant_id), []).append(execution.model_dump())
 
     logger.info(
         "rpa_script_executed",

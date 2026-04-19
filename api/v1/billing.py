@@ -14,7 +14,9 @@ Plural flow:
 
 from __future__ import annotations
 
+import os
 from typing import Any
+from urllib.parse import urlparse
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -26,6 +28,59 @@ from api.deps import get_current_tenant
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
+
+
+def _allowed_redirect_hosts() -> set[str]:
+    """First-party domains that may receive billing redirects.
+
+    MEDIUM-11: caller-supplied success_url/cancel_url/return_url used to
+    pass through to Stripe unchecked, enabling open-redirect phishing
+    opportunities after billing actions.
+
+    The allowlist starts from ``AGENTICORG_FRONTEND_URL`` and can be
+    extended via ``AGENTICORG_BILLING_REDIRECT_ALLOWLIST`` (comma-
+    separated hostnames).
+    """
+    hosts: set[str] = set()
+    fe_url = os.getenv("AGENTICORG_FRONTEND_URL", "").strip()
+    if fe_url:
+        host = urlparse(fe_url).hostname
+        if host:
+            hosts.add(host.lower())
+    extra = os.getenv("AGENTICORG_BILLING_REDIRECT_ALLOWLIST", "").strip()
+    if extra:
+        for item in extra.split(","):
+            item = item.strip().lower()
+            if item:
+                hosts.add(item)
+    return hosts
+
+
+def _validate_redirect_url(url: str, field: str) -> str:
+    """Return ``url`` if it points at an allowlisted first-party host.
+
+    Empty strings are allowed — callers may intentionally omit the
+    redirect to let the gateway pick its default.
+    """
+    if not url:
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(400, f"{field} must be http(s): got '{parsed.scheme}'")
+    host = (parsed.hostname or "").lower()
+    allowed = _allowed_redirect_hosts()
+    if not allowed:
+        raise HTTPException(
+            500,
+            "Billing redirect allowlist is empty. Set AGENTICORG_FRONTEND_URL "
+            "or AGENTICORG_BILLING_REDIRECT_ALLOWLIST.",
+        )
+    if host not in allowed:
+        raise HTTPException(
+            400,
+            f"{field} host '{host}' is not in the billing redirect allowlist.",
+        )
+    return url
 
 
 # ── Request / Response models ────────────────────────────────────────
@@ -128,12 +183,14 @@ async def subscribe_stripe(
     """Create a Stripe Checkout Session for subscription."""
     from core.billing.stripe_client import create_checkout_session
 
+    success_url = _validate_redirect_url(body.success_url, "success_url")
+    cancel_url = _validate_redirect_url(body.cancel_url, "cancel_url")
     try:
         result = create_checkout_session(
             tenant_id=tenant_id,
             plan=body.plan,
-            success_url=body.success_url,
-            cancel_url=body.cancel_url,
+            success_url=success_url,
+            cancel_url=cancel_url,
             customer_email=body.customer_email,
             customer_name=body.customer_name,
         )
@@ -335,10 +392,11 @@ async def create_portal(
     """Create a Stripe Customer Portal session for self-service billing."""
     from core.billing.stripe_client import create_portal_session
 
+    return_url = _validate_redirect_url(body.return_url, "return_url")
     try:
         url = create_portal_session(
             tenant_id=tenant_id,
-            return_url=body.return_url,
+            return_url=return_url,
         )
         return {"portal_url": url}
     except ValueError as exc:
