@@ -45,7 +45,13 @@ npm view agenticorg-sdk version
 # expect the version from sdk-ts/package.json
 ```
 
-## MCP server (npm)
+## MCP server (npm + MCP registry)
+
+**Two separate publishes.** An npm push does NOT propagate to the
+MCP registry. They are independent stores, one for the artifact, one
+for the discovery metadata. Both steps are required.
+
+### Step 1 — publish the npm tarball
 
 ```bash
 cd mcp-server
@@ -53,9 +59,35 @@ npm run build
 npm publish --access public
 ```
 
-MCP registry (`mcp-server/server.json`) points at the npm package —
-its `packages[].version` field must stay in lockstep with
-`package.json` `version`. Bump both in the same PR.
+### Step 2 — publish to registry.modelcontextprotocol.io
+
+Install `mcp-publisher` CLI once per machine. PowerShell:
+
+```powershell
+$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
+Invoke-WebRequest -Uri "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_windows_$arch.tar.gz" -OutFile mcp-publisher.tar.gz
+tar xf mcp-publisher.tar.gz mcp-publisher.exe
+```
+
+Then from `mcp-server/`:
+
+```bash
+mcp-publisher validate       # catch schema failures (desc <=100 chars, etc.)
+mcp-publisher login github   # device-flow OAuth, needs the GitHub account
+                             # that owns the `io.github.<user>/*` namespace
+mcp-publisher publish        # pushes server.json to the registry
+```
+
+The registry validates `description` length (<=100 chars), `version`,
+`packages[].version`, and the `$schema` URL. `scripts/consistency_sweep.py`
+catches the description-length constraint locally so a preflight fails
+instead of a `mcp-publisher validate` later.
+
+### Lockstep rule
+
+`mcp-server/package.json.version`, `server.json.version`, and
+`server.json.packages[0].version` must always move together. The
+sweep fails if any drifts.
 
 ## Version policy
 
