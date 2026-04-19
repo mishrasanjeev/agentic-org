@@ -447,22 +447,53 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
   const [correcting, setCorrecting] = useState(false);
   const [correctionText, setCorrectionText] = useState("");
 
-  // Load the latest run explanation when expanded
+  // Load the latest run explanation when expanded. Real trace data
+  // from GET /agents/{id}/explanation/latest (PR-C1) — replaces the
+  // hardcoded-bullet mock that shipped pre-Enterprise-Readiness.
+  const [explanationHasRun, setExplanationHasRun] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (!expanded) return;
+    let cancelled = false;
+
+    // Keep the feedback fetch so the thumbs-up/down controls still have a
+    // run_id to attach to.
     api.get(`/agents/${agentId}/feedback?limit=1`).then(({ data }) => {
+      if (cancelled) return;
       const items = Array.isArray(data) ? data : data?.items || [];
       if (items.length > 0) {
         setRunResult({ task_id: items[0].run_id, status: "completed" });
       }
     }).catch(() => {});
-    // Load mock explanation until real API is wired
-    setExplanation({
-      bullets: ["Agent processed the request using configured tools", "Confidence was above threshold", "No HITL trigger conditions met"],
-      confidence: 0.92,
-      tools_cited: ["get_contact", "query"],
-      readability_grade: 7.5,
-    });
+
+    api
+      .get(`/agents/${agentId}/explanation/latest`)
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (!data?.has_run) {
+          setExplanationHasRun(false);
+          setExplanation(null);
+          return;
+        }
+        setExplanationHasRun(true);
+        setExplanation({
+          bullets: Array.isArray(data.bullets) ? data.bullets : [],
+          confidence: typeof data.confidence === "number" ? data.confidence : undefined,
+          tools_cited: Array.isArray(data.tools_cited) ? data.tools_cited : [],
+          // readability_grade is deliberately not returned — we won't
+          // fabricate it client-side.
+          readability_grade: undefined,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setExplanationHasRun(null);
+        setExplanation(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [expanded, agentId]);
 
   async function sendFeedback(type: string) {
@@ -495,8 +526,13 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
       </button>
 
       {expanded && (
-        <div className="mt-3 bg-muted/30 rounded-lg p-4 space-y-3">
-          {explanation && explanation.bullets ? (
+        <div className="mt-3 bg-muted/30 rounded-lg p-4 space-y-3" data-testid="explainer-body">
+          {explanationHasRun === false ? (
+            <p className="text-sm text-muted-foreground" data-testid="explainer-empty">
+              No explanation yet. Run the agent at least once to generate a real
+              trace.
+            </p>
+          ) : explanation && explanation.bullets ? (
             <>
               <ul className="list-disc list-inside text-sm space-y-1">
                 {explanation.bullets.map((b, i) => (
