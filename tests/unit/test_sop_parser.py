@@ -48,7 +48,7 @@ class TestDocumentExtraction:
             os.unlink(f.name)
             assert isinstance(text, str)
         except ImportError:
-            pytest.skip("pypdf not installed")
+            raise  # pypdf is a declared dependency; missing import is a packaging error
 
 
 class TestSOPParserPrompt:

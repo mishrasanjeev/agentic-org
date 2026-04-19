@@ -28,8 +28,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         with open(path) as fh:
             return yaml.safe_load(fh) or {}
     except ImportError:
-        pytest.skip("PyYAML not installed")
-        return {}  # unreachable but keeps type checker happy
+        raise  # pyyaml is a declared dependency; missing import is a packaging error
 
 
 # ============================================================================

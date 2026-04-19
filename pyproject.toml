@@ -96,6 +96,12 @@ dev = [
     "mypy>=1.20.1",
     "bandit>=1.9.4",
     "pre-commit>=4.5.1",
+    # Needed by tests that PR-D2 un-skipped (test_pii_redaction,
+    # test_v490_reqs). Kept out of the default `project.dependencies`
+    # so the wheel stays lean for downstream SDK consumers.
+    "presidio-analyzer>=2.2.0",
+    "presidio-anonymizer>=2.2.0",
+    "composio-core>=0.7.21",
 ]
 
 [tool.ruff]
