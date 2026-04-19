@@ -160,6 +160,46 @@ def check_stale_public_claims() -> Check:
     return c
 
 
+def check_mcp_version_lockstep() -> Check:
+    """mcp-server/package.json.version MUST equal server.json.version
+    AND server.json.packages[0].version. These three moving apart
+    silently creates npm/MCP-registry drift that consumers only find
+    at install time.
+    """
+    import json as _json
+
+    c = Check("mcp-server version lockstep")
+    pkg_path = ROOT / "mcp-server" / "package.json"
+    srv_path = ROOT / "mcp-server" / "server.json"
+    if not pkg_path.exists() or not srv_path.exists():
+        c.ok = False
+        c.detail = "mcp-server/package.json or server.json missing"
+        return c
+
+    pkg = _json.loads(pkg_path.read_text(encoding="utf-8"))
+    srv = _json.loads(srv_path.read_text(encoding="utf-8"))
+    pkg_version = str(pkg.get("version", ""))
+    srv_version = str(srv.get("version", ""))
+    srv_pkg_version = ""
+    for entry in srv.get("packages", []):
+        if entry.get("registryType") == "npm":
+            srv_pkg_version = str(entry.get("version", ""))
+            break
+
+    c.subcheck("package.json.version", bool(pkg_version), pkg_version or "missing")
+    c.subcheck(
+        "server.json.version matches",
+        srv_version == pkg_version,
+        f"{srv_version} (expected {pkg_version})",
+    )
+    c.subcheck(
+        "server.json.packages[npm].version matches",
+        srv_pkg_version == pkg_version,
+        f"{srv_pkg_version} (expected {pkg_version})",
+    )
+    return c
+
+
 def check_mcp_tool_count() -> Check:
     c = Check("MCP tool list vs LangGraph tool-index")
     try:
@@ -191,6 +231,7 @@ def main() -> int:
         check_version_agreement(),
         check_product_facts_alignment(),
         check_stale_public_claims(),
+        check_mcp_version_lockstep(),
         check_mcp_tool_count(),
     ]
     print("=" * 60)
