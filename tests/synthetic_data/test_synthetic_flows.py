@@ -214,7 +214,7 @@ class TestAPInvoiceProcessing:
 
         last_output: dict = {}
         last_trace: list = []
-        for attempt in range(3):
+        for _attempt in range(3):
             result = _run_agent(headers, agent_id, "process_invoice", {
                 "invoice": inv["ocr_extracted"],
                 "po_data": inv["po_data"],
