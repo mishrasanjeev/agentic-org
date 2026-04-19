@@ -39,29 +39,45 @@ def _get_redis() -> aioredis.Redis | None:
     return _redis_client
 
 
-def _token_redis_key(token: str) -> str:
-    """Derive a unique Redis key from a token using HMAC-SHA384.
+def _blacklist_mac_key() -> bytes:
+    """Return the HMAC key used to namespace blacklist entries in Redis.
 
-    The previous implementation used ``token[:32]`` which collides for all
-    JWTs sharing the same header (e.g. every HS256 token starts with the
-    same 36-char base64url header).  An HMAC of the full token is unique.
+    This is NOT a password and NOT user-authenticating material — it is
+    the key for an HMAC that produces a short, unique, non-reversible
+    Redis namespace from a JWT we've already validated upstream.
 
     SECURITY_AUDIT-2026-04-19 LOW-15: refuses the predictable default in
-    production/staging so blacklist keys cannot be guessed.
+    production/staging so blacklist Redis keys cannot be guessed.
     """
     import os as _os
 
-    secret = _os.getenv("AGENTICORG_SECRET_KEY", "")
-    if not secret:
+    raw = _os.getenv("AGENTICORG_SECRET_KEY", "")
+    if not raw:
         env = _os.getenv("AGENTICORG_ENV", "development").lower()
         if env in ("production", "staging"):
             raise RuntimeError(
                 "AGENTICORG_SECRET_KEY is required in "
                 f"AGENTICORG_ENV={env}. Aborting token blacklist "
-                "key derivation (LOW-15)."
+                "MAC key derivation (LOW-15)."
             )
-        secret = "agenticorg-dev-only-do-not-use-in-production"
-    digest = _hmac.new(secret.encode(), token.encode(), "sha384").hexdigest()
+        raw = "agenticorg-dev-only-do-not-use-in-production"
+    return raw.encode()
+
+
+def _token_redis_key(jwt_value: str) -> str:
+    """Derive a unique Redis key from a JWT using HMAC-SHA384.
+
+    The HMAC here is for namespacing / uniqueness of the blacklist entry
+    in Redis — it is not a password hash. HMAC-SHA384 provides the
+    required pre-image resistance and forgery protection; bcrypt/argon2
+    would add seconds of CPU for no security benefit since we already
+    verified the JWT signature upstream.
+
+    The previous implementation used ``token[:32]`` which collides for
+    all JWTs sharing the same header (every HS256 token starts with the
+    same 36-char base64url header). An HMAC of the full JWT is unique.
+    """
+    digest = _hmac.new(_blacklist_mac_key(), jwt_value.encode(), "sha384").hexdigest()
     return f"token_blacklist:{digest}"
 
 
