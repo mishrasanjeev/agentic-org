@@ -2,12 +2,17 @@
 /**
  * AgenticOrg MCP Server
  *
- * Exposes AgenticOrg AI agents and tools via the Model Context Protocol (MCP).
- * Any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, etc.) can:
- *   - Discover and run AI agents (AP Processor, Recon, Payroll, etc.)
+ * Exposes AgenticOrg AI agents as MCP tools. Any MCP-compatible client
+ * (ChatGPT, Claude Desktop, Cursor, etc.) can:
+ *   - List and run AI agents (AP Processor, Recon, Payroll, etc.)
  *   - Parse SOPs and deploy new agents
- *   - List available agent skills via A2A
- *   - Call any of the 340+ connector tools directly
+ *   - List agent skills via A2A
+ *   - List the native tool catalogue for informational use
+ *
+ * Connector tools are NOT exposed as direct MCP tools. Agents call
+ * connector tools internally via the AgenticOrg runtime — see
+ * docs/mcp-product-model.md. Live counts (agents, connectors, tools,
+ * version) come from `GET /api/v1/product-facts`.
  *
  * Usage:
  *   AGENTICORG_API_KEY=your-key npx agenticorg-mcp-server
@@ -61,10 +66,23 @@ async function apiPost(path: string, body: unknown): Promise<unknown> {
 
 // ── MCP Server ──────────────────────────────────────────────────────────
 
+// Version is read from package.json at runtime so the advertised
+// server.version can't drift from the published package identifier.
+// The test suite asserts parity on every CI run.
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
+// __dirname is available under CommonJS output (tsconfig module=Node16).
+const pkg = JSON.parse(
+  readFileSync(resolve(dirname(__filename), "..", "package.json"), "utf-8"),
+) as { version: string };
+
 const server = new McpServer({
   name: "agenticorg",
-  version: "0.1.0",
-  description: "AgenticOrg — run enterprise AI agents, 50+ agents, 1000+ integrations, 54 native connectors, 340+ tools",
+  version: pkg.version,
+  description:
+    "AgenticOrg MCP server — run AI agents as MCP tools. Live counts from " +
+    "GET /api/v1/product-facts (agents, connectors, tools, version).",
 });
 
 // ── Tool: list_agents ───────────────────────────────────────────────────

@@ -393,22 +393,22 @@ Severity: [Critical/High/Medium/Low]
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| L1 | Hero stats show updated numbers | Open https://agenticorg.ai. Look at the hero section stats | Stats show "50+ agents", "1000+ connectors", "340+ tools" | | |
-| L2 | Role cards show updated agent counts | Scroll to the role/domain cards section | Cards show updated counts: 10 finance agents, 9 marketing agents, and correct counts for other domains | | |
+| L1 | Hero stats match product-facts endpoint | Open https://agenticorg.ai. Note the hero `agents`, `connectors`, `tools` numbers. Then `curl https://app.agenticorg.ai/api/v1/product-facts`. | Hero stats equal `agent_count` / `connector_count` / `tool_count` from the endpoint. Hardcoded numbers on the page are a drift bug — open a fix. | | |
+| L2 | Role cards show live domain agent counts | Scroll to the role/domain cards section | Each domain card's count equals the number of registered agents for that domain in `GET /api/v1/agents?domain=<d>`. | | |
 | L3 | CA Firm case study section visible | Scroll down the landing page to the section before the Final CTA | A CA Firm case study section is visible with heading, summary, and call-to-action link | | |
 | L4 | Case study link works | Click "Read the full case study" link in the CA Firm section | Navigates to /blog/ca-firm-ai-agent-end-to-end. Blog post loads with full content | | |
 | L5 | Blog nav link works | Click "Blog" in the top navigation bar | Navigates to /blog. Page shows 8+ blog posts listed with titles, dates, and category badges | | |
 | L6 | New blog posts load correctly | On /blog, click each of the 4 newest blog posts | Each post loads fully with title, content, images (if any), and proper formatting. No 404 errors | | |
-| L7 | Pricing page shows 1000+ connectors | Navigate to /pricing | Pricing page mentions "1000+ connectors (54 native + Composio)" in the feature list or comparison table | | |
-| L8 | Meta description matches | View page source of landing page. Search for meta description tag | Meta description contains "50+ pre-built agents" | | |
+| L7 | Pricing page mentions Composio + native | Navigate to /pricing | Pricing page mentions Composio integrations alongside the native connector count. The native-connector number must match `connector_count` from `/product-facts`. | | |
+| L8 | Meta description stays factual | View page source of landing page. Search for meta description tag | Meta description contains the product's current agent count (phrased as "pre-built agents" plus a number that agrees with `/product-facts`). No hardcoded "50+" style marketing placeholders. | | |
 
 ### SECTION M: SEO & Indexing
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
 | M1 | Sitemap includes new blog URLs | Open https://agenticorg.ai/sitemap.xml | Sitemap contains URLs for all 4 new blog posts. Each URL has a valid <lastmod> date | | |
-| M2 | llms.txt shows updated numbers | Open https://agenticorg.ai/llms.txt | Content mentions "50+ agents", "1000+ connectors", and "340+ tools" | | |
-| M3 | llms-full.txt shows updated numbers | Open https://agenticorg.ai/llms-full.txt | Content mentions "50+ agents", "1000+ connectors", and "340+ tools" | | |
+| M2 | llms.txt counts match product-facts | Open https://agenticorg.ai/llms.txt and `curl https://app.agenticorg.ai/api/v1/product-facts` | Every count referenced in `llms.txt` (agents, connectors, tools) matches the `/product-facts` endpoint. `scripts/generate_llms_txt.py` should be the only writer — no hand-edited numbers. | | |
+| M3 | llms-full.txt counts match product-facts | Open https://agenticorg.ai/llms-full.txt and compare to `/product-facts` | Same rule as M2 for the full variant. | | |
 | M4 | robots.txt allows /blog/* | Open https://agenticorg.ai/robots.txt | robots.txt contains Allow rule for /blog/* or does not disallow /blog/ paths | | |
 | M5 | New blog posts have proper meta tags | Open each of the 4 new blog posts. View page source | Each post has a unique <title> tag and a <meta name="description"> tag with relevant content | | |
 
