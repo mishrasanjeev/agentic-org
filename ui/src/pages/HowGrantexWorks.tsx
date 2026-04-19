@@ -206,7 +206,7 @@ export default function HowGrantexWorks() {
         <nav className="fixed top-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur border-b border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <Link to="/" className="text-white font-bold text-lg tracking-tight flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-black">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-xs font-black">
                 A
               </div>
               AgenticOrg
@@ -217,7 +217,7 @@ export default function HowGrantexWorks() {
               </Link>
               <Link
                 to="/signup"
-                className="text-sm bg-gradient-to-r from-blue-500 to-violet-600 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-600 hover:to-violet-700 transition-all"
+                className="text-sm bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-600 hover:to-cyan-600 transition-all"
               >
                 Get Started
               </Link>
@@ -275,7 +275,7 @@ export default function HowGrantexWorks() {
               <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                 <a
                   href="#how-it-works"
-                  className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 text-sm"
+                  className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 text-sm"
                 >
                   See How It Works
                 </a>
@@ -292,7 +292,7 @@ export default function HowGrantexWorks() {
             <FadeIn delay={500}>
               <div className="mt-16 flex justify-center">
                 <div className="relative">
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 flex items-center justify-center animate-pulse">
+                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500/20 to-teal-500/20 border border-blue-500/30 flex items-center justify-center animate-pulse">
                     <ShieldIcon className="w-12 h-12 text-blue-400" />
                   </div>
                   <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
@@ -816,7 +816,7 @@ export default function HowGrantexWorks() {
                   value: "<1ms",
                   label: "Per Check",
                   sublabel: "Offline JWT verification",
-                  gradient: "from-purple-500 to-purple-600",
+                  gradient: "from-blue-500 to-blue-600",
                 },
                 {
                   value: "4-Level",
@@ -874,7 +874,7 @@ export default function HowGrantexWorks() {
               <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                 <Link
                   to="/signup"
-                  className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-xl font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 text-sm"
+                  className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 text-sm"
                 >
                   Get Started Free
                 </Link>
@@ -893,7 +893,7 @@ export default function HowGrantexWorks() {
         <footer className="bg-slate-900 border-t border-slate-800 py-8">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-slate-400 text-sm">
-              <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-[10px] font-black text-white">
+              <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-[10px] font-black text-white">
                 A
               </div>
               AgenticOrg

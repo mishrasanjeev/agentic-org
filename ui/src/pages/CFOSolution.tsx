@@ -81,7 +81,7 @@ const FEATURES = [
     title: "Bank Reconciliation",
     description: "99.7% auto-match rate via Account Aggregator integration. Flag stale items, identify duplicates, and escalate unmatched entries — all without touching a spreadsheet.",
     icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
-    gradient: "from-purple-500 to-pink-600",
+    gradient: "from-blue-600 to-emerald-500",
   },
   {
     title: "Tax Compliance",
@@ -93,7 +93,7 @@ const FEATURES = [
     title: "Month-End Close",
     description: "Reduce close from 72 hours to 4 hours. Automated 7-step workflow: trial balance, accruals, reconciliation, adjustments, review, CFO sign-off, and reporting.",
     icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
-    gradient: "from-indigo-500 to-violet-600",
+    gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
@@ -178,7 +178,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
             <p className="text-slate-600">We will contact you within 24 hours to set up your finance automation trial.</p>
-            <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all">
+            <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all">
               Close
             </button>
           </div>
@@ -211,7 +211,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
                 </select>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed">
+              <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed">
                 {submitting ? "Submitting..." : "Book a Demo"}
               </button>
             </form>
@@ -240,7 +240,7 @@ export default function CFOSolution() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
@@ -250,7 +250,7 @@ export default function CFOSolution() {
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
-            <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25">
+            <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
               Start Free Trial
             </button>
           </div>
@@ -570,7 +570,7 @@ export default function CFOSolution() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
                 <span className="text-white font-semibold">AgenticOrg</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">AI-Powered Virtual Finance Team for CFOs.</p>

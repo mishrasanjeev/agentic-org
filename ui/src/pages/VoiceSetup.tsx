@@ -236,7 +236,7 @@ export default function VoiceSetup() {
                       : "hover:bg-muted"
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg mb-2">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-lg mb-2">
                     {p.name[0]}
                   </div>
                   <p className="font-medium text-sm">{p.name}</p>

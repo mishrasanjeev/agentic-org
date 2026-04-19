@@ -293,7 +293,7 @@ export default function ABMDashboard() {
         <div className="flex-1 min-w-0">
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-purple-600 animate-pulse" />
+              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-teal-500 animate-pulse" />
             </div>
           ) : accounts.length === 0 ? (
             <div className="text-center py-20 text-muted-foreground">

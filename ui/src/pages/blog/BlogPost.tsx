@@ -73,7 +73,7 @@ export default function BlogPost() {
           </h1>
 
           <div className="mt-6 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-sm font-bold">
               A
             </div>
             <div>
@@ -121,11 +121,11 @@ export default function BlogPost() {
         </div>
 
         {/* CTA */}
-        <div className="mt-12 bg-gradient-to-r from-blue-50 to-violet-50 rounded-2xl p-8 text-center border border-blue-100">
+        <div className="mt-12 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 text-center border border-blue-100">
           <h3 className="text-xl font-bold text-slate-900 mb-2">Ready to try it?</h3>
           <p className="text-sm text-slate-600 mb-6">Deploy AI virtual employees in minutes. No credit card required.</p>
           <div className="flex justify-center gap-4">
-            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25">
+            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
               Start Free
             </Link>
             <Link to="/playground" className="border border-slate-300 text-slate-700 px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-white transition-all">

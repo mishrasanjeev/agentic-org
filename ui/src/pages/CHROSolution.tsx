@@ -63,7 +63,7 @@ const FEATURES = [
     title: "Recruitment Engine",
     description: "Screen 500 resumes per hour with AI scoring. Auto-shortlist candidates, schedule interviews, and generate offer letters. Reduce time-to-hire from 45 to 12 days.",
     icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
-    gradient: "from-violet-500 to-purple-600",
+    gradient: "from-blue-500 to-teal-600",
   },
   {
     title: "Day-1 Onboarding",
@@ -93,7 +93,7 @@ const FEATURES = [
     title: "Statutory Compliance",
     description: "Auto-file EPFO, ESI, and Professional Tax returns. Track compliance deadlines, generate Form 12BB, and maintain audit-ready records for all statutory obligations.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
-    gradient: "from-indigo-500 to-violet-600",
+    gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
@@ -178,7 +178,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
             <p className="text-slate-600">We will contact you within 24 hours to set up your HR automation trial.</p>
-            <button onClick={onClose} className="mt-6 bg-gradient-to-r from-violet-500 to-purple-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-violet-600 hover:to-purple-700 transition-all">
+            <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-teal-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-teal-700 transition-all">
               Close
             </button>
           </div>
@@ -211,7 +211,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
                 </select>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-violet-500 to-purple-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-violet-500/25 disabled:opacity-60 disabled:cursor-not-allowed">
+              <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-teal-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25 disabled:opacity-60 disabled:cursor-not-allowed">
                 {submitting ? "Submitting..." : "Book a Demo"}
               </button>
             </form>
@@ -240,7 +240,7 @@ export default function CHROSolution() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
@@ -250,7 +250,7 @@ export default function CHROSolution() {
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
-            <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-violet-500 to-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-violet-500/25">
+            <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-teal-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25">
               Start Free Trial
             </button>
           </div>
@@ -275,7 +275,7 @@ export default function CHROSolution() {
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
               AI-Powered{" "}
-              <span className="bg-gradient-to-r from-violet-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400 bg-clip-text text-transparent">
                 Virtual HR Team
               </span>
             </h1>
@@ -287,7 +287,7 @@ export default function CHROSolution() {
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
-                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-violet-500 to-purple-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-violet-500/25"
+                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-teal-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25"
               >
                 Start Free Trial
               </button>
@@ -433,7 +433,7 @@ export default function CHROSolution() {
       <section className="py-24 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <div className="bg-gradient-to-br from-violet-50 via-white to-purple-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
+            <div className="bg-gradient-to-br from-cyan-50 via-white to-teal-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
                 CHRO Suite &mdash; Enterprise Ready
               </div>
@@ -463,7 +463,7 @@ export default function CHROSolution() {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button
                   onClick={() => setShowDemo(true)}
-                  className="inline-flex items-center justify-center bg-gradient-to-r from-violet-500 to-purple-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-violet-500/25"
+                  className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-teal-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25"
                 >
                   Start Free Trial
                 </button>
@@ -484,7 +484,7 @@ export default function CHROSolution() {
       <section className="py-24 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <div className="bg-gradient-to-br from-violet-50 via-white to-purple-50 rounded-3xl border border-slate-200 overflow-hidden">
+            <div className="bg-gradient-to-br from-cyan-50 via-white to-teal-50 rounded-3xl border border-slate-200 overflow-hidden">
               <div className="p-8 sm:p-12">
                 <div className="text-center mb-12">
                   <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
@@ -500,7 +500,7 @@ export default function CHROSolution() {
                   {TRUST_LOGOS.map((c, i) => (
                     <FadeIn key={c.name} delay={i * 75}>
                       <div className="flex items-center gap-4 bg-white/80 rounded-xl px-5 py-4 border border-slate-100 hover:shadow-md transition-all duration-300">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-teal-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
                           {c.abbr}
                         </div>
                         <div>
@@ -529,7 +529,7 @@ export default function CHROSolution() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
-                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-violet-500 to-purple-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-violet-500/25"
+                className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-teal-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25"
               >
                 Start Free Trial
               </button>
@@ -550,7 +550,7 @@ export default function CHROSolution() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
                 <span className="text-white font-semibold">AgenticOrg</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">AI-Powered Virtual HR Team for CHROs.</p>

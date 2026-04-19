@@ -63,7 +63,7 @@ export default function ResourcePage() {
       <nav className="bg-white border-b px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">AO</div>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-xs">AO</div>
             <span className="font-semibold text-slate-900">AgenticOrg</span>
           </Link>
           <div className="flex gap-4 text-sm">
@@ -142,10 +142,10 @@ export default function ResourcePage() {
         </div>
 
         {/* CTA */}
-        <div className="mt-10 bg-gradient-to-r from-blue-50 to-violet-50 rounded-2xl p-8 text-center border border-blue-100">
+        <div className="mt-10 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 text-center border border-blue-100">
           <h3 className="text-xl font-bold text-slate-900 mb-2">Ready to try it?</h3>
           <p className="text-sm text-slate-600 mb-4">Deploy AI virtual employees in minutes.</p>
-          <Link to={page.cta.link} className="inline-block bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25">
+          <Link to={page.cta.link} className="inline-block bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
             {page.cta.text}
           </Link>
         </div>

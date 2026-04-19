@@ -35,7 +35,7 @@ const ICON_COLORS: Record<string, string> = {
   legal: "from-amber-500 to-orange-600",
   insurance: "from-blue-500 to-cyan-600",
   manufacturing: "from-green-500 to-emerald-600",
-  "ca-firm": "from-violet-500 to-fuchsia-600",
+  "ca-firm": "from-cyan-500 to-fuchsia-600",
 };
 
 const ICON_LABELS: Record<string, string> = {
