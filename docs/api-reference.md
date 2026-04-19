@@ -2040,3 +2040,149 @@ Triggers the daily compliance alert job. Normally run by Celery Beat at 6 AM IST
   "run_at": "2026-04-06T00:30:00Z"
 }
 ```
+
+---
+
+## Enterprise Readiness endpoints (PR-A → PR-F)
+
+These endpoints landed during the Enterprise Readiness program
+(2026-04-18 → 2026-04-19). Each is linked to the PR that introduced it.
+
+### Product facts — single source of truth for counts
+
+```
+GET /api/v1/product-facts
+```
+
+Returns every public numeric claim in one document. The UI, README,
+Landing, Pricing, and llms.txt all derive their numbers from this
+endpoint — no hardcoded counts anywhere.
+
+**Auth:** None (exempt — consumed by the landing page).
+
+**Response:** `200 OK`
+
+```json
+{
+  "version": "4.8.0",
+  "connector_count": 53,
+  "agent_count": 26,
+  "tool_count": 315
+}
+```
+
+Source: PR #196 (PR-A / Phase 1.1).
+
+### Governance config — per-tenant compliance controls
+
+```
+GET  /api/v1/governance/config
+PUT  /api/v1/governance/config
+```
+
+Persists `pii_masking`, `data_region` (IN | EU | US), and
+`audit_retention_years` (1-10). Every `PUT` writes an audit row.
+DB-level `CHECK` constraints reject invalid regions / retention.
+
+**Auth:** `agenticorg:admin` scope (admin-gated).
+
+**Response shape:**
+
+```json
+{
+  "pii_masking": true,
+  "data_region": "IN",
+  "audit_retention_years": 7,
+  "updated_by": "<user-uuid>",
+  "updated_at": "2026-04-18T16:00:00Z"
+}
+```
+
+Source: PR #200 (PR-B1 / Phase 4).
+
+### Integrations status — deploy-time config flags
+
+```
+GET /api/v1/integrations/status
+```
+
+Boolean report of which third-party integrations are configured at the
+deployment level. Never returns secret values — only env presence.
+Drives the Grantex status badge on the Settings page.
+
+**Response:**
+
+```json
+{
+  "grantex_configured": true,
+  "composio_configured": false,
+  "ragflow_configured": false
+}
+```
+
+Source: PR #210 (PR-D4).
+
+### Agent explanation — real run-trace bullets
+
+```
+GET /api/v1/agents/{id}/explanation/latest
+```
+
+Returns explanation bullets derived from the most recent
+`AgentTaskResult` trace — tool names that fired, confidence, and HITL
+gate outcomes. Empty state (`Run the agent to see the explanation`)
+when no run has happened yet; no mock copy.
+
+Source: PR #203 (PR-C1 / Phase 7.1).
+
+### Workflow templates — backend catalog
+
+```
+GET /api/v1/workflows/templates
+```
+
+The Workflow Create page consumes this endpoint instead of embedding a
+hardcoded list. Add a template by editing `core/workflows/template_catalog.py`
+— no UI change required.
+
+Source: PR #207 (PR-C3 / Phase 7.2).
+
+### Knowledge search — native pgvector fallback
+
+```
+POST /api/v1/knowledge/search
+```
+
+**Request:**
+
+```json
+{ "query": "GSTR-3B due date", "top_k": 3 }
+```
+
+**Retrieval order:**
+
+1. RAGFlow (when `RAGFLOW_API_URL` is configured)
+2. Native pgvector ANN using BGE embeddings
+3. Keyword ILIKE fallback
+
+Never returns an empty list against seeded content. Default embedding
+model is `BAAI/bge-small-en-v1.5` (384-dim, English+). Operators can
+swap to bge-m3 (multilingual, 1024-dim) via `AGENTICORG_EMBEDDING_MODEL`
+— see `docs/embeddings-upgrade.md` for the column-dim rotation
+procedure.
+
+**Response:**
+
+```json
+{
+  "results": [
+    {
+      "chunk_text": "GSTR-3B -- Summary Return: due 20th of the following month...",
+      "score": 0.87,
+      "document_name": "GST Return Filing -- GSTR-1, GSTR-3B, GSTR-9 Guidelines"
+    }
+  ]
+}
+```
+
+Source: PR #209 (PR-B4).
