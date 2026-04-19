@@ -133,23 +133,37 @@ def check_product_facts_alignment() -> Check:
 
 
 def check_stale_public_claims() -> Check:
-    """Drift guard — the specific strings P1 eliminated shouldn't return."""
+    """Drift guard — the specific strings P1 eliminated shouldn't return.
+
+    Scans every surface that a customer, AI crawler, MCP client, or
+    package-registry consumer actually reads. If a surface is missing
+    here it won't catch drift — add it on the next incident.
+    """
     c = Check("no stale hardcoded public claims")
     targets = {
         "54 native connectors",
         "57 native connectors",
+        "50+ AI agents",
         "340+ tools",
+        "340+ connector tools",
+        "340+ native tools",
         "v4.0.0",
         "v4.3.0",
         "v4.6.0",
     }
-    # Only scan public surfaces — NOT docs/ (historical) or
-    # ENTERPRISE_READINESS_PLAN.md (which references the bad strings).
+    # Scan every externally-visible surface: README, in-app UI,
+    # AI-crawler-consumed llms.txt/llms-full.txt, MCP registry manifest
+    # + npm package metadata + its README.
     scan = [
         ROOT / "README.md",
         ROOT / "ui" / "src" / "pages" / "Landing.tsx",
         ROOT / "ui" / "src" / "pages" / "Pricing.tsx",
         ROOT / "ui" / "index.html",
+        ROOT / "ui" / "public" / "llms.txt",
+        ROOT / "ui" / "public" / "llms-full.txt",
+        ROOT / "mcp-server" / "server.json",
+        ROOT / "mcp-server" / "package.json",
+        ROOT / "mcp-server" / "README.md",
     ]
     for path in scan:
         if not path.exists():
