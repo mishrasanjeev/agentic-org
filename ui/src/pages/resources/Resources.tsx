@@ -72,7 +72,7 @@ export default function Resources() {
         <div className="mt-12 text-center">
           <h2 className="text-xl font-bold text-slate-900 mb-4">Ready to deploy AI virtual employees?</h2>
           <div className="flex justify-center gap-4">
-            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">Start Free</Link>
+            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">Start Free</Link>
             <Link to="/playground" className="border text-slate-700 px-6 py-2.5 rounded-lg text-sm font-semibold">Try Playground</Link>
           </div>
         </div>

@@ -63,10 +63,10 @@ const DOMAIN_COLORS: Record<string, string> = {
 
 const DOMAIN_BG: Record<string, string> = {
   finance: "from-blue-500 to-blue-600",
-  hr: "from-purple-500 to-purple-600",
+  hr: "from-blue-500 to-blue-600",
   marketing: "from-amber-500 to-amber-600",
   ops: "from-emerald-500 to-emerald-600",
-  backoffice: "from-indigo-500 to-indigo-600",
+  backoffice: "from-cyan-500 to-teal-600",
 };
 
 const GRADE_COLORS: Record<string, string> = {
@@ -295,7 +295,7 @@ export default function Evals() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-base">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-base">
                 AO
               </div>
               <div>
@@ -563,7 +563,7 @@ export default function Evals() {
       <footer className="bg-slate-900 text-slate-400 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-[10px]">
+            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-[10px]">
               AO
             </div>
             <span>AgenticOrg Evaluation Matrix</span>

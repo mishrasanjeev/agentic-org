@@ -87,13 +87,13 @@ const FEATURES = [
     title: "Data Governance",
     description: "Classify sensitive data, enforce access controls, and monitor data flows. Auto-detect PII leaks, ensure DPDPA compliance, and maintain data lineage for audit trails.",
     icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4",
-    gradient: "from-purple-500 to-pink-600",
+    gradient: "from-blue-600 to-emerald-500",
   },
   {
     title: "Fraud Detection",
     description: "AI monitors transactions, expense reports, and vendor payments for anomalies. Flag suspicious patterns, generate investigation reports, and escalate with full evidence.",
     icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
-    gradient: "from-indigo-500 to-violet-600",
+    gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
@@ -240,7 +240,7 @@ export default function CBOSolution() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
@@ -550,7 +550,7 @@ export default function CBOSolution() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
                 <span className="text-white font-semibold">AgenticOrg</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">AI-Powered Virtual Business Ops Team for CBOs.</p>

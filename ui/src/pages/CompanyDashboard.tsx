@@ -38,7 +38,7 @@ const INDUSTRY_COLORS: Record<string, string> = {
   Manufacturing: "from-blue-500 to-cyan-600",
   Export: "from-emerald-500 to-teal-600",
   Healthcare: "from-red-500 to-pink-600",
-  "IT Services": "from-purple-500 to-indigo-600",
+  "IT Services": "from-blue-500 to-cyan-600",
   Textile: "from-amber-500 to-orange-600",
   Logistics: "from-slate-500 to-slate-600",
 };

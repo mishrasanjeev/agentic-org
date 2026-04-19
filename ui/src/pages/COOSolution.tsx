@@ -81,7 +81,7 @@ const FEATURES = [
     title: "Contract Intelligence",
     description: "AI reads and extracts key terms from contracts. Auto-flag risky clauses, track obligations, and surface renewal dates. No more missed deadlines or unfavorable auto-renewals.",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    gradient: "from-purple-500 to-pink-600",
+    gradient: "from-blue-600 to-emerald-500",
   },
   {
     title: "Compliance Guard",
@@ -93,7 +93,7 @@ const FEATURES = [
     title: "Facilities & Assets",
     description: "Track physical assets, maintenance schedules, and workspace utilization. AI predicts maintenance needs, optimizes space allocation, and manages work orders automatically.",
     icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
-    gradient: "from-indigo-500 to-violet-600",
+    gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
@@ -240,7 +240,7 @@ export default function COOSolution() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
@@ -275,7 +275,7 @@ export default function COOSolution() {
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
               AI-Powered{" "}
-              <span className="bg-gradient-to-r from-cyan-400 via-blue-300 to-indigo-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-cyan-400 via-blue-300 to-teal-400 bg-clip-text text-transparent">
                 Virtual Operations Team
               </span>
             </h1>
@@ -550,7 +550,7 @@ export default function COOSolution() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
                 <span className="text-white font-semibold">AgenticOrg</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">AI-Powered Virtual Operations Team for COOs.</p>

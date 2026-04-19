@@ -144,7 +144,7 @@ function DemoForm({ ctaText, slug }: { ctaText: string; slug: string }) {
       </div>
       <input type="tel" placeholder="Phone (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputClass} />
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-violet-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60">
+      <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60">
         {submitting ? "Submitting..." : ctaText}
       </button>
       <p className="text-xs text-slate-400 text-center">No credit card required. Free to start.</p>
@@ -169,7 +169,7 @@ export default function AdsLanding() {
       <nav className="bg-white border-b px-4 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">AO</div>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-xs">AO</div>
             <span className="font-semibold text-slate-900">AgenticOrg</span>
           </Link>
           <Link to="/playground" className="text-sm text-blue-600 font-medium hover:underline">Try Playground</Link>
@@ -252,7 +252,7 @@ export default function AdsLanding() {
           <h2 className="text-2xl font-bold text-white mb-4">Ready to see it work?</h2>
           <p className="text-slate-400 mb-6">Free to start. No credit card. Deploy in 5 minutes.</p>
           <div className="flex justify-center gap-4">
-            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3 rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg">Start Free</Link>
+            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3 rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg">Start Free</Link>
             <Link to="/playground" className="border border-slate-600 text-slate-300 px-8 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-all">Try Playground</Link>
           </div>
         </div>

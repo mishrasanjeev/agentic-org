@@ -93,7 +93,7 @@ const FEATURES = [
     title: "Brand Monitoring",
     description: "Track brand mentions, sentiment, and share of voice across social media, news, and review sites. Get instant alerts on negative sentiment and competitive moves.",
     icon: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
-    gradient: "from-indigo-500 to-violet-600",
+    gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
@@ -240,7 +240,7 @@ export default function CMOSolution() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
             <span className="text-white font-semibold text-lg">AgenticOrg</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
@@ -402,7 +402,7 @@ export default function CMOSolution() {
               <div className="space-y-3">
                 {[
                   { channel: "Google Ads", roas: "4.1x", width: "82%", color: "from-blue-500 to-cyan-500" },
-                  { channel: "Meta Ads", roas: "3.6x", width: "72%", color: "from-indigo-500 to-blue-500" },
+                  { channel: "Meta Ads", roas: "3.6x", width: "72%", color: "from-cyan-500 to-blue-500" },
                   { channel: "Email", roas: "8.2x", width: "100%", color: "from-emerald-500 to-teal-500" },
                   { channel: "SEO", roas: "5.4x", width: "66%", color: "from-amber-500 to-orange-500" },
                 ].map((ch) => (
@@ -578,7 +578,7 @@ export default function CMOSolution() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">AO</div>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">AO</div>
                 <span className="text-white font-semibold">AgenticOrg</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">AI-Powered Virtual Marketing Team for CMOs.</p>

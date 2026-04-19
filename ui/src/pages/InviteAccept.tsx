@@ -76,7 +76,7 @@ export default function InviteAccept() {
           {/* Branding */}
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold tracking-tight">
-              <span className="bg-gradient-to-r from-blue-400 to-violet-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-500 bg-clip-text text-transparent">
                 AgenticOrg
               </span>
             </h1>
