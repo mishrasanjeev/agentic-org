@@ -80,3 +80,31 @@
     --border: 217 33% 17%;
   }
 }
+
+/* ── Typographic polish (impeccable pass 4) ───────────────────────────
+ * Geist ships high-quality OpenType features; turn on tabular numerals
+ * for any element with .tabular-nums so KPI cards, aging tables, and
+ * counters don't visually jitter when values change. This is a CSS
+ * shortcut Tailwind already provides as `tabular-nums`; we re-declare
+ * here so custom numeric elements without the utility class pick it up
+ * automatically (e.g. `<code>`, `<pre>`, numeric cells inside
+ * `data-numeric` wrappers).
+ */
+.tabular-nums,
+code,
+pre,
+[data-numeric] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+}
+
+/* Horizontal scroll containers get smooth snap. Opt-in via
+ * `.snap-scroller` so the existing vertical scroll is untouched. */
+.snap-scroller {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.snap-scroller > * {
+  scroll-snap-align: start;
+}

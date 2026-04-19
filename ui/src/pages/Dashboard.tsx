@@ -173,7 +173,7 @@ export default function Dashboard() {
               <CardTitle className="text-sm text-muted-foreground">{m.label}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className={`text-3xl font-bold ${m.color}`}>{m.value}</p>
+              <p className={`text-3xl font-bold tabular-nums ${m.color}`}>{m.value}</p>
               {m.subtitle && (
                 <p className="text-xs text-muted-foreground mt-1">{m.subtitle}</p>
               )}
