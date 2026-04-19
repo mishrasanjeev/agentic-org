@@ -13,7 +13,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import patch
@@ -356,126 +355,10 @@ class TestCompaniesErrors:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="report schedules now backed by PostgreSQL",
-)
-class TestReportScheduleErrors:
-    """Report Schedule CRUD error paths."""
-
-    def _create_schedule(self, client, report_type="cfo_daily"):
-        return client.post(
-            "/api/v1/report-schedules",
-            json={
-                "report_type": report_type,
-                "cron_expression": "daily",
-                "delivery_channels": [
-                    {"type": "email", "target": "cfo@example.com"}
-                ],
-                "format": "pdf",
-                "is_active": True,
-                "company_id": "default",
-            },
-        )
-
-    def test_create_schedule_missing_report_type_returns_422(self, auth_client):
-        resp = auth_client.post(
-            "/api/v1/report-schedules",
-            json={
-                "cron_expression": "daily",
-                "delivery_channels": [],
-            },
-        )
-        assert resp.status_code == 422
-
-    def test_create_schedule_null_report_type_returns_422(self, auth_client):
-        resp = auth_client.post(
-            "/api/v1/report-schedules",
-            json={"report_type": None},
-        )
-        assert resp.status_code == 422
-
-    def test_create_schedule_empty_body_returns_422(self, auth_client):
-        resp = auth_client.post("/api/v1/report-schedules", json={})
-        assert resp.status_code == 422
-
-    def test_create_schedule_without_auth_returns_401(self, noauth_client):
-        resp = noauth_client.post(
-            "/api/v1/report-schedules",
-            json={"report_type": "cfo_daily"},
-        )
-        assert resp.status_code == 401
-
-    def test_get_schedule_not_found_returns_404(self, auth_client):
-        auth_client.get("/api/v1/report-schedules/nonexistent-id")
-        # list endpoint is GET /report-schedules (no /{id} GET), so 404/405
-        # The API only has list, not get-by-id — verify list works
-        list_resp = auth_client.get("/api/v1/report-schedules")
-        assert list_resp.status_code == 200
-
-    def test_delete_nonexistent_schedule_returns_404(self, auth_client):
-        resp = auth_client.delete("/api/v1/report-schedules/nonexistent-id")
-        assert resp.status_code == 404
-
-    def test_update_nonexistent_schedule_returns_404(self, auth_client):
-        resp = auth_client.patch(
-            "/api/v1/report-schedules/nonexistent-id",
-            json={"is_active": False},
-        )
-        assert resp.status_code == 404
-
-    def test_run_now_nonexistent_schedule_returns_404(self, auth_client):
-        resp = auth_client.post(
-            "/api/v1/report-schedules/nonexistent-id/run-now"
-        )
-        assert resp.status_code == 404
-
-    def test_create_schedule_with_empty_channels_succeeds(self, auth_client):
-        """Empty delivery_channels is allowed (creates schedule, delivers nowhere)."""
-        resp = auth_client.post(
-            "/api/v1/report-schedules",
-            json={
-                "report_type": "cfo_daily",
-                "delivery_channels": [],
-            },
-        )
-        assert resp.status_code == 201
-
-    def test_create_schedule_invalid_format_still_accepted(self, auth_client):
-        """Format validation is lenient (arbitrary string accepted at API level)."""
-        resp = auth_client.post(
-            "/api/v1/report-schedules",
-            json={
-                "report_type": "cfo_daily",
-                "format": "invalid_format_xyz",
-            },
-        )
-        # Accepted at API level — format validation is at render time
-        assert resp.status_code == 201
-
-    def test_update_schedule_toggle_active(self, auth_client):
-        create_resp = self._create_schedule(auth_client)
-        schedule_id = create_resp.json()["id"]
-        resp = auth_client.patch(
-            f"/api/v1/report-schedules/{schedule_id}",
-            json={"is_active": False},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["is_active"] is False
-
-    def test_delete_schedule_returns_204(self, auth_client):
-        create_resp = self._create_schedule(auth_client)
-        schedule_id = create_resp.json()["id"]
-        resp = auth_client.delete(f"/api/v1/report-schedules/{schedule_id}")
-        assert resp.status_code == 204
-
-    def test_delete_then_delete_again_returns_404(self, auth_client):
-        create_resp = self._create_schedule(auth_client)
-        schedule_id = create_resp.json()["id"]
-        auth_client.delete(f"/api/v1/report-schedules/{schedule_id}")
-        resp = auth_client.delete(f"/api/v1/report-schedules/{schedule_id}")
-        assert resp.status_code == 404
-
+# TestReportScheduleErrors moved to
+# tests/integration/test_db_api_endpoints.py::TestReportSchedulesIntegration
+# (ported to AsyncClient + NullPool so the async engine is shared
+# cleanly across tests in the integration-tests CI job).
 
 # ═══════════════════════════════════════════════════════════════════════════
 # General Error Format

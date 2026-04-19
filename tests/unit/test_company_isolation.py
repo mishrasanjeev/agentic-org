@@ -7,7 +7,6 @@ FastAPI dependency_overrides race condition.
 
 from __future__ import annotations
 
-import os
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import patch
@@ -198,48 +197,6 @@ class TestChatIsolation:
 # ═══════════════════════════════════════════════════════════════════════════
 # Report Schedule Isolation
 # ═══════════════════════════════════════════════════════════════════════════
-@pytest.mark.skipif(
-    not os.getenv("AGENTICORG_DB_URL"),
-    reason="report schedules now backed by PostgreSQL",
-)
-class TestReportScheduleIsolation:
-
-    def test_schedule_created_by_a_invisible_to_b(self, app, tenant_a, tenant_b):
-        with tenant_client(app, tenant_a) as client:
-            resp = client.post("/api/v1/report-schedules", json={
-                "report_type": "cfo_daily", "cron_expression": "daily", "delivery_channels": [],
-            })
-            assert resp.status_code in (200, 201)
-            schedule_id = resp.json()["id"]
-
-        with tenant_client(app, tenant_b) as client:
-            resp = client.get("/api/v1/report-schedules")
-            body = resp.json()
-            schedules = body if isinstance(body, list) else body.get("schedules", [])
-            ids = [s["id"] for s in schedules]
-            assert schedule_id not in ids
-
-    def test_schedule_delete_cross_tenant_returns_404(self, app, tenant_a, tenant_b):
-        with tenant_client(app, tenant_a) as client:
-            resp = client.post("/api/v1/report-schedules", json={
-                "report_type": "cmo_weekly", "cron_expression": "weekly", "delivery_channels": [],
-            })
-            schedule_id = resp.json()["id"]
-
-        with tenant_client(app, tenant_b) as client:
-            resp = client.delete(f"/api/v1/report-schedules/{schedule_id}")
-            assert resp.status_code == 404
-
-    def test_own_tenant_can_manage_schedule(self, app, tenant_a):
-        with tenant_client(app, tenant_a) as client:
-            resp = client.post("/api/v1/report-schedules", json={
-                "report_type": "aging_report", "cron_expression": "daily", "delivery_channels": [],
-            })
-            assert resp.status_code in (200, 201)
-            schedule_id = resp.json()["id"]
-
-            resp = client.get("/api/v1/report-schedules")
-            body = resp.json()
-            items = body if isinstance(body, list) else body.get("schedules", [])
-            ids = [s["id"] for s in items]
-            assert schedule_id in ids
+# TestReportScheduleIsolation moved to
+# tests/integration/test_db_api_endpoints.py::TestReportSchedulesIntegration
+#   ::test_schedule_not_visible_across_tenants
