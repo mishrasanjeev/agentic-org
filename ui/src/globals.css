@@ -62,7 +62,11 @@
   :root {
     --background: 0 0% 100%; --foreground: 222 84% 5%;
     --primary: 222 47% 11%; --primary-foreground: 210 40% 98%;
-    --muted: 210 40% 96%; --muted-foreground: 215 16% 47%;
+    /* muted-foreground: tinted toward the brand slate/blue hue (chroma
+       up from 16% → 18%, lightness 47% → 42% for AA body-text contrast).
+       Per impeccable/color-and-contrast: pure gray is dead, tint
+       toward the brand hue. */
+    --muted: 210 40% 96%; --muted-foreground: 215 18% 42%;
     --accent: 210 40% 96%; --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%; --destructive-foreground: 210 40% 98%;
     --border: 214 32% 91%; --radius: 0.5rem;

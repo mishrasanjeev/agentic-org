@@ -292,7 +292,7 @@ export default function IndustryPacks() {
 
       {/* Detail panel */}
       {selectedPack && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setSelectedPack(null)}>
+        <div className="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center" onClick={() => setSelectedPack(null)}>
           <div className="bg-background border rounded-lg p-6 w-full max-w-2xl shadow-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
