@@ -1030,16 +1030,19 @@ async def approve_filing(
         if not company:
             raise HTTPException(404, "Company not found")
 
-        # Check the user has partner role on this company
-        # user_roles keys can be user_id (UUID) or email — check both
+        # Check the current caller has partner role on this company.
+        # user_roles keys can be user_id (UUID) or email — check the
+        # caller's own identifiers, NEVER scan other users' entries.
+        # Prior code iterated values and promoted the caller if ANY
+        # user in the company had partner role (CRITICAL-02 authz
+        # bypass in SECURITY_AUDIT_2026-04-19.md).
         roles = company.user_roles or {}
-        user_role = roles.get(user_email)
-        if not user_role:
-            # Try matching by iterating values (key might be UUID)
-            for _key, _role in roles.items():
-                if _role == CompanyRole.partner.value:
-                    user_role = _role
-                    break
+        caller_ids = [user_email, user.get("sub", ""), user.get("user_id", "")]
+        user_role = None
+        for ident in caller_ids:
+            if ident and ident in roles:
+                user_role = roles[ident]
+                break
         # Also check if user is platform admin (role from JWT)
         jwt_role = user.get("role", "")
         if user_role != CompanyRole.partner.value and jwt_role != "admin":
@@ -1111,13 +1114,15 @@ async def reject_filing(
         if not company:
             raise HTTPException(404, "Company not found")
 
+        # Bind authz to the caller's identity only. Do NOT scan other
+        # users' role entries (CRITICAL-02 authz bypass fix).
         roles = company.user_roles or {}
-        user_role = roles.get(user_email)
-        if not user_role:
-            for _key, _role in roles.items():
-                if _role in (CompanyRole.partner.value, CompanyRole.manager.value):
-                    user_role = _role
-                    break
+        caller_ids = [user_email, user.get("sub", ""), user.get("user_id", "")]
+        user_role = None
+        for ident in caller_ids:
+            if ident and ident in roles:
+                user_role = roles[ident]
+                break
         jwt_role = user.get("role", "")
         if user_role not in (CompanyRole.partner.value, CompanyRole.manager.value) and jwt_role != "admin":
             raise HTTPException(403, "Only partners or managers can reject filings")

@@ -50,12 +50,17 @@ async def test_webhook_stores_event():
         "resource_id": "c-123",
         "data": {"name": "Acme Corp"},
     }
-    result = await handle_cdc_webhook("salesforce", payload, signature=_sign(payload))
+    result = await handle_cdc_webhook(
+        "tenant-a", "salesforce", payload, signature=_sign(payload),
+    )
     assert result["status"] == "accepted"
-    events = get_stored_events()
+    events = get_stored_events(tenant_id="tenant-a")
     assert len(events) == 1
+    assert events[0]["tenant_id"] == "tenant-a"
     assert events[0]["connector"] == "salesforce"
     assert events[0]["event_type"] == "contact.updated"
+    # Cross-tenant read must NOT see it.
+    assert get_stored_events(tenant_id="tenant-b") == []
 
 
 @pytest.mark.asyncio
@@ -67,7 +72,9 @@ async def test_signature_validation():
     os.environ["CDC_WEBHOOK_SECRET_TESTCONN"] = "supersecret"
     try:
         payload = {"event_type": "record.created", "resource_type": "deal", "resource_id": "d-1"}
-        result = await handle_cdc_webhook("testconn", payload, signature="bad-signature")
+        result = await handle_cdc_webhook(
+            "tenant-a", "testconn", payload, signature="bad-signature",
+        )
         assert result["status"] == "rejected"
         assert get_stored_events() == []
     finally:
@@ -100,14 +107,21 @@ async def test_duplicate_event_skipped():
         "resource_type": "invoice",
         "resource_id": "inv-42",
     }
-    first = await handle_cdc_webhook("xero", payload, signature=_sign(payload))
+    first = await handle_cdc_webhook("tenant-a", "xero", payload, signature=_sign(payload))
     assert first["status"] == "accepted"
 
-    second = await handle_cdc_webhook("xero", payload, signature=_sign(payload))
+    second = await handle_cdc_webhook("tenant-a", "xero", payload, signature=_sign(payload))
     assert second["status"] == "duplicate"
 
-    # Only one event stored
-    assert len(get_stored_events()) == 1
+    # Only one event stored for tenant-a
+    assert len(get_stored_events(tenant_id="tenant-a")) == 1
+
+    # A DIFFERENT tenant sending the same fingerprint must NOT dedupe —
+    # the per-tenant dedup scope fixes a previous cross-tenant collision
+    # where tenant-b would see tenant-a's event count as "duplicate".
+    third = await handle_cdc_webhook("tenant-b", "xero", payload, signature=_sign(payload))
+    assert third["status"] == "accepted"
+    assert len(get_stored_events(tenant_id="tenant-b")) == 1
 
 
 @pytest.mark.asyncio
