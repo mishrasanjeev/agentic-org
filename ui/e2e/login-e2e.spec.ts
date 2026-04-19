@@ -17,7 +17,7 @@ function requireAuth(): void {
 }
 
 
-test.describe("Login Page — Rendering & Validation", () => {
+test.describe("Login Page — Rendering & Validation @auth", () => {
   test("login page renders with email and password fields", async ({ page }) => {
     await page.goto(`${APP}/login`, { waitUntil: "networkidle" });
     await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 10000 });
@@ -79,7 +79,7 @@ test.describe("Login Page — Rendering & Validation", () => {
   });
 });
 
-test.describe("Login Page — Auth Flow", () => {
+test.describe("Login Page — Auth Flow @auth", () => {
   test.describe.configure({ mode: "serial" });
 
   test("unauthenticated /dashboard redirects to /login", async ({ page }) => {

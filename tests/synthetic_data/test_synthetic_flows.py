@@ -87,15 +87,19 @@ def _get_agent_id(headers: dict, agent_type: str) -> str:
 def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
     """Run an agent and return the full response.
 
-    Retries once on an empty/non-JSON response — the first call after a
-    pod rollout occasionally hits a cold worker that returns 502 before
-    FastAPI comes up. A single retry after a short back-off clears that
-    without hiding real regressions (repeated empties will still bubble
-    up as JSONDecodeError or a failing assertion).
+    Retries up to 3 times on two distinct transient-flake classes:
+      1. JSONDecodeError — cold-worker 502 on the first call after a
+         pod rollout (FastAPI not yet up).
+      2. `raw_output == ""` AND `reasoning_trace` empty — LLM-side
+         empty-response flake we see once every ~30 runs. A single
+         retry with back-off clears both without hiding real
+         regressions: repeated empties still bubble up as a failing
+         assertion downstream.
     """
     import time as _time
 
-    for attempt in range(2):
+    last: dict = {}
+    for attempt in range(3):
         r = httpx.post(
             f"{BASE}/agents/{agent_id}/run",
             headers=headers,
@@ -103,12 +107,30 @@ def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
             timeout=45,
         )
         try:
-            return r.json()
+            result = r.json()
         except Exception:
-            if attempt == 0:
-                _time.sleep(2)
+            if attempt < 2:
+                _time.sleep(2 * (attempt + 1))
                 continue
             raise
+        # LLM empty-response flake: status=completed but raw_output is
+        # an empty string and nothing was traced. A retry almost always
+        # clears it.
+        output = result.get("output") or {}
+        raw_output = output.get("raw_output", "")
+        trace = result.get("reasoning_trace") or []
+        if (
+            result.get("status") == "completed"
+            and isinstance(raw_output, str)
+            and not raw_output.strip()
+            and not trace
+            and attempt < 2
+        ):
+            last = result
+            _time.sleep(2 * (attempt + 1))
+            continue
+        return result
+    return last
 
 
 def _skip_if_tools_missing(result: dict) -> None:

@@ -178,6 +178,18 @@ consistency_sweep() {
 }
 
 # ---------------------------------------------------------------------------
+# 9b. Critical-path Playwright tags — every tag must appear in ≥1 spec
+# so a deleted/renamed describe can't silently drop coverage.
+# ---------------------------------------------------------------------------
+critical_tag_check() {
+  if [[ "$SKIP_TAG_CHECK" == "1" || ! -d "$REPO_ROOT/ui/e2e" ]]; then
+    echo "[preflight] skipped (SKIP_TAG_CHECK=1 or no ui/e2e/)"
+    return 0
+  fi
+  python scripts/check_critical_path_tags.py
+}
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 run_step "branch safety"          branch_check
@@ -189,6 +201,7 @@ run_step "pytest regression+unit" pytest_check
 run_step "ui tsc"                 ui_check
 run_step "ui build"               ui_build
 run_step "consistency sweep"      consistency_sweep
+run_step "critical-path tags"     critical_tag_check
 
 summary
 echo -e "${GRN}[preflight] all gates passed. Safe to push.${NC}"

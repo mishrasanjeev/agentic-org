@@ -21,7 +21,7 @@ function requireAuth(): void {
   }
 }
 
-test.describe("Integrations page SDK snippet", () => {
+test.describe("Integrations page SDK snippet @sdk @mcp", () => {
   test("Python snippet references AgentRunResult and canonical fields", async ({ page }) => {
     requireAuth();
 

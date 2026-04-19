@@ -44,7 +44,7 @@ async function seedSession(page: import("@playwright/test").Page): Promise<void>
   }, E2E_TOKEN);
 }
 
-test.describe("Settings → Compliance & Data governance", () => {
+test.describe("Settings → Compliance & Data governance @governance @audit", () => {
   test.beforeEach(async ({ page }) => {
     requireAuth();
     await seedSession(page);
