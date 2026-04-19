@@ -28,6 +28,10 @@ def _assert_public_base_url(base_url: str) -> None:
     base_url on a connector, turning connector test/health flows into an
     SSRF primitive against the cluster's internal network (including
     169.254.169.254 cloud metadata).
+
+    Unresolvable hosts are allowed through (DNS may be environment-
+    specific — CI cannot prove a production host is bad); only explicit
+    resolution to a private/reserved range is blocked.
     """
     if not base_url:
         return
@@ -37,12 +41,24 @@ def _assert_public_base_url(base_url: str) -> None:
     host = parsed.hostname or ""
     if not host:
         raise HTTPException(400, "Connector base_url is missing a host")
+
+    # Reject bare IPs in private/reserved ranges without needing DNS.
     try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as exc:
-        raise HTTPException(400, f"Connector base_url host does not resolve: {exc}") from None
-    for info in infos:
-        addr = info[4][0]
+        literal_ip: ipaddress._BaseAddress | None = ipaddress.ip_address(host)
+    except ValueError:
+        literal_ip = None
+    candidates: list[str] = []
+    if literal_ip is not None:
+        candidates.append(str(literal_ip))
+    else:
+        try:
+            infos = socket.getaddrinfo(host, None)
+            candidates = [info[4][0] for info in infos]
+        except socket.gaierror:
+            # Unresolvable — httpx will error on the real call. Don't
+            # block registration purely on a transient DNS miss.
+            return
+    for addr in candidates:
         try:
             ip = ipaddress.ip_address(addr)
         except ValueError:
