@@ -87,12 +87,16 @@ def _get_agent_id(headers: dict, agent_type: str) -> str:
 def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
     """Run an agent and return the full response.
 
-    Retries up to 3 times on two distinct transient-flake classes:
-      1. JSONDecodeError — cold-worker 502 on the first call after a
+    Retries up to 3 times on three distinct transient-flake classes:
+      1. httpx.ReadTimeout / httpx.ConnectError — cold-worker, or the
+         LLM took longer than the per-request 45s window. Back off
+         longer than on other classes since the upstream likely needs
+         time to recover.
+      2. JSONDecodeError — cold-worker 502 on the first call after a
          pod rollout (FastAPI not yet up).
-      2. `raw_output == ""` AND `reasoning_trace` empty — LLM-side
+      3. `raw_output == ""` AND `reasoning_trace` empty — LLM-side
          empty-response flake we see once every ~30 runs. A single
-         retry with back-off clears both without hiding real
+         retry with back-off clears this without hiding real
          regressions: repeated empties still bubble up as a failing
          assertion downstream.
     """
@@ -100,12 +104,20 @@ def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
 
     last: dict = {}
     for attempt in range(3):
-        r = httpx.post(
-            f"{BASE}/agents/{agent_id}/run",
-            headers=headers,
-            json={"action": action, "inputs": inputs},
-            timeout=45,
-        )
+        try:
+            r = httpx.post(
+                f"{BASE}/agents/{agent_id}/run",
+                headers=headers,
+                json={"action": action, "inputs": inputs},
+                timeout=60,  # bumped 45→60 for LLM latency ceiling
+            )
+        except (httpx.ReadTimeout, httpx.ConnectError, httpx.RemoteProtocolError):
+            if attempt < 2:
+                # Back off 5s / 10s — upstream LLM or worker needs
+                # breathing room, not just a fast retry.
+                _time.sleep(5 * (attempt + 1))
+                continue
+            raise
         try:
             result = r.json()
         except Exception:
