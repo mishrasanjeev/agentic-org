@@ -1,10 +1,17 @@
-"""Webhook endpoints for email event tracking (open/click/bounce)."""
+"""Webhook endpoints for email event tracking (open/click/bounce).
+
+Every externally reachable webhook handler here fails closed when the
+provider's verification secret is missing, per SECURITY_AUDIT-2026-04-19
+HIGH-04. Set ``AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1`` only in local dev.
+"""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
+import os
 from typing import Any
 
 import structlog
@@ -13,6 +20,10 @@ from fastapi import APIRouter, HTTPException, Request
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+def _dev_allow_unsigned() -> bool:
+    return os.getenv("AGENTICORG_WEBHOOK_ALLOW_UNSIGNED") == "1"
 
 
 def _get_redis():
@@ -84,20 +95,93 @@ def _verify_sendgrid_signature(
 ) -> bool:
     """Verify SendGrid Event Webhook signature.
 
-    Uses HMAC-SHA256 with the webhook verification key.
+    Uses HMAC-SHA256 with the webhook verification key. Fails closed
+    when no key is configured — pre-fix this returned True (dev-mode
+    bypass) which allowed forged events in production. Per
+    SECURITY_AUDIT_2026-04-19.md HIGH-04.
     """
-    import os
-
     verification_key = public_key or os.getenv("SENDGRID_WEBHOOK_KEY", "")
     if not verification_key:
-        # If no key configured, skip verification (dev mode)
-        logger.warning("sendgrid_webhook_key_not_configured")
-        return True
+        if _dev_allow_unsigned():
+            logger.warning("sendgrid_webhook_key_not_configured_allowed_by_dev_flag")
+            return True
+        logger.error(
+            "sendgrid_webhook_key_not_configured",
+            hint="Set SENDGRID_WEBHOOK_KEY in env. HIGH-04 fail-closed.",
+        )
+        return False
 
     signed_payload = f"{timestamp}{payload.decode('utf-8')}"
     expected = hmac.new(
         verification_key.encode("utf-8"),
         signed_payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def _verify_mailchimp_signature(
+    url: str,
+    form: dict[str, str],
+    signature: str,
+) -> bool:
+    """Verify Mandrill/Mailchimp webhook signature.
+
+    Mandrill signs the webhook URL concatenated with each POST field name
+    and value (in the order the fields were defined for the webhook),
+    then base64-encodes HMAC-SHA1 of that with the webhook key.
+    Ref: https://mailchimp.com/developer/transactional/guides/track-respond-activity-webhooks/#authenticating-webhook-requests
+
+    Fails closed when MAILCHIMP_WEBHOOK_KEY is not set. Set
+    ``AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1`` only for local dev.
+    """
+    verification_key = os.getenv("MAILCHIMP_WEBHOOK_KEY", "")
+    if not verification_key:
+        if _dev_allow_unsigned():
+            logger.warning("mailchimp_webhook_key_not_configured_allowed_by_dev_flag")
+            return True
+        logger.error(
+            "mailchimp_webhook_key_not_configured",
+            hint="Set MAILCHIMP_WEBHOOK_KEY in env. HIGH-04 fail-closed.",
+        )
+        return False
+
+    # Concatenate URL + sorted(key + value) to produce a stable signed string.
+    # Mandrill's docs describe preserving the field order from the webhook
+    # definition, but since we don't have that here we sort by key — the
+    # sender must match this ordering. For strict Mandrill interop, ops
+    # can override by signing in the same sorted-by-key order on their end.
+    signed_parts = [url]
+    for key in sorted(form.keys()):
+        signed_parts.append(key)
+        signed_parts.append(form[key])
+    signed_data = "".join(signed_parts).encode("utf-8")
+    expected = base64.b64encode(
+        hmac.new(verification_key.encode("utf-8"), signed_data, hashlib.sha1).digest()
+    ).decode("utf-8")
+    return hmac.compare_digest(expected, signature)
+
+
+def _verify_moengage_signature(payload: bytes, signature: str) -> bool:
+    """Verify MoEngage webhook signature.
+
+    MoEngage webhooks carry an HMAC-SHA256 of the raw request body signed
+    with a shared secret in the ``X-MoEngage-Signature`` header (hex).
+    Fails closed when MOENGAGE_WEBHOOK_KEY is not set.
+    """
+    verification_key = os.getenv("MOENGAGE_WEBHOOK_KEY", "")
+    if not verification_key:
+        if _dev_allow_unsigned():
+            logger.warning("moengage_webhook_key_not_configured_allowed_by_dev_flag")
+            return True
+        logger.error(
+            "moengage_webhook_key_not_configured",
+            hint="Set MOENGAGE_WEBHOOK_KEY in env. HIGH-04 fail-closed.",
+        )
+        return False
+    expected = hmac.new(
+        verification_key.encode("utf-8"),
+        payload,
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
@@ -185,7 +269,13 @@ async def mailchimp_webhook(request: Request) -> dict[str, Any]:
     Mailchimp sends form-encoded data with: type (subscribe/unsubscribe/campaign),
     fired_at, and nested data fields.
     """
-    form = await request.form()
+    form_data = await request.form()
+    form = {str(k): str(v) for k, v in form_data.items()}
+    signature = request.headers.get("X-Mandrill-Signature", "")
+    webhook_url = str(request.url)
+    if not _verify_mailchimp_signature(webhook_url, form, signature):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
     webhook_type = form.get("type", "")
     fired_at = form.get("fired_at", "")
     data_email = form.get("data[email]", "")
@@ -226,9 +316,14 @@ async def moengage_webhook(request: Request) -> dict[str, Any]:
     MoEngage sends JSON with: event_type, email, campaign_id, timestamp,
     and additional metadata.
     """
+    body = await request.body()
+    signature = request.headers.get("X-MoEngage-Signature", "")
+    if not _verify_moengage_signature(body, signature):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
     try:
-        payload = await request.json()
-    except Exception:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from None
 
     event_type = payload.get("event_type", payload.get("type", ""))

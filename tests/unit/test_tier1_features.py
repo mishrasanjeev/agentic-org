@@ -331,7 +331,12 @@ class TestWebhookParsing:
             yield c
 
     @pytest.fixture(autouse=True)
-    def _mock_redis(self):
+    def _mock_redis(self, monkeypatch):
+        # These tests exercise payload PARSING. Signature fail-closed
+        # behavior is covered by tests/regression/test_security_audit_20260419_high.py
+        # (HIGH-04). Flip the dev bypass so parsing tests are unaffected
+        # by the new verification gate.
+        monkeypatch.setenv("AGENTICORG_WEBHOOK_ALLOW_UNSIGNED", "1")
         mock_redis = AsyncMock()
         mock_redis.hset = AsyncMock()
         mock_redis.scan = AsyncMock(return_value=(0, []))

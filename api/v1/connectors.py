@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
 import uuid as _uuid
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +19,65 @@ from core.models.connector import Connector
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
 
 _log = logging.getLogger(__name__)
+
+
+def _assert_public_base_url(base_url: str) -> None:
+    """Reject connector base_urls that resolve to private/reserved ranges.
+
+    SECURITY_AUDIT-2026-04-19 MEDIUM-12: admins could previously set any
+    base_url on a connector, turning connector test/health flows into an
+    SSRF primitive against the cluster's internal network (including
+    169.254.169.254 cloud metadata).
+
+    Unresolvable hosts are allowed through (DNS may be environment-
+    specific — CI cannot prove a production host is bad); only explicit
+    resolution to a private/reserved range is blocked.
+    """
+    if not base_url:
+        return
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(400, f"Connector base_url must be http(s): got '{parsed.scheme}'")
+    host = parsed.hostname or ""
+    if not host:
+        raise HTTPException(400, "Connector base_url is missing a host")
+
+    # Reject bare IPs in private/reserved ranges without needing DNS.
+    try:
+        literal_ip: ipaddress._BaseAddress | None = ipaddress.ip_address(host)
+    except ValueError:
+        literal_ip = None
+    candidates: list[str] = []
+    if literal_ip is not None:
+        candidates.append(str(literal_ip))
+    else:
+        try:
+            infos = socket.getaddrinfo(host, None)
+            candidates = [info[4][0] for info in infos]
+        except socket.gaierror:
+            # Unresolvable — httpx will error on the real call. Don't
+            # block registration purely on a transient DNS miss.
+            return
+    for addr in candidates:
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise HTTPException(
+                403,
+                f"Connector base_url '{host}' resolves to a blocked "
+                f"address ({ip}). Private, loopback, link-local, "
+                "multicast, reserved, and unspecified ranges are not "
+                "allowed.",
+            )
 
 router = APIRouter(dependencies=[require_tenant_admin])
 
@@ -185,6 +247,9 @@ async def register_connector(
 ):
     tid = _uuid.UUID(tenant_id)
 
+    # MEDIUM-12: reject SSRF-capable base_urls before persisting.
+    _assert_public_base_url(body.base_url or "")
+
     # Separate secret material from non-secret config.
     # auth_config on the Connector model is deprecated for secrets —
     # new writes go to connector_configs.credentials_encrypted via
@@ -281,7 +346,11 @@ async def update_connector(
         # auth_config is deprecated for new writes — secrets go via
         # connector_configs.credentials_encrypted.
         _blocked_fields = {"id", "tenant_id", "auth_config", "secret_ref"}
-        for field, value in body.model_dump(exclude_none=True).items():
+        updates = body.model_dump(exclude_none=True)
+        # MEDIUM-12: same SSRF guard on update paths.
+        if "base_url" in updates:
+            _assert_public_base_url(updates["base_url"] or "")
+        for field, value in updates.items():
             if field in _blocked_fields:
                 continue
             setattr(connector, field, value)
@@ -377,6 +446,12 @@ async def test_connector(
     connector_cls = ConnectorRegistry.get(connector.name)
     if not connector_cls:
         return {"tested": False, "error": f"No connector class for '{connector.name}'"}
+
+    # MEDIUM-12: even if the stored base_url was valid when saved, re-check
+    # at test time so a stale DNS record flipped to a private IP can't be
+    # used as an SSRF primitive.
+    effective_base_url = (connector.base_url or getattr(connector_cls, "base_url", "") or "")
+    _assert_public_base_url(effective_base_url)
 
     # Load credentials from ENCRYPTED connector_configs first,
     # falling back to legacy plaintext auth_config for backward compat.

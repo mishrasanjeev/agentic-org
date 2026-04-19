@@ -16,16 +16,88 @@ give the user a fast pass/fail answer.
 
 from __future__ import annotations
 
+import ipaddress
 import re
+import socket
 from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 
 router = APIRouter()
+
+
+def _resolve_and_block_private(host: str) -> str:
+    """Resolve a hostname and reject private/reserved/link-local targets.
+
+    SECURITY_AUDIT-2026-04-19 HIGH-06: the voice connection-test endpoint
+    was a server-side SSRF primitive. We now resolve the target host and
+    reject any address that is private, loopback, link-local, multicast,
+    reserved, or unspecified — blocking cloud metadata (169.254.169.254),
+    localhost, RFC 1918 ranges, and IPv6 equivalents.
+
+    Returns the resolved IPv4/IPv6 literal to connect to on success.
+    Raises HTTPException(400) on unresolved hosts and HTTPException(403)
+    on blocked addresses.
+    """
+    if not host:
+        raise HTTPException(400, "SIP endpoint host is empty")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise HTTPException(400, f"Could not resolve SIP host: {exc}") from None
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise HTTPException(
+                403,
+                f"SIP endpoint resolves to a blocked address ({ip}). "
+                "Private, loopback, link-local, multicast, reserved, and "
+                "unspecified ranges are not allowed.",
+            )
+    return infos[0][4][0]
+
+
+def _mask_secret(value: str | None) -> str:
+    """Mask a sensitive credential for safe return to the client.
+
+    Keeps the last 4 characters when the secret is long enough; otherwise
+    returns a full mask. Empty/None stays empty so the UI can distinguish
+    'not configured' from 'configured but hidden'.
+    """
+    if not value:
+        return ""
+    if len(value) <= 4:
+        return "***"
+    return "***" + value[-4:]
+
+
+def _mask_voice_config(data: dict) -> dict:
+    """Return a copy of a saved voice config with credentials masked."""
+    masked = dict(data)
+    creds = dict(masked.get("credentials") or {})
+    creds["account_sid"] = _mask_secret(creds.get("account_sid", ""))
+    creds["auth_token"] = _mask_secret(creds.get("auth_token", ""))
+    masked["credentials"] = creds
+    if masked.get("tts_api_key"):
+        masked["tts_api_key"] = _mask_secret(masked["tts_api_key"])
+    if masked.get("stt_api_key"):
+        masked["stt_api_key"] = _mask_secret(masked["stt_api_key"])
+    return masked
 
 # ---------------------------------------------------------------------------
 # Validation constants
@@ -132,15 +204,20 @@ def _validate_voice_config(cfg: VoiceConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/voice/test-connection", response_model=VoiceTestResponse)
+@router.post(
+    "/voice/test-connection",
+    response_model=VoiceTestResponse,
+    dependencies=[require_tenant_admin],
+)
 async def test_connection(
     body: VoiceTestRequest,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Probe SIP provider credentials without persisting.
 
-    Session 5 TC-006 root cause: this endpoint did not exist, so the
-    wizard's Test Connection button always returned HTTP 404.
+    HIGH-05/HIGH-06 hardening: admin-only, custom SIP targets are
+    resolved and filtered against private/reserved IP ranges before
+    any TCP connect.
     """
     ok, msg = _validate_provider_credentials(body.provider, body.credentials)
     if not ok:
@@ -199,7 +276,6 @@ async def test_connection(
     # No SSL bypass / no HTTP request — the real SIP handshake happens
     # via the voice connector when the agent starts.
     import asyncio as _asyncio
-    import socket
     import urllib.parse
 
     target = body.credentials.custom_url.strip()
@@ -219,18 +295,22 @@ async def test_connection(
         host = host_part
         port = 5061 if target.startswith("sips:") else 5060
 
+    host = urllib.parse.unquote(host)
     if not host:
         return VoiceTestResponse(
             status="invalid_credentials",
             message="SIP endpoint could not be parsed — missing host.",
         )
 
+    # SSRF guard: resolve and reject private/reserved ranges before connect.
+    safe_addr = _resolve_and_block_private(host)
+
     loop = _asyncio.get_event_loop()
 
     def _probe_tcp() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(5)
-            s.connect((urllib.parse.unquote(host), port))
+            s.connect((safe_addr, port))
         return "ok"
 
     try:
@@ -256,19 +336,34 @@ async def test_connection(
 _VOICE_CONFIG: dict[str, dict] = {}
 
 
-@router.post("/voice/config", response_model=VoiceConfig)
+@router.post(
+    "/voice/config",
+    response_model=VoiceConfig,
+    dependencies=[require_tenant_admin],
+)
 async def save_voice_config(
     body: VoiceConfig,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    """Save tenant voice config. Admin-only (HIGH-05)."""
     _validate_voice_config(body)
     _VOICE_CONFIG[str(tenant_id)] = body.model_dump()
-    return body
+    # Return masked copy so secrets aren't echoed back in the response.
+    return VoiceConfig(**_mask_voice_config(body.model_dump()))
 
 
-@router.get("/voice/config", response_model=VoiceConfig | None)
+@router.get(
+    "/voice/config",
+    response_model=VoiceConfig | None,
+    dependencies=[require_tenant_admin],
+)
 async def get_voice_config(tenant_id: str = Depends(get_current_tenant)):
+    """Return the saved tenant voice config with credentials masked.
+
+    HIGH-05 fix — pre-fix any authenticated tenant user could read the
+    full credentials. Now admin-only, and secrets are masked on return.
+    """
     data = _VOICE_CONFIG.get(str(tenant_id))
     if not data:
         return None
-    return VoiceConfig(**data)
+    return VoiceConfig(**_mask_voice_config(data))
