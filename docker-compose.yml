@@ -60,7 +60,9 @@ services:
       AGENTICORG_REDIS_URL: redis://redis:6379/0
       AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
       AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
-      AGENTICORG_SECRET_KEY: dev-secret-key-change-in-production-32chars
+      # Local-dev only. Real environments must inject via secret manager.
+      # LOW-15: predictable defaults are rejected in production/staging code paths.
+      AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
       AGENTICORG_PII_MASKING: "true"
       AGENTICORG_LOG_LEVEL: DEBUG
     depends_on:
@@ -84,7 +86,9 @@ services:
       AGENTICORG_REDIS_URL: redis://redis:6379/0
       AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
       AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
-      AGENTICORG_SECRET_KEY: dev-secret-key-change-in-production-32chars
+      # Local-dev only. Real environments must inject via secret manager.
+      # LOW-15: predictable defaults are rejected in production/staging code paths.
+      AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
       AGENTICORG_PII_MASKING: "true"
     depends_on:
       postgres:

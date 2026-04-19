@@ -180,10 +180,15 @@ class TestLogout:
         from api.v1.auth import logout
         mock_request = MagicMock()
         mock_request.headers = _FakeHeaders({"Authorization": "Bearer some-token-value"})
+        # CRITICAL-01: logout reads cookie first. Return empty so the
+        # header path still flows.
+        mock_request.cookies.get.return_value = ""
+        mock_response = MagicMock()
         with patch("api.v1.auth.blacklist_token") as mock_blacklist:
-            result = await logout(mock_request)
+            result = await logout(mock_request, mock_response)
             mock_blacklist.assert_called_once_with("some-token-value")
             assert result == {"status": "logged_out"}
+            mock_response.delete_cookie.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_logout_missing_header(self):
@@ -192,8 +197,10 @@ class TestLogout:
         from api.v1.auth import logout
         mock_request = MagicMock()
         mock_request.headers = _FakeHeaders({})
+        mock_request.cookies.get.return_value = ""
+        mock_response = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
-            await logout(mock_request)
+            await logout(mock_request, mock_response)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -203,8 +210,10 @@ class TestLogout:
         from api.v1.auth import logout
         mock_request = MagicMock()
         mock_request.headers = _FakeHeaders({"Authorization": "Basic abc123"})
+        mock_request.cookies.get.return_value = ""
+        mock_response = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
-            await logout(mock_request)
+            await logout(mock_request, mock_response)
         assert exc_info.value.status_code == 401
 
 

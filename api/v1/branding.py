@@ -115,15 +115,21 @@ def _public_view(branding: BrandingOut) -> BrandingOut:
 @public_router.get("", response_model=BrandingOut)
 async def get_public_branding(
     request: Request,
-    host: str | None = Query(None, description="Host header — used for custom-domain routing"),
     tenant_slug: str | None = Query(None, description="Tenant slug fallback"),
 ) -> BrandingOut:
     """Return branding for the login page — no auth required.
 
     Lookup order:
-      1. custom_domain matches the Host header
+      1. custom_domain matches the request's Host header (trusted path:
+         set by nginx / load balancer via X-Forwarded-Host, which in a
+         well-configured deploy is the real client-visible domain)
       2. tenant_slug explicitly passed
       3. default AgenticOrg branding
+
+    SECURITY_AUDIT-2026-04-19 LOW-14: the ``host`` query parameter was
+    removed. Previously an attacker could enumerate tenant custom
+    domains by probing the public endpoint with guessed values. The
+    canonical host now comes from the request headers only.
 
     Hardening:
       - Per-IP rate limit (30 req/min)
@@ -136,7 +142,15 @@ async def get_public_branding(
         logger.warning("branding_rate_limited", ip=client_ip)
         raise HTTPException(429, "Too many branding lookups, slow down")
 
-    cache_key = f"{host or ''}:{tenant_slug or ''}"
+    # Prefer X-Forwarded-Host (set by our nginx ingress) over Host so
+    # proxied environments see the real client-visible domain.
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or ""
+    ).split(",")[0].strip().lower()
+
+    cache_key = f"{host}:{tenant_slug or ''}"
     now = time.time()
     cached = _branding_cache.get(cache_key)
     if cached is not None and cached[1] > now:

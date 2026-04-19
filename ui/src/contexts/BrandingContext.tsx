@@ -75,8 +75,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
 
   useEffect(() => {
-    const host = window.location.host;
-    const url = `/api/v1/branding?host=${encodeURIComponent(host)}`;
+    // Host is now derived server-side from the request headers
+    // (LOW-14 remediation — client-supplied host enabled enumeration).
+    const url = `/api/v1/branding`;
 
     fetch(url)
       .then((r) => (r.ok ? r.json() : null))

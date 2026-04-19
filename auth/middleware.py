@@ -45,15 +45,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if await is_ip_blocked(client_ip):
             return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
 
-        # Extract token
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
+        # Extract token — prefer the HttpOnly session cookie (CRITICAL-01
+        # remediation). Fall back to Authorization: Bearer for API
+        # clients, CI, SDKs, and browsers that have not yet migrated.
+        token = ""
+        cookie_token = request.cookies.get("agenticorg_session") or ""
+        if cookie_token:
+            token = cookie_token
+        else:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+        if not token:
             await record_auth_failure(client_ip)
             return JSONResponse(
-                status_code=401, content={"detail": "Missing or invalid Authorization header"}
+                status_code=401,
+                content={"detail": "Missing session cookie or Authorization header"},
             )
-
-        token = auth_header[7:]
         try:
             claims = await validate_token(token)
         except ValueError:

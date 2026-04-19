@@ -1088,9 +1088,10 @@ class TestUiReg006SignupTermsConsent:
         )
         request = MagicMock()
         request.client.host = "10.10.10.10"
+        response = MagicMock()
 
         with pytest.raises(HTTPException) as exc:
-            await signup(body, request)
+            await signup(body, request, response)
         assert exc.value.status_code == 400
         assert "password" in exc.value.detail.lower()
 
@@ -1121,6 +1122,7 @@ class TestUiReg006SignupTermsConsent:
         )
         request = MagicMock()
         request.client.host = "10.10.10.11"
+        response = MagicMock()
 
         existing_user = MagicMock()
 
@@ -1131,6 +1133,6 @@ class TestUiReg006SignupTermsConsent:
             mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
 
             with pytest.raises(HTTPException) as exc:
-                await signup(body, request)
+                await signup(body, request, response)
             assert exc.value.status_code == 409
             assert "already registered" in exc.value.detail.lower()

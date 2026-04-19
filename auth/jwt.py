@@ -40,16 +40,28 @@ def _get_redis() -> aioredis.Redis | None:
 
 
 def _token_redis_key(token: str) -> str:
-    """Derive a unique Redis key from a token using HMAC-SHA256.
+    """Derive a unique Redis key from a token using HMAC-SHA384.
 
     The previous implementation used ``token[:32]`` which collides for all
     JWTs sharing the same header (e.g. every HS256 token starts with the
     same 36-char base64url header).  An HMAC of the full token is unique.
+
+    SECURITY_AUDIT-2026-04-19 LOW-15: refuses the predictable default in
+    production/staging so blacklist keys cannot be guessed.
     """
     import os as _os
 
-    _key = _os.getenv("AGENTICORG_SECRET_KEY", "agenticorg-default-key").encode()
-    digest = _hmac.new(_key, token.encode(), "sha384").hexdigest()
+    secret = _os.getenv("AGENTICORG_SECRET_KEY", "")
+    if not secret:
+        env = _os.getenv("AGENTICORG_ENV", "development").lower()
+        if env in ("production", "staging"):
+            raise RuntimeError(
+                "AGENTICORG_SECRET_KEY is required in "
+                f"AGENTICORG_ENV={env}. Aborting token blacklist "
+                "key derivation (LOW-15)."
+            )
+        secret = "agenticorg-dev-only-do-not-use-in-production"
+    digest = _hmac.new(secret.encode(), token.encode(), "sha384").hexdigest()
     return f"token_blacklist:{digest}"
 
 
