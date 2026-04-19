@@ -46,6 +46,39 @@ def _ragflow_headers() -> dict[str, str]:
     return headers
 
 
+def _dataset_for(tenant_id: str) -> str:
+    """Return the RAGFlow dataset ID owned by this tenant.
+
+    SECURITY_AUDIT-2026-04-19 HIGH-07: every tenant previously shared
+    ``datasets/default``, so list/search/delete could surface another
+    tenant's documents. Each tenant now has its own dataset. The ID is
+    derived deterministically so re-deploys keep talking to the same
+    backing storage, and it contains only URL-safe characters.
+    """
+    safe = "".join(c for c in str(tenant_id) if c.isalnum() or c in "-_")
+    return f"tenant_{safe}" if safe else "tenant_unknown"
+
+
+async def _ragflow_ensure_dataset(dataset_id: str) -> None:
+    """Create the per-tenant dataset in RAGFlow if it does not yet exist.
+
+    Best-effort — RAGFlow returns 409 (or similar) when the dataset is
+    already present. We intentionally ignore errors here: the caller's
+    primary operation (upload / search) will surface a real failure.
+    """
+    async with _httpx.AsyncClient(base_url=_RAGFLOW_URL, timeout=15) as client:
+        try:
+            await client.post(
+                "/api/v1/datasets",
+                json={"name": dataset_id, "id": dataset_id},
+                headers=_ragflow_headers(),
+            )
+        except Exception:  # noqa: S110
+            # Dataset may already exist, or RAGFlow may reject the id
+            # format. In either case the downstream call will report.
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
@@ -91,10 +124,12 @@ class StatsResponse(BaseModel):
 async def _ragflow_upload(
     tenant_id: str, filename: str, content: bytes, content_type: str | None,
 ) -> dict[str, Any]:
-    """Upload a document to RAGFlow."""
+    """Upload a document to the tenant's private RAGFlow dataset."""
+    dataset_id = _dataset_for(tenant_id)
+    await _ragflow_ensure_dataset(dataset_id)
     async with _httpx.AsyncClient(base_url=_RAGFLOW_URL, timeout=60) as client:
         resp = await client.post(
-            "/api/v1/datasets/default/documents",
+            f"/api/v1/datasets/{dataset_id}/documents",
             files={"file": (filename, content, content_type or "application/octet-stream")},
             headers={"Authorization": f"Bearer {_RAGFLOW_KEY}"} if _RAGFLOW_KEY else {},
             params={"tenant_id": tenant_id},
@@ -104,11 +139,12 @@ async def _ragflow_upload(
 
 
 async def _ragflow_search(tenant_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
-    """Search documents via RAGFlow vector search."""
+    """Search documents inside the tenant's own dataset only."""
+    dataset_id = _dataset_for(tenant_id)
     async with _httpx.AsyncClient(base_url=_RAGFLOW_URL, timeout=30) as client:
         resp = await client.post(
             "/api/v1/retrieval",
-            json={"query": query, "top_k": top_k, "dataset_ids": ["default"]},
+            json={"query": query, "top_k": top_k, "dataset_ids": [dataset_id]},
             headers=_ragflow_headers(),
         )
         resp.raise_for_status()
@@ -125,10 +161,11 @@ async def _ragflow_search(tenant_id: str, query: str, top_k: int) -> list[dict[s
 
 
 async def _ragflow_list(tenant_id: str) -> list[dict[str, Any]]:
-    """List documents from RAGFlow."""
+    """List documents from the tenant's dataset only."""
+    dataset_id = _dataset_for(tenant_id)
     async with _httpx.AsyncClient(base_url=_RAGFLOW_URL, timeout=30) as client:
         resp = await client.get(
-            "/api/v1/datasets/default/documents",
+            f"/api/v1/datasets/{dataset_id}/documents",
             headers=_ragflow_headers(),
         )
         resp.raise_for_status()
@@ -139,11 +176,12 @@ async def _ragflow_list(tenant_id: str) -> list[dict[str, Any]]:
         return docs if isinstance(docs, list) else []
 
 
-async def _ragflow_delete(doc_id: str) -> bool:
-    """Delete a document from RAGFlow."""
+async def _ragflow_delete(tenant_id: str, doc_id: str) -> bool:
+    """Delete a document from the tenant's dataset."""
+    dataset_id = _dataset_for(tenant_id)
     async with _httpx.AsyncClient(base_url=_RAGFLOW_URL, timeout=30) as client:
         resp = await client.delete(
-            f"/api/v1/datasets/default/documents/{doc_id}",
+            f"/api/v1/datasets/{dataset_id}/documents/{doc_id}",
             headers=_ragflow_headers(),
         )
         return resp.status_code < 400
@@ -356,7 +394,7 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
     """Delete a document from the knowledge base."""
     if _ragflow_available():
         try:
-            deleted = await _ragflow_delete(doc_id)
+            deleted = await _ragflow_delete(tenant_id, doc_id)
             if deleted:
                 return {"ok": True, "document_id": doc_id, "status": "deleted"}
         except Exception as exc:

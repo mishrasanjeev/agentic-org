@@ -5,7 +5,11 @@ import { Helmet } from "react-helmet-async";
 export default function ResetPassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const token = searchParams.get("token");
+  // MEDIUM-10: ``code`` is the new opaque one-time identifier. ``token``
+  // is kept for backward-compat with links issued before the change.
+  const code = searchParams.get("code");
+  const legacyToken = searchParams.get("token");
+  const resetId = code || legacyToken;
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -22,10 +26,13 @@ export default function ResetPassword() {
     setError(null);
     setLoading(true);
     try {
+      const payload: Record<string, unknown> = { password };
+      if (code) payload.code = code;
+      else if (legacyToken) payload.token = legacyToken;
       const res = await fetch("/api/v1/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ detail: "Request failed" }));
@@ -63,9 +70,9 @@ export default function ResetPassword() {
             </div>
           )}
 
-          {!token ? (
+          {!resetId ? (
             <div className="text-center space-y-4">
-              <p className="text-sm text-muted-foreground">Invalid reset link — no token provided.</p>
+              <p className="text-sm text-muted-foreground">Invalid reset link — no code provided.</p>
               <Link to="/forgot-password" className="text-sm text-primary hover:text-primary/80">
                 Request a new reset link
               </Link>

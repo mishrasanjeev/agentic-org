@@ -10,13 +10,15 @@ import uuid
 from collections import defaultdict
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
+from auth.one_time_codes import consume as consume_code
+from auth.one_time_codes import issue as issue_code
 from core.config import settings
 from core.database import async_session_factory
 from core.email import send_password_reset_email, send_welcome_email
@@ -27,6 +29,33 @@ from core.seed_tenant import seed_tenant_defaults
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+def _set_session_cookie(response: Response, token: str, max_age_seconds: int) -> None:
+    """Set the HttpOnly session cookie used by the browser SPA.
+
+    SECURITY_AUDIT-2026-04-19 CRITICAL-01 remediation: the access token
+    is still returned in the JSON body so that API clients, SDKs, CI,
+    and the SSO callback can continue to function, but the browser is
+    encouraged to use the cookie. Frontend migration to cookie-only
+    happens in a follow-up PR which removes ``localStorage`` writes.
+    """
+    is_prod = os.getenv("AGENTICORG_ENV", "development").lower() == "production"
+    response.set_cookie(
+        key="agenticorg_session",
+        value=token,
+        max_age=max_age_seconds,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    """Clear the HttpOnly session cookie on logout."""
+    response.delete_cookie(key="agenticorg_session", path="/")
+
 
 # Signup rate limiting now in core.auth_state (Redis-backed)
 
@@ -76,7 +105,7 @@ def _make_slug(name: str) -> str:
 
 
 @router.post("/signup", response_model=LoginResponse, status_code=201)
-async def signup(body: SignupRequest, request: Request):
+async def signup(body: SignupRequest, request: Request, response: Response):
     """Register a new organization and admin user."""
     # Rate-limit signups per IP (Redis-backed)
     client_ip = request.client.host if request.client else "unknown"
@@ -158,6 +187,7 @@ async def signup(body: SignupRequest, request: Request):
     except Exception:
         logger.exception("Welcome email failed but signup succeeded")
 
+    _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
     return LoginResponse(
         access_token=token,
         user={
@@ -222,7 +252,7 @@ async def _check_rate_limit(client_ip: str) -> bool:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, request: Request):
+async def login(body: LoginRequest, request: Request, response: Response):
     # Rate-limit login attempts per IP (Redis-backed, in-memory fallback)
     client_ip = request.client.host if request.client else "unknown"
     if await _check_rate_limit(client_ip):
@@ -270,6 +300,7 @@ async def login(body: LoginRequest, request: Request):
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
+    _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
     return LoginResponse(
         access_token=token,
         user={
@@ -288,7 +319,7 @@ class GoogleLoginRequest(BaseModel):
 
 
 @router.post("/google", response_model=LoginResponse)
-async def google_login(body: GoogleLoginRequest):
+async def google_login(body: GoogleLoginRequest, response: Response):
     """Verify Google ID token, find-or-create user, return JWT."""
     client_id = settings.google_oauth_client_id
     if not client_id:
@@ -364,6 +395,7 @@ async def google_login(body: GoogleLoginRequest):
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
+    _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
     return LoginResponse(
         access_token=token,
         user={
@@ -381,7 +413,10 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str
+    # One of ``token`` (legacy raw JWT) or ``code`` (opaque one-time
+    # code, preferred per MEDIUM-10) must be present.
+    token: str | None = None
+    code: str | None = None
     password: str
 
 
@@ -420,8 +455,10 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
             },
             expires_minutes=60,
         )
+        # MEDIUM-10: opaque one-time code in URL, JWT stays server-side.
+        code = await issue_code("reset", reset_token, ttl_seconds=60 * 60)
         app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
-        reset_link = f"{app_url}/reset-password?token={reset_token}"
+        reset_link = f"{app_url}/reset-password?code={code}"
         try:
             send_password_reset_email(user.email, reset_link)
         except Exception:
@@ -432,9 +469,16 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
 
 @router.post("/reset-password")
 async def reset_password(body: ResetPasswordRequest):
-    """Validate reset token and set a new password."""
+    """Validate reset (code or legacy JWT) and set a new password."""
+    token_value = body.token
+    if body.code and not token_value:
+        token_value = await consume_code("reset", body.code)
+        if not token_value:
+            raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
+    if not token_value:
+        raise HTTPException(status_code=400, detail="Missing reset code or token")
     try:
-        claims = validate_local_token(body.token)
+        claims = validate_local_token(token_value)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid or expired reset token: {e}") from None
 
@@ -467,13 +511,19 @@ async def reset_password(body: ResetPasswordRequest):
 
 
 @router.post("/logout")
-async def logout(request: Request):
-    """Blacklist the current token so it cannot be reused."""
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    token = auth_header[7:]
+async def logout(request: Request, response: Response):
+    """Blacklist the current token and clear the session cookie."""
+    # Accept either cookie or Authorization header for logout
+    # (CRITICAL-01: cookie is the new primary session carrier).
+    token = request.cookies.get("agenticorg_session") or ""
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing session cookie or Authorization header")
     blacklist_token(token)
+    _clear_session_cookie(response)
     return {"status": "logged_out"}
 
 
@@ -485,10 +535,15 @@ async def get_current_user_profile(request: Request):
     claims are already verified by the auth middleware — we just decode
     and return them in the shape the UI expects.
     """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(401, "Missing Authorization header")
-    token = auth_header[7:]
+    # CRITICAL-01: accept the session cookie first, fall back to the
+    # Authorization header for API-client compatibility.
+    token = request.cookies.get("agenticorg_session") or ""
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(401, "Missing session cookie or Authorization header")
     try:
         claims = validate_local_token(token)
     except Exception as exc:

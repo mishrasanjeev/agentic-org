@@ -47,13 +47,14 @@ class TestAuthLogin:
 
         request = MagicMock()
         request.client.host = "127.0.0.1"
+        response = MagicMock()
         with patch("api.v1.auth.async_session_factory") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=None))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)
             mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(HTTPException) as exc:
-                await login(LoginRequest(email="nobody@x.com", password="Wrong1234"), request)
+                await login(LoginRequest(email="nobody@x.com", password="Wrong1234"), request, response)
             assert exc.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -68,13 +69,14 @@ class TestAuthLogin:
         user.status = "active"
         request = MagicMock()
         request.client.host = "127.0.0.2"
+        response = MagicMock()
         with patch("api.v1.auth.async_session_factory") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=user))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)
             mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(HTTPException) as exc:
-                await login(LoginRequest(email="user@test.com", password="Wrong1234"), request)
+                await login(LoginRequest(email="user@test.com", password="Wrong1234"), request, response)
             assert exc.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -85,12 +87,13 @@ class TestAuthLogin:
         ip = f"ratelimit-{uuid.uuid4().hex[:8]}"
         request = MagicMock()
         request.client.host = ip
+        response = MagicMock()
 
         # Fill rate limit bucket
         auth_mod._login_attempts[ip] = [time.time()] * 5
 
         with pytest.raises(HTTPException) as exc:
-            await login(LoginRequest(email="x@x.com", password="X1234aaa"), request)
+            await login(LoginRequest(email="x@x.com", password="X1234aaa"), request, response)
         assert exc.value.status_code == 429
 
         # Cleanup
@@ -104,10 +107,12 @@ class TestAuthSignup:
 
         request = MagicMock()
         request.client.host = "127.0.0.3"
+        response = MagicMock()
         with pytest.raises(HTTPException) as exc:
             await signup(
                 SignupRequest(org_name="T", admin_name="T", admin_email="t@t.com", password="weak"),
                 request,
+                response,
             )
         assert exc.value.status_code == 400
         assert "uppercase" in exc.value.detail.lower() or "8 characters" in exc.value.detail.lower()
@@ -119,6 +124,7 @@ class TestAuthSignup:
         existing_user = MagicMock()
         request = MagicMock()
         request.client.host = "127.0.0.4"
+        response = MagicMock()
         with patch("api.v1.auth.async_session_factory") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=existing_user))
@@ -131,6 +137,7 @@ class TestAuthSignup:
                         admin_email="dup@test.com", password="GoodPass1",
                     ),
                     request,
+                    response,
                 )
             assert exc.value.status_code == 409
 
@@ -141,6 +148,7 @@ class TestAuthSignup:
         ip = f"signup-rl-{uuid.uuid4().hex[:8]}"
         request = MagicMock()
         request.client.host = ip
+        response = MagicMock()
 
         # Signup rate limiting moved to core.auth_state.check_signup_rate (REQ-04).
         # Patch it to return True (rate-limited) so signup returns 429.
@@ -153,6 +161,7 @@ class TestAuthSignup:
                 await signup(
                     SignupRequest(org_name="O", admin_name="A", admin_email="a@a.com", password="Pass1234"),
                     request,
+                    response,
                 )
         assert exc.value.status_code == 429
 

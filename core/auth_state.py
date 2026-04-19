@@ -127,8 +127,24 @@ async def clear_auth_failures(ip: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _hash_token(token: str) -> str:
-    """SHA-256 hash of the token — never store raw JWTs in Redis."""
-    secret = os.getenv("AGENTICORG_SECRET_KEY", "agenticorg-default-key")
+    """SHA-256 hash of the token — never store raw JWTs in Redis.
+
+    Requires ``AGENTICORG_SECRET_KEY`` in any non-local environment.
+    SECURITY_AUDIT-2026-04-19 LOW-15: pre-fix this fell back to a
+    predictable hard-coded default which made blacklist keys guessable.
+    """
+    secret = os.getenv("AGENTICORG_SECRET_KEY", "")
+    if not secret:
+        env = os.getenv("AGENTICORG_ENV", "development").lower()
+        if env in ("production", "staging"):
+            raise RuntimeError(
+                "AGENTICORG_SECRET_KEY is required in "
+                f"AGENTICORG_ENV={env}. Aborting token blacklist "
+                "hash to avoid predictable default (LOW-15)."
+            )
+        # Local/dev only — still unique-per-process so tests don't
+        # collide with any real environment.
+        secret = "agenticorg-dev-only-do-not-use-in-production"
     return hashlib.sha256(f"{secret}:{token}".encode()).hexdigest()
 
 

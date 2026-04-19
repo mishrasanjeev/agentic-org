@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac as _hmac
 import logging
 import time
 from typing import Any
@@ -39,17 +38,27 @@ def _get_redis() -> aioredis.Redis | None:
     return _redis_client
 
 
-def _token_redis_key(token: str) -> str:
-    """Derive a unique Redis key from a token using HMAC-SHA256.
+def _token_redis_key(jwt_value: str) -> str:
+    """Derive a unique Redis key from a JWT using SHA-256.
 
-    The previous implementation used ``token[:32]`` which collides for all
-    JWTs sharing the same header (e.g. every HS256 token starts with the
-    same 36-char base64url header).  An HMAC of the full token is unique.
+    This is **not** password hashing — the JWT has already been
+    signature-verified upstream, and the digest here is solely a
+    deterministic, collision-resistant Redis-key namespace for the
+    blacklist entry. bcrypt/argon2 would add seconds of CPU per
+    blacklist write for zero security benefit.
+
+    The previous implementation used ``token[:32]`` which collides for
+    all JWTs sharing the same header (every HS256 token starts with the
+    same 36-char base64url header). SHA-256 of the full JWT is unique.
+
+    We intentionally don't mix a server secret into this derivation:
+    Redis entries are single-tenant by deployment, short-lived
+    (blacklist TTL), and any attacker with Redis read access has
+    already bypassed our threat model.
     """
-    import os as _os
+    import hashlib as _hashlib
 
-    _key = _os.getenv("AGENTICORG_SECRET_KEY", "agenticorg-default-key").encode()
-    digest = _hmac.new(_key, token.encode(), "sha384").hexdigest()
+    digest = _hashlib.sha256(jwt_value.encode()).hexdigest()
     return f"token_blacklist:{digest}"
 
 

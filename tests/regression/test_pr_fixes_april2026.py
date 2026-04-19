@@ -161,6 +161,9 @@ class TestGrantexMiddlewareFailureClearing:
         request = MagicMock()
         request.url.path = "/api/v1/agents"
         request.headers.get.return_value = auth_header
+        # CRITICAL-01 cookie path: explicitly return empty so the
+        # middleware falls through to the Authorization header below.
+        request.cookies.get.return_value = ""
         request.client.host = client_ip
         request.path_params = {}
         request.state = MagicMock()

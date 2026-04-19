@@ -5,7 +5,11 @@ import { Helmet } from "react-helmet-async";
 export default function InviteAccept() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const inviteToken = searchParams.get("token");
+  // MEDIUM-10: ``code`` is the new opaque one-time identifier. ``token``
+  // is kept for backward-compat with links issued before the change.
+  const inviteCode = searchParams.get("code");
+  const legacyToken = searchParams.get("token");
+  const inviteId = inviteCode || legacyToken;
 
   const [orgName, setOrgName] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -15,13 +19,15 @@ export default function InviteAccept() {
   const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
-    if (!inviteToken) {
-      setError("Invalid invite link — no token provided.");
+    if (!inviteId) {
+      setError("Invalid invite link — no code provided.");
       setFetching(false);
       return;
     }
-    // Optionally fetch invite details to show org name
-    fetch(`/api/v1/org/invite-info?token=${encodeURIComponent(inviteToken)}`)
+    const param = inviteCode
+      ? `code=${encodeURIComponent(inviteCode)}`
+      : `token=${encodeURIComponent(legacyToken || "")}`;
+    fetch(`/api/v1/org/invite-info?${param}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Invalid invite"))))
       .then((data) => {
         setOrgName(data.org_name || "your organization");
@@ -30,18 +36,21 @@ export default function InviteAccept() {
         setOrgName("your organization");
       })
       .finally(() => setFetching(false));
-  }, [inviteToken]);
+  }, [inviteId, inviteCode, legacyToken]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!inviteToken) return;
+    if (!inviteId) return;
     setError(null);
     setLoading(true);
     try {
+      const payload: Record<string, unknown> = { name, password };
+      if (inviteCode) payload.code = inviteCode;
+      else if (legacyToken) payload.token = legacyToken;
       const res = await fetch("/api/v1/org/accept-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: inviteToken, name, password }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Failed to accept invite" }));
@@ -92,7 +101,7 @@ export default function InviteAccept() {
             </div>
           )}
 
-          {!inviteToken ? (
+          {!inviteId ? (
             <p className="text-sm text-muted-foreground text-center">
               This invite link is invalid. Please ask your administrator for a new one.
             </p>

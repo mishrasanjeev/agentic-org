@@ -15,6 +15,9 @@ from sqlalchemy import select, update
 
 from api.deps import require_tenant_admin
 from auth.jwt import create_access_token, validate_local_token
+from auth.one_time_codes import consume as consume_code
+from auth.one_time_codes import issue as issue_code
+from auth.one_time_codes import peek as peek_code
 from core.config import settings
 from core.database import async_session_factory
 from core.email import send_invite_email
@@ -72,7 +75,10 @@ class InviteRequest(BaseModel):
 
 
 class AcceptInviteRequest(BaseModel):
-    token: str
+    # One of ``token`` (legacy raw JWT) or ``code`` (opaque one-time
+    # code, preferred per MEDIUM-10) must be present.
+    token: str | None = None
+    code: str | None = None
     name: str | None = None
     password: str
 
@@ -183,8 +189,12 @@ async def invite_member(body: InviteRequest, request: Request):
         expires_minutes=1440,
     )
 
+    # MEDIUM-10: put only an opaque short code in the email URL; keep
+    # the JWT on the server behind a Redis key with matching TTL.
+    code = await issue_code("invite", invite_token, ttl_seconds=1440 * 60)
+
     app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
-    invite_link = f"{app_url}/accept-invite?token={invite_token}"
+    invite_link = f"{app_url}/accept-invite?code={code}"
 
     try:
         send_invite_email(body.email, tenant.name, inviter_email, body.role, invite_link)
@@ -200,8 +210,20 @@ async def invite_member(body: InviteRequest, request: Request):
 
 
 @router.get("/invite-info")
-async def get_invite_info(token: str):
-    """Return invite metadata for the accept-invite screen."""
+async def get_invite_info(token: str | None = None, code: str | None = None):
+    """Return invite metadata for the accept-invite screen.
+
+    Accepts either a legacy ``token`` (raw JWT) or — preferred — a
+    short opaque ``code`` issued by ``POST /org/invite``. The code
+    form leaks no session material into URLs or referrer chains.
+    """
+    if code and not token:
+        token_from_code = await peek_code("invite", code)
+        if not token_from_code:
+            raise HTTPException(status_code=400, detail="Invite link is invalid or expired")
+        token = token_from_code
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing invite code")
     claims = _decode_invite_claims(token)
     user_id = claims["agenticorg:user_id"]
 
@@ -227,8 +249,15 @@ async def get_invite_info(token: str):
 
 @router.post("/accept-invite")
 async def accept_invite(body: AcceptInviteRequest):
-    """Validate invite JWT, set password, and activate the user."""
-    claims = _decode_invite_claims(body.token)
+    """Validate invite (code or legacy JWT), set password, activate the user."""
+    token_value = body.token
+    if body.code and not token_value:
+        token_value = await consume_code("invite", body.code)
+        if not token_value:
+            raise HTTPException(status_code=400, detail="Invite link is invalid or expired")
+    if not token_value:
+        raise HTTPException(status_code=400, detail="Missing invite code or token")
+    claims = _decode_invite_claims(token_value)
     user_id = claims["agenticorg:user_id"]
     _validate_password(body.password)
 
