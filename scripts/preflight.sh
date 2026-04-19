@@ -142,8 +142,14 @@ pytest_check() {
     return 0
   fi
   # regression/ is cheap and exhaustive; unit/ has the model-key-set guards
-  # that trip us when serializers change.
-  python -m pytest tests/regression/ tests/unit/ -q --no-cov
+  # that trip us when serializers change. Runs with the addopts coverage
+  # config so the following module-coverage check has .coverage to read;
+  # set SKIP_MODULE_COV=1 to opt back into the old --no-cov fast path.
+  if [[ "$SKIP_MODULE_COV" == "1" ]]; then
+    python -m pytest tests/regression/ tests/unit/ -q --no-cov
+  else
+    python -m pytest tests/regression/ tests/unit/ -q
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -178,6 +184,32 @@ consistency_sweep() {
 }
 
 # ---------------------------------------------------------------------------
+# 9. Per-module coverage floor — auth/*, api/v1/{auth,governance,mcp}.py,
+# core/database.py. Global --cov-fail-under handled by pytest in the
+# unit-tests CI step. Requires pytest_check to have run so .coverage
+# exists; skipped when pytest was skipped.
+# ---------------------------------------------------------------------------
+module_coverage_check() {
+  if [[ "$SKIP_PYTEST" == "1" || "$SKIP_MODULE_COV" == "1" ]]; then
+    echo "[preflight] skipped (SKIP_PYTEST=1 or SKIP_MODULE_COV=1)"
+    return 0
+  fi
+  python scripts/check_module_coverage.py
+}
+
+# ---------------------------------------------------------------------------
+# 10. Critical-path Playwright tags — every tag must appear in ≥1 spec
+# so a deleted/renamed describe can't silently drop coverage.
+# ---------------------------------------------------------------------------
+critical_tag_check() {
+  if [[ "$SKIP_TAG_CHECK" == "1" || ! -d "$REPO_ROOT/ui/e2e" ]]; then
+    echo "[preflight] skipped (SKIP_TAG_CHECK=1 or no ui/e2e/)"
+    return 0
+  fi
+  python scripts/check_critical_path_tags.py
+}
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 run_step "branch safety"          branch_check
@@ -189,6 +221,8 @@ run_step "pytest regression+unit" pytest_check
 run_step "ui tsc"                 ui_check
 run_step "ui build"               ui_build
 run_step "consistency sweep"      consistency_sweep
+run_step "module coverage floor"  module_coverage_check
+run_step "critical-path tags"     critical_tag_check
 
 summary
 echo -e "${GRN}[preflight] all gates passed. Safe to push.${NC}"

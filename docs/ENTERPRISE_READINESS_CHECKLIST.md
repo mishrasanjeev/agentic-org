@@ -103,24 +103,32 @@ enterprise-ready and should be flagged in residual-risk review.
 These are explicit carry-overs, not hidden debt. Each is tracked and
 scheduled.
 
-- [ ] **Coverage floor** (70 % global, 85 % on auth/tenancy/billing/
-  connectors/migrations). Current baseline ~57 %. Not yet enforced in
-  CI because a cut-off below baseline is meaningless and a cut-off at
-  70 % would block every PR until more tests are written. **Plan:**
-  run coverage in CI for two weeks, pick the 10th-percentile value, set
-  `--cov-fail-under` to that value, raise over time.
+- [x] **Coverage floor — shipped 2026-04-19 (PR-F1).** Global baseline
+  is 57 %, pinned to `--cov-fail-under=55` in `pyproject.toml` as a
+  regression guard. Per-module floors (`auth/*` 70 %, `api/v1/auth.py`
+  50 %, `api/v1/governance.py` 35 %, `api/v1/mcp.py` 45 %,
+  `core/database.py` 30 %) enforced by
+  `scripts/check_module_coverage.py` (preflight gate #9). The 70 %
+  global / 85 % critical-module target from Phase 8 is surfaced as a
+  warning next to every module; raise floors as real suite catches up.
 - [ ] **DB-backed unit tests** (5 classes: TestReportScheduleErrors,
   TestReportScheduleIsolation, TestReportSchedules, TestABMApi,
   TestA2ATask.test_get_task_not_found). Gated on `AGENTICORG_DB_URL`
   today. PR-D3 shipped the staging infra (re-exports, migration-check
   allowlist, no-op conftest); the follow-up rewrites these to own their
   async lifecycle + asserts real shapes.
-- [ ] **Critical-path regression tags** (`@auth @tenancy @sdk @mcp
-  @hitl @connector @governance @audit`). Deferred from PR-D4 — once
-  applied, CI enforces that every release has coverage on each tag.
-- [ ] **bge-m3 multilingual embeddings upgrade.** bge-small is English+
-  only; bge-m3 is 2.3 GB multilingual. Deferred until the pipeline has
-  proven itself in CI.
+- [x] **Critical-path regression tags — shipped 2026-04-19 (PR-F3).**
+  `@auth @tenancy @sdk @mcp @hitl @connector @governance @audit` are
+  applied to existing describes (`login-e2e`, `dashboard-403`,
+  `sdk-examples`, `ca-firms` Filing Approvals, `connectors-catalog`,
+  `settings-governance`). `scripts/check_critical_path_tags.py`
+  asserts every tag appears in at least one spec (preflight gate).
+- [x] **bge-m3 multilingual embedding toggle — shipped 2026-04-19
+  (PR-F4).** `AGENTICORG_EMBEDDING_MODEL` flips the model at deploy
+  time (`BAAI/bge-m3` for multilingual, `BAAI/bge-large-en-v1.5` for
+  best English). `docs/embeddings-upgrade.md` documents the column-dim
+  rotation procedure (ADD vector(N) → re-embed → RENAME + index swap).
+  Default stays bge-small for CI friendliness.
 - [x] **Connector detail + Edit — shipped 2026-04-19 (PR-F5).**
   Every connector card now renders an Edit button that navigates to
   `/dashboard/connectors/<id>`; the existing `ConnectorDetail` page

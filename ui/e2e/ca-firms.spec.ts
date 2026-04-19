@@ -525,7 +525,7 @@ test.describe("CA Demo Login Flow", () => {
 //  Filing Approvals
 // ==========================================================================
 
-test.describe("Filing Approvals", () => {
+test.describe("Filing Approvals @hitl", () => {
   test.beforeEach(async ({ page }) => {
     requireAuth();
     await authenticate(page);
