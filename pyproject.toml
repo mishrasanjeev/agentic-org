@@ -131,6 +131,10 @@ cache_dir = "codex-pytest-cache"
 timeout = 60
 timeout_method = "thread"
 addopts = "--basetemp=codex-pytest-basetemp --cov=core --cov=api --cov=auth --cov=workflows --cov=scaling --cov-report=xml --cov-report=term-missing"
+# Coverage floor not enforced here yet — current measured coverage is ~57%
+# and PR-D4 ships the decorative-state work without the floor to avoid a
+# repo-wide CI block. A follow-up will add `--cov-fail-under` once we
+# have a CI run that establishes the real baseline.
 
 [tool.mypy]
 python_version = "3.12"

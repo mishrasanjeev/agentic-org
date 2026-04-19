@@ -206,7 +206,7 @@ export default function Connectors() {
           onClick={() => setActiveTab("marketplace")}
           className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "marketplace" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-primary hover:border-primary/50"}`}
         >
-          Marketplace ({marketplaceTotal || "1000+"})
+          Marketplace{marketplaceTotal > 0 ? ` (${marketplaceTotal})` : ""}
         </button>
       </div>
 
@@ -366,9 +366,13 @@ export default function Connectors() {
                       variant={connectedApps.has(app.key) ? "outline" : "default"}
                       className="w-full"
                       onClick={() => handleConnect(app.key)}
+                      data-testid={`marketplace-connect-${app.key}`}
                     >
-                      {connectedApps.has(app.key) ? "Connected" : "Connect"}
+                      {connectedApps.has(app.key) ? "Connected (Demo)" : "Connect (Demo)"}
                     </Button>
+                    <p className="text-[10px] text-muted-foreground text-center mt-1">
+                      OAuth handoff pending — UI state only
+                    </p>
                   </CardContent>
                 </Card>
               ))}
