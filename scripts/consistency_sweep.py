@@ -174,6 +174,32 @@ def check_stale_public_claims() -> Check:
     return c
 
 
+def check_mcp_registry_schema() -> Check:
+    """Fields that the MCP registry (registry.modelcontextprotocol.io)
+    validates on publish. Catch violations locally instead of during
+    the publish step.
+
+    Known constraints (discovered via mcp-publisher validate):
+      - description length <= 100 chars
+    """
+    import json as _json
+
+    c = Check("mcp-server registry-schema")
+    srv_path = ROOT / "mcp-server" / "server.json"
+    if not srv_path.exists():
+        c.ok = False
+        c.detail = "mcp-server/server.json missing"
+        return c
+    srv = _json.loads(srv_path.read_text(encoding="utf-8"))
+    desc = str(srv.get("description", ""))
+    c.subcheck(
+        "description <= 100 chars",
+        len(desc) <= 100,
+        f"{len(desc)} chars",
+    )
+    return c
+
+
 def check_mcp_version_lockstep() -> Check:
     """mcp-server/package.json.version MUST equal server.json.version
     AND server.json.packages[0].version. These three moving apart
@@ -245,6 +271,7 @@ def main() -> int:
         check_version_agreement(),
         check_product_facts_alignment(),
         check_stale_public_claims(),
+        check_mcp_registry_schema(),
         check_mcp_version_lockstep(),
         check_mcp_tool_count(),
     ]
