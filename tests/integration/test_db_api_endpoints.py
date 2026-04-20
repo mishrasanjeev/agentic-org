@@ -164,7 +164,13 @@ class TestReportSchedulesIntegration:
         created = (await client.post(
             "/api/v1/report-schedules",
             headers=headers,
-            json={"report_type": "cmo_weekly", "cron_expression": "weekly"},
+            json={
+                "report_type": "cmo_weekly",
+                "cron_expression": "weekly",
+                "delivery_channels": [
+                    {"type": "email", "target": "cmo@example.com"},
+                ],
+            },
         )).json()
         try:
             updated = await client.patch(
@@ -207,7 +213,9 @@ class TestReportSchedulesIntegration:
             json={
                 "report_type": "aging_report",
                 "cron_expression": "daily",
-                "delivery_channels": [],
+                "delivery_channels": [
+                    {"type": "email", "target": "ops@example.com"},
+                ],
             },
         )).json()
         try:
@@ -228,6 +236,143 @@ class TestReportSchedulesIntegration:
             await client.delete(
                 f"/api/v1/report-schedules/{created['id']}", headers=a_hdr,
             )
+
+    # --- validation regressions (QA bug TC_001 + TC_002) -------------------
+    #
+    # Each of these used to surface as an HTTP 500 at delivery time because
+    # the API accepted malformed input. They should now all be 422 at the
+    # boundary, with a specific validation message.
+    @pytest.mark.asyncio
+    async def test_missing_email_target_returns_422_not_500(
+        self, client, make_auth_headers,
+    ):
+        """TC_001: empty-string email target must be rejected at boundary."""
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "daily",
+                "delivery_channels": [{"type": "email", "target": ""}],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        assert "target" in resp.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_invalid_email_returns_422(self, client, make_auth_headers):
+        """TC_001: malformed email target must be rejected at boundary."""
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "daily",
+                "delivery_channels": [
+                    {"type": "email", "target": "not-an-email"},
+                ],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        assert "email" in resp.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_invalid_slack_channel_returns_422(
+        self, client, make_auth_headers,
+    ):
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "daily",
+                "delivery_channels": [
+                    {"type": "slack", "target": "not-a-channel-id"},
+                ],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    @pytest.mark.asyncio
+    async def test_invalid_whatsapp_number_returns_422(
+        self, client, make_auth_headers,
+    ):
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "daily",
+                "delivery_channels": [
+                    {"type": "whatsapp", "target": "12345"},
+                ],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    @pytest.mark.asyncio
+    async def test_no_delivery_channels_returns_422(
+        self, client, make_auth_headers,
+    ):
+        """A schedule with zero delivery channels is useless — reject it."""
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "daily",
+                "delivery_channels": [],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    @pytest.mark.asyncio
+    async def test_real_cron_expression_is_accepted(
+        self, client, make_auth_headers,
+    ):
+        """TC_002: real 5-field cron expressions must be accepted."""
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "0 9 * * 1-5",
+                "delivery_channels": [
+                    {"type": "email", "target": "cfo@example.com"},
+                ],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        created = resp.json()
+        assert created["cron_expression"] == "0 9 * * 1-5"
+        await client.delete(
+            f"/api/v1/report-schedules/{created['id']}", headers=headers,
+        )
+
+    @pytest.mark.asyncio
+    async def test_invalid_cron_expression_returns_422(
+        self, client, make_auth_headers,
+    ):
+        """TC_002: obviously-invalid cron must be rejected."""
+        headers = self._admin_headers(make_auth_headers)
+        resp = await client.post(
+            "/api/v1/report-schedules",
+            headers=headers,
+            json={
+                "report_type": "cfo_daily",
+                "cron_expression": "99 99 99 99 99",
+                "delivery_channels": [
+                    {"type": "email", "target": "cfo@example.com"},
+                ],
+            },
+        )
+        assert resp.status_code == 422, resp.text
 
 
 # ═══════════════════════════════════════════════════════════════════════════
