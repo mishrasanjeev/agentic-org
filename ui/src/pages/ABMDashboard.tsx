@@ -125,11 +125,47 @@ export default function ABMDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setError("");
     try {
-      await abmApi.uploadCsv(file);
+      const res = await abmApi.uploadCsv(file);
+      const r = res.data as {
+        created?: number;
+        skipped?: number;
+        dedup_skipped?: { row: string; domain: string; reason: string }[];
+        row_errors?: { row: number; domain: string; reason: string }[];
+      };
+      const parts: string[] = [];
+      if (r.created) parts.push(`${r.created} added`);
+      if (r.dedup_skipped?.length) {
+        parts.push(`${r.dedup_skipped.length} duplicate(s) skipped`);
+      }
+      if (r.row_errors?.length) {
+        // Show the first three concrete reasons so the user can act.
+        const preview = r.row_errors
+          .slice(0, 3)
+          .map((e) => `row ${e.row}: ${e.reason}`)
+          .join("; ");
+        const more = r.row_errors.length > 3
+          ? ` (+${r.row_errors.length - 3} more)`
+          : "";
+        parts.push(`${r.row_errors.length} row error(s): ${preview}${more}`);
+      }
+      if (parts.length === 0) {
+        setError("CSV processed but no rows were imported");
+      } else if (r.dedup_skipped?.length || r.row_errors?.length) {
+        // Report via the same banner — non-fatal but user should see it.
+        setError(parts.join(" · "));
+      }
       await fetchData();
-    } catch {
-      setError("CSV upload failed");
+    } catch (err: unknown) {
+      const detail = (err as {
+        response?: { data?: { detail?: string } };
+      })?.response?.data?.detail;
+      setError(
+        typeof detail === "string"
+          ? `CSV upload rejected: ${detail}`
+          : "CSV upload failed",
+      );
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";

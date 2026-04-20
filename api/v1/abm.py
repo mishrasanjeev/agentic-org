@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import uuid as _uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -30,14 +31,84 @@ router = APIRouter(prefix="/abm", tags=["ABM"])
 _aggregator = IntentAggregator()
 
 
+# TC_018: a domain must have a label, a dot, and a TLD. Not a full RFC
+# 1035 implementation — just enough to reject "wipro" without a TLD
+# while still accepting real customer domains (including IDN punycode
+# via xn-- and multi-dot subdomains).
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+)
+
+# TC_020: company_name / industry / revenue must not carry injection
+# characters ($ @ # ! ? \ / < > & ^ * | ;). Alphanumerics, spaces,
+# hyphens, periods, apostrophes, ampersands and parentheses are
+# preserved because real company names use them (e.g. "S&P Global",
+# "Wipro Limited (Technologies)", "A. O. Smith"). Empty passes —
+# callers validate required/optional separately.
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9 .,'&()\-]*$")
+_SAFE_TEXT_RE = re.compile(r"^[A-Za-z0-9 .,'&()\-/]*$")
+
+
+def _validate_domain(value: str) -> str:
+    v = value.strip().lower()
+    if not v:
+        raise ValueError("domain is required")
+    if not _DOMAIN_RE.match(v):
+        raise ValueError(
+            f"invalid domain {v!r}: expected a registrable domain "
+            "like 'example.com' (label.tld with a TLD of at least 2 chars)"
+        )
+    return v
+
+
+def _validate_safe_name(value: str, field: str = "company_name") -> str:
+    v = value.strip()
+    if not _SAFE_NAME_RE.match(v):
+        raise ValueError(
+            f"{field} contains disallowed characters "
+            "(only letters, digits, spaces, and . , ' & ( ) - are allowed)"
+        )
+    return v
+
+
+def _validate_safe_text(value: str, field: str) -> str:
+    v = value.strip()
+    if not _SAFE_TEXT_RE.match(v):
+        raise ValueError(
+            f"{field} contains disallowed characters "
+            "(only letters, digits, spaces, and . , ' & ( ) - / are allowed)"
+        )
+    return v
+
+
 # ── Pydantic schemas ──────────────────────────────────────────────────
 
 class AccountCreate(BaseModel):
-    company_name: str = Field(..., max_length=255)
+    company_name: str = Field(..., max_length=255, min_length=1)
     domain: str = Field(..., max_length=255)
     industry: str = ""
     revenue: str = ""
     tier: str = Field(default="2", pattern=r"^[123]$")
+
+    @field_validator("domain")
+    @classmethod
+    def _domain_ok(cls, v: str) -> str:
+        return _validate_domain(v)
+
+    @field_validator("company_name")
+    @classmethod
+    def _company_ok(cls, v: str) -> str:
+        return _validate_safe_name(v, "company_name")
+
+    @field_validator("industry")
+    @classmethod
+    def _industry_ok(cls, v: str) -> str:
+        return _validate_safe_text(v, "industry")
+
+    @field_validator("revenue")
+    @classmethod
+    def _revenue_ok(cls, v: str) -> str:
+        return _validate_safe_text(v, "revenue")
 
 
 class AccountUpdate(BaseModel):
@@ -46,6 +117,26 @@ class AccountUpdate(BaseModel):
     industry: str | None = None
     revenue: str | None = None
     tier: str | None = Field(default=None, pattern=r"^[123]$")
+
+    @field_validator("domain")
+    @classmethod
+    def _domain_ok(cls, v: str | None) -> str | None:
+        return _validate_domain(v) if v is not None else None
+
+    @field_validator("company_name")
+    @classmethod
+    def _company_ok(cls, v: str | None) -> str | None:
+        return _validate_safe_name(v, "company_name") if v is not None else None
+
+    @field_validator("industry")
+    @classmethod
+    def _industry_ok(cls, v: str | None) -> str | None:
+        return _validate_safe_text(v, "industry") if v is not None else None
+
+    @field_validator("revenue")
+    @classmethod
+    def _revenue_ok(cls, v: str | None) -> str | None:
+        return _validate_safe_text(v, "revenue") if v is not None else None
 
 
 class CampaignCreate(BaseModel):
@@ -116,13 +207,27 @@ async def upload_accounts(
 ) -> dict[str, Any]:
     """Upload a CSV file of target accounts.
 
-    Expected columns: company_name, domain, industry, revenue, tier.
-    Returns the list of created account IDs.
+    Expected columns: company_name, domain, industry (optional),
+    revenue (optional), tier (optional, default "2").
+
+    Per row handling:
+      - Missing required fields or invalid domain → row rejected (row_errors)
+      - Duplicate of an existing tenant-scoped domain → dedup_skipped
+      - Duplicate of another row inside this same CSV → dedup_skipped
+      - Valid + unique → inserted, account_id appended
+
+    Whole-CSV errors (zero rows after header, bad headers, undecodable
+    bytes) surface as HTTP 400. Per-row errors are collected and
+    returned in the 200 response so the UI can show a specific
+    breakdown instead of a generic "upload failed".
     """
-    if not file.filename or not file.filename.endswith(".csv"):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(400, "Only CSV files are accepted")
 
     content = await file.read()
+    if not content.strip():
+        # TC_019: bytes-empty file — never even reaches the CSV parser.
+        raise HTTPException(400, "CSV file is empty or contains no valid records")
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -140,33 +245,121 @@ async def upload_accounts(
 
     tid = _uuid.UUID(tenant_id)
     created_ids: list[str] = []
-    skipped = 0
+    dedup_skipped: list[dict[str, str]] = []
+    row_errors: list[dict[str, Any]] = []
+    # Track which domains we've already inserted in THIS upload so
+    # duplicates WITHIN the CSV (TC_013) are caught without relying on
+    # a DB round-trip per row.
+    seen_in_upload: set[str] = set()
+    data_rows_seen = 0
 
     async with get_tenant_session(tid) as session:
-        for row in reader:
-            company_name = (row.get("company_name") or "").strip()
-            domain = (row.get("domain") or "").strip()
-            if not company_name or not domain:
-                skipped += 1
+        # Pre-load the set of domains this tenant already has — cheap
+        # for normal catalog sizes and avoids N per-row SELECTs.
+        existing_q = select(func.lower(ABMAccount.domain)).where(
+            ABMAccount.tenant_id == tid,
+            ABMAccount.domain.isnot(None),
+        )
+        existing = {
+            row[0]
+            for row in (await session.execute(existing_q)).all()
+            if row[0]
+        }
+
+        for idx, raw_row in enumerate(reader, start=2):  # row 1 is header
+            data_rows_seen += 1
+            row_num = idx
+            company_name = (raw_row.get("company_name") or "").strip()
+            raw_domain = (raw_row.get("domain") or "").strip()
+
+            # Field-by-field validation. Collect the first error per row
+            # rather than fail-fast so the UI can surface the full list.
+            try:
+                company_name = _validate_safe_name(company_name, "company_name")
+                if not company_name:
+                    raise ValueError("company_name is required")
+                domain = _validate_domain(raw_domain)
+                industry = _validate_safe_text(
+                    raw_row.get("industry") or "", "industry",
+                )
+                revenue = _validate_safe_text(
+                    raw_row.get("revenue") or "", "revenue",
+                )
+                tier = (raw_row.get("tier") or "2").strip()
+                if tier not in {"1", "2", "3"}:
+                    raise ValueError(f"tier must be one of 1, 2, 3 (got {tier!r})")
+            except ValueError as exc:
+                row_errors.append({
+                    "row": row_num,
+                    "domain": raw_domain,
+                    "reason": str(exc),
+                })
+                continue
+
+            # TC_013: duplicate within this CSV.
+            if domain in seen_in_upload:
+                dedup_skipped.append({
+                    "row": str(row_num),
+                    "domain": domain,
+                    "reason": "duplicate of an earlier row in this CSV",
+                })
+                continue
+            # TC_012: duplicate against existing tenant accounts.
+            if domain in existing:
+                dedup_skipped.append({
+                    "row": str(row_num),
+                    "domain": domain,
+                    "reason": "already present in this tenant",
+                })
                 continue
 
             acct = ABMAccount(
                 tenant_id=tid,
                 name=company_name,
                 domain=domain,
-                industry=(row.get("industry") or "").strip() or None,
-                revenue=(row.get("revenue") or "").strip() or None,
-                tier=(row.get("tier") or "2").strip(),
+                industry=industry or None,
+                revenue=revenue or None,
+                tier=tier,
             )
             session.add(acct)
-            await session.flush()
+            try:
+                await session.flush()
+            except IntegrityError:
+                # Last-line defence: a concurrent request inserted the
+                # same domain while we were validating. Undo and mark
+                # the row as skipped rather than surfacing a 500.
+                await session.rollback()
+                dedup_skipped.append({
+                    "row": str(row_num),
+                    "domain": domain,
+                    "reason": "inserted by a concurrent request",
+                })
+                continue
             created_ids.append(str(acct.id))
+            seen_in_upload.add(domain)
 
-    logger.info("abm_csv_upload", tenant=tenant_id, created=len(created_ids), skipped=skipped)
+    # TC_019: header present but no data rows at all.
+    if data_rows_seen == 0:
+        raise HTTPException(
+            400, "CSV file is empty or contains no valid records",
+        )
+
+    logger.info(
+        "abm_csv_upload",
+        tenant=tenant_id,
+        created=len(created_ids),
+        dedup_skipped=len(dedup_skipped),
+        row_errors=len(row_errors),
+    )
     return {
         "created": len(created_ids),
-        "skipped": skipped,
+        # `skipped` kept for back-compat with callers that read the
+        # legacy shape; new callers should prefer dedup_skipped +
+        # row_errors for granular feedback.
+        "skipped": len(dedup_skipped) + len(row_errors),
         "account_ids": created_ids,
+        "dedup_skipped": dedup_skipped,
+        "row_errors": row_errors,
     }
 
 
