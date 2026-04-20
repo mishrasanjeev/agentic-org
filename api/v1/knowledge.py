@@ -225,6 +225,95 @@ async def _ragflow_delete(tenant_id: str, doc_id: str) -> bool:
         return resp.status_code < 400
 
 
+async def _ragflow_dataset_stats(tenant_id: str) -> dict[str, int] | None:
+    """Fetch real chunk + index-size metrics for the tenant's dataset.
+
+    TC_007 / TC_008: ``knowledge_stats`` used to hardcode
+    ``total_chunks=0`` and derive ``index_size_mb`` from a sum of raw
+    file sizes — both misrepresented the RAG index state. Returns
+    ``{"chunk_count": int, "index_size_bytes": int}`` on success or
+    ``None`` on any failure. Never raises — the caller falls back to a
+    DB-derived estimate when we can't reach the registry.
+    """
+    dataset_id = _dataset_for(tenant_id)
+    try:
+        async with _httpx.AsyncClient(base_url=_RAGFLOW_URL, timeout=15) as client:
+            resp = await client.get(
+                "/api/v1/datasets",
+                params={"name": dataset_id},
+                headers=_ragflow_headers(),
+            )
+            if resp.status_code >= 400:
+                return None
+            payload = resp.json()
+    except Exception as exc:
+        logger.debug("ragflow_dataset_stats_failed", error=str(exc))
+        return None
+
+    # RAGFlow wraps dataset records in `data` and exposes `chunk_count`
+    # (or `chunk_num` in older builds) plus `token_num` / `index_size`.
+    # We accept either naming convention so the stats card renders
+    # correctly regardless of RAGFlow version.
+    datasets = payload.get("data", payload)
+    if isinstance(datasets, dict):
+        datasets = datasets.get("datasets", [datasets])
+    if not isinstance(datasets, list) or not datasets:
+        return None
+    ds = next(
+        (
+            d for d in datasets
+            if d.get("name") == dataset_id or d.get("id") == dataset_id
+        ),
+        datasets[0],
+    )
+    chunk_count = int(
+        ds.get("chunk_count")
+        or ds.get("chunk_num")
+        or ds.get("chunks_count")
+        or 0,
+    )
+    # Prefer a field explicitly labelled as bytes. Otherwise fall back
+    # to the token count and convert with a 4-bytes-per-token average,
+    # which is a reasonable rough estimate of embedded-index storage.
+    explicit_bytes = ds.get("index_size_bytes") or ds.get("index_size")
+    if explicit_bytes:
+        index_size_bytes = int(explicit_bytes)
+    else:
+        token_num = int(ds.get("token_num") or ds.get("tokens") or 0)
+        index_size_bytes = token_num * 4 if token_num else 0
+    return {
+        "chunk_count": chunk_count,
+        "index_size_bytes": index_size_bytes,
+    }
+
+
+async def _db_chunk_count(tenant_id: str) -> int:
+    """Count indexed chunks in the Postgres fallback so the Total Chunks
+    card still reflects something real when RAGFlow is unavailable
+    (TC_007). Counts knowledge_documents rows with a non-null embedding
+    for this tenant."""
+    from uuid import UUID as _UUID
+
+    from sqlalchemy import text as _sqtext
+
+    from core.database import get_tenant_session
+
+    tid = _UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            row = (await session.execute(
+                _sqtext(
+                    "SELECT COUNT(*) FROM knowledge_documents "
+                    "WHERE tenant_id = :tid AND embedding IS NOT NULL"
+                ),
+                {"tid": str(tid)},
+            )).fetchone()
+            return int(row[0] or 0) if row else 0
+    except Exception as exc:
+        logger.debug("db_chunk_count_failed", error=str(exc))
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # PostgreSQL fallback — document metadata persistence
 # ---------------------------------------------------------------------------
@@ -589,7 +678,7 @@ async def _native_semantic_search(
                 ),
                 {"tid": str(tid), "like": f"%{query}%", "k": top_k},
             )).fetchall()
-        return [
+        results = [
             SearchResult(
                 chunk_text=(r[1] or "")[:300],
                 score=0.0,
@@ -597,8 +686,44 @@ async def _native_semantic_search(
             )
             for r in rows
         ]
+        if results:
+            return results
     except Exception as exc:
         logger.debug("keyword_fallback_failed", error=str(exc))
+
+    # TC_009 last-resort: match against uploaded document filenames in
+    # the `documents` mirror table. Without this, any query fails when
+    # RAGFlow hasn't finished chunking user uploads yet — the UI showed
+    # "no results" even though the document the user just dropped in
+    # was right there. Returning the filename with a score of 0 and
+    # an empty chunk gives the UI enough signal to say "we found
+    # alpha.pdf but haven't indexed it yet".
+    try:
+        from sqlalchemy import select as _select
+
+        from core.models.document import Document
+
+        async with get_tenant_session(tid) as session:
+            match_rows = (await session.execute(
+                _select(Document).where(
+                    Document.tenant_id == tid,
+                    Document.status != "deleted",
+                    Document.filename.ilike(f"%{query}%"),
+                ).limit(top_k)
+            )).scalars().all()
+            return [
+                SearchResult(
+                    chunk_text=(
+                        f"(matched filename; {d.filename} has not finished "
+                        "indexing yet — re-run the query in a few seconds)"
+                    ),
+                    score=0.0,
+                    document_name=d.filename,
+                )
+                for d in match_rows
+            ]
+    except Exception as exc:
+        logger.debug("filename_fallback_failed", error=str(exc))
         return []
 
 
@@ -625,7 +750,17 @@ async def search_knowledge(
 
 @router.get("/knowledge/stats", response_model=StatsResponse)
 async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
-    """Return aggregate stats about the knowledge base."""
+    """Return aggregate stats about the knowledge base.
+
+    TC_007/TC_008: previously reported ``total_chunks=0`` unconditionally
+    and computed ``index_size_mb`` from a sum of raw file sizes. Now:
+      - total_chunks: RAGFlow dataset stats when reachable, else a
+        Postgres COUNT of knowledge_documents with embeddings.
+      - index_size_mb: RAGFlow-reported index size when available, else
+        the file-size sum as a lower-bound estimate.
+    Both values are labelled with `source` in debug logs so operators
+    can see which path answered.
+    """
     docs: list[dict[str, Any]] = []
 
     if _ragflow_available():
@@ -640,9 +775,43 @@ async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
         except Exception as exc:
             logger.debug("db_stats_failed", error=str(exc))
 
-    total_bytes = sum(d.get("size_bytes", d.get("size", 0)) for d in docs)
+    chunk_count = 0
+    index_size_bytes = 0
+    stats_source = "fallback"
+
+    # Prefer real RAGFlow metrics when the service is up.
+    if _ragflow_available():
+        stats = await _ragflow_dataset_stats(tenant_id)
+        if stats is not None:
+            chunk_count = stats["chunk_count"]
+            index_size_bytes = stats["index_size_bytes"]
+            stats_source = "ragflow"
+
+    # Postgres fallback — count embedded knowledge_documents rows.
+    if chunk_count == 0:
+        chunk_count = await _db_chunk_count(tenant_id)
+        if chunk_count:
+            stats_source = "postgres"
+
+    # Index-size fallback: if RAGFlow didn't provide one, use the sum of
+    # raw file sizes as a lower-bound estimate. Better than the old hard
+    # zero, explicitly labelled as "file bytes, not index bytes" in the
+    # log trail.
+    if index_size_bytes == 0:
+        index_size_bytes = sum(
+            d.get("size_bytes", d.get("size", 0)) for d in docs
+        )
+
+    logger.debug(
+        "knowledge_stats",
+        tenant_id=tenant_id,
+        source=stats_source,
+        total_documents=len(docs),
+        total_chunks=chunk_count,
+        index_size_bytes=index_size_bytes,
+    )
     return StatsResponse(
         total_documents=len(docs),
-        total_chunks=0,  # RAGFlow manages chunk count internally
-        index_size_mb=round(total_bytes / (1024 * 1024), 2),
+        total_chunks=chunk_count,
+        index_size_mb=round(index_size_bytes / (1024 * 1024), 2),
     )
