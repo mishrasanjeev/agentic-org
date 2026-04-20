@@ -5,17 +5,108 @@ Uses PostgreSQL via SQLAlchemy ORM with tenant-scoped sessions (RLS).
 
 from __future__ import annotations
 
+import re
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.report_schedule import ReportSchedule
+
+# Presets understood by both the API layer and the scheduler worker.
+# Real cron strings (5 fields) are also accepted — see _is_valid_cron().
+_CRON_PRESETS: frozenset[str] = frozenset({
+    "every_5_minutes",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly",
+})
+
+# Pragmatic email shape check. SendGrid does authoritative validation at
+# delivery time; this just rejects obviously malformed input at the API
+# boundary so the user gets a 422 instead of an eventual 500.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]+$")
+
+# Slack channel IDs: C* (public), G* (private), D* (DM). 9-11 alphanumeric
+# chars after the prefix. Accepts the friendly "#channel-name" form too,
+# which Slack resolves server-side.
+_SLACK_CHANNEL_RE = re.compile(r"^(?:[CGD][A-Z0-9]{8,10}|#[a-z0-9][a-z0-9._-]{0,78})$")
+
+# WhatsApp: E.164 phone numbers, 8-15 digits with optional leading '+'.
+_WHATSAPP_PHONE_RE = re.compile(r"^\+?[1-9]\d{7,14}$")
+
+
+def _is_valid_cron(expr: str) -> bool:
+    """Accept either a preset keyword or a real 5-field cron expression.
+
+    Delegates to croniter when available (authoritative). When croniter is
+    absent (it is an optional dep for the task layer too, see
+    core/tasks/report_tasks.py), falls back to a per-field range check so
+    we still reject obviously-invalid values like ``99 99 99 99 99``.
+    """
+    if expr in _CRON_PRESETS:
+        return True
+    try:
+        from croniter import croniter  # type: ignore[import-untyped]
+
+        try:
+            croniter(expr, datetime.now(UTC))
+            return True
+        except (ValueError, KeyError):
+            return False
+    except ImportError:
+        pass
+    # croniter not installed — do a field-by-field range check.
+    return _fallback_cron_check(expr)
+
+
+def _fallback_cron_check(expr: str) -> bool:
+    """Permissive-but-range-aware cron validator used when croniter is absent.
+
+    Each of the 5 fields must be a ``*``, ``*/N``, ``A-B``, ``A,B,C``, or a
+    bare integer, all within the field's natural range.
+    """
+    fields = expr.split()
+    if len(fields) != 5:
+        return False
+    ranges = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]
+    for token, (lo, hi) in zip(fields, ranges, strict=False):
+        if not _cron_field_ok(token, lo, hi):
+            return False
+    return True
+
+
+def _cron_field_ok(token: str, lo: int, hi: int) -> bool:
+    if token == "*":
+        return True
+    if token.startswith("*/"):
+        try:
+            n = int(token[2:])
+        except ValueError:
+            return False
+        return n > 0
+    for part in token.split(","):
+        if "-" in part:
+            try:
+                a, b = (int(x) for x in part.split("-", 1))
+            except ValueError:
+                return False
+            if not (lo <= a <= hi and lo <= b <= hi and a <= b):
+                return False
+            continue
+        try:
+            v = int(part)
+        except ValueError:
+            return False
+        if not (lo <= v <= hi):
+            return False
+    return True
 
 router = APIRouter(dependencies=[require_tenant_admin])
 
@@ -28,6 +119,50 @@ class DeliveryChannel(BaseModel):
     type: str = Field(..., description="Channel type: email | slack | whatsapp")
     target: str = Field(..., description="Email address, Slack channel ID, or phone number")
 
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, v: str) -> str:
+        if v not in {"email", "slack", "whatsapp"}:
+            raise ValueError(
+                "type must be one of: email, slack, whatsapp"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _validate_target_for_type(self) -> DeliveryChannel:
+        """Validate target format against channel type.
+
+        Without this, the API accepts an empty or malformed target and the
+        failure surfaces later as an HTTP 500 from the dispatcher (SendGrid
+        rejection, Slack 404, Twilio format error). Rejecting at the
+        boundary gives callers a clean 422 with a specific message.
+        """
+        target = (self.target or "").strip()
+        if not target:
+            raise ValueError(
+                f"target is required for {self.type} delivery channel"
+            )
+        if self.type == "email":
+            if not _EMAIL_RE.match(target):
+                raise ValueError(
+                    "invalid email address (expected name@domain.tld)"
+                )
+        elif self.type == "slack":
+            if not _SLACK_CHANNEL_RE.match(target):
+                raise ValueError(
+                    "invalid Slack channel: use the channel ID "
+                    "(e.g. C01ABC23DEF) or #channel-name"
+                )
+        elif self.type == "whatsapp":
+            if not _WHATSAPP_PHONE_RE.match(target):
+                raise ValueError(
+                    "invalid WhatsApp number: use E.164 format "
+                    "(e.g. +919876543210)"
+                )
+        # Store the trimmed value so downstream code never sees padding.
+        object.__setattr__(self, "target", target)
+        return self
+
 
 class ReportScheduleCreate(BaseModel):
     report_type: str = Field(
@@ -36,13 +171,43 @@ class ReportScheduleCreate(BaseModel):
     )
     cron_expression: str = Field(
         "daily",
-        description="Cron or keyword: every_5_minutes, hourly, daily, weekly, monthly",
+        description=(
+            "Preset keyword (every_5_minutes, hourly, daily, weekly, monthly) "
+            "or a standard 5-field cron expression (e.g. '0 9 * * 1-5')."
+        ),
     )
     delivery_channels: list[DeliveryChannel] = Field(default_factory=list)
     format: str = Field("pdf", description="Output format: pdf | excel | both")
     is_active: bool = True
     company_id: str = "default"
     params: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("cron_expression")
+    @classmethod
+    def _validate_cron(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not _is_valid_cron(v):
+            raise ValueError(
+                "cron_expression must be a preset "
+                f"({', '.join(sorted(_CRON_PRESETS))}) or a valid "
+                "5-field cron expression"
+            )
+        return v
+
+    @field_validator("format")
+    @classmethod
+    def _validate_format(cls, v: str) -> str:
+        if v not in {"pdf", "excel", "both"}:
+            raise ValueError("format must be one of: pdf, excel, both")
+        return v
+
+    @model_validator(mode="after")
+    def _require_at_least_one_channel(self) -> ReportScheduleCreate:
+        if not self.delivery_channels:
+            raise ValueError(
+                "at least one delivery channel is required"
+            )
+        return self
 
 
 class ReportScheduleUpdate(BaseModel):
@@ -53,6 +218,36 @@ class ReportScheduleUpdate(BaseModel):
     is_active: bool | None = None
     company_id: str | None = None
     params: dict[str, Any] | None = None
+
+    @field_validator("cron_expression")
+    @classmethod
+    def _validate_cron(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not _is_valid_cron(v):
+            raise ValueError(
+                "cron_expression must be a preset "
+                f"({', '.join(sorted(_CRON_PRESETS))}) or a valid "
+                "5-field cron expression"
+            )
+        return v
+
+    @field_validator("format")
+    @classmethod
+    def _validate_format(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"pdf", "excel", "both"}:
+            raise ValueError("format must be one of: pdf, excel, both")
+        return v
+
+    @model_validator(mode="after")
+    def _delivery_channels_not_empty_when_set(self) -> ReportScheduleUpdate:
+        if self.delivery_channels is not None and not self.delivery_channels:
+            raise ValueError(
+                "delivery_channels cannot be an empty list; "
+                "omit the field to keep existing channels"
+            )
+        return self
 
 
 class ReportScheduleResponse(BaseModel):
@@ -75,7 +270,12 @@ class ReportScheduleResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _compute_next_run(cron: str) -> datetime:
-    """Lightweight next-run estimation (matches task-layer logic)."""
+    """Estimate next run for display purposes.
+
+    The authoritative next-run calculation happens in the scheduler worker
+    (`core/tasks/report_tasks.py`). This helper just gives the UI a
+    reasonable `next_run_at` to show immediately after create/update.
+    """
     now = datetime.now(UTC)
     interval_map: dict[str, timedelta] = {
         "every_5_minutes": timedelta(minutes=5),
@@ -84,8 +284,15 @@ def _compute_next_run(cron: str) -> datetime:
         "weekly": timedelta(weeks=1),
         "monthly": timedelta(days=30),
     }
-    delta = interval_map.get(cron, timedelta(days=1))
-    return now + delta
+    if cron in interval_map:
+        return now + interval_map[cron]
+    # Real cron string — defer to croniter for an accurate estimate.
+    try:
+        from croniter import croniter  # type: ignore[import-untyped]
+
+        return croniter(cron, now).get_next(datetime)
+    except (ImportError, ValueError, KeyError):
+        return now + timedelta(days=1)
 
 
 def _to_response(row: ReportSchedule) -> ReportScheduleResponse:

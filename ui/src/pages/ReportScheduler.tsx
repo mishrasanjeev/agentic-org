@@ -32,10 +32,23 @@ const REPORT_TYPES = [
   { value: "campaign_report", label: "Campaign Performance" },
 ] as const;
 
-const SCHEDULE_PRESETS = [
+type FrequencyPreset = "daily" | "weekly" | "monthly";
+
+const FREQUENCY_PRESETS: { value: FrequencyPreset; label: string }[] = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
+];
+
+// Cron weekday convention: 0 or 7 = Sunday, 1 = Monday, ... 6 = Saturday.
+const DAYS_OF_WEEK = [
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+  { value: "0", label: "Sunday" },
 ] as const;
 
 const FORMAT_OPTIONS = [
@@ -45,6 +58,12 @@ const FORMAT_OPTIONS = [
 ] as const;
 
 const API_BASE = "/api/v1";
+
+// Must match the server-side regexes in api/v1/report_schedules.py so
+// users see the same error client-side before the round-trip.
+const EMAIL_RE = /^[^@\s]+@[^@\s.]+\.[^@\s]+$/;
+const SLACK_RE = /^(?:[CGD][A-Z0-9]{8,10}|#[a-z0-9][a-z0-9._-]{0,78})$/;
+const WHATSAPP_RE = /^\+?[1-9]\d{7,14}$/;
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
@@ -73,6 +92,102 @@ function statusBadge(active: boolean) {
   );
 }
 
+/** Compose a 5-field cron from the simple controls. */
+function composeCron(
+  freq: FrequencyPreset,
+  time: string,
+  dayOfWeek: string,
+  dayOfMonth: string,
+): string {
+  const [hh, mm] = time.split(":");
+  const minute = String(parseInt(mm, 10) || 0);
+  const hour = String(parseInt(hh, 10) || 0);
+  if (freq === "daily") return `${minute} ${hour} * * *`;
+  if (freq === "weekly") return `${minute} ${hour} * * ${dayOfWeek}`;
+  return `${minute} ${hour} ${dayOfMonth} * *`;
+}
+
+/** Try to map a stored cron back to the simple controls. Falls back to
+ *  advanced mode when the pattern doesn't fit one of our three presets. */
+function parseCron(cron: string): {
+  advanced: boolean;
+  freq: FrequencyPreset;
+  time: string;
+  dayOfWeek: string;
+  dayOfMonth: string;
+  raw: string;
+} {
+  const defaults = {
+    advanced: false,
+    freq: "daily" as FrequencyPreset,
+    time: "09:00",
+    dayOfWeek: "1",
+    dayOfMonth: "1",
+    raw: cron,
+  };
+  // Preset keyword — show as "Daily/Weekly/Monthly" with a default 09:00.
+  if (cron === "daily" || cron === "weekly" || cron === "monthly") {
+    return { ...defaults, freq: cron };
+  }
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return { ...defaults, advanced: true };
+  const [m, h, dom, mo, dow] = parts;
+  const mNum = parseInt(m, 10);
+  const hNum = parseInt(h, 10);
+  if (Number.isNaN(mNum) || Number.isNaN(hNum) || mo !== "*") {
+    return { ...defaults, advanced: true };
+  }
+  const time = `${String(hNum).padStart(2, "0")}:${String(mNum).padStart(2, "0")}`;
+  if (dom === "*" && dow === "*") {
+    return { ...defaults, freq: "daily", time };
+  }
+  if (dom === "*" && /^[0-7]$/.test(dow)) {
+    return { ...defaults, freq: "weekly", time, dayOfWeek: dow };
+  }
+  if (dow === "*" && /^([1-9]|[12]\d|3[01])$/.test(dom)) {
+    return { ...defaults, freq: "monthly", time, dayOfMonth: dom };
+  }
+  return { ...defaults, advanced: true };
+}
+
+function validateTarget(
+  type: DeliveryChannel["type"],
+  target: string,
+): string | null {
+  const t = target.trim();
+  if (!t) return `${type} recipient is required`;
+  if (type === "email" && !EMAIL_RE.test(t)) {
+    return "Invalid email address (expected name@domain.tld)";
+  }
+  if (type === "slack" && !SLACK_RE.test(t)) {
+    return "Invalid Slack channel — use C01ABC23DEF or #channel-name";
+  }
+  if (type === "whatsapp" && !WHATSAPP_RE.test(t)) {
+    return "Invalid WhatsApp number — use E.164 (e.g. +919876543210)";
+  }
+  return null;
+}
+
+/** Flatten a FastAPI 422 body into a one-line user-readable message. */
+async function extractError(resp: Response): Promise<string> {
+  try {
+    const data = await resp.json();
+    if (Array.isArray(data?.detail)) {
+      return data.detail
+        .map((d: { loc?: unknown[]; msg?: string }) => {
+          const field = Array.isArray(d.loc) ? d.loc.slice(1).join(".") : "";
+          return field ? `${field}: ${d.msg}` : d.msg;
+        })
+        .filter(Boolean)
+        .join("; ");
+    }
+    if (typeof data?.detail === "string") return data.detail;
+  } catch {
+    /* fall through */
+  }
+  return `HTTP ${resp.status}`;
+}
+
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export default function ReportScheduler() {
@@ -82,10 +197,16 @@ export default function ReportScheduler() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   /* ── Form state ── */
   const [formType, setFormType] = useState("cfo_daily");
-  const [formCron, setFormCron] = useState("daily");
+  const [formFreq, setFormFreq] = useState<FrequencyPreset>("daily");
+  const [formTime, setFormTime] = useState("09:00");
+  const [formDayOfWeek, setFormDayOfWeek] = useState("1");
+  const [formDayOfMonth, setFormDayOfMonth] = useState("1");
+  const [formAdvanced, setFormAdvanced] = useState(false);
+  const [formCustomCron, setFormCustomCron] = useState("0 9 * * *");
   const [formFormat, setFormFormat] = useState("pdf");
   const [formActive, setFormActive] = useState(true);
   const [formEmailEnabled, setFormEmailEnabled] = useState(true);
@@ -94,6 +215,7 @@ export default function ReportScheduler() {
   const [formSlackTarget, setFormSlackTarget] = useState("");
   const [formWhatsappEnabled, setFormWhatsappEnabled] = useState(false);
   const [formWhatsappTarget, setFormWhatsappTarget] = useState("");
+  const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
 
   /* ── Fetch schedules ── */
   const fetchSchedules = useCallback(async () => {
@@ -107,8 +229,9 @@ export default function ReportScheduler() {
       const data: ReportSchedule[] = await resp.json();
       setSchedules(data);
       setError(null);
-    } catch (e: any) {
-      setError(e.message ?? "Failed to load schedules");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to load schedules";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -118,25 +241,43 @@ export default function ReportScheduler() {
     fetchSchedules();
   }, [fetchSchedules]);
 
-  /* ── Build channels from form ── */
-  function buildChannels(): DeliveryChannel[] {
+  /* ── Build channels + pre-submit validation ── */
+  function buildValidatedChannels(): {
+    channels: DeliveryChannel[];
+    errors: Record<string, string>;
+  } {
+    const errors: Record<string, string> = {};
     const channels: DeliveryChannel[] = [];
-    if (formEmailEnabled && formEmailTarget.trim()) {
-      channels.push({ type: "email", target: formEmailTarget.trim() });
+    if (formEmailEnabled) {
+      const err = validateTarget("email", formEmailTarget);
+      if (err) errors.email = err;
+      else channels.push({ type: "email", target: formEmailTarget.trim() });
     }
-    if (formSlackEnabled && formSlackTarget.trim()) {
-      channels.push({ type: "slack", target: formSlackTarget.trim() });
+    if (formSlackEnabled) {
+      const err = validateTarget("slack", formSlackTarget);
+      if (err) errors.slack = err;
+      else channels.push({ type: "slack", target: formSlackTarget.trim() });
     }
-    if (formWhatsappEnabled && formWhatsappTarget.trim()) {
-      channels.push({ type: "whatsapp", target: formWhatsappTarget.trim() });
+    if (formWhatsappEnabled) {
+      const err = validateTarget("whatsapp", formWhatsappTarget);
+      if (err) errors.whatsapp = err;
+      else channels.push({ type: "whatsapp", target: formWhatsappTarget.trim() });
     }
-    return channels;
+    if (channels.length === 0 && Object.keys(errors).length === 0) {
+      errors.channels = "At least one delivery channel is required";
+    }
+    return { channels, errors };
   }
 
   /* ── Reset form ── */
   function resetForm() {
     setFormType("cfo_daily");
-    setFormCron("daily");
+    setFormFreq("daily");
+    setFormTime("09:00");
+    setFormDayOfWeek("1");
+    setFormDayOfMonth("1");
+    setFormAdvanced(false);
+    setFormCustomCron("0 9 * * *");
     setFormFormat("pdf");
     setFormActive(true);
     setFormEmailEnabled(true);
@@ -147,13 +288,20 @@ export default function ReportScheduler() {
     setFormWhatsappTarget("");
     setEditingId(null);
     setShowForm(false);
+    setFormFieldErrors({});
   }
 
   /* ── Populate form for edit ── */
   function startEdit(s: ReportSchedule) {
     setEditingId(s.id);
     setFormType(s.report_type);
-    setFormCron(s.cron_expression);
+    const parsed = parseCron(s.cron_expression);
+    setFormAdvanced(parsed.advanced);
+    setFormFreq(parsed.freq);
+    setFormTime(parsed.time);
+    setFormDayOfWeek(parsed.dayOfWeek);
+    setFormDayOfMonth(parsed.dayOfMonth);
+    setFormCustomCron(parsed.advanced ? parsed.raw : "0 9 * * *");
     setFormFormat(s.format);
     setFormActive(s.is_active);
 
@@ -169,50 +317,63 @@ export default function ReportScheduler() {
     setFormWhatsappTarget(wa?.target ?? "");
 
     setShowForm(true);
+    setFormFieldErrors({});
   }
 
   /* ── Create / Update ── */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const { channels, errors } = buildValidatedChannels();
+    const cron = formAdvanced
+      ? formCustomCron.trim()
+      : composeCron(formFreq, formTime, formDayOfWeek, formDayOfMonth);
+    if (formAdvanced && cron.split(/\s+/).length !== 5) {
+      errors.cron = "Advanced cron must be a 5-field expression (min hour dom mon dow)";
+    }
+    if (Object.keys(errors).length > 0) {
+      setFormFieldErrors(errors);
+      return;
+    }
+    setFormFieldErrors({});
+    setSubmitting(true);
     const token = localStorage.getItem("token") || "";
-    const channels = buildChannels();
 
     try {
-      if (editingId) {
-        await fetch(`${API_BASE}/report-schedules/${editingId}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            report_type: formType,
-            cron_expression: formCron,
-            delivery_channels: channels,
-            format: formFormat,
-            is_active: formActive,
-          }),
-        });
-      } else {
-        await fetch(`${API_BASE}/report-schedules`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            report_type: formType,
-            cron_expression: formCron,
-            delivery_channels: channels,
-            format: formFormat,
-            is_active: formActive,
-          }),
-        });
+      const payload = {
+        report_type: formType,
+        cron_expression: cron,
+        delivery_channels: channels,
+        format: formFormat,
+        is_active: formActive,
+      };
+      const resp = editingId
+        ? await fetch(`${API_BASE}/report-schedules/${editingId}`, {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          })
+        : await fetch(`${API_BASE}/report-schedules`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+
+      if (!resp.ok) {
+        setError(await extractError(resp));
+        return;
       }
       resetForm();
       fetchSchedules();
-    } catch (err: any) {
-      setError(err.message ?? "Save failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -257,8 +418,8 @@ export default function ReportScheduler() {
       const data = await resp.json();
       alert(`Report triggered. Task ID: ${data.task_id}`);
       fetchSchedules();
-    } catch (err: any) {
-      setError(err.message ?? "Run failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Run failed");
     } finally {
       setActionLoading(null);
     }
@@ -309,10 +470,11 @@ export default function ReportScheduler() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Report type */}
             <div>
-              <label className="block text-sm font-medium mb-1">
+              <label className="block text-sm font-medium mb-1" htmlFor="rs-report-type">
                 Report Type
               </label>
               <select
+                id="rs-report-type"
                 value={formType}
                 onChange={(e) => setFormType(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
@@ -325,17 +487,19 @@ export default function ReportScheduler() {
               </select>
             </div>
 
-            {/* Schedule */}
+            {/* Frequency */}
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Schedule
+              <label className="block text-sm font-medium mb-1" htmlFor="rs-frequency">
+                Frequency
               </label>
               <select
-                value={formCron}
-                onChange={(e) => setFormCron(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                id="rs-frequency"
+                value={formFreq}
+                onChange={(e) => setFormFreq(e.target.value as FrequencyPreset)}
+                disabled={formAdvanced}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background disabled:opacity-50"
               >
-                {SCHEDULE_PRESETS.map((p) => (
+                {FREQUENCY_PRESETS.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
                   </option>
@@ -343,12 +507,99 @@ export default function ReportScheduler() {
               </select>
             </div>
 
+            {/* Execution time (HH:MM) — visible for every frequency */}
+            <div>
+              <label className="block text-sm font-medium mb-1" htmlFor="rs-time">
+                Execution Time (UTC)
+              </label>
+              <input
+                id="rs-time"
+                type="time"
+                value={formTime}
+                onChange={(e) => setFormTime(e.target.value || "09:00")}
+                disabled={formAdvanced}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background disabled:opacity-50"
+              />
+            </div>
+
+            {/* Day selector — weekly only */}
+            {formFreq === "weekly" && !formAdvanced && (
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="rs-dow">
+                  Day of Week
+                </label>
+                <select
+                  id="rs-dow"
+                  value={formDayOfWeek}
+                  onChange={(e) => setFormDayOfWeek(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                >
+                  {DAYS_OF_WEEK.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Day-of-month — monthly only */}
+            {formFreq === "monthly" && !formAdvanced && (
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="rs-dom">
+                  Day of Month
+                </label>
+                <input
+                  id="rs-dom"
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={formDayOfMonth}
+                  onChange={(e) => setFormDayOfMonth(e.target.value || "1")}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                />
+              </div>
+            )}
+
+            {/* Advanced / CRON toggle */}
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={formAdvanced}
+                  onChange={(e) => setFormAdvanced(e.target.checked)}
+                  className="rounded"
+                />
+                Advanced — write CRON expression directly
+              </label>
+              {formAdvanced && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={formCustomCron}
+                    onChange={(e) => setFormCustomCron(e.target.value)}
+                    placeholder="0 9 * * 1-5   (every weekday at 09:00 UTC)"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
+                    aria-label="Custom cron expression"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    5 fields: minute (0-59), hour (0-23), day-of-month (1-31),
+                    month (1-12), day-of-week (0-7).
+                  </p>
+                  {formFieldErrors.cron && (
+                    <p className="text-xs text-red-600 mt-1">{formFieldErrors.cron}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Format */}
             <div>
-              <label className="block text-sm font-medium mb-1">
+              <label className="block text-sm font-medium mb-1" htmlFor="rs-format">
                 Output Format
               </label>
               <select
+                id="rs-format"
                 value={formFormat}
                 onChange={(e) => setFormFormat(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
@@ -380,82 +631,105 @@ export default function ReportScheduler() {
               <p className="text-sm font-medium">Delivery Channels</p>
 
               {/* Email */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="ch-email"
-                  checked={formEmailEnabled}
-                  onChange={(e) => setFormEmailEnabled(e.target.checked)}
-                  className="rounded"
-                />
-                <label htmlFor="ch-email" className="text-sm w-24">
-                  Email
-                </label>
-                {formEmailEnabled && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
                   <input
-                    type="email"
-                    placeholder="recipient@company.com"
-                    value={formEmailTarget}
-                    onChange={(e) => setFormEmailTarget(e.target.value)}
-                    className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
+                    type="checkbox"
+                    id="ch-email"
+                    checked={formEmailEnabled}
+                    onChange={(e) => setFormEmailEnabled(e.target.checked)}
+                    className="rounded"
                   />
+                  <label htmlFor="ch-email" className="text-sm w-24">
+                    Email
+                  </label>
+                  {formEmailEnabled && (
+                    <input
+                      type="email"
+                      placeholder="recipient@company.com"
+                      value={formEmailTarget}
+                      onChange={(e) => setFormEmailTarget(e.target.value)}
+                      className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
+                      aria-invalid={!!formFieldErrors.email}
+                    />
+                  )}
+                </div>
+                {formFieldErrors.email && (
+                  <p className="text-xs text-red-600 pl-32">{formFieldErrors.email}</p>
                 )}
               </div>
 
               {/* Slack */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="ch-slack"
-                  checked={formSlackEnabled}
-                  onChange={(e) => setFormSlackEnabled(e.target.checked)}
-                  className="rounded"
-                />
-                <label htmlFor="ch-slack" className="text-sm w-24">
-                  Slack
-                </label>
-                {formSlackEnabled && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
                   <input
-                    type="text"
-                    placeholder="Channel ID (e.g. C01ABC23DEF)"
-                    value={formSlackTarget}
-                    onChange={(e) => setFormSlackTarget(e.target.value)}
-                    className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
+                    type="checkbox"
+                    id="ch-slack"
+                    checked={formSlackEnabled}
+                    onChange={(e) => setFormSlackEnabled(e.target.checked)}
+                    className="rounded"
                   />
+                  <label htmlFor="ch-slack" className="text-sm w-24">
+                    Slack
+                  </label>
+                  {formSlackEnabled && (
+                    <input
+                      type="text"
+                      placeholder="Channel ID (e.g. C01ABC23DEF) or #channel-name"
+                      value={formSlackTarget}
+                      onChange={(e) => setFormSlackTarget(e.target.value)}
+                      className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
+                      aria-invalid={!!formFieldErrors.slack}
+                    />
+                  )}
+                </div>
+                {formFieldErrors.slack && (
+                  <p className="text-xs text-red-600 pl-32">{formFieldErrors.slack}</p>
                 )}
               </div>
 
               {/* WhatsApp */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="ch-whatsapp"
-                  checked={formWhatsappEnabled}
-                  onChange={(e) => setFormWhatsappEnabled(e.target.checked)}
-                  className="rounded"
-                />
-                <label htmlFor="ch-whatsapp" className="text-sm w-24">
-                  WhatsApp
-                </label>
-                {formWhatsappEnabled && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
                   <input
-                    type="tel"
-                    placeholder="+91 98765 43210"
-                    value={formWhatsappTarget}
-                    onChange={(e) => setFormWhatsappTarget(e.target.value)}
-                    className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
+                    type="checkbox"
+                    id="ch-whatsapp"
+                    checked={formWhatsappEnabled}
+                    onChange={(e) => setFormWhatsappEnabled(e.target.checked)}
+                    className="rounded"
                   />
+                  <label htmlFor="ch-whatsapp" className="text-sm w-24">
+                    WhatsApp
+                  </label>
+                  {formWhatsappEnabled && (
+                    <input
+                      type="tel"
+                      placeholder="+919876543210"
+                      value={formWhatsappTarget}
+                      onChange={(e) => setFormWhatsappTarget(e.target.value)}
+                      className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
+                      aria-invalid={!!formFieldErrors.whatsapp}
+                    />
+                  )}
+                </div>
+                {formFieldErrors.whatsapp && (
+                  <p className="text-xs text-red-600 pl-32">{formFieldErrors.whatsapp}</p>
                 )}
               </div>
+
+              {formFieldErrors.channels && (
+                <p className="text-xs text-red-600">{formFieldErrors.channels}</p>
+              )}
             </div>
 
             {/* Actions */}
             <div className="sm:col-span-2 flex gap-3 pt-2">
               <button
                 type="submit"
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+                disabled={submitting}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
               >
-                {editingId ? "Update Schedule" : "Create Schedule"}
+                {submitting ? "Saving..." : editingId ? "Update Schedule" : "Create Schedule"}
               </button>
               <button
                 type="button"
@@ -513,7 +787,7 @@ export default function ReportScheduler() {
                         .join(", ") || "No delivery"}
                     </div>
                   </td>
-                  <td className="px-4 py-3 hidden sm:table-cell capitalize">
+                  <td className="px-4 py-3 hidden sm:table-cell font-mono text-xs">
                     {s.cron_expression}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">

@@ -587,4 +587,104 @@ describe("ReportScheduler", () => {
     expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("Actions")).toBeInTheDocument();
   });
+
+  // ── QA regressions (TC_001 / TC_002) ───────────────────────────────────
+
+  it("blocks submit and shows inline error when email recipient is invalid (TC_001)", async () => {
+    setupFetch();
+    render(<ReportScheduler />);
+    await waitFor(() => {
+      expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("+ New Schedule"));
+    });
+    // Email is enabled by default; type something that fails our regex.
+    const emailInput = screen.getByPlaceholderText("recipient@company.com");
+    await act(async () => {
+      fireEvent.change(emailInput, { target: { value: "not-an-email" } });
+    });
+    // Submit by submitting the form element itself (avoid HTML5
+    // email-type validation intercepting the submit button click).
+    const form = emailInput.closest("form")!;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    // Inline validation should fire; no POST should be made.
+    const postCalls = mockFetch.mock.calls.filter(
+      (c: unknown[]) =>
+        (c[0] as string).endsWith("/report-schedules") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    expect(postCalls.length).toBe(0);
+    expect(
+      await screen.findByText(/Invalid email address/),
+    ).toBeInTheDocument();
+  });
+
+  it("exposes execution time + day-of-week + advanced cron controls (TC_002)", async () => {
+    setupFetch();
+    render(<ReportScheduler />);
+    await waitFor(() => {
+      expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("+ New Schedule"));
+    });
+    // Execution time is always visible.
+    const timeInput = screen.getByLabelText(/Execution Time/);
+    expect(timeInput).toBeInTheDocument();
+    // Day of Week appears when weekly is selected.
+    const freqSelect = screen.getByLabelText(/Frequency/);
+    await act(async () => {
+      fireEvent.change(freqSelect, { target: { value: "weekly" } });
+    });
+    expect(screen.getByLabelText(/Day of Week/)).toBeInTheDocument();
+    // Advanced mode reveals a cron textbox.
+    const advancedToggle = screen.getByText(/Advanced — write CRON/);
+    await act(async () => {
+      fireEvent.click(advancedToggle);
+    });
+    expect(
+      screen.getByLabelText(/Custom cron expression/i),
+    ).toBeInTheDocument();
+  });
+
+  it("composes a real cron string from frequency + time before POST (TC_002)", async () => {
+    setupFetch();
+    render(<ReportScheduler />);
+    await waitFor(() => {
+      expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("+ New Schedule"));
+    });
+    const emailInput = screen.getByPlaceholderText("recipient@company.com");
+    await act(async () => {
+      fireEvent.change(emailInput, { target: { value: "ops@example.com" } });
+    });
+    // Set time to 14:30 — cron must be "30 14 * * *".
+    const timeInput = screen.getByLabelText(/Execution Time/) as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(timeInput, { target: { value: "14:30" } });
+    });
+    const submitBtns = screen.getAllByText("Create Schedule");
+    const submitBtn = submitBtns[submitBtns.length - 1];
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+    await waitFor(() => {
+      const postCall = mockFetch.mock.calls.find(
+        (c: unknown[]) =>
+          (c[0] as string).endsWith("/report-schedules") &&
+          (c[1] as RequestInit)?.method === "POST",
+      );
+      expect(postCall).toBeDefined();
+      const body = JSON.parse((postCall![1] as RequestInit).body as string);
+      expect(body.cron_expression).toBe("30 14 * * *");
+      expect(body.delivery_channels).toEqual([
+        { type: "email", target: "ops@example.com" },
+      ]);
+    });
+  });
 });
