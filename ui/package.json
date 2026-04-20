@@ -27,7 +27,7 @@
     "@radix-ui/react-tooltip": "^1.1.0",
     "@react-oauth/google": "^0.13.5",
     "@tanstack/react-query": "^5.99.0",
-    "axios": "^1.15.0",
+    "axios": "^1.15.1",
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",
     "i18next": "^26.0.5",
