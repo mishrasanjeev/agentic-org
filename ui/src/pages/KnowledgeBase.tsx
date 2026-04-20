@@ -9,11 +9,19 @@ import api from "@/lib/api";
 /* ------------------------------------------------------------------ */
 
 interface KBDocument {
-  id: string;
+  // TC_005 fix: backend returns `document_id`, frontend used `id` → every
+  // row had `id === undefined`, so `filter(d => d.id !== id)` kept nothing
+  // on delete (all records dropped from the UI). Now we read the canonical
+  // field from the backend directly.
+  document_id: string;
   filename: string;
   status: "processing" | "indexed" | "failed";
   size_bytes: number;
+  // TC_010 fix: backend was returning `created_at`, UI rendered
+  // `doc.uploaded_at` (undefined) → "-". Backend now sends both fields;
+  // we read the user-facing name.
   uploaded_at: string;
+  created_at?: string;
 }
 
 interface KBStats {
@@ -35,7 +43,22 @@ function formatBytes(bytes: number | undefined | null): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-const STATUS_BADGE: Record<string, "success" | "warning" | "destructive"> = {
+function formatUploadedDate(iso: string | null | undefined): string {
+  // TC_010/TC_015-style guard: never render `new Date(null)`, which
+  // produces an epoch-1970 string; fall back to a neutral dash instead.
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
+// Status badges for the three canonical states. Backend normalises the
+// legacy "ready" label to "indexed" (see _normalize_status in
+// api/v1/knowledge.py) so we don't have to keep a fallback here.
+const STATUS_BADGE: Record<
+  KBDocument["status"],
+  "success" | "warning" | "destructive"
+> = {
   indexed: "success",
   processing: "warning",
   failed: "destructive",
@@ -61,10 +84,29 @@ export default function KnowledgeBase() {
         api.get("/knowledge/documents"),
         api.get("/knowledge/stats"),
       ]);
-      const docs =
+      const rawDocs =
         docsRes.status === "fulfilled"
           ? Array.isArray(docsRes.value.data) ? docsRes.value.data : docsRes.value.data?.items || []
           : [];
+      // Normalise on read so the rest of the component can assume
+      // document_id and uploaded_at are present even if a given server
+      // build still ships the legacy field shape.
+      const docs: KBDocument[] = rawDocs.map(
+        (d: Record<string, unknown>): KBDocument => ({
+          document_id: String(d.document_id ?? d.id ?? ""),
+          filename: String(d.filename ?? d.name ?? ""),
+          status: (["processing", "indexed", "failed"].includes(
+            d.status as string,
+          )
+            ? d.status
+            : "indexed") as KBDocument["status"],
+          size_bytes: Number(d.size_bytes ?? 0),
+          uploaded_at: String(
+            d.uploaded_at ?? d.created_at ?? "",
+          ),
+          created_at: typeof d.created_at === "string" ? d.created_at : undefined,
+        }),
+      );
       const s = statsRes.status === "fulfilled" ? statsRes.value.data : null;
 
       setDocuments(docs);
@@ -87,16 +129,49 @@ export default function KnowledgeBase() {
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
+      const existing = new Set(
+        documents.map((d) => d.filename.toLowerCase()),
+      );
       for (const file of Array.from(files)) {
+        // TC_011 client-side dedup: warn on same filename before the
+        // round-trip. The backend also returns 409 for this case — this
+        // check just saves the user a server error.
+        const isDuplicate = existing.has(file.name.toLowerCase());
+        if (isDuplicate) {
+          const proceed = window.confirm(
+            `"${file.name}" is already in the knowledge base. ` +
+              "Upload a new copy anyway?",
+          );
+          if (!proceed) continue;
+        }
         const fd = new FormData();
         fd.append("file", file);
-        await api.post("/knowledge/upload", fd);
+        try {
+          const url = isDuplicate
+            ? "/knowledge/upload?allow_duplicate=true"
+            : "/knowledge/upload";
+          await api.post(url, fd);
+          existing.add(file.name.toLowerCase());
+        } catch (err: unknown) {
+          // If the server rejects a specific file (e.g. 409), keep going
+          // with the rest instead of aborting the whole batch.
+          const status = (err as { response?: { status?: number } })?.response
+            ?.status;
+          if (status === 409) {
+            window.alert(
+              `"${file.name}" already exists on the server. ` +
+                "Check the duplicate box to replace it.",
+            );
+            continue;
+          }
+          throw err;
+        }
       }
       await fetchData();
     } catch {
-      // fallback: add locally
+      // Best-effort local preview if the whole batch failed.
       const newDocs: KBDocument[] = Array.from(files).map((f, i) => ({
-        id: `new-${Date.now()}-${i}`,
+        document_id: `pending-${Date.now()}-${i}`,
         filename: f.name,
         status: "processing" as const,
         size_bytes: f.size,
@@ -108,13 +183,23 @@ export default function KnowledgeBase() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (documentId: string) => {
+    // TC_005 fix: previously we filtered local state optimistically on
+    // `d.id !== id`, but frontend docs had no `id` (only `document_id`),
+    // so `undefined !== undefined` was always false → every row fell out
+    // of the filter. Now we pass the canonical id, await the response,
+    // and refetch from the server when the DELETE succeeds. The refetch
+    // ensures an eventual-consistency outcome: if the backend reports a
+    // failure, the document reappears naturally.
+    if (!documentId) return;
     try {
-      await api.delete(`/knowledge/documents/${id}`);
-    } catch {
-      // remove locally even if API fails
+      await api.delete(`/knowledge/documents/${documentId}`);
+    } catch (err) {
+      // Surface the failure but don't mutate local state — refetch will
+      // reconcile with whatever the server currently believes.
+      console.error("delete failed", err);
     }
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
+    await fetchData();
   };
 
   const handleSearch = async () => {
@@ -249,15 +334,19 @@ export default function KnowledgeBase() {
             </thead>
             <tbody>
               {documents.map((doc) => (
-                <tr key={doc.id} className="border-t hover:bg-muted/50">
+                <tr key={doc.document_id} className="border-t hover:bg-muted/50">
                   <td className="p-3 font-medium">{doc.filename}</td>
                   <td className="p-3">
                     <Badge variant={STATUS_BADGE[doc.status] || "secondary"}>{doc.status}</Badge>
                   </td>
                   <td className="p-3">{formatBytes(doc.size_bytes ?? 0)}</td>
-                  <td className="p-3">{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : "-"}</td>
+                  <td className="p-3">{formatUploadedDate(doc.uploaded_at)}</td>
                   <td className="p-3">
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(doc.id)}>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDelete(doc.document_id)}
+                    >
                       Delete
                     </Button>
                   </td>

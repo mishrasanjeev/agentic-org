@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
@@ -97,6 +97,29 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
 
 
+# Canonical status values surfaced to the UI. "ready" was a legacy
+# RAGFlow-side label that leaked straight into the response; it is now
+# normalised to "indexed" before it reaches the client.
+DOC_STATUS_PROCESSING = "processing"
+DOC_STATUS_INDEXED = "indexed"
+DOC_STATUS_FAILED = "failed"
+_LEGACY_STATUS_MAP: dict[str, str] = {
+    # map everything the upload path or RAGFlow might set onto the three
+    # canonical values the frontend badge component knows about.
+    "ready": DOC_STATUS_INDEXED,
+    "done": DOC_STATUS_INDEXED,
+    "ok": DOC_STATUS_INDEXED,
+    "processed": DOC_STATUS_INDEXED,
+}
+
+
+def _normalize_status(raw: str | None) -> str:
+    """Map any incoming status string onto the canonical set."""
+    if not raw:
+        return DOC_STATUS_PROCESSING
+    return _LEGACY_STATUS_MAP.get(raw, raw)
+
+
 class DocumentOut(BaseModel):
     document_id: str
     filename: str
@@ -104,6 +127,11 @@ class DocumentOut(BaseModel):
     size_bytes: int
     status: str
     created_at: str
+    # TC_010: frontend expected `uploaded_at` but the API only returned
+    # `created_at`, so the Uploaded column rendered "-" for every row.
+    # We now expose both; `uploaded_at` is the user-facing name and
+    # `created_at` is retained for back-compat with SDK consumers.
+    uploaded_at: str
     deleted: bool = False
 
 
@@ -116,6 +144,16 @@ class StatsResponse(BaseModel):
     total_documents: int
     total_chunks: int
     index_size_mb: float
+
+
+class DuplicateDocumentError(Exception):
+    """Raised when an upload would create a filename duplicate in the
+    current tenant scope (TC_011)."""
+
+    def __init__(self, document_id: str, filename: str) -> None:
+        self.document_id = document_id
+        self.filename = filename
+        super().__init__(f"document already exists: {filename}")
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +228,38 @@ async def _ragflow_delete(tenant_id: str, doc_id: str) -> bool:
 # ---------------------------------------------------------------------------
 # PostgreSQL fallback — document metadata persistence
 # ---------------------------------------------------------------------------
+async def _db_find_existing_by_filename(
+    tenant_id: str, filename: str,
+) -> dict[str, Any] | None:
+    """Return the first non-deleted document with the given filename for
+    this tenant, or None. Used to block duplicate uploads (TC_011)."""
+    from uuid import UUID as _UUID
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.document import Document
+
+    tid = _UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Document).where(
+                Document.tenant_id == tid,
+                Document.filename == filename,
+                Document.status != "deleted",
+            ).limit(1)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return {
+            "document_id": str(row.id),
+            "filename": row.filename,
+            "size_bytes": row.size_bytes,
+            "status": _normalize_status(row.status),
+        }
+
+
 async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
     """Store document metadata in PostgreSQL (fallback when RAGFlow is down)."""
     from uuid import UUID as _UUID
@@ -251,20 +321,56 @@ async def _db_list_docs(tenant_id: str) -> list[dict[str, Any]]:
 async def upload_document(
     file: UploadFile,
     tenant_id: str = Depends(get_current_tenant),
+    allow_duplicate: bool = Query(
+        default=False,
+        description=(
+            "TC_011: when False (default), an upload whose filename already "
+            "exists in the tenant's non-deleted documents returns 409 "
+            "Conflict with the existing document_id. Set true to bypass "
+            "the check (e.g. to deliberately upload a new version)."
+        ),
+    ),
 ):
     """Upload a document to the knowledge base.
 
     Uses RAGFlow for chunking + vector indexing when available.
     Falls back to PostgreSQL metadata storage otherwise.
     """
+    filename = file.filename or "untitled"
+
+    # TC_011: filename-level dedup. Caller can opt out with
+    # ?allow_duplicate=true if they actually want two documents with the
+    # same filename (e.g. re-ingesting an updated file). This check is
+    # best-effort — if the DB lookup fails, we proceed with the upload
+    # rather than block legitimate usage.
+    if not allow_duplicate:
+        try:
+            existing = await _db_find_existing_by_filename(tenant_id, filename)
+        except Exception as exc:
+            logger.debug("dedup_lookup_failed_soft", error=str(exc))
+            existing = None
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "duplicate_filename",
+                    "message": (
+                        f"A document named {filename!r} is already in the "
+                        "knowledge base. Upload with allow_duplicate=true "
+                        "to bypass this check."
+                    ),
+                    "existing_document_id": existing["document_id"],
+                },
+            )
+
     content = await file.read()
     doc_id = str(uuid.uuid4())
     doc: dict[str, Any] = {
         "document_id": doc_id,
-        "filename": file.filename or "untitled",
+        "filename": filename,
         "content_type": file.content_type,
         "size_bytes": len(content),
-        "status": "processing",
+        "status": DOC_STATUS_PROCESSING,
         "created_at": _now_iso(),
     }
 
@@ -276,13 +382,13 @@ async def upload_document(
             # RAGFlow returns its own document ID
             rf_doc_id = rf_result.get("data", {}).get("id", doc_id)
             doc["document_id"] = rf_doc_id
-            doc["status"] = "ready"
+            doc["status"] = DOC_STATUS_INDEXED
             logger.info("knowledge_upload_ragflow", doc_id=rf_doc_id, filename=doc["filename"])
         except Exception as exc:
             logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
-            doc["status"] = "ready"
+            doc["status"] = DOC_STATUS_INDEXED
     else:
-        doc["status"] = "ready"
+        doc["status"] = DOC_STATUS_INDEXED
 
     # Session 5 TC-013: always mirror metadata to Postgres so the document
     # list survives a RAGFlow outage or a RAGFlow-side search lag. Without
@@ -299,8 +405,9 @@ async def upload_document(
         filename=doc["filename"],
         content_type=doc["content_type"],
         size_bytes=doc["size_bytes"],
-        status=doc["status"],
+        status=_normalize_status(doc["status"]),
         created_at=doc["created_at"],
+        uploaded_at=doc["created_at"],
     )
 
 
@@ -381,8 +488,9 @@ async def list_documents(
             filename=d.get("filename", d.get("name", "")),
             content_type=d.get("content_type"),
             size_bytes=d.get("size_bytes", d.get("size", 0)),
-            status=d.get("status", "ready"),
+            status=_normalize_status(d.get("status")),
             created_at=d.get("created_at", ""),
+            uploaded_at=d.get("uploaded_at") or d.get("created_at", ""),
         )
         for d in page_items
     ]
