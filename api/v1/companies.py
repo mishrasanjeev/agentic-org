@@ -2266,10 +2266,10 @@ async def generate_company_bridge(
         company.tally_config = tally_config
 
     logger.info(
-        "company_bridge_generated",
-        company_id=company_id,
-        tenant_id=tenant_id,
-        bridge_id=bridge_id,
+        "Generated Tally bridge credentials — company=%s tenant=%s bridge=%s",
+        company_id,
+        tenant_id,
+        bridge_id,
     )
 
     return BridgeGenerateResponse(

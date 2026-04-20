@@ -646,12 +646,26 @@ class TestTallyDetectSchemas:
     """Verify Tally Detect schemas."""
 
     def test_tally_detect_request_schema(self):
-        """TallyDetectRequest requires tally_bridge_url."""
+        """TallyDetectRequest accepts either the canonical `bridge_url`
+        key or the legacy `tally_bridge_url` alias.
+
+        BUG-005 (Ramesh 2026-04-20): the field was renamed to
+        ``bridge_url`` to match the /test-tally request shape. The
+        legacy key stays callable via a Pydantic alias so external
+        SDK consumers that still send ``tally_bridge_url`` keep
+        working. Attributes on the parsed model live under the
+        canonical name.
+        """
         from api.v1.companies import TallyDetectRequest
 
-        body = TallyDetectRequest(tally_bridge_url="http://localhost:9000")
-        assert body.tally_bridge_url == "http://localhost:9000"
-        assert body.tally_bridge_id == ""
+        # Canonical shape.
+        body = TallyDetectRequest(bridge_url="http://localhost:9000")
+        assert body.bridge_url == "http://localhost:9000"
+        assert body.bridge_id == ""
+
+        # Legacy alias — still accepted for back-compat.
+        legacy = TallyDetectRequest(tally_bridge_url="http://localhost:9000")
+        assert legacy.bridge_url == "http://localhost:9000"
 
     def test_tally_detect_response_has_expected_fields(self):
         """TallyDetectResponse has detected, company_name, gstin, pan."""
