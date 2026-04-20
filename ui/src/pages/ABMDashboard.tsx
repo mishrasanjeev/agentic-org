@@ -56,6 +56,32 @@ function intentLabel(score: number): string {
   return "Low";
 }
 
+// TC_016: backend stores tier as "1"/"2"/"3" but the product docs
+// (and the QA plan) expect the semantic labels the sales team actually
+// uses: Strategic / Enterprise / Growth. Mapping at the display layer
+// keeps the API contract stable while fixing the dropdown + card text.
+const TIER_LABEL: Record<string, string> = {
+  "1": "Strategic",
+  "2": "Enterprise",
+  "3": "Growth",
+};
+
+function tierLabel(tier: string | number | null | undefined): string {
+  const key = String(tier ?? "");
+  return TIER_LABEL[key] ?? `Tier ${key}`;
+}
+
+// TC_015: the table used `new Date(acct.updated_at).toLocaleDateString()`
+// and rendered 01/01/1970 for every account whose updated_at came back
+// null (every newly-uploaded row does). Formalise the null-safe
+// formatter so we never render an epoch date again.
+function formatActivityDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2000) return "—";
+  return d.toLocaleDateString();
+}
+
 /* ── Metric card ────────────────────────────────────────────────────── */
 
 function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -209,9 +235,34 @@ export default function ABMDashboard() {
     }
   };
 
-  /* ── Unique industries for filter ─────────────────────────────────── */
+  /* ── Unique industries for filter (TC_021) ────────────────────────── */
+  //
+  // The old code derived `industries` from the current `accounts` on
+  // every render. When the filter was applied and the list shrank, the
+  // industry dropdown's `<option>` list shrank with it — so the already
+  // selected value often fell out of the new options, and the dropdown
+  // appeared "stuck" on a ghost value with no way to pick something
+  // else. We now keep an all-time industries state that only grows as
+  // new accounts arrive, and we always ensure the currently-selected
+  // filter value is in the option list even if it's no longer in the
+  // filtered accounts.
+  const [knownIndustries, setKnownIndustries] = useState<string[]>([]);
 
-  const industries = [...new Set(accounts.map((a) => a.industry).filter(Boolean))].sort();
+  useEffect(() => {
+    setKnownIndustries((prev) => {
+      const merged = new Set(prev);
+      for (const a of accounts) {
+        if (a.industry) merged.add(a.industry);
+      }
+      return [...merged].sort();
+    });
+  }, [accounts]);
+
+  const industries = (() => {
+    const pool = new Set(knownIndustries);
+    if (filterIndustry) pool.add(filterIndustry);
+    return [...pool].sort();
+  })();
 
   /* ── Render ───────────────────────────────────────────────────────── */
 
@@ -254,9 +305,11 @@ export default function ABMDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard label="Total Accounts" value={summary.total_accounts} />
           <MetricCard
-            label="Tier 1 Accounts"
+            label={`${tierLabel("1")} Accounts`}
             value={summary.by_tier["1"] || 0}
-            sub={`${summary.by_tier["2"] || 0} Tier 2 / ${summary.by_tier["3"] || 0} Tier 3`}
+            sub={`${summary.by_tier["2"] || 0} ${tierLabel("2")} / ${
+              summary.by_tier["3"] || 0
+            } ${tierLabel("3")}`}
           />
           <MetricCard
             label="Avg Intent Score"
@@ -284,9 +337,9 @@ export default function ABMDashboard() {
               className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
             >
               <option value="">All Tiers</option>
-              <option value="1">Tier 1</option>
-              <option value="2">Tier 2</option>
-              <option value="3">Tier 3</option>
+              <option value="1">{tierLabel("1")}</option>
+              <option value="2">{tierLabel("2")}</option>
+              <option value="3">{tierLabel("3")}</option>
             </select>
           </div>
 
@@ -353,17 +406,34 @@ export default function ABMDashboard() {
                 <tbody>
                   {accounts.map((acct) => (
                     <tr key={acct.id} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 font-medium">{acct.company_name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{acct.domain}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary">
-                          T{acct.tier}
-                        </span>
+                      <td
+                        className="px-4 py-3 font-medium max-w-[260px] truncate"
+                        title={acct.company_name}
+                      >
+                        {acct.company_name}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{acct.industry || "--"}</td>
+                      <td
+                        className="px-4 py-3 text-muted-foreground max-w-[200px] truncate"
+                        title={acct.domain}
+                      >
+                        {acct.domain}
+                      </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${intentColor(acct.intent_score)}`}
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary whitespace-nowrap"
+                        >
+                          {tierLabel(acct.tier)}
+                        </span>
+                      </td>
+                      <td
+                        className="px-4 py-3 text-muted-foreground max-w-[160px] truncate"
+                        title={acct.industry || undefined}
+                      >
+                        {acct.industry || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${intentColor(acct.intent_score)}`}
                         >
                           {acct.intent_score}
                           <span className="text-[10px] font-normal">
@@ -371,8 +441,8 @@ export default function ABMDashboard() {
                           </span>
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">
-                        {new Date(acct.updated_at).toLocaleDateString()}
+                      <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                        {formatActivityDate(acct.updated_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
