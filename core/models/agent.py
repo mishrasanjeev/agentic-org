@@ -73,8 +73,15 @@ class Agent(BaseModel):
         UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True
     )
     shadow_min_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    # BUG-012 (Ramesh 2026-04-20): default floor was 0.950 — unrealistic
+    # for LLM-driven agents whose per-task confidence typically lands in
+    # the 0.70-0.85 band even on clean runs. A 95% average is effectively
+    # unreachable and shadow agents stayed in shadow-mode forever. Default
+    # is now 0.80 (still a high bar — above the domain-average 0.73 we
+    # see on active agents in prod). Existing rows keep their admin-set
+    # value; only new agents inherit the new default.
     shadow_accuracy_floor: Mapped[Decimal] = mapped_column(
-        Numeric(4, 3), nullable=False, default=Decimal("0.950")
+        Numeric(4, 3), nullable=False, default=Decimal("0.800")
     )
     shadow_sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     shadow_accuracy_current: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)

@@ -1342,7 +1342,28 @@ async def run_agent(
             session.add(hitl_entry)
 
     # 6c. Track running accuracy for shadow AND active agents (atomic SQL)
-    if agent_config.get("status") in ("shadow", "active") and task_status in ("completed", "hitl_triggered"):
+    #
+    # BUG-012 (Ramesh 2026-04-20): shadow accuracy was reported as
+    # ~40% for brand-new agents because the task_confidence defaults
+    # to 0.0 when the LangGraph result doesn't carry an explicit
+    # confidence field (errored runs, output-parse failures, missing
+    # LLM scoring). Those 0.0 samples were being included in the
+    # running average, pulling legitimate 0.7-0.85-confidence runs
+    # toward ~0.4 as soon as a few parse errors hit.
+    #
+    # Fix: treat confidence values below 0.1 as "no-signal" samples and
+    # skip them entirely. Also bump the sample count only when we're
+    # actually scoring. The min-samples gate still prevents promotion
+    # until enough real samples have accumulated.
+    is_measurable = (
+        task_status in ("completed", "hitl_triggered")
+        and task_confidence is not None
+        and float(task_confidence) >= 0.10
+    )
+    if (
+        agent_config.get("status") in ("shadow", "active")
+        and is_measurable
+    ):
         async with get_tenant_session(tid) as session:
             from sqlalchemy import text as sql_text
             # Atomic increment to avoid race conditions between concurrent runs
