@@ -115,3 +115,12 @@ scripts/generate_*pdf*
 scripts/generate_*doc*
 scripts/marketing*
 .tmp_lc/
+
+# MCP registry publisher binary (downloaded per-machine for publishing)
+mcp-server/mcp-publisher.exe
+mcp-server/mcp-publisher
+
+# uv (Astral package manager) lockfile — not a canonical repo tool.
+# pyproject.toml has no [tool.uv] section and no CI/Dockerfile uses uv sync.
+# If we ever adopt uv, delete this entry and commit the lockfile deliberately.
+uv.lock
