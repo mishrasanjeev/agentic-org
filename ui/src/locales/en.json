@@ -188,5 +188,12 @@
     "close": "Close",
     "details": "Details",
     "all": "All"
+  },
+  "errors": {
+    "searchUnavailable": "Search unavailable. Please try again later.",
+    "failedToLoad": "Failed to load data. Please refresh the page.",
+    "networkError": "Network error. Check your connection and try again.",
+    "unauthorized": "You don't have permission to perform this action.",
+    "sessionExpired": "Session expired. Please sign in again."
   }
 }

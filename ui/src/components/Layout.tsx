@@ -117,7 +117,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           onClick={handleLogout}
           className="w-full px-3 py-2 rounded text-sm text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
         >
-          Logout
+          {t("header.logout", "Logout")}
         </button>
       </div>
     </>

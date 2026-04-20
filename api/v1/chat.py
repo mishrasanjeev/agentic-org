@@ -31,6 +31,13 @@ _DOMAIN_KEYWORDS: dict[str, list[str]] = {
         "tax", "gst", "tds", "balance sheet", "p&l", "ledger", "accounts",
         "receivable", "payable", "cash flow", "audit", "billing", "salary",
         "reimbursement", "budget", "forecast", "reconciliation", "bank",
+        # TC_004: a CFO-sense query like "what is our cash runway" never
+        # matched because "cash flow" is a distinct bigram from "cash" and
+        # "runway". Adding the standalone finance lexicon so the common
+        # metrics questions route to the CFO agent.
+        "cash", "runway", "burn", "burn rate", "liquidity", "working capital",
+        "receivables", "payables", "arr", "mrr", "ebitda", "gross margin",
+        "net income", "financials",
     ],
     "hr": [
         "employee", "leave", "attendance", "payroll", "hiring", "recruit",

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import api from "../lib/api";
 
 interface QueryResponse {
@@ -77,6 +78,7 @@ function detectNavigationIntent(text: string): NavIntent | null {
 }
 
 export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
@@ -138,7 +140,10 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
         setDropdownOpen(true);
       } catch {
         setResult({
-          answer: "Search unavailable. Please try again later.",
+          answer: t(
+            "errors.searchUnavailable",
+            "Search unavailable. Please try again later.",
+          ),
           agent: "System",
           confidence: 0,
           domain: "",
@@ -148,7 +153,7 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
         setLoading(false);
       }
     },
-    [companyId, navigate],
+    [companyId, navigate, t],
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
