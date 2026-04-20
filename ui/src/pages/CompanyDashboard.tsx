@@ -1,10 +1,37 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api, { extractApiError } from "@/lib/api";
+import { INDIAN_STATES } from "@/lib/indianStates";
+
+// BUG-001 / BUG-006: industry dropdown options used to be derived from
+// the loaded companies, which left the filter empty on a fresh tenant
+// and (per the Ramesh report) sometimes surfaced mis-mapped values like
+// the language-picker codes EN / HI when a dev accidentally reused the
+// wrong option list. Anchor the filter options to the same canonical
+// INDUSTRIES the onboarding wizard offers, including "Accounting / CA
+// Firm" for BUG-006 coverage of the target audience.
+const INDUSTRIES = [
+  "Accounting / CA Firm",
+  "Manufacturing",
+  "IT Services",
+  "Healthcare",
+  "Export",
+  "Retail",
+  "Textile",
+  "Logistics",
+  "Education",
+  "Construction",
+  "Real Estate",
+  "FMCG",
+  "Agriculture",
+  "Pharmaceuticals",
+  "Automotive",
+  "Other",
+];
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -103,8 +130,27 @@ export default function CompanyDashboard() {
     fetchData();
   }, [fetchData]);
 
-  const industries = [...new Set(companies.map((c) => c.industry).filter(Boolean))];
-  const states = [...new Set(companies.map((c) => c.state || c.state_code).filter(Boolean))];
+  // BUG-001: seed from the canonical INDUSTRIES list so the dropdown has
+  // options even when the tenant has no companies yet, then union any
+  // industries present on currently-loaded companies so bespoke values
+  // saved before the canonical list grew are still selectable.
+  // BUG-010: same pattern for the state filter — seed with all INDIAN_STATES
+  // codes so the dropdown is never empty on an unpopulated tenant.
+  const industries = (() => {
+    const pool = new Set(INDUSTRIES);
+    for (const c of companies) if (c.industry) pool.add(c.industry);
+    if (industryFilter) pool.add(industryFilter);
+    return [...pool].sort();
+  })();
+  const states = (() => {
+    const pool = new Set(INDIAN_STATES.map((s) => s.code));
+    for (const c of companies) {
+      const v = c.state || c.state_code;
+      if (v) pool.add(v);
+    }
+    if (stateFilter) pool.add(stateFilter);
+    return [...pool].sort();
+  })();
 
   const filtered = companies.filter((c) => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.gstin || "").toLowerCase().includes(search.toLowerCase());
@@ -117,6 +163,72 @@ export default function CompanyDashboard() {
   const activeCount = summary.active_clients || companies.filter(isActive).length;
   const totalCount = summary.total_clients || companies.length;
   const inactiveCount = Math.max(totalCount - activeCount, 0);
+
+  // BUG-002 / BUG-009 (Ramesh 2026-04-20): quick-actions menu on each
+  // card. Archive toggles is_active via PATCH (soft delete), Hard
+  // delete uses DELETE which the backend treats as a tenant-admin-only
+  // destructive op. Single active menu at a time to avoid modal-like
+  // overlays on dense grids.
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [busyCompanyId, setBusyCompanyId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    if (openMenuId) {
+      document.addEventListener("mousedown", close);
+      return () => document.removeEventListener("mousedown", close);
+    }
+  }, [openMenuId]);
+
+  const handleArchive = async (company: Company) => {
+    const nextActive = !isActive(company);
+    const verb = nextActive ? "reactivate" : "archive";
+    if (!window.confirm(`Are you sure you want to ${verb} ${company.name}?`)) return;
+    setBusyCompanyId(company.id);
+    setError(null);
+    try {
+      await api.patch(`/companies/${company.id}`, { is_active: nextActive });
+      setOpenMenuId(null);
+      await fetchData();
+    } catch (err) {
+      setError(extractApiError(err, `Failed to ${verb} ${company.name}.`));
+    } finally {
+      setBusyCompanyId(null);
+    }
+  };
+
+  const handleDelete = async (company: Company) => {
+    const confirmed = window.confirm(
+      `Permanently delete ${company.name}? This cannot be undone. ` +
+        "Consider Archive if you may need the data later.",
+    );
+    if (!confirmed) return;
+    // Two-stage confirm for hard delete because it's irreversible.
+    const typed = window.prompt(
+      `Type ${company.name} to confirm hard delete:`,
+      "",
+    );
+    if (typed !== company.name) {
+      setError("Delete cancelled — name did not match.");
+      return;
+    }
+    setBusyCompanyId(company.id);
+    setError(null);
+    try {
+      await api.delete(`/companies/${company.id}`);
+      setOpenMenuId(null);
+      await fetchData();
+    } catch (err) {
+      setError(extractApiError(err, `Failed to delete ${company.name}.`));
+    } finally {
+      setBusyCompanyId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -210,9 +322,14 @@ export default function CompanyDashboard() {
           className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
         >
           <option value="">All States</option>
-          {states.map((st) => (
-            <option key={st} value={st}>{st}</option>
-          ))}
+          {states.map((st) => {
+            const meta = INDIAN_STATES.find((s) => s.code === st);
+            return (
+              <option key={st} value={st}>
+                {meta ? `${meta.code} — ${meta.name}` : st}
+              </option>
+            );
+          })}
         </select>
       </div>
 
@@ -228,7 +345,7 @@ export default function CompanyDashboard() {
           {filtered.map((company) => (
             <Card
               key={company.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              className="group relative cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => navigate(`/dashboard/companies/${company.id}`)}
             >
               <CardHeader className="pb-2">
@@ -247,6 +364,80 @@ export default function CompanyDashboard() {
                     <Badge variant={isActive(company) ? "success" : "secondary"}>
                       {isActive(company) ? "active" : (company.status || "inactive")}
                     </Badge>
+                    {/*
+                      BUG-009 (Ramesh 2026-04-20): kebab menu with Archive / Delete.
+                      Shows on group-hover on desktop, always on mobile (md: class).
+                    */}
+                    <div
+                      className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100 md:opacity-100 transition-opacity"
+                      ref={openMenuId === company.id ? menuRef : undefined}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Open actions for ${company.name}`}
+                        className="p-1 rounded hover:bg-muted disabled:opacity-50"
+                        disabled={busyCompanyId === company.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId((current) =>
+                            current === company.id ? null : company.id,
+                          );
+                        }}
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <circle cx="12" cy="5" r="1.5" />
+                          <circle cx="12" cy="12" r="1.5" />
+                          <circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+                      {openMenuId === company.id && (
+                        <div
+                          className="absolute right-0 top-full mt-1 w-40 rounded-md border bg-popover shadow-lg z-10"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuId(null);
+                              navigate(`/dashboard/companies/${company.id}`);
+                            }}
+                          >
+                            View details
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleArchive(company);
+                            }}
+                          >
+                            {isActive(company) ? "Archive" : "Reactivate"}
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDelete(company);
+                            }}
+                          >
+                            Delete permanently
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <CardTitle className="text-base mt-2">{company.name}</CardTitle>
