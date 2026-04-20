@@ -130,22 +130,46 @@ export default function CompanyOnboard() {
     setTallyDetectResult(null);
     setTallyDetectMsg(null);
     try {
+      // BUG-005: the request shape was `bridge_url`/`bridge_id` but the
+      // backend model was `tally_bridge_url`/`tally_bridge_id`, so the
+      // Auto-Detect call failed silently the moment after Test
+      // Connection succeeded. Backend now accepts either alias; we keep
+      // using the shorter keys so they match /test-tally.
       const res = await api.post("/companies/tally-detect", {
         bridge_url: form.tally_bridge_url,
         bridge_id: form.tally_bridge_id,
       });
-      const data = res.data;
-      if (data?.company_name) {
+      const data = res.data as {
+        detected?: boolean;
+        company_name?: string;
+        gstin?: string;
+        pan?: string;
+        address?: string;
+      };
+      // BUG-005 / BUG-008: honour the `detected` flag. On failure the
+      // backend puts the user-friendly error in `address` — surface
+      // that instead of the generic "Auto-detect failed" fallback.
+      if (data?.detected && data.company_name) {
         setTallyDetectResult({
           company_name: data.company_name,
           gstin: data.gstin || "",
           pan: data.pan || "",
         });
       } else {
-        setTallyDetectMsg("Could not detect company info from Tally.");
+        setTallyDetectMsg(
+          data?.address ||
+            "Could not detect company info from Tally. Verify the bridge URL and try Test Connection first.",
+        );
       }
-    } catch {
-      setTallyDetectMsg("Auto-detect failed. Ensure Tally bridge is running.");
+    } catch (err: unknown) {
+      const detail = (err as {
+        response?: { data?: { detail?: string } };
+      })?.response?.data?.detail;
+      setTallyDetectMsg(
+        typeof detail === "string"
+          ? `Auto-detect failed: ${detail}`
+          : "Auto-detect failed. Ensure the Tally bridge is running and reachable.",
+      );
     } finally {
       setTallyDetecting(false);
     }
@@ -163,18 +187,49 @@ export default function CompanyOnboard() {
     setTallyDetectResult(null);
   };
 
+  const [tallyTestMessage, setTallyTestMessage] = useState<string>("");
+
   const testTallyConnection = async () => {
     setTallyTesting(true);
     setTallyTestResult(null);
+    setTallyTestMessage("");
     try {
-      await api.post("/companies/test-tally", {
+      // BUG-008: the backend already returns a user-friendly reason in
+      // TallyTestResponse.message (e.g. "Could not reach bridge at X —
+      // verify the URL and that the AgenticOrg Tally Bridge is
+      // running."). The wizard used to swallow the response and render
+      // only "Connection failed. Check bridge URL..." regardless.
+      // Surface the backend message verbatim when present.
+      const res = await api.post("/companies/test-tally", {
         bridge_url: form.tally_bridge_url,
         bridge_id: form.tally_bridge_id,
         company_name: form.tally_company_name,
       });
-      setTallyTestResult("success");
-    } catch {
+      const data = res.data as { success?: boolean; message?: string; bridge_version?: string };
+      if (data?.success) {
+        setTallyTestResult("success");
+        setTallyTestMessage(
+          data.bridge_version
+            ? `Bridge reachable (version ${data.bridge_version})`
+            : data.message || "Bridge reachable",
+        );
+      } else {
+        setTallyTestResult("error");
+        setTallyTestMessage(
+          data?.message ||
+            "Connection failed. Check the bridge URL and try again.",
+        );
+      }
+    } catch (err: unknown) {
+      const detail = (err as {
+        response?: { data?: { detail?: string } };
+      })?.response?.data?.detail;
       setTallyTestResult("error");
+      setTallyTestMessage(
+        typeof detail === "string"
+          ? `Connection failed: ${detail}`
+          : "Could not reach the bridge. Verify the URL and that the AgenticOrg Tally Bridge is running.",
+      );
     } finally {
       setTallyTesting(false);
     }
@@ -214,7 +269,19 @@ export default function CompanyOnboard() {
     setSubmitError("");
     setSubmitting(true);
     try {
-      // Map UI field names to backend schema field names
+      // Map UI field names to backend schema field names.
+      // BUG-004: persist the Tally Connection fields captured on Step 5
+      // (previously dropped on the floor, so a subsequent 422 looked
+      // like a mysterious reset). tally_config is the documented
+      // carrier on /companies/onboard.
+      const tallyConfig =
+        form.tally_bridge_url || form.tally_bridge_id || form.tally_company_name
+          ? {
+              bridge_url: form.tally_bridge_url || undefined,
+              bridge_id: form.tally_bridge_id || undefined,
+              company_name: form.tally_company_name || undefined,
+            }
+          : undefined;
       const payload = {
         name: form.name,
         gstin: form.gstin || undefined,
@@ -237,12 +304,35 @@ export default function CompanyOnboard() {
         esi_registration: form.esi_reg || undefined,
         pt_registration: form.pt_reg || undefined,
         gst_auto_file: form.gst_auto_file,
+        tally_config: tallyConfig,
       };
       await api.post("/companies/onboard", payload);
       navigate("/dashboard/companies");
-    } catch (e: any) {
-      const detail = e?.response?.data?.detail;
-      setSubmitError(typeof detail === "string" ? detail : "Failed to onboard company. Please try again.");
+    } catch (e: unknown) {
+      // BUG-004: the old handler set submitError but didn't keep the
+      // user on Step 6 — form state reset to Step 0 next render, so
+      // the error banner was invisible and the form appeared to
+      // silently lose data. Stay on the current step and flatten
+      // Pydantic 422 detail arrays into a readable message.
+      const detail = (e as {
+        response?: { status?: number; data?: { detail?: unknown } };
+      })?.response?.data?.detail;
+      let msg = "Failed to onboard company. Please try again.";
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        msg = (detail as { loc?: unknown[]; msg?: string }[])
+          .map((d) => {
+            const field = Array.isArray(d.loc) ? d.loc.slice(1).join(".") : "";
+            return field ? `${field}: ${d.msg}` : d.msg;
+          })
+          .filter(Boolean)
+          .join("; ");
+      }
+      setSubmitError(msg);
+      // Keep the user on the review step (Step 6) so they can see
+      // the message and their entered data remains intact.
+      setStep(STEPS.length - 1);
     } finally {
       setSubmitting(false);
     }
@@ -454,10 +544,15 @@ export default function CompanyOnboard() {
                   {tallyTesting ? "Testing..." : "Test Connection"}
                 </Button>
                 {tallyTestResult === "success" && (
-                  <p className="text-xs text-emerald-600 mt-2">Connection successful.</p>
+                  <p className="text-xs text-emerald-600 mt-2">
+                    {tallyTestMessage || "Connection successful."}
+                  </p>
                 )}
                 {tallyTestResult === "error" && (
-                  <p className="text-xs text-red-500 mt-2">Connection failed. Check bridge URL and ensure Tally is running.</p>
+                  <p className="text-xs text-red-500 mt-2">
+                    {tallyTestMessage ||
+                      "Connection failed. Check the bridge URL and ensure Tally is running."}
+                  </p>
                 )}
                 <Button
                   variant="outline"

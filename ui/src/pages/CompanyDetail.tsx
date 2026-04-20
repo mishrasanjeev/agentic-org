@@ -35,6 +35,16 @@ interface CompanyInfo {
   document_vault_enabled?: boolean;
   created_at?: string;
   updated_at?: string | null;
+  // BUG-003 (Ramesh 2026-04-20): the Settings tab lacked a Tally
+  // Connection section, so users who'd finished onboarding had no way
+  // to update the ngrok URL or view the bridge_id. The new panel
+  // needs these fields from the existing CompanyOut response.
+  tally_config?: {
+    bridge_url?: string;
+    bridge_id?: string;
+    company_name?: string;
+    bridge_issued_at?: string;
+  } | null;
 }
 
 interface FilingApproval {
@@ -211,6 +221,18 @@ export default function CompanyDetail() {
   const [notice, setNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [savingCompany, setSavingCompany] = useState(false);
+
+  // BUG-003 / BUG-011 (Ramesh 2026-04-20): Tally Connection section
+  // for post-onboard Settings. Keep state local to the card so the
+  // existing Company Settings form stays untouched.
+  const [tallyBridgeUrlDraft, setTallyBridgeUrlDraft] = useState("");
+  const [tallyCompanyDraft, setTallyCompanyDraft] = useState("");
+  const [tallySaving, setTallySaving] = useState(false);
+  const [tallyTesting, setTallyTesting] = useState(false);
+  const [tallyTestResult, setTallyTestResult] = useState<"success" | "error" | null>(null);
+  const [tallyTestMessage, setTallyTestMessage] = useState("");
+  const [bridgeGenerating, setBridgeGenerating] = useState(false);
+  const [bridgeTokenOnce, setBridgeTokenOnce] = useState<string | null>(null);
   const [savingRoles, setSavingRoles] = useState(false);
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
   const [deadlineBusyId, setDeadlineBusyId] = useState<string | null>(null);
@@ -312,6 +334,12 @@ export default function CompanyDetail() {
       ...current,
       gstin: companyData.gstin || current.gstin,
     }));
+
+    // BUG-003: seed the Tally Connection draft fields on load so the
+    // user can edit bridge_url / company_name without re-entering
+    // everything.
+    setTallyBridgeUrlDraft(companyData.tally_config?.bridge_url || "");
+    setTallyCompanyDraft(companyData.tally_config?.company_name || "");
 
     setApprovals(
       approvalsResult.status === "fulfilled"
@@ -467,6 +495,103 @@ export default function CompanyDetail() {
       setError(extractApiError(err, "Failed to save company settings."));
     } finally {
       setSavingCompany(false);
+    }
+  };
+
+  // ── BUG-003 / BUG-008 / BUG-011: Tally Connection handlers ────────
+  const handleSaveTally = async () => {
+    if (!id) return;
+    setTallySaving(true);
+    setError(null);
+    try {
+      // Preserve existing bridge_id (don't let Save clobber an
+      // already-generated credential).
+      const existing = company?.tally_config || {};
+      await api.patch(`/companies/${id}`, {
+        tally_config: {
+          ...existing,
+          bridge_url: tallyBridgeUrlDraft.trim() || null,
+          company_name: tallyCompanyDraft.trim() || null,
+        },
+      });
+      await refreshWithNotice("Tally connection updated.");
+    } catch (err) {
+      setError(extractApiError(err, "Failed to save Tally connection."));
+    } finally {
+      setTallySaving(false);
+    }
+  };
+
+  const handleTestTally = async () => {
+    setTallyTesting(true);
+    setTallyTestResult(null);
+    setTallyTestMessage("");
+    try {
+      const res = await api.post("/companies/test-tally", {
+        bridge_url: tallyBridgeUrlDraft,
+        bridge_id: company?.tally_config?.bridge_id || undefined,
+        company_name: tallyCompanyDraft || undefined,
+      });
+      const data = res.data as { success?: boolean; message?: string; bridge_version?: string };
+      if (data?.success) {
+        setTallyTestResult("success");
+        setTallyTestMessage(
+          data.bridge_version
+            ? `Bridge reachable (version ${data.bridge_version})`
+            : data.message || "Bridge reachable",
+        );
+      } else {
+        setTallyTestResult("error");
+        setTallyTestMessage(
+          data?.message ||
+            "Connection failed. Check the bridge URL and ensure Tally is running.",
+        );
+      }
+    } catch (err: unknown) {
+      setTallyTestResult("error");
+      setTallyTestMessage(
+        extractApiError(err, "Could not reach the Tally bridge."),
+      );
+    } finally {
+      setTallyTesting(false);
+    }
+  };
+
+  const handleGenerateBridge = async () => {
+    if (!id) return;
+    const existingId = company?.tally_config?.bridge_id;
+    if (existingId) {
+      const confirmed = window.confirm(
+        "Generating new credentials will invalidate the current bridge " +
+          `(${existingId}) and the old on-prem Tally bridge will need the new token. Continue?`,
+      );
+      if (!confirmed) return;
+    }
+    setBridgeGenerating(true);
+    setError(null);
+    try {
+      const res = await api.post(`/companies/${id}/bridge/generate`);
+      const data = res.data as { bridge_id: string; bridge_token: string };
+      setBridgeTokenOnce(data.bridge_token);
+      await refreshWithNotice(
+        "Bridge credentials generated. Copy the token below — it is shown only once.",
+      );
+    } catch (err) {
+      setError(extractApiError(err, "Failed to generate bridge credentials."));
+    } finally {
+      setBridgeGenerating(false);
+    }
+  };
+
+  const handleCopyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied to clipboard.`);
+    } catch {
+      // Fallback for older browsers — select the text for the user.
+      setNotice(
+        `Copy not supported in this browser — select the ${label} manually.`,
+      );
     }
   };
 
@@ -1249,6 +1374,152 @@ export default function CompanyDetail() {
                     {savingCompany ? "Saving..." : "Save Company Settings"}
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/*
+            BUG-003 / BUG-011 Tally Connection panel (Ramesh 2026-04-20).
+            Post-onboard editing of bridge URL + company name, Test
+            Connection with backend-specific error messages (BUG-008),
+            and first-time / regenerate issuance of bridge credentials
+            (BUG-011). The bridge_token is returned only once and
+            surfaced in a disclosure block the user can copy.
+          */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tally Connection</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Update the ngrok URL that AgenticOrg uses to reach the on-prem
+                AgenticOrg Tally Bridge, and issue or rotate its credentials.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1" htmlFor="tally-url">
+                    Bridge URL (ngrok)
+                  </label>
+                  <input
+                    id="tally-url"
+                    type="url"
+                    placeholder="https://abc123.ngrok-free.app"
+                    value={tallyBridgeUrlDraft}
+                    onChange={(e) => setTallyBridgeUrlDraft(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" htmlFor="tally-company">
+                    Tally Company Name (optional)
+                  </label>
+                  <input
+                    id="tally-company"
+                    type="text"
+                    placeholder="Company name as in Tally Prime"
+                    value={tallyCompanyDraft}
+                    onChange={(e) => setTallyCompanyDraft(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  onClick={() => void handleTestTally()}
+                  disabled={tallyTesting || !tallyBridgeUrlDraft.trim()}
+                >
+                  {tallyTesting ? "Testing..." : "Test Connection"}
+                </Button>
+                <Button
+                  onClick={() => void handleSaveTally()}
+                  disabled={tallySaving}
+                >
+                  {tallySaving ? "Saving..." : "Save Tally Connection"}
+                </Button>
+              </div>
+
+              {tallyTestResult === "success" && (
+                <p className="text-xs text-emerald-600">
+                  {tallyTestMessage || "Connection successful."}
+                </p>
+              )}
+              {tallyTestResult === "error" && (
+                <p className="text-xs text-red-500">
+                  {tallyTestMessage ||
+                    "Connection failed. Check the bridge URL and ensure Tally is running."}
+                </p>
+              )}
+
+              <div className="border-t pt-4 space-y-2">
+                <p className="text-sm font-medium">Bridge Credentials</p>
+                {company?.tally_config?.bridge_id ? (
+                  <div className="flex items-center gap-2 flex-wrap text-sm">
+                    <span className="text-muted-foreground">Bridge ID:</span>
+                    <code className="font-mono text-xs bg-muted px-2 py-1 rounded break-all">
+                      {company.tally_config.bridge_id}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void handleCopyToClipboard(
+                          company.tally_config?.bridge_id || "",
+                          "Bridge ID",
+                        )
+                      }
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No bridge credentials yet. Generate a pair below to connect
+                    the on-prem AgenticOrg Tally Bridge.
+                  </p>
+                )}
+
+                <Button
+                  variant={company?.tally_config?.bridge_id ? "outline" : "default"}
+                  onClick={() => void handleGenerateBridge()}
+                  disabled={bridgeGenerating}
+                >
+                  {bridgeGenerating
+                    ? "Generating..."
+                    : company?.tally_config?.bridge_id
+                      ? "Regenerate Bridge Credentials"
+                      : "Generate Bridge Credentials"}
+                </Button>
+
+                {bridgeTokenOnce && (
+                  <div className="mt-3 rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                    <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
+                      Save this bridge token now — it cannot be retrieved later.
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <code className="font-mono text-xs bg-background border px-2 py-1 rounded break-all flex-1 min-w-0">
+                        {bridgeTokenOnce}
+                      </code>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          void handleCopyToClipboard(bridgeTokenOnce, "Bridge token")
+                        }
+                      >
+                        Copy
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setBridgeTokenOnce(null)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
