@@ -23,6 +23,19 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+      # fastembed 0.8.x bumps Pillow to >=12.0.0 (py3.14 wheels).
+      # composio-core 0.7.21 pins Pillow<11, so the combined resolver
+      # fails with ResolutionImpossible inside the API Docker build.
+      # Ignore 0.8.x until composio-core widens its Pillow range or
+      # fastembed ships a py3.14 wheel that stays compatible with
+      # Pillow 10.x.
+      #
+      # Context: PR #253 (fastembed >=0.8.0) merged CLEAN on PR-level
+      # CI but broke main's `build` job + cascaded to #254 and #256.
+      # Emergency revert shipped as #263 (cfd841c).
+      - dependency-name: "fastembed"
+        versions: ["0.8.x"]
+
   # npm — frontend dependencies
   - package-ecosystem: "npm"
     directory: "/ui"
