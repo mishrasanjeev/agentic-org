@@ -62,7 +62,7 @@ langchain==1.2.15
 langchain-core>=1.2.31
 langchain-google-genai==4.2.2
 langchain-anthropic==1.4.1
-langchain-openai==1.1.14
+langchain-openai==1.1.15
 langgraph-checkpoint-postgres==3.0.5
 langsmith==0.7.33
 
