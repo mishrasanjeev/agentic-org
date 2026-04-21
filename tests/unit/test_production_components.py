@@ -175,6 +175,7 @@ class TestTallyConnectorBridgeRouting:
         })
 
         mock_resp = MagicMock()
+        mock_resp.status_code = 200
         mock_resp.json.return_value = {
             "status": "ok",
             "xml_response": "<ENVELOPE><BODY><CREATED>1</CREATED></BODY></ENVELOPE>",
@@ -196,6 +197,7 @@ class TestTallyConnectorBridgeRouting:
         })
 
         mock_resp = MagicMock()
+        mock_resp.status_code = 200
         mock_resp.json.return_value = {
             "status": "error",
             "error": "Tally not reachable",
@@ -203,6 +205,8 @@ class TestTallyConnectorBridgeRouting:
         mock_resp.raise_for_status = MagicMock()
 
         with patch("httpx.AsyncClient.post", return_value=mock_resp):
+            # Post-UR-Bug-6: TallyBridgeError (a RuntimeError subclass) —
+            # the caller can still catch RuntimeError for backward compat.
             with pytest.raises(RuntimeError, match="Tally bridge error"):
                 await connector._send_via_bridge("<ENVELOPE/>")
 
