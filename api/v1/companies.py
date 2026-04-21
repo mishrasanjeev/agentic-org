@@ -11,7 +11,7 @@ import uuid as _uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user
@@ -2023,8 +2023,22 @@ async def mark_deadline_filed(
 
 
 class TallyDetectRequest(BaseModel):
-    tally_bridge_url: str
-    tally_bridge_id: str = ""
+    """Body for POST /companies/tally-detect.
+
+    BUG-005 (Ramesh 2026-04-20): the wizard was calling this endpoint
+    with ``bridge_url`` / ``bridge_id`` (matching /test-tally) while this
+    model expected the ``tally_`` prefix, so every Auto-Detect call
+    failed silently under Pydantic's default extra=ignore behaviour
+    immediately after a successful Test Connection. The model now
+    accepts both shapes via Field aliases, so existing SDK consumers
+    using ``tally_bridge_url`` keep working AND the UI's natural
+    ``bridge_url`` payload validates.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    bridge_url: str = Field(..., alias="tally_bridge_url")
+    bridge_id: str = Field(default="", alias="tally_bridge_id")
 
 
 class TallyDetectResponse(BaseModel):
@@ -2055,15 +2069,15 @@ async def tally_detect(
     Requires the AgenticOrg Bridge agent to be running on the client's
     network with access to the Tally Prime instance.
     """
-    if not body.tally_bridge_url:
-        raise HTTPException(422, "tally_bridge_url is required")
+    if not body.bridge_url:
+        raise HTTPException(422, "bridge_url is required")
 
     # Try to connect to the real Tally bridge
     try:
         import httpx
 
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"{body.tally_bridge_url}/api/company-info")
+            resp = await client.get(f"{body.bridge_url}/api/company-info")
             resp.raise_for_status()
             data = resp.json()
             return TallyDetectResponse(
@@ -2081,7 +2095,7 @@ async def tally_detect(
             company_name="",
             gstin="",
             pan="",
-            address=f"Could not connect to Tally bridge at {body.tally_bridge_url}: {exc}",
+            address=f"Could not connect to Tally bridge at {body.bridge_url}: {exc}",
             fy_start="",
             fy_end="",
         )
@@ -2166,6 +2180,103 @@ async def test_tally(
             success=False,
             message=f"Bridge connection failed: {type(exc).__name__}",
         )
+
+
+# ===========================================================================
+# Per-company Bridge credential issuance
+# Ramesh 2026-04-20 BUG-011: the on-prem Tally bridge needs a bridge_id
+# and bridge_token to connect back to AgenticOrg, but the UI had no way
+# to generate them. /bridge/register existed tenant-wide; this thin
+# wrapper scopes credentials to a specific company and persists the
+# resulting bridge_id on the company's tally_config so Settings can
+# display it post-onboard.
+# ===========================================================================
+
+
+class BridgeGenerateResponse(BaseModel):
+    bridge_id: str
+    bridge_token: str
+    ws_url: str
+    message: str = (
+        "Store this bridge_token securely — it is shown once and cannot "
+        "be retrieved later. Regenerate to issue a new pair."
+    )
+
+
+@router.post(
+    "/companies/{company_id}/bridge/generate",
+    response_model=BridgeGenerateResponse,
+    status_code=201,
+)
+async def generate_company_bridge(
+    company_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+) -> BridgeGenerateResponse:
+    """Mint a new bridge_id + bridge_token pair for a company's Tally
+    bridge, persist bridge_id on the company.tally_config, and return
+    the pair. The token is shown once and not stored server-side in a
+    retrievable form (matches /bridge/register semantics).
+
+    Regenerating supersedes the previous credentials — the old
+    bridge must reconnect with the new pair.
+    """
+    import secrets
+
+    from core.models.bridge import BridgeRegistration
+
+    tid = _uuid.UUID(tenant_id)
+    cid = _uuid.UUID(company_id)
+    bridge_id = str(_uuid.uuid4())
+    bridge_token = secrets.token_urlsafe(48)
+    ws_url = f"wss://app.agenticorg.ai/api/v1/ws/bridge/{bridge_id}"
+
+    async with get_tenant_session(tid) as session:
+        # Tenant-scoped fetch ensures cross-tenant regenerate is 404.
+        result = await session.execute(
+            select(Company).where(
+                Company.id == cid,
+                Company.tenant_id == tid,
+            )
+        )
+        company = result.scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Register the new bridge so websocket auth recognises it.
+        session.add(BridgeRegistration(
+            tenant_id=tid,
+            bridge_id=bridge_id,
+            bridge_type="tally",
+            url=ws_url,
+            status="active",
+            metadata_={
+                "bridge_token": bridge_token,
+                "company_id": str(cid),
+                "label": company.name or "",
+            },
+        ))
+
+        # Persist the new bridge_id on the company so the Settings UI
+        # can render it. The token is NOT persisted in plaintext here —
+        # it lives only in the BridgeRegistration metadata and is
+        # returned once to the caller.
+        tally_config = dict(company.tally_config or {})
+        tally_config["bridge_id"] = bridge_id
+        tally_config["bridge_issued_at"] = datetime.now(UTC).isoformat()
+        company.tally_config = tally_config
+
+    logger.info(
+        "Generated Tally bridge credentials — company=%s tenant=%s bridge=%s",
+        company_id,
+        tenant_id,
+        bridge_id,
+    )
+
+    return BridgeGenerateResponse(
+        bridge_id=bridge_id,
+        bridge_token=bridge_token,
+        ws_url=ws_url,
+    )
 
 
 # ===========================================================================
