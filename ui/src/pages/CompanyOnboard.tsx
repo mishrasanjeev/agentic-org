@@ -67,6 +67,12 @@ const STEPS = [
 ];
 
 const INDUSTRIES = [
+  // BUG-006 (Ramesh 2026-04-20): CA-firm onboarding was the primary
+  // target audience but the wizard's industry dropdown didn't list
+  // the "Accounting / CA Firm" option. Added as the first entry so
+  // CA firm admins onboarding their own practice can pick the
+  // semantically correct value instead of forcing "Other".
+  "Accounting / CA Firm",
   "Manufacturing", "IT Services", "Healthcare", "Export", "Retail",
   "Textile", "Logistics", "Education", "Construction", "Real Estate",
   "FMCG", "Agriculture", "Pharmaceuticals", "Automotive", "Other",

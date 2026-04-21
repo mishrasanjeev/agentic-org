@@ -59,7 +59,10 @@ class AgentCreate(BaseModel):
     initial_status: str = "shadow"
     shadow_comparison_agent: str | None = None
     shadow_min_samples: int = 20
-    shadow_accuracy_floor: float = 0.95
+    # BUG-012 (Ramesh 2026-04-20): aligned with the ORM default —
+    # 0.95 was unrealistic for LLM-driven agents; see
+    # core/models/agent.py for the full rationale.
+    shadow_accuracy_floor: float = 0.80
     scaling: ScalingConfig = Field(default_factory=ScalingConfig)
     cost_controls: CostControlConfig = Field(default_factory=CostControlConfig)
     ttl_hours: int | None = None
