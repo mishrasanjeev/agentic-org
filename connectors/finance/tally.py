@@ -17,11 +17,72 @@ from typing import Any
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 import structlog
+from defusedxml.ElementTree import ParseError as XMLParseError
 from defusedxml.ElementTree import fromstring as xml_fromstring
 
 from connectors.framework.base_connector import BaseConnector
 
 logger = structlog.get_logger()
+
+
+# UR-Bug-6 (Uday/Ramesh 2026-04-21): Tally errors used to surface as a
+# bare ``RuntimeError`` — callers couldn't distinguish a transient
+# bridge outage from a TDL-syntax bug, company-not-open, or bad XML.
+# The UI rendered a single opaque "Tally bridge error" line for every
+# case, so debugging was guesswork.
+#
+# Exception hierarchy keeps the generic catch-all working (``except
+# TallyError``) while letting finer handlers react to specific
+# failure modes. API layers should catch ``TallyError`` and map to
+# HTTP 4xx/5xx according to the subclass.
+
+
+class TallyError(RuntimeError):
+    """Base class for all Tally-originated failures.
+
+    Attributes
+    ----------
+    detail : str | None
+        Machine-readable reason from Tally's XML response or the
+        bridge envelope (e.g. "LINEERROR 01: Company not open").
+    request_id : str | None
+        Bridge request_id when the failure came through the tunnel —
+        useful for cross-referencing bridge logs.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        detail: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.detail = detail
+        self.request_id = request_id
+
+
+class TallyConnectionError(TallyError):
+    """Tally endpoint is unreachable (bridge down, ngrok offline,
+    localhost:9000 closed, TCP timeout). Typically a user/ops problem
+    rather than a code bug. API layer should return 503."""
+
+
+class TallyBridgeError(TallyError):
+    """Bridge rejected the call (auth failure, unknown bridge_id,
+    bridge internal error)."""
+
+
+class TallyResponseError(TallyError):
+    """Tally itself returned an error response (TDL syntax, missing
+    company, permission denied, malformed voucher). API layer should
+    return 400 — the user's request is the problem."""
+
+
+class TallyXMLError(TallyError):
+    """Tally returned a non-XML or malformed-XML body. Usually means
+    the bridge forwarded an HTML error page (502/504) or Tally is
+    running on a port serving a non-TDL service."""
 
 
 def _tdl_request(request_type: str, collection: str, filters: dict | None = None) -> str:
@@ -83,6 +144,50 @@ def _xml_to_dict(elem: Element) -> dict[str, Any]:
     return result
 
 
+# UR-Bug-6: inspect the parsed XML for Tally's inline error markers.
+# Tally reports business-logic failures *inside* a 2xx response body
+# rather than via HTTP status, so a naive caller that only checks the
+# transport succeeds when the voucher actually failed.
+_TALLY_ERROR_KEYS = frozenset({
+    "LINEERROR",
+    "EXCEPTIONS",
+    "ERROR",
+    "DESC",  # inside <STATUS><DESC> for some TDL errors
+})
+
+
+def _extract_tally_error(parsed: dict[str, Any]) -> str | None:
+    """Return the first error message found anywhere in a parsed Tally
+    response, or None if the response looks clean.
+
+    Scans recursively because Tally nests errors at varying depths
+    depending on the request type (Export vs Import vs TDL dump).
+    """
+    status = parsed.get("STATUS") if isinstance(parsed, dict) else None
+    if isinstance(status, dict):
+        # Success responses typically carry STATUS=1 as the text payload.
+        # Anything else is suspicious; dig for DESC.
+        desc = status.get("DESC")
+        if isinstance(desc, str) and desc.strip():
+            return desc.strip()
+    for key in _TALLY_ERROR_KEYS:
+        value = parsed.get(key) if isinstance(parsed, dict) else None
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            nested = _extract_tally_error(value)
+            if nested:
+                return nested
+    # Depth-first walk for deeply nested IMPORTRESULT / LINEERROR blocks.
+    if isinstance(parsed, dict):
+        for v in parsed.values():
+            if isinstance(v, dict):
+                nested = _extract_tally_error(v)
+                if nested:
+                    return nested
+    return None
+
+
 class TallyConnector(BaseConnector):
     """Tally connector with optional bridge routing for remote instances.
 
@@ -119,6 +224,53 @@ class TallyConnector(BaseConnector):
         api_key = self._get_secret("api_key")
         self._auth_headers = {"X-Tally-Key": api_key} if api_key else {}
 
+    async def health_check(self) -> dict[str, Any]:
+        """Tally-specific health check.
+
+        UR-Bug-4 (Uday/Ramesh 2026-04-21): the inherited BaseConnector
+        default issues an HTTP GET to ``/`` — Tally Prime only serves
+        HTTP POST with an XML envelope and returns 405 on GET, so the
+        default always reported "unhealthy". Override sends the
+        smallest possible TDL probe (``CompanyInfo`` export) through
+        whichever path is configured (bridge or direct) and treats a
+        parseable XML response as healthy.
+        """
+        probe = _tdl_request("Export", "CompanyInfo")
+        try:
+            if self._use_bridge:
+                await self._send_via_bridge(probe)
+                return {"status": "healthy", "transport": "bridge"}
+            # Direct localhost / LAN call. Swallow the dict — we only
+            # care that the request cycle completes and the response
+            # parses as XML.
+            resp = await self._post_xml(probe)
+            if resp is None:
+                return {"status": "unhealthy", "error": "empty XML response"}
+            return {"status": "healthy", "transport": "direct"}
+        except TallyConnectionError as exc:
+            # Upstream is unreachable — ops-level failure, not an auth
+            # or data issue. Report as "unreachable" not "unhealthy" so
+            # the UI can phrase it correctly.
+            return {
+                "status": "unreachable",
+                "error": str(exc),
+                "detail": exc.detail,
+            }
+        except TallyBridgeError as exc:
+            return {
+                "status": "bridge_error",
+                "error": str(exc),
+                "detail": exc.detail,
+            }
+        except TallyError as exc:
+            return {
+                "status": "unhealthy",
+                "error": str(exc),
+                "detail": exc.detail,
+            }
+        except Exception as exc:  # defensive — connector health must never raise
+            return {"status": "unhealthy", "error": str(exc)}
+
     async def _send_xml(self, xml_body: str) -> dict[str, Any]:
         """Send XML to Tally — directly or via bridge tunnel.
 
@@ -132,7 +284,12 @@ class TallyConnector(BaseConnector):
         return _xml_to_dict(resp)
 
     async def _send_via_bridge(self, xml_body: str) -> dict[str, Any]:
-        """Route XML through the cloud bridge to a remote Tally instance."""
+        """Route XML through the cloud bridge to a remote Tally instance.
+
+        UR-Bug-6: each failure mode now maps to a specific Tally*Error
+        subclass so the API layer can pick the right HTTP status and
+        surface a user-actionable message instead of a generic 500.
+        """
         import httpx
 
         request_id = str(uuid.uuid4())
@@ -150,26 +307,102 @@ class TallyConnector(BaseConnector):
             bridge_id=self._bridge_id,
         )
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                self._bridge_url,
-                json=payload,
-                headers=headers,
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    self._bridge_url,
+                    json=payload,
+                    headers=headers,
+                )
+        except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
+            raise TallyConnectionError(
+                "Could not reach the Tally bridge at "
+                f"{self._bridge_url} — check that the AgenticOrg Tally "
+                "Bridge is running on the client's machine and the ngrok "
+                "tunnel is live.",
+                detail=str(exc),
+                request_id=request_id,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise TallyBridgeError(
+                f"Tally bridge HTTP error: {exc}",
+                detail=str(exc),
+                request_id=request_id,
+            ) from exc
+
+        if resp.status_code == 401 or resp.status_code == 403:
+            raise TallyBridgeError(
+                "Tally bridge rejected our token. Regenerate bridge "
+                "credentials in Settings → Tally Connection.",
+                detail=f"HTTP {resp.status_code}",
+                request_id=request_id,
             )
-            resp.raise_for_status()
+        if resp.status_code >= 500:
+            raise TallyBridgeError(
+                f"Tally bridge returned HTTP {resp.status_code} — "
+                "the bridge itself may be in a bad state; try restarting "
+                "the agenticorg-bridge process.",
+                detail=resp.text[:500],
+                request_id=request_id,
+            )
+        if resp.status_code >= 400:
+            raise TallyBridgeError(
+                f"Tally bridge rejected the request (HTTP "
+                f"{resp.status_code}).",
+                detail=resp.text[:500],
+                request_id=request_id,
+            )
+
+        try:
             result = resp.json()
+        except ValueError as exc:
+            raise TallyBridgeError(
+                "Tally bridge returned a non-JSON response — most likely "
+                "an HTML error page from an upstream proxy.",
+                detail=resp.text[:500],
+                request_id=request_id,
+            ) from exc
 
         if result.get("status") == "error":
-            raise RuntimeError(
-                f"Tally bridge error: {result.get('error', 'unknown')}"
+            raise TallyBridgeError(
+                f"Tally bridge error: {result.get('error', 'unknown')}",
+                detail=result.get("error"),
+                request_id=request_id,
             )
 
         xml_response = result.get("xml_response", "")
         if not xml_response:
-            raise RuntimeError("Tally bridge returned empty response")
+            raise TallyResponseError(
+                "Tally returned an empty response — usually means no "
+                "company is open on the client's Tally instance.",
+                request_id=request_id,
+            )
 
-        elem = xml_fromstring(xml_response)
-        return _xml_to_dict(elem)
+        try:
+            elem = xml_fromstring(xml_response)
+        except XMLParseError as exc:
+            raise TallyXMLError(
+                "Tally returned a non-XML body. Check that the Tally "
+                "instance is actually Tally Prime / ERP 9 and not "
+                "another service listening on the port.",
+                detail=str(exc),
+                request_id=request_id,
+            ) from exc
+
+        parsed = _xml_to_dict(elem)
+
+        # Tally surfaces business-logic failures inline in the response
+        # (LINEERROR, EXCEPTIONS, etc.). Lift those into TallyResponseError
+        # so callers don't treat a failed voucher as a success.
+        err_msg = _extract_tally_error(parsed)
+        if err_msg:
+            raise TallyResponseError(
+                f"Tally rejected the request: {err_msg}",
+                detail=err_msg,
+                request_id=request_id,
+            )
+
+        return parsed
 
     async def post_voucher(self, **params) -> dict[str, Any]:
         """Import a voucher into Tally via TDL XML."""
