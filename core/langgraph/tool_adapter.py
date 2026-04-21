@@ -121,19 +121,37 @@ def build_tools_for_agent(
 
 def _build_tool_index(
     connector_config: dict[str, Any] | None = None,
+    connector_names: list[str] | None = None,
 ) -> dict[str, tuple[str, str]]:
     """Build a reverse index: tool_name -> (connector_name, description).
 
     Scans all registered native connectors and their tool registries,
     then appends Composio tools (with ``composio:`` prefix) from the
     ConnectorRegistry.  Native tools always take priority.
+
+    UR-Bug-2 (Uday/Ramesh 2026-04-21): when ``connector_names`` is
+    provided, the index is restricted to tools registered by those
+    connectors. Used by ``GET /tools?connectors=gmail`` so the agent
+    creation UI can populate authorized_tools with exactly the
+    connectors the user picked, instead of every tool in the product.
     """
+    allowed: set[str] | None = None
+    if connector_names:
+        # Normalise — strip any "registry-" UI prefix and lowercase.
+        allowed = {
+            n.removeprefix("registry-").strip().lower()
+            for n in connector_names
+            if n
+        }
+
     index: dict[str, tuple[str, str]] = {}
 
     # 1. Native connectors first
     for connector_name in ConnectorRegistry.all_names():
         # Skip the composio meta-connector; its tools are handled below
         if connector_name == "composio":
+            continue
+        if allowed is not None and connector_name.lower() not in allowed:
             continue
 
         connector_cls = ConnectorRegistry.get(connector_name)
@@ -155,8 +173,9 @@ def _build_tool_index(
                 index[tool_name] = (connector_name, doc)
 
     # 2. Composio tools (already filtered for native priority in registry)
-    for tool_name, meta in ConnectorRegistry.get_composio_tools().items():
-        if tool_name not in index:
-            index[tool_name] = ("composio", meta.get("description", ""))
+    if allowed is None or "composio" in allowed:
+        for tool_name, meta in ConnectorRegistry.get_composio_tools().items():
+            if tool_name not in index:
+                index[tool_name] = ("composio", meta.get("description", ""))
 
     return index
