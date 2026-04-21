@@ -70,7 +70,7 @@ export default function CBODashboard() {
       const resp = await api.get("/kpis/cbo");
       setData(resp.data);
     } catch {
-      setError("Failed to load CBO KPIs");
+      setError(t("errors.failedToLoadKpis", "Failed to load CBO KPIs"));
     } finally {
       setLoading(false);
     }

@@ -168,16 +168,27 @@ export default function KnowledgeBase() {
         }
       }
       await fetchData();
-    } catch {
-      // Best-effort local preview if the whole batch failed.
-      const newDocs: KBDocument[] = Array.from(files).map((f, i) => ({
-        document_id: `pending-${Date.now()}-${i}`,
-        filename: f.name,
-        status: "processing" as const,
-        size_bytes: f.size,
-        uploaded_at: new Date().toISOString(),
-      }));
-      setDocuments((prev) => [...newDocs, ...prev]);
+    } catch (err: unknown) {
+      // TC_007 (Aishwarya 2026-04-21): the previous catch optimistically
+      // added EVERY file in the batch to local state as
+      // status="processing", which is how a cancelled-duplicate file
+      // ended up appearing in the list even though the user had
+      // declined to upload it. A failure here must NOT fabricate
+      // local entries — it must surface as an error and leave the
+      // last-known-good server state (already fetched above or below)
+      // as the source of truth.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const message = status
+        ? `Upload failed (HTTP ${status}). Please try again.`
+        : "Upload failed. Please try again.";
+      window.alert(message);
+      // Refetch so the UI stays consistent with the server even after
+      // a partial failure.
+      try {
+        await fetchData();
+      } catch {
+        /* fetchData already logs and resets state */
+      }
     } finally {
       setUploading(false);
     }

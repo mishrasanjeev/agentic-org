@@ -66,9 +66,24 @@ const TIER_LABEL: Record<string, string> = {
   "3": "Growth",
 };
 
+// TC_013 (Aishwarya 2026-04-21): table displayed "Tier Strategic" /
+// "Tier Enterprise" / "Tier Growth" instead of plain semantic labels.
+// Root cause: tierLabel's fallback was ``Tier ${key}`` so anything
+// that wasn't exactly "1"/"2"/"3" got the "Tier " prefix slapped on.
+// If the backend (or a fixture) returns tier already as "Strategic",
+// the fallback produced "Tier Strategic" — which also broke the
+// Strategic/Enterprise/Growth filter because the dropdown value
+// ("1") no longer matches the rendered text. Make tierLabel
+// idempotent so known semantic labels round-trip cleanly.
+const _SEMANTIC_TIERS = new Set(Object.values(TIER_LABEL));
+
 function tierLabel(tier: string | number | null | undefined): string {
-  const key = String(tier ?? "");
-  return TIER_LABEL[key] ?? `Tier ${key}`;
+  const key = String(tier ?? "").trim();
+  if (!key) return "—";
+  if (TIER_LABEL[key]) return TIER_LABEL[key];
+  if (_SEMANTIC_TIERS.has(key)) return key;
+  // Preserve unknown values without the confusing "Tier " prefix.
+  return key;
 }
 
 // TC_015: the table used `new Date(acct.updated_at).toLocaleDateString()`
@@ -110,6 +125,12 @@ export default function ABMDashboard() {
   // Upload
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  // TC_008 (Aishwarya 2026-04-21): the CSV upload banner used the same
+  // `error` state as `fetchData`, and because `fetchData` clears
+  // `error` on entry, the "N duplicates skipped" message vanished the
+  // moment the table refreshed. Separate notice state outlives the
+  // refetch so dedup feedback is actually visible.
+  const [uploadNotice, setUploadNotice] = useState("");
 
   // Campaign modal
   const [campaignAccountId, setCampaignAccountId] = useState<string | null>(null);
@@ -152,6 +173,7 @@ export default function ABMDashboard() {
     if (!file) return;
     setUploading(true);
     setError("");
+    setUploadNotice("");
     try {
       const res = await abmApi.uploadCsv(file);
       const r = res.data as {
@@ -166,7 +188,6 @@ export default function ABMDashboard() {
         parts.push(`${r.dedup_skipped.length} duplicate(s) skipped`);
       }
       if (r.row_errors?.length) {
-        // Show the first three concrete reasons so the user can act.
         const preview = r.row_errors
           .slice(0, 3)
           .map((e) => `row ${e.row}: ${e.reason}`)
@@ -176,21 +197,23 @@ export default function ABMDashboard() {
           : "";
         parts.push(`${r.row_errors.length} row error(s): ${preview}${more}`);
       }
+      // TC_008: route the notice through a state that fetchData doesn't
+      // touch so duplicate-skipped / row-error feedback outlives the
+      // refresh that follows.
       if (parts.length === 0) {
-        setError("CSV processed but no rows were imported");
-      } else if (r.dedup_skipped?.length || r.row_errors?.length) {
-        // Report via the same banner — non-fatal but user should see it.
-        setError(parts.join(" · "));
+        setUploadNotice("CSV processed but no rows were imported.");
+      } else {
+        setUploadNotice(parts.join(" · "));
       }
       await fetchData();
     } catch (err: unknown) {
       const detail = (err as {
         response?: { data?: { detail?: string } };
       })?.response?.data?.detail;
-      setError(
+      setUploadNotice(
         typeof detail === "string"
           ? `CSV upload rejected: ${detail}`
-          : "CSV upload failed",
+          : "CSV upload failed. Please check the file and try again.",
       );
     } finally {
       setUploading(false);
@@ -204,14 +227,28 @@ export default function ABMDashboard() {
     try {
       const res = await abmApi.getIntent(accountId);
       const intent = res.data;
-      alert(
-        `Intent for ${intent.domain}\n\n` +
-        `Composite: ${intent.composite_score}\n` +
-        `Bombora Surge: ${intent.bombora_surge}\n` +
-        `G2 Signals: ${intent.g2_signals}\n` +
-        `TrustRadius: ${intent.trustradius_intent}\n` +
-        `Topics: ${(intent.topics || []).join(", ") || "none"}`
-      );
+      // TC_012 (Aishwarya 2026-04-21): when the tenant hasn't
+      // configured Bombora / G2 / TrustRadius connectors the backend
+      // now returns source="seeded" with a note pointing the user at
+      // Settings. Surface that note in the popup so the zeros don't
+      // look like silent failures, and clearly label the provider
+      // signals as "not configured" instead of "0".
+      const isSeeded = intent.source === "seeded";
+      const note = typeof intent.note === "string" ? intent.note : "";
+      const lines = [
+        `Intent for ${intent.domain}`,
+        "",
+        `Composite: ${intent.composite_score}` +
+          (isSeeded ? "  (seeded placeholder — see note)" : ""),
+        `Bombora Surge: ${isSeeded ? "not configured" : intent.bombora_surge}`,
+        `G2 Signals: ${isSeeded ? "not configured" : intent.g2_signals}`,
+        `TrustRadius: ${isSeeded ? "not configured" : intent.trustradius_intent}`,
+        `Topics: ${(intent.topics || []).join(", ") || "none"}`,
+      ];
+      if (note) {
+        lines.push("", note);
+      }
+      alert(lines.join("\n"));
       await fetchData();
     } catch {
       setError("Failed to fetch intent data");
@@ -297,6 +334,25 @@ export default function ABMDashboard() {
       {error && (
         <div className="rounded-lg bg-destructive/10 text-destructive px-4 py-3 text-sm">
           {error}
+        </div>
+      )}
+
+      {/*
+        TC_008 upload notice — amber (informational) banner separate
+        from the destructive error banner so dedup/row-error feedback
+        is visible even when the upload partially succeeds.
+      */}
+      {uploadNotice && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300 text-amber-900 dark:text-amber-100 px-4 py-3 text-sm flex items-start gap-3">
+          <span className="flex-1">{uploadNotice}</span>
+          <button
+            type="button"
+            onClick={() => setUploadNotice("")}
+            aria-label="Dismiss upload notice"
+            className="text-amber-800 hover:text-amber-950"
+          >
+            ×
+          </button>
         </div>
       )}
 

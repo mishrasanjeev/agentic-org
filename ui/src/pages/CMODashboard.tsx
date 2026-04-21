@@ -83,7 +83,7 @@ export default function CMODashboard() {
       const resp = await api.get("/kpis/cmo");
       setData(resp.data);
     } catch {
-      setError("Failed to load CMO KPIs");
+      setError(t("errors.failedToLoadKpis", "Failed to load CMO KPIs"));
     } finally {
       setLoading(false);
     }

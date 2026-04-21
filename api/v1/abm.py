@@ -511,6 +511,24 @@ async def get_account_intent(
 
     Queries Bombora, G2, and TrustRadius in parallel and returns a
     composite intent score.  The score is cached on the account record.
+
+    TC_009 / TC_011 / TC_012 (Aishwarya 2026-04-21): previously this
+    path called the real aggregator with empty configs (no Bombora /
+    G2 / TrustRadius creds in the tenant), which legitimately returns
+    composite=0.0 and all-zero provider signals. The old handler then
+    auto-committed that 0.0 onto ``acct.intent_score``, clobbering the
+    tier-banded seed written at CSV upload time. Side effects:
+      - TC_009: account table flipped back to intent=0 the moment the
+                user clicked "View Intent" on any row.
+      - TC_011: dashboard summary avg_intent settled at 0 because
+                every View-Intent interaction wrote 0s.
+      - TC_012: popup showed all zeros for every account.
+
+    New behaviour: only persist the aggregator output when at least
+    one provider returned a real signal. When all providers are
+    uncooperative we return the seeded score with an explicit
+    ``source`` marker so the popup can tell the user to configure
+    connectors instead of pretending the account has 0 intent.
     """
     tid = _uuid.UUID(tenant_id)
     acct_uuid = _parse_account_id(account_id)
@@ -524,8 +542,6 @@ async def get_account_intent(
         if not acct:
             raise HTTPException(404, "Account not found")
 
-        # Use empty configs -- in production these would come from the
-        # tenant's stored connector configurations.
         try:
             intent = await _aggregator.aggregate_intent(
                 domain=acct.domain or "",
@@ -537,14 +553,37 @@ async def get_account_intent(
             logger.error("abm_intent_error", account_id=account_id, error=str(exc))
             raise HTTPException(502, f"Intent aggregation failed: {exc}") from exc
 
-        # Cache on the account
-        acct.intent_score = intent["composite_score"]
-        metadata = dict(acct.metadata_) if acct.metadata_ else {}
-        metadata["intent_data"] = intent
-        acct.metadata_ = metadata
-        acct.updated_at = datetime.now(UTC)
+        bombora = float(intent.get("bombora_surge") or 0)
+        g2 = float(intent.get("g2_signals") or 0)
+        trustradius = float(intent.get("trustradius_intent") or 0)
+        composite = float(intent.get("composite_score") or 0)
+        has_real_signal = any(v > 0 for v in (bombora, g2, trustradius, composite))
 
-    return intent
+        seed_score = float(acct.intent_score or 0)
+
+        if has_real_signal:
+            # Real aggregator response — persist.
+            acct.intent_score = composite
+            metadata = dict(acct.metadata_) if acct.metadata_ else {}
+            metadata["intent_data"] = intent
+            acct.metadata_ = metadata
+            acct.updated_at = datetime.now(UTC)
+            intent["source"] = "aggregator"
+            return intent
+
+        # All providers came back empty. Fall back to the seeded
+        # score already on the account row — don't overwrite DB.
+        return {
+            **intent,
+            "composite_score": seed_score,
+            "source": "seeded",
+            "note": (
+                "Real intent signals unavailable — configure Bombora, "
+                "G2 or TrustRadius connectors in Settings to see live "
+                "scores. The value shown is a tier-based placeholder "
+                "until then."
+            ),
+        }
 
 
 @router.post("/accounts/{account_id}/campaign")
