@@ -3,11 +3,17 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 
+// Codex 2026-04-22 release-signoff residual: UI used
+// ``max_replicas_per_type`` and a 5-domain default, but the backend
+// schema (``core/schemas/api.py::FleetLimits``) uses
+// ``max_replicas_global_ceiling`` and includes the ``comms`` domain.
+// Align the UI to the backend source of truth so saves round-trip
+// without silently dropping fields.
 interface FleetLimits {
   max_active_agents: number;
   max_agents_per_domain: Record<string, number>;
   max_shadow_agents: number;
-  max_replicas_per_type: number;
+  max_replicas_global_ceiling: number;
 }
 
 interface ApiKeyRecord {
@@ -23,9 +29,11 @@ interface ApiKeyRecord {
 
 const DEFAULT_LIMITS: FleetLimits = {
   max_active_agents: 35,
-  max_agents_per_domain: { finance: 20, hr: 20, marketing: 20, ops: 20, backoffice: 20 },
-  max_shadow_agents: 10,
-  max_replicas_per_type: 20,
+  max_agents_per_domain: {
+    finance: 20, hr: 20, marketing: 20, ops: 20, backoffice: 20, comms: 20,
+  },
+  max_shadow_agents: 50,
+  max_replicas_global_ceiling: 20,
 };
 
 type DataRegion = "IN" | "EU" | "US";
@@ -226,13 +234,13 @@ export default function Settings() {
               <input type="number" value={limits.max_shadow_agents} onChange={(e) => setLimits({ ...limits, max_shadow_agents: Number(e.target.value) })} className="border rounded px-3 py-2 text-sm w-full mt-1" />
             </div>
             <div>
-              <label className="text-sm font-medium">Max Replicas Per Agent Type</label>
-              <input type="number" value={limits.max_replicas_per_type} onChange={(e) => setLimits({ ...limits, max_replicas_per_type: Number(e.target.value) })} className="border rounded px-3 py-2 text-sm w-full mt-1" />
+              <label className="text-sm font-medium">Max Replicas (Global Ceiling)</label>
+              <input type="number" value={limits.max_replicas_global_ceiling} onChange={(e) => setLimits({ ...limits, max_replicas_global_ceiling: Number(e.target.value) })} className="border rounded px-3 py-2 text-sm w-full mt-1" />
             </div>
           </div>
           <div>
             <label className="text-sm font-medium">Max Agents Per Domain</label>
-            <div className="grid grid-cols-5 gap-2 mt-1">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-1">
               {Object.entries(limits.max_agents_per_domain).map(([domain, count]) => (
                 <div key={domain}>
                   <label className="text-xs text-muted-foreground capitalize">{domain}</label>

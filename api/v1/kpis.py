@@ -198,27 +198,68 @@ async def _compute_basic_metrics(
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
+# Helper: map the sentinel 'default'/'all'/'' and malformed UUIDs to
+# None so the KPI SQL below honours the same legacy contract as
+# _compute_basic_metrics. Keeps tenant-wide reads for admin tooling
+# that doesn't pass a real company id.
+def _parse_company_uuid(company_id: str | None) -> str | None:
+    if company_id and company_id not in ("", "default", "all"):
+        try:
+            import uuid as _uuid_mod
+            return str(_uuid_mod.UUID(company_id))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 async def _query_agent_results(
-    tenant_id: str, domains: list[str], hours: int = 24, limit: int = 50
+    tenant_id: str,
+    domains: list[str],
+    hours: int = 24,
+    limit: int = 50,
+    company_id: str | None = None,
 ) -> list[dict]:
-    """Query recent agent_task_results for the given domains."""
+    """Query recent agent_task_results for the given domains.
+
+    Codex 2026-04-22 release-signoff review: the helper ignored the
+    caller's ``company_id`` so CEO/CFO/CMO dashboards showed tenant-
+    wide rows even when the switcher was scoped. Now honours the
+    same company_uuid contract as _compute_basic_metrics — unscoped
+    reads keep the tenant-wide contract admin tooling expects.
+    """
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
+    company_uuid = _parse_company_uuid(company_id)
+
+    if company_uuid is not None:
+        sql = (
+            "SELECT agent_type, domain, task_type, task_output, "
+            "       confidence, status, created_at "
+            "FROM agent_task_results "
+            "WHERE domain = ANY(:domains) "
+            "  AND created_at > :cutoff "
+            "  AND company_id = :cid "
+            "ORDER BY created_at DESC "
+            "LIMIT :lim"
+        )
+        params: dict[str, Any] = {
+            "domains": domains, "cutoff": cutoff,
+            "lim": limit, "cid": company_uuid,
+        }
+    else:
+        sql = (
+            "SELECT agent_type, domain, task_type, task_output, "
+            "       confidence, status, created_at "
+            "FROM agent_task_results "
+            "WHERE domain = ANY(:domains) "
+            "  AND created_at > :cutoff "
+            "ORDER BY created_at DESC "
+            "LIMIT :lim"
+        )
+        params = {"domains": domains, "cutoff": cutoff, "lim": limit}
+
     try:
         async with get_tenant_session(tenant_id) as session:
-            rows = (
-                await session.execute(
-                    text(
-                        "SELECT agent_type, domain, task_type, task_output, "
-                        "       confidence, status, created_at "
-                        "FROM agent_task_results "
-                        "WHERE domain = ANY(:domains) "
-                        "  AND created_at > :cutoff "
-                        "ORDER BY created_at DESC "
-                        "LIMIT :lim"
-                    ),
-                    {"domains": domains, "cutoff": cutoff, "lim": limit},
-                )
-            ).all()
+            rows = (await session.execute(text(sql), params)).all()
             return [
                 {
                     "agent_type": r.agent_type,
@@ -238,38 +279,60 @@ async def _query_agent_results(
         return []
 
 
-async def _count_pending_approvals(tenant_id: str) -> int:
-    """Count pending filing approvals for a tenant."""
+async def _count_pending_approvals(
+    tenant_id: str, company_id: str | None = None,
+) -> int:
+    """Count pending filing approvals, optionally scoped to a company."""
+    company_uuid = _parse_company_uuid(company_id)
+
+    if company_uuid is not None:
+        sql = (
+            "SELECT COUNT(*) AS cnt FROM filing_approvals "
+            "WHERE status = 'pending' AND company_id = :cid"
+        )
+        params: dict[str, Any] = {"cid": company_uuid}
+    else:
+        sql = (
+            "SELECT COUNT(*) AS cnt FROM filing_approvals "
+            "WHERE status = 'pending'"
+        )
+        params = {}
+
     try:
         async with get_tenant_session(tenant_id) as session:
-            row = (
-                await session.execute(
-                    text(
-                        "SELECT COUNT(*) AS cnt FROM filing_approvals "
-                        "WHERE status = 'pending'"
-                    )
-                )
-            ).first()
+            row = (await session.execute(text(sql), params)).first()
             return row.cnt if row else 0
     except Exception:
         logger.debug("filing_approvals count failed", exc_info=True)
         return 0
 
 
-async def _get_tax_calendar(tenant_id: str) -> list[dict]:
-    """Get upcoming compliance deadlines for a tenant."""
+async def _get_tax_calendar(
+    tenant_id: str, company_id: str | None = None,
+) -> list[dict]:
+    """Get upcoming compliance deadlines, optionally scoped to a company."""
+    company_uuid = _parse_company_uuid(company_id)
+
+    if company_uuid is not None:
+        sql = (
+            "SELECT deadline_type, filing_period, due_date, filed "
+            "FROM compliance_deadlines "
+            "WHERE due_date >= CURRENT_DATE AND company_id = :cid "
+            "ORDER BY due_date ASC LIMIT 10"
+        )
+        params: dict[str, Any] = {"cid": company_uuid}
+    else:
+        sql = (
+            "SELECT deadline_type, filing_period, due_date, filed "
+            "FROM compliance_deadlines "
+            "WHERE due_date >= CURRENT_DATE "
+            "ORDER BY due_date ASC LIMIT 10"
+        )
+        params = {}
+
     try:
         async with get_tenant_session(tenant_id) as session:
-            rows = (
-                await session.execute(
-                    text(
-                        "SELECT deadline_type, filing_period, due_date, filed "
-                        "FROM compliance_deadlines "
-                        "WHERE due_date >= CURRENT_DATE "
-                        "ORDER BY due_date ASC LIMIT 10"
-                    )
-                )
-            ).all()
+            rows = (await session.execute(text(sql), params)).all()
             return [
                 {
                     "filing": f"{r.deadline_type} ({r.filing_period})",
@@ -285,27 +348,44 @@ async def _get_tax_calendar(tenant_id: str) -> list[dict]:
         return []
 
 
-async def _get_recent_escalations(tenant_id: str, limit: int = 5) -> list[dict]:
-    """Get recent HITL items for CEO attention."""
+async def _get_recent_escalations(
+    tenant_id: str, limit: int = 5, company_id: str | None = None,
+) -> list[dict]:
+    """Get recent HITL items for CEO attention, optionally scoped."""
+    company_uuid = _parse_company_uuid(company_id)
+
+    if company_uuid is not None:
+        sql = (
+            "SELECT id, title, priority, status, created_at "
+            "FROM hitl_queue "
+            "WHERE status = 'pending' AND company_id = :cid "
+            "ORDER BY CASE priority "
+            "  WHEN 'critical' THEN 0 "
+            "  WHEN 'high' THEN 1 "
+            "  WHEN 'medium' THEN 2 "
+            "  ELSE 3 END, "
+            "created_at DESC "
+            "LIMIT :lim"
+        )
+        params: dict[str, Any] = {"cid": company_uuid, "lim": limit}
+    else:
+        sql = (
+            "SELECT id, title, priority, status, created_at "
+            "FROM hitl_queue "
+            "WHERE status = 'pending' "
+            "ORDER BY CASE priority "
+            "  WHEN 'critical' THEN 0 "
+            "  WHEN 'high' THEN 1 "
+            "  WHEN 'medium' THEN 2 "
+            "  ELSE 3 END, "
+            "created_at DESC "
+            "LIMIT :lim"
+        )
+        params = {"lim": limit}
+
     try:
         async with get_tenant_session(tenant_id) as session:
-            rows = (
-                await session.execute(
-                    text(
-                        "SELECT id, title, priority, status, created_at "
-                        "FROM hitl_queue "
-                        "WHERE status = 'pending' "
-                        "ORDER BY CASE priority "
-                        "  WHEN 'critical' THEN 0 "
-                        "  WHEN 'high' THEN 1 "
-                        "  WHEN 'medium' THEN 2 "
-                        "  ELSE 3 END, "
-                        "created_at DESC "
-                        "LIMIT :lim"
-                    ),
-                    {"lim": limit},
-                )
-            ).all()
+            rows = (await session.execute(text(sql), params)).all()
             return [
                 {
                     "id": str(r.id),
@@ -388,7 +468,9 @@ async def get_ceo_kpis(
 
     # Enrich with live escalations if not demo
     if not base.get("demo"):
-        escalations = await _get_recent_escalations(tenant_id, limit=5)
+        escalations = await _get_recent_escalations(
+            tenant_id, limit=5, company_id=company_id,
+        )
         if escalations:
             base["recent_escalations"] = escalations
 
@@ -405,13 +487,17 @@ async def get_cfo_kpis(
     """Finance KPIs for the CFO executive dashboard."""
     base = await _build_kpi_response(tenant_id, "cfo", company_id)
 
-    # Enrich with live data when available
+    # Enrich with live data when available — all helpers honour the
+    # same company scope so the CFO board stays consistent with the
+    # company switcher the UI sent.
     if not base.get("demo"):
-        tax_cal = await _get_tax_calendar(tenant_id)
+        tax_cal = await _get_tax_calendar(tenant_id, company_id=company_id)
         if tax_cal:
             base["tax_calendar"] = tax_cal
 
-        pending = await _count_pending_approvals(tenant_id)
+        pending = await _count_pending_approvals(
+            tenant_id, company_id=company_id,
+        )
         base["pending_approvals_count"] = pending
 
     return base

@@ -226,10 +226,38 @@ export default function Schemas() {
   const [loading, setLoading] = useState(true);
   const [selectedSchema, setSelectedSchema] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  // TC_013 / Codex 2026-04-22 release-signoff fix: the editor used
+  // to read from hardcoded SCHEMA_DEFINITIONS which meant custom
+  // schemas persisted via POST/PUT /schemas never appeared. Resolve
+  // the backend ``json_schema`` for the selected name and feed it to
+  // the editor. Falls back to the static definitions only when the
+  // backend returns 404 (platform-default schemas, for demos).
+  const [editorSchema, setEditorSchema] = useState<object | null>(null);
 
   useEffect(() => {
     fetchSchemas();
   }, []);
+
+  useEffect(() => {
+    if (!selectedSchema) {
+      setEditorSchema(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await api.get(`/schemas/${encodeURIComponent(selectedSchema)}`);
+        if (data && typeof data === "object" && data.json_schema) {
+          setEditorSchema(data.json_schema as object);
+          return;
+        }
+      } catch {
+        /* fall through to static defaults */
+      }
+      // Backend didn't have this schema — fall back to the local
+      // SCHEMA_DEFINITIONS demo shape so the editor still renders.
+      setEditorSchema(SCHEMA_DEFINITIONS[selectedSchema] ?? null);
+    })();
+  }, [selectedSchema]);
 
   async function fetchSchemas() {
     setLoading(true);
@@ -309,7 +337,7 @@ export default function Schemas() {
             </div>
           </CardHeader>
           <CardContent>
-            <SchemaEditor schema={selectedSchema ? SCHEMA_DEFINITIONS[selectedSchema] : { $schema: "https://json-schema.org/draft/2020-12/schema", title: "NewSchema", type: "object", required: [], properties: {} }} />
+            <SchemaEditor schema={selectedSchema ? (editorSchema ?? SCHEMA_DEFINITIONS[selectedSchema]) : { $schema: "https://json-schema.org/draft/2020-12/schema", title: "NewSchema", type: "object", required: [], properties: {} }} />
           </CardContent>
         </Card>
       )}
