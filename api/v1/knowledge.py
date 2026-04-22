@@ -455,9 +455,9 @@ async def upload_document(
             },
         )
 
-    # TC_011: filename-level dedup. Caller can opt out with
-    # ?allow_duplicate=true (adds a second copy) or ?replace=true
-    # (deletes the old one first). This check is best-effort — if the
+    # TC_011 + Codex 2026-04-22: filename-level dedup. Caller can opt
+    # out with ?allow_duplicate=true (adds a second copy) or
+    # ?replace=true (deletes the old one first). Best-effort — if the
     # DB lookup fails, we proceed with the upload rather than block
     # legitimate usage.
     if not allow_duplicate and not replace:
@@ -481,13 +481,12 @@ async def upload_document(
                 },
             )
 
-    # Root-cause fix for TC_007 (Codex 2026-04-22): when the caller asks
-    # for replace, actually replace. Previously the UI alerted "check
-    # the duplicate box to replace it", but the duplicate box only added
-    # another copy — the existing document was never touched. Now
-    # replace=true soft-deletes the existing document in both RAGFlow
-    # and the DB mirror before ingesting the new one, so the UI copy
-    # and the backend behaviour agree.
+    # Real replace path — matches the UI's "Replace" modal action.
+    # Previously the UI alerted "check the duplicate box to replace it",
+    # but the duplicate box only added another copy — the existing
+    # document was never touched. Now replace=true soft-deletes the
+    # existing document in both RAGFlow and the DB mirror before
+    # ingesting the new one, so the UI copy and backend agree.
     if replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)

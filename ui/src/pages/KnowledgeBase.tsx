@@ -69,6 +69,59 @@ const STATUS_BADGE: Record<
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
+// Codex 2026-04-22 audit: window.confirm only has OK/Cancel, so the
+// "upload duplicate" flow forced Cancel to mean "add a second copy",
+// which users hit by accident. A small inline picker lets Cancel mean
+// abort (safe default) and splits the real choice into Replace vs Keep
+// both.
+type DuplicateAction = "replace" | "keep_both" | "cancel";
+
+function DuplicateDecisionModal({
+  filename,
+  onDecide,
+}: {
+  filename: string;
+  onDecide: (action: DuplicateAction) => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dup-dialog-title"
+    >
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+        <h3 id="dup-dialog-title" className="text-lg font-semibold mb-2">
+          Duplicate file
+        </h3>
+        <p className="text-sm text-slate-600 mb-4">
+          <span className="font-medium">&ldquo;{filename}&rdquo;</span> is
+          already in the knowledge base. What would you like to do?
+        </p>
+        <div className="flex flex-col gap-2">
+          <Button onClick={() => onDecide("replace")} className="w-full">
+            Replace existing (old version is deleted + reindexed)
+          </Button>
+          <Button
+            onClick={() => onDecide("keep_both")}
+            variant="outline"
+            className="w-full"
+          >
+            Keep both (upload as a second copy with the same name)
+          </Button>
+          <Button
+            onClick={() => onDecide("cancel")}
+            variant="ghost"
+            className="w-full"
+          >
+            Cancel (do not upload)
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function KnowledgeBase() {
   // Codex 2026-04-22 i18n tripwire: the page must surface through the
   // language switcher. Individual strings are wrapped in follow-up PRs.
@@ -81,6 +134,25 @@ export default function KnowledgeBase() {
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<string[]>([]);
+  // Modal state for the duplicate-file decision flow.
+  const [dupPrompt, setDupPrompt] = useState<{
+    filename: string;
+    resolve: (action: DuplicateAction) => void;
+  } | null>(null);
+
+  const askDuplicateDecision = useCallback(
+    (filename: string) =>
+      new Promise<DuplicateAction>((resolve) => {
+        setDupPrompt({
+          filename,
+          resolve: (action) => {
+            setDupPrompt(null);
+            resolve(action);
+          },
+        });
+      }),
+    [],
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -138,31 +210,29 @@ export default function KnowledgeBase() {
         documents.map((d) => d.filename.toLowerCase()),
       );
       for (const file of Array.from(files)) {
-        // TC_011 client-side dedup warning + TC_007 honesty fix (Codex
-        // 2026-04-22 review): previously the confirm dialog said
-        // "Upload a new copy anyway?" and the 409 alert said "check the
-        // duplicate box to replace it", but there was no replace path —
-        // the duplicate box only added a second copy, so the UI copy
-        // lied about what the backend actually did. Now the user picks
-        // between replace (real overwrite via ?replace=true) and add-
-        // alongside (?allow_duplicate=true), and both code paths do
-        // what they say on the tin.
+        // TC_011 client-side dedup + Codex 2026-04-22 audit (F4):
+        // the prior window.confirm() flow forced Cancel to mean "upload
+        // as a second copy", which trapped users. The 3-way modal
+        // (DuplicateDecisionModal above) lets Cancel mean abort and
+        // splits Replace (real overwrite via ?replace=true) from
+        // Keep-both (adds a second doc via ?allow_duplicate=true).
         const isDuplicate = existing.has(file.name.toLowerCase());
-        let mode: "none" | "replace" | "duplicate" = "none";
+        let action: DuplicateAction = "replace";
         if (isDuplicate) {
-          const doReplace = window.confirm(
-            `"${file.name}" is already in the knowledge base.\n\n` +
-              "OK = Replace the existing document (old version is deleted + reindexed).\n" +
-              "Cancel = Upload as a second copy with the same name.",
-          );
-          mode = doReplace ? "replace" : "duplicate";
+          action = await askDuplicateDecision(file.name);
+          if (action === "cancel") continue;
+        } else {
+          action = "keep_both"; // not actually a duplicate — just normal upload
         }
         const fd = new FormData();
         fd.append("file", file);
         try {
           let url = "/knowledge/upload";
-          if (mode === "replace") url += "?replace=true";
-          else if (mode === "duplicate") url += "?allow_duplicate=true";
+          if (isDuplicate && action === "replace") {
+            url += "?replace=true";
+          } else if (isDuplicate && action === "keep_both") {
+            url += "?allow_duplicate=true";
+          }
           await api.post(url, fd);
           existing.add(file.name.toLowerCase());
         } catch (err: unknown) {
@@ -264,6 +334,12 @@ export default function KnowledgeBase() {
 
   return (
     <div className="space-y-6">
+      {dupPrompt && (
+        <DuplicateDecisionModal
+          filename={dupPrompt.filename}
+          onDecide={dupPrompt.resolve}
+        />
+      )}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Knowledge Base</h2>
         <Button variant="outline" onClick={fetchData}>Refresh</Button>

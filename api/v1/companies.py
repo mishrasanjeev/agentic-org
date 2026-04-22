@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant, get_current_user
+from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from core.database import get_tenant_session
 from core.models.company import Company
 
@@ -329,7 +329,12 @@ async def list_companies(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/companies", response_model=CompanyOut, status_code=201)
+@router.post(
+    "/companies",
+    response_model=CompanyOut,
+    status_code=201,
+    dependencies=[require_tenant_admin],
+)
 async def create_company(
     body: CompanyCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -427,7 +432,11 @@ async def get_company(
 # ---------------------------------------------------------------------------
 
 
-@router.patch("/companies/{company_id}", response_model=CompanyOut)
+@router.patch(
+    "/companies/{company_id}",
+    response_model=CompanyOut,
+    dependencies=[require_tenant_admin],
+)
 async def update_company(
     company_id: str,
     body: CompanyUpdate,
@@ -480,7 +489,11 @@ async def update_company(
 # ---------------------------------------------------------------------------
 
 
-@router.delete("/companies/{company_id}", status_code=204)
+@router.delete(
+    "/companies/{company_id}",
+    status_code=204,
+    dependencies=[require_tenant_admin],
+)
 async def delete_company(
     company_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -550,7 +563,10 @@ async def get_company_roles(
 # ---------------------------------------------------------------------------
 
 
-@router.put("/companies/{company_id}/roles")
+@router.put(
+    "/companies/{company_id}/roles",
+    dependencies=[require_tenant_admin],
+)
 async def update_company_roles(
     company_id: str,
     body: RoleUpdateRequest,
@@ -598,7 +614,12 @@ async def update_company_roles(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/companies/onboard", response_model=CompanyOut, status_code=201)
+@router.post(
+    "/companies/onboard",
+    response_model=CompanyOut,
+    status_code=201,
+    dependencies=[require_tenant_admin],
+)
 async def onboard_company(
     body: CompanyOnboard,
     tenant_id: str = Depends(get_current_tenant),

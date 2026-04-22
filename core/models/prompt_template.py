@@ -90,3 +90,54 @@ class PromptEditHistory(BaseModel):
     )
 
     agent = relationship("Agent")
+
+
+class PromptTemplateEditHistory(BaseModel):
+    """Template-level edit history.
+
+    Codex 2026-04-22 audit gap #8: marketing copy claimed full edit
+    history + rollback for prompt templates, but the only existing
+    history table (``prompt_edit_history``) recorded agent prompt
+    changes, not template ones. This table captures the before/after
+    text for each template update so the governance claim has
+    teeth — ``GET /prompt-templates/{id}/history`` + ``POST
+    /prompt-templates/{id}/rollback`` read from here.
+    """
+
+    __tablename__ = "prompt_template_edit_history"
+    __table_args__ = (
+        Index(
+            "idx_prompt_template_edit_history_template",
+            "tenant_id",
+            "template_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("prompt_templates.id"), nullable=False
+    )
+    edited_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # Snapshot the full template state before the mutation so rollback
+    # can restore it deterministically.
+    name_before: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    template_text_before: Mapped[str | None] = mapped_column(Text, nullable=True)
+    variables_before: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    description_before: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # What it became (for readable history).
+    name_after: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    template_text_after: Mapped[str | None] = mapped_column(Text, nullable=True)
+    variables_after: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    description_after: Mapped[str | None] = mapped_column(Text, nullable=True)
+    change_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )

@@ -79,7 +79,7 @@ export default function Workflows() {
     }
   }
 
-  function useTemplate(template: WorkflowTemplate) {
+  function applyTemplate(template: WorkflowTemplate) {
     navigate("/dashboard/workflows/new", {
       state: {
         templateId: template.id,
@@ -196,7 +196,7 @@ export default function Workflows() {
                   <div className="text-xs text-muted-foreground">
                     {tpl.steps} steps | {tpl.trigger.replace(/_/g, " ")}
                   </div>
-                  <Button size="sm" onClick={() => useTemplate(tpl)} data-testid={`use-template-${tpl.id}`}>
+                  <Button size="sm" onClick={() => applyTemplate(tpl)} data-testid={`use-template-${tpl.id}`}>
                     Use Template
                   </Button>
                 </div>

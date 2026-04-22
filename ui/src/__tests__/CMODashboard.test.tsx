@@ -174,7 +174,10 @@ describe("CMODashboard", () => {
     mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
     renderCMO();
     await waitFor(() => {
-      expect(mockGet).toHaveBeenCalledWith("/kpis/cmo");
+      // Codex 2026-04-22 multi-company fix: the dashboard now passes a
+      // params object (empty when no company is selected) so KPI helpers
+      // can filter by company_id.
+      expect(mockGet).toHaveBeenCalledWith("/kpis/cmo", { params: {} });
     });
   });
 });

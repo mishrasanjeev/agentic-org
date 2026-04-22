@@ -153,14 +153,18 @@ describe("KnowledgeBase", () => {
     expect(screen.getByText("indexed")).toBeInTheDocument();
   });
 
-  it("warns on duplicate filename upload and skips POST when user cancels (TC_011)", async () => {
+  /* Codex 2026-04-22 audit: the old tests asserted against window.confirm
+   * (OK/Cancel), but the new flow uses an inline 3-way modal (Replace /
+   * Keep both / Cancel) so Cancel cannot accidentally mean "upload a
+   * second copy". These tests drive the modal directly. */
+
+  it("cancelling the duplicate modal aborts the upload (no POST)", async () => {
     armFetches();
     render(<KnowledgeBase />);
     await waitFor(() => {
       expect(screen.getByText("alpha.pdf")).toBeInTheDocument();
     });
 
-    // Simulate uploading a new file with the same filename as an existing doc.
     const fileInput = document.querySelector(
       'input[type="file"]',
     ) as HTMLInputElement;
@@ -173,15 +177,24 @@ describe("KnowledgeBase", () => {
       fireEvent.change(fileInput);
     });
 
-    // User clicked Cancel on the confirm dialog (beforeEach returns false)
-    expect(window.confirm).toHaveBeenCalled();
-    // No POST should be made because the user cancelled.
+    // The modal should appear with all three options.
+    await waitFor(() => {
+      expect(screen.getByText(/Duplicate file/i)).toBeInTheDocument();
+    });
+    const cancelBtn = screen.getByRole("button", {
+      name: /Cancel \(do not upload\)/i,
+    });
+
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    // No POST — Cancel must abort, not silently upload.
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it("sends allow_duplicate=true when user confirms the overwrite (TC_011)", async () => {
+  it("clicking Replace uploads with ?replace=true (real overwrite)", async () => {
     armFetches();
-    vi.spyOn(window, "confirm").mockReturnValue(true); // user clicks OK
     render(<KnowledgeBase />);
     await waitFor(() => {
       expect(screen.getByText("alpha.pdf")).toBeInTheDocument();
@@ -197,6 +210,51 @@ describe("KnowledgeBase", () => {
 
     await act(async () => {
       fireEvent.change(fileInput);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Duplicate file/i)).toBeInTheDocument();
+    });
+    const replaceBtn = screen.getByRole("button", {
+      name: /Replace existing/i,
+    });
+    await act(async () => {
+      fireEvent.click(replaceBtn);
+    });
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        "/knowledge/upload?replace=true",
+        expect.anything(),
+      );
+    });
+  });
+
+  it("clicking Keep both uploads with ?allow_duplicate=true", async () => {
+    armFetches();
+    render(<KnowledgeBase />);
+    await waitFor(() => {
+      expect(screen.getByText("alpha.pdf")).toBeInTheDocument();
+    });
+
+    const fileInput = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    const dupFile = new File(["..."], "alpha.pdf", { type: "application/pdf" });
+    Object.defineProperty(fileInput, "files", {
+      value: { 0: dupFile, length: 1, item: (i: number) => [dupFile][i] },
+    });
+
+    await act(async () => {
+      fireEvent.change(fileInput);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Duplicate file/i)).toBeInTheDocument();
+    });
+    const keepBothBtn = screen.getByRole("button", { name: /Keep both/i });
+    await act(async () => {
+      fireEvent.click(keepBothBtn);
     });
 
     await waitFor(() => {

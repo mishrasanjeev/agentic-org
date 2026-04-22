@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -37,34 +38,79 @@ ROLE_DOMAIN_MAP: dict[str, list[str]] = {
 
 async def _compute_basic_metrics(
     tenant_id: str, role: str, domains: list[str],
+    company_id: str | None = None,
 ) -> dict:
     """Compute real KPI metrics from agent_task_results for any CxO role.
 
     Returns honest zeros when no data exists — never fabricated numbers.
+
+    Codex 2026-04-22 multi-company isolation fix: previously the SQL
+    ignored the ``company_id`` the endpoint accepted, so the Finance
+    dashboard showed tenant-wide numbers even when the user had picked
+    a specific company. Both ``agent_task_results`` and ``agents``
+    carry a nullable ``company_id`` column, so we can filter honestly
+    when the caller scopes the request. When ``company_id`` is None or
+    the sentinel "default" (legacy meaning: no scope), we keep the
+    tenant-wide aggregate so admin tooling that does not pass a real
+    company id keeps working.
     """
     from core.database import get_tenant_session
 
+    # Parse company_id; treat blanks / "default" / malformed UUIDs as
+    # no-scope so the legacy tenant-wide view keeps working.
+    company_uuid: str | None = None
+    if company_id and company_id not in ("", "default", "all"):
+        try:
+            import uuid as _uuid_mod
+            company_uuid = str(_uuid_mod.UUID(company_id))
+        except (TypeError, ValueError):
+            company_uuid = None
+
+    params: dict[str, Any] = {
+        "tid": tenant_id, "domains": domains,
+    }
+    if company_uuid is not None:
+        params["cid"] = company_uuid
+
     try:
         async with get_tenant_session(tenant_id) as session:
-            # Aggregate stats from last 30 days
+            # Aggregate stats from last 30 days. Two literal statements
+            # rather than string-concat so ruff's S608 SQLi check stays
+            # satisfied (and so a reader can see at a glance that no
+            # user input flows into the SQL).
             cutoff = datetime.now(UTC) - timedelta(days=30)
-            rows = (
-                await session.execute(
-                    text(
-                        "SELECT domain, status, COUNT(*) as cnt, "
-                        "       AVG(confidence) as avg_conf, "
-                        "       SUM(tokens_used) as total_tokens, "
-                        "       SUM(cost_usd) as total_cost, "
-                        "       AVG(duration_ms) as avg_duration, "
-                        "       COUNT(*) FILTER (WHERE hitl_required) as hitl_count "
-                        "FROM agent_task_results "
-                        "WHERE tenant_id = :tid "
-                        "  AND domain = ANY(:domains) "
-                        "  AND created_at > :cutoff "
-                        "GROUP BY domain, status"
-                    ),
-                    {"tid": tenant_id, "domains": domains, "cutoff": cutoff},
+            q_params = {**params, "cutoff": cutoff}
+            if company_uuid is not None:
+                agg_sql = (
+                    "SELECT domain, status, COUNT(*) as cnt, "
+                    "       AVG(confidence) as avg_conf, "
+                    "       SUM(tokens_used) as total_tokens, "
+                    "       SUM(cost_usd) as total_cost, "
+                    "       AVG(duration_ms) as avg_duration, "
+                    "       COUNT(*) FILTER (WHERE hitl_required) as hitl_count "
+                    "FROM agent_task_results "
+                    "WHERE tenant_id = :tid "
+                    "  AND domain = ANY(:domains) "
+                    "  AND created_at > :cutoff "
+                    "  AND company_id = :cid "
+                    "GROUP BY domain, status"
                 )
+            else:
+                agg_sql = (
+                    "SELECT domain, status, COUNT(*) as cnt, "
+                    "       AVG(confidence) as avg_conf, "
+                    "       SUM(tokens_used) as total_tokens, "
+                    "       SUM(cost_usd) as total_cost, "
+                    "       AVG(duration_ms) as avg_duration, "
+                    "       COUNT(*) FILTER (WHERE hitl_required) as hitl_count "
+                    "FROM agent_task_results "
+                    "WHERE tenant_id = :tid "
+                    "  AND domain = ANY(:domains) "
+                    "  AND created_at > :cutoff "
+                    "GROUP BY domain, status"
+                )
+            rows = (
+                await session.execute(text(agg_sql), q_params)
             ).all()
 
             # Build per-domain breakdown
@@ -95,15 +141,30 @@ async def _compute_basic_metrics(
                 total_hitl += r.hitl_count or 0
                 total_cost += float(r.total_cost or 0)
 
-            # Count active agents
-            agent_count_row = await session.execute(
-                text(
-                    "SELECT COUNT(*) FROM agents "
-                    "WHERE tenant_id = :tid AND domain = ANY(:domains) "
-                    "AND status IN ('active', 'shadow')"
-                ),
-                {"tid": tenant_id, "domains": domains},
-            )
+            # Count active agents (honoring the same company scope).
+            # When a company scope is active, use the with-company SQL;
+            # otherwise use the plain one. This avoids string-concat
+            # entirely so ruff's S608 SQLi heuristic stays happy, and
+            # the two statements are obvious pure-literal strings.
+            if company_uuid is not None:
+                agent_count_row = await session.execute(
+                    text(
+                        "SELECT COUNT(*) FROM agents "
+                        "WHERE tenant_id = :tid AND domain = ANY(:domains) "
+                        "AND status IN ('active', 'shadow') "
+                        "AND company_id = :cid"
+                    ),
+                    params,
+                )
+            else:
+                agent_count_row = await session.execute(
+                    text(
+                        "SELECT COUNT(*) FROM agents "
+                        "WHERE tenant_id = :tid AND domain = ANY(:domains) "
+                        "AND status IN ('active', 'shadow')"
+                    ),
+                    params,
+                )
             agent_count = (agent_count_row.scalar() or 0)
 
             success_rate = round(
@@ -302,7 +363,7 @@ async def _build_kpi_response(
     # produced NaN in the UI when fields like "items" or "result"
     # were passed through instead of numeric KPIs.
     domains = ROLE_DOMAIN_MAP.get(role, [])
-    basic = await _compute_basic_metrics(tenant_id, role, domains)
+    basic = await _compute_basic_metrics(tenant_id, role, domains, company_id)
     has_data = basic.get("total_tasks_30d", 0) > 0
 
     return {

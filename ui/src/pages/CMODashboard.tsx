@@ -80,7 +80,12 @@ export default function CMODashboard() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await api.get("/kpis/cmo");
+      // Codex 2026-04-22 multi-company isolation fix — same reason as
+      // the CFO dashboard: the marketing board ignored the company
+      // switcher because it didn't thread company_id through.
+      const companyId = localStorage.getItem("company_id") || "";
+      const params = companyId ? { company_id: companyId } : {};
+      const resp = await api.get("/kpis/cmo", { params });
       setData(resp.data);
     } catch {
       setError(t("errors.failedToLoadKpis", "Failed to load CMO KPIs"));
