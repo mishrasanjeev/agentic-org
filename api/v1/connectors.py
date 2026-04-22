@@ -160,17 +160,36 @@ async def list_registry_connectors(category: str | None = None):
 
 # ── GET /tools — Function-level tool names ─────────────────────────────────
 @router.get("/tools")
-async def list_tools(category: str | None = None):
+async def list_tools(
+    category: str | None = None,
+    connectors: str | None = None,
+):
     """Return all function-level tool names from the connector registry.
 
     Unlike ``GET /mcp/tools`` which returns agent-level MCP tool names
     (e.g., ``agenticorg_email_agent``), this returns the actual function-level
     tool names (e.g., ``send_email``, ``read_inbox``) that agents use.
+
+    Query params
+    ------------
+    ``category``
+        Optional — only return tools whose connector's category matches.
+    ``connectors``
+        Optional — comma-separated list of connector names. Tools are
+        restricted to those belonging to the named connectors. Used by
+        the agent creation UI (UR-Bug-2) so ``authorized_tools`` picker
+        matches the connectors the user actually selected.
     """
+    connector_filter: list[str] | None = None
+    if connectors:
+        connector_filter = [
+            part.strip() for part in connectors.split(",") if part.strip()
+        ] or None
+
     try:
         from core.langgraph.tool_adapter import _build_tool_index
 
-        tool_index = _build_tool_index()
+        tool_index = _build_tool_index(connector_names=connector_filter)
         tools: list[str] = []
         tool_details: list[dict] = []
         for tool_name, (connector_name, description) in sorted(tool_index.items()):

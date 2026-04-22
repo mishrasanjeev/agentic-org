@@ -108,6 +108,24 @@ export default function AgentCreate() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [composioExpanded, setComposioExpanded] = useState(false);
 
+  // UR-Bug-1 / UR-Bug-2 (Uday/Ramesh 2026-04-21): agent creation had no
+  // connector picker, so the Agent ORM's `connector_ids` column stayed
+  // empty on fresh agents and the `authorized_tools` auto-populate drew
+  // from every tool in the catalog. Users hit two problems:
+  //   1. No way to say "this agent talks to Gmail" without a follow-up
+  //      PATCH via API.
+  //   2. Authorized Tools showed every connector's tools, so Gmail
+  //      agents ended up with irrelevant defaults and no Gmail ones.
+  interface ConnectorOption {
+    id: string;              // "registry-gmail" etc.
+    name: string;            // "gmail"
+    display_name: string;    // "Gmail"
+    category: string;
+    tool_functions: string[];
+  }
+  const [availableConnectors, setAvailableConnectors] = useState<ConnectorOption[]>([]);
+  const [connectorIds, setConnectorIds] = useState<string[]>([]);
+
   // Load available parent agents when domain changes
   useEffect(() => {
     agentsApi.list({ domain, status: "active" }).then(({ data }) => {
@@ -116,25 +134,55 @@ export default function AgentCreate() {
     }).catch(() => setAvailableParents([]));
   }, [domain]);
 
-  // Load available function-level tools from connector registry
+  // Load available connectors for the picker (UR-Bug-1).
   useEffect(() => {
-    api.get("/tools").then(({ data }) => {
-      const allTools: string[] = data.tools || [];
-      setAvailableTools(allTools);
-    }).catch(() => {
-      // Fallback: try connector registry
-      api.get("/connectors/registry").then(({ data }) => {
-        const items = data.items || [];
-        const allTools: string[] = [];
-        items.forEach((item: { tool_functions?: string[] }) => {
-          (item.tool_functions || []).forEach((t: string) => {
-            if (!allTools.includes(t)) allTools.push(t);
-          });
-        });
-        setAvailableTools(allTools);
-      }).catch(() => setAvailableTools([]));
-    });
+    api.get("/connectors/registry").then(({ data }) => {
+      const items: ConnectorOption[] = (data.items || []).map(
+        (c: Record<string, unknown>): ConnectorOption => ({
+          id: String(c.id ?? c.connector_id ?? ""),
+          name: String(c.name ?? ""),
+          display_name: String(c.display_name ?? c.name ?? ""),
+          category: String(c.category ?? ""),
+          tool_functions: Array.isArray(c.tool_functions)
+            ? (c.tool_functions as unknown[]).map(String)
+            : [],
+        }),
+      );
+      setAvailableConnectors(items);
+    }).catch(() => setAvailableConnectors([]));
   }, []);
+
+  // Load available function-level tools from the registry. When the
+  // user has picked specific connectors, restrict the tool list to
+  // those connectors only (UR-Bug-2). When nothing is picked, show
+  // the full catalog — preserves the previous behaviour so agents
+  // without an explicit connector selection still discover tools.
+  useEffect(() => {
+    const connectorNames = connectorIds
+      .map((id) =>
+        availableConnectors.find((c) => c.id === id)?.name ?? "",
+      )
+      .filter(Boolean);
+    const url = connectorNames.length > 0
+      ? `/tools?connectors=${encodeURIComponent(connectorNames.join(","))}`
+      : "/tools";
+    api.get(url).then(({ data }) => {
+      setAvailableTools(data.tools || []);
+    }).catch(() => {
+      // Fallback: derive tools from the cached connector registry
+      // (also filtered, if the user picked any).
+      const pool = connectorIds.length > 0
+        ? availableConnectors.filter((c) => connectorIds.includes(c.id))
+        : availableConnectors;
+      const allTools: string[] = [];
+      pool.forEach((item) => {
+        (item.tool_functions || []).forEach((t: string) => {
+          if (!allTools.includes(t)) allTools.push(t);
+        });
+      });
+      setAvailableTools(allTools);
+    });
+  }, [connectorIds, availableConnectors]);
 
   // Auto-assign default tools when agent type changes
   useEffect(() => {
@@ -267,6 +315,10 @@ export default function AgentCreate() {
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
         authorized_tools: authorizedTools.length > 0 ? authorizedTools : undefined,
+        // UR-Bug-1: connector linkage chosen in Step 4. Empty means
+        // "tenant-default lookup" server-side; non-empty restricts the
+        // agent to the named connector instances.
+        connector_ids: connectorIds.length > 0 ? connectorIds : undefined,
       });
       import("@/components/Analytics").then(m => m.trackEvent("agent_create", { agent_type: agentType, domain })).catch(() => {});
       navigate(`/dashboard/agents/${data.agent_id || ""}`);
@@ -544,11 +596,76 @@ export default function AgentCreate() {
                   <label className="text-sm font-medium">Max Retries</label>
                   <input type="number" min={1} max={10} value={maxRetries} onChange={(e) => setMaxRetries(Number(e.target.value))} className="border rounded px-3 py-2 text-sm w-24 mt-1" />
                 </div>
+                {/* Connectors (UR-Bug-1) */}
+                <div>
+                  <label className="text-sm font-medium">Connectors</label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Which connectors this agent is linked to. Leave empty for
+                    tenant-default lookup; pick one or more to restrict the
+                    Authorized Tools list below to just those connectors'
+                    functions.
+                  </p>
+                  {connectorIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {connectorIds.map((cid) => {
+                        const conn = availableConnectors.find((c) => c.id === cid);
+                        const label = conn?.display_name || conn?.name || cid;
+                        return (
+                          <span
+                            key={cid}
+                            className="inline-flex items-center gap-1 bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-medium"
+                          >
+                            {label}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConnectorIds(connectorIds.filter((x) => x !== cid))
+                              }
+                              className="ml-1 text-primary/60 hover:text-primary"
+                              aria-label={`Remove ${label}`}
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <select
+                    data-testid="connector-picker"
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (id && !connectorIds.includes(id)) {
+                        setConnectorIds([...connectorIds, id]);
+                      }
+                      e.target.value = "";
+                    }}
+                    className="border rounded px-3 py-2 text-sm w-full mt-1"
+                  >
+                    <option value="">
+                      {availableConnectors.length === 0
+                        ? "Loading connectors..."
+                        : "+ Add connector"}
+                    </option>
+                    {availableConnectors
+                      .filter((c) => !connectorIds.includes(c.id))
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.display_name}
+                          {c.category ? ` (${c.category})` : ""}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
                 {/* Authorized Tools */}
                 <div>
                   <label className="text-sm font-medium">Authorized Tools</label>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Tools this agent can call. Auto-populated based on agent type — add or remove as needed.
+                    Tools this agent can call. {connectorIds.length > 0
+                      ? "Filtered to the connectors you picked above."
+                      : "Auto-populated based on agent type — add or remove as needed."}
                   </p>
                   {authorizedTools.length > 0 ? (
                     <div className="space-y-2 mb-2">
