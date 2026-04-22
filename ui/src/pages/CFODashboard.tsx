@@ -61,13 +61,21 @@ export default function CFODashboard() {
 
   useEffect(() => {
     fetchData();
+    // The company switcher writes to localStorage and forces a reload
+    // (see CompanySwitcher.tsx), so we don't need an observer here.
   }, []);
 
   async function fetchData() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await api.get("/kpis/cfo");
+      // Codex 2026-04-22 multi-company isolation fix: CFO dashboard
+      // previously hit /kpis/cfo without a company_id, so filter-state
+      // from the company switcher was ignored and the board showed
+      // tenant-wide numbers regardless of which company was selected.
+      const companyId = localStorage.getItem("company_id") || "";
+      const params = companyId ? { company_id: companyId } : {};
+      const resp = await api.get("/kpis/cfo", { params });
       setData(resp.data);
     } catch {
       setError(t("errors.failedToLoadKpis", "Failed to load CFO KPIs"));

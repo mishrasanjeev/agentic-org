@@ -33,12 +33,15 @@ def tenant_client(app, tenant_id: str):
     from api.deps import get_current_tenant
     app.dependency_overrides[get_current_tenant] = lambda: tenant_id
 
+    # Codex 2026-04-22: create/mutate routes require admin scope.
+    admin_scopes = ["agenticorg:admin"]
+
     async def _fake_validate(token):
-        return {"sub": f"user-{tenant_id[:8]}", "agenticorg:tenant_id": tenant_id, "agenticorg:scopes": []}
+        return {"sub": f"user-{tenant_id[:8]}", "agenticorg:tenant_id": tenant_id, "agenticorg:scopes": admin_scopes}
 
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=[]):
+            with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
                 with TestClient(app, raise_server_exceptions=False) as c:
                     c.headers["Authorization"] = f"Bearer fake-token-{tenant_id[:8]}"
                     yield c

@@ -68,6 +68,59 @@ const STATUS_BADGE: Record<
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
+// Codex 2026-04-22 audit: window.confirm only has OK/Cancel, so the
+// "upload duplicate" flow forced Cancel to mean "add a second copy",
+// which users hit by accident. A small inline picker lets Cancel mean
+// abort (safe default) and splits the real choice into Replace vs Keep
+// both.
+type DuplicateAction = "replace" | "keep_both" | "cancel";
+
+function DuplicateDecisionModal({
+  filename,
+  onDecide,
+}: {
+  filename: string;
+  onDecide: (action: DuplicateAction) => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dup-dialog-title"
+    >
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+        <h3 id="dup-dialog-title" className="text-lg font-semibold mb-2">
+          Duplicate file
+        </h3>
+        <p className="text-sm text-slate-600 mb-4">
+          <span className="font-medium">&ldquo;{filename}&rdquo;</span> is
+          already in the knowledge base. What would you like to do?
+        </p>
+        <div className="flex flex-col gap-2">
+          <Button onClick={() => onDecide("replace")} className="w-full">
+            Replace existing (old version is deleted + reindexed)
+          </Button>
+          <Button
+            onClick={() => onDecide("keep_both")}
+            variant="outline"
+            className="w-full"
+          >
+            Keep both (upload as a second copy with the same name)
+          </Button>
+          <Button
+            onClick={() => onDecide("cancel")}
+            variant="ghost"
+            className="w-full"
+          >
+            Cancel (do not upload)
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function KnowledgeBase() {
   const [documents, setDocuments] = useState<KBDocument[]>([]);
   const [stats, setStats] = useState<KBStats | null>(null);
@@ -76,6 +129,25 @@ export default function KnowledgeBase() {
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<string[]>([]);
+  // Modal state for the duplicate-file decision flow.
+  const [dupPrompt, setDupPrompt] = useState<{
+    filename: string;
+    resolve: (action: DuplicateAction) => void;
+  } | null>(null);
+
+  const askDuplicateDecision = useCallback(
+    (filename: string) =>
+      new Promise<DuplicateAction>((resolve) => {
+        setDupPrompt({
+          filename,
+          resolve: (action) => {
+            setDupPrompt(null);
+            resolve(action);
+          },
+        });
+      }),
+    [],
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -133,23 +205,28 @@ export default function KnowledgeBase() {
         documents.map((d) => d.filename.toLowerCase()),
       );
       for (const file of Array.from(files)) {
-        // TC_011 client-side dedup: warn on same filename before the
-        // round-trip. The backend also returns 409 for this case — this
-        // check just saves the user a server error.
+        // TC_011 client-side dedup + Codex 2026-04-22 audit fix:
+        // previously window.confirm() forced Cancel to mean "upload as a
+        // second copy", which trapped users who expected Cancel to
+        // abort. The modal has three explicit choices so Cancel now
+        // means exactly what it says.
         const isDuplicate = existing.has(file.name.toLowerCase());
+        let action: DuplicateAction = "replace";
         if (isDuplicate) {
-          const proceed = window.confirm(
-            `"${file.name}" is already in the knowledge base. ` +
-              "Upload a new copy anyway?",
-          );
-          if (!proceed) continue;
+          action = await askDuplicateDecision(file.name);
+          if (action === "cancel") continue;
+        } else {
+          action = "keep_both"; // not actually a duplicate — just normal upload
         }
         const fd = new FormData();
         fd.append("file", file);
         try {
-          const url = isDuplicate
-            ? "/knowledge/upload?allow_duplicate=true"
-            : "/knowledge/upload";
+          let url = "/knowledge/upload";
+          if (isDuplicate && action === "replace") {
+            url += "?replace=true";
+          } else if (isDuplicate && action === "keep_both") {
+            url += "?allow_duplicate=true";
+          }
           await api.post(url, fd);
           existing.add(file.name.toLowerCase());
         } catch (err: unknown) {
@@ -160,7 +237,7 @@ export default function KnowledgeBase() {
           if (status === 409) {
             window.alert(
               `"${file.name}" already exists on the server. ` +
-                "Check the duplicate box to replace it.",
+                "Re-select the file and choose Replace to overwrite it.",
             );
             continue;
           }
@@ -251,6 +328,12 @@ export default function KnowledgeBase() {
 
   return (
     <div className="space-y-6">
+      {dupPrompt && (
+        <DuplicateDecisionModal
+          filename={dupPrompt.filename}
+          onDecide={dupPrompt.resolve}
+        />
+      )}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Knowledge Base</h2>
         <Button variant="outline" onClick={fetchData}>Refresh</Button>

@@ -14,7 +14,12 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant, get_user_domains
+from api.deps import (
+    get_current_tenant,
+    get_current_user,
+    get_user_domains,
+    require_tenant_admin,
+)
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
@@ -315,6 +320,52 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
         raise HTTPException(400, "Invalid company_id format") from exc
 
 
+def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
+    """Extract a user UUID from JWT claims for audit-log ``edited_by``.
+
+    Codex 2026-04-22 audit gap #9 — the prompt audit trail did not record
+    who made the change. Claims carry either ``user_id`` (canonical) or
+    ``sub`` (email). Return a UUID when the claim is UUID-shaped;
+    otherwise None so a malformed claim doesn't blow up the update path.
+
+    Tolerant of non-dict inputs (e.g., the Depends() sentinel in direct-
+    call tests) — any non-dict is treated as "no user", which is the
+    same as a missing claim.
+    """
+    if not isinstance(user, dict) or not user:
+        return None
+    for key in ("user_id", "sub"):
+        raw = user.get(key)
+        if not raw:
+            continue
+        try:
+            return _uuid.UUID(str(raw))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _enforce_domain_access(agent: Agent | None, user_domains: list[str] | None) -> None:
+    """Codex 2026-04-22 audit gap — domain RBAC bypassable by ID.
+
+    List endpoints already filter by ``user_domains``, but object GET /
+    PUT / PATCH / DELETE routes did not, so a domain-limited user could
+    reach arbitrary records if they knew the ID. This helper closes that
+    bypass. Raises 404 (not 403) so agent existence is not leaked to a
+    caller who isn't allowed to see it.
+
+    Direct-call tests pass the Depends() sentinel as the default value,
+    so treat any non-list (including FastAPI's Depends instance) as
+    "no domain limit" — same semantic as a missing claim.
+    """
+    if agent is None:
+        return
+    if not isinstance(user_domains, list):
+        return
+    if agent.domain and agent.domain not in user_domains:
+        raise HTTPException(404, "Agent not found")
+
+
 def _validate_authorized_tools(tools: list[str]) -> list[str]:
     """Validate that every tool in the list exists in the connector tool_index.
 
@@ -327,7 +378,11 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
 
 
 # ── POST /agents ─────────────────────────────────────────────────────────────
-@router.post("/agents", status_code=201)
+@router.post(
+    "/agents",
+    status_code=201,
+    dependencies=[require_tenant_admin],
+)
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     company_uuid = _parse_company_id(body.company_id)
@@ -372,21 +427,59 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             if company_exists.scalar_one_or_none() is None:
                 raise HTTPException(404, "Company not found")
         # ── SET-008: Enforce shadow agent limit ────────────────────────
+        #
+        # Codex 2026-04-22 audit gap #7 — fail-closed on safety errors.
+        # The previous body swallowed every exception ("Skip limit check
+        # if query fails") so a DB hiccup would silently let the caller
+        # exceed the shadow-agent budget. CLAUDE.md's non-negotiable
+        # safety rules don't permit degrade-to-weaker-state on the
+        # control plane. Missing tenant settings is a normal condition
+        # (→ use defaults), but a real query failure must fail the
+        # request rather than bypass the budget.
         if initial_status == "shadow":
             try:
-                tenant_result = await session.execute(select(Tenant).where(Tenant.id == tid))
+                tenant_result = await session.execute(
+                    select(Tenant).where(Tenant.id == tid)
+                )
                 tenant_row = tenant_result.scalar_one_or_none()
-                stored = (tenant_row.settings or {}).get("fleet_limits") if tenant_row else None
+                stored = (
+                    (tenant_row.settings or {}).get("fleet_limits")
+                    if tenant_row
+                    else None
+                )
                 limits = FleetLimits(**stored) if stored else FleetLimits()
-                shadow_count = (await session.execute(
-                    select(func.count(Agent.id)).where(Agent.tenant_id == tid, Agent.status == "shadow")
-                )).scalar() or 0
+                shadow_count = (
+                    await session.execute(
+                        select(func.count(Agent.id)).where(
+                            Agent.tenant_id == tid, Agent.status == "shadow"
+                        )
+                    )
+                ).scalar() or 0
                 if shadow_count >= limits.max_shadow_agents:
-                    raise HTTPException(409, detail=f"Shadow limit reached ({shadow_count}/{limits.max_shadow_agents})")
+                    raise HTTPException(
+                        409,
+                        detail=(
+                            f"Shadow limit reached "
+                            f"({shadow_count}/{limits.max_shadow_agents})"
+                        ),
+                    )
             except HTTPException:
                 raise
-            except Exception:  # noqa: S110
-                pass  # Skip limit check if query fails (new tenant, no settings)
+            except Exception as exc:
+                logger.error(
+                    "shadow_limit_check_failed",
+                    tenant_id=str(tid),
+                    error=str(exc),
+                )
+                raise HTTPException(
+                    503,
+                    detail=(
+                        "Could not verify the tenant's shadow-agent budget. "
+                        "Refusing to create agent rather than bypass the "
+                        "limit silently. Retry when the control plane is "
+                        "healthy."
+                    ),
+                ) from exc
 
         agent = Agent(
             tenant_id=tid,
@@ -518,7 +611,7 @@ async def list_agents(
         count_query = select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
 
         # RBAC domain filtering
-        if user_domains is not None:
+        if isinstance(user_domains, list):
             query = query.where(Agent.domain.in_(user_domains))
             count_query = count_query.where(Agent.domain.in_(user_domains))
 
@@ -673,7 +766,10 @@ async def delegate_to_agent(
         return {"status": "failed", "reason": "Grantex delegation failed"}
 
 
-@router.post("/agents/import-csv")
+@router.post(
+    "/agents/import-csv",
+    dependencies=[require_tenant_admin],
+)
 async def import_agents_csv(
     file: UploadFile,
     tenant_id: str = Depends(get_current_tenant),
@@ -925,7 +1021,11 @@ async def generate_agent(
 
 # ── GET /agents/{id} ────────────────────────────────────────────────────────
 @router.get("/agents/{agent_id}")
-async def get_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def get_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -934,16 +1034,37 @@ async def get_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)
         agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(404, "Agent not found")
+    _enforce_domain_access(agent, user_domains)
     return _agent_to_dict(agent)
 
 
 # ── PUT /agents/{id} ────────────────────────────────────────────────────────
-@router.put("/agents/{agent_id}")
+@router.put(
+    "/agents/{agent_id}",
+    dependencies=[require_tenant_admin],
+)
 async def replace_agent(
     agent_id: UUID,
     body: AgentCreate,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user: dict = Depends(get_current_user),
 ):
+    """PUT /agents/{id} — full replace.
+
+    Codex 2026-04-22 audit gap: the previous body of this route updated
+    only a subset of fields and silently dropped company_id,
+    connector_ids, employee_name, avatar_url, designation, specialization,
+    routing_filter, reporting_to, org_level and system_prompt_text.
+    Callers that relied on PUT semantics (replace everything) got silent
+    partial mutation. In addition, PATCH emitted a PromptEditHistory
+    entry + version snapshot on system-prompt changes, but PUT did not,
+    which let the audit trail be bypassed through the replace path.
+
+    Both are fixed here. PUT now writes every AgentCreate field the
+    ORM supports, and when the system prompt changes it emits a real
+    PromptEditHistory record with edited_by populated.
+    """
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -952,11 +1073,32 @@ async def replace_agent(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
+        # Domain RBAC also guards the target domain: a user limited to
+        # ``finance`` cannot PUT an agent into ``hr`` via the replace path.
+        if isinstance(user_domains, list) and body.domain and body.domain not in user_domains:
+            raise HTTPException(
+                403, f"You do not have access to the '{body.domain}' domain."
+            )
 
+        # Active-agent prompt lock — matches PATCH semantics so users
+        # can't swap out a live agent's prompt via PUT either.
+        new_prompt_text = body.system_prompt_text
+        old_prompt_text = agent.system_prompt_text
+        prompt_changing = new_prompt_text is not None and new_prompt_text != old_prompt_text
+        if prompt_changing and agent.status == "active":
+            raise HTTPException(
+                409,
+                "Prompt is locked on active agents. Clone this agent to make changes.",
+            )
+
+        # Core fields
         agent.name = body.name
         agent.agent_type = body.agent_type
         agent.domain = body.domain
         agent.system_prompt_ref = body.system_prompt
+        if new_prompt_text is not None:
+            agent.system_prompt_text = new_prompt_text
         agent.prompt_variables = body.prompt_variables
         agent.llm_model = body.llm.model
         agent.llm_fallback = body.llm.fallback_model
@@ -975,15 +1117,70 @@ async def replace_agent(
             _uuid.UUID(body.shadow_comparison_agent) if body.shadow_comparison_agent else None
         )
 
+        # Codex 2026-04-22 audit gap — fields previously dropped by PUT.
+        # A full replace must honour every AgentCreate field the ORM
+        # carries, otherwise users who PUT with a new company_id /
+        # connector_ids get silent partial mutation.
+        # Guard each field so a schema with ``model_config extra=ignore``
+        # doesn't explode on unrelated callers passing partial bodies.
+        raw_company_id = getattr(body, "company_id", None)
+        if isinstance(raw_company_id, str) and raw_company_id:
+            agent.company_id = _parse_company_id(raw_company_id)
+        elif raw_company_id is None:
+            # Explicit clear — caller sent null.
+            agent.company_id = None
+        raw_connector_ids = getattr(body, "connector_ids", None)
+        if isinstance(raw_connector_ids, (list, tuple)):
+            agent.connector_ids = list(raw_connector_ids)
+        agent.employee_name = getattr(body, "employee_name", agent.employee_name)
+        agent.avatar_url = getattr(body, "avatar_url", agent.avatar_url)
+        agent.designation = getattr(body, "designation", agent.designation)
+        agent.specialization = getattr(body, "specialization", agent.specialization)
+        raw_routing = getattr(body, "routing_filter", None)
+        if isinstance(raw_routing, dict):
+            agent.routing_filter = raw_routing
+        agent.reporting_to = getattr(body, "reporting_to", agent.reporting_to)
+        raw_org_level = getattr(body, "org_level", None)
+        if isinstance(raw_org_level, int):
+            agent.org_level = raw_org_level
+        raw_parent = getattr(body, "parent_agent_id", None)
+        if isinstance(raw_parent, str) and raw_parent:
+            try:
+                agent.parent_agent_id = _uuid.UUID(raw_parent)
+            except (TypeError, ValueError):
+                pass
+        elif raw_parent is None:
+            agent.parent_agent_id = None
+
+        # Codex 2026-04-22 audit gap #9 — audit trail was bypassed
+        # through PUT. Emit the same PromptEditHistory record PATCH
+        # does so "who changed what" is captured regardless of method,
+        # and include edited_by so the audit isn't anonymous.
+        if prompt_changing:
+            audit = PromptEditHistory(
+                tenant_id=tid,
+                agent_id=agent.id,
+                prompt_before=old_prompt_text,
+                prompt_after=new_prompt_text or "",
+                change_reason="PUT /agents replace",
+                edited_by=_user_uuid_from_claims(user),
+            )
+            session.add(audit)
+
     return {"id": str(agent_id), "replaced": True}
 
 
 # ── PATCH /agents/{id} ──────────────────────────────────────────────────────
-@router.patch("/agents/{agent_id}")
+@router.patch(
+    "/agents/{agent_id}",
+    dependencies=[require_tenant_admin],
+)
 async def update_agent(
     agent_id: UUID,
     body: AgentUpdate,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user: dict = Depends(get_current_user),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -993,8 +1190,18 @@ async def update_agent(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
         update_data = body.model_dump(exclude_unset=True)
+        if (
+            isinstance(user_domains, list)
+            and "domain" in update_data
+            and update_data["domain"] not in user_domains
+        ):
+            raise HTTPException(
+                403,
+                f"You do not have access to the '{update_data['domain']}' domain.",
+            )
 
         # Prompt lock: reject prompt edits on active agents
         prompt_changing = "system_prompt_text" in update_data or "system_prompt" in update_data
@@ -1057,12 +1264,18 @@ async def update_agent(
         # Audit trail for prompt edits
         new_prompt = agent.system_prompt_text
         if prompt_changing and old_prompt != new_prompt:
+            # Codex 2026-04-22 audit gap #9 — populate edited_by so
+            # "who changed the prompt" is captured alongside the
+            # before/after text. Falls back to None if claims don't
+            # carry a UUID-shaped user id (malformed token rather than
+            # a bypass — auth still rejects missing claims above).
             audit = PromptEditHistory(
                 tenant_id=tid,
                 agent_id=agent.id,
                 prompt_before=old_prompt,
                 prompt_after=new_prompt or "",
                 change_reason=change_reason,
+                edited_by=_user_uuid_from_claims(user),
             )
             session.add(audit)
 
@@ -1143,7 +1356,18 @@ async def run_agent(
     # Resolve system prompt — custom text or load from prompt file
     system_prompt = agent_config.get("system_prompt_text") or ""
     if not system_prompt:
-        # Try loading from the prompt template file directly (works for all agents)
+        # Try loading from the prompt template file directly (works for all agents).
+        #
+        # Codex 2026-04-22 audit gap #7 — the previous block swallowed
+        # every prompt-load exception and fell through to a generic
+        # "You are a <type> agent..." placeholder. That silently
+        # downgraded the agent's behaviour whenever a configured prompt
+        # was present but unreadable (permissions, disk error, wrong
+        # encoding), which is exactly the wrong failure mode for an
+        # enterprise automation product. Read failures now raise
+        # 500 so the caller learns something is wrong; only the
+        # genuinely-absent file path (no prompt_ref AND no built-in
+        # module) continues to use the documented default.
         prompt_ref = agent_config.get("system_prompt_ref", "")
         if prompt_ref:
             from pathlib import Path
@@ -1154,17 +1378,42 @@ async def run_agent(
                     for k, v in (agent_config.get("prompt_variables") or {}).items():
                         raw = raw.replace("{{" + k + "}}", v)
                     system_prompt = raw
-                except Exception:  # noqa: S110
-                    pass
+                except Exception as exc:
+                    logger.error(
+                        "agent_prompt_file_unreadable",
+                        agent_id=str(agent_id),
+                        prompt_ref=prompt_ref,
+                        error=str(exc),
+                    )
+                    raise HTTPException(
+                        500,
+                        detail={
+                            "error": "prompt_file_unreadable",
+                            "message": (
+                                f"Could not read the configured prompt file "
+                                f"{prompt_ref!r} for agent {agent_id}. "
+                                "Refusing to run with a generic fallback. "
+                                "Fix the file or clear system_prompt_ref "
+                                "and set system_prompt_text instead."
+                            ),
+                        },
+                    ) from exc
     if not system_prompt:
-        # Load from prompt file via LangGraph agent module (built-in agents only)
+        # Load from prompt file via LangGraph agent module (built-in agents only).
+        # ImportError / AttributeError here is a normal signal that the
+        # agent type doesn't ship a hard-coded prompt module, in which
+        # case we use the generic placeholder. A *different* error
+        # while executing load_fn must not be silenced though — it
+        # indicates a real bug in the agent module.
         try:
             import importlib
 
             mod = importlib.import_module(
                 f"core.langgraph.agents.{agent_config['agent_type']}"
             )
-            load_fn = getattr(mod, "load_prompt", None) or getattr(mod, "load_ap_processor_prompt", None)
+            load_fn = getattr(mod, "load_prompt", None) or getattr(
+                mod, "load_ap_processor_prompt", None
+            )
             if load_fn:
                 system_prompt = load_fn(agent_config.get("prompt_variables", {}))
         except (ImportError, AttributeError):
@@ -1173,6 +1422,24 @@ async def run_agent(
                 f"{agent_config.get('domain', 'ops')} domain. Process the task "
                 "and return JSON with status, confidence, and processing_trace."
             )
+        except Exception as exc:
+            logger.error(
+                "agent_prompt_module_load_failed",
+                agent_id=str(agent_id),
+                agent_type=agent_config.get("agent_type"),
+                error=str(exc),
+            )
+            raise HTTPException(
+                500,
+                detail={
+                    "error": "prompt_module_broken",
+                    "message": (
+                        "Agent module exists but failed to load its prompt. "
+                        "Refusing to run with a generic fallback — fix the "
+                        "module or configure system_prompt_text directly."
+                    ),
+                },
+            ) from exc
 
     # Get Grantex grant token if available (from request state or agent config)
     grant_token = ""
@@ -1448,7 +1715,10 @@ async def run_agent(
 
 
 # ── POST /agents/{id}/pause ──────────────────────────────────────────────────
-@router.post("/agents/{agent_id}/pause")
+@router.post(
+    "/agents/{agent_id}/pause",
+    dependencies=[require_tenant_admin],
+)
 async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -1485,7 +1755,10 @@ async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenan
 
 
 # ── POST /agents/{id}/resume ─────────────────────────────────────────────────
-@router.post("/agents/{agent_id}/resume")
+@router.post(
+    "/agents/{agent_id}/resume",
+    dependencies=[require_tenant_admin],
+)
 async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -1546,7 +1819,10 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 
 
 # ── POST /agents/{id}/promote ────────────────────────────────────────────────
-@router.post("/agents/{agent_id}/promote")
+@router.post(
+    "/agents/{agent_id}/promote",
+    dependencies=[require_tenant_admin],
+)
 async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -1604,7 +1880,10 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
 
 
 # ── POST /agents/{id}/retire ───────────────────────────────────────────────────
-@router.post("/agents/{agent_id}/retire")
+@router.post(
+    "/agents/{agent_id}/retire",
+    dependencies=[require_tenant_admin],
+)
 async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     """Retire an agent — marks as retired, removes from active fleet."""
     tid = _uuid.UUID(tenant_id)
@@ -1697,7 +1976,10 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 
 
 # ── POST /agents/{id}/rollback ───────────────────────────────────────────────
-@router.post("/agents/{agent_id}/rollback")
+@router.post(
+    "/agents/{agent_id}/rollback",
+    dependencies=[require_tenant_admin],
+)
 async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -1754,7 +2036,10 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
 
 
 # ── POST /agents/{id}/clone ──────────────────────────────────────────────────
-@router.post("/agents/{agent_id}/clone")
+@router.post(
+    "/agents/{agent_id}/clone",
+    dependencies=[require_tenant_admin],
+)
 async def clone_agent(
     agent_id: UUID,
     body: AgentCloneRequest,
@@ -1818,6 +2103,21 @@ async def clone_agent(
             designation=body.overrides.get("designation", parent.designation),
             specialization=body.overrides.get("specialization", parent.specialization),
             routing_filter=body.overrides.get("routing_filter", parent.routing_filter),
+            # Codex 2026-04-22 audit gap #6 — clone dropped company_id and
+            # connector_ids, so the new agent looked valid in the UI but
+            # lost the company scope and connector bindings the original
+            # depended on. Preserve both by default (overrides can still
+            # move the clone to a different company or clear connectors).
+            company_id=(
+                _parse_company_id(body.overrides["company_id"])
+                if "company_id" in body.overrides
+                else getattr(parent, "company_id", None)
+            ),
+            connector_ids=list(
+                body.overrides.get("connector_ids", parent.connector_ids or [])
+            ),
+            reporting_to=body.overrides.get("reporting_to", parent.reporting_to),
+            org_level=body.overrides.get("org_level", parent.org_level),
         )
         session.add(clone)
         await session.flush()
@@ -2154,10 +2454,14 @@ async def list_agent_amendments(
 
 
 # ── DELETE /agents/{id} ─────────────────────────────────────────────────────
-@router.delete("/agents/{agent_id}")
+@router.delete(
+    "/agents/{agent_id}",
+    dependencies=[require_tenant_admin],
+)
 async def delete_agent(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Permanently delete an agent. Only paused, retired, or inactive agents can be deleted."""
     tid = _uuid.UUID(tenant_id)
@@ -2168,6 +2472,7 @@ async def delete_agent(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
         deletable_statuses = {"paused", "retired", "inactive", "shadow"}
         if agent.status not in deletable_statuses:

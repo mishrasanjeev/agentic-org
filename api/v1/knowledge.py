@@ -415,24 +415,47 @@ async def upload_document(
         description=(
             "TC_011: when False (default), an upload whose filename already "
             "exists in the tenant's non-deleted documents returns 409 "
-            "Conflict with the existing document_id. Set true to bypass "
-            "the check (e.g. to deliberately upload a new version)."
+            "Conflict with the existing document_id. Set true to add a "
+            "second copy with the same filename — does NOT replace. "
+            "Use ?replace=true for real replacement."
+        ),
+    ),
+    replace: bool = Query(
+        default=False,
+        description=(
+            "Codex 2026-04-22 audit: when True, soft-delete any existing "
+            "document with the same filename (RAGFlow + DB mirror) before "
+            "ingesting the new one. Mutually exclusive with "
+            "allow_duplicate=true. The UI's duplicate-decision modal uses "
+            "this to honour a real Replace."
         ),
     ),
 ):
     """Upload a document to the knowledge base.
 
-    Uses RAGFlow for chunking + vector indexing when available.
-    Falls back to PostgreSQL metadata storage otherwise.
+    Dedup policy:
+      - default                        → 409 Conflict on filename match
+      - ``?allow_duplicate=true``      → add a second copy
+      - ``?replace=true``              → soft-delete existing, ingest new
     """
     filename = file.filename or "untitled"
 
-    # TC_011: filename-level dedup. Caller can opt out with
-    # ?allow_duplicate=true if they actually want two documents with the
-    # same filename (e.g. re-ingesting an updated file). This check is
-    # best-effort — if the DB lookup fails, we proceed with the upload
-    # rather than block legitimate usage.
-    if not allow_duplicate:
+    if allow_duplicate and replace:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "conflicting_dedup_flags",
+                "message": (
+                    "allow_duplicate=true and replace=true are mutually "
+                    "exclusive. Pick one: add a second copy, or replace."
+                ),
+            },
+        )
+
+    # TC_011 + Codex 2026-04-22: filename-level dedup. Caller can opt
+    # out with ?allow_duplicate=true (add another copy) or ?replace=true
+    # (soft-delete existing, ingest new). Check is best-effort.
+    if not allow_duplicate and not replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)
         except Exception as exc:
@@ -445,12 +468,56 @@ async def upload_document(
                     "error": "duplicate_filename",
                     "message": (
                         f"A document named {filename!r} is already in the "
-                        "knowledge base. Upload with allow_duplicate=true "
-                        "to bypass this check."
+                        "knowledge base. Upload again with ?replace=true "
+                        "to replace it, or ?allow_duplicate=true to add "
+                        "a second copy alongside the existing one."
                     ),
                     "existing_document_id": existing["document_id"],
                 },
             )
+
+    # Real replace path — matches the UI's "OK = Replace" action.
+    if replace:
+        try:
+            existing = await _db_find_existing_by_filename(tenant_id, filename)
+        except Exception as exc:
+            logger.debug("replace_lookup_failed_soft", error=str(exc))
+            existing = None
+        if existing is not None:
+            old_doc_id = existing["document_id"]
+            if _ragflow_available():
+                try:
+                    await _ragflow_delete(tenant_id, old_doc_id)
+                except Exception as exc:
+                    logger.warning(
+                        "replace_ragflow_delete_failed",
+                        doc_id=old_doc_id,
+                        error=str(exc),
+                    )
+            try:
+                from uuid import UUID as _UUID
+
+                from sqlalchemy import update
+
+                from core.database import get_tenant_session
+                from core.models.document import Document
+
+                tid = _UUID(tenant_id)
+                async with get_tenant_session(tid) as session:
+                    await session.execute(
+                        update(Document)
+                        .where(
+                            Document.id == _UUID(old_doc_id),
+                            Document.tenant_id == tid,
+                        )
+                        .values(status="deleted")
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "replace_db_soft_delete_failed",
+                    doc_id=old_doc_id,
+                    error=str(exc),
+                )
 
     content = await file.read()
     doc_id = str(uuid.uuid4())

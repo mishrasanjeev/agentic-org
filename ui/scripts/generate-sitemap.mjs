@@ -4,7 +4,7 @@
  * Run: node scripts/generate-sitemap.mjs
  * Hooked into: "build" script in package.json
  */
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -69,7 +69,18 @@ ${urls.join("\n")}
 <!-- Auto-generated: ${new Date().toISOString()} -->
 `;
 
-const outPath = join(ROOT, "public/sitemap.xml");
+// Codex 2026-04-22 audit: the previous path wrote to
+// ``public/sitemap.xml`` which is a tracked file, so every build
+// dirtied the working tree with a fresh ``lastmod`` date. That
+// breaks hermetic builds — CI couldn't tell "dev changed this file"
+// from "build stamped it". Write to ``dist/sitemap.xml`` instead so
+// the output is a real build artifact, and keep the tracked
+// ``public/sitemap.xml`` as a static placeholder for dev.
+const distDir = join(ROOT, "dist");
+if (!existsSync(distDir)) {
+  mkdirSync(distDir, { recursive: true });
+}
+const outPath = join(distDir, "sitemap.xml");
 writeFileSync(outPath, sitemap, "utf-8");
 
 const count = urls.length;

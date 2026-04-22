@@ -12,7 +12,14 @@
  * Run: node scripts/generate-llms.mjs
  * Hooked into: "build" script in package.json
  */
-import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
+import {
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  statSync,
+  mkdirSync,
+  existsSync,
+} from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -552,8 +559,15 @@ const llmsFullTxt = generateLlmsFullTxt(
   resources,
 );
 
-writeFileSync(join(UI_ROOT, "public/llms.txt"), llmsTxt, "utf-8");
-writeFileSync(join(UI_ROOT, "public/llms-full.txt"), llmsFullTxt, "utf-8");
+// Codex 2026-04-22 audit: writing to public/ dirtied tracked files on
+// every build. Write to dist/ so the output is a real build artifact;
+// public/ keeps a static placeholder for dev.
+const LLMS_OUT_DIR = join(UI_ROOT, "dist");
+if (!existsSync(LLMS_OUT_DIR)) {
+  mkdirSync(LLMS_OUT_DIR, { recursive: true });
+}
+writeFileSync(join(LLMS_OUT_DIR, "llms.txt"), llmsTxt, "utf-8");
+writeFileSync(join(LLMS_OUT_DIR, "llms-full.txt"), llmsFullTxt, "utf-8");
 
 console.log(
   `llms.txt + llms-full.txt generated — ${agents.length} agents, ${connectors.length} connectors (${totalTools} tools), ${pricing.length} tiers, ${blogs.length} blogs, ${resources.length} resources`,
