@@ -34,10 +34,19 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Production deploy 2026-04-22 failed here because report_schedules
+    # doesn't exist yet on all envs — the table is created by the ORM
+    # at startup (Base.metadata.create_all) rather than an earlier
+    # migration. Guard every step on table existence so this migration
+    # is a no-op wherever the base table isn't there yet; when it
+    # eventually gets created, a later re-run picks up the column.
     op.execute("""
         DO $$
         BEGIN
-            IF NOT EXISTS (
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'report_schedules'
+            ) AND NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
                 WHERE table_name = 'report_schedules'
                   AND column_name = 'company_id'
@@ -51,19 +60,34 @@ def upgrade() -> None:
 
     # Backfill from config JSON. Cast the text value to UUID; skip rows
     # whose config carries a non-UUID (legacy seeded data) so the
-    # migration doesn't abort on one bad row.
+    # migration doesn't abort on one bad row. Guarded on the column's
+    # presence so the backfill is skipped when the ALTER above was too.
     op.execute("""
-        UPDATE report_schedules
-        SET company_id = (config->>'company_id')::uuid
-        WHERE company_id IS NULL
-          AND config ? 'company_id'
-          AND config->>'company_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'report_schedules'
+                  AND column_name = 'company_id'
+            ) THEN
+                UPDATE report_schedules
+                SET company_id = (config->>'company_id')::uuid
+                WHERE company_id IS NULL
+                  AND config ? 'company_id'
+                  AND config->>'company_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+            END IF;
+        END
+        $$;
     """)
 
     op.execute("""
         DO $$
         BEGIN
-            IF NOT EXISTS (
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'report_schedules'
+                  AND column_name = 'company_id'
+            ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes
                 WHERE tablename = 'report_schedules'
                   AND indexname = 'ix_report_schedules_tenant_company'
