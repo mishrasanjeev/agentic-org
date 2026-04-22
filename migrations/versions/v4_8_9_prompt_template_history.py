@@ -19,7 +19,9 @@ from alembic import op
 
 # Alembic identifiers — kept <=32 chars.
 revision = "v489_tpl_edit_history"
-down_revision = "v487_shadow_acc_floor"
+# Chained onto v488 after the report_schedule_comp migration merged to
+# main in #275. Originally authored against v487; rebased post-merge.
+down_revision = "v488_report_schedule_comp"
 branch_labels = None
 depends_on = None
 
