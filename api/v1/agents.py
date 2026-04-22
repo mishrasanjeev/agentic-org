@@ -8,6 +8,7 @@ import re as _re
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -378,7 +379,7 @@ async def get_default_tools(
     domain: str | None = None,
     connector_ids: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
-) -> dict[str, list[str]]:
+) -> dict[str, Any]:
     """Return the default authorized-tools list for ``agent_type``.
 
     Root-cause fix (2026-04-22 Codex review, UR-Bug-2 gap): the
