@@ -2,6 +2,18 @@
 
 This repository is a multi-tenant enterprise AI platform. Optimize for correct, minimal, verifiable, production-safe changes. The default bar is enterprise-grade, not demo-grade.
 
+## MANDATORY for bug fixes and reopen analysis
+
+Every bug fix, reopen triage, QA-driven PR, or bug-list engagement on this
+repo MUST follow [`docs/bug_triage_skill.md`](docs/bug_triage_skill.md). That
+file codifies a fail-closed verdict matrix, symptom-grep rule, sibling-path
+sweep, test-replays-tester's-steps rule, merged-vs-deployed honesty, and
+Alembic safety gates. Producing a bug-fix summary or declaring a bug "Fixed"
+without walking the checklist in that file is an incorrect work product.
+
+Forbidden verdicts: "should be fixed", "the code looks correct", "probably a
+cache issue", "fixed in main" (without deploy confirmation).
+
 ## Mission
 
 - Deliver the simplest correct change that satisfies the request.

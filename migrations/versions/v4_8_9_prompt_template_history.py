@@ -27,28 +27,46 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("""
-        CREATE TABLE IF NOT EXISTS prompt_template_edit_history (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            tenant_id UUID NOT NULL REFERENCES tenants(id),
-            template_id UUID NOT NULL REFERENCES prompt_templates(id),
-            edited_by UUID NULL REFERENCES users(id),
-            name_before VARCHAR(255) NULL,
-            template_text_before TEXT NULL,
-            variables_before JSONB NULL,
-            description_before TEXT NULL,
-            name_after VARCHAR(255) NULL,
-            template_text_after TEXT NULL,
-            variables_after JSONB NULL,
-            description_after TEXT NULL,
-            change_reason VARCHAR(500) NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-    """)
-
+    # Same defensive pattern as v4_8_8: the FK references assume
+    # ``tenants``, ``users`` and ``prompt_templates`` exist. On a fresh
+    # environment where ORM-created tables haven't run yet, the
+    # CREATE TABLE fails with "relation does not exist". Skip the
+    # migration body entirely when any referenced table is missing —
+    # the table will be created on a subsequent run once the ORM has
+    # stood up the prerequisites.
     op.execute("""
         DO $$
         BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'prompt_templates'
+            ) THEN
+                RAISE NOTICE 'skipping v489: prompt_templates not yet created';
+                RETURN;
+            END IF;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'prompt_template_edit_history'
+            ) THEN
+                CREATE TABLE prompt_template_edit_history (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    tenant_id UUID NOT NULL REFERENCES tenants(id),
+                    template_id UUID NOT NULL REFERENCES prompt_templates(id),
+                    edited_by UUID NULL REFERENCES users(id),
+                    name_before VARCHAR(255) NULL,
+                    template_text_before TEXT NULL,
+                    variables_before JSONB NULL,
+                    description_before TEXT NULL,
+                    name_after VARCHAR(255) NULL,
+                    template_text_after TEXT NULL,
+                    variables_after JSONB NULL,
+                    description_after TEXT NULL,
+                    change_reason VARCHAR(500) NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+            END IF;
+
             IF NOT EXISTS (
                 SELECT 1 FROM pg_indexes
                 WHERE tablename = 'prompt_template_edit_history'
