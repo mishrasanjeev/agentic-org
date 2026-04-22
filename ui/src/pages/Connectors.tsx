@@ -126,6 +126,27 @@ export default function Connectors() {
     }
   }
 
+  async function deleteConnector(id: string, name: string) {
+    // Uday 2026-04-22: Connectors page had no way to remove stale
+    // instances. Backend exposes soft-delete via DELETE /connectors/{id};
+    // confirm + call + refetch.
+    if (!id) return;
+    const ok = window.confirm(
+      `Archive the connector "${name}"?\n\n` +
+        "The connector will be marked inactive and hidden from this list. " +
+        "Any agent tool references remain intact so you can restore via " +
+        "Edit if needed. Continue?",
+    );
+    if (!ok) return;
+    try {
+      await api.delete(`/connectors/${id}`);
+      await fetchConnectors();
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || err.message || "Unknown error";
+      setHealthResult({ id, msg: `Archive failed: ${detail}`, ok: false });
+    }
+  }
+
   const filtered = connectors.filter(
     (c) => categoryFilter === "all" || c.category?.toLowerCase() === categoryFilter.toLowerCase()
   );
@@ -252,6 +273,13 @@ export default function Connectors() {
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => healthCheck(connector.id)}>
                       Health Check
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => deleteConnector(connector.id, connector.name)}
+                    >
+                      Archive
                     </Button>
                   </div>
                 </div>

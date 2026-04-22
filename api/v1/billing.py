@@ -185,6 +185,24 @@ async def subscribe_stripe(
 
     success_url = _validate_redirect_url(body.success_url, "success_url")
     cancel_url = _validate_redirect_url(body.cancel_url, "cancel_url")
+    # TC_009 (Aishwarya 2026-04-22): the old 502 "Payment gateway
+    # error" was indistinguishable from "gateway not configured" vs
+    # "gateway had a real outage". When STRIPE_SECRET_KEY isn't set in
+    # this environment the only honest response is "this tenant's
+    # environment doesn't have Stripe wired up yet — contact admin"
+    # rather than blaming the gateway.
+    import os as _os
+
+    if not _os.getenv("STRIPE_SECRET_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Stripe is not configured in this environment. Set "
+                "STRIPE_SECRET_KEY in the server config to enable "
+                "international checkouts, or use the India checkout "
+                "(/billing/subscribe/india) if you're in INR."
+            ),
+        )
     try:
         result = create_checkout_session(
             tenant_id=tenant_id,
@@ -211,8 +229,20 @@ async def subscribe_india(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Create a Plural payment order and return the hosted checkout URL."""
+    import os as _os
+
     from core.billing.pinelabs_client import create_payment_order
 
+    if not _os.getenv("PINELABS_API_KEY") and not _os.getenv("PLURAL_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Plural / Pine Labs is not configured in this environment. "
+                "Set PINELABS_API_KEY (or PLURAL_API_KEY) on the server to "
+                "enable INR checkouts. Admin can contact support for the "
+                "staging sandbox keys."
+            ),
+        )
     try:
         order = create_payment_order(
             tenant_id=tenant_id,

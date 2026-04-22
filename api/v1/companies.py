@@ -2093,33 +2093,80 @@ async def tally_detect(
     if not body.bridge_url:
         raise HTTPException(422, "bridge_url is required")
 
-    # Try to connect to the real Tally bridge
-    try:
-        import httpx
+    # Try to connect to the real Tally bridge.
+    #
+    # Uday/Ramesh 2026-04-22 BUG-005: the old failure path leaked raw
+    # Python exception messages like "Expecting value: line 1 column 1
+    # (char 0)" into the user-visible ``address`` field. That's both
+    # ugly UX and a confusing diagnosis (it's a JSON parse error, not
+    # a connectivity error). Distinguish the real failure modes and
+    # return a generic, actionable message that's the same for every
+    # company.
+    import httpx
 
+    url = f"{body.bridge_url.rstrip('/')}/api/company-info"
+    generic_failure_hint = (
+        "Could not read company info from the Tally bridge. "
+        "Verify that (1) the agenticorg-bridge process is running on "
+        "the client's machine, (2) Tally Prime is open with a company "
+        "loaded, and (3) the bridge URL exposed via ngrok is reachable. "
+        "You can still click Next and fill the fields manually."
+    )
+
+    try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"{body.bridge_url}/api/company-info")
-            resp.raise_for_status()
-            data = resp.json()
-            return TallyDetectResponse(
-                detected=True,
-                company_name=data.get("company_name", ""),
-                gstin=data.get("gstin", ""),
-                pan=data.get("pan", ""),
-                address=data.get("address", ""),
-                fy_start=data.get("fy_start", ""),
-                fy_end=data.get("fy_end", ""),
-            )
-    except Exception as exc:
+            resp = await client.get(url)
+    except httpx.HTTPError as exc:
+        logger.warning("tally_detect_connect_failed url=%s error=%s", url, exc)
         return TallyDetectResponse(
             detected=False,
             company_name="",
             gstin="",
             pan="",
-            address=f"Could not connect to Tally bridge at {body.bridge_url}: {exc}",
+            address=generic_failure_hint,
             fy_start="",
             fy_end="",
         )
+
+    if resp.status_code != 200:
+        logger.warning(
+            "tally_detect_bad_status url=%s status=%s", url, resp.status_code,
+        )
+        return TallyDetectResponse(
+            detected=False,
+            company_name="",
+            gstin="",
+            pan="",
+            address=generic_failure_hint,
+            fy_start="",
+            fy_end="",
+        )
+
+    try:
+        data = resp.json()
+    except ValueError:
+        # Bridge returned 200 but not JSON — likely a mock page or a
+        # proxy interstitial. Don't leak the raw parser error.
+        logger.warning("tally_detect_non_json url=%s", url)
+        return TallyDetectResponse(
+            detected=False,
+            company_name="",
+            gstin="",
+            pan="",
+            address=generic_failure_hint,
+            fy_start="",
+            fy_end="",
+        )
+
+    return TallyDetectResponse(
+        detected=True,
+        company_name=data.get("company_name", ""),
+        gstin=data.get("gstin", ""),
+        pan=data.get("pan", ""),
+        address=data.get("address", ""),
+        fy_start=data.get("fy_start", ""),
+        fy_end=data.get("fy_end", ""),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2240,51 +2287,83 @@ async def generate_company_bridge(
 
     Regenerating supersedes the previous credentials — the old
     bridge must reconnect with the new pair.
+
+    Uday/Ramesh 2026-04-22: the previous implementation raised a bare
+    ValueError on a malformed company_id UUID, which FastAPI mapped to
+    a raw 500 with the "E1001 INTERNAL_ERROR" payload. Guard each
+    failure point and return a structured error the UI can render.
     """
     import secrets
 
     from core.models.bridge import BridgeRegistration
 
-    tid = _uuid.UUID(tenant_id)
-    cid = _uuid.UUID(company_id)
+    try:
+        tid = _uuid.UUID(tenant_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid tenant context") from exc
+
+    try:
+        cid = _uuid.UUID(company_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="company_id must be a UUID",
+        ) from exc
+
     bridge_id = str(_uuid.uuid4())
     bridge_token = secrets.token_urlsafe(48)
     ws_url = f"wss://app.agenticorg.ai/api/v1/ws/bridge/{bridge_id}"
 
-    async with get_tenant_session(tid) as session:
-        # Tenant-scoped fetch ensures cross-tenant regenerate is 404.
-        result = await session.execute(
-            select(Company).where(
-                Company.id == cid,
-                Company.tenant_id == tid,
+    try:
+        async with get_tenant_session(tid) as session:
+            # Tenant-scoped fetch ensures cross-tenant regenerate is 404.
+            result = await session.execute(
+                select(Company).where(
+                    Company.id == cid,
+                    Company.tenant_id == tid,
+                )
             )
+            company = result.scalar_one_or_none()
+            if not company:
+                raise HTTPException(status_code=404, detail="Company not found")
+
+            # Register the new bridge so websocket auth recognises it.
+            session.add(BridgeRegistration(
+                tenant_id=tid,
+                bridge_id=bridge_id,
+                bridge_type="tally",
+                url=ws_url,
+                status="active",
+                metadata_={
+                    "bridge_token": bridge_token,
+                    "company_id": str(cid),
+                    "label": company.name or "",
+                },
+            ))
+
+            # Persist the new bridge_id on the company so Settings can
+            # render it. The token is NOT persisted in plaintext here —
+            # it lives only in BridgeRegistration metadata and is
+            # returned once to the caller.
+            tally_config = dict(company.tally_config or {})
+            tally_config["bridge_id"] = bridge_id
+            tally_config["bridge_issued_at"] = datetime.now(UTC).isoformat()
+            company.tally_config = tally_config
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "generate_company_bridge_failed tenant=%s company=%s",
+            tenant_id,
+            company_id,
         )
-        company = result.scalar_one_or_none()
-        if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-
-        # Register the new bridge so websocket auth recognises it.
-        session.add(BridgeRegistration(
-            tenant_id=tid,
-            bridge_id=bridge_id,
-            bridge_type="tally",
-            url=ws_url,
-            status="active",
-            metadata_={
-                "bridge_token": bridge_token,
-                "company_id": str(cid),
-                "label": company.name or "",
-            },
-        ))
-
-        # Persist the new bridge_id on the company so the Settings UI
-        # can render it. The token is NOT persisted in plaintext here —
-        # it lives only in the BridgeRegistration metadata and is
-        # returned once to the caller.
-        tally_config = dict(company.tally_config or {})
-        tally_config["bridge_id"] = bridge_id
-        tally_config["bridge_issued_at"] = datetime.now(UTC).isoformat()
-        company.tally_config = tally_config
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Could not generate bridge credentials. Please try again; "
+                "if the problem persists contact support with the company id."
+            ),
+        ) from exc
 
     logger.info(
         "Generated Tally bridge credentials — company=%s tenant=%s bridge=%s",

@@ -387,49 +387,83 @@ async def create_report_schedule(
     body: ReportScheduleCreate,
     tenant_id: str = Depends(get_current_tenant),
 ) -> ReportScheduleResponse:
-    """Create a new report schedule."""
-    tid = _uuid.UUID(tenant_id)
-    schedule_id = _uuid.uuid4()
-    channels_data = [ch.model_dump() for ch in body.delivery_channels]
-    primary_channel = body.delivery_channels[0].type if body.delivery_channels else "email"
+    """Create a new report schedule.
 
-    config: dict[str, Any] = {
-        "company_id": body.company_id,
-        "params": body.params,
-    }
+    TC_001 reopen (Aishwarya 2026-04-22): testers still saw an HTTP 500
+    on empty recipient. Pydantic validators already map empty targets
+    to 422, and the UI validates before submit — so the 500 must come
+    from an unexpected exception path (DB, next-run compute, JSONB
+    serialisation). Wrap the whole route body so ANY un-handled
+    exception returns a structured 500 with an actionable message
+    rather than a bare stack trace. ValueError / HTTPException are
+    re-raised so FastAPI keeps its own mapping.
+    """
+    try:
+        tid = _uuid.UUID(tenant_id)
+        schedule_id = _uuid.uuid4()
+        channels_data = [ch.model_dump() for ch in body.delivery_channels]
+        primary_channel = (
+            body.delivery_channels[0].type if body.delivery_channels else "email"
+        )
 
-    # Codex 2026-04-22 isolation fix: dual-write company_id to both the
-    # new indexed column and ``config`` (kept for backward compat with
-    # legacy readers). Pass None rather than raise on a malformed id so
-    # existing clients that send an empty string keep creating tenant-
-    # wide schedules.
-    company_uuid: _uuid.UUID | None = None
-    if body.company_id:
-        try:
-            company_uuid = _uuid.UUID(body.company_id)
-        except (TypeError, ValueError):
-            company_uuid = None
+        config: dict[str, Any] = {
+            "company_id": body.company_id,
+            "params": body.params,
+        }
 
-    row = ReportSchedule(
-        id=schedule_id,
-        name=body.report_type,
-        report_type=body.report_type,
-        cron_expression=body.cron_expression,
-        recipients=channels_data,
-        delivery_channel=primary_channel,
-        format=body.format,
-        enabled=body.is_active,
-        last_run_at=None,
-        next_run_at=_compute_next_run(body.cron_expression) if body.is_active else None,
-        config=config,
-        tenant_id=tid,
-        company_id=company_uuid,
-    )
+        # Codex 2026-04-22 isolation fix: dual-write company_id to both
+        # the new indexed column and ``config`` (kept for back-compat
+        # with legacy readers). Accept malformed id as "no company" so
+        # existing callers that send an empty string keep working.
+        company_uuid: _uuid.UUID | None = None
+        if body.company_id:
+            try:
+                company_uuid = _uuid.UUID(body.company_id)
+            except (TypeError, ValueError):
+                company_uuid = None
 
-    async with get_tenant_session(tid) as session:
-        session.add(row)
-        await session.flush()
-        return _to_response(row)
+        row = ReportSchedule(
+            id=schedule_id,
+            name=body.report_type,
+            report_type=body.report_type,
+            cron_expression=body.cron_expression,
+            recipients=channels_data,
+            delivery_channel=primary_channel,
+            format=body.format,
+            enabled=body.is_active,
+            last_run_at=None,
+            next_run_at=_compute_next_run(body.cron_expression)
+            if body.is_active
+            else None,
+            config=config,
+            tenant_id=tid,
+            company_id=company_uuid,
+        )
+
+        async with get_tenant_session(tid) as session:
+            session.add(row)
+            await session.flush()
+            return _to_response(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import structlog
+
+        structlog.get_logger().error(
+            "report_schedule_create_failed",
+            tenant_id=tenant_id,
+            report_type=getattr(body, "report_type", None),
+            error=str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Could not create the report schedule. Check the recipient "
+                "and cron expression and try again. If the problem persists, "
+                "contact support."
+            ),
+        ) from exc
 
 
 @router.patch("/report-schedules/{schedule_id}", response_model=ReportScheduleResponse)

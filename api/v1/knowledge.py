@@ -289,9 +289,26 @@ async def _ragflow_dataset_stats(tenant_id: str) -> dict[str, int] | None:
 
 async def _db_chunk_count(tenant_id: str) -> int:
     """Count indexed chunks in the Postgres fallback so the Total Chunks
-    card still reflects something real when RAGFlow is unavailable
-    (TC_007). Counts knowledge_documents rows with a non-null embedding
-    for this tenant."""
+    card still reflects something real when RAGFlow is unavailable.
+
+    TC_004 (Aishwarya 2026-04-22, reopen of TC_007): the original
+    implementation only counted ``knowledge_documents`` rows with a
+    non-null embedding. But the upload path writes to ``documents``,
+    so freshly-uploaded files never showed in the count even after
+    RAGFlow marked them "ready". The card sat at zero forever.
+
+    Now we sum two real sources:
+      1. ``knowledge_documents`` rows with embeddings (legacy KB seed).
+      2. ``documents`` rows with status='indexed' — each contributes
+         an estimated chunk count based on file size (roughly
+         1 chunk per 2 KB of text, capped at 1500 chunks per doc).
+
+    The estimate is coarse on purpose: chunk size is up to the
+    RAGFlow chunker, and the goal is a number that's honestly
+    *non-zero* when documents exist and zero when they don't —
+    not a pretend-exact count. RAGFlow's real stats path is still
+    preferred when available.
+    """
     from uuid import UUID as _UUID
 
     from sqlalchemy import text as _sqtext
@@ -299,19 +316,36 @@ async def _db_chunk_count(tenant_id: str) -> int:
     from core.database import get_tenant_session
 
     tid = _UUID(tenant_id)
+    total = 0
     try:
         async with get_tenant_session(tid) as session:
-            row = (await session.execute(
+            # Legacy KB content with computed embeddings.
+            legacy_row = (await session.execute(
                 _sqtext(
                     "SELECT COUNT(*) FROM knowledge_documents "
                     "WHERE tenant_id = :tid AND embedding IS NOT NULL"
                 ),
                 {"tid": str(tid)},
             )).fetchone()
-            return int(row[0] or 0) if row else 0
+            total += int(legacy_row[0] or 0) if legacy_row else 0
+
+            # Upload-path documents — estimate chunks per file.
+            doc_rows = await session.execute(
+                _sqtext(
+                    "SELECT COALESCE(size_bytes, 0) FROM documents "
+                    "WHERE tenant_id = :tid "
+                    "  AND status IN ('indexed', 'ready') "
+                    "  AND (status IS NULL OR status != 'deleted')"
+                ),
+                {"tid": str(tid)},
+            )
+            for (size_bytes,) in doc_rows:
+                est = min(max(int(size_bytes) // 2048, 1), 1500)
+                total += est
     except Exception as exc:
         logger.debug("db_chunk_count_failed", error=str(exc))
         return 0
+    return total
 
 
 # ---------------------------------------------------------------------------

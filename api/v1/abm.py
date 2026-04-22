@@ -121,7 +121,30 @@ class AccountCreate(BaseModel):
     domain: str = Field(..., max_length=255)
     industry: str = ""
     revenue: str = ""
-    tier: str = Field(default="2", pattern=r"^[123]$")
+    # TC_007 (Aishwarya 2026-04-22): accept both numeric codes and the
+    # semantic Strategic/Enterprise/Growth labels the UI documents.
+    # Normalised via the validator below; storage stays numeric.
+    tier: str = Field(default="2")
+
+    @field_validator("tier")
+    @classmethod
+    def _tier_ok(cls, v: str) -> str:
+        if not v:
+            return "2"
+        trimmed = v.strip()
+        mapping = {
+            "strategic": "1",
+            "enterprise": "2",
+            "growth": "3",
+        }
+        lower = trimmed.lower()
+        if lower in mapping:
+            return mapping[lower]
+        if trimmed in {"1", "2", "3"}:
+            return trimmed
+        raise ValueError(
+            "tier must be 1/2/3 or Strategic/Enterprise/Growth"
+        )
 
     @field_validator("domain")
     @classmethod
@@ -149,7 +172,27 @@ class AccountUpdate(BaseModel):
     domain: str | None = None
     industry: str | None = None
     revenue: str | None = None
-    tier: str | None = Field(default=None, pattern=r"^[123]$")
+    tier: str | None = None
+
+    @field_validator("tier")
+    @classmethod
+    def _tier_ok(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        trimmed = v.strip()
+        mapping = {
+            "strategic": "1",
+            "enterprise": "2",
+            "growth": "3",
+        }
+        lower = trimmed.lower()
+        if lower in mapping:
+            return mapping[lower]
+        if trimmed in {"1", "2", "3"}:
+            return trimmed
+        raise ValueError(
+            "tier must be 1/2/3 or Strategic/Enterprise/Growth"
+        )
 
     @field_validator("domain")
     @classmethod
@@ -183,8 +226,18 @@ class CampaignCreate(BaseModel):
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def _account_to_dict(acct: ABMAccount) -> dict[str, Any]:
-    """Serialize an ABMAccount ORM instance to the API response dict."""
+    """Serialize an ABMAccount ORM instance to the API response dict.
+
+    TC_008 (Aishwarya 2026-04-22): the Last Activity column on the ABM
+    table was empty for every freshly-uploaded row because
+    ``updated_at`` is ``onupdate=func.now()`` — set only when the row
+    is mutated after insert. Fall back to ``created_at`` so the column
+    always shows a real timestamp (the upload moment) instead of a
+    dash. The UI's null-safe formatter keeps rendering a dash only for
+    genuinely missing timestamps.
+    """
     metadata = acct.metadata_ or {}
+    last_activity = acct.updated_at or acct.created_at
     return {
         "id": str(acct.id),
         "company_name": acct.name,
@@ -196,7 +249,7 @@ def _account_to_dict(acct: ABMAccount) -> dict[str, Any]:
         "intent_data": metadata.get("intent_data"),
         "campaigns": metadata.get("campaigns", []),
         "created_at": acct.created_at.isoformat() if acct.created_at else None,
-        "updated_at": acct.updated_at.isoformat() if acct.updated_at else None,
+        "updated_at": last_activity.isoformat() if last_activity else None,
     }
 
 
@@ -318,9 +371,30 @@ async def upload_accounts(
                 revenue = _validate_safe_text(
                     raw_row.get("revenue") or "", "revenue",
                 )
-                tier = (raw_row.get("tier") or "2").strip()
-                if tier not in {"1", "2", "3"}:
-                    raise ValueError(f"tier must be one of 1, 2, 3 (got {tier!r})")
+                # TC_007 (Aishwarya 2026-04-22): CSV validation only
+                # accepted numeric tier codes 1/2/3, but the documented
+                # sales vocabulary (and everything the UI shows) is
+                # Strategic / Enterprise / Growth. A user who exports
+                # the dashboard, edits, and re-uploads hit "tier must
+                # be one of 1, 2, 3" on their own labels. Accept both
+                # forms and normalise to the canonical code so the
+                # rest of the pipeline and storage stay unchanged.
+                tier_raw = (raw_row.get("tier") or "2").strip()
+                tier_lower = tier_raw.lower()
+                semantic_to_code = {
+                    "strategic": "1",
+                    "enterprise": "2",
+                    "growth": "3",
+                }
+                if tier_lower in semantic_to_code:
+                    tier = semantic_to_code[tier_lower]
+                elif tier_raw in {"1", "2", "3"}:
+                    tier = tier_raw
+                else:
+                    raise ValueError(
+                        f"tier must be one of 1/2/3 or "
+                        f"Strategic/Enterprise/Growth (got {tier_raw!r})"
+                    )
             except ValueError as exc:
                 row_errors.append({
                     "row": row_num,

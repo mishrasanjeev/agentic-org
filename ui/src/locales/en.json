@@ -207,5 +207,61 @@
     "networkError": "Network error. Check your connection and try again.",
     "unauthorized": "You don't have permission to perform this action.",
     "sessionExpired": "Session expired. Please sign in again."
+  },
+  "abm": {
+    "title": "ABM Dashboard",
+    "totalAccounts": "Total Accounts",
+    "avgIntentScore": "Avg Intent Score",
+    "pipelineInfluenced": "Pipeline Influenced",
+    "totalCampaigns": "Total Campaigns",
+    "uploadCsv": "Upload CSV",
+    "addAccount": "Add Account",
+    "filters": "Filters",
+    "tier": "Tier",
+    "industry": "Industry",
+    "minIntent": "Min Intent",
+    "lastActivity": "Last Activity",
+    "actions": "Actions",
+    "viewIntent": "View Intent",
+    "launchCampaign": "Launch Campaign",
+    "noAccounts": "No accounts yet. Upload a CSV to start."
+  },
+  "knowledge": {
+    "title": "Knowledge Base",
+    "upload": "Upload",
+    "search": "Search",
+    "searchPlaceholder": "Search policies, contracts, reports...",
+    "totalDocuments": "Total Documents",
+    "totalChunks": "Total Chunks",
+    "indexSize": "Index Size",
+    "filename": "Filename",
+    "status": "Status",
+    "size": "Size",
+    "uploaded": "Uploaded",
+    "noDocuments": "No documents yet. Upload to get started."
+  },
+  "reportSchedules": {
+    "title": "Report Schedules",
+    "create": "Create Schedule",
+    "reportType": "Report Type",
+    "frequency": "Frequency",
+    "format": "Format",
+    "channels": "Delivery Channels",
+    "next": "Next Run",
+    "active": "Active",
+    "paused": "Paused",
+    "noSchedules": "No schedules yet. Create one to get started."
+  },
+  "settings": {
+    "title": "Settings",
+    "fleetGovernance": "Fleet Governance Limits",
+    "complianceData": "Compliance & Data",
+    "apiKeys": "API Keys",
+    "grantexIntegration": "Grantex Integration",
+    "userManagement": "User Management",
+    "webhookConfiguration": "Webhook Configuration",
+    "save": "Save Settings",
+    "saving": "Saving...",
+    "saved": "Settings saved successfully."
   }
 }
