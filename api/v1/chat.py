@@ -156,6 +156,20 @@ except Exception:
     _log.info("chat_redis_unavailable_using_memory_fallback")
 
 
+def _session_key(tenant_id: str, company_id: str, agent_id: str = "") -> str:
+    """Compose the Redis bucket key for chat history.
+
+    Root-cause fix for Codex 2026-04-22 isolation gap: without
+    ``agent_id`` in the key, every agent you talked to under one company
+    shared the same bucket — a support agent's chat would leak into the
+    accounting agent's sidebar. When the caller provides an agent id,
+    scope the history to it. Callers that omit ``agent_id`` continue to
+    use the legacy bucket so we don't orphan existing sessions.
+    """
+    base = f"{tenant_id}:{company_id}"
+    return f"{base}:{agent_id}" if agent_id else base
+
+
 async def _load_session(key: str) -> list[dict]:
     """Load session history from Redis, falling back to in-memory dict."""
     if _redis_client is not None:
@@ -370,18 +384,38 @@ async def chat_query(
     elif answer and not tools_used:
         confidence = min(confidence, 0.6)
 
-    # Fallback: generate a contextual response based on domain
+    # Root-cause fix for TC_004 / Codex 2026-04-22 review: the old
+    # fallback path fabricated a "[AgentName] I've analyzed your query
+    # about X..." response with a forced 0.6/0.7 confidence whenever
+    # the real agent couldn't produce an answer. That was dishonest —
+    # users saw a plausible-looking reply and trusted it as if an agent
+    # had actually reasoned about their query. Surface the no-answer
+    # condition explicitly so the UI can show a "try again / connect
+    # this data source" state instead of a phantom response. The
+    # confidence drops to the minimum because the system genuinely
+    # has no grounded answer.
     if not answer:
         answer = (
-            f"[{agent_name}] I've analyzed your query about '{body.query}' "
-            f"in the {domain} domain. Let me look into the relevant data and "
-            f"get back to you with specific details. What aspect would you "
-            f"like me to focus on?"
+            "No agent was able to answer that query. "
+            "Check that the relevant connector is configured (for example, "
+            "link Gmail for inbox questions or Tally for GST queries) and "
+            "that an agent is deployed in the matching domain. "
+            "Rephrasing the question or picking an agent explicitly from "
+            "the header bar may also help."
         )
-        confidence = 0.6 if domain == "general" else 0.7
+        confidence = 0.0
 
-    # Store in session history (Redis-backed, BUG #22)
-    session_key = f"{tenant_id}:{body.company_id}"
+    # Store in session history (Redis-backed, BUG #22).
+    #
+    # Root-cause fix for Codex 2026-04-22 review on chat history
+    # isolation: the session key was only ``tenant_id:company_id``, so
+    # history from agent A leaked into agent B's sidebar when the user
+    # switched agents with the same company context. When the caller
+    # scopes the query to a specific ``agent_id``, scope the history
+    # bucket to it too. The ``agent_id`` suffix is opaque to Redis and
+    # costs nothing; callers that don't pass ``agent_id`` keep the old
+    # bucket layout.
+    session_key = _session_key(tenant_id, body.company_id, body.agent_id)
     entries = await _load_session(session_key)
     now = datetime.now(UTC).isoformat()
     entries.append(
@@ -411,9 +445,19 @@ async def chat_query(
 @router.get("/chat/history", response_model=list[ChatMessage])
 async def chat_history(
     company_id: str = "",
+    agent_id: str = "",
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Return chat history for the current session (Redis-backed)."""
-    session_key = f"{tenant_id}:{company_id}"
+    """Return chat history for the current session (Redis-backed).
+
+    Root-cause fix for Codex 2026-04-22 chat history isolation gap:
+    the session key was just ``tenant_id:company_id``, so switching
+    between agents with the same company loaded the wrong history. The
+    key now includes ``agent_id`` when provided, matching the ``POST
+    /chat/query`` write path so reads and writes agree. Callers that
+    omit ``agent_id`` see the legacy tenant+company bucket (no data
+    loss for existing sessions).
+    """
+    session_key = _session_key(tenant_id, company_id, agent_id)
     entries = await _load_session(session_key)
     return [ChatMessage(**e) for e in entries]

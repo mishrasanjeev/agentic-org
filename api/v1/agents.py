@@ -8,6 +8,7 @@ import re as _re
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -326,6 +327,85 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
     return [t for t in tools if t not in index]
 
 
+def _derive_default_tools(
+    agent_type: str,
+    domain: str | None,
+    connector_names: list[str] | None,
+) -> list[str]:
+    """Return the default authorized-tools list for ``agent_type``.
+
+    When ``connector_names`` is provided, the result is the intersection
+    of the static agent-type/domain defaults and the tools actually
+    offered by those connectors — so an ``ap_processor`` picked with the
+    ``tally`` connector only gets tools Tally supports, and the LLM
+    tool-surface never drifts past what the agent's linked connectors
+    can execute.
+
+    When ``connector_names`` is provided but yields no intersection
+    (a connector the type has no mapped defaults for), we fall back to
+    the union of the connectors' tools.  When no ``connector_names`` are
+    given, we return the static defaults.
+
+    This is the single source of truth used by both ``POST /agents``
+    auto-population and ``GET /agents/default-tools/{type}``.
+    """
+    from core.langgraph.tool_adapter import _build_tool_index
+
+    static_defaults = _AGENT_TYPE_DEFAULT_TOOLS.get(
+        agent_type,
+        _DOMAIN_DEFAULT_TOOLS.get(domain or "", []),
+    )
+
+    if not connector_names:
+        return list(static_defaults)
+
+    connector_index = _build_tool_index(connector_names=connector_names)
+    connector_tool_names = set(connector_index.keys())
+
+    intersected = [t for t in static_defaults if t in connector_tool_names]
+    if intersected:
+        return intersected
+
+    # No overlap — the user picked a connector whose tools we don't have
+    # a static mapping for. Return the connector tools directly so the
+    # agent at least sees something runnable.
+    return sorted(connector_tool_names)
+
+
+# ── GET /agents/default-tools/{agent_type} ───────────────────────────────────
+@router.get("/agents/default-tools/{agent_type}")
+async def get_default_tools(
+    agent_type: str,
+    domain: str | None = None,
+    connector_ids: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Return the default authorized-tools list for ``agent_type``.
+
+    Root-cause fix (2026-04-22 Codex review, UR-Bug-2 gap): the
+    ``/agents/create`` UI called this route but the backend never
+    implemented it, so every agent fell through to a client-side
+    ``availableTools.slice(0, 5)`` guess. This endpoint now returns a
+    real connector-aware default list:
+
+    - If ``connector_ids`` is supplied (comma-separated connector names,
+      tolerant of the ``registry-<name>`` UI prefix), defaults are
+      intersected with the tools those connectors actually expose.
+    - Otherwise the static ``_AGENT_TYPE_DEFAULT_TOOLS`` /
+      ``_DOMAIN_DEFAULT_TOOLS`` fallback is returned.
+
+    ``tenant_id`` is required so the route sits behind the same auth gate
+    as the rest of ``/agents`` and the tenant-scoping is explicit.
+    """
+    _ = tenant_id  # Auth side-effect — value unused for derivation.
+    conn_list: list[str] | None = None
+    if connector_ids:
+        conn_list = [c.strip() for c in connector_ids.split(",") if c.strip()]
+
+    tools = _derive_default_tools(agent_type, domain, conn_list)
+    return {"agent_type": agent_type, "tools": tools}
+
+
 # ── POST /agents ─────────────────────────────────────────────────────────────
 @router.post("/agents", status_code=201)
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
@@ -334,12 +414,17 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 
     initial_status = body.initial_status or "shadow"
 
-    # Auto-populate authorized tools based on agent type / domain when none provided
+    # Auto-populate authorized tools based on agent type / domain when none provided.
+    # When the caller supplied ``connector_ids`` but no explicit
+    # ``authorized_tools``, derive defaults connector-aware (root-cause
+    # fix for UR-Bug-1 downstream: a Gmail agent should default to Gmail
+    # tools, not the static type map's union).
     tools = body.authorized_tools
     if not tools:
-        tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
+        tools = _derive_default_tools(
             body.agent_type,
-            _DOMAIN_DEFAULT_TOOLS.get(body.domain, []),
+            body.domain,
+            body.connector_ids or None,
         )
 
     # Validate user-provided tools against the registry (skip for auto-populated)

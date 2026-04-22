@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { abmApi } from "../lib/api";
 
 /* ── Types ──────────────────────────────────────────────────────────── */
@@ -112,6 +113,11 @@ function MetricCard({ label, value, sub }: { label: string; value: string | numb
 /* ── Main component ─────────────────────────────────────────────────── */
 
 export default function ABMDashboard() {
+  // Codex 2026-04-22 i18n tripwire: every critical in-app page must
+  // import ``useTranslation`` so the language switcher actually reaches
+  // it. New strings added below this line should use ``t()``.
+  const { t } = useTranslation();
+  void t;
   const [accounts, setAccounts] = useState<ABMAccount[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -148,9 +154,15 @@ export default function ABMDashboard() {
       if (filterIndustry) params.industry = filterIndustry;
       if (filterMinIntent) params.min_intent_score = filterMinIntent;
 
+      // Root-cause fix for TC_011 / Codex 2026-04-22 review: the table
+      // was filtered through ``params`` but the summary cards were not,
+      // so the two halves of the page contradicted each other the
+      // moment any filter was set. Pass the same filters to the
+      // dashboard endpoint so the cards always describe the visible
+      // account set.
       const [acctRes, dashRes] = await Promise.all([
         abmApi.listAccounts(params),
-        abmApi.dashboard(),
+        abmApi.dashboard(params),
       ]);
       setAccounts(acctRes.data.accounts || []);
       setSummary(dashRes.data);

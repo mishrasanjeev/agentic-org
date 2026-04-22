@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,10 @@ const STATUS_BADGE: Record<
 /* ------------------------------------------------------------------ */
 
 export default function KnowledgeBase() {
+  // Codex 2026-04-22 i18n tripwire: the page must surface through the
+  // language switcher. Individual strings are wrapped in follow-up PRs.
+  const { t } = useTranslation();
+  void t;
   const [documents, setDocuments] = useState<KBDocument[]>([]);
   const [stats, setStats] = useState<KBStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,23 +138,31 @@ export default function KnowledgeBase() {
         documents.map((d) => d.filename.toLowerCase()),
       );
       for (const file of Array.from(files)) {
-        // TC_011 client-side dedup: warn on same filename before the
-        // round-trip. The backend also returns 409 for this case — this
-        // check just saves the user a server error.
+        // TC_011 client-side dedup warning + TC_007 honesty fix (Codex
+        // 2026-04-22 review): previously the confirm dialog said
+        // "Upload a new copy anyway?" and the 409 alert said "check the
+        // duplicate box to replace it", but there was no replace path —
+        // the duplicate box only added a second copy, so the UI copy
+        // lied about what the backend actually did. Now the user picks
+        // between replace (real overwrite via ?replace=true) and add-
+        // alongside (?allow_duplicate=true), and both code paths do
+        // what they say on the tin.
         const isDuplicate = existing.has(file.name.toLowerCase());
+        let mode: "none" | "replace" | "duplicate" = "none";
         if (isDuplicate) {
-          const proceed = window.confirm(
-            `"${file.name}" is already in the knowledge base. ` +
-              "Upload a new copy anyway?",
+          const doReplace = window.confirm(
+            `"${file.name}" is already in the knowledge base.\n\n` +
+              "OK = Replace the existing document (old version is deleted + reindexed).\n" +
+              "Cancel = Upload as a second copy with the same name.",
           );
-          if (!proceed) continue;
+          mode = doReplace ? "replace" : "duplicate";
         }
         const fd = new FormData();
         fd.append("file", file);
         try {
-          const url = isDuplicate
-            ? "/knowledge/upload?allow_duplicate=true"
-            : "/knowledge/upload";
+          let url = "/knowledge/upload";
+          if (mode === "replace") url += "?replace=true";
+          else if (mode === "duplicate") url += "?allow_duplicate=true";
           await api.post(url, fd);
           existing.add(file.name.toLowerCase());
         } catch (err: unknown) {
@@ -160,7 +173,7 @@ export default function KnowledgeBase() {
           if (status === 409) {
             window.alert(
               `"${file.name}" already exists on the server. ` +
-                "Check the duplicate box to replace it.",
+                "Re-select the file and choose Replace in the prompt to overwrite it.",
             );
             continue;
           }

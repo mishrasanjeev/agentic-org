@@ -108,7 +108,8 @@ export const abmApi = {
   createAccount: (data: any) => api.post("/abm/accounts", data),
   getIntent: (id: string) => api.get(`/abm/accounts/${id}/intent`),
   launchCampaign: (id: string, data: any) => api.post(`/abm/accounts/${id}/campaign`, data),
-  dashboard: () => api.get("/abm/dashboard"),
+  dashboard: (params?: Record<string, string>) =>
+    api.get("/abm/dashboard", { params }),
   uploadCsv: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
