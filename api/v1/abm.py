@@ -464,6 +464,13 @@ async def create_account(
             if existing:
                 raise HTTPException(409, f"Account with domain {body.domain} already exists")
 
+            # Root-cause fix for Codex 2026-04-22 ABM gap: the CSV upload
+            # path seeds a tier-banded placeholder intent score so QA
+            # never sees all-zero rows, but the manual ``POST /accounts``
+            # path was skipping the seed entirely. That made the UX
+            # inconsistent (one freshly-added account would read as Low
+            # intent even in the Strategic tier). Seed here too — same
+            # deterministic helper, so the two code paths stay identical.
             acct = ABMAccount(
                 tenant_id=tid,
                 name=body.company_name,
@@ -471,6 +478,7 @@ async def create_account(
                 industry=body.industry or None,
                 revenue=body.revenue or None,
                 tier=body.tier,
+                intent_score=_seed_intent_score(body.tier, body.domain),
             )
             session.add(acct)
             await session.flush()
@@ -640,22 +648,52 @@ async def launch_campaign(
 
 @router.get("/dashboard")
 async def abm_dashboard(
+    tier: str | None = None,
+    industry: str | None = None,
+    min_intent_score: float | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """ABM executive dashboard summary.
 
     Returns total accounts, counts by tier, average intent score,
     top 10 accounts by intent, and pipeline influenced value.
+
+    Root-cause fix for TC_011 / Codex 2026-04-22 review: the table at
+    ``/abm/accounts`` accepts ``tier``/``industry``/``min_intent_score``
+    filters, but this dashboard did not. When a user filtered the table
+    the summary cards kept showing unfiltered totals, so the two halves
+    of the same page contradicted each other. The endpoint now accepts
+    the same filter triple and applies it to every aggregate query —
+    including the top-10 list — so the summary always describes the
+    same account set the table is rendering.
+
+    When no filters are supplied the endpoint is a strict superset of
+    the previous contract (tenant-wide totals), so existing callers
+    keep working.
     """
     tid = _uuid.UUID(tenant_id)
 
+    def _apply_filters(q: Any) -> Any:
+        if tier:
+            q = q.where(ABMAccount.tier == tier)
+        if industry:
+            q = q.where(func.lower(ABMAccount.industry) == industry.lower())
+        if min_intent_score is not None:
+            q = q.where(ABMAccount.intent_score >= min_intent_score)
+        return q
+
     async with get_tenant_session(tid) as session:
-        # Total accounts
-        total_q = select(func.count()).select_from(ABMAccount).where(ABMAccount.tenant_id == tid)
+        # Total accounts (filtered)
+        total_q = _apply_filters(
+            select(func.count()).select_from(ABMAccount).where(ABMAccount.tenant_id == tid)
+        )
         total = (await session.execute(total_q)).scalar() or 0
 
-        # Counts by tier
-        tier_q = (
+        # Counts by tier — always returned over the filtered set so the
+        # stacked-tier widget lines up with the table. If the user
+        # already pinned ``tier=1`` the other buckets read zero, which
+        # is the correct answer, not a bug.
+        tier_q = _apply_filters(
             select(ABMAccount.tier, func.count().label("count"))
             .where(ABMAccount.tenant_id == tid)
             .group_by(ABMAccount.tier)
@@ -666,18 +704,17 @@ async def abm_dashboard(
             tier_key = str(row.tier) if row.tier else "unclassified"
             by_tier[tier_key] = row.count
 
-        # Average intent score
-        avg_q = select(func.avg(ABMAccount.intent_score)).where(ABMAccount.tenant_id == tid)
+        # Average intent score (filtered)
+        avg_q = _apply_filters(
+            select(func.avg(ABMAccount.intent_score)).where(ABMAccount.tenant_id == tid)
+        )
         avg_intent_raw = (await session.execute(avg_q)).scalar()
         avg_intent = round(float(avg_intent_raw), 2) if avg_intent_raw else 0.0
 
-        # Top 10 by intent score
-        top_q = (
-            select(ABMAccount)
-            .where(ABMAccount.tenant_id == tid)
-            .order_by(ABMAccount.intent_score.desc())
-            .limit(10)
-        )
+        # Top 10 by intent score (filtered)
+        top_q = _apply_filters(
+            select(ABMAccount).where(ABMAccount.tenant_id == tid)
+        ).order_by(ABMAccount.intent_score.desc()).limit(10)
         top_result = await session.execute(top_q)
         top_10 = [
             {
@@ -690,7 +727,10 @@ async def abm_dashboard(
             for a in top_result.scalars().all()
         ]
 
-        # Pipeline influenced: sum of spend_usd across all campaigns
+        # Pipeline influenced: campaigns aren't tier/industry-scoped and
+        # summing spend across all of them is the intended read of
+        # "total influenced pipeline", so this stays tenant-wide
+        # regardless of table filters.
         camp_q = select(ABMCampaign).where(ABMCampaign.tenant_id == tid)
         camp_result = await session.execute(camp_q)
         pipeline_influenced = 0.0

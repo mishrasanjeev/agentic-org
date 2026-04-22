@@ -333,14 +333,47 @@ def _parse_schedule_id(schedule_id: str) -> _uuid.UUID:
 
 @router.get("/report-schedules", response_model=list[ReportScheduleResponse])
 async def list_report_schedules(
+    company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[ReportScheduleResponse]:
-    """List all report schedules for the current tenant."""
+    """List report schedules for the current tenant.
+
+    Codex 2026-04-22 isolation fix: when the caller is scoped to a
+    specific company, only return schedules with that ``company_id``
+    (plus tenant-wide schedules where ``company_id IS NULL``). Without
+    this, two users in the same tenant who manage separate companies
+    would see each other's schedules — a tenancy hole CLAUDE.md's non-
+    negotiable rules don't permit for a control-plane surface.
+
+    When no ``company_id`` is supplied, the legacy tenant-wide list is
+    returned (unchanged contract for admin / reporting tooling).
+    """
     tid = _uuid.UUID(tenant_id)
+    company_uuid: _uuid.UUID | None = None
+    if company_id:
+        try:
+            company_uuid = _uuid.UUID(company_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="company_id must be a UUID",
+            ) from exc
+
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(ReportSchedule).where(ReportSchedule.tenant_id == tid)
-        )
+        query = select(ReportSchedule).where(ReportSchedule.tenant_id == tid)
+        if company_uuid is not None:
+            # Return the company's own schedules *and* tenant-wide
+            # schedules (company_id IS NULL) so a company user doesn't
+            # lose visibility of org-level schedules.
+            from sqlalchemy import or_
+
+            query = query.where(
+                or_(
+                    ReportSchedule.company_id == company_uuid,
+                    ReportSchedule.company_id.is_(None),
+                )
+            )
+        result = await session.execute(query)
         rows = result.scalars().all()
         return [_to_response(row) for row in rows]
 
@@ -365,6 +398,18 @@ async def create_report_schedule(
         "params": body.params,
     }
 
+    # Codex 2026-04-22 isolation fix: dual-write company_id to both the
+    # new indexed column and ``config`` (kept for backward compat with
+    # legacy readers). Pass None rather than raise on a malformed id so
+    # existing clients that send an empty string keep creating tenant-
+    # wide schedules.
+    company_uuid: _uuid.UUID | None = None
+    if body.company_id:
+        try:
+            company_uuid = _uuid.UUID(body.company_id)
+        except (TypeError, ValueError):
+            company_uuid = None
+
     row = ReportSchedule(
         id=schedule_id,
         name=body.report_type,
@@ -378,6 +423,7 @@ async def create_report_schedule(
         next_run_at=_compute_next_run(body.cron_expression) if body.is_active else None,
         config=config,
         tenant_id=tid,
+        company_id=company_uuid,
     )
 
     async with get_tenant_session(tid) as session:
