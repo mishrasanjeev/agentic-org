@@ -70,7 +70,7 @@ export default function CHRODashboard() {
       const resp = await api.get("/kpis/chro");
       setData(resp.data);
     } catch {
-      setError("Failed to load CHRO KPIs");
+      setError(t("errors.failedToLoadKpis", "Failed to load CHRO KPIs"));
     } finally {
       setLoading(false);
     }

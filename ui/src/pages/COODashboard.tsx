@@ -70,7 +70,7 @@ export default function COODashboard() {
       const resp = await api.get("/kpis/coo");
       setData(resp.data);
     } catch {
-      setError("Failed to load COO KPIs");
+      setError(t("errors.failedToLoadKpis", "Failed to load COO KPIs"));
     } finally {
       setLoading(false);
     }

@@ -70,7 +70,7 @@ export default function CFODashboard() {
       const resp = await api.get("/kpis/cfo");
       setData(resp.data);
     } catch {
-      setError("Failed to load CFO KPIs");
+      setError(t("errors.failedToLoadKpis", "Failed to load CFO KPIs"));
     } finally {
       setLoading(false);
     }

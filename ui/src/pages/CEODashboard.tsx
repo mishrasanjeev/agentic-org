@@ -60,7 +60,7 @@ export default function CEODashboard() {
         const resp = await api.get("/kpis/ceo");
         setData(resp.data);
       } catch {
-        setError("Failed to load CEO KPIs");
+        setError(t("errors.failedToLoadKpis", "Failed to load CEO KPIs"));
       } finally {
         setLoading(false);
       }

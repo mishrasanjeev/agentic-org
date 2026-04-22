@@ -217,6 +217,40 @@ export default function ReportScheduler() {
   const [formWhatsappTarget, setFormWhatsappTarget] = useState("");
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
 
+  // TC_002 (Aishwarya 2026-04-21): a stale per-channel error that was
+  // set on a previous submit persisted after the user unchecked the
+  // channel and switched to a different one. The next submit would
+  // read ``formFieldErrors.email`` while the form no longer owned an
+  // email row. Centralise toggles through setters that clear the
+  // matching error and any "no channels selected" message.
+  function toggleEmail(next: boolean) {
+    setFormEmailEnabled(next);
+    setFormFieldErrors((prev) => {
+      const cleaned = { ...prev };
+      if (!next) delete cleaned.email;
+      delete cleaned.channels;
+      return cleaned;
+    });
+  }
+  function toggleSlack(next: boolean) {
+    setFormSlackEnabled(next);
+    setFormFieldErrors((prev) => {
+      const cleaned = { ...prev };
+      if (!next) delete cleaned.slack;
+      delete cleaned.channels;
+      return cleaned;
+    });
+  }
+  function toggleWhatsapp(next: boolean) {
+    setFormWhatsappEnabled(next);
+    setFormFieldErrors((prev) => {
+      const cleaned = { ...prev };
+      if (!next) delete cleaned.whatsapp;
+      delete cleaned.channels;
+      return cleaned;
+    });
+  }
+
   /* ── Fetch schedules ── */
   const fetchSchedules = useCallback(async () => {
     try {
@@ -637,7 +671,7 @@ export default function ReportScheduler() {
                     type="checkbox"
                     id="ch-email"
                     checked={formEmailEnabled}
-                    onChange={(e) => setFormEmailEnabled(e.target.checked)}
+                    onChange={(e) => toggleEmail(e.target.checked)}
                     className="rounded"
                   />
                   <label htmlFor="ch-email" className="text-sm w-24">
@@ -666,7 +700,7 @@ export default function ReportScheduler() {
                     type="checkbox"
                     id="ch-slack"
                     checked={formSlackEnabled}
-                    onChange={(e) => setFormSlackEnabled(e.target.checked)}
+                    onChange={(e) => toggleSlack(e.target.checked)}
                     className="rounded"
                   />
                   <label htmlFor="ch-slack" className="text-sm w-24">
@@ -695,7 +729,7 @@ export default function ReportScheduler() {
                     type="checkbox"
                     id="ch-whatsapp"
                     checked={formWhatsappEnabled}
-                    onChange={(e) => setFormWhatsappEnabled(e.target.checked)}
+                    onChange={(e) => toggleWhatsapp(e.target.checked)}
                     className="rounded"
                   />
                   <label htmlFor="ch-whatsapp" className="text-sm w-24">
