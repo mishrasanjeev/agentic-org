@@ -416,27 +416,30 @@ async def upload_document(
             "TC_011: when False (default), an upload whose filename already "
             "exists in the tenant's non-deleted documents returns 409 "
             "Conflict with the existing document_id. Set true to add a "
-            "second copy with the same filename — does NOT replace. "
-            "Use ?replace=true for real replacement."
+            "second copy with the same filename — does NOT replace the "
+            "existing document. Use ?replace=true for replacement."
         ),
     ),
     replace: bool = Query(
         default=False,
         description=(
-            "Codex 2026-04-22 audit: when True, soft-delete any existing "
-            "document with the same filename (RAGFlow + DB mirror) before "
-            "ingesting the new one. Mutually exclusive with "
-            "allow_duplicate=true. The UI's duplicate-decision modal uses "
-            "this to honour a real Replace."
+            "TC_007 / Codex 2026-04-22 review: when True, soft-delete any "
+            "existing document with the same filename (RAGFlow + DB) "
+            "before ingesting the new one, so users who want 'replace' "
+            "actually get replace instead of a second identical row. "
+            "Mutually exclusive with allow_duplicate=true."
         ),
     ),
 ):
     """Upload a document to the knowledge base.
 
+    Uses RAGFlow for chunking + vector indexing when available.
+    Falls back to PostgreSQL metadata storage otherwise.
+
     Dedup policy:
-      - default                        → 409 Conflict on filename match
-      - ``?allow_duplicate=true``      → add a second copy
-      - ``?replace=true``              → soft-delete existing, ingest new
+      - default (neither flag)           → 409 Conflict on filename match
+      - ``?allow_duplicate=true``        → add a second doc with same name
+      - ``?replace=true``                → soft-delete existing, ingest new
     """
     filename = file.filename or "untitled"
 
@@ -453,8 +456,10 @@ async def upload_document(
         )
 
     # TC_011 + Codex 2026-04-22: filename-level dedup. Caller can opt
-    # out with ?allow_duplicate=true (add another copy) or ?replace=true
-    # (soft-delete existing, ingest new). Check is best-effort.
+    # out with ?allow_duplicate=true (adds a second copy) or
+    # ?replace=true (deletes the old one first). Best-effort — if the
+    # DB lookup fails, we proceed with the upload rather than block
+    # legitimate usage.
     if not allow_duplicate and not replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)
@@ -476,7 +481,12 @@ async def upload_document(
                 },
             )
 
-    # Real replace path — matches the UI's "OK = Replace" action.
+    # Real replace path — matches the UI's "Replace" modal action.
+    # Previously the UI alerted "check the duplicate box to replace it",
+    # but the duplicate box only added another copy — the existing
+    # document was never touched. Now replace=true soft-deletes the
+    # existing document in both RAGFlow and the DB mirror before
+    # ingesting the new one, so the UI copy and backend agree.
     if replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)

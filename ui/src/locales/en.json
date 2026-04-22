@@ -104,6 +104,16 @@
     "cooDashboard": "COO Dashboard",
     "cboDashboard": "CBO Dashboard"
   },
+  "dashboard": {
+    "totalAgents": "Total Agents",
+    "activeAgents": "Active Agents",
+    "pendingApprovals": "Pending Approvals",
+    "shadowAgents": "Shadow Agents",
+    "approvalsResolved": "Approvals Resolved",
+    "decisionsCount": "{{resolved}}/{{total}} decisions",
+    "noApprovalsLogged": "No approvals logged",
+    "dataIncomplete": "Some data may be incomplete:"
+  },
   "companies": {
     "title": "Companies",
     "onboard": "Onboard Company",

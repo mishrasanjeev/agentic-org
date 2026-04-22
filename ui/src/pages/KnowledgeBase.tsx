@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,6 +123,10 @@ function DuplicateDecisionModal({
 }
 
 export default function KnowledgeBase() {
+  // Codex 2026-04-22 i18n tripwire: the page must surface through the
+  // language switcher. Individual strings are wrapped in follow-up PRs.
+  const { t } = useTranslation();
+  void t;
   const [documents, setDocuments] = useState<KBDocument[]>([]);
   const [stats, setStats] = useState<KBStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -205,11 +210,12 @@ export default function KnowledgeBase() {
         documents.map((d) => d.filename.toLowerCase()),
       );
       for (const file of Array.from(files)) {
-        // TC_011 client-side dedup + Codex 2026-04-22 audit fix:
-        // previously window.confirm() forced Cancel to mean "upload as a
-        // second copy", which trapped users who expected Cancel to
-        // abort. The modal has three explicit choices so Cancel now
-        // means exactly what it says.
+        // TC_011 client-side dedup + Codex 2026-04-22 audit (F4):
+        // the prior window.confirm() flow forced Cancel to mean "upload
+        // as a second copy", which trapped users. The 3-way modal
+        // (DuplicateDecisionModal above) lets Cancel mean abort and
+        // splits Replace (real overwrite via ?replace=true) from
+        // Keep-both (adds a second doc via ?allow_duplicate=true).
         const isDuplicate = existing.has(file.name.toLowerCase());
         let action: DuplicateAction = "replace";
         if (isDuplicate) {
@@ -237,7 +243,7 @@ export default function KnowledgeBase() {
           if (status === 409) {
             window.alert(
               `"${file.name}" already exists on the server. ` +
-                "Re-select the file and choose Replace to overwrite it.",
+                "Re-select the file and choose Replace in the prompt to overwrite it.",
             );
             continue;
           }

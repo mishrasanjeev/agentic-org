@@ -72,7 +72,16 @@ export default function ChatPanel({
   // Load chat history on open
   useEffect(() => {
     if (!open) return;
-    const params = agentId ? `?agent_id=${agentId}` : "";
+    // Root-cause fix for Codex 2026-04-22 history isolation gap: the
+    // write side (POST /chat/query) persists under
+    // ``tenant:company:agent``, so reads must use the same triple or
+    // the sidebar shows empty / wrong history. Previously this effect
+    // only sent ``agent_id``, so the ``company_id`` part of the key
+    // silently defaulted to empty string on the backend.
+    const qs = new URLSearchParams();
+    if (agentId) qs.set("agent_id", agentId);
+    if (companyId) qs.set("company_id", companyId);
+    const params = qs.toString() ? `?${qs.toString()}` : "";
     api.get(`/chat/history${params}`).then(({ data }) => {
       const items: any[] = Array.isArray(data) ? data : data?.messages || [];
       const loaded: Message[] = items.map((m: any) => ({

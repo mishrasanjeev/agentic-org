@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
@@ -34,6 +35,7 @@ const PRIORITY_VARIANT: Record<string, "destructive" | "warning" | "default"> = 
 };
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [approvals, setApprovals] = useState<HITLItem[]>([]);
@@ -125,26 +127,37 @@ export default function Dashboard() {
     ? Math.round((resolvedApprovals / approvals.length) * 100)
     : 0;
 
+  // Codex 2026-04-22 i18n gap fix: the Dashboard was a heavy in-app
+  // page with zero ``useTranslation`` coverage, so the language
+  // switcher did nothing for the first surface users hit after login.
+  // Strings labelled here cascade to every metric card + status banner;
+  // the rest of the page falls back to the existing English where no
+  // key is defined yet (widen coverage in subsequent PRs rather than
+  // blocking this fix on a full translation sweep — the hi.json keys
+  // added here are the entries worth wiring first).
   const metrics = [
-    { label: "Total Agents", value: totalAgents, color: "text-foreground", subtitle: "" },
-    { label: "Active Agents", value: activeAgents, color: "text-green-600", subtitle: "" },
-    { label: "Pending Approvals", value: pendingApprovals, color: "text-red-600", subtitle: "" },
-    { label: "Shadow Agents", value: shadowAgents, color: "text-yellow-600", subtitle: "" },
+    { label: t("dashboard.totalAgents", "Total Agents"), value: totalAgents, color: "text-foreground", subtitle: "" },
+    { label: t("dashboard.activeAgents", "Active Agents"), value: activeAgents, color: "text-green-600", subtitle: "" },
+    { label: t("dashboard.pendingApprovals", "Pending Approvals"), value: pendingApprovals, color: "text-red-600", subtitle: "" },
+    { label: t("dashboard.shadowAgents", "Shadow Agents"), value: shadowAgents, color: "text-yellow-600", subtitle: "" },
     {
-      label: "Approvals Resolved",
+      label: t("dashboard.approvalsResolved", "Approvals Resolved"),
       value: approvals.length > 0 ? `${resolvedPct}%` : "—",
       color: "text-green-600",
       subtitle: approvals.length > 0
-        ? `${resolvedApprovals}/${approvals.length} decisions`
-        : "No approvals logged",
+        ? t("dashboard.decisionsCount", "{{resolved}}/{{total}} decisions", {
+            resolved: resolvedApprovals,
+            total: approvals.length,
+          })
+        : t("dashboard.noApprovalsLogged", "No approvals logged"),
     },
   ];
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
-        <p className="text-muted-foreground">Loading dashboard data...</p>
+        <h2 className="text-2xl font-bold">{t("nav.dashboard", "Dashboard")}</h2>
+        <p className="text-muted-foreground">{t("status.loading", "Loading dashboard data...")}</p>
       </div>
     );
   }
@@ -152,13 +165,13 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <Helmet>
-        <title>Dashboard — AgenticOrg</title>
+        <title>{t("nav.dashboard", "Dashboard")} — AgenticOrg</title>
       </Helmet>
-      <h2 className="text-2xl font-bold">Dashboard</h2>
+      <h2 className="text-2xl font-bold">{t("nav.dashboard", "Dashboard")}</h2>
 
       {fetchWarnings.length > 0 && (
         <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
-          <p className="font-medium">Some data may be incomplete:</p>
+          <p className="font-medium">{t("dashboard.dataIncomplete", "Some data may be incomplete:")}</p>
           <ul className="list-disc list-inside mt-1">
             {fetchWarnings.map((w, i) => <li key={i}>{w}</li>)}
           </ul>

@@ -184,16 +184,38 @@ export default function AgentCreate() {
     });
   }, [connectorIds, availableConnectors]);
 
-  // Auto-assign default tools when agent type changes
+  // Auto-assign default tools when agent type, domain, or connector picks
+  // change. Root-cause fix (Codex 2026-04-22): the previous effect called a
+  // route that didn't exist and always silently dropped to a
+  // ``availableTools.slice(0, 5)`` guess. The backend now implements
+  // ``GET /agents/default-tools/{type}`` with an optional ``connector_ids``
+  // filter, so the defaults actually reflect what the selected connectors
+  // can do. We also depend on ``availableTools`` so the fallback re-runs
+  // once the connector tools have loaded, instead of showing an empty list
+  // forever on slow networks.
   useEffect(() => {
     const type = useCustomType ? customType : agentType;
-    api.get(`/agents/default-tools/${type}`).then(({ data }) => {
+    if (!type) return;
+    const params: Record<string, string> = {};
+    if (domain) params.domain = domain;
+    if (connectorIds.length > 0) params.connector_ids = connectorIds.join(",");
+    api.get(`/agents/default-tools/${type}`, { params }).then(({ data }) => {
       setAuthorizedTools(data.tools || []);
     }).catch(() => {
-      // Fallback: use first 5 tools from available
-      setAuthorizedTools(availableTools.slice(0, 5));
+      // Fallback: union the tools from selected connectors so the list is
+      // at least runnable, not a truncated slice of the global catalog.
+      const pool = connectorIds.length > 0
+        ? availableConnectors.filter((c) => connectorIds.includes(c.id))
+        : availableConnectors;
+      const derived: string[] = [];
+      pool.forEach((item) => {
+        (item.tool_functions || []).forEach((t: string) => {
+          if (!derived.includes(t)) derived.push(t);
+        });
+      });
+      setAuthorizedTools(derived.length ? derived : availableTools.slice(0, 5));
     });
-  }, [agentType, useCustomType, customType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agentType, useCustomType, customType, domain, connectorIds, availableTools, availableConnectors]);
 
   // Load templates when domain changes
   useEffect(() => {

@@ -104,6 +104,16 @@
     "cooDashboard": "COO डैशबोर्ड",
     "cboDashboard": "CBO डैशबोर्ड"
   },
+  "dashboard": {
+    "totalAgents": "कुल एजेंट",
+    "activeAgents": "सक्रिय एजेंट",
+    "pendingApprovals": "लंबित अनुमोदन",
+    "shadowAgents": "छाया एजेंट",
+    "approvalsResolved": "अनुमोदन हल हुए",
+    "decisionsCount": "{{resolved}}/{{total}} निर्णय",
+    "noApprovalsLogged": "कोई अनुमोदन दर्ज नहीं",
+    "dataIncomplete": "कुछ डेटा अधूरा हो सकता है:"
+  },
   "companies": {
     "title": "कंपनियां",
     "onboard": "नई कंपनी जोड़ें",
