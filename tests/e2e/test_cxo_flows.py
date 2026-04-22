@@ -157,14 +157,35 @@ class TestCFOJourney:
             assert key in data, f"CFO KPI missing: {key}"
 
     def test_nl_query_finance_routes_correctly(self, client):
-        """NL query with finance question routes to finance domain."""
+        """NL query with finance question routes to finance domain.
+
+        TC_003 (Aishwarya 2026-04-22): the endpoint no longer wedges in
+        a fake 0.6 confidence when no agent can answer. Either an agent
+        produced a real answer (confidence >= 0.7), or the endpoint
+        honestly reports 0.0 with a no-answer message. Both are valid.
+        The old assertion ``>= 0.7`` was only passing because the
+        canned-fallback forced 0.6/0.7 — it was asserting a lie.
+        """
         resp = client.post("/api/v1/chat/query", json={
             "query": "What is our accounts receivable aging and cash flow position?"
         })
         assert resp.status_code == 200
         data = resp.json()
         assert data["domain"] == "finance"
-        assert data["confidence"] >= 0.7
+        confidence = float(data["confidence"])
+        if confidence == 0.0:
+            # Honest no-answer path — production must surface the
+            # actionable hint text rather than a phantom reply.
+            assert "configure" in data["answer"].lower() or "agent" in data["answer"].lower(), (
+                "When confidence=0.0 the answer must explain the no-answer state; "
+                f"got: {data['answer']!r}"
+            )
+        else:
+            assert confidence >= 0.7, (
+                "When an agent answers at all, confidence must reflect real "
+                "reasoning — no hardcoded 0.6 constant. "
+                f"Got: {confidence}"
+            )
 
     def test_report_schedule_created_successfully(self, client):
         """CFO can create a report schedule that persists."""
@@ -303,14 +324,27 @@ class TestCMOJourney:
             assert key in data, f"CMO KPI missing: {key}"
 
     def test_nl_query_marketing_routes_correctly(self, client):
-        """NL query with marketing question routes to marketing domain."""
+        """Same contract as test_nl_query_finance_routes_correctly —
+        TC_003 fix allows an honest 0.0 with a no-answer hint when
+        no marketing agent is configured on this environment.
+        """
         resp = client.post("/api/v1/chat/query", json={
             "query": "Show me the latest SEO rankings and campaign conversion rates"
         })
         assert resp.status_code == 200
         data = resp.json()
         assert data["domain"] == "marketing"
-        assert data["confidence"] >= 0.7
+        confidence = float(data["confidence"])
+        if confidence == 0.0:
+            assert "configure" in data["answer"].lower() or "agent" in data["answer"].lower(), (
+                "When confidence=0.0 the answer must explain the no-answer state; "
+                f"got: {data['answer']!r}"
+            )
+        else:
+            assert confidence >= 0.7, (
+                "When an agent answers, confidence must reflect real reasoning. "
+                f"Got: {confidence}"
+            )
 
     def test_content_factory_has_cmo_approval_gate(self):
         """Content Factory agent includes CMO approval-related tools."""
