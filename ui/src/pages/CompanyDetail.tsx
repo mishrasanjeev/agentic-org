@@ -1369,9 +1369,38 @@ export default function CompanyDetail() {
                     Enable GST auto-file
                   </label>
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2 flex items-center gap-3">
                   <Button disabled={savingCompany} onClick={() => void handleSaveCompany()}>
                     {savingCompany ? "Saving..." : "Save Company Settings"}
+                  </Button>
+                  {/*
+                    BUG-002 (Uday 2026-04-22): Settings tab had no way to
+                    remove a company. The backend exposes a soft-delete
+                    via DELETE /companies/{id} (sets is_active=False and
+                    preserves audit trail). Expose it here behind an
+                    explicit confirmation so partners can archive
+                    off-boarded clients without writing SQL.
+                  */}
+                  <Button
+                    variant="destructive"
+                    disabled={savingCompany}
+                    onClick={async () => {
+                      const confirmed = window.confirm(
+                        `Archive "${company?.name ?? "this company"}"?\n\n` +
+                        "The company will be marked inactive and hidden from the list. " +
+                        "All filings, audit logs, and historical data are preserved.\n\n" +
+                        "This can be reversed by support. Continue?",
+                      );
+                      if (!confirmed) return;
+                      try {
+                        await api.delete(`/companies/${id}`);
+                        navigate("/dashboard/companies");
+                      } catch (err) {
+                        setError(extractApiError(err, "Failed to archive company."));
+                      }
+                    }}
+                  >
+                    Archive Company
                   </Button>
                 </div>
               </div>

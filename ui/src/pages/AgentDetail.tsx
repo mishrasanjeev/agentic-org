@@ -1127,11 +1127,38 @@ function ShadowTab({ agent }: { agent: Agent }) {
     setGenerating(true);
     setGenResult(null);
     try {
-      await api.post(`/agents/${agent.id}/run`, {
-        action: "shadow_sample",
-        inputs: { mode: "test", generate_sample: true },
+      // TC_014 (Aishwarya 2026-04-22): a single /run emits a single
+      // sample, so users clicking once saw the progress bar jump from
+      // 35% to 40% and stop — they expected the button to fill the
+      // gap to minSamples in one click. Call /run in a loop to make
+      // up the shortfall. Cap the batch so a bad config can't DOS
+      // the agent; if more than 5 runs fail in a row, surface the
+      // error instead of silently continuing.
+      const gap = Math.max(0, (agent.shadow_min_samples ?? 20) - sampleCount);
+      const plannedRuns = Math.min(gap > 0 ? gap : 1, 25);
+      let successes = 0;
+      let consecutiveFailures = 0;
+      for (let i = 0; i < plannedRuns; i++) {
+        try {
+          await api.post(`/agents/${agent.id}/run`, {
+            action: "shadow_sample",
+            inputs: { mode: "test", generate_sample: true },
+          });
+          successes += 1;
+          consecutiveFailures = 0;
+        } catch (err: any) {
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= 3) {
+            throw err;
+          }
+        }
+      }
+      setGenResult({
+        type: "success",
+        msg:
+          `Generated ${successes} shadow sample${successes === 1 ? "" : "s"}. ` +
+          "Refresh to see updated count and accuracy.",
       });
-      setGenResult({ type: "success", msg: "Shadow sample generated successfully. Refresh to see updated count." });
     } catch (err: any) {
       setGenResult({ type: "error", msg: err.response?.data?.detail || "Failed to generate sample. The agent may need to be configured first." });
     } finally {

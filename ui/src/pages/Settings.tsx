@@ -90,7 +90,23 @@ export default function Settings() {
   async function fetchSettings() {
     try {
       const { data } = await api.get("/config/fleet_limits");
-      if (data.max_active_agents) setLimits(data);
+      // TC_011 (Aishwarya 2026-04-22): the server used to reply with
+      // ``max_agents_per_domain: {}`` when no fleet_limits row existed;
+      // the UI replaced the pre-seeded 5-domain map with the empty
+      // object, so the input grid rendered zero rows. Merge the server
+      // response over the defaults so missing keys don't erase the
+      // pre-seeded domains. Backend default now also returns the 6
+      // canonical domains pre-populated.
+      if (data && typeof data === "object") {
+        setLimits({
+          ...DEFAULT_LIMITS,
+          ...data,
+          max_agents_per_domain: {
+            ...DEFAULT_LIMITS.max_agents_per_domain,
+            ...(data.max_agents_per_domain ?? {}),
+          },
+        });
+      }
     } catch {
       // Use defaults
     }
@@ -465,6 +481,90 @@ npx agenticorg-mcp-server`}</code></pre>
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* TC_010 (Aishwarya 2026-04-22): User Management section was
+          missing from the page. Expose the real role-mapping entry
+          points (per-company role CRUD lives under Companies →
+          Settings → Company Role Mapping) with a clear link, plus
+          the tenant-level Grantex admin scope management. Full
+          invite UI + SSO provisioning is tracked as a separate
+          enhancement; this section at least closes the "where do
+          I manage users?" question. */}
+      <Card data-testid="user-management-card">
+        <CardHeader>
+          <CardTitle>User Management</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            Tenant-wide roles are assigned per company. Per-company
+            role mapping (partner / manager / senior_associate /
+            associate / audit_reviewer) is managed from each
+            company's detail page under <span className="font-medium">Settings → Company Role Mapping</span>.
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              Invite a user: share the signup link
+              <code className="ml-1 bg-muted px-1.5 py-0.5 rounded text-xs">{"/signup?invite={tenant_id}"}</code>
+              — the first sign-in binds them to this tenant.
+            </li>
+            <li>
+              Promote to tenant admin: issue a Grantex grant with the
+              <code className="ml-1 bg-muted px-1.5 py-0.5 rounded text-xs">agenticorg:admin</code> scope.
+            </li>
+            <li>
+              Revoke access: disable the user's company role or
+              revoke the API key(s) issued to them.
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* TC_010 (Aishwarya 2026-04-22): Webhook Configuration section
+          was missing. We do not yet support arbitrary outbound
+          webhooks, but we expose the inbound receivers the platform
+          already accepts so callers can wire their existing systems.
+          Outbound webhook CRUD is tracked separately. */}
+      <Card data-testid="webhooks-card">
+        <CardHeader>
+          <CardTitle>Webhook Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            AgenticOrg accepts inbound webhooks from the following
+            providers. Configure these URLs in the provider's dashboard
+            with the signing secret issued from
+            <span className="font-medium"> Settings → API Keys</span>.
+          </p>
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 font-medium">Provider</th>
+                <th className="text-left py-2 font-medium">Inbound URL</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b">
+                <td className="py-2">SendGrid (Email events)</td>
+                <td className="py-2 font-mono text-xs">/api/v1/webhooks/email/sendgrid</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2">Mailchimp</td>
+                <td className="py-2 font-mono text-xs">/api/v1/webhooks/email/mailchimp</td>
+              </tr>
+              <tr>
+                <td className="py-2">MoEngage</td>
+                <td className="py-2 font-mono text-xs">/api/v1/webhooks/email/moengage</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="text-xs text-muted-foreground">
+            Outbound webhook delivery (AgenticOrg → your endpoint on
+            agent events) is planned — track this feature in the
+            <span className="font-medium"> /dashboard/observatory </span>
+            subscriptions panel when available.
+          </p>
         </CardContent>
       </Card>
 

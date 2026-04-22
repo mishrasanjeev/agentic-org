@@ -240,7 +240,22 @@ class PaginatedResponse(BaseModel):
 
 class FleetLimits(BaseModel):
     max_active_agents: int = 35
-    max_agents_per_domain: dict[str, int] = {}
+    # TC_011 (Aishwarya 2026-04-22): the empty-dict default sent the
+    # Settings page a ``max_agents_per_domain: {}`` that replaced the
+    # UI's pre-seeded 5-domain map, so the input grid rendered zero
+    # rows ("Only the label is displayed"). Populate sensible defaults
+    # for the six canonical domains so every tenant has configurable
+    # inputs on day one.
+    max_agents_per_domain: dict[str, int] = Field(
+        default_factory=lambda: {
+            "finance": 20,
+            "hr": 20,
+            "marketing": 20,
+            "ops": 20,
+            "backoffice": 20,
+            "comms": 20,
+        }
+    )
     max_shadow_agents: int = 50
     max_replicas_global_ceiling: int = 20
 

@@ -207,5 +207,61 @@
     "networkError": "नेटवर्क त्रुटि। अपना कनेक्शन जांचें और पुनः प्रयास करें।",
     "unauthorized": "आपके पास यह कार्रवाई करने की अनुमति नहीं है।",
     "sessionExpired": "सत्र समाप्त हो गया। कृपया पुनः साइन इन करें।"
+  },
+  "abm": {
+    "title": "ABM डैशबोर्ड",
+    "totalAccounts": "कुल अकाउंट्स",
+    "avgIntentScore": "औसत इंटेंट स्कोर",
+    "pipelineInfluenced": "प्रभावित पाइपलाइन",
+    "totalCampaigns": "कुल अभियान",
+    "uploadCsv": "CSV अपलोड करें",
+    "addAccount": "अकाउंट जोड़ें",
+    "filters": "फ़िल्टर",
+    "tier": "टियर",
+    "industry": "उद्योग",
+    "minIntent": "न्यूनतम इंटेंट",
+    "lastActivity": "अंतिम गतिविधि",
+    "actions": "कार्रवाइयाँ",
+    "viewIntent": "इंटेंट देखें",
+    "launchCampaign": "अभियान शुरू करें",
+    "noAccounts": "कोई अकाउंट नहीं। पहले CSV अपलोड करें।"
+  },
+  "knowledge": {
+    "title": "नॉलेज बेस",
+    "upload": "अपलोड",
+    "search": "खोज",
+    "searchPlaceholder": "नीति, अनुबंध, रिपोर्ट खोजें...",
+    "totalDocuments": "कुल दस्तावेज़",
+    "totalChunks": "कुल चंक्स",
+    "indexSize": "इंडेक्स आकार",
+    "filename": "फ़ाइल का नाम",
+    "status": "स्थिति",
+    "size": "आकार",
+    "uploaded": "अपलोड तिथि",
+    "noDocuments": "अभी तक कोई दस्तावेज़ नहीं। पहले फ़ाइल अपलोड करें।"
+  },
+  "reportSchedules": {
+    "title": "रिपोर्ट शेड्यूल",
+    "create": "शेड्यूल बनाएं",
+    "reportType": "रिपोर्ट प्रकार",
+    "frequency": "आवृत्ति",
+    "format": "प्रारूप",
+    "channels": "डिलीवरी चैनल",
+    "next": "अगला रन",
+    "active": "सक्रिय",
+    "paused": "रुका हुआ",
+    "noSchedules": "कोई शेड्यूल नहीं। पहले बनाएं।"
+  },
+  "settings": {
+    "title": "सेटिंग्स",
+    "fleetGovernance": "फ्लीट गवर्नेंस सीमाएं",
+    "complianceData": "अनुपालन और डेटा",
+    "apiKeys": "API कुंजियां",
+    "grantexIntegration": "Grantex एकीकरण",
+    "userManagement": "उपयोगकर्ता प्रबंधन",
+    "webhookConfiguration": "वेबहुक कॉन्फ़िगरेशन",
+    "save": "सेटिंग्स सहेजें",
+    "saving": "सहेजा जा रहा है...",
+    "saved": "सेटिंग्स सफलतापूर्वक सहेजी गईं।"
   }
 }

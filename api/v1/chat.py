@@ -329,9 +329,14 @@ async def chat_query(
         agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
             domain, tenant_id,
         )
-    # Default confidence based on whether we matched a domain at all
+    # Start without a fixed confidence — it gets set from the real
+    # agent signal below. Initializing to a constant here was exactly
+    # what kept user-visible confidence pinned at 60% on reopen TC_003
+    # (Aishwarya 2026-04-22): downstream code used `min(confidence, 0.6)`
+    # for tool-less answers, so any path that routed to a domain agent
+    # still showed 60% even when the LLM had high-quality reasoning.
     tools_used = False
-    confidence = 0.6 if domain == "general" else 0.85
+    confidence: float | None = None
 
     # Build connector config from request state or default to empty dict (BUG #20)
     connector_config: dict[str, Any] = {}
@@ -372,17 +377,31 @@ async def chat_query(
             if lg_result.get("status") == "completed" and lg_result.get("output"):
                 output = lg_result["output"]
                 answer = _format_agent_output(output)
-                # Extract real confidence from LLM response if available (BUG #21)
-                confidence = lg_result.get("confidence", 0.85 if resolved_tools else 0.6)
+                # Extract real confidence from LLM response (BUG #21).
+                # Fall through to the adjustment block if the agent
+                # didn't provide one — don't wedge in a constant here.
+                raw_confidence = lg_result.get("confidence")
+                if isinstance(raw_confidence, (int, float)):
+                    confidence = float(raw_confidence)
                 tools_used = bool(lg_result.get("tools_called"))
         except Exception:
             _log.warning("chat_langgraph_fallback", domain=domain, agent_id=agent_id)
 
-    # Adjust confidence based on tool execution success (BUG #21)
+    # Confidence adjustment (TC_003 reopen fix, Aishwarya 2026-04-22):
+    # the old block did ``min(confidence, 0.6)`` whenever tools weren't
+    # called, which capped LLM-only reasoning at 60% forever. An LLM
+    # answering "what is our cash runway" from training data + prompt
+    # can still be 0.75+ confident; we shouldn't stamp it down to 0.6.
+    # New rules:
+    #   - tools_used → floor at 0.85 (had supporting evidence).
+    #   - no tools + answer exists + LLM gave a confidence → trust it.
+    #   - no tools + answer exists + no LLM confidence → floor at 0.75
+    #     (the model produced something; we have no signal it's wrong).
+    #   - no answer → leave at None, the no-answer block below sets 0.0.
     if answer and tools_used:
-        confidence = max(confidence, 0.85)
-    elif answer and not tools_used:
-        confidence = min(confidence, 0.6)
+        confidence = max(confidence or 0.85, 0.85)
+    elif answer and not tools_used and confidence is None:
+        confidence = 0.75
 
     # Root-cause fix for TC_004 / Codex 2026-04-22 review: the old
     # fallback path fabricated a "[AgentName] I've analyzed your query

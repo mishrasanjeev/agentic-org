@@ -410,6 +410,39 @@ async def update_connector(
     return _connector_to_dict(connector)
 
 
+# ── DELETE /connectors/{conn_id} ────────────────────────────────────────────
+#
+# Uday 2026-04-22: the connectors page listed instances but offered no
+# way to remove a stale or misconfigured one. Callers were forced to
+# issue raw SQL against the DB. Expose a soft-delete (sets status to
+# "deleted") so the tool listing filters them out while preserving
+# audit history. Hard delete is intentionally not supported — a
+# deleted connector can be restored via PUT /connectors/{id}
+# (status=active).
+@router.delete("/connectors/{conn_id}", status_code=200)
+async def delete_connector(
+    conn_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Connector).where(
+                Connector.id == conn_id, Connector.tenant_id == tid
+            )
+        )
+        connector = result.scalar_one_or_none()
+        if not connector:
+            raise HTTPException(404, "Connector not found")
+        connector.status = "deleted"
+
+    return {
+        "connector_id": str(conn_id),
+        "status": "deleted",
+        "message": "Connector archived. Restore via PUT with status=active.",
+    }
+
+
 # ── GET /connectors/{conn_id}/health ─────────────────────────────────────────
 @router.get("/connectors/{conn_id}/health")
 async def connector_health(
