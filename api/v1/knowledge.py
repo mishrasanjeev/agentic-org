@@ -489,17 +489,34 @@ async def upload_document(
             },
         )
 
-    # TC_011 + Codex 2026-04-22: filename-level dedup. Caller can opt
-    # out with ?allow_duplicate=true (adds a second copy) or
-    # ?replace=true (deletes the old one first). Best-effort — if the
-    # DB lookup fails, we proceed with the upload rather than block
-    # legitimate usage.
+    # Filename-level dedup. Caller can opt out with
+    # ?allow_duplicate=true (adds a second copy) or ?replace=true
+    # (deletes the old one first).
+    #
+    # Codex 2026-04-22 release-signoff review (TC_006 residual): the
+    # old body treated any dedup-lookup failure as "no duplicate,
+    # proceed" (fail-open). That allowed a transient DB error to
+    # silently insert a second copy of an existing document. Fail-
+    # closed here: if we can't read the state, we refuse the upload
+    # and ask the caller to retry, the same way every safety-gate in
+    # CLAUDE.md is required to behave.
     if not allow_duplicate and not replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)
         except Exception as exc:
-            logger.debug("dedup_lookup_failed_soft", error=str(exc))
-            existing = None
+            logger.error("dedup_lookup_failed", filename=filename, error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "dedup_lookup_unavailable",
+                    "message": (
+                        "Could not verify whether this filename already "
+                        "exists in the knowledge base. Refusing to upload "
+                        "rather than risk silently creating a duplicate. "
+                        "Please retry in a few seconds."
+                    ),
+                },
+            ) from exc
         if existing is not None:
             raise HTTPException(
                 status_code=409,

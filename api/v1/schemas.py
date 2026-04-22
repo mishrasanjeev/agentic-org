@@ -65,6 +65,36 @@ async def list_schemas(
     )
 
 
+# ── GET /schemas/{name} ─────────────────────────────────────────────────────
+#
+# Codex 2026-04-22 release-signoff review: the Schemas UI was reading
+# hardcoded SCHEMA_DEFINITIONS from a local TS file instead of the
+# persisted backend schemas. That meant custom schemas created via
+# POST/PUT never appeared in the editor. This route lets the UI
+# resolve the latest version for a given schema name in one call.
+@router.get("/schemas/{name}")
+async def get_schema_by_name(
+    name: str,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(SchemaRegistry)
+            .where(
+                SchemaRegistry.tenant_id == tid,
+                SchemaRegistry.name == name,
+            )
+            .order_by(SchemaRegistry.created_at.desc())
+            .limit(1)
+        )
+        schema_row = result.scalar_one_or_none()
+
+    if not schema_row:
+        raise HTTPException(404, f"Schema {name!r} not found")
+    return _schema_to_dict(schema_row)
+
+
 # ── POST /schemas ────────────────────────────────────────────────────────────
 @router.post("/schemas", status_code=201)
 async def create_schema(
