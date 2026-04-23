@@ -62,11 +62,31 @@ describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
   }
 
   it("ChatPanel uses agent_id + company_id on history fetch", () => {
-    // Pins the isolation fix so a future edit that drops company_id
-    // from the history querystring fails the build instead of silently
-    // re-introducing cross-agent history leakage.
     expect(chatPanelSource).toBeTruthy();
     expect(chatPanelSource).toContain("agent_id");
     expect(chatPanelSource).toContain("company_id");
+  });
+
+  // Codex 2026-04-23 reopen: the previous test only checked the
+  // ``useTranslation`` import; it did not prove visible strings were
+  // wrapped. This stricter assertion counts ``t("...")`` call sites on
+  // Dashboard.tsx and requires at least 10 — enough that incremental
+  // regressions ("someone dropped the import back to unused") get
+  // caught. Each subsequent page-translation PR should raise the
+  // floor as it lands.
+  it("Dashboard.tsx has substantive t() coverage (>=10 call sites)", () => {
+    const source = findSource("Dashboard.tsx");
+    const matches = source.match(/\bt\(\s*["']/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("Dashboard.tsx no longer documents English-fallback policy", () => {
+    // Codex flagged the old comment "falls back to the existing
+    // English where no key is defined yet" as the product telling on
+    // itself. The fallback policy is gone; the comment is too.
+    const source = findSource("Dashboard.tsx");
+    expect(source).not.toContain(
+      "falls back to the existing English",
+    );
   });
 });
