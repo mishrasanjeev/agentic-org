@@ -106,6 +106,10 @@ env:
   AGENTICORG_LLM_FALLBACK: gemini-2.5-flash-preview-05-20     # Switch to gpt-4o-2024-11-20 when needed
   # Alembic is the schema authority. init_db() skips legacy DDL when this is true.
   AGENTICORG_DDL_MANAGED_BY_ALEMBIC: "true"
+  # Codex round-4 blocker K-E: enforce Redis-backed auth state across
+  # replicas. Without strict mode, token revocations + login-throttle
+  # counters silently fall back to per-pod memory.
+  AGENTICORG_AUTH_STATE_STRICT: "1"
   # Public app URL — used in billing callback URLs (Stripe + Plural),
   # invite emails, password-reset emails, etc. MUST match the actual
   # production hostname; a wrong value silently breaks payment redirects

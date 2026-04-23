@@ -152,6 +152,12 @@ env:
   AGENTICORG_DEFAULT_CONFIDENCE_FLOOR: "0.88"
   AGENTICORG_LLM_PRIMARY: gemini-2.5-flash
   AGENTICORG_LLM_FALLBACK: gemini-2.5-flash-preview-05-20
+  # Codex round-4 blocker K-E + 2026-04-23 prod re-verification: enforce
+  # Redis-backed auth state so token-blacklist writes/reads and the
+  # login-throttle counter are consistent across replicas. Without
+  # strict mode a revocation on replica A still validates on replica B.
+  # Enterprise multi-replica deploys must set this to "1".
+  AGENTICORG_AUTH_STATE_STRICT: "1"
   GRANTEX_BASE_URL: https://api.grantex.dev
 
 # ── Secrets from GCP Secret Manager ─────────────────────────────────────────

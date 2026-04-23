@@ -237,6 +237,55 @@ def test_k_f_billing_async_routes_wrap_sync_calls() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_k_e_strict_mode_wired_in_prod_manifests() -> None:
+    """Codex 2026-04-23 prod re-verification: the strict-mode env var
+    must be wired into the production Helm values — otherwise the code
+    fix is dormant in production.
+    """
+    for rel in ("helm/values.yaml", "helm/values-production.yaml"):
+        src = _read(rel)
+        assert "AGENTICORG_AUTH_STATE_STRICT" in src, (
+            f"{rel} must set AGENTICORG_AUTH_STATE_STRICT so the K-E "
+            "fail-closed auth state is active in prod"
+        )
+        # Must be truthy ("1" / "true" / "yes")
+        m = re.search(
+            r"AGENTICORG_AUTH_STATE_STRICT\s*:\s*\"?([^\"\n]+)\"?",
+            src,
+        )
+        assert m, f"couldn't parse strict-mode value in {rel}"
+        assert m.group(1).strip().lower() in ("1", "true", "yes"), (
+            f"{rel}: AGENTICORG_AUTH_STATE_STRICT must be truthy, got "
+            f"{m.group(1)!r}"
+        )
+
+
+def test_k_e_health_probes_are_public() -> None:
+    """Codex 2026-04-23 prod re-verification: /billing/health and
+    /knowledge/health were declared auth-free in their route files but
+    the global AuthMiddleware still required a token, so ops could not
+    call them as smoke probes. They must be in EXEMPT_PATHS.
+    """
+    src = _read("auth/middleware.py")
+    assert "/api/v1/billing/health" in src, (
+        "AuthMiddleware.EXEMPT_PATHS must include /api/v1/billing/health "
+        "so deploy smoke checks can reach it unauthenticated"
+    )
+    assert "/api/v1/knowledge/health" in src, (
+        "AuthMiddleware.EXEMPT_PATHS must include /api/v1/knowledge/health"
+    )
+
+
+def test_k_e_health_endpoint_exposes_commit_sha() -> None:
+    """/health must expose the deployed commit SHA so Codex + ops can
+    prove which commit is actually live (version alone is ambiguous).
+    """
+    src = _read("api/v1/health.py")
+    assert "_deployed_commit" in src
+    assert "AGENTICORG_GIT_SHA" in src
+    assert "\"commit\"" in src
+
+
 def test_k_g_connectors_test_endpoint_refuses_plaintext() -> None:
     """api/v1/connectors.py test path must not read Connector.auth_config."""
     src = _read("api/v1/connectors.py")
