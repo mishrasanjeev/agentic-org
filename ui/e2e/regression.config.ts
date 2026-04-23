@@ -39,9 +39,14 @@ export default defineConfig({
   timeout: 60_000,
   retries: 2,
   workers: 1, // Sequential for regression stability
+  // Codex 2026-04-22 release-signoff post-deploy e2e flagged the
+  // clash: Playwright refuses when the HTML reporter folder sits
+  // inside the test-artifact outputDir. Give each its own top-level
+  // subtree so a future artifact layout doesn't re-introduce it.
+  outputDir: "../test-results/regression-artifacts",
   reporter: [
     ["list"],
-    ["html", { open: "never", outputFolder: "../test-results/regression-report" }],
+    ["html", { open: "never", outputFolder: "../playwright-report/regression" }],
     ["json", { outputFile: "../test-results/regression-results.json" }],
   ],
   use: {
