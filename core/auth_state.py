@@ -2,7 +2,15 @@
 
 Provides atomic rate limiting, IP blocking, and token blacklisting that
 survives pod restarts and works correctly across multiple replicas.
-Falls back to in-memory state if Redis is unavailable.
+
+Fallback behavior:
+- Default (strict mode OFF): degrades to in-memory state if Redis is
+  unavailable. Acceptable for single-replica dev/local environments.
+- Strict mode (AGENTICORG_AUTH_STATE_STRICT=1): refuses to degrade —
+  raises RuntimeError on Redis failure so the caller can return 503.
+  Enterprise multi-replica deploys MUST enable strict mode; otherwise
+  a token revoked on replica A still validates on replica B, and an
+  IP blocked on replica A is free to retry on replica B.
 """
 
 from __future__ import annotations
@@ -24,6 +32,11 @@ logger = logging.getLogger(__name__)
 _redis: aioredis.Redis | None = None
 
 
+def _strict() -> bool:
+    """Is strict multi-replica auth-state enforcement enabled?"""
+    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+
+
 async def _get_redis() -> aioredis.Redis | None:
     global _redis
     if _redis is not None:
@@ -33,10 +46,31 @@ async def _get_redis() -> aioredis.Redis | None:
         _redis = aioredis.from_url(url, decode_responses=True)
         await _redis.ping()
         return _redis
-    except Exception:
-        logger.debug("auth_state: Redis unavailable, using in-memory fallback")
+    except Exception as exc:
+        if _strict():
+            logger.error(
+                "auth_state: Redis unavailable in strict mode — refusing to "
+                "degrade to in-memory fallback (%s)",
+                exc,
+            )
+            raise
+        logger.warning(
+            "auth_state: Redis unavailable, using in-memory fallback "
+            "(single-replica only; set AGENTICORG_AUTH_STATE_STRICT=1 "
+            "for multi-replica enforcement): %s",
+            exc,
+        )
         _redis = None
         return None
+
+
+def _raise_if_strict(op: str, exc: Exception | None = None) -> None:
+    """If strict mode is on, reject degraded operation."""
+    if _strict():
+        msg = f"auth_state: {op} requires Redis in strict mode"
+        if exc is not None:
+            raise RuntimeError(f"{msg}: {exc}") from exc
+        raise RuntimeError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +113,12 @@ async def record_auth_failure(ip: str) -> bool:
                 await r.setex(f"auth:blocked:{ip}", AUTH_BLOCK_DURATION, "1")
                 return True
             return False
-        except Exception:
-            logger.debug("auth_state: Redis failure tracking failed, using memory")
-    # In-memory fallback
+        except Exception as exc:
+            _raise_if_strict("record_auth_failure", exc)
+            logger.warning("auth_state: Redis failure tracking failed, using memory (%s)", exc)
+    else:
+        _raise_if_strict("record_auth_failure")
+    # In-memory fallback (non-strict only)
     now = time.time()
     _mem_failures[ip] = [t for t in _mem_failures[ip] if now - t < AUTH_FAILURE_WINDOW]
     _mem_failures[ip].append(now)
@@ -99,9 +136,13 @@ async def is_ip_blocked(ip: str) -> bool:
             val = await r.get(f"auth:blocked:{ip}")
             if val:
                 return True
-        except Exception:
-            logger.debug("auth_state: Redis block check failed, using memory")
-    # In-memory fallback
+            return False
+        except Exception as exc:
+            _raise_if_strict("is_ip_blocked", exc)
+            logger.warning("auth_state: Redis block check failed, using memory (%s)", exc)
+    else:
+        _raise_if_strict("is_ip_blocked")
+    # In-memory fallback (non-strict only)
     if ip in _mem_blocked:
         if time.time() < _mem_blocked[ip]:
             return True
@@ -116,8 +157,11 @@ async def clear_auth_failures(ip: str) -> None:
     if r:
         try:
             await r.delete(f"auth:failures:{ip}", f"auth:blocked:{ip}")
-        except Exception:
-            logger.debug("auth_state: Redis clear_failures failed")
+        except Exception as exc:
+            _raise_if_strict("clear_auth_failures", exc)
+            logger.warning("auth_state: Redis clear_failures failed (%s)", exc)
+    else:
+        _raise_if_strict("clear_auth_failures")
     _mem_failures.pop(ip, None)
     _mem_blocked.pop(ip, None)
 
@@ -156,8 +200,12 @@ async def blacklist_token(token: str) -> None:
     if r:
         try:
             await r.setex(f"auth:blacklist:{h}", TOKEN_BLACKLIST_TTL, "1")
-        except Exception:
-            logger.debug("auth_state: Redis blacklist write failed")
+            return
+        except Exception as exc:
+            _raise_if_strict("blacklist_token", exc)
+            logger.warning("auth_state: Redis blacklist write failed (%s)", exc)
+    else:
+        _raise_if_strict("blacklist_token")
 
 
 async def is_token_blacklisted(token: str) -> bool:
@@ -176,8 +224,12 @@ async def is_token_blacklisted(token: str) -> bool:
             if val:
                 _mem_blacklist[h] = time.time() + TOKEN_BLACKLIST_TTL
                 return True
-        except Exception:
-            logger.debug("auth_state: Redis blacklist read failed")
+            return False
+        except Exception as exc:
+            _raise_if_strict("is_token_blacklisted", exc)
+            logger.warning("auth_state: Redis blacklist read failed (%s)", exc)
+            return False
+    _raise_if_strict("is_token_blacklisted")
     return False
 
 
@@ -196,9 +248,12 @@ async def check_signup_rate(ip: str) -> bool:
             if count == 1:
                 await r.expire(key, SIGNUP_WINDOW)
             return count > SIGNUP_MAX_PER_HOUR
-        except Exception:
-            logger.debug("auth_state: Redis signup rate check failed, using memory")
-    # In-memory fallback
+        except Exception as exc:
+            _raise_if_strict("check_signup_rate", exc)
+            logger.warning("auth_state: Redis signup rate check failed, using memory (%s)", exc)
+    else:
+        _raise_if_strict("check_signup_rate")
+    # In-memory fallback (non-strict only)
     now = time.time()
     _mem_signup[ip] = [t for t in _mem_signup[ip] if now - t < SIGNUP_WINDOW]
     if len(_mem_signup[ip]) >= SIGNUP_MAX_PER_HOUR:

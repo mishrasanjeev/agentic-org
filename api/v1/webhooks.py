@@ -36,6 +36,35 @@ def _get_redis():
     return aioredis.from_url(url, decode_responses=True)
 
 
+def _event_matches_criteria(
+    event_fields: dict[str, Any],
+    match_criteria: dict[str, Any],
+) -> bool:
+    """Return True iff every key in ``match_criteria`` is present and
+    equal (case-insensitive string compare) on ``event_fields``.
+
+    Codex 2026-04-23 re-verification blocker B: the listener stores
+    match criteria (e.g. ``{"campaign_id": "abc", "email": "u@x.com"}``)
+    but the webhook resume path was firing on any event of the
+    matching type — so every recipient who clicked triggered every
+    campaign's wait step. This helper centralises the equality check;
+    tests pin the expected boolean surface.
+
+    An empty ``match_criteria`` matches every event (back-compat: some
+    older workflows are declared without a match and should still resume
+    on the first event of the right type).
+    """
+    if not match_criteria:
+        return True
+    for k, expected in match_criteria.items():
+        actual = event_fields.get(k)
+        if actual is None:
+            return False
+        if str(actual).strip().lower() != str(expected).strip().lower():
+            return False
+    return True
+
+
 async def _store_email_event(
     campaign_id: str,
     email: str,
@@ -43,7 +72,15 @@ async def _store_email_event(
     timestamp: str | int,
     extra: dict[str, Any] | None = None,
 ) -> None:
-    """Store event in Redis and check for waiting workflows."""
+    """Store event in Redis and check for waiting workflows.
+
+    Codex 2026-04-23 re-verification blocker B: resume now honours
+    the ``match`` criteria the listener stored — a click event on
+    campaign A must not resume a workflow that was waiting for a
+    click on campaign B.
+    """
+    import json as _json
+
     r = _get_redis()
     try:
         # Store in hash: email_events:{campaign_id}:{email}
@@ -57,7 +94,15 @@ async def _store_email_event(
                 mapping[k] = str(v)
         await r.hset(key, mapping=mapping)
 
-        # Check for workflow event waits
+        event_fields: dict[str, Any] = {
+            "campaign_id": campaign_id,
+            "email": email,
+            "event_type": event_type,
+            "timestamp": timestamp,
+            **(extra or {}),
+        }
+
+        # Check for workflow event waits.
         # Keys look like: wfwait_event:email.{event}:{run_id}:{step_id}
         pattern = f"wfwait_event:email.{event_type}:*"
         cursor = 0
@@ -65,22 +110,55 @@ async def _store_email_event(
             cursor, keys = await r.scan(cursor=cursor, match=pattern, count=100)
             for wait_key in keys:
                 parts = wait_key.split(":")
-                if len(parts) >= 4:
-                    run_id = parts[2]
-                    step_id = parts[3]
-                    logger.info(
-                        "workflow_event_match",
+                if len(parts) < 4:
+                    continue
+                run_id = parts[2]
+                step_id = parts[3]
+
+                # Load the listener payload and honour the stored
+                # match criteria before firing. The criteria were
+                # stored by workflows/step_types.py::_execute_wait_for_event.
+                match_criteria: dict[str, Any] = {}
+                try:
+                    raw_payload = await r.get(wait_key)
+                    if raw_payload:
+                        payload = _json.loads(raw_payload)
+                        match_criteria = payload.get("match", {}) or {}
+                except Exception as exc:
+                    logger.warning(
+                        "workflow_event_listener_payload_unreadable",
+                        wait_key=wait_key,
+                        error=str(exc),
+                    )
+                    # Unreadable payload: do NOT fire — refusing to
+                    # resume a workflow we can't prove matches is the
+                    # safer side of the fail-closed line.
+                    continue
+
+                if not _event_matches_criteria(event_fields, match_criteria):
+                    logger.debug(
+                        "workflow_event_criteria_mismatch",
                         event_type=event_type,
+                        match=match_criteria,
                         email=email,
                         run_id=run_id,
                         step_id=step_id,
                     )
-                    # Trigger workflow resumption via Celery
-                    from core.tasks.workflow_tasks import resume_workflow_wait
+                    continue
 
-                    resume_workflow_wait.delay(run_id, step_id)
-                    # Remove the wait key so it only fires once
-                    await r.delete(wait_key)
+                logger.info(
+                    "workflow_event_match",
+                    event_type=event_type,
+                    email=email,
+                    run_id=run_id,
+                    step_id=step_id,
+                )
+                # Trigger workflow resumption via Celery
+                from core.tasks.workflow_tasks import resume_workflow_wait
+
+                resume_workflow_wait.delay(run_id, step_id)
+                # Remove the wait key so it only fires once
+                await r.delete(wait_key)
             if cursor == 0:
                 break
     finally:

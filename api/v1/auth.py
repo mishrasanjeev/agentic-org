@@ -211,8 +211,18 @@ _LOGIN_WINDOW = 60  # 1 minute
 _throttle_redis = None
 
 
+def _auth_state_strict() -> bool:
+    """Is strict multi-replica auth-state enforcement enabled?"""
+    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+
+
 async def _get_throttle_redis():
-    """Lazy-init async Redis client for login throttling."""
+    """Lazy-init async Redis client for login throttling.
+
+    Strict mode (AGENTICORG_AUTH_STATE_STRICT=1): raise if Redis is
+    unreachable — the login throttle MUST be cross-replica consistent
+    in production, otherwise an attacker spreads attempts across pods.
+    """
     global _throttle_redis
     if _throttle_redis is not None:
         return _throttle_redis
@@ -223,13 +233,27 @@ async def _get_throttle_redis():
         _throttle_redis = aioredis.from_url(url, decode_responses=True)
         await _throttle_redis.ping()
         return _throttle_redis
-    except Exception:
+    except Exception as exc:
+        if _auth_state_strict():
+            logger.error(
+                "Login throttle requires Redis in strict mode — refusing "
+                "to degrade to in-memory fallback (%s)",
+                exc,
+            )
+            raise
+        logger.warning(
+            "Login throttle Redis unavailable, using in-memory fallback "
+            "(single-replica only; set AGENTICORG_AUTH_STATE_STRICT=1 "
+            "for multi-replica enforcement): %s",
+            exc,
+        )
         _throttle_redis = None
         return None
 
 
 async def _check_rate_limit(client_ip: str) -> bool:
     """Check and increment login rate limit. Returns True if blocked."""
+    strict = _auth_state_strict()
     redis = await _get_throttle_redis()
     if redis:
         try:
@@ -238,9 +262,18 @@ async def _check_rate_limit(client_ip: str) -> bool:
             if count == 1:
                 await redis.expire(key, _LOGIN_WINDOW)
             return count > _LOGIN_MAX
-        except Exception:
-            logger.debug("Redis throttle unavailable, using in-memory fallback")
-    # In-memory fallback
+        except Exception as exc:
+            if strict:
+                raise RuntimeError(
+                    f"Login throttle Redis read/write failed in strict mode: {exc}"
+                ) from exc
+            logger.warning("Redis throttle unavailable, using in-memory fallback (%s)", exc)
+    elif strict:
+        raise RuntimeError(
+            "Login throttle requires Redis in strict mode "
+            "(AGENTICORG_AUTH_STATE_STRICT=1)"
+        )
+    # In-memory fallback (non-strict only)
     now = time.time()
     _login_attempts[client_ip] = [
         t for t in _login_attempts[client_ip] if now - t < _LOGIN_WINDOW

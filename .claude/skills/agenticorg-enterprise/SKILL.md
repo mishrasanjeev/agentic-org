@@ -1,17 +1,30 @@
 ---
 name: agenticorg-enterprise
-description: Use this skill for any meaningful code change in the AgenticOrg repository when the work must meet enterprise-grade standards. Apply it for backend API changes, auth or tenant isolation work, billing, connectors, secrets, migrations, async runtime behavior, frontend auth flows, worker or deployment changes, and any task where correctness, security, and production safety matter more than speed. This skill is especially important when touching FastAPI routes, request authorization, multi-tenant data access, Redis or Celery, Alembic migrations, health checks, metrics, or React session handling.
+description: Use this skill for enterprise hardening work in the AgenticOrg repository: whole-codebase audits, release sign-off, architecture review, and any meaningful code change that must meet enterprise-grade standards. Apply it for backend API changes, auth or tenant isolation work, billing, connectors, secrets, workflows, migrations, async runtime behavior, frontend auth flows, worker or deployment changes, and any task where correctness, security, scale, and production safety matter more than speed. This skill is especially important when touching FastAPI routes, request authorization, multi-tenant data access, Redis or Celery, workflow orchestration, Alembic migrations, health checks, metrics, or React session handling.
 ---
 
 # AgenticOrg Enterprise
 
-This skill is the project-specific implementation guide for shipping safe changes in AgenticOrg. Use it to keep diffs small, preserve enterprise controls, and verify the actual risk boundary you touched.
+This skill is the project-specific implementation guide for shipping safe changes
+in AgenticOrg. Use it to keep diffs small, preserve enterprise controls, and
+verify the actual risk boundary you touched.
+
+It is also the mandatory audit lens for enterprise-grade reviews in this repo.
+If the task is a whole-codebase scan, enterprise hardening review, architecture
+safety review, or release sign-off, this skill is not optional. If the task is
+bug-sheet triage or reopen analysis, use this skill together with
+`agenticorg-bug-fix-fail-closed`.
 
 ## Use This Skill When
 
 - The change touches `api/`, `auth/`, `core/`, `migrations/`, `ui/`, `helm/`, `docker-compose.yml`, or `.github/workflows/`.
 - The request affects auth, billing, org management, approvals, branding, SSO, invoices, connectors, tool execution, workers, or deployment behavior.
 - The change could create a tenant-isolation, secret-handling, operability, or release-safety regression.
+- Someone asks for enterprise hardening, production readiness, scale review,
+  release sign-off, or a brutally honest audit of the whole product.
+- The work touches workflow orchestration, event-driven execution, async runtime
+  paths, browser session handling, startup/runtime DB mutation, or any control
+  plane used by multiple tenants.
 
 ## Core Workflow
 
@@ -27,6 +40,80 @@ This skill is the project-specific implementation guide for shipping safe change
 4. Implement without broad refactors.
 5. Verify the exact boundary you changed.
 6. Report what changed, what was verified, and any residual risk.
+
+## Audit Workflow For Enterprise Reviews
+
+When the user asks for a deep review, release sign-off, or enterprise
+hardening audit, do all of the following before issuing a verdict:
+
+1. Scan the repo for the known enterprise failure classes in this skill.
+2. Inspect the real runtime path, not just the obvious route or component.
+3. Compare sibling implementations for the same control surface.
+4. Distinguish:
+   - proven functional bugs,
+   - scale and operability defects,
+   - poor coding patterns with real regression risk.
+5. Run the strongest feasible verification:
+   - backend lint and security checks,
+   - frontend lint, typecheck, and build,
+   - targeted tests,
+   - and the full suite if the user wants true release sign-off.
+6. Report findings first, ordered by severity, with file references.
+7. Refuse release sign-off if the evidence does not clear the relevant gate.
+
+Code that "looks reasonable" is not evidence for enterprise sign-off.
+
+## Stop-Ship Enterprise Gates
+
+Do not grant enterprise release sign-off when any of these remain true:
+
+- Workflow execution and workflow resume paths persist different state schemas.
+- Event-driven workflows store match or filter criteria but the consumer
+  resumes by event type only.
+- Long-running workflows execute in request-process background tasks instead of
+  a durable worker queue.
+- Browser auth still depends primarily on script-readable bearer tokens in
+  `localStorage` instead of a hardened cookie/session model.
+- Token revocation, auth throttling, or other security controls can silently
+  degrade to process-memory behavior in multi-pod production paths.
+- Async request handlers or webhooks call synchronous Redis, HTTP, or DB
+  helpers on the hot path.
+- Runtime connector execution and connector test flows read credentials from
+  different stores or with different fallback rules.
+- Startup-time DDL or seed logic is still being treated as a primary schema
+  management mechanism instead of a compatibility fallback.
+- The audit depends only on source reading for auth, billing, workflow,
+  connector, migration, or deployment-sensitive flows.
+- Full-suite verification is incomplete and the user is asking for true release
+  sign-off on the product rather than a narrow change.
+
+## Known Failure Classes To Check First
+
+These are recurring mistakes this repo must aggressively reject:
+
+1. **Split-brain workflow state**: one path writes `step_results` /
+   `waiting_step_id`, another reads `steps` / `current_step`.
+2. **Over-broad event consumption**: listener registration stores a filter,
+   webhook or event consumer ignores it.
+3. **Non-durable orchestration**: important jobs run in FastAPI
+   `BackgroundTasks` instead of Celery or another durable executor.
+4. **Primary browser auth in localStorage**: `token` or `user` in localStorage
+   remains the main session source after a cookie migration claim.
+5. **Security fallback to process memory**: rate limits, blacklists, revocation,
+   or tenant control state fall back to in-memory dicts in code that is meant
+   to work across replicas.
+6. **Sync I/O inside async handlers**: synchronous Redis, HTTP, or DB clients
+   used from async API routes, billing callbacks, or high-volume webhooks.
+7. **Runtime and test parity drift**: "test connection" or admin probe
+   endpoints use different state, secrets, or validators than real execution.
+8. **Startup DDL as governance**: `init_db()` or app startup owns schema
+   evolution instead of Alembic.
+9. **Broad exception swallowing on control paths**: `except Exception: pass`
+   or silent downgrade logic in auth, billing, workflow, connector, or
+   persistence layers.
+10. **Client state hacks instead of proper context propagation**:
+    `window.location.reload()`, localStorage-only company scoping, or similar
+    shortcuts in core product flows.
 
 ## Hard Rules
 
@@ -68,6 +155,11 @@ This skill is the project-specific implementation guide for shipping safe change
 - Worker and beat entrypoints in code, Compose, Helm, and CI must point to real modules.
 - Do not keep auth throttling, temporary session state, or token revocation only in process memory when the behavior must survive restarts or scale-out.
 - In this repo specifically, avoid `core.billing.usage_tracker._get_redis()` inside async API handlers such as SSO or billing cancellation paths.
+- For long-running product workflows, request-process `BackgroundTasks` are not
+  a durable orchestration layer. Use Celery or another persistent execution
+  model for anything that must survive restarts, retries, or scale-out.
+- Any event-driven resume path must prove that the producer and consumer agree
+  on the exact persisted state schema and the same matching semantics.
 
 ### Frontend/API contract discipline
 
@@ -75,6 +167,12 @@ This skill is the project-specific implementation guide for shipping safe change
 - Dashboard and catalog UIs must treat backend responses as the source of truth for KPIs, labels, and collections. Do not hardcode firm names, billing dates, revenue math, or placeholder portfolio stats once an API exists.
 - When normalizing backend data for UI use, keep the mapping narrow and deterministic. Stable IDs must come from server fields such as `id` or `name`, not array position.
 - If a page can show `No data yet`, verify that state against a non-empty live or seeded payload before considering the page complete.
+- Do not call a browser auth flow "cookie-hardened" while shared API helpers,
+  auth context, or SSO callbacks still read or write bearer tokens from
+  localStorage as the primary path.
+- `window.location.reload()` is a warning sign in core product flows. Treat it
+  as a temporary workaround that needs explicit justification, not a default
+  state propagation mechanism.
 
 ### Configuration and env vars
 
@@ -216,6 +314,9 @@ These are recurring CI failure modes from the April 2026 enterprise program. Che
 - Verify negative cases, not only happy paths.
 - Confirm that tenant A cannot affect tenant B.
 - Confirm non-admin users cannot perform admin actions.
+- If the task is release sign-off or enterprise audit, do not stop at targeted
+  tests. Run the strongest end-to-end or full-suite signal available and say
+  explicitly when it is missing.
 
 ### Migrations and persistence
 
@@ -234,6 +335,20 @@ These are recurring CI failure modes from the April 2026 enterprise program. Che
 
 - Verify the referenced command or module actually exists in the repo.
 - If one runtime contract changes, update every manifest that depends on it.
+
+## Output Contract For Enterprise Audits
+
+For enterprise reviews and sign-off requests, the output must include:
+
+- explicit verdict: `sign-off granted` or `sign-off refused`;
+- findings first, ordered by severity;
+- file references for each blocker;
+- what was verified versus what remains unverified;
+- whether each problem is a functional bug, scale-hardening defect, or poor
+  coding pattern with real operational risk.
+
+Do not hide behind soft language such as "mostly fine", "looks good overall",
+or "probably shippable". If a stop-ship gate is still open, say so directly.
 
 ## Practical Commands
 
