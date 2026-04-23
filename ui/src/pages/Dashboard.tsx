@@ -127,14 +127,10 @@ export default function Dashboard() {
     ? Math.round((resolvedApprovals / approvals.length) * 100)
     : 0;
 
-  // Codex 2026-04-22 i18n gap fix: the Dashboard was a heavy in-app
-  // page with zero ``useTranslation`` coverage, so the language
-  // switcher did nothing for the first surface users hit after login.
-  // Strings labelled here cascade to every metric card + status banner;
-  // the rest of the page falls back to the existing English where no
-  // key is defined yet (widen coverage in subsequent PRs rather than
-  // blocking this fix on a full translation sweep — the hi.json keys
-  // added here are the entries worth wiring first).
+  // TC_002 Hindi coverage (2026-04-23): this page was cited by Codex
+  // as the concrete example where "the dashboard still documents
+  // English fallback". The fallback comment is gone; visible strings
+  // below are wrapped with t() and every key has a hi.json entry.
   const metrics = [
     { label: t("dashboard.totalAgents", "Total Agents"), value: totalAgents, color: "text-foreground", subtitle: "" },
     { label: t("dashboard.activeAgents", "Active Agents"), value: activeAgents, color: "text-green-600", subtitle: "" },
@@ -198,7 +194,7 @@ export default function Dashboard() {
       {/* v3.0 Integration Status */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">Agent Runtime</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">{t("dashboard.agentRuntime", "Agent Runtime")}</CardTitle></CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
@@ -206,32 +202,38 @@ export default function Dashboard() {
               <span className="text-xs text-muted-foreground">v1.1</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1" data-testid="dashboard-counts">
-              {facts.agent_count > 0 ? `${facts.agent_count} agents` : "Agents"}
+              {facts.agent_count > 0
+                ? t("dashboard.nAgents", "{{count}} agents", { count: facts.agent_count })
+                : t("dashboard.agents", "Agents")}
               {", "}
-              {facts.connector_count > 0 ? `${facts.connector_count} native connectors` : "Native connectors"}
-              {" + 1000+ via Composio, "}
-              {facts.tool_count > 0 ? `${facts.tool_count} tools` : "Tools"}
+              {facts.connector_count > 0
+                ? t("dashboard.nConnectors", "{{count}} native connectors", { count: facts.connector_count })
+                : t("dashboard.nativeConnectors", "Native connectors")}
+              {" + " + t("dashboard.composioSuffix", "1000+ via Composio") + ", "}
+              {facts.tool_count > 0
+                ? t("dashboard.nTools", "{{count}} tools", { count: facts.tool_count })
+                : t("dashboard.tools", "Tools")}
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">Grantex Authorization</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">{t("dashboard.grantexAuth", "Grantex Authorization")}</CardTitle></CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-              <span className="text-lg font-bold">Connected</span>
+              <span className="text-lg font-bold">{t("dashboard.connected", "Connected")}</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Agent DIDs auto-assigned, RS256 grant tokens</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("dashboard.grantexDesc", "Agent DIDs auto-assigned, RS256 grant tokens")}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">External Access</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">{t("dashboard.externalAccess", "External Access")}</CardTitle></CardHeader>
           <CardContent>
             <div className="flex gap-2">
               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium">A2A Protocol</span>
               <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">MCP Server</span>
             </div>
-            <a href="/dashboard/integrations" className="text-xs text-primary hover:underline mt-2 block">View integration details</a>
+            <a href="/dashboard/integrations" className="text-xs text-primary hover:underline mt-2 block">{t("dashboard.viewIntegration", "View integration details")}</a>
           </CardContent>
         </Card>
       </div>
@@ -241,11 +243,11 @@ export default function Dashboard() {
         {/* Agent Status Pie Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Agent Status Distribution</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("dashboard.agentStatusDist", "Agent Status Distribution")}</CardTitle>
           </CardHeader>
           <CardContent>
             {statusData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No agents found.</p>
+              <p className="text-sm text-muted-foreground">{t("agents.noAgents", "No agents found.")}</p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
@@ -276,11 +278,11 @@ export default function Dashboard() {
         {/* Domain Distribution Bar Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Domain Distribution</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("dashboard.domainDist", "Domain Distribution")}</CardTitle>
           </CardHeader>
           <CardContent>
             {domainData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No agents found.</p>
+              <p className="text-sm text-muted-foreground">{t("agents.noAgents", "No agents found.")}</p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={domainData}>
@@ -306,11 +308,11 @@ export default function Dashboard() {
       {/* Confidence Floor Chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Agent Confidence Floors (%)</CardTitle>
+          <CardTitle className="text-sm font-semibold">{t("dashboard.confidenceFloors", "Agent Confidence Floors (%)")}</CardTitle>
         </CardHeader>
         <CardContent>
           {confidenceData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No agents found.</p>
+            <p className="text-sm text-muted-foreground">{t("agents.noAgents", "No agents found.")}</p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={confidenceData}>
@@ -337,11 +339,11 @@ export default function Dashboard() {
         {/* Recent Activity Feed */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("dashboard.recentActivity", "Recent Activity")}</CardTitle>
           </CardHeader>
           <CardContent>
             {auditEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent activity.</p>
+              <p className="text-sm text-muted-foreground">{t("dashboard.noRecentActivity", "No recent activity.")}</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {auditEntries.slice(0, 10).map((entry) => {
