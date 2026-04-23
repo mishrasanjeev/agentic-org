@@ -72,7 +72,13 @@ class Agent(BaseModel):
     shadow_comparison_agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True
     )
-    shadow_min_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    # Uday 2026-04-23 Bug 1: default target was 20 samples which
+    # stretched shadow-mode validation into a 20-click / one-bulk-batch
+    # flow. A quick reviewable batch is better for day-to-day QA: 10
+    # samples gives a representative accuracy signal without blocking
+    # the user on a long run. Existing rows keep their admin-set value;
+    # only new agents inherit the new default (no migration needed).
+    shadow_min_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     # BUG-012 (Ramesh 2026-04-20): default floor was 0.950 — unrealistic
     # for LLM-driven agents whose per-task confidence typically lands in
     # the 0.70-0.85 band even on clean runs. A 95% average is effectively

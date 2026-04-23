@@ -18,8 +18,14 @@ const AUTH_TYPE_FIELDS: Record<string, { key: string; label: string; placeholder
     { key: "refresh_token", label: "Refresh Token", placeholder: "Enter refresh token (optional)" },
   ],
   basic: [
-    { key: "api_key", label: "Username", placeholder: "Enter username" },
-    { key: "api_secret", label: "Password", placeholder: "Enter password" },
+    // TC_008 (Aishwarya 2026-04-23): basic-auth creates were landing
+    // username/password into api_key/api_secret keys, but the native
+    // connector classes (e.g. connectors/ops/servicenow.py,
+    // connectors/marketing/salesforce.py) read config["username"] /
+    // config["password"] — so credentials saved via Create never made
+    // it to the connector. Use the keys the connectors actually read.
+    { key: "username", label: "Username", placeholder: "Enter username" },
+    { key: "password", label: "Password", placeholder: "Enter password" },
   ],
   bolt_bot_token: [
     { key: "api_key", label: "Bot Token", placeholder: "xoxb-..." },

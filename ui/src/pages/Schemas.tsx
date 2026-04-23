@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import SchemaEditor from "@/components/SchemaEditor";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 
 interface SchemaEntry {
   name: string;
@@ -234,6 +234,19 @@ export default function Schemas() {
   // backend returns 404 (platform-default schemas, for demos).
   const [editorSchema, setEditorSchema] = useState<object | null>(null);
 
+  // TC_003 / TC_004 (Aishwarya 2026-04-23): the page rendered a
+  // SchemaEditor but never exposed a Save/Create button, so the UI
+  // was view-only — users couldn't actually persist a new schema or
+  // an edit. Add an explicit form (name / version / description) and
+  // Save/Create actions that call POST or PUT /schemas.
+  const [editorJson, setEditorJson] = useState<string>("");
+  const [formName, setFormName] = useState<string>("");
+  const [formVersion, setFormVersion] = useState<string>("1");
+  const [formDescription, setFormDescription] = useState<string>("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState<boolean>(false);
+
   useEffect(() => {
     fetchSchemas();
   }, []);
@@ -241,6 +254,10 @@ export default function Schemas() {
   useEffect(() => {
     if (!selectedSchema) {
       setEditorSchema(null);
+      setFormName("");
+      setFormVersion("1");
+      setFormDescription("");
+      setEditorJson("");
       return;
     }
     (async () => {
@@ -248,6 +265,10 @@ export default function Schemas() {
         const { data } = await api.get(`/schemas/${encodeURIComponent(selectedSchema)}`);
         if (data && typeof data === "object" && data.json_schema) {
           setEditorSchema(data.json_schema as object);
+          setFormName(data.name || selectedSchema);
+          setFormVersion(data.version || "1");
+          setFormDescription(data.description || "");
+          setEditorJson(JSON.stringify(data.json_schema, null, 2));
           return;
         }
       } catch {
@@ -255,9 +276,95 @@ export default function Schemas() {
       }
       // Backend didn't have this schema — fall back to the local
       // SCHEMA_DEFINITIONS demo shape so the editor still renders.
-      setEditorSchema(SCHEMA_DEFINITIONS[selectedSchema] ?? null);
+      const fallback = SCHEMA_DEFINITIONS[selectedSchema] ?? null;
+      setEditorSchema(fallback);
+      setFormName(selectedSchema);
+      setFormVersion("1");
+      setFormDescription("");
+      setEditorJson(fallback ? JSON.stringify(fallback, null, 2) : "{}");
     })();
   }, [selectedSchema]);
+
+  // TC_003 (Aishwarya 2026-04-23): when the user clicks "Create
+  // Schema" we must prepare a blank editor with initial JSON so the
+  // SchemaEditor onChange is non-empty and the Create button can
+  // resolve what to POST.
+  useEffect(() => {
+    if (showEditor && !selectedSchema) {
+      const blank = {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        title: "NewSchema",
+        type: "object",
+        required: [],
+        properties: {},
+      };
+      setEditorJson(JSON.stringify(blank, null, 2));
+      setFormName("");
+      setFormVersion("1");
+      setFormDescription("");
+      setFormError(null);
+      setFormNotice(null);
+    }
+  }, [showEditor, selectedSchema]);
+
+  async function handleSaveSchema() {
+    setFormError(null);
+    setFormNotice(null);
+
+    const trimmedName = formName.trim();
+    if (!trimmedName) {
+      setFormError("Schema name is required.");
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(editorJson || "{}");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Invalid JSON";
+      setFormError(`Invalid JSON: ${msg}`);
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      setFormError("Schema JSON must be an object.");
+      return;
+    }
+
+    const payload = {
+      name: trimmedName,
+      version: (formVersion || "1").trim() || "1",
+      description: formDescription.trim() || null,
+      json_schema: parsed,
+      is_default: false,
+    };
+
+    setSaving(true);
+    try {
+      if (selectedSchema) {
+        // Editing an existing schema → PUT /schemas/{name}
+        const { data } = await api.put(
+          `/schemas/${encodeURIComponent(selectedSchema)}`,
+          payload,
+        );
+        setFormNotice(
+          data?.created
+            ? "New version created."
+            : "Schema updated.",
+        );
+      } else {
+        // Creating a new schema → POST /schemas
+        await api.post("/schemas", payload);
+        setFormNotice("Schema created.");
+      }
+      await fetchSchemas();
+      setShowEditor(false);
+      setSelectedSchema(null);
+    } catch (e: unknown) {
+      setFormError(extractApiError(e, "Failed to save schema."));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function fetchSchemas() {
     setLoading(true);
@@ -333,11 +440,96 @@ export default function Schemas() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>{selectedSchema ? `Edit: ${selectedSchema}` : "New Schema"}</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => { setShowEditor(false); setSelectedSchema(null); }}>Close</Button>
+              <Button variant="outline" size="sm" onClick={() => { setShowEditor(false); setSelectedSchema(null); setFormError(null); setFormNotice(null); }}>Close</Button>
             </div>
           </CardHeader>
-          <CardContent>
-            <SchemaEditor schema={selectedSchema ? (editorSchema ?? SCHEMA_DEFINITIONS[selectedSchema]) : { $schema: "https://json-schema.org/draft/2020-12/schema", title: "NewSchema", type: "object", required: [], properties: {} }} />
+          <CardContent className="space-y-3">
+            {/* TC_003/TC_004 (Aishwarya 2026-04-23): name + version +
+                description form fields and an explicit Save/Create
+                button. Without these, the editor rendered but the
+                user had no way to persist their changes. */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="schema-name">
+                  Schema name
+                </label>
+                <input
+                  id="schema-name"
+                  type="text"
+                  className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="e.g. InvoiceV2"
+                  disabled={!!selectedSchema}
+                  aria-label="Schema name"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="schema-version">
+                  Version
+                </label>
+                <input
+                  id="schema-version"
+                  type="text"
+                  className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  value={formVersion}
+                  onChange={(e) => setFormVersion(e.target.value)}
+                  placeholder="1"
+                  aria-label="Schema version"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="schema-description">
+                  Description (optional)
+                </label>
+                <input
+                  id="schema-description"
+                  type="text"
+                  className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder="Short summary"
+                  aria-label="Schema description"
+                />
+              </div>
+            </div>
+
+            <SchemaEditor
+              schema={selectedSchema ? (editorSchema ?? SCHEMA_DEFINITIONS[selectedSchema]) : { $schema: "https://json-schema.org/draft/2020-12/schema", title: "NewSchema", type: "object", required: [], properties: {} }}
+              onChange={(v) => setEditorJson(v)}
+            />
+
+            {formError && (
+              <p className="text-sm text-red-600" role="alert" data-testid="schema-form-error">
+                {formError}
+              </p>
+            )}
+            {formNotice && (
+              <p className="text-sm text-emerald-700" role="status" data-testid="schema-form-notice">
+                {formNotice}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSaveSchema}
+                disabled={saving}
+                data-testid="schema-save-button"
+              >
+                {saving
+                  ? "Saving…"
+                  : selectedSchema
+                  ? "Save"
+                  : "Create"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => { setShowEditor(false); setSelectedSchema(null); setFormError(null); setFormNotice(null); }}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

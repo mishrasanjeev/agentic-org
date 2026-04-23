@@ -253,16 +253,22 @@ export default function Connectors() {
             </select>
           </div>
 
+          {/* TC_005 (Aishwarya 2026-04-23): the three action buttons
+              (Edit / Health Check / Archive) were absolutely
+              positioned at bottom-right of each card, which caused
+              them to overlap the card content (category/auth/rate
+              row) at 100% zoom and on narrower viewports. Render
+              them in a dedicated flex row below the card. */}
           {loading ? (
             <p className="text-muted-foreground">Loading connectors...</p>
           ) : filtered.length === 0 ? (
             <p className="text-muted-foreground">No connectors found.</p>
           ) : (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((connector) => (
-                <div key={connector.id} className="relative">
+                <div key={connector.id} className="flex flex-col gap-2">
                   <ConnectorCard connector={connector} />
-                  <div className="absolute bottom-3 right-3 flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -134,6 +134,9 @@ export default function KnowledgeBase() {
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<string[]>([]);
+  // TC_002 (Aishwarya 2026-04-23): surface real backend errors to the user
+  // instead of a blanket "API offline" line.
+  const [searchError, setSearchError] = useState<string | null>(null);
   // Modal state for the duplicate-file decision flow.
   const [dupPrompt, setDupPrompt] = useState<{
     filename: string;
@@ -298,11 +301,26 @@ export default function KnowledgeBase() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
+    setSearchError(null);
     try {
       const res = await api.post("/knowledge/search", { query: searchQuery });
-      setSearchResults(Array.isArray(res.data?.results) ? res.data.results : []);
-    } catch {
-      setSearchResults(["(Search unavailable — API offline. Results will appear once the backend is running.)"]);
+      const results = Array.isArray(res.data?.results) ? res.data.results : [];
+      setSearchResults(results);
+      // TC_002 (Aishwarya 2026-04-23): when the backend returns zero
+      // results, show a dedicated empty state — not the previous
+      // "API offline" line, which misled testers into filing bugs
+      // against a working search.
+      if (results.length === 0) {
+        setSearchError(t("knowledge.search.noResults", "No matching chunks in the knowledge base for this query."));
+      }
+    } catch (e) {
+      // TC_002 (Aishwarya 2026-04-23): the bare catch previously
+      // showed "(Search unavailable — API offline...)" for ANY error,
+      // which is why the tester filed "Something went wrong". Surface
+      // the backend's structured error detail so testers and operators
+      // see what actually failed.
+      setSearchResults([]);
+      setSearchError(extractApiError(e, t("knowledge.search.failed", "Search failed — please try again.")));
     }
   };
 
@@ -414,6 +432,16 @@ export default function KnowledgeBase() {
           {searchResults.map((r, i) => (
             <p key={i} className="text-sm text-muted-foreground">{r}</p>
           ))}
+        </div>
+      )}
+      {searchError && searchResults.length === 0 && (
+        <div
+          className="border border-amber-200 bg-amber-50 text-amber-900 rounded-lg p-3 text-sm"
+          role="alert"
+          aria-live="polite"
+          data-testid="kb-search-error"
+        >
+          {searchError}
         </div>
       )}
 
