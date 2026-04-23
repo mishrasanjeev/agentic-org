@@ -189,16 +189,23 @@ class TestEvalsEndpoints:
         assert resp == _SAMPLE_SCORECARD
 
     @pytest.mark.asyncio
-    async def test_get_evals_file_not_found(self, tmp_path):
-        from fastapi import HTTPException
-
+    async def test_get_evals_file_not_found_returns_baseline(self, tmp_path):
+        """Post-2026-04-23 contract: /api/v1/evals serves a baseline
+        scorecard when evals/scorecard.json is missing instead of
+        404'ing. The old behaviour blanked the public /evals page and
+        tripped the evals-thorough e2e smoke."""
         from api.v1.evals import get_evals
 
         missing = tmp_path / "no_such_file.json"
         with patch("api.v1.evals._SCORECARD_PATH", missing):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_evals()
-            assert exc_info.value.status_code == 404
+            result = await get_evals()
+
+        assert result["_is_baseline"] is True
+        assert "platform_metrics" in result
+        pm = result["platform_metrics"]
+        # The UI reads these four fields to render the "%" metrics.
+        for key in ("stp_rate", "hitl_rate", "mean_confidence", "uptime_sla"):
+            assert 0 < float(pm[key]) <= 1
 
     @pytest.mark.asyncio
     async def test_get_agent_evals_happy(self, tmp_path):
@@ -2291,16 +2298,16 @@ class TestLoadScorecard:
 
         assert data == {"test": True}
 
-    def test_load_scorecard_missing_file(self, tmp_path):
-        from fastapi import HTTPException
-
+    def test_load_scorecard_missing_file_returns_baseline(self, tmp_path):
+        """Post-2026-04-23: _load_scorecard returns a labeled baseline
+        when the file is missing. _require_scorecard keeps the 404."""
         from api.v1.evals import _load_scorecard
 
         missing = tmp_path / "nope.json"
         with patch("api.v1.evals._SCORECARD_PATH", missing):
-            with pytest.raises(HTTPException) as exc_info:
-                _load_scorecard()
-            assert exc_info.value.status_code == 404
+            result = _load_scorecard()
+
+        assert result["_is_baseline"] is True
 
     def test_load_scorecard_reads_latest(self, tmp_path):
         from api.v1.evals import _load_scorecard

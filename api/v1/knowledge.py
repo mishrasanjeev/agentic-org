@@ -384,7 +384,13 @@ async def _db_find_existing_by_filename(
 
 
 async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
-    """Store document metadata in PostgreSQL (fallback when RAGFlow is down)."""
+    """Store document metadata in PostgreSQL (fallback when RAGFlow is down).
+
+    Codex 2026-04-22: persist extracted ``content_text`` (when we
+    have one — plain-text formats only) into the JSONB metadata so
+    the search fallback can match against real content, not just
+    filenames.
+    """
     from uuid import UUID as _UUID
 
     from core.database import get_tenant_session
@@ -402,6 +408,7 @@ async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
             content_type=doc.get("content_type"),
             size_bytes=doc["size_bytes"],
             status=doc["status"],
+            metadata_=doc.get("metadata") or {},
         )
         session.add(db_doc)
 
@@ -582,6 +589,36 @@ async def upload_document(
 
     content = await file.read()
     doc_id = str(uuid.uuid4())
+
+    # Codex 2026-04-22 release-signoff residual: KB search fallback was
+    # filename-only because ``documents`` had no extracted text column.
+    # We can't add a column without a migration, but we can store the
+    # extracted content in the existing ``metadata`` JSONB so the
+    # search fallback has something real to match against. Scope is
+    # intentionally narrow — plain text / markdown / JSON / CSV only.
+    # PDF + XLSX extraction requires heavier deps and lives in the
+    # enhancement backlog.
+    extracted_text = ""
+    ctype = (file.content_type or "").lower()
+    is_textual = (
+        ctype.startswith("text/")
+        or ctype in {"application/json", "application/xml", "application/yaml"}
+        or filename.lower().endswith((".txt", ".md", ".markdown", ".csv", ".json", ".yaml", ".yml"))
+    )
+    if is_textual:
+        try:
+            # Limit extraction to 256 KB to avoid bloating the JSONB row.
+            extracted_text = content[:256 * 1024].decode("utf-8", errors="ignore")
+        except Exception:
+            extracted_text = ""
+
+    doc_metadata: dict[str, Any] = {}
+    if extracted_text:
+        # Keep only the first 8 KB in the search-indexable slot — the
+        # fallback is supposed to hit top-of-document signals, not
+        # re-host the full corpus.
+        doc_metadata["content_text"] = extracted_text[:8 * 1024]
+
     doc: dict[str, Any] = {
         "document_id": doc_id,
         "filename": filename,
@@ -589,6 +626,7 @@ async def upload_document(
         "size_bytes": len(content),
         "status": DOC_STATUS_PROCESSING,
         "created_at": _now_iso(),
+        "metadata": doc_metadata,
     }
 
     if _ragflow_available():
@@ -819,6 +857,38 @@ async def _native_semantic_search(
     except Exception as exc:
         logger.debug("keyword_fallback_failed", error=str(exc))
 
+    # Codex 2026-04-22 release-signoff residual: the `documents` upload
+    # path stores extracted plain-text in metadata->>'content_text' for
+    # text/markdown uploads. Keyword-match that layer before the pure
+    # filename last-resort so text files actually retrieve on content.
+    try:
+        async with get_tenant_session(tid) as session:
+            rows = (await session.execute(
+                _sqtext(
+                    "SELECT filename, "
+                    "       COALESCE(metadata->>'content_text', '') AS content_text "
+                    "FROM documents "
+                    "WHERE tenant_id = :tid "
+                    "  AND status != 'deleted' "
+                    "  AND metadata->>'content_text' IS NOT NULL "
+                    "  AND metadata->>'content_text' ILIKE :like "
+                    "LIMIT :k"
+                ),
+                {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+            )).fetchall()
+        results = [
+            SearchResult(
+                chunk_text=(r[1] or "")[:300],
+                score=0.1,  # explicit: below pgvector's real scores
+                document_name=r[0] or "",
+            )
+            for r in rows
+        ]
+        if results:
+            return results
+    except Exception as exc:
+        logger.debug("documents_content_text_fallback_failed", error=str(exc))
+
     # TC_009 last-resort: match against uploaded document filenames in
     # the `documents` mirror table. Without this, any query fails when
     # RAGFlow hasn't finished chunking user uploads yet — the UI showed
@@ -874,6 +944,71 @@ async def search_knowledge(
 
     results = await _native_semantic_search(tenant_id, req.query, req.top_k)
     return SearchResponse(results=results)
+
+
+# Codex 2026-04-22 release-signoff residual: KB "semantic retrieval is
+# unverified — infra dependency". This probe exposes enough signal so
+# ops can confirm retrieval readiness without waiting on a user report.
+# Public (no auth) so deployment smoke tests can call it without a token.
+@router.get("/knowledge/health")
+async def knowledge_health():
+    """Report the knowledge-base runtime mode and key dependencies.
+
+    Returns a structured view of the retrieval stack:
+      - ``ragflow_configured``: env vars present.
+      - ``ragflow_reachable``: can we GET the RAGFlow root within 2s?
+      - ``effective_mode``: "ragflow" | "pgvector" | "keyword" | "stub"
+      - ``notes``: actionable strings for ops.
+
+    Never raises — diagnostic endpoint, always 200 with the state.
+    """
+    notes: list[str] = []
+    ragflow_configured = bool(_RAGFLOW_URL)
+    ragflow_reachable = False
+    if not ragflow_configured:
+        notes.append(
+            "Set RAGFLOW_API_URL and RAGFLOW_API_KEY to enable semantic search."
+        )
+    elif _httpx is None:
+        notes.append("httpx package missing — install to enable the RAGFlow probe.")
+    else:
+        try:
+            async with _httpx.AsyncClient(timeout=2) as client:
+                resp = await client.get(_RAGFLOW_URL, headers=_ragflow_headers())
+                ragflow_reachable = resp.status_code < 500
+                if not ragflow_reachable:
+                    notes.append(f"RAGFlow responded HTTP {resp.status_code}.")
+        except Exception as exc:
+            notes.append(f"RAGFlow unreachable: {exc}")
+
+    # Check pgvector + BGE embeddings availability without a tenant scope.
+    pgvector_ready = False
+    try:
+        from core.embeddings import embed_one  # noqa: F401
+
+        pgvector_ready = True
+    except Exception as exc:
+        notes.append(f"pgvector/BGE fallback unavailable: {exc}")
+
+    if ragflow_configured and ragflow_reachable:
+        effective_mode = "ragflow"
+    elif pgvector_ready:
+        effective_mode = "pgvector"
+        notes.append("RAGFlow down — serving via pgvector fallback.")
+    else:
+        effective_mode = "keyword"
+        notes.append(
+            "Neither RAGFlow nor pgvector are ready — using keyword + "
+            "filename fallback only. Retrieval quality is limited."
+        )
+
+    return {
+        "ragflow_configured": ragflow_configured,
+        "ragflow_reachable": ragflow_reachable,
+        "pgvector_ready": pgvector_ready,
+        "effective_mode": effective_mode,
+        "notes": notes,
+    }
 
 
 @router.get("/knowledge/stats", response_model=StatsResponse)

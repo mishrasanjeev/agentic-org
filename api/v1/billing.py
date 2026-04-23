@@ -172,6 +172,55 @@ async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> di
     return get_usage(tenant_id)
 
 
+# Codex 2026-04-22 release-signoff: "Billing live-checkout still needs
+# ops credential configuration" was labeled Unverified — infra
+# dependency. This endpoint exposes gateway-config state so ops can
+# confirm credentials are wired before running a live checkout. Public
+# (no auth) so deploy smoke can call it.
+@router.get("/health")
+async def billing_health() -> dict[str, Any]:
+    """Report which payment gateway(s) are configured on this deploy.
+
+    Does NOT validate creds — just reports whether env vars are
+    populated, which is the necessary (not sufficient) precondition
+    for a working checkout. A true validation needs a test charge,
+    which must be run manually by ops.
+    """
+    import os as _os
+
+    stripe_configured = bool(_os.getenv("STRIPE_SECRET_KEY"))
+    pinelabs_configured = bool(
+        _os.getenv("PINELABS_API_KEY") or _os.getenv("PLURAL_API_KEY")
+    )
+
+    if stripe_configured and pinelabs_configured:
+        recommended = "both — Stripe for USD, Pine Labs for INR"
+    elif stripe_configured:
+        recommended = "Stripe — INR callers need Pine Labs config"
+    elif pinelabs_configured:
+        recommended = "Pine Labs — USD callers need Stripe config"
+    else:
+        recommended = (
+            "NONE — no gateway is configured. Set STRIPE_SECRET_KEY and/or "
+            "PINELABS_API_KEY (or PLURAL_API_KEY) on the server to enable "
+            "checkouts. Until then, /billing/subscribe and "
+            "/billing/subscribe/india return a 503 with an actionable message."
+        )
+
+    return {
+        "stripe_configured": stripe_configured,
+        "pinelabs_configured": pinelabs_configured,
+        "recommended_checkout_flow": recommended,
+        "ready_for_release": stripe_configured or pinelabs_configured,
+        "note": (
+            "This is a config probe only. Ready-for-release requires a "
+            "manual test transaction in sandbox mode against the "
+            "configured gateway(s) before enabling the Upgrade button in "
+            "production."
+        ),
+    }
+
+
 # ── Stripe Subscribe ─────────────────────────────────────────────────
 
 

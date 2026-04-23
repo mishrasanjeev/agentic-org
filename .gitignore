@@ -83,7 +83,14 @@ scripts/slack_demo.py
 tests/connector_e2e/
 
 # Claude Code working directory
-.claude/
+/.claude/*
+!/.claude/skills/
+!/.claude/skills/agenticorg-bug-fix-fail-closed/
+!/.claude/skills/agenticorg-bug-fix-fail-closed/SKILL.md
+/.claude/worktrees/
+/.claude/settings.local.json
+/.claude/scheduled_tasks.lock
+/.claude/skills/*/agents/
 
 # Old seed scripts with hardcoded data
 scripts/seed_demo_data.sql

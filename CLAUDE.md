@@ -5,11 +5,16 @@ This repository is a multi-tenant enterprise AI platform. Optimize for correct, 
 ## MANDATORY for bug fixes and reopen analysis
 
 Every bug fix, reopen triage, QA-driven PR, or bug-list engagement on this
-repo MUST follow [`docs/bug_triage_skill.md`](docs/bug_triage_skill.md). That
-file codifies a fail-closed verdict matrix, symptom-grep rule, sibling-path
-sweep, test-replays-tester's-steps rule, merged-vs-deployed honesty, and
-Alembic safety gates. Producing a bug-fix summary or declaring a bug "Fixed"
-without walking the checklist in that file is an incorrect work product.
+repo MUST use the repo-authored skill
+[`/.claude/skills/agenticorg-bug-fix-fail-closed/SKILL.md`](.claude/skills/agenticorg-bug-fix-fail-closed/SKILL.md)
+and follow the canonical checklist in
+[`docs/bug_triage_skill.md`](docs/bug_triage_skill.md). The skill is the
+entrypoint; `docs/bug_triage_skill.md` is the source of truth for the
+fail-closed verdict matrix, symptom-grep rule, sibling-path sweep,
+test-replays-tester's-steps rule, merged-vs-deployed honesty, release
+sign-off discipline, and Alembic safety gates. Producing a bug-fix summary,
+reopen verdict, or release sign-off without walking that checklist is an
+incorrect work product.
 
 Forbidden verdicts: "should be fixed", "the code looks correct", "probably a
 cache issue", "fixed in main" (without deploy confirmation).
