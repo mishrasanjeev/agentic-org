@@ -533,7 +533,26 @@ async def test_connector(
     except Exception:
         _log.debug("connector_test_encrypted_creds_load_failed conn_id=%s", conn_id)
     if not config:
-        config = connector.auth_config or {}
+        # Codex 2026-04-23 re-verification blocker G: runtime execution
+        # (core/tool_gateway/gateway.py) refuses to fall back to the
+        # plaintext Connector.auth_config. Historically this endpoint
+        # DID fall back, which gave attackers a parity gap — credentials
+        # that the runtime wouldn't accept could still be exercised via
+        # the test endpoint. Close the gap: refuse the test when no
+        # encrypted credentials are present. Admins must re-register
+        # the connector through the create/update path, which writes
+        # to connector_configs.credentials_encrypted via encrypt_for_tenant.
+        return {
+            "tested": False,
+            "name": connector.name,
+            "error": (
+                "Connector has no encrypted credentials. Re-register the "
+                "connector via POST/PUT /connectors so credentials land "
+                "in the encrypted vault (connector_configs.credentials_"
+                "encrypted). Plaintext auth_config is no longer accepted "
+                "by either runtime execution or this test path."
+            ),
+        }
     try:
         instance = connector_cls(config)
         await asyncio.wait_for(instance.connect(), timeout=10)

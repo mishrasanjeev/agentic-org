@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -19,7 +20,18 @@ _jwks_cache_time: float = 0
 JWKS_CACHE_TTL = 3600
 
 # ---------------------------------------------------------------------------
-# Token blacklist — Redis-backed with in-memory fallback
+# Token blacklist — Redis-backed
+#
+# Codex 2026-04-23 re-verification blocker E: the old implementation
+# fell back to an in-memory dict when Redis was unavailable. That silently
+# broke blacklisting in any multi-replica deploy — a token revoked on
+# replica A still validated on replica B. For enterprise release, the
+# strict-mode env var (AGENTICORG_AUTH_STATE_STRICT=1) enforces "Redis
+# or no auth-state operation": blacklist writes that can't reach Redis
+# raise so the caller knows the revocation did not land. Default
+# behavior (strict mode off) preserves today's in-memory fallback for
+# single-replica dev + local testing, but logs loudly so operators
+# can see degraded state.
 # ---------------------------------------------------------------------------
 
 _blacklisted_tokens: dict[str, float] = {}  # token -> expiry timestamp
@@ -28,13 +40,34 @@ _redis_client: aioredis.Redis | None = None
 _BLACKLIST_TTL = 3700  # slightly longer than token expiry (60 min)
 
 
+def _auth_state_strict() -> bool:
+    """Is strict multi-replica auth-state enforcement enabled?
+
+    When true, blacklist + auth-state calls raise if Redis is
+    unreachable rather than degrading to per-process memory.
+    Enterprise deploys must set AGENTICORG_AUTH_STATE_STRICT=1.
+    """
+    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+
+
 def _get_redis() -> aioredis.Redis | None:
     global _redis_client
     if _redis_client is None:
         try:
             _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
-        except Exception:
-            logger.warning("Redis unavailable for token blacklist — using in-memory fallback")
+        except Exception as exc:
+            if _auth_state_strict():
+                logger.error(
+                    "Redis unavailable for token blacklist — strict mode refuses "
+                    "to degrade to in-memory fallback (%s)",
+                    exc,
+                )
+                raise
+            logger.warning(
+                "Redis unavailable for token blacklist — using in-memory fallback "
+                "(single-replica only; set AGENTICORG_AUTH_STATE_STRICT=1 for "
+                "multi-replica enforcement)",
+            )
     return _redis_client
 
 
@@ -63,7 +96,14 @@ def _token_redis_key(jwt_value: str) -> str:
 
 
 def blacklist_token(token: str) -> None:
-    """Add a token to the blacklist so it is rejected on future validation."""
+    """Add a token to the blacklist so it is rejected on future validation.
+
+    Strict mode (AGENTICORG_AUTH_STATE_STRICT=1): if Redis is unavailable
+    or the write fails, raise RuntimeError so callers return 503 rather
+    than silently dropping the revocation onto one replica's memory.
+    """
+    strict = _auth_state_strict()
+
     # Prune expired entries if cache is full
     if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
         now = time.time()
@@ -71,38 +111,72 @@ def blacklist_token(token: str) -> None:
         for k in expired:
             _blacklisted_tokens.pop(k, None)
     _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
-    # Also store in Redis asynchronously — the sync caller can't await,
-    # so we store in memory as primary and Redis is best-effort via check
-    r = _get_redis()
-    if r is not None:
-        try:
-            import asyncio
 
-            key = _token_redis_key(token)
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(r.setex(key, _BLACKLIST_TTL, "1"))
-            else:
-                asyncio.run(r.setex(key, _BLACKLIST_TTL, "1"))
-        except Exception:
-            logger.debug("Redis blacklist write failed — in-memory fallback active")
+    r = _get_redis()
+    if r is None:
+        if strict:
+            raise RuntimeError(
+                "Token blacklist requires Redis in strict mode "
+                "(AGENTICORG_AUTH_STATE_STRICT=1) — write refused"
+            )
+        return
+
+    try:
+        import asyncio
+
+        key = _token_redis_key(token)
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is not None:
+            running.create_task(r.setex(key, _BLACKLIST_TTL, "1"))
+        else:
+            asyncio.run(r.setex(key, _BLACKLIST_TTL, "1"))
+    except Exception as exc:
+        if strict:
+            raise RuntimeError(
+                f"Token blacklist Redis write failed in strict mode: {exc}"
+            ) from exc
+        logger.warning("Redis blacklist write failed — in-memory fallback active (%s)", exc)
 
 
 async def _is_blacklisted(token: str) -> bool:
-    """Check if token is blacklisted (memory + Redis)."""
+    """Check if token is blacklisted (memory + Redis).
+
+    Strict mode: if Redis is unreachable, raise so callers return 503 —
+    silently returning False would let a revoked-on-replica-A token
+    validate on replica B.
+    """
+    strict = _auth_state_strict()
+
     if token in _blacklisted_tokens:
         if time.time() <= _blacklisted_tokens[token]:
             return True
         _blacklisted_tokens.pop(token, None)  # expired
+
     r = _get_redis()
-    if r is not None:
-        try:
-            val = await r.get(_token_redis_key(token))
-            if val:
-                _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
-                return True
-        except Exception:
-            logger.debug("Redis blacklist read failed — checking memory only")
+    if r is None:
+        if strict:
+            raise RuntimeError(
+                "Token blacklist check requires Redis in strict mode "
+                "(AGENTICORG_AUTH_STATE_STRICT=1)"
+            )
+        return False
+
+    try:
+        val = await r.get(_token_redis_key(token))
+    except Exception as exc:
+        if strict:
+            raise RuntimeError(
+                f"Token blacklist Redis read failed in strict mode: {exc}"
+            ) from exc
+        logger.warning("Redis blacklist read failed — checking memory only (%s)", exc)
+        return False
+
+    if val:
+        _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
+        return True
     return False
 
 

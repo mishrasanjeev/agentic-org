@@ -19,6 +19,22 @@ incorrect work product.
 Forbidden verdicts: "should be fixed", "the code looks correct", "probably a
 cache issue", "fixed in main" (without deploy confirmation).
 
+## MANDATORY for enterprise hardening, architecture review, and release sign-off
+
+Any whole-codebase audit, enterprise hardening review, production-readiness
+assessment, architecture-safety review, or release sign-off in this repo MUST
+use the repo-authored skill
+[`/.claude/skills/agenticorg-enterprise/SKILL.md`](.claude/skills/agenticorg-enterprise/SKILL.md).
+This includes reviews of workflow durability, auth/session hardening, billing
+runtime behavior, connector secret handling, async safety, startup DDL,
+multi-tenant isolation, and deployment readiness. Producing an enterprise
+verdict or release sign-off without walking that skill is an incorrect work
+product.
+
+If the task is both bug-related and enterprise-hardening-related, use both
+repo-authored skills together: `agenticorg-bug-fix-fail-closed` and
+`agenticorg-enterprise`.
+
 ## Mission
 
 - Deliver the simplest correct change that satisfies the request.

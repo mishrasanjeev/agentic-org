@@ -166,10 +166,20 @@ async def get_subscription(
 
 @router.get("/usage")
 async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """Return current usage counters for the authenticated tenant."""
+    """Return current usage counters for the authenticated tenant.
+
+    Codex 2026-04-23 blocker F: ``get_usage`` uses a synchronous Redis
+    client. Calling it directly from an async route blocks the event
+    loop for the duration of every Redis round-trip — which under real
+    latency stalls every concurrent request on the same worker. Wrap
+    in ``asyncio.to_thread`` so the blocking I/O runs in the thread
+    pool.
+    """
+    import asyncio
+
     from core.billing.usage_tracker import get_usage
 
-    return get_usage(tenant_id)
+    return await asyncio.to_thread(get_usage, tenant_id)
 
 
 # Codex 2026-04-22 release-signoff: "Billing live-checkout still needs
@@ -252,8 +262,13 @@ async def subscribe_stripe(
                 "(/billing/subscribe/india) if you're in INR."
             ),
         )
+    # Codex 2026-04-23 blocker F: Stripe SDK is synchronous. Run in
+    # threadpool so the event loop is not parked for the whole round-trip.
+    import asyncio
+
     try:
-        result = create_checkout_session(
+        result = await asyncio.to_thread(
+            create_checkout_session,
             tenant_id=tenant_id,
             plan=body.plan,
             success_url=success_url,
@@ -292,8 +307,14 @@ async def subscribe_india(
                 "staging sandbox keys."
             ),
         )
+    # Codex 2026-04-23 blocker F: create_payment_order uses sync httpx
+    # (plus sync Redis for order mapping). Run in threadpool so we do
+    # not block the event loop for the full gateway round-trip.
+    import asyncio
+
     try:
-        order = create_payment_order(
+        order = await asyncio.to_thread(
+            create_payment_order,
             tenant_id=tenant_id,
             plan=body.plan,
             amount_inr=body.amount_inr,
@@ -347,9 +368,13 @@ async def plural_callback(request: Request) -> RedirectResponse:
     plural_order_id = params.get("plural_order_id", "")
 
     # Resolve order details from stored mapping or params
+    # Codex 2026-04-23 blocker F: both lookup_order_details (sync Redis)
+    # and get_order_status (sync httpx) must run off the event loop.
+    import asyncio
+
     effective_order_id = order_id or plural_order_id
     if merchant_ref:
-        stored = lookup_order_details(merchant_ref)
+        stored = await asyncio.to_thread(lookup_order_details, merchant_ref)
         if not effective_order_id:
             effective_order_id = stored.get("order_id", "")
         if not tenant_id:
@@ -362,7 +387,7 @@ async def plural_callback(request: Request) -> RedirectResponse:
     # Server-side verification: call Plural API to get real status
     if effective_order_id:
         try:
-            order_data = get_order_status(effective_order_id)
+            order_data = await asyncio.to_thread(get_order_status, effective_order_id)
             actual_status = order_data.get("status", "")
 
             if actual_status in ("PROCESSED", "AUTHORIZED"):
@@ -423,9 +448,11 @@ async def stripe_callback(
 
     if session_id:
         try:
+            import asyncio
+
             from core.billing.stripe_client import verify_checkout_session
 
-            session_data = verify_checkout_session(session_id)
+            session_data = await asyncio.to_thread(verify_checkout_session, session_id)
 
             if session_data.get("verified"):
                 verified_status = "success"
@@ -469,11 +496,14 @@ async def create_portal(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Create a Stripe Customer Portal session for self-service billing."""
+    import asyncio
+
     from core.billing.stripe_client import create_portal_session
 
     return_url = _validate_redirect_url(body.return_url, "return_url")
     try:
-        url = create_portal_session(
+        url = await asyncio.to_thread(
+            create_portal_session,
             tenant_id=tenant_id,
             return_url=return_url,
         )
@@ -491,10 +521,12 @@ async def create_portal(
 @router.post("/order-status")
 async def check_order_status(body: OrderStatusRequest) -> dict[str, Any]:
     """Check the status of a Plural payment order."""
+    import asyncio
+
     from core.billing.pinelabs_client import get_order_status
 
     try:
-        return get_order_status(body.order_id)
+        return await asyncio.to_thread(get_order_status, body.order_id)
     except Exception as exc:
         logger.exception("plural_status_error", order_id=body.order_id)
         raise HTTPException(status_code=502, detail="Failed to check order status") from exc
@@ -540,6 +572,8 @@ async def cancel_subscription(
 
     # Stripe: resolve subscription_id from server-side state — NEVER
     # trust the caller-supplied ID.
+    import asyncio
+
     from core.billing.stripe_client import cancel_subscription as _cancel
 
     sub_id_raw = await redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
@@ -552,7 +586,7 @@ async def cancel_subscription(
             "Contact support if you believe this is an error.",
         )
 
-    success = _cancel(sub_id)
+    success = await asyncio.to_thread(_cancel, sub_id)
     if not success:
         raise HTTPException(status_code=502, detail="Failed to cancel subscription")
 
@@ -569,6 +603,8 @@ async def cancel_subscription(
 @router.post("/webhook/stripe")
 async def stripe_webhook(request: Request) -> dict[str, Any]:
     """Handle Stripe webhook callbacks."""
+    import asyncio
+
     from core.billing.stripe_client import handle_webhook
 
     body = await request.body()
@@ -577,7 +613,7 @@ async def stripe_webhook(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
 
     try:
-        result = handle_webhook(body, sig)
+        result = await asyncio.to_thread(handle_webhook, body, sig)
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -595,6 +631,8 @@ async def plural_webhook(request: Request) -> dict[str, Any]:
       - webhook-timestamp: unix timestamp in seconds
       - webhook-signature: base64 HMAC-SHA256 with "v1," prefix
     """
+    import asyncio
+
     from core.billing.pinelabs_client import handle_webhook
 
     raw_body = await request.body()
@@ -611,7 +649,7 @@ async def plural_webhook(request: Request) -> dict[str, Any]:
         )
 
     try:
-        result = handle_webhook(raw_body, headers)
+        result = await asyncio.to_thread(handle_webhook, raw_body, headers)
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

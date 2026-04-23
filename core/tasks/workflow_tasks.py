@@ -1,8 +1,25 @@
-"""Celery tasks for workflow wait step and event-based resumption."""
+"""Celery tasks for workflow wait step and event-based resumption.
+
+Codex 2026-04-23 re-verification blocker A: these tasks were reading
+``state["steps"]`` / writing ``state["current_step"]``, but the
+async engine (``workflows/engine.py``) writes
+``state["step_results"]`` / ``state["waiting_step_id"]`` /
+``state["status"]`` to the same Redis key. Scheduled timeouts and
+external-event resumes silently did nothing because the keys didn't
+match — the workflow sat in ``waiting_*`` forever.
+
+The fix aligns this module to the engine's canonical schema. We
+re-implement the engine's ``resume_from_wait`` / ``timeout_event_wait``
+semantics in sync Redis so scheduled Celery workers can drive the
+same state transitions the async engine uses. The delegate functions
+keep the behaviour in lockstep: any subsequent engine schema change
+must update both this file and ``workflows/engine.py`` together.
+"""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import structlog
 
@@ -21,15 +38,37 @@ def _get_redis():
     return redis.from_url(url, decode_responses=True)
 
 
+def _clean_event_wait_keys(r: Any, run_id: str, step_id: str) -> None:
+    """Delete any wait-for-event keys for this (run, step)."""
+    event_pattern = f"wfwait_event:*:{run_id}:{step_id}"
+    cursor = 0
+    while True:
+        cursor, keys = r.scan(cursor=cursor, match=event_pattern, count=100)
+        if keys:
+            r.delete(*keys)
+        if cursor == 0:
+            break
+
+
 @app.task(name="resume_workflow_wait")
 def resume_workflow_wait(run_id: str, step_id: str) -> dict:
-    """Load workflow state from Redis, mark wait step complete, resume execution.
+    """Resume a workflow paused at a wait_delay or wait_for_event step.
 
     Called when:
     - A scheduled wait duration expires (via Celery ETA / countdown).
-    - An external event matches a ``wait_for_event`` step (triggered by webhook).
+    - An external event matches a ``wait_for_event`` step (triggered
+      by webhook).
 
-    Workflow state is stored at ``wfstate:{run_id}`` as a JSON hash.
+    Writes to the same ``wfstate:{run_id}`` key the async engine uses
+    and with the same schema the engine's ``resume_from_wait`` writes:
+
+      - ``state["step_results"][step_id] = {output, status="completed"}``
+      - ``state["status"]`` transitions ``waiting_* → running``
+      - ``state["waiting_step_id"]`` is cleared
+      - ``state["steps_completed"]`` is recomputed
+
+    This lets the web process (async engine) and the Celery worker
+    both drive the same state machine without diverging.
     """
     log = logger.bind(run_id=run_id, step_id=step_id)
     try:
@@ -41,41 +80,48 @@ def resume_workflow_wait(run_id: str, step_id: str) -> dict:
             return {"status": "error", "reason": "workflow_state_not_found"}
 
         state = json.loads(raw)
-        steps = state.get("steps", {})
+        current_status = state.get("status")
 
-        if step_id not in steps:
-            log.warning("step_not_found", available=list(steps.keys()))
-            return {"status": "error", "reason": "step_not_found"}
+        if current_status not in ("waiting_delay", "waiting_event"):
+            log.info(
+                "workflow_not_waiting",
+                status=current_status,
+            )
+            # Idempotent: the state already advanced (maybe by the
+            # async resume path or the other worker). Don't overwrite.
+            return {"status": "noop", "reason": f"current status is {current_status}"}
 
-        step = steps[step_id]
-        if step.get("status") == "completed":
-            log.info("step_already_completed")
-            return {"status": "already_completed"}
+        waiting_step_id = state.get("waiting_step_id")
+        if waiting_step_id and waiting_step_id != step_id:
+            log.warning(
+                "waiting_step_mismatch",
+                expected=waiting_step_id,
+                received=step_id,
+            )
+            return {
+                "status": "error",
+                "reason": "waiting_step_id does not match",
+            }
 
-        # Mark step as completed
-        step["status"] = "completed"
-        step["completed_by"] = "resume_workflow_wait"
-        state["steps"] = steps
-        state["current_step"] = step.get("next_step", None)
+        # Record completion — same schema the engine uses.
+        step_results = state.setdefault("step_results", {})
+        step_results[step_id] = {
+            "output": {},
+            "status": "completed",
+            "completed_by": "resume_workflow_wait",
+        }
+        state["steps_completed"] = len(step_results)
+        state["status"] = "running"
+        state.pop("waiting_step_id", None)
 
-        r.set(state_key, json.dumps(state))
+        r.set(state_key, json.dumps(state), ex=172800)
+        _clean_event_wait_keys(r, run_id, step_id)
 
-        # Clean up any event wait keys for this step
-        event_pattern = f"wfwait_event:*:{run_id}:{step_id}"
-        cursor = 0
-        while True:
-            cursor, keys = r.scan(cursor=cursor, match=event_pattern, count=100)
-            if keys:
-                r.delete(*keys)
-            if cursor == 0:
-                break
-
-        log.info("workflow_wait_resumed", next_step=state.get("current_step"))
+        log.info("workflow_wait_resumed")
         return {
             "status": "resumed",
             "run_id": run_id,
             "step_id": step_id,
-            "next_step": state.get("current_step"),
         }
 
     except Exception as exc:
@@ -88,7 +134,8 @@ def timeout_workflow_event(run_id: str, step_id: str) -> dict:
     """Mark an event wait as timed_out and resume to the fallback path.
 
     Scheduled with a countdown equal to the step's ``timeout_hours``.
-    If the event already arrived (step completed), this is a no-op.
+    Idempotent: if the event already arrived (step already in
+    ``step_results``), this is a no-op.
     """
     log = logger.bind(run_id=run_id, step_id=step_id)
     try:
@@ -100,46 +147,38 @@ def timeout_workflow_event(run_id: str, step_id: str) -> dict:
             return {"status": "error", "reason": "workflow_state_not_found"}
 
         state = json.loads(raw)
-        steps = state.get("steps", {})
 
-        if step_id not in steps:
-            log.warning("step_not_found")
-            return {"status": "error", "reason": "step_not_found"}
-
-        step = steps[step_id]
-
-        # If event already arrived, skip timeout
-        if step.get("status") == "completed":
+        # Idempotency: step already completed (event arrived first).
+        step_results = state.get("step_results", {})
+        if step_id in step_results:
             log.info("event_already_received_before_timeout")
             return {"status": "already_completed"}
 
-        # Mark as timed out and route to fallback path
-        step["status"] = "timed_out"
-        step["timed_out"] = True
-        state["steps"] = steps
-        state["current_step"] = step.get("false_path", step.get("fallback_step"))
+        # Not waiting for this step any more (manual cancel / concurrent
+        # resume). Don't touch.
+        if state.get("waiting_step_id") != step_id:
+            log.info("step_no_longer_waiting")
+            return {"status": "noop"}
 
-        r.set(state_key, json.dumps(state))
+        # Mark as timed out — same schema as engine.timeout_event_wait.
+        step_results[step_id] = {
+            "status": "timed_out",
+            "output": {},
+            "completed_by": "timeout_workflow_event",
+        }
+        state["step_results"] = step_results
+        state["steps_completed"] = len(step_results)
+        state["status"] = "running"
+        state.pop("waiting_step_id", None)
 
-        # Clean up event wait keys
-        event_pattern = f"wfwait_event:*:{run_id}:{step_id}"
-        cursor = 0
-        while True:
-            cursor, keys = r.scan(cursor=cursor, match=event_pattern, count=100)
-            if keys:
-                r.delete(*keys)
-            if cursor == 0:
-                break
+        r.set(state_key, json.dumps(state), ex=172800)
+        _clean_event_wait_keys(r, run_id, step_id)
 
-        log.info(
-            "workflow_event_timed_out",
-            fallback_step=state.get("current_step"),
-        )
+        log.info("workflow_event_timed_out")
         return {
             "status": "timed_out",
             "run_id": run_id,
             "step_id": step_id,
-            "fallback_step": state.get("current_step"),
         }
 
     except Exception as exc:
