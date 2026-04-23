@@ -75,6 +75,7 @@ const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
 
 /* ── Report Schedules ── */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
+const RPASchedules = lazyRetry(() => import("./pages/RPASchedules"));
 
 /* ── Knowledge Base, Voice, RPA, Industry Packs ── */
 const KnowledgeBase = lazyRetry(() => import("./pages/KnowledgeBase"));
@@ -279,6 +280,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "cmo"]}>
             <Layout>
               <ReportScheduler />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/rpa-schedules"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <RPASchedules />
             </Layout>
           </ProtectedRoute>
         }

@@ -50,6 +50,7 @@ from api.v1 import (
     push,
     report_schedules,
     rpa,
+    rpa_schedules,
     sales,
     schemas,
     sop,
@@ -200,6 +201,7 @@ app.include_router(billing.router, prefix="/api/v1", tags=["Billing"])
 app.include_router(composio.router, prefix="/api/v1", tags=["Composio Marketplace"])
 app.include_router(packs.router, prefix="/api/v1", tags=["Industry Packs"])
 app.include_router(rpa.router, prefix="/api/v1", tags=["RPA"])
+app.include_router(rpa_schedules.router, prefix="/api/v1", tags=["RPA"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
 app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
