@@ -59,6 +59,12 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/billing/callback",  # Plural redirect callback (browser returning from gateway)
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
         "/api/v1/billing/plans",  # Public pricing — no tenant data
+        # Codex 2026-04-23 prod re-verification: /billing/health +
+        # /knowledge/health are declared auth-free in their route
+        # files, but GrantexAuthMiddleware still required a token.
+        # Exempt them so ops smoke / uptime probes can call them.
+        "/api/v1/billing/health",
+        "/api/v1/knowledge/health",
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
         "/api/v1/product-facts",  # Public product counts/version for README, Landing, Pricing
