@@ -15,7 +15,6 @@ Blockers addressed:
 from __future__ import annotations
 
 import ast
-import os
 import re
 from pathlib import Path
 
@@ -118,56 +117,49 @@ def test_k_e_jwt_defines_strict_helper() -> None:
     assert "AGENTICORG_AUTH_STATE_STRICT" in src
 
 
-def test_k_e_jwt_blacklist_raises_in_strict_mode() -> None:
-    """Strict mode + no Redis → blacklist_token raises, _is_blacklisted raises."""
+def test_k_e_jwt_blacklist_raises_in_strict_mode(monkeypatch) -> None:
+    """Strict mode + Redis unavailable → blacklist_token raises, _is_blacklisted raises.
+
+    Monkeypatches ``_get_redis`` to return None, which deterministically
+    simulates "Redis unreachable" regardless of whether the test
+    environment actually has a Redis running on localhost (CI does,
+    local dev usually does not).
+    """
     import asyncio
     import sys
 
     sys.path.insert(0, str(REPO))
-    for mod in list(sys.modules):
-        if mod.startswith("auth.jwt"):
-            del sys.modules[mod]
+    from auth import jwt as jwt_mod
 
-    os.environ["AGENTICORG_AUTH_STATE_STRICT"] = "1"
-    os.environ["AGENTICORG_REDIS_URL"] = "redis://127.0.0.1:1/0"  # unreachable
+    monkeypatch.setenv("AGENTICORG_AUTH_STATE_STRICT", "1")
+    monkeypatch.setattr(jwt_mod, "_get_redis", lambda: None)
+    jwt_mod._blacklisted_tokens.clear()
+
+    # In strict mode, blacklist_token must raise when Redis is down
+    write_token = "strict-write-probe-token"
     try:
-        from auth import jwt as jwt_mod
+        jwt_mod.blacklist_token(write_token)
+    except RuntimeError as exc:
+        assert "strict" in str(exc).lower() or "redis" in str(exc).lower()
+    else:
+        raise AssertionError(
+            "blacklist_token must raise in strict mode when Redis is "
+            "unreachable"
+        )
 
-        jwt_mod._redis_client = None
-        jwt_mod._blacklisted_tokens.clear()
-
-        # In strict mode, blacklist_token must raise when Redis is down
-        write_token = "strict-write-probe-token"
-        try:
-            jwt_mod.blacklist_token(write_token)
-        except (RuntimeError, Exception) as exc:
-            assert "strict" in str(exc).lower() or "redis" in str(exc).lower()
-        else:
-            raise AssertionError(
-                "blacklist_token must raise in strict mode when Redis is "
-                "unreachable"
-            )
-
-        # Reset — use a token that is NOT in the memory dict so the check
-        # reaches the Redis path. (The write above populated memory before
-        # failing on Redis, which is correct behavior — the caller sees 503
-        # and knows the revocation did not land; but for this read-path
-        # probe we need a fresh token.)
-        jwt_mod._redis_client = None
-        jwt_mod._blacklisted_tokens.clear()
-        read_token = "strict-read-probe-token"
-        try:
-            asyncio.run(jwt_mod._is_blacklisted(read_token))
-        except (RuntimeError, Exception) as exc:
-            assert "strict" in str(exc).lower() or "redis" in str(exc).lower()
-        else:
-            raise AssertionError(
-                "_is_blacklisted must raise in strict mode when Redis is "
-                "unreachable"
-            )
-    finally:
-        os.environ.pop("AGENTICORG_AUTH_STATE_STRICT", None)
-        os.environ.pop("AGENTICORG_REDIS_URL", None)
+    # Use a fresh token so the memory-dict short-circuit doesn't mask
+    # the Redis-path check.
+    jwt_mod._blacklisted_tokens.clear()
+    read_token = "strict-read-probe-token"
+    try:
+        asyncio.run(jwt_mod._is_blacklisted(read_token))
+    except RuntimeError as exc:
+        assert "strict" in str(exc).lower() or "redis" in str(exc).lower()
+    else:
+        raise AssertionError(
+            "_is_blacklisted must raise in strict mode when Redis is "
+            "unreachable"
+        )
 
 
 def test_k_e_auth_state_module_has_strict_guard() -> None:
