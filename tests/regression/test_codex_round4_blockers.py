@@ -263,17 +263,20 @@ def test_k_e_strict_mode_wired_in_prod_manifests() -> None:
 def test_k_e_health_probes_are_public() -> None:
     """Codex 2026-04-23 prod re-verification: /billing/health and
     /knowledge/health were declared auth-free in their route files but
-    the global AuthMiddleware still required a token, so ops could not
-    call them as smoke probes. They must be in EXEMPT_PATHS.
+    the global middleware still required a token. The fix must land
+    on BOTH the legacy ``AuthMiddleware`` and the live
+    ``GrantexAuthMiddleware`` (the one api/main.py registers). The
+    first pass of this regression only checked the legacy class,
+    which is why prod still returned 401 after the first merge.
     """
-    src = _read("auth/middleware.py")
-    assert "/api/v1/billing/health" in src, (
-        "AuthMiddleware.EXEMPT_PATHS must include /api/v1/billing/health "
-        "so deploy smoke checks can reach it unauthenticated"
-    )
-    assert "/api/v1/knowledge/health" in src, (
-        "AuthMiddleware.EXEMPT_PATHS must include /api/v1/knowledge/health"
-    )
+    for rel in ("auth/middleware.py", "auth/grantex_middleware.py"):
+        src = _read(rel)
+        assert "/api/v1/billing/health" in src, (
+            f"{rel} EXEMPT_PATHS must include /api/v1/billing/health"
+        )
+        assert "/api/v1/knowledge/health" in src, (
+            f"{rel} EXEMPT_PATHS must include /api/v1/knowledge/health"
+        )
 
 
 def test_k_e_health_endpoint_exposes_commit_sha() -> None:
