@@ -157,27 +157,33 @@ async def list_scripts(
 ) -> list[RPAScriptOut]:
     """List available RPA scripts (built-in + custom).
 
-    Built-in scripts are discovered from the ``rpa/scripts/`` directory.
-    Custom (tenant-specific) scripts will come from the DB in a future
-    release.
+    Delegates to ``rpa.scripts._registry.discover_scripts`` so adding
+    a new RPA is as simple as dropping a ``*.py`` file with SCRIPT_META
+    + ``async def run(...)`` — no edits needed here or elsewhere. The
+    hardcoded ``_BUILTIN_SCRIPTS`` dict above is kept as a
+    back-compat augmentation: anything it declares that the registry
+    also declares prefers the registry metadata.
     """
+    del tenant_id  # unused — listing is tenant-agnostic catalog
+    from rpa.scripts._registry import discover_scripts
+
+    registry = discover_scripts()
     scripts: list[RPAScriptOut] = []
-
-    # Built-in scripts
-    for key, meta in _BUILTIN_SCRIPTS.items():
-        script_file = _SCRIPTS_DIR / f"{key}.py"
-        if script_file.exists():
-            scripts.append(RPAScriptOut(
+    for key, meta in sorted(registry.items()):
+        # Merge hardcoded metadata for back-compat where it exists.
+        merged = {**_BUILTIN_SCRIPTS.get(key, {}), **meta}
+        scripts.append(
+            RPAScriptOut(
                 id=f"builtin-{key}",
-                name=meta["name"],
-                description=meta["description"],
-                category=meta.get("category", "general"),
+                name=merged.get("name") or key,
+                description=merged.get("description") or "",
+                category=merged.get("category", "general"),
                 script_key=key,
-                params_schema=meta.get("params_schema", {}),
-                estimated_duration_s=meta.get("estimated_duration_s", 60),
+                params_schema=merged.get("params_schema", {}),
+                estimated_duration_s=merged.get("estimated_duration_s", 60),
                 is_builtin=True,
-            ))
-
+            )
+        )
     return scripts
 
 
@@ -215,13 +221,21 @@ async def run_script(
     pointed at arbitrary URLs and are therefore a server-side
     automation/SSRF surface.
     """
-    # Resolve script key
+    # Resolve script key against the generic registry first; fall
+    # back to the legacy hardcoded _BUILTIN_SCRIPTS map for scripts
+    # that haven't yet been normalised to SCRIPT_META.
+    from rpa.scripts._registry import discover_scripts
+
     script_key = script_id.replace("builtin-", "") if script_id.startswith("builtin-") else script_id
 
-    if script_key not in _BUILTIN_SCRIPTS:
+    registry = discover_scripts()
+    if script_key not in registry and script_key not in _BUILTIN_SCRIPTS:
         raise HTTPException(404, f"RPA script '{script_key}' not found")
 
-    if script_key in _ADMIN_ONLY_SCRIPTS:
+    meta = {**_BUILTIN_SCRIPTS.get(script_key, {}), **registry.get(script_key, {})}
+
+    # Admin gate: honour both the legacy set and the per-script flag.
+    if script_key in _ADMIN_ONLY_SCRIPTS or meta.get("admin_only"):
         scopes = getattr(request.state, "scopes", []) or []
         claims = getattr(request.state, "claims", {}) or {}
         is_admin = (
@@ -236,8 +250,6 @@ async def run_script(
                 "it can be pointed at arbitrary URLs and is gated to "
                 "privileged operators.",
             )
-
-    meta = _BUILTIN_SCRIPTS[script_key]
     execution_id = str(uuid.uuid4())
     started_at = datetime.now(UTC)
 
