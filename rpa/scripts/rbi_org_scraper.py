@@ -36,12 +36,13 @@ Chunks are then embedded + persisted by the task layer.
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 SCRIPT_META = {
     "name": "RBI.org.in Scraper",
@@ -135,7 +136,10 @@ def _extract_links(html: str, base_url: str) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
     for a in soup.find_all("a", href=True):
         title = _collapse_whitespace(a.get_text() or "")
-        href = a["href"].strip()
+        href_val = a.get("href")  # type: ignore[attr-defined]
+        if not isinstance(href_val, str):
+            continue
+        href = href_val.strip()
         if not title or len(title) < 8:
             continue
         if href.startswith("#") or href.startswith("javascript:"):
