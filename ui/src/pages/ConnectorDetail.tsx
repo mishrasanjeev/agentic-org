@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api, { extractApiError } from "@/lib/api";
-import { AUTH_TYPES, authTypeLabel, buildAuthConfig } from "@/lib/connector-constants";
+import { AUTH_TYPES, authTypeLabel, buildAuthConfig, buildBasicAuthConfig } from "@/lib/connector-constants";
 
 interface ConnectorDetail {
   connector_id: string;
@@ -42,6 +42,10 @@ export default function ConnectorDetailPage() {
   const [oauth2ClientId, setOauth2ClientId] = useState("");
   const [oauth2TokenUrl, setOauth2TokenUrl] = useState("");
   const [oauth2RedirectUri, setOauth2RedirectUri] = useState("");
+  // TC_008 (Aishwarya 2026-04-23): basic auth needs its own
+  // username field in edit — the single-token flow above couldn't
+  // carry it and the tester saw missing Username during Edit.
+  const [basicUsername, setBasicUsername] = useState("");
   const [testing, setTesting] = useState(false);
 
   function validateBaseUrl(url: string): boolean {
@@ -83,7 +87,13 @@ export default function ConnectorDetailPage() {
         rate_limit_rpm: rateLimitRpm,
       };
       if (secretRef.trim()) update.secret_ref = secretRef.trim();
-      const authConfig = buildAuthConfig(authType, authToken);
+      // TC_008 (Aishwarya 2026-04-23): basic auth takes two fields; the
+      // single-field helper didn't carry username. Use the basic-auth
+      // helper so both username and password flow through.
+      const authConfig =
+        authType === "basic"
+          ? buildBasicAuthConfig(basicUsername, authToken)
+          : buildAuthConfig(authType, authToken);
       // Add OAuth2-specific fields
       if (authType === "oauth2") {
         if (oauth2ClientId.trim()) authConfig.client_id = oauth2ClientId.trim();
@@ -228,9 +238,36 @@ export default function ConnectorDetailPage() {
                         </div>
                       </>
                     )}
+                    {/* TC_008 (Aishwarya 2026-04-23): basic auth
+                        previously rendered ONLY a single Password
+                        input on the Edit screen — the matching
+                        Username field was missing, and the label
+                        fell through to the generic "Password" helper.
+                        Add an explicit Username input so Edit mirrors
+                        the Create form. */}
+                    {authType === "basic" && (
+                      <div>
+                        <label className="text-sm font-medium">Username</label>
+                        <input
+                          type="text"
+                          value={basicUsername}
+                          onChange={(e) => setBasicUsername(e.target.value)}
+                          placeholder="Enter username (leave blank to keep existing)"
+                          className="border rounded px-3 py-2 text-sm w-full mt-1"
+                          autoComplete="username"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
-                      <input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Enter new credential (leave blank to keep existing)" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                      <input
+                        type="password"
+                        value={authToken}
+                        onChange={(e) => setAuthToken(e.target.value)}
+                        placeholder="Enter new credential (leave blank to keep existing)"
+                        className="border rounded px-3 py-2 text-sm w-full mt-1"
+                        autoComplete={authType === "basic" ? "new-password" : "off"}
+                      />
                     </div>
                     <div>
                       <label className="text-sm font-medium">Secret Reference</label>
@@ -244,7 +281,7 @@ export default function ConnectorDetailPage() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-                  <Button size="sm" variant="outline" onClick={() => { setEditing(false); setAuthToken(""); setSecretRef(""); }}>Cancel</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setEditing(false); setAuthToken(""); setSecretRef(""); setBasicUsername(""); }}>Cancel</Button>
                 </div>
               </div>
             ) : (

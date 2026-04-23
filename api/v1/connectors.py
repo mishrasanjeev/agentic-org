@@ -241,8 +241,24 @@ async def list_connectors(
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        query = select(Connector).where(Connector.tenant_id == tid)
-        count_query = select(func.count()).select_from(Connector).where(Connector.tenant_id == tid)
+        # Uday 2026-04-23: soft-deleted connectors ("archived") must
+        # stay out of the default listing, otherwise the Connectors
+        # page continues to show them and the user can't distinguish
+        # "archived, can recreate" from "active". Filter on status to
+        # hide them by default; they re-enter on re-registration (the
+        # POST /connectors auto-restore path).
+        query = select(Connector).where(
+            Connector.tenant_id == tid,
+            func.coalesce(Connector.status, "active") != "deleted",
+        )
+        count_query = (
+            select(func.count())
+            .select_from(Connector)
+            .where(
+                Connector.tenant_id == tid,
+                func.coalesce(Connector.status, "active") != "deleted",
+            )
+        )
         if category:
             query = query.where(Connector.category == category)
             count_query = count_query.where(Connector.category == category)
@@ -299,7 +315,49 @@ async def register_connector(
         try:
             await session.flush()
         except IntegrityError:
-            raise HTTPException(409, f"Connector '{body.name}' already exists") from None
+            # Uday 2026-04-23: a row with the same (tenant_id, name) may
+            # already exist. If that row is status="deleted" (soft-delete
+            # via DELETE /connectors/{id}), the prior flow surfaced a
+            # hard 409 "already exists" — confusing, because the user
+            # had just archived it and expected re-registration to
+            # work. Instead, reactivate the soft-deleted twin in place
+            # so audit history is preserved on a single row. If the
+            # existing row is still active, we still 409 honestly.
+            existing = None
+            try:
+                await session.rollback()
+                existing_result = await session.execute(
+                    select(Connector).where(
+                        Connector.tenant_id == tid,
+                        Connector.name == body.name,
+                    )
+                )
+                candidate = existing_result.scalar_one_or_none()
+                # Guard: real ORM row will have a .status string; a
+                # broken / mock Result may return a coroutine-like
+                # object. Only treat as an existing row when we can
+                # safely read .status.
+                if hasattr(candidate, "status") and isinstance(candidate.status, str | type(None)):
+                    existing = candidate
+            except Exception:
+                existing = None
+
+            if existing is not None and (existing.status or "").lower() == "deleted":
+                existing.status = "active"
+                existing.category = body.category
+                existing.base_url = body.base_url
+                existing.auth_type = body.auth_type
+                existing.auth_config = {}
+                existing.secret_ref = body.secret_ref
+                existing.tool_functions = body.tool_functions
+                existing.data_schema_ref = body.data_schema_ref
+                existing.rate_limit_rpm = body.rate_limit_rpm
+                connector = existing
+                await session.flush()
+            else:
+                raise HTTPException(
+                    409, f"Connector '{body.name}' already exists"
+                ) from None
 
         # Store secrets in the encrypted connector_configs table
         if secret_fields:
@@ -532,6 +590,42 @@ async def test_connector(
                 config = {**(cc.config or {}), **(creds or {})}
     except Exception:
         _log.debug("connector_test_encrypted_creds_load_failed conn_id=%s", conn_id)
+    # TC_006 (Aishwarya 2026-04-23): CA-firms store GSTN credentials
+    # in the per-company Credential Vault (GSTNCredential) via
+    # /companies/{id}/credentials. That vault exists for multi-company
+    # firms and shows "Verified" in the UI. Historically the connector
+    # test only looked in ConnectorConfig.credentials_encrypted and
+    # ignored the vault, so testers saw "test failed" even though the
+    # vault was clearly populated. Bridge the two stores for the GSTN
+    # connector: if ConnectorConfig has no creds, try the active
+    # GSTNCredential for this tenant.
+    if not config and connector.name.lower() in ("gstn", "gst"):
+        try:
+            from core.crypto import decrypt_for_tenant
+            from core.models.gstn_credential import GSTNCredential
+
+            async with get_tenant_session(tid) as session:
+                gstn_result = await session.execute(
+                    select(GSTNCredential)
+                    .where(
+                        GSTNCredential.tenant_id == tid,
+                        GSTNCredential.is_active.is_(True),
+                    )
+                    .order_by(GSTNCredential.last_verified_at.desc())
+                    .limit(1)
+                )
+                gstn_cred = gstn_result.scalar_one_or_none()
+            if gstn_cred and gstn_cred.password_encrypted:
+                decrypted_pw = decrypt_for_tenant(gstn_cred.password_encrypted)
+                config = {
+                    "gstin": gstn_cred.gstin,
+                    "username": gstn_cred.username,
+                    "password": decrypted_pw,
+                    "portal_type": gstn_cred.portal_type or "gstn",
+                }
+        except Exception:
+            _log.debug("connector_test_gstn_vault_bridge_failed conn_id=%s", conn_id)
+
     if not config:
         # Codex 2026-04-23 re-verification blocker G: runtime execution
         # (core/tool_gateway/gateway.py) refuses to fall back to the
@@ -542,16 +636,24 @@ async def test_connector(
         # encrypted credentials are present. Admins must re-register
         # the connector through the create/update path, which writes
         # to connector_configs.credentials_encrypted via encrypt_for_tenant.
+        hint = (
+            "Connector has no encrypted credentials. Re-register the "
+            "connector via POST/PUT /connectors so credentials land "
+            "in the encrypted vault (connector_configs.credentials_"
+            "encrypted). Plaintext auth_config is no longer accepted "
+            "by either runtime execution or this test path."
+        )
+        if connector.name.lower() in ("gstn", "gst"):
+            hint += (
+                " For GSTN: if you used the per-company Credential Vault "
+                "(Company → Settings → GSTN Credentials), ensure the "
+                "credential is marked Active — the connector test "
+                "automatically uses the most recent active vault entry."
+            )
         return {
             "tested": False,
             "name": connector.name,
-            "error": (
-                "Connector has no encrypted credentials. Re-register the "
-                "connector via POST/PUT /connectors so credentials land "
-                "in the encrypted vault (connector_configs.credentials_"
-                "encrypted). Plaintext auth_config is no longer accepted "
-                "by either runtime execution or this test path."
-            ),
+            "error": hint,
         }
     try:
         instance = connector_cls(config)
@@ -577,7 +679,49 @@ async def test_connector(
             "health": health,
         }
     except TimeoutError:
-        return {"tested": False, "name": connector.name, "error": "Connection timed out (10s)"}
-    except Exception:
+        # TC_007 (Aishwarya 2026-04-23): "Connection timed out (10s)" is
+        # specific; return a hint about what to check.
+        return {
+            "tested": False,
+            "name": connector.name,
+            "error": (
+                "Connection timed out after 10s. The connector's base URL "
+                "did not respond — check that the endpoint is reachable "
+                "from the platform network and that no upstream proxy is "
+                "blocking outbound traffic."
+            ),
+        }
+    except Exception as exc:
+        # TC_007 (Aishwarya 2026-04-23): the route used to always return
+        # "Connector test failed" regardless of the actual cause (401,
+        # SSL, DNS, auth token expired, etc.). Surface a specific,
+        # actionable message derived from the exception so operators can
+        # debug without tailing server logs. Still suppresses secrets by
+        # never echoing the raw request payload.
         _log.exception("connector_test_failed conn_id=%s name=%s", conn_id, connector.name)
-        return {"tested": False, "name": connector.name, "error": "Connector test failed"}
+        err_name = type(exc).__name__
+        err_msg = str(exc)[:240]
+        # Map common failure classes to actionable hints.
+        lowered = (err_name + " " + err_msg).lower()
+        if "401" in lowered or "unauthor" in lowered or "invalid credentials" in lowered:
+            hint = "Invalid credentials — verify username/password or API key in the credential vault."
+        elif "403" in lowered or "forbidden" in lowered:
+            hint = "Authentication succeeded but the account is not authorized for this resource."
+        elif "ssl" in lowered or "certificate" in lowered:
+            hint = "SSL / certificate validation failed. Check base URL protocol and peer certificate."
+        elif "dns" in lowered or "name resolution" in lowered or "nodename" in lowered:
+            hint = "DNS lookup failed for the connector base URL."
+        elif "connectionrefused" in lowered or "connection refused" in lowered:
+            hint = "Target refused the connection — host is up but the port is not accepting traffic."
+        elif "token" in lowered and ("expired" in lowered or "refresh" in lowered):
+            hint = "Authentication token expired — refresh the OAuth grant or re-authorize."
+        elif "timeout" in lowered:
+            hint = "Request timed out — endpoint is slow or unreachable from the platform."
+        else:
+            hint = f"{err_name}: {err_msg}" if err_msg else f"{err_name} (no detail)"
+        return {
+            "tested": False,
+            "name": connector.name,
+            "error": hint,
+            "error_class": err_name,
+        }

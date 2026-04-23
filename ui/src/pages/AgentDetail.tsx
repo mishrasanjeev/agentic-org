@@ -1108,7 +1108,12 @@ function ShadowTab({ agent }: { agent: Agent }) {
   const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const sampleCount = agent.shadow_sample_count ?? 0;
-  const minSamples = agent.shadow_min_samples ?? 20;
+  // Uday 2026-04-23 Bug 1/2: the default target was 20 samples which
+  // produced long bulk runs and a "13 / 20" display that made users
+  // think generation wasn't finished. Drop the default to 10 so a
+  // fresh agent fills in a quick, reviewable batch, and use the
+  // per-agent field verbatim when the server provides it.
+  const minSamples = agent.shadow_min_samples ?? 10;
   const sampleProgress = minSamples > 0 ? Math.min((sampleCount / minSamples) * 100, 100) : 0;
 
   const accuracyCurrent = agent.shadow_accuracy_current != null ? agent.shadow_accuracy_current * 100 : 0;
@@ -1127,22 +1132,28 @@ function ShadowTab({ agent }: { agent: Agent }) {
     setGenerating(true);
     setGenResult(null);
     try {
-      // TC_014 (Aishwarya 2026-04-22): a single /run emits a single
-      // sample, so users clicking once saw the progress bar jump from
-      // 35% to 40% and stop — they expected the button to fill the
-      // gap to minSamples in one click. Call /run in a loop to make
-      // up the shortfall. Cap the batch so a bad config can't DOS
-      // the agent; if more than 5 runs fail in a row, surface the
-      // error instead of silently continuing.
-      const gap = Math.max(0, (agent.shadow_min_samples ?? 20) - sampleCount);
-      const plannedRuns = Math.min(gap > 0 ? gap : 1, 25);
+      // Uday 2026-04-23 Bug 1: the earlier loop awaited each call but
+      // without a visible pause between requests the batch felt like a
+      // parallel bulk run — the progress counter jumped several samples
+      // at once so testers couldn't tell each sample had actually
+      // completed before the next one started. Cap the default batch
+      // at 10 (per the 2026-04-23 spec), run each sample strictly
+      // sequentially, and push an intermediate status after each so
+      // the UI shows "Sample 3/10…" progress in real time.
+      const target = Math.max(1, agent.shadow_min_samples ?? 10);
+      const gap = Math.max(0, target - sampleCount);
+      const plannedRuns = Math.min(gap > 0 ? gap : 1, 10);
       let successes = 0;
       let consecutiveFailures = 0;
       for (let i = 0; i < plannedRuns; i++) {
+        setGenResult({
+          type: "success",
+          msg: `Generating sample ${i + 1}/${plannedRuns}…`,
+        });
         try {
           await api.post(`/agents/${agent.id}/run`, {
             action: "shadow_sample",
-            inputs: { mode: "test", generate_sample: true },
+            inputs: { mode: "test", generate_sample: true, sequential_index: i + 1 },
           });
           successes += 1;
           consecutiveFailures = 0;
@@ -1156,7 +1167,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
       setGenResult({
         type: "success",
         msg:
-          `Generated ${successes} shadow sample${successes === 1 ? "" : "s"}. ` +
+          `Generated ${successes} shadow sample${successes === 1 ? "" : "s"} (of ${plannedRuns} attempted). ` +
           "Refresh to see updated count and accuracy.",
       });
     } catch (err: any) {
@@ -1219,9 +1230,19 @@ function ShadowTab({ agent }: { agent: Agent }) {
               {genResult.msg}
             </div>
           )}
+          {/* Uday 2026-04-23 Bug 2: the display used to show a single
+              "{collected} / {target}" row which made a partial run look
+              like incomplete success ("13 generated, 20 total" read
+              like 7 missing). Split the two signals so testers see
+              how many samples actually exist (generated) separately
+              from the promotion target. */}
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Samples collected</span>
-            <span className="font-medium">{sampleCount} / {minSamples}</span>
+            <span className="text-muted-foreground">Samples generated</span>
+            <span className="font-medium">{sampleCount}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Promotion target</span>
+            <span className="font-medium">{minSamples}</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
             <div

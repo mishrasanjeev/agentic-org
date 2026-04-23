@@ -22,6 +22,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/billing/callback",  # Plural redirect callback
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
         "/api/v1/billing/plans",  # Public pricing page
+        # Codex 2026-04-23 prod re-verification: the billing + knowledge
+        # health probes were declared auth-free in their route files but
+        # the global AuthMiddleware still required a token before the
+        # handler could run, so ops smoke tests could not use them. Add
+        # the explicit paths to EXEMPT_PATHS so the /health endpoints
+        # are actually callable from CI / Deploy / Uptime probes.
+        "/api/v1/billing/health",
+        "/api/v1/knowledge/health",
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
         "/api/v1/product-facts",  # Public product counts/version for README, Landing, Pricing

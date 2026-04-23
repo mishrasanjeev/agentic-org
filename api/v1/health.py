@@ -26,6 +26,21 @@ from api.v1.product_facts import _version_from_pyproject as _pv  # noqa: E402
 
 APP_VERSION = _pv()
 
+
+def _deployed_commit() -> str:
+    """Resolve the git commit SHA of the running deploy.
+
+    Codex 2026-04-23 prod re-verification: /health exposed only version
+    (e.g. "4.8.0"), which can't prove which commit SHA is live. Helm +
+    Cloud Run can inject this via AGENTICORG_GIT_SHA / K_REVISION env
+    vars at deploy time. Fall back to "unknown" when not provided.
+    """
+    for key in ("AGENTICORG_GIT_SHA", "GIT_SHA", "GIT_COMMIT", "K_REVISION"):
+        v = os.getenv(key, "").strip()
+        if v:
+            return v
+    return "unknown"
+
 # Timeout for individual connector health checks (seconds)
 _CONNECTOR_HC_TIMEOUT = 5.0
 
@@ -76,6 +91,7 @@ async def health_readiness():
     return {
         "status": "healthy" if core_healthy else "unhealthy",
         "version": APP_VERSION,
+        "commit": _deployed_commit(),
         "checks": checks,
     }
 
