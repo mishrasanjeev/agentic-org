@@ -77,10 +77,25 @@ def upgrade() -> None:
     )
 
     # Index for filtering by tenant + source_object_type (used by
-    # search UIs that show a per-source sidebar).
+    # search UIs that show a per-source sidebar). Guarded on
+    # information_schema so ephemeral CI databases that haven't yet
+    # created knowledge_documents (and therefore have no
+    # source_object_type column) don't fail with a relation-not-found
+    # error.
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_knowledge_documents_tenant_source_type "
-        "ON knowledge_documents (tenant_id, source_object_type)"
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'knowledge_documents'
+                  AND column_name = 'source_object_type'
+            ) THEN
+                CREATE INDEX IF NOT EXISTS ix_knowledge_documents_tenant_source_type
+                    ON knowledge_documents (tenant_id, source_object_type);
+            END IF;
+        END$$;
+        """
     )
 
     # ── knowledge_chunk_sources ────────────────────────────────────
