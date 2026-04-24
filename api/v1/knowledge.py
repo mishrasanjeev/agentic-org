@@ -1048,11 +1048,41 @@ async def knowledge_health():
             "filename fallback only. Retrieval quality is limited."
         )
 
+    # S0-07 (PR-4 2026-04-24): surface the last gold-corpus eval score
+    # so ops + Codex can confirm retrieval is above the 4.6/5 floor
+    # without having to invoke the script manually. The file is
+    # written by `scripts/rag_eval.py --output` on every run; absence
+    # means "no eval has run against this deploy yet" — not a failure
+    # condition for the probe itself, just an honest datapoint.
+    last_eval: dict[str, object] = {"ran_at": None, "overall_score": None}
+    try:
+        import json as _json
+        import os as _os
+        from pathlib import Path as _Path
+
+        eval_path = _Path(
+            _os.environ.get("AGENTICORG_RAG_EVAL_REPORT", "/tmp/rag_eval_latest.json")
+        )
+        if eval_path.exists():
+            with eval_path.open("r", encoding="utf-8") as fh:
+                data = _json.load(fh)
+            last_eval = {
+                "ran_at": data.get("ran_at")
+                or eval_path.stat().st_mtime,
+                "overall_score": data.get("overall_score"),
+                "per_modality_score": data.get("per_modality_score"),
+                "gate_passes": data.get("gate_passes"),
+            }
+    except Exception as exc:
+        notes.append(f"Could not read last eval report: {exc}")
+
     return {
         "ragflow_configured": ragflow_configured,
         "ragflow_reachable": ragflow_reachable,
         "pgvector_ready": pgvector_ready,
         "effective_mode": effective_mode,
+        "last_eval": last_eval,
+        "quality_floor": 4.6,
         "notes": notes,
     }
 
