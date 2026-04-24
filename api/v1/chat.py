@@ -210,6 +210,46 @@ _INTERNAL_FIELDS = {
 }
 
 
+_READABLE_KEYS = ("text", "content", "answer", "response", "message", "summary", "result")
+
+
+def _extract_readable(val: Any) -> str | None:
+    """Best-effort extract of user-facing text from a nested LLM payload.
+
+    TC_008 (Aishwarya 2026-04-24): agents sometimes return a structured
+    block like ``{"type": "text", "text": "...", "extras": {"signature":
+    "..."}}`` as the ``answer``. The old code did ``str(val)`` on the
+    dict, which produces Python repr with SINGLE quotes and leaks the
+    raw block into chat bubbles. Recurse through known text-carrying
+    keys instead.
+
+    Returns ``None`` when no readable text can be extracted so the
+    caller can fall back to its own formatting.
+    """
+    if val is None:
+        return None
+    if isinstance(val, str):
+        s = val.strip()
+        return s if s else None
+    if isinstance(val, (int, float, bool)):
+        return str(val)
+    if isinstance(val, dict):
+        for key in _READABLE_KEYS:
+            inner = val.get(key)
+            text = _extract_readable(inner)
+            if text:
+                return text
+        return None
+    if isinstance(val, (list, tuple)):
+        parts: list[str] = []
+        for item in val:
+            text = _extract_readable(item)
+            if text:
+                parts.append(text)
+        return "\n".join(parts) if parts else None
+    return None
+
+
 def _format_agent_output(output: dict | str | Any) -> str:
     """Convert a LangGraph agent output dict into a human-readable string.
 
@@ -219,12 +259,13 @@ def _format_agent_output(output: dict | str | Any) -> str:
       * a dict with standard ``answer``/``response`` keys, or
       * a dict with arbitrary structured fields.
 
-    Never returns a raw JSON dict as the user-facing answer.
+    Never returns a raw JSON/Python dict repr as the user-facing answer.
     """
     if isinstance(output, str):
         return output
     if not isinstance(output, dict):
-        return str(output)
+        text = _extract_readable(output)
+        return text if text is not None else str(output)
     # Free-text response (LLM didn't return JSON)
     if "raw_output" in output and output["raw_output"]:
         raw = output["raw_output"]
@@ -234,18 +275,32 @@ def _format_agent_output(output: dict | str | Any) -> str:
             try:
                 parsed = __import__("json").loads(raw)
                 if isinstance(parsed, dict):
-                    for key in ("answer", "response", "message", "summary", "result"):
-                        if key in parsed and parsed[key]:
-                            return str(parsed[key])
+                    text = _extract_readable(parsed)
+                    if text:
+                        return text
                     return _format_agent_output(parsed)
             except (ValueError, TypeError):
                 pass
-        return str(raw)
-    # Standard answer/response keys
+            return raw
+        text = _extract_readable(raw)
+        if text:
+            return text
+    # Standard answer/response keys — recurse through nested structured
+    # blocks (TC_008 fix) so a payload like ``answer={type, text, ...}``
+    # renders as just the text.
     for key in ("answer", "response", "message", "summary", "result"):
         if key in output and output[key]:
             val = output[key]
-            return val if isinstance(val, str) else str(val)
+            if isinstance(val, str):
+                return val
+            text = _extract_readable(val)
+            if text:
+                return text
+    # Bare text/content block at top level (e.g.
+    # ``{"type": "text", "text": "..."}``) — TC_008 fix.
+    for key in ("text", "content"):
+        if key in output and isinstance(output[key], str) and output[key].strip():
+            return output[key]
     # Format remaining structured output as readable text.
     lines = []
     for k, v in output.items():

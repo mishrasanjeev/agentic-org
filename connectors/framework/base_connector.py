@@ -110,6 +110,15 @@ class BaseConnector(abc.ABC):
 
         Returns 'not_configured' when credentials are missing instead of
         attempting a request that would fail with empty Bearer tokens.
+
+        Uday/Ramesh 2026-04-24 (UI-HEALTH-404): Gmail connector test used
+        to return ``status=healthy`` when the root path returned HTTP
+        404, because the base check was only proving "the network round-
+        trip worked". That's a false positive — authentication + resource
+        reachability both failed, but the UI flashed green. Treat only
+        2xx responses as healthy; 3xx redirects are healthy too (the
+        endpoint exists), but 4xx / 5xx surface as ``unhealthy`` with
+        an actionable message + the HTTP status preserved for debugging.
         """
         if not self._has_credentials():
             return {
@@ -119,7 +128,32 @@ class BaseConnector(abc.ABC):
         try:
             if self._client:
                 resp = await self._client.get("/")
-                return {"status": "healthy", "http_status": resp.status_code}
+                sc = resp.status_code
+                if 200 <= sc < 400:
+                    return {"status": "healthy", "http_status": sc}
+                if sc in (401, 403):
+                    reason = (
+                        "Authentication was rejected by the upstream API "
+                        f"(HTTP {sc}). Re-check credentials: OAuth2 "
+                        "connectors need a valid, non-expired refresh "
+                        "token; API-key connectors need the live key."
+                    )
+                elif sc == 404:
+                    reason = (
+                        "Base URL returned HTTP 404. Verify the configured "
+                        "base URL targets the real API root (e.g. for Gmail "
+                        "use 'https://gmail.googleapis.com' and scope the "
+                        "path per tool, not '/gmail/v1')."
+                    )
+                elif 500 <= sc < 600:
+                    reason = (
+                        f"Upstream returned HTTP {sc}. The API is reachable "
+                        "but reporting a server error; retry shortly or check "
+                        "the provider's status page."
+                    )
+                else:
+                    reason = f"Upstream returned HTTP {sc}, which is not a success response."
+                return {"status": "unhealthy", "http_status": sc, "reason": reason}
             return {"status": "not_connected"}
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}

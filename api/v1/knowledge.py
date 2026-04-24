@@ -980,6 +980,11 @@ async def search_knowledge(
 
     Order: RAGFlow (if configured) → native pgvector + BGE embeddings →
     keyword fallback. All three paths return the same SearchResult shape.
+
+    TC_002 (Aishwarya 2026-04-24): wrap the whole body so a native
+    search failure returns a structured 500 detail instead of the
+    opaque global ``E1001 INTERNAL_ERROR`` envelope that the UI only
+    knows how to render as "Something went wrong".
     """
     if _ragflow_available():
         try:
@@ -988,8 +993,27 @@ async def search_knowledge(
         except Exception as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
-    results = await _native_semantic_search(tenant_id, req.query, req.top_k)
-    return SearchResponse(results=results)
+    try:
+        results = await _native_semantic_search(tenant_id, req.query, req.top_k)
+        return SearchResponse(results=results)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "knowledge_search_failed",
+            tenant_id=tenant_id,
+            query_len=len(req.query or ""),
+            error=str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Knowledge-base search could not complete. Check the "
+                "/knowledge/health endpoint to confirm retrieval backends "
+                "are reachable. If the problem persists, contact support."
+            ),
+        ) from exc
 
 
 # Codex 2026-04-22 release-signoff residual: KB "semantic retrieval is

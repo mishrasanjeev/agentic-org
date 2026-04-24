@@ -39,13 +39,25 @@ export default function ConnectorDetailPage() {
   const [baseUrlError, setBaseUrlError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(60);
   // OAuth2-specific fields
+  // UI-OAUTH-001 (Uday/Ramesh 2026-04-24): Edit form previously had
+  // only Client ID, Token URL, Redirect URI — Client Secret and
+  // Refresh Token were missing, so Gmail-style OAuth2 connectors could
+  // not be re-authenticated here. Add the two missing fields and
+  // forward them through handleSave.auth_config.
   const [oauth2ClientId, setOauth2ClientId] = useState("");
+  const [oauth2ClientSecret, setOauth2ClientSecret] = useState("");
+  const [oauth2RefreshToken, setOauth2RefreshToken] = useState("");
   const [oauth2TokenUrl, setOauth2TokenUrl] = useState("");
   const [oauth2RedirectUri, setOauth2RedirectUri] = useState("");
   // TC_008 (Aishwarya 2026-04-23): basic auth needs its own
   // username field in edit — the single-token flow above couldn't
   // carry it and the tester saw missing Username during Edit.
   const [basicUsername, setBasicUsername] = useState("");
+  // Uday/Ramesh 2026-04-24 (Zoho org_id): connector-specific extras
+  // (Zoho organization_id, NetSuite account, Shopify shop) merged
+  // into auth_config on save.
+  const [extraConfig, setExtraConfig] = useState("");
+  const [extraConfigError, setExtraConfigError] = useState("");
   const [testing, setTesting] = useState(false);
 
   function validateBaseUrl(url: string): boolean {
@@ -78,6 +90,22 @@ export default function ConnectorDetailPage() {
       return;
     }
     setBaseUrlError("");
+    setExtraConfigError("");
+    let extraParsed: Record<string, unknown> | null = null;
+    if (extraConfig.trim()) {
+      try {
+        const parsed = JSON.parse(extraConfig);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          setExtraConfigError("Extra config must be a JSON object.");
+          return;
+        }
+        extraParsed = parsed as Record<string, unknown>;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Invalid JSON";
+        setExtraConfigError(`Invalid JSON: ${msg}`);
+        return;
+      }
+    }
     setSaving(true);
     setFeedback(null);
     try {
@@ -94,11 +122,20 @@ export default function ConnectorDetailPage() {
         authType === "basic"
           ? buildBasicAuthConfig(basicUsername, authToken)
           : buildAuthConfig(authType, authToken);
-      // Add OAuth2-specific fields
+      // Add OAuth2-specific fields — UI-OAUTH-001 (2026-04-24): Gmail
+      // OAuth2 needs client_id + client_secret + refresh_token to mint
+      // access tokens; Edit had only client_id.
       if (authType === "oauth2") {
         if (oauth2ClientId.trim()) authConfig.client_id = oauth2ClientId.trim();
+        if (oauth2ClientSecret.trim()) authConfig.client_secret = oauth2ClientSecret.trim();
+        if (oauth2RefreshToken.trim()) authConfig.refresh_token = oauth2RefreshToken.trim();
         if (oauth2TokenUrl.trim()) authConfig.token_url = oauth2TokenUrl.trim();
         if (oauth2RedirectUri.trim()) authConfig.redirect_uri = oauth2RedirectUri.trim();
+      }
+      if (extraParsed) {
+        for (const [k, v] of Object.entries(extraParsed)) {
+          (authConfig as Record<string, unknown>)[k] = v;
+        }
       }
       if (Object.keys(authConfig).length > 0) update.auth_config = authConfig;
 
@@ -228,6 +265,19 @@ export default function ConnectorDetailPage() {
                           <label className="text-sm font-medium">Client ID</label>
                           <input type="text" value={oauth2ClientId} onChange={(e) => setOauth2ClientId(e.target.value)} placeholder="OAuth2 Client ID" className="border rounded px-3 py-2 text-sm w-full mt-1" />
                         </div>
+                        {/* UI-OAUTH-001 (Uday/Ramesh 2026-04-24):
+                            Gmail / Google OAuth2 needs client_secret +
+                            refresh_token on this form or the connector
+                            can't mint access tokens at runtime. */}
+                        <div>
+                          <label className="text-sm font-medium">Client Secret</label>
+                          <input type="password" value={oauth2ClientSecret} onChange={(e) => setOauth2ClientSecret(e.target.value)} placeholder="Enter new client secret (leave blank to keep existing)" autoComplete="new-password" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Refresh Token</label>
+                          <input type="password" value={oauth2RefreshToken} onChange={(e) => setOauth2RefreshToken(e.target.value)} placeholder="Paste refresh token (required for Gmail/Google APIs)" autoComplete="new-password" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                          <p className="text-xs text-muted-foreground mt-1">Gmail, Google Drive, and Google Calendar connectors require a refresh token obtained via the OAuth consent flow.</p>
+                        </div>
                         <div>
                           <label className="text-sm font-medium">Token URL</label>
                           <input type="url" value={oauth2TokenUrl} onChange={(e) => setOauth2TokenUrl(e.target.value)} placeholder="https://accounts.google.com/o/oauth2/token" className="border rounded px-3 py-2 text-sm w-full mt-1" />
@@ -268,6 +318,22 @@ export default function ConnectorDetailPage() {
                         className="border rounded px-3 py-2 text-sm w-full mt-1"
                         autoComplete={authType === "basic" ? "new-password" : "off"}
                       />
+                    </div>
+                    {/* Uday/Ramesh 2026-04-24 (Zoho org_id): connector-
+                        specific extras merged into auth_config. Zoho
+                        Books needs ``organization_id``; NetSuite
+                        ``account``; Shopify ``shop``. */}
+                    <div>
+                      <label className="text-sm font-medium">Extra config (JSON)</label>
+                      <textarea
+                        value={extraConfig}
+                        onChange={(e) => setExtraConfig(e.target.value)}
+                        placeholder={'{\n  "organization_id": "12345678"\n}'}
+                        rows={3}
+                        className="border rounded px-3 py-2 text-sm w-full mt-1 font-mono"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Connector-specific parameters (e.g. Zoho Books <code>organization_id</code>).</p>
+                      {extraConfigError && <p className="text-xs text-red-600 mt-1">{extraConfigError}</p>}
                     </div>
                     <div>
                       <label className="text-sm font-medium">Secret Reference</label>
