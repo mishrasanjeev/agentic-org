@@ -37,7 +37,7 @@ import sys
 
 async def _run_plan(target_model: str, target_dims: int) -> int:
     """Print the plan + sanity-check the catalog. No writes."""
-    from core.ai_providers.catalog import EMBEDDING_CATALOG, find_embedding
+    from core.ai_providers.catalog import EMBEDDING_CATALOG
 
     print("Rotation plan")
     print("=============")
@@ -73,8 +73,8 @@ async def _run_plan(target_model: str, target_dims: int) -> int:
         "against the NEW model. Refuses to proceed below 4.6/5."
     )
     print(
-        "  2. Run `embedding_rotate.py shadow --i-understand` — creates "
-        "knowledge_documents_v2 with vector(%d), re-embeds every chunk." % target_dims
+        f"  2. Run `embedding_rotate.py shadow --i-understand` — creates "
+        f"knowledge_documents_v2 with vector({target_dims}), re-embeds every chunk."
     )
     print(
         "  3. Run `embedding_rotate.py swap --i-understand` — renames "

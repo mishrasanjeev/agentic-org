@@ -9,6 +9,9 @@ covers every modality — not just seeded text.
 """
 
 from core.rag.eval import (
+    QUALITY_FLOOR as QUALITY_FLOOR,
+)
+from core.rag.eval import (
     EvalReport as EvalReport,
 )
 from core.rag.eval import (
@@ -16,9 +19,6 @@ from core.rag.eval import (
 )
 from core.rag.eval import (
     QueryRun as QueryRun,
-)
-from core.rag.eval import (
-    QUALITY_FLOOR as QUALITY_FLOOR,
 )
 from core.rag.eval import (
     RetrievedChunk as RetrievedChunk,

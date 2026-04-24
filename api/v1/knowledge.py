@@ -1060,8 +1060,9 @@ async def knowledge_health():
         import os as _os
         from pathlib import Path as _Path
 
+        _default_eval_path = "/tmp/rag_eval_latest.json"  # noqa: S108 — admin-configurable via AGENTICORG_RAG_EVAL_REPORT
         eval_path = _Path(
-            _os.environ.get("AGENTICORG_RAG_EVAL_REPORT", "/tmp/rag_eval_latest.json")
+            _os.environ.get("AGENTICORG_RAG_EVAL_REPORT", _default_eval_path)
         )
         if eval_path.exists():
             with eval_path.open("r", encoding="utf-8") as fh:

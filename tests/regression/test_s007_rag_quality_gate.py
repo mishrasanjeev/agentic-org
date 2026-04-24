@@ -202,7 +202,8 @@ def test_regression_detected_when_score_drops_substantially() -> None:
         detect_regressions,
     )
 
-    q = GoldQuery(id="r-01", modality="text", query="x")
+    # Construct-and-discard: we only need the ID in the QueryRun below.
+    GoldQuery(id="r-01", modality="text", query="x")
     report = EvalReport(
         total_queries=1,
         passed=0,
@@ -233,7 +234,7 @@ def test_regression_detected_when_score_drops_substantially() -> None:
 def test_rag_eval_script_runs_fixture_mode_and_passes() -> None:
     """``scripts/rag_eval.py --fixture`` is the smoke test everything
     else builds on. Fixture retrieval is crafted to score 5.0."""
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 — fixed argv, no shell, invokes our own script
         [sys.executable, str(REPO / "scripts/rag_eval.py"), "--fixture", "--format", "text"],
         capture_output=True,
         text=True,
@@ -249,7 +250,7 @@ def test_rag_eval_script_runs_fixture_mode_and_passes() -> None:
 def test_embedding_rotate_plan_mode_is_always_safe() -> None:
     """``embedding_rotate.py plan`` never writes. Always exits 0 with
     a plan summary for a known-good target."""
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 — fixed argv, no shell, invokes our own script
         [
             sys.executable,
             str(REPO / "scripts/embedding_rotate.py"),
@@ -270,7 +271,7 @@ def test_embedding_rotate_plan_mode_is_always_safe() -> None:
 def test_embedding_rotate_refuses_shadow_without_confirmation() -> None:
     """Destructive phases (shadow/swap/reap) must refuse unless the
     operator passes --i-understand."""
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 — fixed argv, no shell, invokes our own script
         [
             sys.executable,
             str(REPO / "scripts/embedding_rotate.py"),
