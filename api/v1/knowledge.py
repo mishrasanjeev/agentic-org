@@ -1072,7 +1072,7 @@ async def knowledge_health():
         import os as _os
         from pathlib import Path as _Path
 
-        _default_eval_path = "/tmp/rag_eval_latest.json"  # noqa: S108 — admin-configurable via AGENTICORG_RAG_EVAL_REPORT
+        _default_eval_path = "/tmp/rag_eval_latest.json"  # noqa: S108  # nosec B108 — admin-configurable via AGENTICORG_RAG_EVAL_REPORT
         eval_path = _Path(
             _os.environ.get("AGENTICORG_RAG_EVAL_REPORT", _default_eval_path)
         )
