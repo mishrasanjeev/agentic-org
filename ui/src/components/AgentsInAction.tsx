@@ -5,7 +5,7 @@ const AGENTS = [
     name: "Priya", designation: "AP Processor - Mumbai", avatar: "P", color: "from-emerald-500 to-teal-600",
     domain: "Finance", specialization: "Domestic invoices < 5L",
     steps: [
-      { text: "Extracting invoice data via OCR...", icon: "scan" },
+      { text: "Parsing invoice PDF line items...", icon: "scan" },
       { text: "Validating GSTIN against government portal...", icon: "check" },
       { text: "3-way match: Invoice vs PO vs GRN...", icon: "match" },
       { text: "Match confirmed. Scheduling payment for day 9.", icon: "done" },

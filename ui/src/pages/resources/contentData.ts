@@ -144,12 +144,12 @@ export const CONTENT_PAGES: ContentPage[] = [
     cluster: "finance",
     title: "AI Accounts Payable Automation: From Invoice to Payment in 11 Seconds",
     metaTitle: "AI Accounts Payable Automation — 11 Seconds Per Invoice",
-    metaDescription: "Automate your entire AP workflow with AI: OCR extraction, GSTIN validation, 3-way matching, payment scheduling, GL posting. Process invoices in 11 seconds.",
+    metaDescription: "Automate your entire AP workflow with AI: PDF invoice extraction, GSTIN validation, 3-way matching, payment scheduling, GL posting. Process invoices in 11 seconds.",
     keywords: ["AI accounts payable", "AP automation", "invoice processing AI", "accounts payable automation software"],
-    heroStat: { value: "11s", label: "Per invoice — OCR to GL posting" },
+    heroStat: { value: "11s", label: "Per PDF invoice — extraction to GL posting" },
     sections: [
       { heading: "The AP Bottleneck", body: "Accounts payable is the most labor-intensive function in finance. Every invoice requires: manual data entry, GSTIN validation, purchase order lookup, goods receipt matching, approval routing, payment scheduling, and GL posting. For a mid-size company processing 500 invoices/month, this consumes 3-5 FTEs full-time." },
-      { heading: "How AI AP Automation Works", body: "An AI AP agent follows a 6-step pipeline:\n\n1. EXTRACT: OCR reads the invoice PDF — invoice ID, vendor, GSTIN, line items, totals\n2. VALIDATE: GSTIN checked against government portal in real-time\n3. MATCH: 3-way match against PO and GRN (2% tolerance)\n4. SCHEDULE: Payment scheduled for early-pay discount capture\n5. POST: Journal entry posted to GL with idempotency key\n6. NOTIFY: Remittance advice sent to vendor" },
+      { heading: "How AI AP Automation Works", body: "An AI AP agent follows a 6-step pipeline:\n\n1. EXTRACT: Parse the digital PDF invoice — invoice ID, vendor, GSTIN, line items, totals\n2. VALIDATE: GSTIN checked against government portal in real-time\n3. MATCH: 3-way match against PO and GRN (2% tolerance)\n4. SCHEDULE: Payment scheduled for early-pay discount capture\n5. POST: Journal entry posted to GL with idempotency key\n6. NOTIFY: Remittance advice sent to vendor" },
       { heading: "Results", body: "Organizations using AI AP automation report: 72% faster month-end close, zero duplicate payments, 99.7% auto-match rate, and recovery of early-payment discounts worth an average of 69,800 per month." },
     ],
     faqs: [
@@ -484,7 +484,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { heading: "India-Specific Agents", body: "AP Processor with GSTIN validation and e-invoice (IRN) support, Tax Compliance agent for GSTR-1/3B/9 filing, Payroll Engine with PF/ESI/TDS computation, Reconciliation agent with Indian banking integration, and Onboarding agent with Darwinbox + Aadhaar verification." },
     ],
     faqs: [
-      { q: "Does it support regional Indian languages?", a: "The platform currently operates in English. Multi-language support (Hindi, Tamil, Telugu, Kannada) for invoice OCR and employee communications is on the roadmap." },
+      { q: "Does it support regional Indian languages?", a: "The platform currently operates in English. Multi-language support (Hindi, Tamil, Telugu, Kannada) for invoice extraction and employee communications is on the roadmap." },
     ],
     relatedSlugs: ["gst-compliance-automation", "epfo-automation-india", "darwinbox-ai-integration"],
     cta: { text: "Start Free — India-Ready", link: "/signup" },
@@ -532,7 +532,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     keywords: ["Tally AI integration", "Tally automation", "Tally Prime AI", "accounting automation India"],
     sections: [
       { heading: "Tally Meets AI", body: "Tally Prime is the backbone of Indian SME accounting. AI agents extend it: automated journal entries from bank transactions, reconciliation against bank statements, GST return preparation from Tally data, and financial report generation. The agent reads from and writes to Tally — no manual data entry." },
-      { heading: "Key Workflows", body: "Bank reconciliation: agent matches Tally ledger entries against bank statements daily. AP automation: agent creates purchase vouchers from invoice OCR. GST filing: agent aggregates Tally data for GSTR preparation. Financial close: agent posts month-end adjustments and generates trial balance." },
+      { heading: "Key Workflows", body: "Bank reconciliation: agent matches Tally ledger entries against bank statements daily. AP automation: agent creates purchase vouchers by parsing digital PDF invoices. GST filing: agent aggregates Tally data for GSTR preparation. Financial close: agent posts month-end adjustments and generates trial balance." },
     ],
     faqs: [
       { q: "Does it work with Tally on-premise?", a: "Yes. The integration works with both Tally Prime on-premise (via Tally API server) and Tally cloud versions." },

@@ -1,0 +1,96 @@
+name: RAG quality gate
+
+# Release-gap P0.2 (2026-04-24): the product claims retrieval quality
+# >= 4.6/5. Prove it on every push to main + on a nightly schedule
+# against the live prod tenant index. Blocks main-branch merges that
+# regress retrieval quality below the floor.
+#
+# PR runs use --fixture (no secrets, no external state); the scheduled
+# run against prod tenant is gated on the RAG_EVAL_PROD_TENANT_UUID
+# repo secret being present.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "core/rag/**"
+      - "scripts/rag_eval.py"
+      - "api/v1/knowledge.py"
+      - ".github/workflows/rag-eval.yml"
+  schedule:
+    - cron: "0 3 * * *"  # 03:00 UTC nightly
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: "Tenant UUID to probe live (overrides the RAG_EVAL_PROD_TENANT_UUID secret)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  fixture-gate:
+    name: Fixture eval (no secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run fixture gate
+        run: |
+          python scripts/rag_eval.py --fixture --format text
+
+  live-gate:
+    name: Live tenant eval
+    # Only runs on the nightly schedule + manual dispatch. On main-push
+    # we don't block the merge on prod-state; the fixture gate is
+    # the merge gate.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Resolve tenant UUID
+        id: tenant
+        run: |
+          TID="${{ inputs.tenant }}"
+          if [ -z "$TID" ]; then
+            TID="${{ secrets.RAG_EVAL_PROD_TENANT_UUID }}"
+          fi
+          if [ -z "$TID" ]; then
+            echo "::notice::RAG_EVAL_PROD_TENANT_UUID not set — skipping live gate"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "tenant=$TID" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run live gate
+        if: steps.tenant.outputs.skip == 'false'
+        env:
+          AGENTICORG_DATABASE_URL: ${{ secrets.AGENTICORG_DATABASE_URL }}
+          AGENTICORG_REDIS_URL: ${{ secrets.AGENTICORG_REDIS_URL }}
+        run: |
+          python scripts/rag_eval.py --tenant "${{ steps.tenant.outputs.tenant }}" --format json --output /tmp/rag_eval.json
+      - name: Upload report
+        if: steps.tenant.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-eval-${{ github.run_id }}
+          path: /tmp/rag_eval.json
+          if-no-files-found: error

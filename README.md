@@ -46,7 +46,7 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 | Before | After |
 |--------|-------|
 | 5-day month-end close | **1.5 days** with AP + Recon + Close + Treasury agents |
-| Manual invoice processing | **11 seconds** per invoice (OCR --> GSTIN --> 3-way match --> GL) |
+| Manual invoice processing | **11 seconds** per digital PDF invoice (parse --> GSTIN --> 3-way match --> GL) |
 | 40% ticket mis-routing | **88% auto-classification** accuracy |
 | 2-week employee onboarding | **4 hours** (Darwinbox + Slack + email auto-provisioned) |
 | Manual bank reconciliation | **99.7% auto-match** rate, done by 6 AM daily |
@@ -187,7 +187,7 @@ Automated report generation and delivery:
 Production-ready workflow templates that combine multiple agents:
 | Template | Domain | Description |
 |----------|--------|-------------|
-| `invoice_to_pay_v3` | Finance | OCR --> GSTIN --> 3-way match --> payment execution |
+| `invoice_to_pay_v3` | Finance | PDF parse --> GSTIN --> 3-way match --> payment execution |
 | `month_end_close` | Finance | Trial balance --> adjustments --> reconciliation --> close |
 | `daily_treasury` | Finance | Cash position --> sweep --> forecast --> report |
 | `tax_calendar` | Finance | Deadline tracking --> filing prep --> DSC signing |

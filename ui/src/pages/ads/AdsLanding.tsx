@@ -21,12 +21,12 @@ const PAGES: Record<string, AdsPageProps> = {
   "ai-invoice-processing": {
     keyword: "AI Invoice Processing",
     headline: "Stop Losing ₹69,800/Month on Late Invoice Payments",
-    subheadline: "AI processes invoices in 11 seconds — OCR, GSTIN validation, 3-way match, GL posting. No manual work.",
+    subheadline: "AI processes digital PDF invoices in 11 seconds — extraction, GSTIN validation, 3-way match, GL posting. No manual work.",
     painPoint: "Your AP team spends 5 days on month-end close. Invoices sit in approval queues. Early-payment discounts expire unclaimed.",
     metric: "11 sec",
     metricLabel: "Per invoice — from receipt to GL posting",
     features: [
-      "OCR extracts invoice data from any PDF format",
+      "Parse invoice data from digital PDFs (text-layer)",
       "GSTIN validated against government portal in real-time",
       "3-way match: Invoice vs PO vs GRN (2% tolerance, configurable)",
       "Payment auto-scheduled to capture early-pay discounts",

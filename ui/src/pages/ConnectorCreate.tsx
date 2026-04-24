@@ -46,6 +46,13 @@ export default function ConnectorCreate() {
   const [authType, setAuthType] = useState("api_key");
   const [secretRef, setSecretRef] = useState("");
   const [authFields, setAuthFields] = useState<Record<string, string>>({});
+  // Uday/Ramesh 2026-04-24 (Zoho org_id): extra connector-specific
+  // config key=value pairs (JSON) merged into auth_config. Zoho Books
+  // needs ``organization_id``; NetSuite needs ``account``; HubSpot
+  // needs ``portal_id``; Shopify needs ``shop``. Rather than hardcode
+  // per-connector fields, accept a JSON blob.
+  const [extraConfig, setExtraConfig] = useState("");
+  const [extraConfigError, setExtraConfigError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(100);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -70,10 +77,26 @@ export default function ConnectorCreate() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("Connector name is required"); return; }
+    setExtraConfigError("");
+    let extraParsed: Record<string, unknown> | null = null;
+    if (extraConfig.trim()) {
+      try {
+        const parsed = JSON.parse(extraConfig);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          setExtraConfigError("Extra config must be a JSON object.");
+          return;
+        }
+        extraParsed = parsed as Record<string, unknown>;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Invalid JSON";
+        setExtraConfigError(`Invalid JSON: ${msg}`);
+        return;
+      }
+    }
     setSubmitting(true);
     setError("");
     try {
-      const authConfig = buildMultiAuthConfig();
+      const authConfig = { ...buildMultiAuthConfig(), ...(extraParsed || {}) } as Record<string, unknown>;
       await api.post("/connectors", {
         name: name.trim(),
         category,
@@ -162,6 +185,23 @@ export default function ConnectorCreate() {
                   </div>
                 </>
               )}
+              {/* Uday/Ramesh 2026-04-24 (Zoho org_id): connector-
+                  specific extras that don't fit the auth template —
+                  Zoho Books needs ``organization_id``, NetSuite needs
+                  ``account``, Shopify needs ``shop``. Merged into
+                  auth_config server-side. */}
+              <div>
+                <label className="text-sm font-medium">Extra config (optional, JSON)</label>
+                <textarea
+                  value={extraConfig}
+                  onChange={(e) => setExtraConfig(e.target.value)}
+                  placeholder={'{\n  "organization_id": "12345678"\n}'}
+                  rows={3}
+                  className="border rounded px-3 py-2 text-sm w-full mt-1 font-mono"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Connector-specific parameters (e.g. Zoho Books <code>organization_id</code>, NetSuite <code>account</code>, Shopify <code>shop</code>).</p>
+                {extraConfigError && <p className="text-xs text-red-600 mt-1">{extraConfigError}</p>}
+              </div>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

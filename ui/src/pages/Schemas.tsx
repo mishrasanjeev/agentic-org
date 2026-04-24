@@ -390,7 +390,7 @@ export default function Schemas() {
       <div className="grid grid-cols-4 gap-2">
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">Total Schemas</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{DEFAULT_SCHEMAS.length + schemas.length}</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{DEFAULT_SCHEMAS.filter((name) => !schemas.some((s) => s.name === name)).length + schemas.length}</p></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">Platform Default</CardTitle></CardHeader>
@@ -410,7 +410,19 @@ export default function Schemas() {
         <p className="text-muted-foreground">Loading schemas...</p>
       ) : (
         <div className="grid grid-cols-3 gap-4">
-          {(schemas.length > 0 ? schemas : DEFAULT_SCHEMAS.map((name) => ({ name, version: "1", is_default: true, field_count: 0, description: "" }))).map((schema) => (
+          {/* TC_003 (Aishwarya 2026-04-24): the list used to be
+              `schemas.length > 0 ? schemas : DEFAULT_SCHEMAS`, so
+              creating a single custom schema hid all 18 platform
+              defaults. Always render BOTH — default cards first (for
+              a stable baseline), then tenant-persisted schemas. Names
+              that appear in both buckets prefer the persisted row so
+              edits are reflected. */}
+          {[
+            ...DEFAULT_SCHEMAS
+              .filter((name) => !schemas.some((s) => s.name === name))
+              .map((name) => ({ name, version: "1", is_default: true, field_count: 0, description: "" })),
+            ...schemas,
+          ].map((schema) => (
             <Card
               key={schema.name}
               className="cursor-pointer hover:shadow-md transition-shadow"

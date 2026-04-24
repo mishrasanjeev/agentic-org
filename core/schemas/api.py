@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ── Agent schemas ──
 
@@ -214,6 +214,46 @@ class SchemaCreate(BaseModel):
     description: str | None = None
     json_schema: dict[str, Any]
     is_default: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Schema name is required")
+        return v
+
+    @field_validator("json_schema")
+    @classmethod
+    def _validate_json_schema(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Reject empty / shape-less schemas.
+
+        TC_006 (Aishwarya 2026-04-24): the endpoint accepted
+        ``json_schema={}`` and created a row with no definition at all,
+        which then rendered as blank in view/edit (TC_004/TC_005). A
+        valid JSON Schema needs at minimum ``type`` or ``$ref`` plus,
+        for ``type=object``, a non-empty ``properties`` map.
+        """
+        if not isinstance(v, dict) or not v:
+            raise ValueError(
+                "json_schema must be a non-empty JSON Schema object "
+                "with at least 'type' and 'properties' fields"
+            )
+        if "$ref" in v:
+            return v
+        schema_type = v.get("type")
+        if not schema_type:
+            raise ValueError(
+                "json_schema must declare a 'type' field (e.g. 'object')"
+            )
+        if schema_type == "object":
+            properties = v.get("properties")
+            if not isinstance(properties, dict) or not properties:
+                raise ValueError(
+                    "json_schema with type='object' must declare a "
+                    "non-empty 'properties' map"
+                )
+        return v
 
 
 # ── DSAR ──

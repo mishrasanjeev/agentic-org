@@ -295,14 +295,57 @@ def _compute_next_run(cron: str) -> datetime:
         return now + timedelta(days=1)
 
 
+def _coerce_channel(ch: Any) -> DeliveryChannel | None:
+    """Best-effort parse of a stored recipient entry.
+
+    Legacy rows from v4.4/4.5 stored ``recipients`` as bare string lists
+    (``["user@example.com"]``). Later rows use the structured dict shape
+    (``[{"type": "email", "target": "..."}]``). Attempting strict
+    DeliveryChannel construction on the legacy shape crashes the list
+    endpoint with a 500 — TC_001 reopen 2026-04-24.
+
+    Returns ``None`` when the entry cannot be coerced into a valid
+    channel so the caller can drop it rather than 500ing the whole list.
+    """
+    if isinstance(ch, DeliveryChannel):
+        return ch
+    if isinstance(ch, dict):
+        try:
+            return DeliveryChannel(**ch)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(ch, str):
+        s = ch.strip()
+        if not s:
+            return None
+        # Legacy string — assume email if it looks like one; otherwise
+        # surface as a "Slack channel name" shape so it doesn't silently
+        # vanish from the UI.
+        try:
+            if _EMAIL_RE.match(s):
+                return DeliveryChannel(type="email", target=s)
+            if _SLACK_CHANNEL_RE.match(s):
+                return DeliveryChannel(type="slack", target=s)
+            if _WHATSAPP_PHONE_RE.match(s):
+                return DeliveryChannel(type="whatsapp", target=s)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _to_response(row: ReportSchedule) -> ReportScheduleResponse:
-    """Convert an ORM row to the API response model."""
+    """Convert an ORM row to the API response model.
+
+    Defensive against legacy row shapes: a single bad ``recipients``
+    entry no longer crashes the list endpoint (TC_001 reopen).
+    """
     config: dict[str, Any] = row.config or {}
     channels_raw: list[Any] = row.recipients or []
-    parsed_channels = [
-        DeliveryChannel(**ch) if isinstance(ch, dict) else ch
-        for ch in channels_raw
-    ]
+    parsed_channels: list[DeliveryChannel] = []
+    for ch in channels_raw:
+        coerced = _coerce_channel(ch)
+        if coerced is not None:
+            parsed_channels.append(coerced)
     return ReportScheduleResponse(
         id=str(row.id),
         report_type=row.report_type,
@@ -359,23 +402,60 @@ async def list_report_schedules(
                 detail="company_id must be a UUID",
             ) from exc
 
-    async with get_tenant_session(tid) as session:
-        query = select(ReportSchedule).where(ReportSchedule.tenant_id == tid)
-        if company_uuid is not None:
-            # Return the company's own schedules *and* tenant-wide
-            # schedules (company_id IS NULL) so a company user doesn't
-            # lose visibility of org-level schedules.
-            from sqlalchemy import or_
+    try:
+        async with get_tenant_session(tid) as session:
+            query = select(ReportSchedule).where(ReportSchedule.tenant_id == tid)
+            if company_uuid is not None:
+                # Return the company's own schedules *and* tenant-wide
+                # schedules (company_id IS NULL) so a company user doesn't
+                # lose visibility of org-level schedules.
+                from sqlalchemy import or_
 
-            query = query.where(
-                or_(
-                    ReportSchedule.company_id == company_uuid,
-                    ReportSchedule.company_id.is_(None),
+                query = query.where(
+                    or_(
+                        ReportSchedule.company_id == company_uuid,
+                        ReportSchedule.company_id.is_(None),
+                    )
                 )
-            )
-        result = await session.execute(query)
-        rows = result.scalars().all()
-        return [_to_response(row) for row in rows]
+            result = await session.execute(query)
+            rows = result.scalars().all()
+            # TC_001 reopen 2026-04-24: a single row with legacy recipients
+            # shape, NULL timestamps, or any other unexpected value used to
+            # 500 the whole list. Skip the bad row (logged) and still
+            # return the ones that parsed so the UI isn't blank-screened.
+            out: list[ReportScheduleResponse] = []
+            for row in rows:
+                try:
+                    out.append(_to_response(row))
+                except Exception as row_exc:  # noqa: BLE001 — defensive boundary
+                    import structlog
+
+                    structlog.get_logger().warning(
+                        "report_schedule_row_skipped",
+                        tenant_id=tenant_id,
+                        schedule_id=getattr(row, "id", None),
+                        error=str(row_exc),
+                    )
+            return out
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import structlog
+
+        structlog.get_logger().error(
+            "report_schedule_list_failed",
+            tenant_id=tenant_id,
+            company_id=company_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Could not load report schedules. If the problem persists, "
+                "contact support."
+            ),
+        ) from exc
 
 
 @router.post(
