@@ -421,6 +421,25 @@ class TestConnectorUpdateCredentialMerge:
         assert "merged_secrets" in src
         assert "merged_secrets.update(new_secrets)" in src
 
+    def test_put_route_fails_closed_on_decrypt_error(self) -> None:
+        """Codex PR #305 review (P1): if the stored credentials blob
+        exists but decryption fails (key drift, corruption, transient
+        error), the route must refuse the write and preserve existing
+        credentials_encrypted — NOT fall through to re-encrypting only
+        the partial new_secrets, which would wipe them.
+        """
+        import inspect
+
+        from api.v1 import connectors
+
+        src = inspect.getsource(connectors.update_connector)
+        # The decrypt exception handler must raise HTTPException, not
+        # log-and-continue.
+        assert "connector_update_decrypt_failed_refusing_wipe" in src
+        assert "raise HTTPException(" in src
+        # The error message must guide the admin to recovery.
+        assert "Re-register the connector" in src or "re-register" in src.lower()
+
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])

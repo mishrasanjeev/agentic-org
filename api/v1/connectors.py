@@ -465,16 +465,38 @@ async def update_connector(
             if cc and cc.credentials_encrypted:
                 enc = cc.credentials_encrypted.get("_encrypted") if isinstance(cc.credentials_encrypted, dict) else None
                 if isinstance(enc, str) and enc:
+                    # Codex PR #305 review (P1): if the stored blob
+                    # exists but we cannot decrypt it (key drift,
+                    # corruption, transient error), MUST NOT fall back
+                    # to treating the request as a full replacement.
+                    # That was the original wipe bug. Fail-closed: refuse
+                    # the write, keep credentials_encrypted untouched,
+                    # return a 500 with a pointer to re-registration.
                     try:
                         existing_plain = decrypt_for_tenant(enc)
                         existing = __import__("json").loads(existing_plain)
                         if isinstance(existing, dict):
                             merged_secrets.update(existing)
-                    except Exception:
-                        _log.warning(
-                            "connector_update_decrypt_failed_treating_as_replace",
-                            conn_id=str(conn_id),
+                        else:
+                            raise ValueError(
+                                "decrypted credentials are not a JSON object"
+                            )
+                    except Exception as exc:
+                        _log.exception(
+                            "connector_update_decrypt_failed_refusing_wipe conn_id=%s",
+                            conn_id,
                         )
+                        raise HTTPException(
+                            status_code=500,
+                            detail=(
+                                "Could not decrypt the existing connector "
+                                "credentials. Refusing the update rather than "
+                                "risk wiping them. Re-register the connector "
+                                "via POST /connectors with the full credential "
+                                "set (client_id, client_secret, refresh_token, "
+                                "organization_id, etc.) to recover."
+                            ),
+                        ) from exc
             # New keys win on collision so admins can rotate creds.
             merged_secrets.update(new_secrets)
 

@@ -23,19 +23,25 @@ with current status, code-level fix anchor, and what remains for GA.
 
 ### 2. No live RAG quality proof  — **External run required**
 
-- **Code ready**: `scripts/rag_eval.py --tenant <uuid>` is wired into the
-  main-branch CI workflow and scheduled nightly against the seeded prod
-  tenant index. `/knowledge/health` surfaces `last_eval.overall_score`
-  once the script has run against the tenant.
-- **What's missing**: first live invocation. The nightly run posts to
-  the endpoint at the next cron tick; alternatively the operator can
-  trigger it manually with a prod tenant UUID.
+- **Code ready**: `scripts/rag_eval.py` + scoring primitives in
+  `core/rag/eval.py`. `/knowledge/health` surfaces `last_eval.overall_score`.
+- **CI wired (this PR)**: `.github/workflows/rag-eval.yml` —
+  - PR + main-push runs a `--fixture` gate (no secrets, always safe).
+  - Nightly schedule (03:00 UTC) runs `--tenant <uuid>` where the
+    tenant UUID comes from the `RAG_EVAL_PROD_TENANT_UUID` repo
+    secret. Skips cleanly with a workflow-notice if the secret is
+    unset.
+- **What's missing for GA**:
+  1. Set the `RAG_EVAL_PROD_TENANT_UUID` repo secret to the prod
+     tenant UUID (or add `AGENTICORG_DATABASE_URL` /
+     `AGENTICORG_REDIS_URL` to the `production` environment so the
+     nightly job can connect).
+  2. Wait one nightly tick, or trigger the `live-gate` job manually
+     via `workflow_dispatch` with an explicit `tenant` input.
+  3. Confirm `/knowledge/health` returns `last_eval.overall_score >= 4.6`.
 - **Floor**: ≥ 4.6/5 overall AND per-modality (enforced by
   `gate_decision` in `core/rag/eval.py`).
-- **Owner**: deploy/ops. Action: run
-  `python scripts/rag_eval.py --tenant <prod_uuid>` once against the
-  seeded index, confirm `/knowledge/health` returns
-  `last_eval.overall_score >= 4.6`. Fixture-mode proof (CI) already passes.
+- **Owner**: deploy/ops.
 
 ### 3. RAGFlow unreachable — formally accept pgvector as GA mode  — **Decision documented**
 

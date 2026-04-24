@@ -484,7 +484,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { heading: "India-Specific Agents", body: "AP Processor with GSTIN validation and e-invoice (IRN) support, Tax Compliance agent for GSTR-1/3B/9 filing, Payroll Engine with PF/ESI/TDS computation, Reconciliation agent with Indian banking integration, and Onboarding agent with Darwinbox + Aadhaar verification." },
     ],
     faqs: [
-      { q: "Does it support regional Indian languages?", a: "The platform currently operates in English. Multi-language support (Hindi, Tamil, Telugu, Kannada) for invoice OCR and employee communications is on the roadmap." },
+      { q: "Does it support regional Indian languages?", a: "The platform currently operates in English. Multi-language support (Hindi, Tamil, Telugu, Kannada) for invoice extraction and employee communications is on the roadmap." },
     ],
     relatedSlugs: ["gst-compliance-automation", "epfo-automation-india", "darwinbox-ai-integration"],
     cta: { text: "Start Free — India-Ready", link: "/signup" },
@@ -532,7 +532,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     keywords: ["Tally AI integration", "Tally automation", "Tally Prime AI", "accounting automation India"],
     sections: [
       { heading: "Tally Meets AI", body: "Tally Prime is the backbone of Indian SME accounting. AI agents extend it: automated journal entries from bank transactions, reconciliation against bank statements, GST return preparation from Tally data, and financial report generation. The agent reads from and writes to Tally — no manual data entry." },
-      { heading: "Key Workflows", body: "Bank reconciliation: agent matches Tally ledger entries against bank statements daily. AP automation: agent creates purchase vouchers from invoice OCR. GST filing: agent aggregates Tally data for GSTR preparation. Financial close: agent posts month-end adjustments and generates trial balance." },
+      { heading: "Key Workflows", body: "Bank reconciliation: agent matches Tally ledger entries against bank statements daily. AP automation: agent creates purchase vouchers by parsing digital PDF invoices. GST filing: agent aggregates Tally data for GSTR preparation. Financial close: agent posts month-end adjustments and generates trial balance." },
     ],
     faqs: [
       { q: "Does it work with Tally on-premise?", a: "Yes. The integration works with both Tally Prime on-premise (via Tally API server) and Tally cloud versions." },
