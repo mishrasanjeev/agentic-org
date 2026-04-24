@@ -347,6 +347,12 @@ async def ingest_document(
                     },
                 )
             indexed += 1
+        # Codex PR #304 review P1: the AsyncSession from
+        # async_session_factory does NOT auto-commit on context exit.
+        # Without this line every INSERT rolls back and the whole
+        # ingestion is a silent no-op even though we increment
+        # chunks_indexed and log success. Commit explicitly.
+        await session.commit()
 
     logger.info(
         "rag_ingest_complete",
