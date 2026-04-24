@@ -655,6 +655,52 @@ async def upload_document(
     except Exception as exc:
         logger.warning("db_store_doc_failed", error=str(exc))
 
+    # S0-06 (PR-3 2026-04-24): also run the multimodal ingestion service
+    # so native pgvector search covers user-uploaded PDFs / DOCX / XLSX
+    # / CSV even when RAGFlow is down. Extraction errors surface as 415;
+    # embed/persist errors are logged and NOT fatal because the upload
+    # row already landed in `documents`.
+    try:
+        from core.rag import UnsupportedMimeType, ingest_document
+
+        ingest_result = await ingest_document(
+            tenant_id=tenant_id,
+            title=filename,
+            stream=content,
+            mime_type=(file.content_type or ""),
+            filename=filename,
+            source=f"upload://{filename}",
+            source_object_id=doc["document_id"],
+            source_object_type="upload",
+        )
+        logger.info(
+            "kb_ingest_multimodal",
+            doc_id=doc["document_id"],
+            chunks_indexed=ingest_result.chunks_indexed,
+            embedding_model=ingest_result.embedding_model,
+        )
+    except UnsupportedMimeType as exc:
+        # The body was accepted (row is in `documents`) but we can't
+        # populate knowledge_documents for it. 415 would be wrong now —
+        # the resource was created. Return the DocumentOut and log so
+        # operators see the gap. Future: front-end guards unsupported
+        # types before upload and falls through to this path.
+        logger.info(
+            "kb_ingest_unsupported_mime",
+            doc_id=doc["document_id"],
+            mime=file.content_type,
+            error=str(exc),
+        )
+    except Exception as exc:
+        # Any other failure (embedding model down, DB hiccup) — log,
+        # don't fail the upload. The RAGFlow/keyword fallback still
+        # works for this doc.
+        logger.warning(
+            "kb_ingest_multimodal_failed",
+            doc_id=doc["document_id"],
+            error=str(exc),
+        )
+
     return DocumentOut(
         document_id=doc["document_id"],
         filename=doc["filename"],
