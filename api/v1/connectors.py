@@ -432,15 +432,27 @@ async def update_connector(
                 continue
             setattr(connector, field, value)
 
-        # If auth_config was provided in the update, store it encrypted
+        # If auth_config was provided in the update, MERGE it into the
+        # existing encrypted credentials (PR #305 P0 fix 2026-04-24).
+        #
+        # Regression this guards against: the 24-Apr sweep added an
+        # "Extra config (JSON)" textarea so admins could set Zoho Books
+        # `organization_id`. A user editing only that field sent a
+        # minimal `auth_config={"organization_id": "12345"}`. The old
+        # code REPLACED `credentials_encrypted` with the encrypted
+        # version of that small dict — wiping client_id / client_secret /
+        # refresh_token. Next test-connection failed with "no creds".
+        #
+        # Fix: decrypt what's there, shallow-merge the new keys in
+        # (new wins on collision), re-encrypt. Callers that genuinely
+        # want to replace all creds still can — they just have to send
+        # every key they intend to keep.
         new_secrets = body.model_dump(exclude_none=True).get("auth_config")
         if new_secrets:
             from core.crypto import encrypt_for_tenant
+            from core.crypto.tenant_secrets import decrypt_for_tenant
             from core.models.connector_config import ConnectorConfig
 
-            encrypted = await encrypt_for_tenant(
-                __import__("json").dumps(new_secrets), tid
-            )
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
@@ -448,6 +460,27 @@ async def update_connector(
                 )
             )
             cc = cc_result.scalar_one_or_none()
+
+            merged_secrets: dict = {}
+            if cc and cc.credentials_encrypted:
+                enc = cc.credentials_encrypted.get("_encrypted") if isinstance(cc.credentials_encrypted, dict) else None
+                if isinstance(enc, str) and enc:
+                    try:
+                        existing_plain = decrypt_for_tenant(enc)
+                        existing = __import__("json").loads(existing_plain)
+                        if isinstance(existing, dict):
+                            merged_secrets.update(existing)
+                    except Exception:
+                        _log.warning(
+                            "connector_update_decrypt_failed_treating_as_replace",
+                            conn_id=str(conn_id),
+                        )
+            # New keys win on collision so admins can rotate creds.
+            merged_secrets.update(new_secrets)
+
+            encrypted = await encrypt_for_tenant(
+                __import__("json").dumps(merged_secrets), tid
+            )
             if cc:
                 cc.credentials_encrypted = {"_encrypted": encrypted}
             else:

@@ -144,12 +144,12 @@ export const CONTENT_PAGES: ContentPage[] = [
     cluster: "finance",
     title: "AI Accounts Payable Automation: From Invoice to Payment in 11 Seconds",
     metaTitle: "AI Accounts Payable Automation — 11 Seconds Per Invoice",
-    metaDescription: "Automate your entire AP workflow with AI: OCR extraction, GSTIN validation, 3-way matching, payment scheduling, GL posting. Process invoices in 11 seconds.",
+    metaDescription: "Automate your entire AP workflow with AI: PDF invoice extraction, GSTIN validation, 3-way matching, payment scheduling, GL posting. Process invoices in 11 seconds.",
     keywords: ["AI accounts payable", "AP automation", "invoice processing AI", "accounts payable automation software"],
-    heroStat: { value: "11s", label: "Per invoice — OCR to GL posting" },
+    heroStat: { value: "11s", label: "Per PDF invoice — extraction to GL posting" },
     sections: [
       { heading: "The AP Bottleneck", body: "Accounts payable is the most labor-intensive function in finance. Every invoice requires: manual data entry, GSTIN validation, purchase order lookup, goods receipt matching, approval routing, payment scheduling, and GL posting. For a mid-size company processing 500 invoices/month, this consumes 3-5 FTEs full-time." },
-      { heading: "How AI AP Automation Works", body: "An AI AP agent follows a 6-step pipeline:\n\n1. EXTRACT: OCR reads the invoice PDF — invoice ID, vendor, GSTIN, line items, totals\n2. VALIDATE: GSTIN checked against government portal in real-time\n3. MATCH: 3-way match against PO and GRN (2% tolerance)\n4. SCHEDULE: Payment scheduled for early-pay discount capture\n5. POST: Journal entry posted to GL with idempotency key\n6. NOTIFY: Remittance advice sent to vendor" },
+      { heading: "How AI AP Automation Works", body: "An AI AP agent follows a 6-step pipeline:\n\n1. EXTRACT: Parse the digital PDF invoice — invoice ID, vendor, GSTIN, line items, totals\n2. VALIDATE: GSTIN checked against government portal in real-time\n3. MATCH: 3-way match against PO and GRN (2% tolerance)\n4. SCHEDULE: Payment scheduled for early-pay discount capture\n5. POST: Journal entry posted to GL with idempotency key\n6. NOTIFY: Remittance advice sent to vendor" },
       { heading: "Results", body: "Organizations using AI AP automation report: 72% faster month-end close, zero duplicate payments, 99.7% auto-match rate, and recovery of early-payment discounts worth an average of 69,800 per month." },
     ],
     faqs: [

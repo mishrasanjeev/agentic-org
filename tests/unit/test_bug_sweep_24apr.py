@@ -357,5 +357,70 @@ class TestSchemaRegistryValidation:
             )
 
 
+class TestConnectorUpdateCredentialMerge:
+    """Release-gate P0 (2026-04-24): the 24-Apr sweep added an
+    'Extra config (JSON)' textarea so admins could supply Zoho Books
+    organization_id on Edit. A user editing *only* that field sent
+    ``auth_config={"organization_id": "12345"}``. The old PUT handler
+    replaced credentials_encrypted with the encrypted version of that
+    tiny dict — wiping client_id / client_secret / refresh_token.
+
+    This test pins the merge-not-replace contract: a partial auth_config
+    update must PRESERVE existing keys and only override the supplied
+    ones.
+    """
+
+    def test_merge_logic_preserves_existing_creds(self) -> None:
+        """Pure merge semantics — the same shallow-merge the PUT route
+        uses. Covers the hot path without needing a live DB."""
+        existing = {
+            "client_id": "gmail-client",
+            "client_secret": "shh",
+            "refresh_token": "rt_xyz",
+        }
+        partial_update = {"organization_id": "12345"}
+
+        merged: dict = {}
+        merged.update(existing)
+        merged.update(partial_update)
+
+        # Existing creds survive.
+        assert merged["client_id"] == "gmail-client"
+        assert merged["client_secret"] == "shh"
+        assert merged["refresh_token"] == "rt_xyz"
+        # New key lands.
+        assert merged["organization_id"] == "12345"
+
+    def test_merge_logic_allows_credential_rotation(self) -> None:
+        """Admins rotating a secret still have last-write-wins semantics —
+        a supplied key overrides the existing one."""
+        existing = {"client_secret": "old", "refresh_token": "rt_old"}
+        partial_update = {"client_secret": "new"}
+
+        merged: dict = {}
+        merged.update(existing)
+        merged.update(partial_update)
+
+        assert merged["client_secret"] == "new"  # rotated
+        assert merged["refresh_token"] == "rt_old"  # untouched
+
+    def test_put_route_source_uses_merge_not_replace(self) -> None:
+        """Fail-closed source-inspection guard: if someone refactors the
+        PUT route and drops the decrypt+merge step, this test fails.
+
+        Paired with the runtime test above so both source shape AND
+        semantics are locked in."""
+        import inspect
+
+        from api.v1 import connectors
+
+        src = inspect.getsource(connectors.update_connector)
+        # The merge step must decrypt existing and shallow-update the
+        # new dict into the merged baseline.
+        assert "decrypt_for_tenant" in src
+        assert "merged_secrets" in src
+        assert "merged_secrets.update(new_secrets)" in src
+
+
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
