@@ -23,11 +23,11 @@ boundary translates into 415.
 from __future__ import annotations
 
 import hashlib
-import logging
 import uuid as _uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+import structlog
 from sqlalchemy import text as sqltext
 
 from core.rag.extractors import (
@@ -37,7 +37,7 @@ from core.rag.extractors import (
     extract,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Re-export for core/rag/__init__.py
 __all__ = ["UnsupportedMimeType", "ingest_document", "IngestResult"]
