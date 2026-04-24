@@ -47,6 +47,7 @@ const ALL_NAV = [
   { path: "/dashboard/rpa", labelKey: "nav.rpa", label: "RPA Scripts", roles: ["admin"] },
   { path: "/dashboard/rpa-schedules", labelKey: "nav.rpaSchedules", label: "RPA Schedules", roles: ["admin"] },
   { path: "/dashboard/settings/ai-credentials", labelKey: "nav.aiCredentials", label: "AI Credentials", roles: ["admin"] },
+  { path: "/dashboard/settings/ai-config", labelKey: "nav.aiConfig", label: "AI Configuration", roles: ["admin"] },
   { path: "/dashboard/packs", labelKey: "nav.packs", label: "Industry Packs", roles: ["admin"] },
   { path: "/dashboard/sla", labelKey: "nav.sla", label: "SLA Monitor", roles: ["admin"] },
   { path: "/dashboard/billing", labelKey: "nav.billing", label: "Billing", roles: ["admin"] },

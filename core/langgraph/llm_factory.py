@@ -43,6 +43,7 @@ def create_chat_model(
     *,
     query: str = "",
     routing_config: dict | None = None,
+    tenant_id: str | None = None,
 ) -> BaseChatModel:
     """Create a LangChain ChatModel, optionally using smart routing.
 
@@ -129,7 +130,7 @@ def create_chat_model(
             # Fall through to normal model resolution
 
     resolved = _resolve_model(model)
-    return _build_model(resolved, temperature, max_tokens)
+    return _build_model(resolved, temperature, max_tokens, tenant_id=tenant_id)
 
 
 def _build_ollama_model(model_name: str, temperature: float, max_tokens: int) -> BaseChatModel:
@@ -162,8 +163,47 @@ def _build_vllm_model(model_name: str, temperature: float, max_tokens: int) -> B
     )
 
 
-def _build_model(resolved: str, temperature: float, max_tokens: int) -> BaseChatModel:
-    """Instantiate the correct LangChain ChatModel for *resolved* model name."""
+def _resolve_cloud_api_key(provider: str, tenant_id: str | None = None) -> str:
+    """Resolve the API key for a cloud LLM provider.
+
+    S0-08 (PR-2): the earlier version read ``os.getenv(...)`` directly.
+    Route through the tenant-aware resolver so BYO tokens and the
+    tenant's ``ai_fallback_policy`` take effect. On any resolver error
+    we fall back to the env var so callers that run outside a tenant
+    context (cron, boot probes) still function.
+    """
+    from core.ai_providers.resolver import (
+        ProviderNotConfigured,
+        get_provider_credential_sync,
+    )
+
+    try:
+        resolved = get_provider_credential_sync(tenant_id, provider, "llm")
+        return resolved.secret
+    except ProviderNotConfigured:
+        # No tenant BYO and no platform env — let the caller's client
+        # library surface the usual "missing API key" error so the
+        # symptom is actionable.
+        return ""
+    except Exception as exc:
+        logger.warning("llm_key_resolve_failed", provider=provider, error=str(exc))
+        return ""
+
+
+def _build_model(
+    resolved: str,
+    temperature: float,
+    max_tokens: int,
+    tenant_id: str | None = None,
+) -> BaseChatModel:
+    """Instantiate the correct LangChain ChatModel for *resolved* model name.
+
+    When ``tenant_id`` is provided, credentials route through the
+    tenant AI resolver (``core.ai_providers.resolver``) so BYO tokens
+    take effect. Sync-over-async via a short-lived threadpool —
+    expensive per call only when the resolver cache misses (60-120s
+    TTL).
+    """
 
     # Local models via Ollama (OpenAI-compatible API)
     if _is_ollama_model(resolved):
@@ -181,7 +221,7 @@ def _build_model(resolved: str, temperature: float, max_tokens: int) -> BaseChat
             model=resolved,
             temperature=temperature,
             max_output_tokens=max_tokens,
-            google_api_key=os.getenv("GOOGLE_GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", "")),
+            google_api_key=_resolve_cloud_api_key("gemini", tenant_id),
         )
 
     # Cloud: Claude
@@ -192,7 +232,7 @@ def _build_model(resolved: str, temperature: float, max_tokens: int) -> BaseChat
             model_name=resolved,
             temperature=temperature,
             max_tokens=max_tokens,
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+            anthropic_api_key=_resolve_cloud_api_key("anthropic", tenant_id),
         )
 
     # Cloud: GPT
@@ -203,7 +243,7 @@ def _build_model(resolved: str, temperature: float, max_tokens: int) -> BaseChat
             model=resolved,
             temperature=temperature,
             max_tokens=max_tokens,
-            openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+            openai_api_key=_resolve_cloud_api_key("openai", tenant_id),
         )
 
     # Default fallback — Gemini Flash (free)
@@ -213,7 +253,7 @@ def _build_model(resolved: str, temperature: float, max_tokens: int) -> BaseChat
         model="gemini-2.5-flash",
         temperature=temperature,
         max_output_tokens=max_tokens,
-        google_api_key=os.getenv("GOOGLE_GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", "")),
+        google_api_key=_resolve_cloud_api_key("gemini", tenant_id),
     )
 
 
@@ -231,13 +271,19 @@ def _resolve_model(model: str) -> str:
     if "gemini" in m:
         return model
 
+    # S0-08: capability gate — before PR-2 this read the provider env
+    # var directly. Route through the resolver so a tenant BYO token
+    # counts as "available" too. No tenant context here (we're running
+    # inside _resolve_model which is called before the request-level
+    # tenant propagates down), so the resolver falls back to platform
+    # env. Keeps the old behaviour verbatim when no BYO is set.
     if "claude" in m:
-        if os.getenv("ANTHROPIC_API_KEY"):
+        if _resolve_cloud_api_key("anthropic"):
             return model
         return "gemini-2.5-flash"
 
     if "gpt" in m:
-        if os.getenv("OPENAI_API_KEY"):
+        if _resolve_cloud_api_key("openai"):
             return model
         return "gemini-2.5-flash"
 

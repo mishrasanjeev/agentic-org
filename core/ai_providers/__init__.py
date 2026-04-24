@@ -18,3 +18,12 @@ from core.ai_providers.resolver import (
 from core.ai_providers.resolver import (
     get_provider_credential as get_provider_credential,
 )
+from core.ai_providers.settings import (
+    EffectiveAISetting as EffectiveAISetting,
+)
+from core.ai_providers.settings import (
+    get_effective_ai_setting as get_effective_ai_setting,
+)
+from core.ai_providers.settings import (
+    invalidate_tenant_ai_setting_cache as invalidate_tenant_ai_setting_cache,
+)
