@@ -462,6 +462,20 @@ jobs:
           kubectl set image deploy/agenticorg-ui ui=${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }} \
             --namespace agenticorg
 
+      # Codex 2026-04-24 enterprise sign-off blocker:
+      # /api/v1/health returned commit: "unknown" because this job
+      # rolls new images via `kubectl set image` (fast) without
+      # threading the commit SHA into the container env. Set the env
+      # var directly on the Deployment so the next pod rollout reads
+      # the same SHA that was just deployed. This runs BEFORE the
+      # rollout-verify step so the new pods come up with the variable
+      # already present.
+      - name: Inject deployed commit SHA into API env
+        run: |
+          kubectl set env deploy/agenticorg-api \
+            AGENTICORG_GIT_SHA=${{ github.sha }} \
+            --namespace agenticorg
+
       - name: Verify production rollout
         run: |
           set -euo pipefail
