@@ -1205,7 +1205,7 @@ class TestSchemasEndpoints:
 
         body = SchemaCreate(
             name="default_schema",
-            json_schema={"type": "object"},
+            json_schema={"type": "object", "properties": {"id": {"type": "string"}}},
             is_default=True,
         )
 
@@ -1226,7 +1226,7 @@ class TestSchemasEndpoints:
         body = SchemaCreate(
             name="new_schema",
             version="1",
-            json_schema={"type": "object"},
+            json_schema={"type": "object", "properties": {"id": {"type": "string"}}},
         )
 
         ctx = _patch_tenant_session("schemas", mock_session)
@@ -1272,7 +1272,7 @@ class TestSchemasEndpoints:
         body = SchemaCreate(
             name="test",
             version="1",
-            json_schema={"type": "object"},
+            json_schema={"type": "object", "properties": {"id": {"type": "string"}}},
             is_default=True,
         )
 
