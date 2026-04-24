@@ -55,6 +55,7 @@ from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry
 from core.models.sso_config import SSOConfig as SSOConfig
 from core.models.tenant import Tenant as Tenant
+from core.models.tenant_ai_credential import TenantAICredential as TenantAICredential
 from core.models.tool_call import ToolCall as ToolCall
 from core.models.user import User as User
 from core.models.workflow import StepExecution as StepExecution

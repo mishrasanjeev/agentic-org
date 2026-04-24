@@ -331,9 +331,120 @@ async def test_connection(
         )
 
 
-# In-memory per-tenant config store. Replaced with a DB table when the
-# Voice Agent feature graduates from beta.
+# In-memory per-tenant config store.
+#
+# S0-09 (PR-1 2026-04-24): the STT/TTS api_key fields used to be
+# stored here in plaintext — Codex flagged the dict as "partial BYO
+# token". Now the non-secret fields (sip_provider, phone_number,
+# stt_engine, tts_engine, etc.) still live in this process-local dict
+# because they're not secrets and rebooting re-loads them from the UI.
+# The api_key fields are persisted through the encrypted
+# ``tenant_ai_credentials`` vault instead — see _save_voice_keys /
+# _load_voice_key below.
 _VOICE_CONFIG: dict[str, dict] = {}
+
+
+# Mapping between the voice engine choice and the AI-credentials
+# provider slug. Keep in sync with
+# ``core.models.tenant_ai_credential.PROVIDER_ALLOWLIST``.
+_STT_ENGINE_TO_PROVIDER: dict[str, str] = {"deepgram": "stt_deepgram"}
+_TTS_ENGINE_TO_PROVIDER: dict[str, str] = {"google": "tts_azure"}
+# Note: the UI currently exposes "google" TTS but the production
+# path uses Azure Speech under the hood. When a true Google TTS
+# provider is added, register it separately in the allowlist and
+# map it here.
+
+
+async def _save_voice_keys(tenant_uuid, body: VoiceConfig) -> None:
+    """Persist stt_api_key + tts_api_key in tenant_ai_credentials.
+
+    Upserts a row per (provider, kind). Empty keys are left alone
+    (admin can set just one side).
+    """
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from core.ai_providers.resolver import invalidate_cache, mask_token
+    from core.crypto.tenant_secrets import encrypt_for_tenant
+    from core.database import get_tenant_session
+    from core.models.tenant_ai_credential import TenantAICredential
+
+    pairs: list[tuple[str, str, str]] = []  # (provider, kind, raw)
+    if body.stt_api_key and body.stt_api_key.strip():
+        provider = _STT_ENGINE_TO_PROVIDER.get(body.stt_engine)
+        if provider:
+            pairs.append((provider, "stt", body.stt_api_key.strip()))
+    if body.tts_api_key and body.tts_api_key.strip():
+        provider = _TTS_ENGINE_TO_PROVIDER.get(body.tts_engine)
+        if provider:
+            pairs.append((provider, "tts", body.tts_api_key.strip()))
+
+    if not pairs:
+        return
+
+    for provider, kind, raw in pairs:
+        ciphertext = await encrypt_for_tenant(raw, tenant_uuid)
+        prefix, suffix = mask_token(raw)
+        async with get_tenant_session(tenant_uuid) as session:
+            result = await session.execute(
+                select(TenantAICredential).where(
+                    TenantAICredential.tenant_id == tenant_uuid,
+                    TenantAICredential.provider == provider,
+                    TenantAICredential.credential_kind == kind,
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                session.add(
+                    TenantAICredential(
+                        id=_uuid.uuid4(),
+                        tenant_id=tenant_uuid,
+                        provider=provider,
+                        credential_kind=kind,
+                        credentials_encrypted={"_encrypted": ciphertext},
+                        status="unverified",
+                        display_prefix=prefix,
+                        display_suffix=suffix,
+                        label=f"voice.{kind}",
+                    )
+                )
+            else:
+                existing.credentials_encrypted = {"_encrypted": ciphertext}
+                existing.display_prefix = prefix
+                existing.display_suffix = suffix
+                existing.status = "unverified"
+                from datetime import UTC, datetime
+
+                existing.rotated_at = datetime.now(UTC)
+        invalidate_cache(tenant_uuid, provider, kind)
+
+
+async def _voice_key_display(tenant_uuid, provider: str, kind: str) -> str | None:
+    """Return a ``prefix…suffix`` masked string for the stored key, or
+    ``None`` if none is configured. Never returns raw material.
+    """
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.tenant_ai_credential import TenantAICredential
+
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(
+            select(TenantAICredential).where(
+                TenantAICredential.tenant_id == tenant_uuid,
+                TenantAICredential.provider == provider,
+                TenantAICredential.credential_kind == kind,
+            )
+        )
+        row = result.scalar_one_or_none()
+    if row is None:
+        return None
+    prefix = row.display_prefix or ""
+    suffix = row.display_suffix or ""
+    if not prefix and not suffix:
+        return "***"
+    return f"{prefix}...{suffix}"
 
 
 @router.post(
@@ -345,10 +456,31 @@ async def save_voice_config(
     body: VoiceConfig,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Save tenant voice config. Admin-only (HIGH-05)."""
+    """Save tenant voice config. Admin-only (HIGH-05).
+
+    The ``stt_api_key`` and ``tts_api_key`` fields are extracted and
+    persisted through the encrypted ``tenant_ai_credentials`` vault
+    (S0-09 closure). The returned body is always masked — the raw
+    token never leaves the server again.
+    """
+    import uuid as _uuid
+
     _validate_voice_config(body)
-    _VOICE_CONFIG[str(tenant_id)] = body.model_dump()
-    # Return masked copy so secrets aren't echoed back in the response.
+
+    try:
+        tenant_uuid = _uuid.UUID(tenant_id)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid tenant_id") from exc
+
+    # Persist secret material in the encrypted vault
+    await _save_voice_keys(tenant_uuid, body)
+
+    # Store only the non-secret fields in the process-local dict
+    non_secret = body.model_dump()
+    non_secret.pop("stt_api_key", None)
+    non_secret.pop("tts_api_key", None)
+    _VOICE_CONFIG[str(tenant_id)] = non_secret
+
     return VoiceConfig(**_mask_voice_config(body.model_dump()))
 
 
@@ -361,9 +493,35 @@ async def get_voice_config(tenant_id: str = Depends(get_current_tenant)):
     """Return the saved tenant voice config with credentials masked.
 
     HIGH-05 fix — pre-fix any authenticated tenant user could read the
-    full credentials. Now admin-only, and secrets are masked on return.
+    full credentials. Now admin-only, secrets are masked on return,
+    and the secret bodies live in the encrypted vault — this endpoint
+    never touches raw cipher material.
     """
+    import uuid as _uuid
+
     data = _VOICE_CONFIG.get(str(tenant_id))
     if not data:
         return None
-    return VoiceConfig(**_mask_voice_config(data))
+
+    try:
+        tenant_uuid = _uuid.UUID(tenant_id)
+    except ValueError:
+        return VoiceConfig(**_mask_voice_config(data))
+
+    # Overlay masked key displays from the vault so the UI can show
+    # "sk-…abcd" without ever seeing the real body.
+    stt_provider = _STT_ENGINE_TO_PROVIDER.get(data.get("stt_engine", ""))
+    tts_provider = _TTS_ENGINE_TO_PROVIDER.get(data.get("tts_engine", ""))
+    stt_key_display = (
+        await _voice_key_display(tenant_uuid, stt_provider, "stt")
+        if stt_provider else None
+    )
+    tts_key_display = (
+        await _voice_key_display(tenant_uuid, tts_provider, "tts")
+        if tts_provider else None
+    )
+
+    merged = dict(data)
+    merged["stt_api_key"] = stt_key_display
+    merged["tts_api_key"] = tts_key_display
+    return VoiceConfig(**_mask_voice_config(merged))

@@ -76,6 +76,7 @@ const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
 /* ── Report Schedules ── */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
 const RPASchedules = lazyRetry(() => import("./pages/RPASchedules"));
+const AICredentials = lazyRetry(() => import("./pages/AICredentials"));
 
 /* ── Knowledge Base, Voice, RPA, Industry Packs ── */
 const KnowledgeBase = lazyRetry(() => import("./pages/KnowledgeBase"));
@@ -290,6 +291,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <RPASchedules />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/settings/ai-credentials"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <AICredentials />
             </Layout>
           </ProtectedRoute>
         }
