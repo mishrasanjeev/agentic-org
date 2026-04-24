@@ -56,17 +56,50 @@ async def _retrieve_live(
     results = await _native_semantic_search(tenant_id, query, top_k)
     chunks: list[RetrievedChunk] = []
     for r in results:
+        # Codex PR #304 review P1: _native_semantic_search returns
+        # SearchResult pydantic instances, not dicts. The dict-only
+        # check used to drop every row in live --tenant mode, so
+        # every query scored as empty retrieval. Accept both shapes.
         if isinstance(r, dict):
-            chunks.append(
-                RetrievedChunk(
-                    text=str(r.get("content") or r.get("text") or ""),
-                    score=float(r.get("score", 0.0)),
-                    source=str(r.get("source") or ""),
-                    page=r.get("page"),
-                    sheet=r.get("sheet"),
-                    mode=str(r.get("mode") or "pgvector"),
-                )
+            text = str(
+                r.get("content")
+                or r.get("text")
+                or r.get("chunk_text")
+                or ""
             )
+            score = float(r.get("score", 0.0) or 0.0)
+            source = str(r.get("source") or r.get("document_name") or "")
+            page = r.get("page")
+            sheet = r.get("sheet")
+            mode = str(r.get("mode") or "pgvector")
+        else:
+            # Pydantic / dataclass / ORM result — pull attributes we
+            # know about.
+            text = str(
+                getattr(r, "chunk_text", None)
+                or getattr(r, "content", None)
+                or getattr(r, "text", "")
+                or ""
+            )
+            score = float(getattr(r, "score", 0.0) or 0.0)
+            source = str(
+                getattr(r, "document_name", None)
+                or getattr(r, "source", "")
+                or ""
+            )
+            page = getattr(r, "page", None)
+            sheet = getattr(r, "sheet", None)
+            mode = str(getattr(r, "mode", None) or "pgvector")
+        chunks.append(
+            RetrievedChunk(
+                text=text,
+                score=score,
+                source=source,
+                page=page,
+                sheet=sheet,
+                mode=mode,
+            )
+        )
     return chunks
 
 

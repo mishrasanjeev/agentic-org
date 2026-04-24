@@ -1054,7 +1054,19 @@ async def knowledge_health():
     # written by `scripts/rag_eval.py --output` on every run; absence
     # means "no eval has run against this deploy yet" — not a failure
     # condition for the probe itself, just an honest datapoint.
-    last_eval: dict[str, object] = {"ran_at": None, "overall_score": None}
+    #
+    # Codex PR #304 P2 review: keep the shape stable across first-run +
+    # read failures — always include ran_at / overall_score /
+    # per_modality_score / gate_passes, using nulls / empty dict.
+    # CodeQL /health leak review: never echo the exception body into
+    # the public note — use a stable category string so ops know which
+    # failure class fired without leaking paths or tracebacks.
+    last_eval: dict[str, object] = {
+        "ran_at": None,
+        "overall_score": None,
+        "per_modality_score": {},
+        "gate_passes": None,
+    }
     try:
         import json as _json
         import os as _os
@@ -1068,14 +1080,19 @@ async def knowledge_health():
             with eval_path.open("r", encoding="utf-8") as fh:
                 data = _json.load(fh)
             last_eval = {
-                "ran_at": data.get("ran_at")
-                or eval_path.stat().st_mtime,
+                "ran_at": data.get("ran_at") or eval_path.stat().st_mtime,
                 "overall_score": data.get("overall_score"),
-                "per_modality_score": data.get("per_modality_score"),
+                "per_modality_score": data.get("per_modality_score") or {},
                 "gate_passes": data.get("gate_passes"),
             }
-    except Exception as exc:
-        notes.append(f"Could not read last eval report: {exc}")
+    except (FileNotFoundError, PermissionError):
+        notes.append("Could not read last eval report: file access failed.")
+    except (ValueError, TypeError):
+        # JSONDecodeError is a ValueError; malformed payload shouldn't
+        # leak path info to an unauthenticated probe.
+        notes.append("Could not read last eval report: malformed payload.")
+    except OSError:
+        notes.append("Could not read last eval report: I/O error.")
 
     return {
         "ragflow_configured": ragflow_configured,
