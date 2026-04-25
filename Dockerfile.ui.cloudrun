@@ -1,0 +1,19 @@
+FROM node:25-slim AS builder
+WORKDIR /app
+COPY ui/package.json ui/package-lock.json* ./
+RUN npm install --legacy-peer-deps
+ARG CACHE_BUST=1
+COPY ui/ .
+COPY core/agents/ ../core/agents/
+COPY connectors/ ../connectors/
+ARG VITE_GA4_ID=""
+ENV VITE_GA4_ID=$VITE_GA4_ID
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
+ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'
+ENV PORT=8080
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:${PORT}/health || exit 1
