@@ -107,7 +107,7 @@ dev = [
     "ruff>=0.15.11",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
-    "pre-commit>=4.5.1",
+    "pre-commit>=4.6.0",
     # Needed by tests that PR-D2 un-skipped (test_pii_redaction,
     # test_v490_reqs). Kept out of the default `project.dependencies`
     # so the wheel stays lean for downstream SDK consumers.
