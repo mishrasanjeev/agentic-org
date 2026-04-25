@@ -33,6 +33,10 @@ const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazyRetry(() => import("./pages/ResetPassword"));
 const Evals = lazyRetry(() => import("./pages/Evals"));
 const Pricing = lazyRetry(() => import("./pages/Pricing"));
+const Support = lazyRetry(() => import("./pages/legal/Support"));
+const Privacy = lazyRetry(() => import("./pages/legal/Privacy"));
+const Terms = lazyRetry(() => import("./pages/legal/Terms"));
+const Refund = lazyRetry(() => import("./pages/legal/Refund"));
 const Playground = lazyRetry(() => import("./pages/Playground"));
 const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
 const Agents = lazyRetry(() => import("./pages/Agents"));
@@ -155,6 +159,17 @@ export default function App() {
       <Route path="/evals" element={<Evals />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/playground" element={<Playground />} />
+
+      {/* Legal / policy pages — required for Stripe activation */}
+      <Route path="/support" element={<Support />} />
+      <Route path="/contact" element={<Support />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/privacy-policy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/terms-of-service" element={<Terms />} />
+      <Route path="/refund" element={<Refund />} />
+      <Route path="/refund-policy" element={<Refund />} />
+      <Route path="/cancellation" element={<Refund />} />
 
       {/* Blog / Content pages */}
       <Route path="/blog" element={<Blog />} />
