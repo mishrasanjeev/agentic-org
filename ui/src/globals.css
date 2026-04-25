@@ -1,6 +1,14 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+/* v4 changed default border color from gray-200 to currentColor.
+   Restore prior behaviour so legacy `border` classes don't show
+   text-colored borders that look like layout breakage. */
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+}
 
 /* Shimmer animation for release banner gradient border */
 @keyframes shimmer {
