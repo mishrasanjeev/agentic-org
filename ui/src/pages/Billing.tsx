@@ -63,7 +63,10 @@ export default function Billing() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [currency, setCurrency] = useState<"usd" | "inr">("usd");
+  // Currency switcher and INR (Pine Labs Plural) rail removed 2026-04-25 —
+  // all customers (including India) checkout via Stripe in USD until we
+  // wire the Plural integration properly. Backend /billing/subscribe/india
+  // and the Plural client remain in place, just unreachable from the UI.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -90,11 +93,8 @@ export default function Billing() {
   const handleSubscribe = async (plan: string) => {
     setActionLoading(plan);
     setError(null);
-    const isIndia = currency === "inr";
-    const endpoint = isIndia ? "/billing/subscribe/india" : "/billing/subscribe";
-
     try {
-      const resp = await api.post(endpoint, { plan });
+      const resp = await api.post("/billing/subscribe", { plan });
       const data = resp.data;
       const url = data.challenge_url || data.checkout_url;
       if (url) window.location.href = url;
@@ -178,14 +178,6 @@ export default function Billing() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Currency:</span>
-            <button
-              onClick={() => setCurrency(currency === "usd" ? "inr" : "usd")}
-              className="px-3 py-1 rounded border text-sm hover:bg-muted"
-              data-testid="currency-toggle"
-            >
-              {currency === "usd" ? "USD $" : "INR \u20B9"}
-            </button>
             {subscription?.is_paid && (
               <button
                 onClick={handleCancel}
@@ -229,13 +221,7 @@ export default function Billing() {
               >
                 <h3 className="text-lg font-bold mb-1">{p.label}</h3>
                 <p className="text-2xl font-semibold mb-3">
-                  {currency === "usd"
-                    ? p.price_usd === 0
-                      ? "Free"
-                      : `$${p.price_usd}/mo`
-                    : p.price_inr === 0
-                      ? "Free"
-                      : `\u20B9${p.price_inr.toLocaleString("en-IN")}/mo`}
+                  {p.price_usd === 0 ? "Free" : `$${p.price_usd}/mo`}
                 </p>
 
                 {/* Adjustment note for upgrades/downgrades */}
