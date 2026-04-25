@@ -105,7 +105,7 @@ dev = [
     "testcontainers[postgres,redis]>=4.8.0,<4.14.0",
     "factory-boy>=3.3.3",
     "ruff>=0.15.11",
-    "mypy>=1.20.1",
+    "mypy>=1.20.2",
     "bandit>=1.9.4",
     "pre-commit>=4.5.1",
     # Needed by tests that PR-D2 un-skipped (test_pii_redaction,
