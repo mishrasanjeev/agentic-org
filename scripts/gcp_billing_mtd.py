@@ -20,8 +20,9 @@ DATASET = "billing_export"
 
 
 def run_query(sql: str) -> list[dict]:
-    token = subprocess.check_output(
-        ["gcloud", "auth", "print-access-token"], text=True
+    token = subprocess.check_output(  # noqa: S603
+        ["gcloud", "auth", "print-access-token"],  # noqa: S607
+        text=True,
     ).strip()
     import urllib.request
 
@@ -34,7 +35,7 @@ def run_query(sql: str) -> list[dict]:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req) as resp:  # noqa: S310
         body = json.loads(resp.read())
     if not body.get("jobComplete"):
         sys.exit("Query did not complete synchronously; rerun.")
@@ -46,8 +47,9 @@ def run_query(sql: str) -> list[dict]:
 
 
 def find_billing_table() -> str:
-    token = subprocess.check_output(
-        ["gcloud", "auth", "print-access-token"], text=True
+    token = subprocess.check_output(  # noqa: S603
+        ["gcloud", "auth", "print-access-token"],  # noqa: S607
+        text=True,
     ).strip()
     import urllib.request
 
@@ -55,7 +57,7 @@ def find_billing_table() -> str:
         f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT}/datasets/{DATASET}/tables",
         headers={"Authorization": f"Bearer {token}"},
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req) as resp:  # noqa: S310
         body = json.loads(resp.read())
     tables = [t["tableReference"]["tableId"] for t in body.get("tables", [])]
     standard = [t for t in tables if t.startswith("gcp_billing_export_v1_")]
@@ -82,6 +84,8 @@ def main() -> None:
     table = find_billing_table()
     fq = f"`{PROJECT}.{DATASET}.{table}`"
 
+    # year/month are int from argparse/date.today; table name is a fixed-prefix match
+    # from the BigQuery API listing (find_billing_table). No user-controlled string interpolation.
     total_sql = f"""
     SELECT
       ROUND(SUM(cost), 2) AS gross_cost,
@@ -91,7 +95,7 @@ def main() -> None:
     WHERE EXTRACT(YEAR FROM usage_start_time) = {year}
       AND EXTRACT(MONTH FROM usage_start_time) = {month}
     GROUP BY currency
-    """
+    """  # noqa: S608
     by_service_sql = f"""
     SELECT
       service.description AS service,
@@ -103,7 +107,7 @@ def main() -> None:
     HAVING net_cost > 0
     ORDER BY net_cost DESC
     LIMIT 15
-    """
+    """  # noqa: S608
 
     print(f"=== {year}-{month:02d} (project: {PROJECT}) ===\n")
     totals = run_query(total_sql)
