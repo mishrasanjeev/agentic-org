@@ -163,7 +163,7 @@ def decrypt_credential(ciphertext: str) -> str:
         )
 
     # Un-stamped (legacy) ciphertext — try every key
-    for kid, kbytes in keyring:
+    for _kid, kbytes in keyring:
         try:
             return Fernet(kbytes).decrypt(ciphertext.encode()).decode()
         except InvalidToken:
