@@ -136,6 +136,11 @@ extend-immutable-calls = ["fastapi.Depends", "Depends"]
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E501", "I001", "DTZ011", "B007", "B905", "F841"]
 "migrations/*" = ["I001", "E501"]
+# Spend reporter builds aggregate SQL with column names from
+# argparse-validated values (period names, provider prefixes). All
+# user input arrives as bind parameters; ruff S608 flags any
+# f-string in a SQL context regardless.
+"core/billing/spend.py" = ["S608"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

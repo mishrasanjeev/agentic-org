@@ -35,28 +35,31 @@ def _make_router(
 
 
 # ===================================================================
-# TC-LLM-01: Simple query routes to Tier 1 (Gemini Flash)
+# TC-LLM-01: Simple query routes to Tier 1 (Gemini Flash-Lite)
 # ===================================================================
+# Tier1 was gemini-2.5-flash before the spend-cap PR; the rework
+# moves Flash to Tier2 and uses Flash-Lite for high-volume Tier1
+# traffic so per-token cost on the cheapest path drops ~2x.
 
 
 class TestSimpleQueryRoutesToTier1:
-    """Short / simple queries should route to Tier 1 (Gemini Flash)."""
+    """Short / simple queries should route to Tier 1 (Gemini Flash-Lite)."""
 
     def test_short_query_routes_to_tier1(self):
         router = _make_router(routing="auto", llm_mode="cloud")
         model = router.route(query="What is 2+2?", config={})
-        assert model == "gemini-2.5-flash", f"Expected tier1 model, got {model}"
+        assert model == "gemini-2.5-flash-lite", f"Expected tier1 model, got {model}"
 
     def test_very_short_query(self):
         router = _make_router(routing="auto", llm_mode="cloud")
         model = router.route(query="Hello", config={})
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-2.5-flash-lite"
 
     def test_empty_query_routes_to_tier1(self):
         """Empty string < 100 chars -> tier1."""
         router = _make_router(routing="auto", llm_mode="cloud")
         model = router.route(query="", config={})
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-2.5-flash-lite"
 
 
 # ===================================================================
@@ -95,7 +98,7 @@ class TestComplexQueryRoutesToTier3:
         )
         assert 100 <= len(medium_query) < 500
         model = router.route(query=medium_query, config={})
-        assert model == "gemini-2.5-pro"
+        assert model == "gemini-2.5-flash"
 
 
 # ===================================================================
@@ -110,19 +113,18 @@ class TestForcedTierOverridesAuto:
         router = _make_router(routing="tier1", llm_mode="cloud")
         long_query = "x" * 600  # Would be tier3 in auto mode
         model = router.route(query=long_query, config={})
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-2.5-flash-lite"
 
     def test_force_tier2(self):
         router = _make_router(routing="tier2", llm_mode="cloud")
         model = router.route(query="Hi", config={})  # Would be tier1 in auto
-        assert model == "gemini-2.5-pro"
+        assert model == "gemini-2.5-flash"
 
     def test_force_tier3_on_simple_query(self):
         router = _make_router(routing="tier3", llm_mode="cloud")
         model = router.route(query="Hi", config={})
-        # Tier 3 model (not gemini-flash)
-        assert model != "gemini-2.5-flash"
-        assert model != "gemini-2.5-pro"
+        # Tier 3 = pro after the spend-cap rework.
+        assert model == "gemini-2.5-pro"
 
     def test_per_agent_config_overrides_global(self):
         """Agent-level routing config should override the global setting."""
@@ -131,7 +133,8 @@ class TestForcedTierOverridesAuto:
             query="Hi",
             config={"routing": "tier3"},
         )
-        assert model != "gemini-2.5-flash"
+        # tier3 -> gemini-2.5-pro, definitely not the tier1 flash-lite.
+        assert model == "gemini-2.5-pro"
 
     def test_per_agent_tier1_overrides_global_tier3(self):
         router = _make_router(routing="tier3", llm_mode="cloud")
@@ -139,7 +142,7 @@ class TestForcedTierOverridesAuto:
             query="Analyze this complex legal document...",
             config={"routing": "tier1"},
         )
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-2.5-flash-lite"
 
 
 # ===================================================================
@@ -262,20 +265,20 @@ class TestFallbackWhenRouteLLMUnavailable:
         """Without RouteLLM, short queries use heuristic -> tier1."""
         router = _make_router(routing="auto", llm_mode="cloud", routellm_available=False)
         model = router.route(query="Hi", config={})
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-2.5-flash-lite"
 
     def test_heuristic_fallback_medium(self):
         router = _make_router(routing="auto", llm_mode="cloud", routellm_available=False)
         medium = "a" * 200
         model = router.route(query=medium, config={})
-        assert model == "gemini-2.5-pro"
+        assert model == "gemini-2.5-flash"
 
     def test_heuristic_fallback_long(self):
         router = _make_router(routing="auto", llm_mode="cloud", routellm_available=False)
         long_q = "b" * 600
         model = router.route(query=long_q, config={})
-        assert model != "gemini-2.5-flash"
-        assert model != "gemini-2.5-pro"
+        # Tier3 = pro after the spend-cap rework.
+        assert model == "gemini-2.5-pro"
 
     def test_routellm_import_failure_does_not_crash(self):
         """Even if RouteLLM import raises, the module should load fine."""
@@ -294,8 +297,8 @@ class TestFallbackWhenRouteLLMUnavailable:
         router._routellm_init_attempted = True
         router._routellm_controller = None
         model = router.route(query="Quick question", config={})
-        # Should use heuristic, not crash
-        assert model == "gemini-2.5-flash"
+        # Heuristic short-query path -> tier1 -> flash-lite.
+        assert model == "gemini-2.5-flash-lite"
 
 
 # ===================================================================
