@@ -122,24 +122,66 @@ def test_case1_decrypt_old_fernet_after_adding_new_key(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Foundation #4: envelope payloads must carry the KEK resource id "
-        "in their header so a KEK rotation doesn't orphan them. "
-        "core/crypto/envelope.py already records kek_resource on new "
-        "payloads but there is no decrypt-by-resource-id lookup that "
-        "supports a multi-KEK keyring."
-    ),
-)
 def test_case2_decrypt_envelope_after_kek_rotation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pytest.fail(
-        "stub — to be implemented when keyring lands. Should: encrypt "
-        "an envelope using KEK1, swap PLATFORM_KEK env to KEK2, decrypt "
-        "and assert plaintext matches."
-    )
+    """Envelope payload self-stamps the KEK resource it used. Rotating
+    AGENTICORG_PLATFORM_KEK env to a new KMS key MUST NOT orphan
+    payloads encrypted under the old one — the decrypt path uses
+    ``payload.kek``, not the env var.
+
+    This contract was already implemented in ``core/crypto/envelope.py``
+    when the iter 1 keyring landed in credential_vault. This test
+    locks the contract so a future refactor that "simplifies"
+    ``decrypt`` to use the env var instead of the stamp would break
+    visibly.
+
+    KMS calls are mocked — the test exercises the protocol (stamp,
+    select-by-stamp), not real Cloud KMS.
+    """
+    from core.crypto import envelope
+
+    # Trivial wrap/unwrap that's reversible per-KEK (NOT real crypto;
+    # protocol test only).
+    def fake_wrap(kek: str, dek: bytes) -> bytes:
+        return b"wrapped:" + kek.encode() + b":" + dek
+
+    def fake_unwrap(kek: str, wrapped: bytes) -> bytes:
+        prefix = b"wrapped:" + kek.encode() + b":"
+        if not wrapped.startswith(prefix):
+            raise RuntimeError(
+                f"unwrap mismatch — payload was wrapped under a different KEK "
+                f"than the one supplied ({kek!r})"
+            )
+        return wrapped[len(prefix):]
+
+    monkeypatch.setattr(envelope, "_wrap_dek", fake_wrap)
+    monkeypatch.setattr(envelope, "_unwrap_dek", fake_unwrap)
+
+    # T0 — encrypt under KEK v1
+    kek_v1 = "projects/test/locations/global/keyRings/agenticorg/cryptoKeys/v1"
+    monkeypatch.setenv("AGENTICORG_PLATFORM_KEK", kek_v1)
+    payload_old = envelope.encrypt(b"sensitive-tenant-data")
+    assert payload_old.kek == kek_v1
+
+    # T1 — rotate platform KEK env to v2
+    kek_v2 = "projects/test/locations/global/keyRings/agenticorg/cryptoKeys/v2"
+    monkeypatch.setenv("AGENTICORG_PLATFORM_KEK", kek_v2)
+
+    # The OLD payload self-stamped its KEK; decrypt must use that, not the env.
+    plaintext = envelope.decrypt(payload_old)
+    assert plaintext == b"sensitive-tenant-data"
+
+    # New encrypts use the new env value.
+    payload_new = envelope.encrypt(b"new-data")
+    assert payload_new.kek == kek_v2
+    assert envelope.decrypt(payload_new) == b"new-data"
+
+    # And the v2 payload cannot be decrypted under the v1 KEK (the
+    # fake unwrap raises if the wrapper KEK doesn't match), proving
+    # the stamp is what drives decrypt — not the active env.
+    monkeypatch.setenv("AGENTICORG_PLATFORM_KEK", kek_v1)
+    assert envelope.decrypt(payload_new) == b"new-data"  # still uses payload.kek
 
 
 # ---------------------------------------------------------------------------
@@ -147,21 +189,85 @@ def test_case2_decrypt_envelope_after_kek_rotation(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Foundation #4: a `verify-all` CLI must scan every encrypted "
-        "column and refuse to mark a key 'retired' (or delete it) while "
-        "any row's key_id stamp still points at it. Today there is no "
-        "verify-all and no key lifecycle metadata."
-    ),
-)
 def test_case3_reject_delete_old_key_while_referenced() -> None:
-    pytest.fail(
-        "stub — to be implemented when keyring CLI lands. Should: seed "
-        "a row encrypted with key v1; attempt to retire v1; assert the "
-        "operation refuses with a clear 'still referenced' error."
+    """``verify_all`` must extract key references from any ciphertext shape
+    and refuse retirement of a key that's still referenced.
+
+    Tested at the parser + assertion layer. The DB-integration scan
+    (full ``scan_encrypted_columns`` against a seeded test database)
+    is part of Foundation #6 hermetic-CI; this test pins the parser
+    and lifecycle-assertion contracts that it depends on.
+    """
+    import asyncio
+
+    from core.crypto.verify_all import (
+        KeyRef,
+        KeyStillReferencedError,
+        assert_key_unreferenced,
+        parse_ciphertext,
+        parse_jsonb_credentials,
     )
+
+    # ── Parser contracts ──
+    assert parse_ciphertext("agko_vv1$abc") == KeyRef("vault", "v1")
+    assert parse_ciphertext("agko_vv2$xyz") == KeyRef("vault", "v2")
+    assert parse_ciphertext("agko_vlegacy$abc") == KeyRef("vault", "legacy")
+    # Un-stamped vault ciphertext (legacy, pre-keyring) attributed to "legacy"
+    assert parse_ciphertext("gAAAAA-some-fernet-bytes") == KeyRef("vault", "legacy")
+    # Envelope JSON
+    envelope_blob = (
+        '{"version":1,"kek":"projects/p/locations/l/keyRings/r/cryptoKeys/v1",'
+        '"wrapped_dek":"d2Q=","nonce":"bg==","ciphertext":"Y3Q="}'
+    )
+    parsed = parse_ciphertext(envelope_blob)
+    assert parsed == KeyRef("envelope", "projects/p/locations/l/keyRings/r/cryptoKeys/v1")
+    # None / empty
+    assert parse_ciphertext(None) is None
+    assert parse_ciphertext("") is None
+    # JSONB connector_configs.credentials_encrypted shape
+    assert parse_jsonb_credentials({"_encrypted": "agko_vv2$abc"}) == KeyRef("vault", "v2")
+    assert parse_jsonb_credentials(None) is None
+    assert parse_jsonb_credentials({}) is None
+
+    # ── Lifecycle gate: assert_key_unreferenced ──
+    # Use a fake session that returns a controlled ciphertext blob for
+    # one column and nothing for the others.
+    class _FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return [(r,) for r in self._rows]
+
+    class _FakeSession:
+        def __init__(self, rows_per_column):
+            self._rows = rows_per_column
+            self._calls = 0
+
+        async def execute(self, _stmt):
+            self._calls += 1
+            try:
+                return _FakeResult(self._rows[self._calls - 1])
+            except IndexError:
+                return _FakeResult([])
+
+    # Seed: one connector_config row references vault key 'v1'
+    fake = _FakeSession([
+        [{"_encrypted": "agko_vv1$ciphertext-bytes"}],  # connector_configs
+        [],  # gstn_credentials (no rows)
+    ])
+    # 'v1' is referenced — assert refuses
+    with pytest.raises(KeyStillReferencedError) as exc_info:
+        asyncio.run(assert_key_unreferenced("v1", fake))
+    assert "v1" in str(exc_info.value)
+    assert "connector_configs" in str(exc_info.value)
+
+    # 'v99' is NOT referenced — assert succeeds (returns None)
+    fake2 = _FakeSession([
+        [{"_encrypted": "agko_vv1$ciphertext-bytes"}],
+        [],
+    ])
+    asyncio.run(assert_key_unreferenced("v99", fake2))  # no raise = pass
 
 
 # ---------------------------------------------------------------------------
