@@ -359,7 +359,15 @@ class TestPDFRendererEdgeCases:
 class TestExcelRendererEdgeCases:
     """Edge cases for render_excel."""
 
-    def test_render_excel_empty_content_data(self):
+    # 2026-04-26: replaced `tempfile.TemporaryDirectory()` with the
+    # pytest `tmp_path` fixture. On Windows, TemporaryDirectory's
+    # cleanup races with OS file-handle release inside openpyxl —
+    # `_rmtree_unsafe` would fail on `os.rmdir(path)` ~5-10% of the
+    # time. pytest's tmp_path uses a deferred cleanup queue that
+    # tolerates that lag. This is the same cause the user flagged
+    # blocking the Foundation #2/#3 PR preflight — see
+    # `feedback_no_manual_qa_closure_plan.md` rule on no-flake CI.
+    def test_render_excel_empty_content_data(self, tmp_path):
         """Excel render with empty data should create a valid .xlsx."""
         from core.reports.generator import ReportOutput
         from core.reports.renderer import render_excel
@@ -369,15 +377,14 @@ class TestExcelRendererEdgeCases:
             content_data={},
             report_type="cfo_daily",
         )
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "empty_test.xlsx")
-            result = render_excel(report, path)
-            assert os.path.exists(result)
-            assert os.path.getsize(result) > 0
-            with open(result, "rb") as f:
-                assert f.read(2) == b"PK"  # XLSX is a ZIP
+        path = str(tmp_path / "empty_test.xlsx")
+        result = render_excel(report, path)
+        assert os.path.exists(result)
+        assert os.path.getsize(result) > 0
+        with open(result, "rb") as f:
+            assert f.read(2) == b"PK"  # XLSX is a ZIP
 
-    def test_render_excel_unknown_report_type(self):
+    def test_render_excel_unknown_report_type(self, tmp_path):
         """Excel renderer should handle unknown report types gracefully."""
         from core.reports.generator import ReportOutput
         from core.reports.renderer import render_excel
@@ -387,10 +394,9 @@ class TestExcelRendererEdgeCases:
             content_data={"custom_key": "custom_val"},
             report_type="custom_unknown",
         )
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, "custom.xlsx")
-            result = render_excel(report, path)
-            assert os.path.exists(result)
+        path = str(tmp_path / "custom.xlsx")
+        result = render_excel(report, path)
+        assert os.path.exists(result)
 
 
 class TestDeliveryEdgeCases:
