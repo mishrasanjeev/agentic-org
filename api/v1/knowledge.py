@@ -319,11 +319,16 @@ async def _db_chunk_count(tenant_id: str) -> int:
     total = 0
     try:
         async with get_tenant_session(tid) as session:
-            # Legacy KB content with computed embeddings.
+            # Legacy KB content with computed embeddings — column
+            # follows the RAG_USE_BGE_M3 flag so the count stays
+            # consistent with what /search actually queries.
+            from core.embeddings import rag_embedding_column
+
+            ecol = rag_embedding_column()
             legacy_row = (await session.execute(
                 _sqtext(
-                    "SELECT COUNT(*) FROM knowledge_documents "
-                    "WHERE tenant_id = :tid AND embedding IS NOT NULL"
+                    "SELECT COUNT(*) FROM knowledge_documents "  # nosec B608 — `ecol` is a module-level constant name, not user input
+                    f"WHERE tenant_id = :tid AND {ecol} IS NOT NULL"
                 ),
                 {"tid": str(tid)},
             )).fetchone()
@@ -847,20 +852,22 @@ async def _native_semantic_search(
 
     tid = _UUID(tenant_id)
 
-    # Try the vector path first.
+    # Try the vector path first. Column + model swap honour the
+    # RAG_USE_BGE_M3 flag — both sides flip atomically.
     try:
-        from core.embeddings import embed_one
+        from core.embeddings import embed_one, rag_embedding_column
 
         qvec = embed_one(query)
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
+        col = rag_embedding_column()
         async with get_tenant_session(tid) as session:
             rows = (await session.execute(
                 _sqtext(
-                    "SELECT title, content, "
-                    "1 - (embedding <=> CAST(:q AS vector)) AS score "
+                    "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
+                    f"1 - ({col} <=> CAST(:q AS vector)) AS score "
                     "FROM knowledge_documents "
-                    "WHERE tenant_id = :tid AND embedding IS NOT NULL "
-                    "ORDER BY embedding <=> CAST(:q AS vector) "
+                    f"WHERE tenant_id = :tid AND {col} IS NOT NULL "
+                    f"ORDER BY {col} <=> CAST(:q AS vector) "
                     "LIMIT :k"
                 ),
                 {"q": vector_literal, "tid": str(tid), "k": top_k},
