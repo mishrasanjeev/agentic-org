@@ -209,12 +209,23 @@ def _get_bge_m3_model() -> Any:
 def embed_bge_m3(texts: list[str], batch_size: int = 32) -> list[list[float]]:
     """Embed ``texts`` with bge-m3 (1024-dim, multilingual, 8192 ctx).
 
+    Routing:
+      - When ``AGENTICORG_TEI_URL`` is set, POST to that TEI service
+        (HuggingFace text-embeddings-inference) — recommended for the
+        request path so the api container does NOT need to hold the
+        2.3 GB weights in memory.
+      - Otherwise load FlagEmbedding in-process — used by the backfill
+        Cloud Run job (which can afford the 16 GiB peak memory) and
+        by local development.
+
     Returns dense vectors only — bge-m3 also produces sparse and
     multi-vector outputs but the request path uses pgvector dense
     cosine search, so the other modes are not exposed here.
     """
     if not texts:
         return []
+    if os.getenv("AGENTICORG_TEI_URL"):
+        return _embed_via_tei(texts)
     model = _get_bge_m3_model()
     out = model.encode(
         texts,
@@ -226,6 +237,44 @@ def embed_bge_m3(texts: list[str], batch_size: int = 32) -> list[list[float]]:
     )
     dense = out["dense_vecs"]
     return [list(map(float, v)) for v in dense]
+
+
+def _embed_via_tei(texts: list[str]) -> list[list[float]]:
+    """POST ``texts`` to the configured TEI service.
+
+    The TEI service runs as a separate Cloud Run service
+    (``agenticorg-embeddings``) at ``min-instances=1`` so the bge-m3
+    weights live there permanently and the api container stays at
+    2 GiB. Cloud Run's invoker IAM is enforced via an ID token signed
+    by the api's service account audience-bound to the TEI service URL.
+
+    The TEI ``/embed`` endpoint shape:
+        request:  {"inputs": ["t1", "t2"], "normalize": true}
+        response: [[v1...], [v2...]]
+    """
+    import google.auth
+    import google.auth.transport.requests
+    import httpx
+    from google.oauth2 import id_token
+
+    base = os.environ["AGENTICORG_TEI_URL"].rstrip("/")
+    # Mint an audience-bound ID token. Falls back to anonymous if no
+    # GCP creds are available (dev / test environments where TEI is
+    # exposed via --allow-unauthenticated).
+    headers = {"Content-Type": "application/json"}
+    try:
+        auth_req = google.auth.transport.requests.Request()
+        token = id_token.fetch_id_token(auth_req, base)
+        headers["Authorization"] = f"Bearer {token}"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("tei_id_token_fetch_skipped", error=str(exc))
+
+    payload = {"inputs": texts, "normalize": True, "truncate": True}
+    with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+        response = client.post(f"{base}/embed", json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+    return [list(map(float, v)) for v in data]
 
 
 # Compatibility shim for the backfill — keeps the call site model-name
