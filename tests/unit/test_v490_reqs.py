@@ -258,6 +258,11 @@ class TestREQ02AlembicDDL:
         content = Path("core/database.py").read_text()
         assert "AGENTICORG_DDL_MANAGED_BY_ALEMBIC" in content
 
+    @pytest.mark.skip(
+        reason="Helm chart removed in Stage 4 of the Cloud Run cost-cut migration. "
+        "AGENTICORG_DDL_MANAGED_BY_ALEMBIC is now set in the Cloud Run service env "
+        "vars. Followup: rewrite to assert against Cloud Run config."
+    )
     def test_helm_sets_alembic_flag(self):
         """Helm production values must enable alembic-managed DDL."""
         from pathlib import Path

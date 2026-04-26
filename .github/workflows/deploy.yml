@@ -357,16 +357,14 @@ jobs:
 
   deploy-production:
     needs: [build, integration-tests, security-scan, approval-gate]
-    # approval-gate is skipped for non-tag pushes (if: startsWith...),
-    # so for main pushes this effectively waits only on the other 3.
-    # For tagged releases, it requires the manual approval.
-    if: |
-      always() &&
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
-      needs.build.result == 'success' &&
-      needs.integration-tests.result == 'success' &&
-      needs.security-scan.result == 'success' &&
-      (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped')
+    # GKE cluster removed in Stage 4 of the Cloud Run cost-cut migration
+    # (2026-04-25). The helm-based deploy below targets a cluster that no
+    # longer exists. A Cloud Run deploy CI rewrite is pending; until then,
+    # production releases are done by manual `gcloud run services update`
+    # against the agenticorg-api/agenticorg-ui Cloud Run services in
+    # asia-southeast1. Re-enable this job once the new deploy steps are
+    # in place.
+    if: false
     runs-on: ubuntu-latest
     permissions:
       id-token: write

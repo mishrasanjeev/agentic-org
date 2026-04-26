@@ -1,6 +1,0 @@
-apiVersion: v2
-name: agenticorg
-description: Enterprise Agent Swarm Platform
-type: application
-version: 2.1.0
-appVersion: "2.1.0"
