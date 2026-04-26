@@ -805,14 +805,28 @@ function ConfigTab({ agent }: { agent: Agent }) {
     agent.confidence_floor != null ? Math.round(agent.confidence_floor * 100) : 70
   );
 
+  // Uday 2026-04-26 (BUG, gemini-2.0-flash deprecated):
+  // gemini-2.0-flash returned 404 NOT_FOUND ("no longer available to new
+  // users") on agent runs because the dropdown listed it as an option.
+  // Refreshed to the current generally-available models as of Apr 2026:
+  //   - Gemini 2.5 (flash + pro)
+  //   - GPT-4o family + o1/o3 reasoning models
+  //   - Claude Opus/Sonnet/Haiku 4.x
+  //   - Llama 3.3 70B
+  // Any older entry the user previously saved (e.g. gemini-2.0-flash on a
+  // pre-existing agent) is preserved by `editLlmModel` initial state, so
+  // they can still see and replace it from this list.
   const LLM_OPTIONS = [
-    "gemini-2.0-flash",
-    "gemini-1.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-preview-05-20",
     "gpt-4o",
     "gpt-4o-mini",
-    "claude-3-opus",
-    "claude-3-sonnet",
-    "llama-3-70b",
+    "o3-mini",
+    "claude-opus-4-5",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "llama-3.3-70b",
   ];
 
   function startEditing() {

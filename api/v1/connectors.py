@@ -367,16 +367,37 @@ async def register_connector(
             encrypted_creds = await encrypt_for_tenant(
                 __import__("json").dumps(secret_fields), tid
             )
-            cc = ConnectorConfig(
-                tenant_id=tid,
-                connector_name=body.name,
-                display_name=body.name,
-                auth_type=body.auth_type or "api_key",
-                credentials_encrypted={"_encrypted": encrypted_creds},
-                config=non_secret_config,
-                status="configured",
+            # Uday 2026-04-26 (BUG 1): connector_configs has its own
+            # UniqueConstraint(tenant_id, connector_name). When the
+            # Connector was reactivated above, an old ConnectorConfig
+            # row for the same name still exists — adding a new one
+            # raises IntegrityError unhandled and the API returns 500
+            # (UI shows "Failed to register connector. Please try
+            # again."). Upsert in place: if a config exists, replace
+            # its credentials + config + auth_type; otherwise add new.
+            cc_existing_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == body.name,
+                )
             )
-            session.add(cc)
+            cc_existing = cc_existing_result.scalar_one_or_none()
+            if cc_existing is not None:
+                cc_existing.credentials_encrypted = {"_encrypted": encrypted_creds}
+                cc_existing.config = non_secret_config
+                cc_existing.auth_type = body.auth_type or "api_key"
+                cc_existing.status = "configured"
+            else:
+                cc = ConnectorConfig(
+                    tenant_id=tid,
+                    connector_name=body.name,
+                    display_name=body.name,
+                    auth_type=body.auth_type or "api_key",
+                    credentials_encrypted={"_encrypted": encrypted_creds},
+                    config=non_secret_config,
+                    status="configured",
+                )
+                session.add(cc)
             await session.flush()
 
     return _connector_to_dict(connector)
