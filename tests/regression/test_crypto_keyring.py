@@ -45,6 +45,22 @@ def _set_secret_key(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     monkeypatch.setenv("AGENTICORG_SECRET_KEY", value)
     # Reset the connector vault module's cached key derivation if any.
     monkeypatch.delenv("AGENTICORG_VAULT_KEY", raising=False)
+    # Important: a stray AGENTICORG_VAULT_KEYRING from a previous test
+    # would override the single-key fallback path under exercise here.
+    monkeypatch.delenv("AGENTICORG_VAULT_KEYRING", raising=False)
+
+
+def _set_keyring(monkeypatch: pytest.MonkeyPatch, *entries: tuple[str, str]) -> None:
+    """Set AGENTICORG_VAULT_KEYRING from ``(id, raw)`` tuples.
+
+    First entry = active encryption key. All entries allowed for
+    decryption. Other vault env vars cleared so the keyring path is
+    the only one in play.
+    """
+    spec = ",".join(f"{kid}:{raw}" for kid, raw in entries)
+    monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", spec)
+    monkeypatch.delenv("AGENTICORG_VAULT_KEY", raising=False)
+    monkeypatch.delenv("AGENTICORG_SECRET_KEY", raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -61,31 +77,44 @@ def _set_secret_key(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
 # to a real pass.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Foundation #4 not yet implemented. _get_vault_key() returns a "
-        "single derived key — there is no allowed_decrypt_keys list. "
-        "Encrypting with key A and swapping env to key B orphans the "
-        "ciphertext. The keyring PR will land allowed_decrypt_keys + "
-        "key-version stamping; this xfail flips to PASS at that point."
-    ),
-)
 def test_case1_decrypt_old_fernet_after_adding_new_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Foundation #4 contract: a rotation that mounts the new key as
+    active and keeps the old key in the keyring must decrypt ciphertext
+    encrypted under the old key.
+
+    The 2026-04-25 incident violated this — rotating
+    AGENTICORG_SECRET_KEY orphaned every existing connector credential.
+    The fix is the keyring: encrypts use the active (first) key,
+    decrypts try every allowed key. Old ciphertext continues to read
+    until a re-encrypt sweep migrates it.
+    """
     from core.crypto.credential_vault import decrypt_credential, encrypt_credential
 
-    _set_secret_key(monkeypatch, "key-A-original" + "0" * 50)
+    # T0 — only key A in the keyring; encrypt
+    _set_keyring(monkeypatch, ("v1", "key-A-original" + "0" * 50))
     ciphertext = encrypt_credential("connector-secret-from-key-A")
+    assert ciphertext.startswith("agko_vv1$"), (
+        f"new ciphertext must be stamped 'agko_vv1$': got {ciphertext[:40]!r}"
+    )
 
-    # Rotate to key B (old key NOT mounted alongside — exactly today's bug)
-    _set_secret_key(monkeypatch, "key-B-rotated" + "0" * 50)
+    # T1 — rotation: v2 is now the active encryption key, v1 is kept
+    # in the keyring as an allowed decryption key.
+    _set_keyring(
+        monkeypatch,
+        ("v2", "key-B-rotated" + "0" * 50),
+        ("v1", "key-A-original" + "0" * 50),
+    )
 
-    # Today this raises InvalidToken. With keyring, decrypt should try
-    # both keys (A is in allowed_decrypt_keys) and succeed.
+    # The old ciphertext (stamped 'v1') must still decrypt under v1.
     plaintext = decrypt_credential(ciphertext)
     assert plaintext == "connector-secret-from-key-A"
+
+    # And new encrypts at T1 use the v2 active key.
+    new_ciphertext = encrypt_credential("connector-secret-from-key-B")
+    assert new_ciphertext.startswith("agko_vv2$")
+    assert decrypt_credential(new_ciphertext) == "connector-secret-from-key-B"
 
 
 # ---------------------------------------------------------------------------
