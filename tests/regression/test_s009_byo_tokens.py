@@ -283,11 +283,15 @@ def test_no_direct_provider_env_reads_outside_resolver() -> None:
         # fallback path. This IS the canonical env reader.
         "core/ai_providers/resolver.py",
     }
-    # Skip directories that don't belong to us.
+    # Skip directories that don't belong to us. (.uv-cache/ added
+    # 2026-04-26: `uv` extracts wheel sources into the cache dir at
+    # install time on Windows; rglob('*.py') sees them as repo files
+    # otherwise and false-positives on third-party reads.)
     skip_prefixes = (
         "tests/",
         ".venv/",
         ".tmp_lc/",
+        ".uv-cache/",
         "ui/",
         "node_modules/",
         ".git/",
