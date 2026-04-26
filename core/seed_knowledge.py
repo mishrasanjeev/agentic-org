@@ -252,6 +252,13 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
             "ALTER TABLE knowledge_documents "
             "ADD COLUMN IF NOT EXISTS embedding vector(384)"
         ))
+        # PR-A: also add the bge-m3 destination column when the seed
+        # path runs ahead of the alembic migration (test fixtures /
+        # local first-boot). Idempotent ADD COLUMN IF NOT EXISTS.
+        await conn.execute(text(
+            "ALTER TABLE knowledge_documents "
+            "ADD COLUMN IF NOT EXISTS embedding_bge_m3 vector(1024)"
+        ))
 
     # Compute embeddings for the curated corpus once, up front.
     # title + short lead of the content gives a semantically strong vector
@@ -289,11 +296,16 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
                 else None
             )
 
+            # Column follows the RAG_USE_BGE_M3 flag so seed-time
+            # writes land in the same place /search reads from.
+            from core.embeddings import rag_embedding_column
+
+            ecol = rag_embedding_column()
             await session.execute(
                 text(
-                    "INSERT INTO knowledge_documents "
+                    "INSERT INTO knowledge_documents "  # nosec B608 — `ecol` is a module-level constant name, not user input
                     "(id, tenant_id, title, content, category, source, "
-                    "file_type, status, token_count, embedding, created_at) "
+                    f"file_type, status, token_count, {ecol}, created_at) "
                     "VALUES (:id, :tid, :title, :content, :cat, :src, "
                     "'text', 'ready', :tokens, CAST(:emb AS vector), now())"
                 ),

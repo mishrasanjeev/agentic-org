@@ -84,6 +84,12 @@ dependencies = [
     "reportlab>=4.4.10",
     "google-cloud-kms>=3.12.0",
     "fastembed>=0.7.0",
+    # FlagEmbedding is BAAI's official loader for bge-m3 (8192 ctx,
+    # 1024 dim, multilingual). fastembed does not ship bge-m3.
+    # Loaded lazily — only the backfill job (PR-A) and PR-B's flipped
+    # request path import it. The default request-path embedder stays
+    # on fastembed/bge-small until PR-B cutover.
+    "FlagEmbedding>=1.2.0",
 ]
 
 [project.optional-dependencies]
@@ -141,6 +147,16 @@ extend-immutable-calls = ["fastapi.Depends", "Depends"]
 # user input arrives as bind parameters; ruff S608 flags any
 # f-string in a SQL context regardless.
 "core/billing/spend.py" = ["S608"]
+# RAG layer interpolates ``rag_embedding_column()`` (a module-level
+# constant getter) into SQL to flip between the legacy ``embedding``
+# column and the new ``embedding_bge_m3`` column without a deploy.
+# All values reaching the SQL string are constants under our control;
+# bind parameters carry the actual user input. Ruff/bandit S608 flags
+# any f-string in a SQL context, hence the per-file ignore.
+"core/embeddings_backfill.py" = ["S608"]
+"core/rag/ingest.py" = ["S608"]
+"core/seed_knowledge.py" = ["S608"]
+"api/v1/knowledge.py" = ["S608"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

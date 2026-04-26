@@ -1,0 +1,101 @@
+{
+  "generated_at": "2026-04-26T14:29:28.532481+00:00",
+  "global_percent": 55.0,
+  "global_floor": 55.0,
+  "global_target": 80.0,
+  "critical_path_target": 90.0,
+  "status": "ok",
+  "modules": [
+    {
+      "glob": "auth/*",
+      "percent": 70.0,
+      "floor": 70.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "api/v1/auth.py",
+      "percent": 50.0,
+      "floor": 50.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "core/crypto/*",
+      "percent": 70.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "core/database.py",
+      "percent": 32.0,
+      "floor": 30.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "api/deps.py",
+      "percent": 94.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "core/billing/*",
+      "percent": 57.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "api/v1/billing.py",
+      "percent": 40.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "workflows/*",
+      "percent": 79.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "core/tasks/workflow_tasks.py",
+      "percent": 15.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "connectors/framework/*",
+      "percent": null,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "skip"
+    },
+    {
+      "glob": "api/v1/connectors.py",
+      "percent": 36.0,
+      "floor": 0.0,
+      "target": 90.0,
+      "status": "ok"
+    },
+    {
+      "glob": "api/v1/governance.py",
+      "percent": 40.0,
+      "floor": 35.0,
+      "target": 70.0,
+      "status": "ok"
+    },
+    {
+      "glob": "api/v1/mcp.py",
+      "percent": 49.0,
+      "floor": 45.0,
+      "target": 70.0,
+      "status": "ok"
+    }
+  ]
+}

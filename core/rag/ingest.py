@@ -294,14 +294,19 @@ async def ingest_document(
             dedup_key = _content_hash(chunk_text)[:12]
             canonical_source = f"{chunk_source}#chunk{idx + 1}-{dedup_key}"
 
+            # Column name + model swap honour the RAG_USE_BGE_M3 flag
+            # so the request path stays atomic with the search side.
+            from core.embeddings import rag_embedding_column
+
+            target_column = rag_embedding_column()
             await session.execute(
                 sqltext(
-                    "INSERT INTO knowledge_documents "
+                    "INSERT INTO knowledge_documents "  # nosec B608 — `target_column` is a module-level constant name, not user input
                     "  (id, tenant_id, title, content, category, source, "
                     "   file_type, mime_type, embedding_model, "
                     "   embedding_dimensions, token_count, "
                     "   source_object_id, source_object_type, "
-                    "   status, embedding, created_at) "
+                    f"   status, {target_column}, created_at) "
                     "VALUES "
                     "  (gen_random_uuid(), :tid, :title, :content, "
                     "   :category, :source, 'rag', :mime_type, "
