@@ -167,7 +167,42 @@ export default function ConnectorDetailPage() {
     setFeedback(null);
     try {
       const { data } = await api.post(`/connectors/${id}/test`);
-      setFeedback({ type: data.success ? "success" : "error", msg: data.message || (data.success ? "Connection test passed" : "Connection test failed") });
+      // Uday CA Firms 2026-04-26 BUG 2: backend returns
+      //   {tested: bool, name: str, health: {status: str, http_status?: int}, error?: str}
+      // The previous handler dispatched on a fictional `success`
+      // field on the response — always undefined → always falsy →
+      // tester saw "Connection test failed" even when the connector
+      // returned status="healthy". Render against the real response
+      // shape: error string (test could not run) → fail;
+      // tested + health.status==="healthy" → success; everything else
+      // (status="unhealthy", "not_configured", "not_connected") shows
+      // the specific reason from the health probe.
+      const tested = Boolean(data?.tested);
+      const status: string = data?.health?.status ?? "";
+      const httpStatus = data?.health?.http_status;
+      if (data?.error) {
+        setFeedback({ type: "error", msg: String(data.error) });
+      } else if (!tested) {
+        setFeedback({ type: "error", msg: "Connection test did not run" });
+      } else if (status === "healthy") {
+        setFeedback({
+          type: "success",
+          msg: httpStatus
+            ? `Connection test passed (HTTP ${httpStatus})`
+            : "Connection test passed",
+        });
+      } else if (status) {
+        const reason: string = data?.health?.reason || data?.health?.error || "";
+        const code = httpStatus ? ` (HTTP ${httpStatus})` : "";
+        setFeedback({
+          type: "error",
+          msg: reason
+            ? `Connection ${status}${code}: ${reason}`
+            : `Connection ${status}${code}`,
+        });
+      } else {
+        setFeedback({ type: "error", msg: "Connection test returned no health status" });
+      }
     } catch (e: unknown) {
       setFeedback({ type: "error", msg: extractApiError(e, "Connection test failed") });
     } finally {
@@ -308,17 +343,31 @@ export default function ConnectorDetailPage() {
                         />
                       </div>
                     )}
-                    <div>
-                      <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
-                      <input
-                        type="password"
-                        value={authToken}
-                        onChange={(e) => setAuthToken(e.target.value)}
-                        placeholder="Enter new credential (leave blank to keep existing)"
-                        className="border rounded px-3 py-2 text-sm w-full mt-1"
-                        autoComplete={authType === "basic" ? "new-password" : "off"}
-                      />
-                    </div>
+                    {/* Uday CA Firms 2026-04-26 BUG 1: when authType is
+                        oauth2 the explicit Client Secret + Refresh
+                        Token fields above already cover the OAuth2
+                        credential surface. The generic helper field
+                        below resolves to authTypeLabel('oauth2') =
+                        "Client Secret", producing TWO identically-
+                        labelled inputs in the form and confusing
+                        admins about which value wins (the explicit
+                        field DID win at save time, but the duplicate
+                        was a real UX bug). Hide the generic field
+                        for oauth2; render it only for the auth types
+                        whose credential sits in a single token. */}
+                    {authType !== "oauth2" && (
+                      <div>
+                        <label className="text-sm font-medium">{authTypeLabel(authType)}</label>
+                        <input
+                          type="password"
+                          value={authToken}
+                          onChange={(e) => setAuthToken(e.target.value)}
+                          placeholder="Enter new credential (leave blank to keep existing)"
+                          className="border rounded px-3 py-2 text-sm w-full mt-1"
+                          autoComplete={authType === "basic" ? "new-password" : "off"}
+                        />
+                      </div>
+                    )}
                     {/* Uday/Ramesh 2026-04-24 (Zoho org_id): connector-
                         specific extras merged into auth_config. Zoho
                         Books needs ``organization_id``; NetSuite
