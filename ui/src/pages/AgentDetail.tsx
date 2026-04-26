@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1120,6 +1120,14 @@ function ShadowTab({ agent }: { agent: Agent }) {
   const [generating, setGenerating] = useState(false);
   const [retesting, setRetesting] = useState(false);
   const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  // Uday CA Firms 2026-04-26 BUG (major) part B: previously a single
+  // click on "Generate Test Samples" auto-batched up to 10 sequential
+  // runs with no way to stop. Default the batch to 1 (manual control)
+  // and let the user pick a higher count if they want a batch run.
+  const [batchSize, setBatchSize] = useState(1);
+  // Stop signal that's safe to read inside an in-flight async loop
+  // (a bare useState would hand back the closed-over initial value).
+  const stopRequestedRef = useRef(false);
 
   const sampleCount = agent.shadow_sample_count ?? 0;
   // Uday 2026-04-23 Bug 1/2: the default target was 20 samples which
@@ -1145,21 +1153,32 @@ function ShadowTab({ agent }: { agent: Agent }) {
   async function generateSample() {
     setGenerating(true);
     setGenResult(null);
+    stopRequestedRef.current = false;
     try {
-      // Uday 2026-04-23 Bug 1: the earlier loop awaited each call but
-      // without a visible pause between requests the batch felt like a
-      // parallel bulk run — the progress counter jumped several samples
-      // at once so testers couldn't tell each sample had actually
-      // completed before the next one started. Cap the default batch
-      // at 10 (per the 2026-04-23 spec), run each sample strictly
-      // sequentially, and push an intermediate status after each so
-      // the UI shows "Sample 3/10…" progress in real time.
+      // Uday CA Firms 2026-04-26 BUG (major) part B: hardcoded batch of
+      // 10 with no manual control was the old behaviour. Now: user picks
+      // a batch size (default 1 = strictly manual), and a Stop button
+      // can break the loop between samples. Cap remains at 10 so a typo
+      // can't kick off 1000 LLM calls.
+      const requested = Math.max(1, Math.min(batchSize, 10));
       const target = Math.max(1, agent.shadow_min_samples ?? 10);
       const gap = Math.max(0, target - sampleCount);
-      const plannedRuns = Math.min(gap > 0 ? gap : 1, 10);
+      // If the user hasn't met the minimum, cap at the gap so we don't
+      // go past the threshold; otherwise honour the requested count
+      // (re-running a fully sampled agent is allowed but rare).
+      const plannedRuns = gap > 0 ? Math.min(requested, gap) : requested;
       let successes = 0;
       let consecutiveFailures = 0;
       for (let i = 0; i < plannedRuns; i++) {
+        if (stopRequestedRef.current) {
+          setGenResult({
+            type: "success",
+            msg:
+              `Stopped after ${successes} sample${successes === 1 ? "" : "s"} ` +
+              `(of ${plannedRuns} planned). Refresh to see updated count and accuracy.`,
+          });
+          return;
+        }
         setGenResult({
           type: "success",
           msg: `Generating sample ${i + 1}/${plannedRuns}…`,
@@ -1188,6 +1207,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
       setGenResult({ type: "error", msg: err.response?.data?.detail || "Failed to generate sample. The agent may need to be configured first." });
     } finally {
       setGenerating(false);
+      stopRequestedRef.current = false;
     }
   }
 
@@ -1217,14 +1237,41 @@ function ShadowTab({ agent }: { agent: Agent }) {
           <div className="flex justify-between items-center">
             <CardTitle className="text-sm font-semibold">Shadow Sample Progress</CardTitle>
             <div className="flex gap-2">
+              {/* Uday CA Firms 2026-04-26 BUG (major) part B: explicit
+                  batch-size control + Stop button. Default batch=1
+                  (one click = one sample), max 10. */}
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={batchSize}
+                onChange={(e) => setBatchSize(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
+                disabled={generating || retesting || meetsCount}
+                className="border rounded px-2 py-1 text-sm w-16"
+                title="Number of samples to run on next click (1-10)"
+                aria-label="Samples per click"
+              />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={generateSample}
                 disabled={generating || retesting || meetsCount}
+                title={`Run ${batchSize} test sample${batchSize === 1 ? "" : "s"}`}
               >
-                {generating ? "Generating..." : "Generate Test Sample"}
+                {generating
+                  ? "Generating..."
+                  : `Generate ${batchSize === 1 ? "Test Sample" : `${batchSize} Samples`}`}
               </Button>
+              {generating && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { stopRequestedRef.current = true; }}
+                  title="Stop after the current sample finishes"
+                >
+                  Stop
+                </Button>
+              )}
               {sampleCount > 0 && (
                 <Button
                   variant="outline"
