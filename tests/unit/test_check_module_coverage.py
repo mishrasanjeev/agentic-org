@@ -13,7 +13,6 @@ than mocked.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -27,7 +26,9 @@ SCRIPT = REPO / "scripts" / "check_module_coverage.py"
 def _run_in(cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run the gate script with COVERAGE_GATE_ROOT pointing at cwd."""
     env = {**__import__("os").environ, "COVERAGE_GATE_ROOT": str(cwd)}
-    return subprocess.run(
+    # Trusted: SCRIPT is a literal path inside the repo; sys.executable is
+    # the test interpreter; cwd is a pytest tmp_path.
+    return subprocess.run(  # noqa: S603
         [sys.executable, str(SCRIPT)],
         cwd=cwd,
         capture_output=True,
