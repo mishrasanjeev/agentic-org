@@ -1,0 +1,4417 @@
+{
+  "generated_against": "https://app.agenticorg.ai",
+  "totals": {
+    "manual_only": 3,
+    "automated": 11,
+    "needs-automation": 409,
+    "duplicate": 11
+  },
+  "records": [
+    {
+      "id": "TC-LP-001",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Landing page loads without errors",
+      "proposal": "manual_only",
+      "reason": "manual phrase pattern: open\\s+browser\\s+devtools",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/"
+      ]
+    },
+    {
+      "id": "TC-LP-002",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Landing page \u2014 all sections render",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "tests/unit/test_qa_matrix.py"
+      ],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-003",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Book a Demo modal \u2014 happy path",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-004",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Book a Demo modal \u2014 empty required fields",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-005",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Book a Demo \u2014 duplicate email",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-006",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Landing page \u2014 responsive design (mobile)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-007",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Landing page \u2014 SEO meta tags",
+      "proposal": "manual_only",
+      "reason": "manual phrase pattern: view\\s+page\\s+source",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-008",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Pricing page loads correctly",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/pricing"
+      ]
+    },
+    {
+      "id": "TC-LP-009",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Evals page loads without auth",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "tests/e2e_full_production_test.py"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/evals"
+      ]
+    },
+    {
+      "id": "TC-LP-010",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Evals page \u2014 domain filter",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-011",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Evals page \u2014 sort by column",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-012",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Evals page \u2014 percentage display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-013",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Playground page \u2014 run a use case",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/landing.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/playground"
+      ]
+    },
+    {
+      "id": "TC-LP-014",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Playground page \u2014 all 8 use cases",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-LP-013 in same module",
+      "refs": [],
+      "duplicate_of": "TC-LP-013",
+      "paths": []
+    },
+    {
+      "id": "TC-LP-015",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Playground \u2014 no login required",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-016",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Blog and Resources pages",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-017",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "Solutions pages (Google Ads landing)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LP-018",
+      "module": "Module 1: Landing Page & Public Pages",
+      "title": "robots.txt and sitemap.xml",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/robots.txt",
+        "/sitemap.xml"
+      ]
+    },
+    {
+      "id": "TC-AUTH-001",
+      "module": "Module 2: Authentication",
+      "title": "Login with demo CEO credentials",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-002",
+      "module": "Module 2: Authentication",
+      "title": "Login with all 6 demo roles",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-003",
+      "module": "Module 2: Authentication",
+      "title": "Login with wrong password",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-004",
+      "module": "Module 2: Authentication",
+      "title": "Login with non-existent email",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-005",
+      "module": "Module 2: Authentication",
+      "title": "Signup \u2014 create new organization",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "tests/unit/test_qa_matrix.py"
+      ],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-006",
+      "module": "Module 2: Authentication",
+      "title": "Signup \u2014 duplicate email",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-007",
+      "module": "Module 2: Authentication",
+      "title": "Signup \u2014 password mismatch",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-008",
+      "module": "Module 2: Authentication",
+      "title": "Signup \u2014 empty required fields",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-009",
+      "module": "Module 2: Authentication",
+      "title": "Google OAuth \u2014 button visibility",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-010",
+      "module": "Module 2: Authentication",
+      "title": "Logout",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-011",
+      "module": "Module 2: Authentication",
+      "title": "Token expiry",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-012",
+      "module": "Module 2: Authentication",
+      "title": "Protected route \u2014 direct URL access without login",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-013",
+      "module": "Module 2: Authentication",
+      "title": "Role-based route access \u2014 Auditor cannot access agent creation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-014",
+      "module": "Module 2: Authentication",
+      "title": "Role-based route access \u2014 CFO cannot create agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUTH-015",
+      "module": "Module 2: Authentication",
+      "title": "Rate limiting \u2014 brute force login",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-001",
+      "module": "Module 3: Dashboard",
+      "title": "Dashboard loads with metrics",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-002",
+      "module": "Module 3: Dashboard",
+      "title": "Dashboard \u2014 charts render",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-003",
+      "module": "Module 3: Dashboard",
+      "title": "Dashboard \u2014 recent activity feed",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-004",
+      "module": "Module 3: Dashboard",
+      "title": "Dashboard \u2014 pending approvals summary",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-005",
+      "module": "Module 3: Dashboard",
+      "title": "Dashboard \u2014 CFO sees only finance data",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-001",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent list \u2014 displays all agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-002",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent list \u2014 filter by domain",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-003",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent list \u2014 filter by status",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-004",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent list \u2014 search by name",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-005",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent list \u2014 kill switch (pause active agent)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-006",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 overview tab",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-007",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 config tab",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-008",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 prompt tab",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-009",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 promote shadow to active",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-010",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 rollback",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-011",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 shadow tab",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-012",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 cost tab",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-AGT-007 in same module",
+      "refs": [],
+      "duplicate_of": "TC-AGT-007",
+      "paths": []
+    },
+    {
+      "id": "TC-AGT-013",
+      "module": "Module 4: Agent Fleet Management",
+      "title": "Agent detail \u2014 prompt history",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-AGT-008 in same module",
+      "refs": [],
+      "duplicate_of": "TC-AGT-008",
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-001",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Full agent creation \u2014 happy path",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-002",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Agent creation \u2014 custom agent type",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-003",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Agent creation \u2014 template variable substitution",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-004",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Agent creation \u2014 step validation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-005",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Agent creation \u2014 cancel",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-006",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Agent creation \u2014 back navigation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-007",
+      "module": "Module 5: Agent Creation Wizard",
+      "title": "Agent creation \u2014 duplicate name+type",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-001",
+      "module": "Module 6: Agent Execution",
+      "title": "Run agent \u2014 happy path",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-002",
+      "module": "Module 6: Agent Execution",
+      "title": "Run agent \u2014 HITL triggered (low confidence)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-003",
+      "module": "Module 6: Agent Execution",
+      "title": "Run agent \u2014 LLM model fallback",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-004",
+      "module": "Module 6: Agent Execution",
+      "title": "Run agent \u2014 budget exceeded",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-005",
+      "module": "Module 6: Agent Execution",
+      "title": "Run agent \u2014 confidence string handling",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-006",
+      "module": "Module 6: Agent Execution",
+      "title": "Run paused agent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-007",
+      "module": "Module 6: Agent Execution",
+      "title": "Clone agent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EXEC-008",
+      "module": "Module 6: Agent Execution",
+      "title": "Agent budget endpoint",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-001",
+      "module": "Module 7: Workflows",
+      "title": "Workflow list page",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-002",
+      "module": "Module 7: Workflows",
+      "title": "Create workflow",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-003",
+      "module": "Module 7: Workflows",
+      "title": "Run workflow manually",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-004",
+      "module": "Module 7: Workflows",
+      "title": "View workflow run details",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-005",
+      "module": "Module 7: Workflows",
+      "title": "Workflow with HITL step",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-HITL-001",
+      "module": "Module 8: Approval Queue (HITL)",
+      "title": "View pending approvals",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-HITL-002",
+      "module": "Module 8: Approval Queue (HITL)",
+      "title": "Approve an item",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-HITL-003",
+      "module": "Module 8: Approval Queue (HITL)",
+      "title": "Reject an item",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-HITL-004",
+      "module": "Module 8: Approval Queue (HITL)",
+      "title": "Filter by priority",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-HITL-005",
+      "module": "Module 8: Approval Queue (HITL)",
+      "title": "Decided tab shows history",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-HITL-006",
+      "module": "Module 8: Approval Queue (HITL)",
+      "title": "Role-based approval visibility \u2014 CFO",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-001",
+      "module": "Module 9: Connectors",
+      "title": "Connector list page",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-002",
+      "module": "Module 9: Connectors",
+      "title": "Filter by category",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-003",
+      "module": "Module 9: Connectors",
+      "title": "Connector health check",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-004",
+      "module": "Module 9: Connectors",
+      "title": "Register new connector",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-001",
+      "module": "Module 10: Prompt Templates",
+      "title": "List prompt templates",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-002",
+      "module": "Module 10: Prompt Templates",
+      "title": "View built-in template \u2014 read-only",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-003",
+      "module": "Module 10: Prompt Templates",
+      "title": "Clone built-in template",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-004",
+      "module": "Module 10: Prompt Templates",
+      "title": "Create custom template",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-005",
+      "module": "Module 10: Prompt Templates",
+      "title": "Edit custom template",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-TPL-004 in same module",
+      "refs": [],
+      "duplicate_of": "TC-TPL-004",
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-006",
+      "module": "Module 10: Prompt Templates",
+      "title": "Delete custom template",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-TPL-004 in same module",
+      "refs": [],
+      "duplicate_of": "TC-TPL-004",
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-007",
+      "module": "Module 10: Prompt Templates",
+      "title": "Filter by domain",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-001",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Sales pipeline page loads",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-002",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Pipeline funnel visualization",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-003",
+      "module": "Module 11: Sales Pipeline",
+      "title": "View lead details",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-004",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Run Sales Agent on lead",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-005",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Seed demo prospects",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-006",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Import CSV leads",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-007",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Due follow-ups",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-008",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Sales metrics",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-009",
+      "module": "Module 11: Sales Pipeline",
+      "title": "Lead score color coding",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUDIT-001",
+      "module": "Module 12: Audit Log",
+      "title": "Audit log page loads",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUDIT-002",
+      "module": "Module 12: Audit Log",
+      "title": "Filter by event type",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUDIT-003",
+      "module": "Module 12: Audit Log",
+      "title": "Pagination",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUDIT-004",
+      "module": "Module 12: Audit Log",
+      "title": "Export as CSV",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUDIT-005",
+      "module": "Module 12: Audit Log",
+      "title": "Export evidence package (JSON)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-AUDIT-006",
+      "module": "Module 12: Audit Log",
+      "title": "Auditor role \u2014 read-only access",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-COMP-001",
+      "module": "Module 13: Compliance (DSAR)",
+      "title": "DSAR access request",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-COMP-002",
+      "module": "Module 13: Compliance (DSAR)",
+      "title": "DSAR erase request",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-COMP-003",
+      "module": "Module 13: Compliance (DSAR)",
+      "title": "DSAR export request",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-COMP-004",
+      "module": "Module 13: Compliance (DSAR)",
+      "title": "SOC-2 evidence package",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-001",
+      "module": "Module 14: Organization Management",
+      "title": "View organization profile",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-002",
+      "module": "Module 14: Organization Management",
+      "title": "List organization members",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-003",
+      "module": "Module 14: Organization Management",
+      "title": "Invite new member",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-004",
+      "module": "Module 14: Organization Management",
+      "title": "Accept invite",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-005",
+      "module": "Module 14: Organization Management",
+      "title": "Deactivate member",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-006",
+      "module": "Module 14: Organization Management",
+      "title": "Update onboarding progress",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-001",
+      "module": "Module 15: Settings",
+      "title": "Settings page loads",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-002",
+      "module": "Module 15: Settings",
+      "title": "Update fleet limits",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-003",
+      "module": "Module 15: Settings",
+      "title": "Toggle PII masking",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-004",
+      "module": "Module 15: Settings",
+      "title": "Change data region",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-005",
+      "module": "Module 15: Settings",
+      "title": "Non-admin cannot access settings",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EMAIL-001",
+      "module": "Module 16: Email System",
+      "title": "Email domain validation \u2014 blocked domain",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EMAIL-002",
+      "module": "Module 16: Email System",
+      "title": "Email domain validation \u2014 fake domain (no MX)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EMAIL-003",
+      "module": "Module 16: Email System",
+      "title": "Email domain validation \u2014 real domain",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-EMAIL-001 in same module",
+      "refs": [],
+      "duplicate_of": "TC-EMAIL-001",
+      "paths": []
+    },
+    {
+      "id": "TC-EMAIL-004",
+      "module": "Module 16: Email System",
+      "title": "Email \u2014 test domain blocked",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EMAIL-005",
+      "module": "Module 16: Email System",
+      "title": "Welcome email on signup",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-EMAIL-006",
+      "module": "Module 16: Email System",
+      "title": "Invite email",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DEMO-001",
+      "module": "Module 17: Demo Request Flow",
+      "title": "Submit demo request \u2014 no auth required",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DEMO-002",
+      "module": "Module 17: Demo Request Flow",
+      "title": "Demo request creates lead in pipeline",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DEMO-003",
+      "module": "Module 17: Demo Request Flow",
+      "title": "Demo request \u2014 duplicate email handling",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DEMO-004",
+      "module": "Module 17: Demo Request Flow",
+      "title": "Demo request triggers sales agent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SCH-001",
+      "module": "Module 18: Schemas",
+      "title": "List schemas",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SCH-002",
+      "module": "Module 18: Schemas",
+      "title": "Create schema",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SCH-003",
+      "module": "Module 18: Schemas",
+      "title": "Upsert schema",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-API-001",
+      "module": "Module 19: Health & API",
+      "title": "Health check \u2014 liveness",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-API-002",
+      "module": "Module 19: Health & API",
+      "title": "Health check \u2014 full",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-API-003",
+      "module": "Module 19: Health & API",
+      "title": "API versioning",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-API-004",
+      "module": "Module 19: Health & API",
+      "title": "CORS headers",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-API-005",
+      "module": "Module 19: Health & API",
+      "title": "Pagination \u2014 default parameters",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-API-006",
+      "module": "Module 19: Health & API",
+      "title": "Pagination \u2014 custom page size",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TEAM-001",
+      "module": "Module 20: Agent Teams",
+      "title": "Create agent team",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CFG-001",
+      "module": "Module 21: Config Management",
+      "title": "Get fleet limits",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CFG-002",
+      "module": "Module 21: Config Management",
+      "title": "Update fleet limits",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-001",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "RBAC \u2014 domain segregation for CFO",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-002",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "RBAC \u2014 admin sees all domains",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-003",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "RBAC \u2014 auditor denied write operations",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-004",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Tenant isolation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-005",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Concurrent requests",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-006",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Error handling \u2014 invalid JSON body",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-007",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Error handling \u2014 missing required fields",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-008",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Error handling \u2014 non-existent resource",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-009",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Prompt lock on active agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-010",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "SQL injection prevention",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-011",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "XSS prevention",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CC-012",
+      "module": "Module 22: Cross-Cutting Concerns",
+      "title": "Large payload handling",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERF-001",
+      "module": "Module 23: Performance & Reliability",
+      "title": "Initial page load time",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/"
+      ]
+    },
+    {
+      "id": "TC-PERF-002",
+      "module": "Module 23: Performance & Reliability",
+      "title": "Code splitting verification",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERF-003",
+      "module": "Module 23: Performance & Reliability",
+      "title": "API response times",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERF-004",
+      "module": "Module 23: Performance & Reliability",
+      "title": "Agent execution latency",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BC-001",
+      "module": "Module 24: Backward Compatibility",
+      "title": "All 6 demo logins still work",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BC-002",
+      "module": "Module 24: Backward Compatibility",
+      "title": "Existing agents with claude-3-5-sonnet model still work",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BC-003",
+      "module": "Module 24: Backward Compatibility",
+      "title": "Agents without cost_controls run unlimited",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BC-004",
+      "module": "Module 24: Backward Compatibility",
+      "title": "Agents without parent_agent_id work normally",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BC-005",
+      "module": "Module 24: Backward Compatibility",
+      "title": "CEO sees 28+ agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BC-006",
+      "module": "Module 24: Backward Compatibility",
+      "title": "Existing prompt templates intact",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ONB-001",
+      "module": "Module 25: Onboarding Flow",
+      "title": "New org onboarding",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ONB-002",
+      "module": "Module 25: Onboarding Flow",
+      "title": "Skip onboarding",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WS-001",
+      "module": "Module 26: WebSocket Feed",
+      "title": "Real-time agent activity feed",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-001",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Access API with expired token",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-002",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Access API with tampered token",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-NEG-001 in same module",
+      "refs": [],
+      "duplicate_of": "TC-NEG-001",
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-003",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Create agent with confidence floor out of range",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-004",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Update non-existent agent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-005",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Run agent with empty input",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-006",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Extremely long agent name",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-007",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Special characters in inputs",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-008",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Concurrent agent creation race condition",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-009",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Delete active agent with running workflows",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-NEG-010",
+      "module": "Module 27: Negative & Edge Cases",
+      "title": "Browser back button after logout",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-001",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Create agent with parent (reporting_to)",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "tests/unit/test_qa_matrix.py"
+      ],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-002",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "View hierarchy in agent detail",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-003",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Escalation to parent agent on HITL",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-004",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Escalation chain \u2014 3 levels deep",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-005",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Escalation when parent is paused",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-006",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Agent without parent \u2014 escalation to human",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-007",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Update parent_agent_id via PATCH",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORG-CHART-008",
+      "module": "Module 28: Org Chart Hierarchy & Parent Escalation",
+      "title": "Remove parent (set to null)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-001",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Create agent with Gemini model",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-002",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Create agent with Claude model \u2014 no API key",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-003",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Create agent with GPT model \u2014 no API key",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-LLM-002 in same module",
+      "refs": [],
+      "duplicate_of": "TC-LLM-002",
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-004",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Agent with Claude model \u2014 API key present",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-005",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Agent with no llm_model set (null)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-006",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Agent with unknown/invalid model name",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-007",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "LLM model dropdown in Agent Create wizard",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LLM-008",
+      "module": "Module 29: Per-Agent LLM Model Selection",
+      "title": "Two agents with different models \u2014 back to back",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-001",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Create agent with monthly budget cap",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-002",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Cost tracking after execution",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-003",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Budget exceeded \u2014 execution blocked",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-004",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Agent without budget \u2014 unlimited execution",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-005",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Budget warning at 80% utilization",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-006",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Budget resets monthly",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-007",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Cost tab in Agent Detail UI",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-BUDGET-008",
+      "module": "Module 30: Per-Agent Budget Enforcement",
+      "title": "Cost tab \u2014 no budget configured",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-001",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing by routing_filter match",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-002",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing by specialization match",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-003",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing fallback \u2014 no filter match",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-004",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing priority \u2014 filter > specialization > fallback",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-005",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing with single agent \u2014 no ambiguity",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-006",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing filter \u2014 partial key match",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ROUTE-007",
+      "module": "Module 31: Smart Routing (Multi-Agent)",
+      "title": "Routing filter \u2014 case sensitivity",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERSONA-001",
+      "module": "Module 32: Persona & Virtual Employee Fields",
+      "title": "Create agent with full persona",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/avatar.png"
+      ]
+    },
+    {
+      "id": "TC-PERSONA-002",
+      "module": "Module 32: Persona & Virtual Employee Fields",
+      "title": "Update persona via PATCH",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERSONA-003",
+      "module": "Module 32: Persona & Virtual Employee Fields",
+      "title": "Agent list shows employee_name",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERSONA-004",
+      "module": "Module 32: Persona & Virtual Employee Fields",
+      "title": "Agent without persona fields",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PERSONA-005",
+      "module": "Module 32: Persona & Virtual Employee Fields",
+      "title": "Multiple agents same type \u2014 different personas",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-001",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Edit prompt on active agent \u2014 blocked",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-002",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Edit non-prompt fields on active agent \u2014 allowed",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-003",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Edit prompt on shadow agent \u2014 allowed",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-004",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Prompt edit history \u2014 full audit trail",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-005",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Clone active agent to edit prompt",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-006",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Prompt lock UI display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOCK-007",
+      "module": "Module 33: Prompt Lock & Edit History",
+      "title": "Shadow agent prompt \u2014 editable UI",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-001",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Update lead stage via PATCH",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-002",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Update lead BANT fields",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-003",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Update deal value and schedule demo",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-004",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Mark lead as lost",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-005",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Run automated follow-ups",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-006",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Follow-up respects timing schedule",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-007",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Follow-up sequence completion",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-008",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Process inbox \u2014 Gmail reply detection",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-009",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Process lead with different actions",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-010",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Import CSV \u2014 validation errors",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-011",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Import CSV \u2014 duplicate detection",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-012",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Seed prospects \u2014 idempotent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-ADV-013",
+      "module": "Module 34: Sales Pipeline \u2014 Advanced Flows",
+      "title": "Sales metrics accuracy",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-001",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "Edit built-in template \u2014 blocked (409)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-002",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "Delete built-in template \u2014 blocked",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-003",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "RBAC \u2014 CFO sees only finance templates",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-004",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "RBAC \u2014 CEO sees all templates",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-005",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "Template variable extraction",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-006",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "Template with no variables",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-ADV-007",
+      "module": "Module 35: Prompt Template \u2014 Advanced Flows",
+      "title": "Use template in agent creation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-GMAIL-001",
+      "module": "Module 36: Gmail Integration & Inbox Management",
+      "title": "Process inbox \u2014 no replies",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-GMAIL-002",
+      "module": "Module 36: Gmail Integration & Inbox Management",
+      "title": "Gmail service account authentication",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-GMAIL-003",
+      "module": "Module 36: Gmail Integration & Inbox Management",
+      "title": "Gmail service account \u2014 missing config",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CLONE-001",
+      "module": "Module 37: Agent Clone \u2014 Advanced Flows",
+      "title": "Clone inherits all settings",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CLONE-002",
+      "module": "Module 37: Agent Clone \u2014 Advanced Flows",
+      "title": "Clone starts in shadow mode",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CLONE-003",
+      "module": "Module 37: Agent Clone \u2014 Advanced Flows",
+      "title": "Clone with overrides",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CLONE-004",
+      "module": "Module 37: Agent Clone \u2014 Advanced Flows",
+      "title": "Multiple clones from same original",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-001",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "Confidence exactly at floor \u2014 no HITL",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-002",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "Confidence just below floor \u2014 HITL triggered",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-003",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "Confidence returned as \"high\" string",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-004",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "Confidence returned as \"medium\" string",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-CONF-003 in same module",
+      "refs": [],
+      "duplicate_of": "TC-CONF-003",
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-005",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "Confidence returned as \"low\" string",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-CONF-003 in same module",
+      "refs": [],
+      "duplicate_of": "TC-CONF-003",
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-006",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "Confidence field missing from LLM output",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-007",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "HITL decision options",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONF-008",
+      "module": "Module 38: Confidence & HITL \u2014 Advanced Flows",
+      "title": "HITL item expiry",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-001",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Domain change cascades to parent agents and templates",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-002",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Custom agent type toggle",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-003",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Routing filter add/remove",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-004",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Reports To dropdown \u2014 populated with active agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-005",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Reports To dropdown \u2014 select and deselect parent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-006",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "LLM model selector",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-007",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "LLM model shown in Review step",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-008",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Confidence floor slider boundary values",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-009",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Max Retries input validation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-010",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Step validation \u2014 disabled Next button",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-011",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Cancel and Back button labels",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-012",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Avatar URL preview in Review",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-013",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Creation failure error message",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CRT-UI-014",
+      "module": "Module 39: Agent Create Wizard \u2014 UI Interactions",
+      "title": "Submitting state \u2014 button disabled",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-001",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Persona header \u2014 employee name display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-002",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Persona header \u2014 avatar rendering",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-003",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Persona header \u2014 Reports To display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-004",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Overview tab \u2014 LLM Model and Reports To fields",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-005",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Promote button \u2014 disabled when active",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-006",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Promote button \u2014 loading state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-007",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Rollback button \u2014 loading and error state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-008",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Agent not found",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-009",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Kill switch on detail page",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-010",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Tab switching preserves state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-011",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Authorized tools display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-012",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Shadow tab \u2014 progress bar colors",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-013",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Shadow tab \u2014 promotion readiness checklist",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-014",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Cost tab \u2014 utilization bar colors",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DET-UI-015",
+      "module": "Module 40: Agent Detail \u2014 UI Interactions",
+      "title": "Built-in badge rendering",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOGIN-UI-001",
+      "module": "Module 41: Login Page \u2014 UI Interactions",
+      "title": "Demo credentials toggle",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOGIN-UI-002",
+      "module": "Module 41: Login Page \u2014 UI Interactions",
+      "title": "Demo credential button \u2014 auto-fill",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOGIN-UI-003",
+      "module": "Module 41: Login Page \u2014 UI Interactions",
+      "title": "Loading state during login",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOGIN-UI-004",
+      "module": "Module 41: Login Page \u2014 UI Interactions",
+      "title": "Error message display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOGIN-UI-005",
+      "module": "Module 41: Login Page \u2014 UI Interactions",
+      "title": "Navigation links",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LOGIN-UI-006",
+      "module": "Module 41: Login Page \u2014 UI Interactions",
+      "title": "Google OAuth button conditional rendering",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SIGNUP-UI-001",
+      "module": "Module 42: Signup Page \u2014 UI Interactions",
+      "title": "All fields required",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SIGNUP-UI-002",
+      "module": "Module 42: Signup Page \u2014 UI Interactions",
+      "title": "Loading state during signup",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SIGNUP-UI-003",
+      "module": "Module 42: Signup Page \u2014 UI Interactions",
+      "title": "Error message display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SIGNUP-UI-004",
+      "module": "Module 42: Signup Page \u2014 UI Interactions",
+      "title": "Sign in link",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-001",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Metric card color coding",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-002",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Pie chart rendering and interaction",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-003",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Domain distribution bar chart",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-004",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Activity feed \u2014 badge colors",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-005",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Pending approvals click-through",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-006",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Loading state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-DASH-UI-007",
+      "module": "Module 43: Dashboard \u2014 UI Interactions",
+      "title": "Empty states",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-APPR-UI-001",
+      "module": "Module 44: Approvals Page \u2014 UI Interactions",
+      "title": "Tab switching \u2014 Pending vs Decided",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-APPR-UI-002",
+      "module": "Module 44: Approvals Page \u2014 UI Interactions",
+      "title": "Priority filter \u2014 live filtering",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-APPR-UI-003",
+      "module": "Module 44: Approvals Page \u2014 UI Interactions",
+      "title": "Feedback message after decision",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-APPR-UI-004",
+      "module": "Module 44: Approvals Page \u2014 UI Interactions",
+      "title": "Empty approval queue",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-UI-001",
+      "module": "Module 45: Connectors Page \u2014 UI Interactions",
+      "title": "Stats cards accuracy",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-UI-002",
+      "module": "Module 45: Connectors Page \u2014 UI Interactions",
+      "title": "Health check button and result",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-UI-003",
+      "module": "Module 45: Connectors Page \u2014 UI Interactions",
+      "title": "Register Connector navigation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CONN-UI-004",
+      "module": "Module 45: Connectors Page \u2014 UI Interactions",
+      "title": "Loading and empty states",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-UI-001",
+      "module": "Module 46: Workflows Page \u2014 UI Interactions",
+      "title": "Workflow card rendering",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-UI-002",
+      "module": "Module 46: Workflows Page \u2014 UI Interactions",
+      "title": "Run Now button",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-UI-003",
+      "module": "Module 46: Workflows Page \u2014 UI Interactions",
+      "title": "View button navigation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-UI-004",
+      "module": "Module 46: Workflows Page \u2014 UI Interactions",
+      "title": "Create Workflow navigation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-WF-UI-005",
+      "module": "Module 46: Workflows Page \u2014 UI Interactions",
+      "title": "Loading and empty states",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-UI-001",
+      "module": "Module 47: Settings Page \u2014 UI Interactions",
+      "title": "Fleet limits input changes",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-UI-002",
+      "module": "Module 47: Settings Page \u2014 UI Interactions",
+      "title": "Per-domain max agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-UI-003",
+      "module": "Module 47: Settings Page \u2014 UI Interactions",
+      "title": "PII masking toggle",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-UI-004",
+      "module": "Module 47: Settings Page \u2014 UI Interactions",
+      "title": "Data region dropdown",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SET-UI-005",
+      "module": "Module 47: Settings Page \u2014 UI Interactions",
+      "title": "Save success feedback",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PLAY-UI-001",
+      "module": "Module 48: Playground Page \u2014 UI Interactions",
+      "title": "Use case card selection",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PLAY-UI-002",
+      "module": "Module 48: Playground Page \u2014 UI Interactions",
+      "title": "Run button disabled during execution",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PLAY-UI-003",
+      "module": "Module 48: Playground Page \u2014 UI Interactions",
+      "title": "Execution trace \u2014 terminal display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PLAY-UI-004",
+      "module": "Module 48: Playground Page \u2014 UI Interactions",
+      "title": "Summary card after execution",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PLAY-UI-005",
+      "module": "Module 48: Playground Page \u2014 UI Interactions",
+      "title": "Error state display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PLAY-UI-006",
+      "module": "Module 48: Playground Page \u2014 UI Interactions",
+      "title": "User agents section",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PRICE-UI-001",
+      "module": "Module 49: Pricing Page \u2014 UI Interactions",
+      "title": "Three tier cards rendering",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PRICE-UI-002",
+      "module": "Module 49: Pricing Page \u2014 UI Interactions",
+      "title": "Feature comparison table",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PRICE-UI-003",
+      "module": "Module 49: Pricing Page \u2014 UI Interactions",
+      "title": "FAQ accordion",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PRICE-UI-004",
+      "module": "Module 49: Pricing Page \u2014 UI Interactions",
+      "title": "CTA buttons open demo modal",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PRICE-UI-005",
+      "module": "Module 49: Pricing Page \u2014 UI Interactions",
+      "title": "Navbar navigation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-PRICE-UI-006",
+      "module": "Module 49: Pricing Page \u2014 UI Interactions",
+      "title": "Mobile menu toggle",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-001",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Hero CTA buttons",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-002",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Book a Demo modal \u2014 from button",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-003",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Mobile menu toggle and navigation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-004",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Navbar sign-in button",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-005",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Logo bar renders",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-006",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Role cards \u2014 content accuracy",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-007",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "India Connectors section",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-LAND-UI-008",
+      "module": "Module 50: Landing Page \u2014 UI Interactions",
+      "title": "Scroll animations",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-001",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Create template form toggle",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-002",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Create form validation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-003",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Template card \u2014 click to expand",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-004",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Clone button for built-in template",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-005",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Edit and Save for custom template",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-006",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Delete custom template",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-007",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Variables display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-TPL-UI-008",
+      "module": "Module 51: Prompt Templates Page \u2014 UI Interactions",
+      "title": "Domain filter",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-001",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Funnel bar \u2014 click to filter",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-002",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Stage legend buttons",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-003",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Lead row expand/collapse",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-004",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Run Agent button \u2014 loading state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-005",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Refresh button",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-006",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Metrics card accuracy",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-007",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Empty pipeline state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-SALES-UI-008",
+      "module": "Module 52: Sales Pipeline \u2014 UI Interactions",
+      "title": "Deal value and follow-up date display",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-001",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Org chart page loads",
+      "proposal": "manual_only",
+      "reason": "manual phrase pattern: open\\s+browser\\s+devtools",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-002",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Tree view shows hierarchy with connector lines",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-003",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "List view shows indented flat list",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-004",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Domain filter (All, Finance, HR, Marketing, Ops, Backoffice)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-005",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "View toggle (Tree/List)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-006",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Click node navigates to agent detail",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-007",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Expand/collapse on deep branches",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-008",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Empty state \u2014 no hierarchy",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-009",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Status dot colors (green/yellow/red/blue)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-010",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Domain color coding (emerald/purple/amber/blue borders)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-011",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Legend displays correctly",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-012",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Sidebar nav shows \"Org Chart\" link",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-013",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "CFO sees only finance tree when domain-scoped",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ORGTREE-014",
+      "module": "Module 53: Org Chart Tree Visualization",
+      "title": "Horizontal scroll on wide trees",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-001",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Import CSV button visible on Agents page",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-002",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Import panel toggle (show/hide)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-003",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Download template CSV",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-004",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Upload and import valid CSV \u2014 happy path",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-005",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "CSV with reporting_to_name \u2014 parent links set",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-006",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "CSV with missing required fields \u2014 skip rows",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-007",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "CSV with self-reference \u2014 skip and report",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-008",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "CSV with unknown parent name \u2014 skip and report",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-009",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Duplicate import \u2014 second run skips existing agents",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-010",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Import result display (imported count, skipped, parent links)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-011",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Skip details expandable section",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-012",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "Agents appear in org chart after import",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-013",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "All imported agents start in shadow mode",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-CSV-014",
+      "module": "Module 54: CSV Bulk Import",
+      "title": "org_level column respected from CSV",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-001",
+      "module": "Module 55: Smart Escalation",
+      "title": "Escalation walks to active parent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-002",
+      "module": "Module 55: Smart Escalation",
+      "title": "Escalation skips paused parent, continues to grandparent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-003",
+      "module": "Module 55: Smart Escalation",
+      "title": "Escalation max depth (5 hops) \u2014 no infinite loop",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-004",
+      "module": "Module 55: Smart Escalation",
+      "title": "Cycle detection \u2014 A to B to A stops gracefully",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-005",
+      "module": "Module 55: Smart Escalation",
+      "title": "Domain head fallback when no parent found",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-006",
+      "module": "Module 55: Smart Escalation",
+      "title": "Human fallback when no domain head exists",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-007",
+      "module": "Module 55: Smart Escalation",
+      "title": "DOMAIN_TO_ROLE mapping (finance to cfo, hr to chro, etc.)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-008",
+      "module": "Module 55: Smart Escalation",
+      "title": "Backward compatibility \u2014 escalate_to_parent still returns UUID or None",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-009",
+      "module": "Module 55: Smart Escalation",
+      "title": "Escalation from nonexistent agent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-ESC-010",
+      "module": "Module 55: Smart Escalation",
+      "title": "resolve_domain_head picks oldest active root agent",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-001",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 create hierarchy via wizard then view in org chart",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-002",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 CSV import then view in org chart",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-003",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 edit parent via Agent Detail then verify org chart",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-004",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 remove parent via Agent Detail then verify org chart",
+      "proposal": "duplicate",
+      "reason": "title >=85% similar to TC-E2E-ORG-003 in same module",
+      "refs": [],
+      "duplicate_of": "TC-E2E-ORG-003",
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-005",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 CSV import then promote agents level by level",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-006",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 escalation triggers when child agent has low confidence",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-007",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Full flow \u2014 multi-department org chart",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-008",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "CSV import \u2014 large file (20+ agents)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-009",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "CSV import \u2014 BOM-encoded file from Excel",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-010",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Org chart \u2014 API response structure",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-011",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Org chart \u2014 domain filter via API",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-012",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Import CSV \u2014 error state UI",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-013",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Import CSV \u2014 confidence_floor and llm_model from CSV",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-014",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Org chart loading state",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-015",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Org chart \u2014 agent count stats in header",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-016",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "List view \u2014 click to navigate",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-017",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Org chart accessible to CFO, CHRO, CMO, COO roles",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-E2E-ORG-018",
+      "module": "Module 56: Org Chart \u2014 End-to-End Integration Flows",
+      "title": "Sidebar \"Org Chart\" appears between \"Agents\" and \"Workflows\"",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-LOGIN-001",
+      "module": "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI",
+      "title": "Login page divider is visible and styled",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/cfo-demo.spec.ts",
+        "ui/e2e/error-handling.spec.ts",
+        "ui/e2e/landing.spec.ts",
+        "ui/e2e/login-e2e.spec.ts",
+        "ui/e2e/negative-cases.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/login"
+      ]
+    },
+    {
+      "id": "TC-REG-SIGNUP-002",
+      "module": "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI",
+      "title": "Signup page OR divider styled consistently",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/negative-cases.spec.ts",
+        "ui/e2e/onboarding-e2e.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/signup"
+      ]
+    },
+    {
+      "id": "TC-REG-SIGNUP-003",
+      "module": "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI",
+      "title": "Signup fields do not auto-fill",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/negative-cases.spec.ts",
+        "ui/e2e/onboarding-e2e.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/signup"
+      ]
+    },
+    {
+      "id": "TC-REG-SIGNUP-004",
+      "module": "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI",
+      "title": "Password show/hide toggle on Signup",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/negative-cases.spec.ts",
+        "ui/e2e/onboarding-e2e.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/signup"
+      ]
+    },
+    {
+      "id": "TC-REG-SIGNUP-005",
+      "module": "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI",
+      "title": "Terms & Conditions checkbox blocks signup",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/negative-cases.spec.ts",
+        "ui/e2e/onboarding-e2e.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/signup"
+      ]
+    },
+    {
+      "id": "TC-REG-SIGNUP-006",
+      "module": "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI",
+      "title": "Signup end-to-end with terms consent",
+      "proposal": "automated",
+      "reason": "matched on TC id reference or URL path overlap",
+      "refs": [
+        "ui/e2e/negative-cases.spec.ts",
+        "ui/e2e/onboarding-e2e.spec.ts"
+      ],
+      "duplicate_of": null,
+      "paths": [
+        "/signup"
+      ]
+    },
+    {
+      "id": "TC-REG-AGENT-007",
+      "module": "Module 58: March 2026 Bug Regression \u2014 Agent Management",
+      "title": "Comms domain in agent creation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-AGENT-008",
+      "module": "Module 58: March 2026 Bug Regression \u2014 Agent Management",
+      "title": "Shadow agent resumes to shadow (not active)",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-AGENT-009",
+      "module": "Module 58: March 2026 Bug Regression \u2014 Agent Management",
+      "title": "Shadow agent retest resets counters",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-AGENT-010",
+      "module": "Module 58: March 2026 Bug Regression \u2014 Agent Management",
+      "title": "Authorized tools auto-populated and validated",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-CONN-011",
+      "module": "Module 59: March 2026 Bug Regression \u2014 Connector Architecture",
+      "title": "Connector base_url override",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-CONN-012",
+      "module": "Module 59: March 2026 Bug Regression \u2014 Connector Architecture",
+      "title": "Gmail connector available",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-CONN-013",
+      "module": "Module 59: March 2026 Bug Regression \u2014 Connector Architecture",
+      "title": "Multi-auth connector UI",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-CONN-014",
+      "module": "Module 59: March 2026 Bug Regression \u2014 Connector Architecture",
+      "title": "Health check includes connectors",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-CONN-015",
+      "module": "Module 59: March 2026 Bug Regression \u2014 Connector Architecture",
+      "title": "Prompt tool reference validation",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-APIKEY-001",
+      "module": "Module 60: March 2026 Bug Regression \u2014 API Key System (NEW)",
+      "title": "Generate API key from Settings",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-APIKEY-002",
+      "module": "Module 60: March 2026 Bug Regression \u2014 API Key System (NEW)",
+      "title": "Authenticate with API key",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-APIKEY-003",
+      "module": "Module 60: March 2026 Bug Regression \u2014 API Key System (NEW)",
+      "title": "Revoke API key",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-SDK-001",
+      "module": "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)",
+      "title": "Developers section on landing page",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-SDK-002",
+      "module": "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)",
+      "title": "Integration workflow page",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/integration-workflow"
+      ]
+    },
+    {
+      "id": "TC-REG-SDK-003",
+      "module": "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)",
+      "title": "MCP server on npm",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/package/agenticorg-mcp-server"
+      ]
+    },
+    {
+      "id": "TC-REG-SDK-004",
+      "module": "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)",
+      "title": "MCP Registry listing",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    },
+    {
+      "id": "TC-REG-SEO-001",
+      "module": "Module 62: March 2026 Bug Regression \u2014 SEO & Content (NEW)",
+      "title": "Sitemap includes new pages",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/sitemap.xml"
+      ]
+    },
+    {
+      "id": "TC-REG-SEO-002",
+      "module": "Module 62: March 2026 Bug Regression \u2014 SEO & Content (NEW)",
+      "title": "llms.txt includes SDK section",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": [
+        "/llms.txt"
+      ]
+    },
+    {
+      "id": "TC-REG-LLM-001",
+      "module": "Module 63: March 2026 Bug Regression \u2014 LLM Cost Tracking (NEW)",
+      "title": "Agent run returns performance metrics",
+      "proposal": "needs-automation",
+      "reason": "no existing test match; not flagged manual or deprecated",
+      "refs": [],
+      "duplicate_of": null,
+      "paths": []
+    }
+  ]
+}
