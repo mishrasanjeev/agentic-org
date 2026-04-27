@@ -1,0 +1,37 @@
+# Pre-bake BAAI/bge-m3 ONNX weights into the TEI image so cold starts
+# skip the ~150s HuggingFace Hub download. Combined with min-instances=0
+# this drops the embeddings service ongoing cost from ~$55/mo (always-on
+# at 16 GiB) to ~$0-5/mo (idle is $0; only pay during /embed bursts).
+#
+# Cold start cost trade: still ~30-60s for ONNX load + warmup before
+# the first request after idle. Acceptable for /knowledge/search which
+# isn't a hot path.
+#
+# Layout: huggingface-cli download --local-dir lays out files under
+# /model/{onnx,1_Pooling,...}. TEI accepts --model-id /model directly,
+# bypassing the HF cache lookup entirely.
+
+FROM python:3.12-slim AS downloader
+# huggingface_hub 1.12+ deprecated `huggingface-cli` in favour of `hf`.
+RUN pip install --no-cache-dir 'huggingface_hub[cli]>=1.12.0'
+# Only the ONNX backend files — skip pytorch_model.bin (~2.3 GB) and
+# the colbert/sparse heads we don't use. This keeps the image lean.
+RUN hf download BAAI/bge-m3 \
+    --local-dir /model \
+    onnx/model.onnx \
+    onnx/model.onnx_data \
+    config.json \
+    config_sentence_transformers.json \
+    sentence_bert_config.json \
+    tokenizer.json \
+    tokenizer_config.json \
+    special_tokens_map.json \
+    1_Pooling/config.json
+
+FROM asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/text-embeddings-inference:cpu-latest
+COPY --from=downloader /model /model
+# Cloud Run service args still pass --model-id, but we override the
+# default here so a typo in the service args still finds the baked
+# weights. Cloud Run --args replaces this CMD entirely though, so
+# keep the args list in `gcloud run deploy` in sync.
+CMD ["--model-id=/model", "--port=80", "--hostname=0.0.0.0"]
