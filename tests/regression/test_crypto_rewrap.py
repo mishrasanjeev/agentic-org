@@ -330,6 +330,165 @@ def test_run_decrypt_failure_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Foundation #4 iter 4 — cache invalidation hook
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_cache_invalidator_registry_includes_tenant_ai_credentials() -> None:
+    """Pin the registration: rewrap MUST flush the resolver cache after
+    touching tenant_ai_credentials. Without this entry callers get
+    pre-rotation plaintext from the 120s-TTL cache.
+    """
+    from core.crypto.verify_all import _CACHE_INVALIDATORS
+
+    invalidators = _CACHE_INVALIDATORS.get(
+        "tenant_ai_credentials.credentials_encrypted"
+    )
+    assert invalidators is not None, (
+        "tenant_ai_credentials.credentials_encrypted must be registered "
+        "in _CACHE_INVALIDATORS so rewrap flushes the resolver cache"
+    )
+    assert "core.ai_providers.resolver:invalidate_cache" in invalidators
+
+
+def test_tenant_ai_credentials_is_in_scanners() -> None:
+    """If the column isn't in _SCANNERS, rewrap won't even visit it —
+    iter 4 silently regresses."""
+    from core.crypto.verify_all import _SCANNERS
+
+    labels = {label for label, _dotted in _SCANNERS}
+    assert "tenant_ai_credentials.credentials_encrypted" in labels
+
+
+def test_fire_cache_invalidators_calls_registered_callable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every registered dotted callable runs once."""
+    calls: list[str] = []
+
+    def fake_invalidate(*_args, **_kwargs):
+        calls.append("called")
+
+    # Inject a fake callable into a fake module path the helper can resolve.
+    fake_mod = type(sys)("fake_mod_for_iter4")
+    fake_mod.flush = fake_invalidate
+    monkeypatch.setitem(sys.modules, "fake_mod_for_iter4", fake_mod)
+    monkeypatch.setitem(
+        rw._CACHE_INVALIDATORS,
+        "test.column",
+        ["fake_mod_for_iter4:flush"],
+    )
+
+    rw._fire_cache_invalidators("test.column")
+    assert calls == ["called"]
+
+
+def test_fire_cache_invalidators_swallows_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing invalidator must not block rewrap completion."""
+    fake_mod = type(sys)("fake_mod_for_iter4_boom")
+    fake_mod.flush = lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+    monkeypatch.setitem(sys.modules, "fake_mod_for_iter4_boom", fake_mod)
+    monkeypatch.setitem(
+        rw._CACHE_INVALIDATORS,
+        "test.column.boom",
+        ["fake_mod_for_iter4_boom:flush"],
+    )
+    # Must not raise.
+    rw._fire_cache_invalidators("test.column.boom")
+
+
+def test_run_invalidates_cache_after_rewrap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: when rewrap touches a registered column, the
+    invalidator fires once after the loop completes."""
+    monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active,v1:older")
+
+    invalidator_calls: list[str] = []
+
+    def fake_invalidate(*_args, **_kwargs):
+        invalidator_calls.append("flushed")
+
+    fake_mod = type(sys)("fake_mod_for_iter4_run")
+    fake_mod.flush = fake_invalidate
+    monkeypatch.setitem(sys.modules, "fake_mod_for_iter4_run", fake_mod)
+
+    monkeypatch.setattr(
+        rw, "_SCANNERS",
+        [("connector_configs.credentials_encrypted", "ignored")],
+    )
+    # Override the registry so this test doesn't depend on the live
+    # tenant_ai_credentials wiring (that's covered separately).
+    monkeypatch.setattr(
+        rw, "_CACHE_INVALIDATORS",
+        {"connector_configs.credentials_encrypted":
+         ["fake_mod_for_iter4_run:flush"]},
+    )
+
+    old_ct = _stamp_with("v1", "x")
+    full_set = [("a", {"_encrypted": old_ct})]
+    rows_per_call = [full_set, full_set, []]
+    session = _mock_session_for(rows_per_call=rows_per_call)
+    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+
+    rc = asyncio.run(
+        rw.run(
+            only_column=None, only_kid=None, batch_size=10, dry_run=False
+        )
+    )
+    assert rc == 0
+    # Invalidator fired exactly once after the loop, not per-row.
+    assert invalidator_calls == ["flushed"]
+
+
+def test_run_does_not_invalidate_when_nothing_touched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If every row is already on the active key, no invalidator fires.
+
+    Pointless cache flushes during a "nothing to do" rewrap waste the
+    next caller's first request on a re-fetch.
+    """
+    monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active,v1:older")
+
+    invalidator_calls: list[str] = []
+
+    def fake_invalidate(*_args, **_kwargs):
+        invalidator_calls.append("flushed")
+
+    fake_mod = type(sys)("fake_mod_for_iter4_clean")
+    fake_mod.flush = fake_invalidate
+    monkeypatch.setitem(sys.modules, "fake_mod_for_iter4_clean", fake_mod)
+
+    monkeypatch.setattr(
+        rw, "_SCANNERS",
+        [("connector_configs.credentials_encrypted", "ignored")],
+    )
+    monkeypatch.setattr(
+        rw, "_CACHE_INVALIDATORS",
+        {"connector_configs.credentials_encrypted":
+         ["fake_mod_for_iter4_clean:flush"]},
+    )
+
+    # Only active-key ciphertext present → 0 rows pending.
+    active_ct = encrypt_credential("on-active")
+    full_set = [("a", {"_encrypted": active_ct})]
+    rows_per_call = [full_set]
+    session = _mock_session_for(rows_per_call=rows_per_call)
+    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+
+    rc = asyncio.run(
+        rw.run(
+            only_column=None, only_kid=None, batch_size=10, dry_run=False
+        )
+    )
+    assert rc == 0
+    assert invalidator_calls == []
+
+
 def test_cli_help_documents_flags() -> None:
     captured = io.StringIO()
     sys.stdout = captured

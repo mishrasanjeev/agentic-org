@@ -62,7 +62,7 @@ from core.crypto.credential_vault import (
     decrypt_credential,
     encrypt_credential,
 )
-from core.crypto.verify_all import _SCANNERS
+from core.crypto.verify_all import _CACHE_INVALIDATORS, _SCANNERS
 from core.database import async_session_factory
 
 logger = structlog.get_logger()
@@ -100,6 +100,43 @@ def _split_column_label(label: str) -> tuple[str, str]:
         raise ValueError(f"rewrap: column label missing '.': {label!r}")
     table, column = label.split(".", 1)
     return table, column
+
+
+def _fire_cache_invalidators(label: str) -> None:
+    """Run every cache-invalidator registered for ``label``.
+
+    Each invalidator is a ``"module.path:callable"`` string. We import
+    on demand so verify_all/rewrap stay importable in environments
+    where the consuming module isn't loaded (CLI before app startup).
+    Errors are logged but never block the rewrap — the worst case is
+    callers get cached plaintext for up to one TTL window after
+    rewrap completes, which is the same as the pre-iter-4 baseline.
+    """
+    for dotted in _CACHE_INVALIDATORS.get(label, []):
+        try:
+            mod_path, attr = dotted.split(":", 1)
+            mod = __import__(mod_path, fromlist=[attr])
+            callable_obj = getattr(mod, attr, None)
+            if callable(callable_obj):
+                callable_obj()
+                logger.info(
+                    "rewrap_cache_invalidated",
+                    column=label,
+                    invalidator=dotted,
+                )
+            else:
+                logger.warning(
+                    "rewrap_cache_invalidator_not_callable",
+                    column=label,
+                    invalidator=dotted,
+                )
+        except Exception as exc:
+            logger.warning(
+                "rewrap_cache_invalidator_failed",
+                column=label,
+                invalidator=dotted,
+                error=str(exc),
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -285,6 +322,7 @@ async def run(
 
     written = 0
     started = time.monotonic()
+    touched_columns: set[str] = set()
     for label, _dotted in columns:
         while True:
             async with async_session_factory() as session:
@@ -297,6 +335,7 @@ async def run(
                 )
                 if not rows:
                     break
+                touched_columns.add(label)
                 for row_id, raw in rows:
                     ct = _extract_ciphertext(label, raw)
                     if ct is None:
@@ -340,6 +379,11 @@ async def run(
                 f"(rate={rate:.1f} rows/s)",
                 file=sys.stderr,
             )
+    # Foundation #4 iter 4: flush downstream credential caches for any
+    # column we actually wrote to. Eager flush; cache re-warms on next
+    # access. Failures don't propagate — see _fire_cache_invalidators.
+    for label in sorted(touched_columns):
+        _fire_cache_invalidators(label)
     return 0
 
 
