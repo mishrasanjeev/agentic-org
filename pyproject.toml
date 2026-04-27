@@ -157,6 +157,10 @@ extend-immutable-calls = ["fastapi.Depends", "Depends"]
 "core/rag/ingest.py" = ["S608"]
 "core/seed_knowledge.py" = ["S608"]
 "api/v1/knowledge.py" = ["S608"]
+# Rewrap job (Foundation #4 iter 3) interpolates table+column names
+# from the registered _SCANNERS list (module-level constants) into
+# UPDATE/SELECT statements. All row-level inputs land as bind params.
+"core/crypto/rewrap.py" = ["S608"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
