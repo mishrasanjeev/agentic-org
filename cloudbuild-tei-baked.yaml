@@ -1,0 +1,18 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.tei.baked
+      - -t
+      - $_IMAGE
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - $_IMAGE
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/text-embeddings-inference:bge-m3-baked
+options:
+  machineType: E2_HIGHCPU_8
+timeout: 1500s
