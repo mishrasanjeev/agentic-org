@@ -7,2604 +7,2625 @@ entries:
 - id: TC-LP-001
   module: 'Module 1: Landing Page & Public Pages'
   title: Landing page loads without errors
-  status: unknown
+  status: manual_only
   references: []
-  notes: ''
+  notes: 'audit: manual phrase pattern: open\s+browser\s+devtools'
 - id: TC-LP-002
   module: 'Module 1: Landing Page & Public Pages'
   title: "Landing page \u2014 all sections render"
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - tests/unit/test_qa_matrix.py
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''tests/unit/test_qa_matrix.py''])'
 - id: TC-LP-003
   module: 'Module 1: Landing Page & Public Pages'
   title: "Book a Demo modal \u2014 happy path"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-004
   module: 'Module 1: Landing Page & Public Pages'
   title: "Book a Demo modal \u2014 empty required fields"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-005
   module: 'Module 1: Landing Page & Public Pages'
   title: "Book a Demo \u2014 duplicate email"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-006
   module: 'Module 1: Landing Page & Public Pages'
   title: "Landing page \u2014 responsive design (mobile)"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-007
   module: 'Module 1: Landing Page & Public Pages'
   title: "Landing page \u2014 SEO meta tags"
-  status: unknown
+  status: manual_only
   references: []
-  notes: ''
+  notes: 'audit: manual phrase pattern: view\s+page\s+source'
 - id: TC-LP-008
   module: 'Module 1: Landing Page & Public Pages'
   title: Pricing page loads correctly
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-009
   module: 'Module 1: Landing Page & Public Pages'
   title: Evals page loads without auth
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - tests/e2e_full_production_test.py
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''tests/e2e_full_production_test.py''])'
 - id: TC-LP-010
   module: 'Module 1: Landing Page & Public Pages'
   title: "Evals page \u2014 domain filter"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-011
   module: 'Module 1: Landing Page & Public Pages'
   title: "Evals page \u2014 sort by column"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-012
   module: 'Module 1: Landing Page & Public Pages'
   title: "Evals page \u2014 percentage display"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-013
   module: 'Module 1: Landing Page & Public Pages'
   title: "Playground page \u2014 run a use case"
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/landing.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/landing.spec.ts''])'
 - id: TC-LP-014
   module: 'Module 1: Landing Page & Public Pages'
   title: "Playground page \u2014 all 8 use cases"
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-LP-013 in same module (master=TC-LP-013)'
 - id: TC-LP-015
   module: 'Module 1: Landing Page & Public Pages'
   title: "Playground \u2014 no login required"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-016
   module: 'Module 1: Landing Page & Public Pages'
   title: Blog and Resources pages
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-017
   module: 'Module 1: Landing Page & Public Pages'
   title: Solutions pages (Google Ads landing)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LP-018
   module: 'Module 1: Landing Page & Public Pages'
   title: robots.txt and sitemap.xml
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-001
   module: 'Module 2: Authentication'
   title: Login with demo CEO credentials
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-002
   module: 'Module 2: Authentication'
   title: Login with all 6 demo roles
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-003
   module: 'Module 2: Authentication'
   title: Login with wrong password
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-004
   module: 'Module 2: Authentication'
   title: Login with non-existent email
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-005
   module: 'Module 2: Authentication'
   title: "Signup \u2014 create new organization"
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - tests/unit/test_qa_matrix.py
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''tests/unit/test_qa_matrix.py''])'
 - id: TC-AUTH-006
   module: 'Module 2: Authentication'
   title: "Signup \u2014 duplicate email"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-007
   module: 'Module 2: Authentication'
   title: "Signup \u2014 password mismatch"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-008
   module: 'Module 2: Authentication'
   title: "Signup \u2014 empty required fields"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-009
   module: 'Module 2: Authentication'
   title: "Google OAuth \u2014 button visibility"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-010
   module: 'Module 2: Authentication'
   title: Logout
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-011
   module: 'Module 2: Authentication'
   title: Token expiry
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-012
   module: 'Module 2: Authentication'
   title: "Protected route \u2014 direct URL access without login"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-013
   module: 'Module 2: Authentication'
   title: "Role-based route access \u2014 Auditor cannot access agent creation"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-014
   module: 'Module 2: Authentication'
   title: "Role-based route access \u2014 CFO cannot create agents"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUTH-015
   module: 'Module 2: Authentication'
   title: "Rate limiting \u2014 brute force login"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-001
   module: 'Module 3: Dashboard'
   title: Dashboard loads with metrics
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-002
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 charts render"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-003
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 recent activity feed"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-004
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 pending approvals summary"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-005
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 CFO sees only finance data"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-001
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 displays all agents"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-002
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 filter by domain"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-003
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 filter by status"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-004
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 search by name"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-005
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 kill switch (pause active agent)"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-006
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 overview tab"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-007
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 config tab"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-008
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 prompt tab"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-009
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 promote shadow to active"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-010
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 rollback"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-011
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 shadow tab"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AGT-012
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 cost tab"
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-AGT-007 in same module (master=TC-AGT-007)'
 - id: TC-AGT-013
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 prompt history"
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-AGT-008 in same module (master=TC-AGT-008)'
 - id: TC-CRT-001
   module: 'Module 5: Agent Creation Wizard'
   title: "Full agent creation \u2014 happy path"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-002
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 custom agent type"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-003
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 template variable substitution"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-004
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 step validation"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-005
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 cancel"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-006
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 back navigation"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-007
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 duplicate name+type"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-001
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 happy path"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-002
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 HITL triggered (low confidence)"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-003
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 LLM model fallback"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-004
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 budget exceeded"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-005
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 confidence string handling"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-006
   module: 'Module 6: Agent Execution'
   title: Run paused agent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-007
   module: 'Module 6: Agent Execution'
   title: Clone agent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EXEC-008
   module: 'Module 6: Agent Execution'
   title: Agent budget endpoint
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-001
   module: 'Module 7: Workflows'
   title: Workflow list page
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-002
   module: 'Module 7: Workflows'
   title: Create workflow
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-003
   module: 'Module 7: Workflows'
   title: Run workflow manually
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-004
   module: 'Module 7: Workflows'
   title: View workflow run details
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-005
   module: 'Module 7: Workflows'
   title: Workflow with HITL step
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-HITL-001
   module: 'Module 8: Approval Queue (HITL)'
   title: View pending approvals
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-HITL-002
   module: 'Module 8: Approval Queue (HITL)'
   title: Approve an item
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-HITL-003
   module: 'Module 8: Approval Queue (HITL)'
   title: Reject an item
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-HITL-004
   module: 'Module 8: Approval Queue (HITL)'
   title: Filter by priority
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-HITL-005
   module: 'Module 8: Approval Queue (HITL)'
   title: Decided tab shows history
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-HITL-006
   module: 'Module 8: Approval Queue (HITL)'
   title: "Role-based approval visibility \u2014 CFO"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-001
   module: 'Module 9: Connectors'
   title: Connector list page
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-002
   module: 'Module 9: Connectors'
   title: Filter by category
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-003
   module: 'Module 9: Connectors'
   title: Connector health check
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-004
   module: 'Module 9: Connectors'
   title: Register new connector
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-001
   module: 'Module 10: Prompt Templates'
   title: List prompt templates
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-002
   module: 'Module 10: Prompt Templates'
   title: "View built-in template \u2014 read-only"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-003
   module: 'Module 10: Prompt Templates'
   title: Clone built-in template
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-004
   module: 'Module 10: Prompt Templates'
   title: Create custom template
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-005
   module: 'Module 10: Prompt Templates'
   title: Edit custom template
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-TPL-004 in same module (master=TC-TPL-004)'
 - id: TC-TPL-006
   module: 'Module 10: Prompt Templates'
   title: Delete custom template
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-TPL-004 in same module (master=TC-TPL-004)'
 - id: TC-TPL-007
   module: 'Module 10: Prompt Templates'
   title: Filter by domain
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-001
   module: 'Module 11: Sales Pipeline'
   title: Sales pipeline page loads
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-002
   module: 'Module 11: Sales Pipeline'
   title: Pipeline funnel visualization
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-003
   module: 'Module 11: Sales Pipeline'
   title: View lead details
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-004
   module: 'Module 11: Sales Pipeline'
   title: Run Sales Agent on lead
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-005
   module: 'Module 11: Sales Pipeline'
   title: Seed demo prospects
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-006
   module: 'Module 11: Sales Pipeline'
   title: Import CSV leads
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-007
   module: 'Module 11: Sales Pipeline'
   title: Due follow-ups
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-008
   module: 'Module 11: Sales Pipeline'
   title: Sales metrics
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-009
   module: 'Module 11: Sales Pipeline'
   title: Lead score color coding
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUDIT-001
   module: 'Module 12: Audit Log'
   title: Audit log page loads
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUDIT-002
   module: 'Module 12: Audit Log'
   title: Filter by event type
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUDIT-003
   module: 'Module 12: Audit Log'
   title: Pagination
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUDIT-004
   module: 'Module 12: Audit Log'
   title: Export as CSV
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUDIT-005
   module: 'Module 12: Audit Log'
   title: Export evidence package (JSON)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-AUDIT-006
   module: 'Module 12: Audit Log'
   title: "Auditor role \u2014 read-only access"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-COMP-001
   module: 'Module 13: Compliance (DSAR)'
   title: DSAR access request
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-COMP-002
   module: 'Module 13: Compliance (DSAR)'
   title: DSAR erase request
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-COMP-003
   module: 'Module 13: Compliance (DSAR)'
   title: DSAR export request
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-COMP-004
   module: 'Module 13: Compliance (DSAR)'
   title: SOC-2 evidence package
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-001
   module: 'Module 14: Organization Management'
   title: View organization profile
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-002
   module: 'Module 14: Organization Management'
   title: List organization members
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-003
   module: 'Module 14: Organization Management'
   title: Invite new member
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-004
   module: 'Module 14: Organization Management'
   title: Accept invite
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-005
   module: 'Module 14: Organization Management'
   title: Deactivate member
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-006
   module: 'Module 14: Organization Management'
   title: Update onboarding progress
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-001
   module: 'Module 15: Settings'
   title: Settings page loads
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-002
   module: 'Module 15: Settings'
   title: Update fleet limits
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-003
   module: 'Module 15: Settings'
   title: Toggle PII masking
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-004
   module: 'Module 15: Settings'
   title: Change data region
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-005
   module: 'Module 15: Settings'
   title: Non-admin cannot access settings
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EMAIL-001
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 blocked domain"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EMAIL-002
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 fake domain (no MX)"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EMAIL-003
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 real domain"
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-EMAIL-001 in same module (master=TC-EMAIL-001)'
 - id: TC-EMAIL-004
   module: 'Module 16: Email System'
   title: "Email \u2014 test domain blocked"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EMAIL-005
   module: 'Module 16: Email System'
   title: Welcome email on signup
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-EMAIL-006
   module: 'Module 16: Email System'
   title: Invite email
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DEMO-001
   module: 'Module 17: Demo Request Flow'
   title: "Submit demo request \u2014 no auth required"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DEMO-002
   module: 'Module 17: Demo Request Flow'
   title: Demo request creates lead in pipeline
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DEMO-003
   module: 'Module 17: Demo Request Flow'
   title: "Demo request \u2014 duplicate email handling"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DEMO-004
   module: 'Module 17: Demo Request Flow'
   title: Demo request triggers sales agent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SCH-001
   module: 'Module 18: Schemas'
   title: List schemas
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SCH-002
   module: 'Module 18: Schemas'
   title: Create schema
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SCH-003
   module: 'Module 18: Schemas'
   title: Upsert schema
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-API-001
   module: 'Module 19: Health & API'
   title: "Health check \u2014 liveness"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-API-002
   module: 'Module 19: Health & API'
   title: "Health check \u2014 full"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-API-003
   module: 'Module 19: Health & API'
   title: API versioning
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-API-004
   module: 'Module 19: Health & API'
   title: CORS headers
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-API-005
   module: 'Module 19: Health & API'
   title: "Pagination \u2014 default parameters"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-API-006
   module: 'Module 19: Health & API'
   title: "Pagination \u2014 custom page size"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TEAM-001
   module: 'Module 20: Agent Teams'
   title: Create agent team
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CFG-001
   module: 'Module 21: Config Management'
   title: Get fleet limits
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CFG-002
   module: 'Module 21: Config Management'
   title: Update fleet limits
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-001
   module: 'Module 22: Cross-Cutting Concerns'
   title: "RBAC \u2014 domain segregation for CFO"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-002
   module: 'Module 22: Cross-Cutting Concerns'
   title: "RBAC \u2014 admin sees all domains"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-003
   module: 'Module 22: Cross-Cutting Concerns'
   title: "RBAC \u2014 auditor denied write operations"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-004
   module: 'Module 22: Cross-Cutting Concerns'
   title: Tenant isolation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-005
   module: 'Module 22: Cross-Cutting Concerns'
   title: Concurrent requests
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-006
   module: 'Module 22: Cross-Cutting Concerns'
   title: "Error handling \u2014 invalid JSON body"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-007
   module: 'Module 22: Cross-Cutting Concerns'
   title: "Error handling \u2014 missing required fields"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-008
   module: 'Module 22: Cross-Cutting Concerns'
   title: "Error handling \u2014 non-existent resource"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-009
   module: 'Module 22: Cross-Cutting Concerns'
   title: Prompt lock on active agents
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-010
   module: 'Module 22: Cross-Cutting Concerns'
   title: SQL injection prevention
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-011
   module: 'Module 22: Cross-Cutting Concerns'
   title: XSS prevention
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CC-012
   module: 'Module 22: Cross-Cutting Concerns'
   title: Large payload handling
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERF-001
   module: 'Module 23: Performance & Reliability'
   title: Initial page load time
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERF-002
   module: 'Module 23: Performance & Reliability'
   title: Code splitting verification
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERF-003
   module: 'Module 23: Performance & Reliability'
   title: API response times
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERF-004
   module: 'Module 23: Performance & Reliability'
   title: Agent execution latency
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BC-001
   module: 'Module 24: Backward Compatibility'
   title: All 6 demo logins still work
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BC-002
   module: 'Module 24: Backward Compatibility'
   title: Existing agents with claude-3-5-sonnet model still work
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BC-003
   module: 'Module 24: Backward Compatibility'
   title: Agents without cost_controls run unlimited
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BC-004
   module: 'Module 24: Backward Compatibility'
   title: Agents without parent_agent_id work normally
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BC-005
   module: 'Module 24: Backward Compatibility'
   title: CEO sees 28+ agents
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BC-006
   module: 'Module 24: Backward Compatibility'
   title: Existing prompt templates intact
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ONB-001
   module: 'Module 25: Onboarding Flow'
   title: New org onboarding
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ONB-002
   module: 'Module 25: Onboarding Flow'
   title: Skip onboarding
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WS-001
   module: 'Module 26: WebSocket Feed'
   title: Real-time agent activity feed
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-001
   module: 'Module 27: Negative & Edge Cases'
   title: Access API with expired token
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-002
   module: 'Module 27: Negative & Edge Cases'
   title: Access API with tampered token
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-NEG-001 in same module (master=TC-NEG-001)'
 - id: TC-NEG-003
   module: 'Module 27: Negative & Edge Cases'
   title: Create agent with confidence floor out of range
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-004
   module: 'Module 27: Negative & Edge Cases'
   title: Update non-existent agent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-005
   module: 'Module 27: Negative & Edge Cases'
   title: Run agent with empty input
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-006
   module: 'Module 27: Negative & Edge Cases'
   title: Extremely long agent name
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-007
   module: 'Module 27: Negative & Edge Cases'
   title: Special characters in inputs
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-008
   module: 'Module 27: Negative & Edge Cases'
   title: Concurrent agent creation race condition
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-009
   module: 'Module 27: Negative & Edge Cases'
   title: Delete active agent with running workflows
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-NEG-010
   module: 'Module 27: Negative & Edge Cases'
   title: Browser back button after logout
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-001
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Create agent with parent (reporting_to)
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - tests/unit/test_qa_matrix.py
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''tests/unit/test_qa_matrix.py''])'
 - id: TC-ORG-CHART-002
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: View hierarchy in agent detail
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-003
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Escalation to parent agent on HITL
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-004
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: "Escalation chain \u2014 3 levels deep"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-005
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Escalation when parent is paused
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-006
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: "Agent without parent \u2014 escalation to human"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-007
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Update parent_agent_id via PATCH
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORG-CHART-008
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Remove parent (set to null)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-001
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: Create agent with Gemini model
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-002
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: "Create agent with Claude model \u2014 no API key"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-003
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: "Create agent with GPT model \u2014 no API key"
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-LLM-002 in same module (master=TC-LLM-002)'
 - id: TC-LLM-004
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: "Agent with Claude model \u2014 API key present"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-005
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: Agent with no llm_model set (null)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-006
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: Agent with unknown/invalid model name
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-007
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: LLM model dropdown in Agent Create wizard
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LLM-008
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: "Two agents with different models \u2014 back to back"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-001
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Create agent with monthly budget cap
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-002
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Cost tracking after execution
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-003
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: "Budget exceeded \u2014 execution blocked"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-004
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: "Agent without budget \u2014 unlimited execution"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-005
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Budget warning at 80% utilization
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-006
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Budget resets monthly
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-007
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Cost tab in Agent Detail UI
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-BUDGET-008
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: "Cost tab \u2014 no budget configured"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-001
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: Routing by routing_filter match
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-002
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: Routing by specialization match
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-003
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: "Routing fallback \u2014 no filter match"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-004
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: "Routing priority \u2014 filter > specialization > fallback"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-005
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: "Routing with single agent \u2014 no ambiguity"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-006
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: "Routing filter \u2014 partial key match"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ROUTE-007
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: "Routing filter \u2014 case sensitivity"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERSONA-001
   module: 'Module 32: Persona & Virtual Employee Fields'
   title: Create agent with full persona
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERSONA-002
   module: 'Module 32: Persona & Virtual Employee Fields'
   title: Update persona via PATCH
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERSONA-003
   module: 'Module 32: Persona & Virtual Employee Fields'
   title: Agent list shows employee_name
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERSONA-004
   module: 'Module 32: Persona & Virtual Employee Fields'
   title: Agent without persona fields
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PERSONA-005
   module: 'Module 32: Persona & Virtual Employee Fields'
   title: "Multiple agents same type \u2014 different personas"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-001
   module: 'Module 33: Prompt Lock & Edit History'
   title: "Edit prompt on active agent \u2014 blocked"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-002
   module: 'Module 33: Prompt Lock & Edit History'
   title: "Edit non-prompt fields on active agent \u2014 allowed"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-003
   module: 'Module 33: Prompt Lock & Edit History'
   title: "Edit prompt on shadow agent \u2014 allowed"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-004
   module: 'Module 33: Prompt Lock & Edit History'
   title: "Prompt edit history \u2014 full audit trail"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-005
   module: 'Module 33: Prompt Lock & Edit History'
   title: Clone active agent to edit prompt
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-006
   module: 'Module 33: Prompt Lock & Edit History'
   title: Prompt lock UI display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOCK-007
   module: 'Module 33: Prompt Lock & Edit History'
   title: "Shadow agent prompt \u2014 editable UI"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-001
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Update lead stage via PATCH
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-002
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Update lead BANT fields
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-003
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Update deal value and schedule demo
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-004
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Mark lead as lost
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-005
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Run automated follow-ups
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-006
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Follow-up respects timing schedule
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-007
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Follow-up sequence completion
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-008
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: "Process inbox \u2014 Gmail reply detection"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-009
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Process lead with different actions
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-010
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: "Import CSV \u2014 validation errors"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-011
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: "Import CSV \u2014 duplicate detection"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-012
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: "Seed prospects \u2014 idempotent"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-ADV-013
   module: "Module 34: Sales Pipeline \u2014 Advanced Flows"
   title: Sales metrics accuracy
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-001
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: "Edit built-in template \u2014 blocked (409)"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-002
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: "Delete built-in template \u2014 blocked"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-003
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: "RBAC \u2014 CFO sees only finance templates"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-004
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: "RBAC \u2014 CEO sees all templates"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-005
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: Template variable extraction
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-006
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: Template with no variables
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-ADV-007
   module: "Module 35: Prompt Template \u2014 Advanced Flows"
   title: Use template in agent creation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-GMAIL-001
   module: 'Module 36: Gmail Integration & Inbox Management'
   title: "Process inbox \u2014 no replies"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-GMAIL-002
   module: 'Module 36: Gmail Integration & Inbox Management'
   title: Gmail service account authentication
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-GMAIL-003
   module: 'Module 36: Gmail Integration & Inbox Management'
   title: "Gmail service account \u2014 missing config"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CLONE-001
   module: "Module 37: Agent Clone \u2014 Advanced Flows"
   title: Clone inherits all settings
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CLONE-002
   module: "Module 37: Agent Clone \u2014 Advanced Flows"
   title: Clone starts in shadow mode
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CLONE-003
   module: "Module 37: Agent Clone \u2014 Advanced Flows"
   title: Clone with overrides
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CLONE-004
   module: "Module 37: Agent Clone \u2014 Advanced Flows"
   title: Multiple clones from same original
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONF-001
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: "Confidence exactly at floor \u2014 no HITL"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONF-002
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: "Confidence just below floor \u2014 HITL triggered"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONF-003
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: Confidence returned as "high" string
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONF-004
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: Confidence returned as "medium" string
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-CONF-003 in same module (master=TC-CONF-003)'
 - id: TC-CONF-005
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: Confidence returned as "low" string
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-CONF-003 in same module (master=TC-CONF-003)'
 - id: TC-CONF-006
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: Confidence field missing from LLM output
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONF-007
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: HITL decision options
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONF-008
   module: "Module 38: Confidence & HITL \u2014 Advanced Flows"
   title: HITL item expiry
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-001
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Domain change cascades to parent agents and templates
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-002
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Custom agent type toggle
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-003
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Routing filter add/remove
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-004
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: "Reports To dropdown \u2014 populated with active agents"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-005
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: "Reports To dropdown \u2014 select and deselect parent"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-006
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: LLM model selector
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-007
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: LLM model shown in Review step
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-008
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Confidence floor slider boundary values
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-009
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Max Retries input validation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-010
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: "Step validation \u2014 disabled Next button"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-011
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Cancel and Back button labels
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-012
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Avatar URL preview in Review
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-013
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: Creation failure error message
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CRT-UI-014
   module: "Module 39: Agent Create Wizard \u2014 UI Interactions"
   title: "Submitting state \u2014 button disabled"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-001
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Persona header \u2014 employee name display"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-002
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Persona header \u2014 avatar rendering"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-003
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Persona header \u2014 Reports To display"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-004
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Overview tab \u2014 LLM Model and Reports To fields"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-005
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Promote button \u2014 disabled when active"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-006
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Promote button \u2014 loading state"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-007
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Rollback button \u2014 loading and error state"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-008
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: Agent not found
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-009
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: Kill switch on detail page
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-010
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: Tab switching preserves state
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-011
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: Authorized tools display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-012
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Shadow tab \u2014 progress bar colors"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-013
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Shadow tab \u2014 promotion readiness checklist"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-014
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: "Cost tab \u2014 utilization bar colors"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DET-UI-015
   module: "Module 40: Agent Detail \u2014 UI Interactions"
   title: Built-in badge rendering
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOGIN-UI-001
   module: "Module 41: Login Page \u2014 UI Interactions"
   title: Demo credentials toggle
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOGIN-UI-002
   module: "Module 41: Login Page \u2014 UI Interactions"
   title: "Demo credential button \u2014 auto-fill"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOGIN-UI-003
   module: "Module 41: Login Page \u2014 UI Interactions"
   title: Loading state during login
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOGIN-UI-004
   module: "Module 41: Login Page \u2014 UI Interactions"
   title: Error message display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOGIN-UI-005
   module: "Module 41: Login Page \u2014 UI Interactions"
   title: Navigation links
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LOGIN-UI-006
   module: "Module 41: Login Page \u2014 UI Interactions"
   title: Google OAuth button conditional rendering
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SIGNUP-UI-001
   module: "Module 42: Signup Page \u2014 UI Interactions"
   title: All fields required
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SIGNUP-UI-002
   module: "Module 42: Signup Page \u2014 UI Interactions"
   title: Loading state during signup
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SIGNUP-UI-003
   module: "Module 42: Signup Page \u2014 UI Interactions"
   title: Error message display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SIGNUP-UI-004
   module: "Module 42: Signup Page \u2014 UI Interactions"
   title: Sign in link
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-001
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: Metric card color coding
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-002
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: Pie chart rendering and interaction
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-003
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: Domain distribution bar chart
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-004
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: "Activity feed \u2014 badge colors"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-005
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: Pending approvals click-through
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-006
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: Loading state
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-DASH-UI-007
   module: "Module 43: Dashboard \u2014 UI Interactions"
   title: Empty states
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-APPR-UI-001
   module: "Module 44: Approvals Page \u2014 UI Interactions"
   title: "Tab switching \u2014 Pending vs Decided"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-APPR-UI-002
   module: "Module 44: Approvals Page \u2014 UI Interactions"
   title: "Priority filter \u2014 live filtering"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-APPR-UI-003
   module: "Module 44: Approvals Page \u2014 UI Interactions"
   title: Feedback message after decision
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-APPR-UI-004
   module: "Module 44: Approvals Page \u2014 UI Interactions"
   title: Empty approval queue
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-UI-001
   module: "Module 45: Connectors Page \u2014 UI Interactions"
   title: Stats cards accuracy
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-UI-002
   module: "Module 45: Connectors Page \u2014 UI Interactions"
   title: Health check button and result
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-UI-003
   module: "Module 45: Connectors Page \u2014 UI Interactions"
   title: Register Connector navigation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CONN-UI-004
   module: "Module 45: Connectors Page \u2014 UI Interactions"
   title: Loading and empty states
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-UI-001
   module: "Module 46: Workflows Page \u2014 UI Interactions"
   title: Workflow card rendering
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-UI-002
   module: "Module 46: Workflows Page \u2014 UI Interactions"
   title: Run Now button
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-UI-003
   module: "Module 46: Workflows Page \u2014 UI Interactions"
   title: View button navigation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-UI-004
   module: "Module 46: Workflows Page \u2014 UI Interactions"
   title: Create Workflow navigation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-WF-UI-005
   module: "Module 46: Workflows Page \u2014 UI Interactions"
   title: Loading and empty states
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-UI-001
   module: "Module 47: Settings Page \u2014 UI Interactions"
   title: Fleet limits input changes
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-UI-002
   module: "Module 47: Settings Page \u2014 UI Interactions"
   title: Per-domain max agents
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-UI-003
   module: "Module 47: Settings Page \u2014 UI Interactions"
   title: PII masking toggle
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-UI-004
   module: "Module 47: Settings Page \u2014 UI Interactions"
   title: Data region dropdown
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SET-UI-005
   module: "Module 47: Settings Page \u2014 UI Interactions"
   title: Save success feedback
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PLAY-UI-001
   module: "Module 48: Playground Page \u2014 UI Interactions"
   title: Use case card selection
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PLAY-UI-002
   module: "Module 48: Playground Page \u2014 UI Interactions"
   title: Run button disabled during execution
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PLAY-UI-003
   module: "Module 48: Playground Page \u2014 UI Interactions"
   title: "Execution trace \u2014 terminal display"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PLAY-UI-004
   module: "Module 48: Playground Page \u2014 UI Interactions"
   title: Summary card after execution
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PLAY-UI-005
   module: "Module 48: Playground Page \u2014 UI Interactions"
   title: Error state display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PLAY-UI-006
   module: "Module 48: Playground Page \u2014 UI Interactions"
   title: User agents section
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PRICE-UI-001
   module: "Module 49: Pricing Page \u2014 UI Interactions"
   title: Three tier cards rendering
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PRICE-UI-002
   module: "Module 49: Pricing Page \u2014 UI Interactions"
   title: Feature comparison table
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PRICE-UI-003
   module: "Module 49: Pricing Page \u2014 UI Interactions"
   title: FAQ accordion
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PRICE-UI-004
   module: "Module 49: Pricing Page \u2014 UI Interactions"
   title: CTA buttons open demo modal
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PRICE-UI-005
   module: "Module 49: Pricing Page \u2014 UI Interactions"
   title: Navbar navigation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-PRICE-UI-006
   module: "Module 49: Pricing Page \u2014 UI Interactions"
   title: Mobile menu toggle
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-001
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: Hero CTA buttons
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-002
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: "Book a Demo modal \u2014 from button"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-003
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: Mobile menu toggle and navigation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-004
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: Navbar sign-in button
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-005
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: Logo bar renders
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-006
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: "Role cards \u2014 content accuracy"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-007
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: India Connectors section
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-LAND-UI-008
   module: "Module 50: Landing Page \u2014 UI Interactions"
   title: Scroll animations
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-001
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Create template form toggle
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-002
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Create form validation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-003
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: "Template card \u2014 click to expand"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-004
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Clone button for built-in template
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-005
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Edit and Save for custom template
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-006
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Delete custom template
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-007
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Variables display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-TPL-UI-008
   module: "Module 51: Prompt Templates Page \u2014 UI Interactions"
   title: Domain filter
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-001
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: "Funnel bar \u2014 click to filter"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-002
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: Stage legend buttons
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-003
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: Lead row expand/collapse
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-004
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: "Run Agent button \u2014 loading state"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-005
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: Refresh button
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-006
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: Metrics card accuracy
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-007
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: Empty pipeline state
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-SALES-UI-008
   module: "Module 52: Sales Pipeline \u2014 UI Interactions"
   title: Deal value and follow-up date display
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-001
   module: 'Module 53: Org Chart Tree Visualization'
   title: Org chart page loads
-  status: unknown
+  status: manual_only
   references: []
-  notes: ''
+  notes: 'audit: manual phrase pattern: open\s+browser\s+devtools'
 - id: TC-ORGTREE-002
   module: 'Module 53: Org Chart Tree Visualization'
   title: Tree view shows hierarchy with connector lines
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-003
   module: 'Module 53: Org Chart Tree Visualization'
   title: List view shows indented flat list
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-004
   module: 'Module 53: Org Chart Tree Visualization'
   title: Domain filter (All, Finance, HR, Marketing, Ops, Backoffice)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-005
   module: 'Module 53: Org Chart Tree Visualization'
   title: View toggle (Tree/List)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-006
   module: 'Module 53: Org Chart Tree Visualization'
   title: Click node navigates to agent detail
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-007
   module: 'Module 53: Org Chart Tree Visualization'
   title: Expand/collapse on deep branches
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-008
   module: 'Module 53: Org Chart Tree Visualization'
   title: "Empty state \u2014 no hierarchy"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-009
   module: 'Module 53: Org Chart Tree Visualization'
   title: Status dot colors (green/yellow/red/blue)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-010
   module: 'Module 53: Org Chart Tree Visualization'
   title: Domain color coding (emerald/purple/amber/blue borders)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-011
   module: 'Module 53: Org Chart Tree Visualization'
   title: Legend displays correctly
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-012
   module: 'Module 53: Org Chart Tree Visualization'
   title: Sidebar nav shows "Org Chart" link
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-013
   module: 'Module 53: Org Chart Tree Visualization'
   title: CFO sees only finance tree when domain-scoped
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ORGTREE-014
   module: 'Module 53: Org Chart Tree Visualization'
   title: Horizontal scroll on wide trees
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-001
   module: 'Module 54: CSV Bulk Import'
   title: Import CSV button visible on Agents page
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-002
   module: 'Module 54: CSV Bulk Import'
   title: Import panel toggle (show/hide)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-003
   module: 'Module 54: CSV Bulk Import'
   title: Download template CSV
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-004
   module: 'Module 54: CSV Bulk Import'
   title: "Upload and import valid CSV \u2014 happy path"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-005
   module: 'Module 54: CSV Bulk Import'
   title: "CSV with reporting_to_name \u2014 parent links set"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-006
   module: 'Module 54: CSV Bulk Import'
   title: "CSV with missing required fields \u2014 skip rows"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-007
   module: 'Module 54: CSV Bulk Import'
   title: "CSV with self-reference \u2014 skip and report"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-008
   module: 'Module 54: CSV Bulk Import'
   title: "CSV with unknown parent name \u2014 skip and report"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-009
   module: 'Module 54: CSV Bulk Import'
   title: "Duplicate import \u2014 second run skips existing agents"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-010
   module: 'Module 54: CSV Bulk Import'
   title: Import result display (imported count, skipped, parent links)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-011
   module: 'Module 54: CSV Bulk Import'
   title: Skip details expandable section
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-012
   module: 'Module 54: CSV Bulk Import'
   title: Agents appear in org chart after import
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-013
   module: 'Module 54: CSV Bulk Import'
   title: All imported agents start in shadow mode
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-CSV-014
   module: 'Module 54: CSV Bulk Import'
   title: org_level column respected from CSV
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-001
   module: 'Module 55: Smart Escalation'
   title: Escalation walks to active parent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-002
   module: 'Module 55: Smart Escalation'
   title: Escalation skips paused parent, continues to grandparent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-003
   module: 'Module 55: Smart Escalation'
   title: "Escalation max depth (5 hops) \u2014 no infinite loop"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-004
   module: 'Module 55: Smart Escalation'
   title: "Cycle detection \u2014 A to B to A stops gracefully"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-005
   module: 'Module 55: Smart Escalation'
   title: Domain head fallback when no parent found
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-006
   module: 'Module 55: Smart Escalation'
   title: Human fallback when no domain head exists
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-007
   module: 'Module 55: Smart Escalation'
   title: DOMAIN_TO_ROLE mapping (finance to cfo, hr to chro, etc.)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-008
   module: 'Module 55: Smart Escalation'
   title: "Backward compatibility \u2014 escalate_to_parent still returns UUID or None"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-009
   module: 'Module 55: Smart Escalation'
   title: Escalation from nonexistent agent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-ESC-010
   module: 'Module 55: Smart Escalation'
   title: resolve_domain_head picks oldest active root agent
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-001
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 create hierarchy via wizard then view in org chart"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-002
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 CSV import then view in org chart"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-003
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 edit parent via Agent Detail then verify org chart"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-004
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 remove parent via Agent Detail then verify org chart"
-  status: unknown
+  status: duplicate
   references: []
-  notes: ''
+  notes: 'audit: title >=85% similar to TC-E2E-ORG-003 in same module (master=TC-E2E-ORG-003)'
 - id: TC-E2E-ORG-005
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 CSV import then promote agents level by level"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-006
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 escalation triggers when child agent has low confidence"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-007
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Full flow \u2014 multi-department org chart"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-008
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "CSV import \u2014 large file (20+ agents)"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-009
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "CSV import \u2014 BOM-encoded file from Excel"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-010
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Org chart \u2014 API response structure"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-011
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Org chart \u2014 domain filter via API"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-012
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Import CSV \u2014 error state UI"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-013
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Import CSV \u2014 confidence_floor and llm_model from CSV"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-014
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: Org chart loading state
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-015
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "Org chart \u2014 agent count stats in header"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-016
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: "List view \u2014 click to navigate"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-017
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: Org chart accessible to CFO, CHRO, CMO, COO roles
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-E2E-ORG-018
   module: "Module 56: Org Chart \u2014 End-to-End Integration Flows"
   title: Sidebar "Org Chart" appears between "Agents" and "Workflows"
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-LOGIN-001
   module: "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI"
   title: Login page divider is visible and styled
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/cfo-demo.spec.ts
+  - ui/e2e/error-handling.spec.ts
+  - ui/e2e/landing.spec.ts
+  - ui/e2e/login-e2e.spec.ts
+  - ui/e2e/negative-cases.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/cfo-demo.spec.ts'', ''ui/e2e/error-handling.spec.ts'',
+    ''ui/e2e/landing.spec.ts''])'
 - id: TC-REG-SIGNUP-002
   module: "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI"
   title: Signup page OR divider styled consistently
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/negative-cases.spec.ts
+  - ui/e2e/onboarding-e2e.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/negative-cases.spec.ts'', ''ui/e2e/onboarding-e2e.spec.ts''])'
 - id: TC-REG-SIGNUP-003
   module: "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI"
   title: Signup fields do not auto-fill
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/negative-cases.spec.ts
+  - ui/e2e/onboarding-e2e.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/negative-cases.spec.ts'', ''ui/e2e/onboarding-e2e.spec.ts''])'
 - id: TC-REG-SIGNUP-004
   module: "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI"
   title: Password show/hide toggle on Signup
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/negative-cases.spec.ts
+  - ui/e2e/onboarding-e2e.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/negative-cases.spec.ts'', ''ui/e2e/onboarding-e2e.spec.ts''])'
 - id: TC-REG-SIGNUP-005
   module: "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI"
   title: Terms & Conditions checkbox blocks signup
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/negative-cases.spec.ts
+  - ui/e2e/onboarding-e2e.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/negative-cases.spec.ts'', ''ui/e2e/onboarding-e2e.spec.ts''])'
 - id: TC-REG-SIGNUP-006
   module: "Module 57: March 2026 Bug Regression \u2014 Login & Signup UI"
   title: Signup end-to-end with terms consent
-  status: unknown
-  references: []
-  notes: ''
+  status: automated
+  references:
+  - ui/e2e/negative-cases.spec.ts
+  - ui/e2e/onboarding-e2e.spec.ts
+  notes: 'audit: matched on TC id reference or URL path overlap (refs=[''ui/e2e/negative-cases.spec.ts'', ''ui/e2e/onboarding-e2e.spec.ts''])'
 - id: TC-REG-AGENT-007
   module: "Module 58: March 2026 Bug Regression \u2014 Agent Management"
   title: Comms domain in agent creation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-AGENT-008
   module: "Module 58: March 2026 Bug Regression \u2014 Agent Management"
   title: Shadow agent resumes to shadow (not active)
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-AGENT-009
   module: "Module 58: March 2026 Bug Regression \u2014 Agent Management"
   title: Shadow agent retest resets counters
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-AGENT-010
   module: "Module 58: March 2026 Bug Regression \u2014 Agent Management"
   title: Authorized tools auto-populated and validated
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-CONN-011
   module: "Module 59: March 2026 Bug Regression \u2014 Connector Architecture"
   title: Connector base_url override
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-CONN-012
   module: "Module 59: March 2026 Bug Regression \u2014 Connector Architecture"
   title: Gmail connector available
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-CONN-013
   module: "Module 59: March 2026 Bug Regression \u2014 Connector Architecture"
   title: Multi-auth connector UI
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-CONN-014
   module: "Module 59: March 2026 Bug Regression \u2014 Connector Architecture"
   title: Health check includes connectors
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-CONN-015
   module: "Module 59: March 2026 Bug Regression \u2014 Connector Architecture"
   title: Prompt tool reference validation
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-APIKEY-001
   module: "Module 60: March 2026 Bug Regression \u2014 API Key System (NEW)"
   title: Generate API key from Settings
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-APIKEY-002
   module: "Module 60: March 2026 Bug Regression \u2014 API Key System (NEW)"
   title: Authenticate with API key
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-APIKEY-003
   module: "Module 60: March 2026 Bug Regression \u2014 API Key System (NEW)"
   title: Revoke API key
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-SDK-001
   module: "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)"
   title: Developers section on landing page
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-SDK-002
   module: "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)"
   title: Integration workflow page
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-SDK-003
   module: "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)"
   title: MCP server on npm
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-SDK-004
   module: "Module 61: March 2026 Bug Regression \u2014 SDK & MCP Integration (NEW)"
   title: MCP Registry listing
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-SEO-001
   module: "Module 62: March 2026 Bug Regression \u2014 SEO & Content (NEW)"
   title: Sitemap includes new pages
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-SEO-002
   module: "Module 62: March 2026 Bug Regression \u2014 SEO & Content (NEW)"
   title: llms.txt includes SDK section
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
 - id: TC-REG-LLM-001
   module: "Module 63: March 2026 Bug Regression \u2014 LLM Cost Tracking (NEW)"
   title: Agent run returns performance metrics
-  status: unknown
+  status: needs-automation
   references: []
-  notes: ''
+  notes: 'audit: no existing test match; not flagged manual or deprecated'
