@@ -1128,6 +1128,14 @@ function ShadowTab({ agent }: { agent: Agent }) {
   // Stop signal that's safe to read inside an in-flight async loop
   // (a bare useState would hand back the closed-over initial value).
   const stopRequestedRef = useRef(false);
+  // Aishwarya 2026-04-27 TC_004 reopen: PR #322 added the
+  // stopRequestedRef + Stop button but the loop only checked the
+  // ref BETWEEN iterations. For batchSize=1 (the common case) the
+  // single iteration's await ran to completion and the user-visible
+  // "Stop" did nothing. Real fix: an AbortController whose signal
+  // is passed to api.post — clicking Stop now cancels the in-flight
+  // POST and the catch+finally fires immediately.
+  const abortRef = useRef<AbortController | null>(null);
 
   const sampleCount = agent.shadow_sample_count ?? 0;
   // Uday 2026-04-23 Bug 1/2: the default target was 20 samples which
@@ -1154,6 +1162,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
     setGenerating(true);
     setGenResult(null);
     stopRequestedRef.current = false;
+    abortRef.current = new AbortController();
     try {
       // Uday CA Firms 2026-04-26 BUG (major) part B: hardcoded batch of
       // 10 with no manual control was the old behaviour. Now: user picks
@@ -1184,13 +1193,29 @@ function ShadowTab({ agent }: { agent: Agent }) {
           msg: `Generating sample ${i + 1}/${plannedRuns}…`,
         });
         try {
-          await api.post(`/agents/${agent.id}/run`, {
-            action: "shadow_sample",
-            inputs: { mode: "test", generate_sample: true, sequential_index: i + 1 },
-          });
+          await api.post(
+            `/agents/${agent.id}/run`,
+            {
+              action: "shadow_sample",
+              inputs: { mode: "test", generate_sample: true, sequential_index: i + 1 },
+            },
+            // Aishwarya 2026-04-27 TC_004 reopen: pass the abort
+            // signal so clicking Stop cancels the in-flight POST.
+            { signal: abortRef.current.signal },
+          );
           successes += 1;
           consecutiveFailures = 0;
         } catch (err: any) {
+          // Treat axios CanceledError as a clean stop, not a failure.
+          if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
+            setGenResult({
+              type: "success",
+              msg:
+                `Stopped after ${successes} sample${successes === 1 ? "" : "s"} ` +
+                `(of ${plannedRuns} planned). Refresh to see updated count and accuracy.`,
+            });
+            return;
+          }
           consecutiveFailures += 1;
           if (consecutiveFailures >= 3) {
             throw err;
@@ -1208,6 +1233,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
     } finally {
       setGenerating(false);
       stopRequestedRef.current = false;
+      abortRef.current = null;
     }
   }
 
@@ -1266,8 +1292,15 @@ function ShadowTab({ agent }: { agent: Agent }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { stopRequestedRef.current = true; }}
-                  title="Stop after the current sample finishes"
+                  onClick={() => {
+                    // Aishwarya 2026-04-27 TC_004 reopen: aborting
+                    // the in-flight POST is what makes Stop actually
+                    // stop for batchSize=1. Setting the ref alone
+                    // only worked between iterations.
+                    stopRequestedRef.current = true;
+                    abortRef.current?.abort();
+                  }}
+                  title="Stop and cancel the in-flight sample"
                 >
                   Stop
                 </Button>

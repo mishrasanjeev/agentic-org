@@ -108,19 +108,36 @@ class TestBug3ConfigField:
 
 class TestBug4ConnectorConfig:
     def test_run_agent_handler_passes_connector_config(self):
-        """POST /agents/{id}/run must pass connector_config to langgraph_run()."""
+        """POST /agents/{id}/run must pass connector_config to langgraph_run().
+
+        2026-04-27 update (Ramesh shadow-accuracy fix): the OLD assertion
+        pinned `connector_config=agent_config.get("config")` — passing
+        the vestigial top-level agent_config field. That was the BUG —
+        it bypassed connector_ids → ConnectorConfig → decrypt resolution
+        and made every Zoho/GSTN/Tally tool call hit empty auth.
+        connector_config now comes from `_load_connector_configs_for_agent`
+        which resolves connector_ids → encrypted ConnectorConfig rows →
+        decrypts → merges. See
+        ~/.claude/.../memory/feedback_27apr_reopen_autopsy.md rule #4.
+        """
 
         with open("api/v1/agents.py", encoding="utf-8") as f:
             code = f.read()
 
-        # Find the langgraph_run() call and verify connector_config is passed
         assert "connector_config=" in code, (
             "agents.py must pass connector_config= to langgraph_run()"
         )
-        assert 'connector_config=agent_config.get("config")' in code or \
-               "connector_config=agent_config.get('config')" in code, (
-            "connector_config must come from agent_config['config']"
+        # New contract: connector_config comes from the resolver, not the
+        # vestigial agent_config field.
+        assert "connector_config=resolved_connector_config" in code, (
+            "connector_config must come from _load_connector_configs_for_agent "
+            "(resolves connector_ids → ConnectorConfig → decrypt). "
+            "Reverting to agent_config.get('config') re-introduces the "
+            "Ramesh 2026-04-27 shadow-accuracy bug."
         )
+        # And the resolver itself must exist + decrypt.
+        assert "_load_connector_configs_for_agent" in code
+        assert "decrypt_for_tenant" in code
 
 
 # ═══════════════════════════════════════════════════════════════════════════

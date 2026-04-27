@@ -22,25 +22,78 @@ interface ChatQueryResponse {
 // `{"answer":"...", "signature":"abc..."}`) as a raw string. The
 // backend tries to unwrap this but a few paths still slip through.
 // Unwrap defensively before rendering so users never see raw JSON.
-const READABLE_KEYS = ["answer", "response", "message", "summary", "result"] as const;
+//
+// Aishwarya 2026-04-27 TC_005: shadow-mode chat displayed
+// `{'type': 'text', 'text': '...', 'extras': {...}}` (Python dict
+// repr after str() on a structured response object). Fix has to
+// handle:
+//   - JSON object with the "text" envelope key
+//   - Python repr (single quotes, True/False/None) — common when
+//     str() is called on a dict in the backend before serialising
+//   - Already-extracted plain strings
+const READABLE_KEYS = [
+  "text",      // 2026-04-27 TC_005 — LangGraph text envelope
+  "answer",
+  "response",
+  "message",
+  "summary",
+  "result",
+  "content",   // OpenAI-style chat completion shape
+] as const;
+
+function _pythonReprToJson(s: string): string | null {
+  // Best-effort convert "{'a': 'b', 'c': True}" → '{"a": "b", "c": true}'.
+  // Skips when the string contains escapes that would break naive
+  // single-to-double substitution.
+  if (s.includes('"') || s.includes("\\")) return null;
+  return s
+    .replace(/'/g, '"')
+    .replace(/\bTrue\b/g, "true")
+    .replace(/\bFalse\b/g, "false")
+    .replace(/\bNone\b/g, "null");
+}
 
 function extractReadableText(raw: unknown): string {
-  if (typeof raw !== "string") return String(raw ?? "");
-  const trimmed = raw.trim();
-  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return raw;
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+  if (raw == null) return "";
+  if (typeof raw !== "string") {
+    // Already an object — try to pull a readable key directly.
+    if (typeof raw === "object" && !Array.isArray(raw)) {
       for (const key of READABLE_KEYS) {
-        const v = (parsed as Record<string, unknown>)[key];
+        const v = (raw as Record<string, unknown>)[key];
         if (typeof v === "string" && v.trim()) return v;
       }
     }
-    // Structured data without a readable key — fall back to the original.
-    return raw;
-  } catch {
-    return raw;
+    return String(raw);
   }
+  const trimmed = raw.trim();
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return raw;
+
+  // Try JSON first.
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    // Try Python-repr fallback.
+    const candidate = _pythonReprToJson(trimmed);
+    if (candidate != null) {
+      try {
+        parsed = JSON.parse(candidate);
+      } catch {
+        return raw;
+      }
+    } else {
+      return raw;
+    }
+  }
+
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    for (const key of READABLE_KEYS) {
+      const v = (parsed as Record<string, unknown>)[key];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+  }
+  // Structured data without a readable key — fall back to the original.
+  return raw;
 }
 
 export default function ChatPanel({
@@ -215,7 +268,11 @@ export default function ChatPanel({
           {messages.map((msg) =>
             msg.role === "user" ? (
               <div key={msg.id} className="flex justify-end">
-                <div className="max-w-[80%] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">
+                {/* Aishwarya 2026-04-27 TC_005: long unbroken tokens
+                    (URLs, IDs, JSON snippets) overflowed the chat
+                    bubble. `break-words` + `whitespace-pre-wrap`
+                    forces them to wrap inside the bubble. */}
+                <div className="max-w-[80%] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white whitespace-pre-wrap break-words">
                   {msg.text}
                 </div>
               </div>
@@ -234,7 +291,7 @@ export default function ChatPanel({
                       )}
                     </div>
                   )}
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
                     {msg.text}
                   </p>
                 </div>

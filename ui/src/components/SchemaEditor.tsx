@@ -29,6 +29,22 @@ export default function SchemaEditor({
   const [value, setValue] = useState(initialValue);
   const [monacoMounted, setMonacoMounted] = useState(false);
 
+  // Aishwarya 2026-04-27 TC_003: opening Schema B after Schema A still
+  // showed A's JSON. Cause: ``useState(initialValue)`` only uses the
+  // prop on the first render; subsequent prop changes recompute
+  // ``initialValue`` but never update the local ``value`` state.
+  // Sync them whenever the prop-derived initialValue changes — that's
+  // the React contract for "reset on prop change".
+  useEffect(() => {
+    setValue(initialValue);
+    onChange?.(initialValue);
+    // initialValue captures the prop change; onChange should be
+    // stable (parent passes a memoised handler) but not always — this
+    // effect intentionally does NOT depend on onChange to avoid an
+    // update loop when the parent recreates the callback per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValue]);
+
   // Kick the fallback after 2.5s if Monaco never mounted.
   useEffect(() => {
     const t = setTimeout(() => {
