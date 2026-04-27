@@ -145,7 +145,33 @@ _SCANNERS: list[tuple[str, str]] = [
      "core.models.connector_config:ConnectorConfig:credentials_encrypted"),
     ("gstn_credentials.password_encrypted",
      "core.models.gstn_credential:GSTNCredential:password_encrypted"),
+    # Foundation #4 iter 4 — tenant_ai_credentials must rewrap too.
+    # The cache invalidator below ensures decrypted plaintext held in
+    # ``core.ai_providers.resolver._CACHE`` is dropped after a row is
+    # restamped so callers don't get stale plaintext from the
+    # 120s-TTL cache.
+    ("tenant_ai_credentials.credentials_encrypted",
+     "core.models.tenant_ai_credential:TenantAICredential:credentials_encrypted"),
 ]
+
+
+# Foundation #4 iter 4 — cache invalidation on rotated_at.
+#
+# Some encrypted columns feed in-process caches that hold the
+# decrypted plaintext. After ``rewrap`` UPDATEs a row in such a
+# column, the cache must be told to drop any entry that may now be
+# pointing at a stale plaintext (cf. the SECRET_KEY incident — same
+# class of failure: rotated under us, downstream lookup served pre-
+# rotation data). Each invalidator is a dotted ``module:callable``
+# that takes no args and flushes its whole cache. Whole-cache flush
+# (rather than per-row) is intentional: rewrap runs in operator-
+# initiated bursts, and the caches re-warm on next access in O(1
+# round-trip).
+_CACHE_INVALIDATORS: dict[str, list[str]] = {
+    "tenant_ai_credentials.credentials_encrypted": [
+        "core.ai_providers.resolver:invalidate_cache",
+    ],
+}
 
 
 async def _fetch_column(session, dotted: str) -> Iterable:
