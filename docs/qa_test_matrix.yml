@@ -859,39 +859,71 @@ entries:
 - id: TC-API-001
   module: 'Module 19: Health & API'
   title: "Health check \u2014 liveness"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_001_liveness_endpoint_is_lightweight'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-001 GET /health/liveness is unauthenticated and returns alive'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-001b GET /health/liveness is fast (under 2s)'
+  notes: 'Foundation #6 burndown 2026-04-28: liveness no-DB / no-Redis pinned + 2s SLO smoke. K8s liveness probe.'
 - id: TC-API-002
   module: 'Module 19: Health & API'
   title: "Health check \u2014 full"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_002_readiness_checks_db_and_redis'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_002_readiness_returns_only_healthy_when_all_green'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_002_readiness_includes_version_and_commit'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_002_diagnostics_endpoint_is_admin_only'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-002 GET /health includes db + redis check status'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-002b GET /health/diagnostics requires admin auth'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-002c GET /health/diagnostics with admin token returns connector roster'
+  notes: 'Foundation #6 burndown 2026-04-28: readiness DB+Redis check + admin-gated diagnostics + version/commit fields pinned. Health gate accepts only "healthy".'
 - id: TC-API-003
   module: 'Module 19: Health & API'
   title: API versioning
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_003_all_routers_mount_under_v1_prefix'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_003_app_carries_version_string'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-003 OpenAPI doc carries a non-empty version string'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-003b /api/v1 prefix is honored \u2014 root /api is a 404'
+  notes: 'Foundation #6 burndown 2026-04-28: /api/v1 prefix coverage ratchet + OpenAPI version pinned.'
 - id: TC-API-004
   module: 'Module 19: Health & API'
   title: CORS headers
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_004_cors_dev_allows_wildcard'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_004_cors_prod_uses_allowlist'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_004_cors_middleware_added_with_credentials_true'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-004 OPTIONS preflight returns CORS headers'
+  notes: 'Foundation #6 burndown 2026-04-28: env-conditional CORS + credentials=True + preflight smoke pinned.'
 - id: TC-API-005
   module: 'Module 19: Health & API'
   title: "Pagination \u2014 default parameters"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_005_paginated_response_default_per_page_is_20'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_005_paginated_response_default_page_is_1'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_005_paginated_response_carries_total_and_pages'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-005 GET /audit with NO page/per_page uses defaults page=1, per_page=20'
+  notes: 'Foundation #6 burndown 2026-04-28: PaginatedResponse defaults + total/pages fields pinned.'
 - id: TC-API-006
   module: 'Module 19: Health & API'
   title: "Pagination \u2014 custom page size"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_006_audit_per_page_caps_at_100'
+    - 'tests/unit/test_module_19_health_api.py::test_tc_api_006_paginated_response_accepts_arbitrary_per_page_field'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-006 GET /audit?per_page=10 honors the custom page size'
+    - 'ui/e2e/qa-module-19-health-api.spec.ts::TC-API-006b GET /audit?per_page=10000 is silently clamped to 100'
+  notes: 'Foundation #6 burndown 2026-04-28: per_page custom value + 100 cap pinned (cross-pin with TC-AUDIT-003b).'
 - id: TC-TEAM-001
   module: 'Module 20: Agent Teams'
   title: Create agent team
