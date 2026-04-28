@@ -743,6 +743,58 @@ async def init_db() -> None:
             );
         """))
 
+        # 9d. v4.4.0 safety net — report_schedules.
+        # The v4.4.0 alembic migration created this table, but envs that
+        # were stamped past v4.4.0 without ever running it (e.g. prod
+        # 2026-04-22 cutover) ended up missing the table. The 2026-04-22
+        # company_id migration explicitly guards on table existence and
+        # logs that this safety-net path is the canonical creator. The
+        # 27-Apr TC_001 reopen (Aishwarya, "report schedule create 500")
+        # surfaced because instrumentation revealed
+        # `relation "report_schedules" does not exist`. Idempotent on
+        # repeat startups.
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS report_schedules (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id),
+                company_id UUID NULL,
+                name VARCHAR(200) NOT NULL,
+                report_type VARCHAR(50) NOT NULL,
+                cron_expression VARCHAR(100) NOT NULL,
+                recipients JSONB NOT NULL DEFAULT '[]'::jsonb,
+                delivery_channel VARCHAR(20) NOT NULL DEFAULT 'email',
+                format VARCHAR(10) NOT NULL DEFAULT 'pdf',
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                last_run_at TIMESTAMPTZ,
+                next_run_at TIMESTAMPTZ,
+                config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ
+            );
+        """))
+        # If the table already existed from an older env without the
+        # v488 company_id migration, ensure the column is present.
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'report_schedules'
+                      AND column_name = 'company_id'
+                ) THEN
+                    ALTER TABLE report_schedules ADD COLUMN company_id UUID NULL;
+                END IF;
+            END $$;
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant "
+            "ON report_schedules(tenant_id);"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant_company "
+            "ON report_schedules(tenant_id, company_id);"
+        ))
+
         # 9c. RLS for ALL v4.7 tenant-scoped tables
         # (Missing from the original v4.7.0 ship — found in gap analysis #6)
         _v47_rls_tables = [
@@ -751,6 +803,7 @@ async def init_db() -> None:
             "invoices",
             "tenant_branding",
             "workflow_variants",
+            "report_schedules",
         ]
         for _rls_tbl in _v47_rls_tables:
             await conn.execute(text(f"ALTER TABLE {_rls_tbl} ENABLE ROW LEVEL SECURITY;"))  # noqa: S608
