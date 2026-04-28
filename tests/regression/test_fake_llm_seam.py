@@ -193,3 +193,26 @@ def test_conftest_default_makes_fake_active() -> None:
     default. Pin that the variable is set during a test run."""
     assert os.environ.get("AGENTICORG_TEST_FAKE_LLM") == "1"
     assert fake_llm.is_active() is True
+
+
+@pytest.mark.asyncio
+async def test_unsupported_model_still_raises_under_fake() -> None:
+    """The fake must NOT mask the production validation contract.
+    An unsupported model name should raise ValueError even when
+    the fake is active — otherwise tests asserting the rejection
+    silently pass (a false-green that Foundation #8 forbids).
+
+    Tests _call_model directly (rather than complete()) because
+    complete() has a fallback chain that masks the primary error.
+    The fix is to validate BEFORE the fake-active check.
+    """
+    from core.llm.router import LLMRouter
+
+    router = LLMRouter()
+    with pytest.raises(ValueError, match="Unsupported model"):
+        await router._call_model(
+            model="some-unknown-model-xyz",
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=0.0,
+            max_tokens=100,
+        )
