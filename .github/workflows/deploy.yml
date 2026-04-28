@@ -87,11 +87,29 @@ jobs:
       - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install uv && uv pip install --system -e ".[dev]"
+      # Foundation #7 PR-E: launch a real Celery worker bound to the
+      # Redis service so integration tests can exercise the queue
+      # round-trip when AGENTICORG_TEST_FAKE_CELERY is unset. Eager
+      # mode (the default for unit tests) doesn't need this; this is
+      # only for tests that explicitly opt back into a real worker.
+      - name: Start Celery worker (background)
+        run: |
+          AGENTICORG_REDIS_URL=redis://localhost:6379/0 \
+          AGENTICORG_SECRET_KEY=ci-test-secret-key-minimum-16 \
+            celery -A core.tasks.celery_app worker \
+              --loglevel=info \
+              --queues=reports,delivery,maintenance,workflows,rpa \
+              --detach \
+              --pidfile=/tmp/celery-worker.pid \
+              --logfile=/tmp/celery-worker.log
       - run: pytest tests/integration/ tests/regression/ -v
         env:
           AGENTICORG_DB_URL: postgresql+asyncpg://test:test@localhost:5432/test
           AGENTICORG_REDIS_URL: redis://localhost:6379/0
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
+      - name: Tail celery worker log on failure
+        if: failure()
+        run: tail -200 /tmp/celery-worker.log || true
 
   security-scan:
     needs: lint

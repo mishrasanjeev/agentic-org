@@ -23,6 +23,7 @@ os.environ.setdefault("AGENTICORG_TEST_FAKE_LLM", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_MAIL", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_STORAGE", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_CONNECTORS", "1")
+os.environ.setdefault("AGENTICORG_TEST_FAKE_CELERY", "1")
 
 # Foundation #7 PR-D: install the global httpx.AsyncClient patch so
 # auth-time + one-off clients (e.g. OAuth token refresh inside
@@ -39,7 +40,13 @@ __import__(
 def _reset_fake_doubles_between_tests():
     """Clear hermetic doubles' state before each test so captures
     + registrations don't bleed across cases."""
-    for _mod_name in ("fake_llm", "fake_mail", "fake_storage", "fake_connectors"):
+    for _mod_name in (
+        "fake_llm",
+        "fake_mail",
+        "fake_storage",
+        "fake_connectors",
+        "fake_celery",
+    ):
         try:
             _mod = __import__(
                 f"core.test_doubles.{_mod_name}", fromlist=[_mod_name]

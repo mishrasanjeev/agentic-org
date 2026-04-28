@@ -103,3 +103,22 @@ app.conf.beat_schedule = {
 
 # ── Auto-discover tasks from the core.tasks package ─────────────────
 app.autodiscover_tasks(["core.tasks"])
+
+
+# ── Foundation #7 PR-E: hermetic-CI seam ────────────────────────────
+# When AGENTICORG_TEST_FAKE_CELERY=1, run every task synchronously in
+# the calling process (eager mode) and capture each invocation so
+# tests can assert "task X was enqueued with these args" without a
+# real broker. See docs/hermetic_test_doubles.md.
+if os.getenv("AGENTICORG_TEST_FAKE_CELERY", "").lower() in ("1", "true", "yes"):
+    app.conf.task_always_eager = True
+    app.conf.task_eager_propagates = True
+
+    from celery.signals import task_prerun  # noqa: PLC0415
+
+    @task_prerun.connect
+    def _record_task_invocation(sender=None, args=None, kwargs=None, **_):  # noqa: ANN001
+        from core.test_doubles import fake_celery  # noqa: PLC0415
+
+        name = getattr(sender, "name", "") or ""
+        fake_celery._record(name=name, args=args or (), kwargs=kwargs or {})
