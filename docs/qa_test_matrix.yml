@@ -209,33 +209,54 @@ entries:
 - id: TC-DASH-001
   module: 'Module 3: Dashboard'
   title: Dashboard loads with metrics
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_001_dashboard_fetches_three_apis'
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_001_uses_promise_allsettled_not_all'
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_001_metric_derivations_pinned'
+    - 'ui/e2e/qa-module-3-dashboard.spec.ts::TC-DASH-001 dashboard renders Total Agents + Active + Pending + Shadow KPI cards'
+  notes: 'Foundation #6 burndown 2026-04-28: 3-API fetch + Promise.allSettled + metric derivations + KPI labels pinned.'
 - id: TC-DASH-002
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 charts render"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_002_status_distribution_pie_data'
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_002_domain_distribution_bar_data'
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_002_confidence_chart_handles_null_floor'
+    - 'ui/e2e/qa-module-3-dashboard.spec.ts::TC-DASH-002 dashboard renders without runtime errors'
+  notes: 'Foundation #6 burndown 2026-04-28: pie/bar data sources + null-floor guard + no-runtime-errors smoke pinned.'
 - id: TC-DASH-003
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 recent activity feed"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_003_recent_activity_caps_at_10'
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_003_recent_activity_empty_state_pinned'
+    - 'ui/e2e/qa-module-3-dashboard.spec.ts::TC-DASH-003 dashboard renders Recent Activity card (with feed or empty state)'
+  notes: 'Foundation #6 burndown 2026-04-28: 10-entry cap + empty-state copy pinned.'
 - id: TC-DASH-004
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 pending approvals summary"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_004_pending_items_filtered_from_approvals_response'
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_004_resolved_approvals_excludes_expired'
+    - 'ui/e2e/qa-module-3-dashboard.spec.ts::TC-DASH-004 Pending Approvals card present + clicking deeplinks to /dashboard/approvals'
+  notes: 'Foundation #6 burndown 2026-04-28: pending filter + resolved-excludes-expired + deeplink pinned.'
 - id: TC-DASH-005
   module: 'Module 3: Dashboard'
   title: "Dashboard \u2014 CFO sees only finance data"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_3_dashboard.py::test_tc_dash_005_agents_endpoint_enforces_user_domains_filter'
+    - 'ui/e2e/qa-module-3-dashboard.spec.ts::TC-DASH-005 dashboard inherits RBAC scope from /agents response'
+  notes: 'Foundation #6 burndown 2026-04-28: server-side domain RBAC inherited by dashboard pinned. Cross-pin: TC-CC-001 / TC-AGT-002.'
 - id: TC-AGT-001
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 displays all agents"
