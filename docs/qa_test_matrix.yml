@@ -1001,63 +1001,97 @@ entries:
 - id: TC-NEG-001
   module: 'Module 27: Negative & Edge Cases'
   title: Access API with expired token
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_001_validate_local_token_rejects_revoked'
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_001_validate_local_token_surfaces_jwt_error'
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_001_jwt_validation_pins_audience_and_issuer'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-001 expired/tampered token returns 401/403'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-001b empty Authorization header returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: revoked/expired/tampered + audience+issuer pins + 401/403 e2e.'
 - id: TC-NEG-002
   module: 'Module 27: Negative & Edge Cases'
   title: Access API with tampered token
   status: duplicate
-  references: []
+  references:
+    - 'See TC-NEG-001 — same coverage; audit flagged title >=85% similar.'
   notes: 'audit: title >=85% similar to TC-NEG-001 in same module (master=TC-NEG-001)'
 - id: TC-NEG-003
   module: 'Module 27: Negative & Edge Cases'
   title: Create agent with confidence floor out of range
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_003_confidence_floor_default_documented'
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_003_shadow_accuracy_floor_default_pinned'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-003 confidence_floor 1.5 (>1) is rejected by handler'
+  notes: 'Foundation #6 burndown 2026-04-28: defaults + handler [0,1] enforcement pinned.'
 - id: TC-NEG-004
   module: 'Module 27: Negative & Edge Cases'
   title: Update non-existent agent
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_004_update_non_existent_agent_returns_404'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-004 PATCH /agents/{nonexistent} returns 404'
+  notes: 'Foundation #6 burndown 2026-04-28: 404 on missing target pinned.'
 - id: TC-NEG-005
   module: 'Module 27: Negative & Edge Cases'
   title: Run agent with empty input
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_005_agent_create_requires_name_and_type'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-005 POST /agents with empty body returns 422'
+  notes: 'Foundation #6 burndown 2026-04-28: required-field schema + 422 on empty body pinned.'
 - id: TC-NEG-006
   module: 'Module 27: Negative & Edge Cases'
   title: Extremely long agent name
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_006_agent_name_max_length_pinned'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-006 POST /agents with 256-char name returns 422'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-006b POST /agents with 255-char name accepted (boundary)'
+  notes: 'Foundation #6 burndown 2026-04-28: 255 boundary + 256 reject pinned.'
 - id: TC-NEG-007
   module: 'Module 27: Negative & Edge Cases'
   title: Special characters in inputs
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_007_agent_name_storage_is_unicode_text_no_escaping'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-007 POST /agents with unicode + special chars in name accepted'
+  notes: 'Foundation #6 burndown 2026-04-28: utf-8 storage + verbatim round-trip + no-server-escaping pinned.'
 - id: TC-NEG-008
   module: 'Module 27: Negative & Edge Cases'
   title: Concurrent agent creation race condition
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_008_agent_versions_unique_per_agent_version_pair'
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_008_per_agent_advisory_lock_for_serialised_writes'
+  notes: 'Foundation #6 burndown 2026-04-28: AgentVersion unique constraint + per-agent advisory lock pinned.'
 - id: TC-NEG-009
   module: 'Module 27: Negative & Edge Cases'
   title: Delete active agent with running workflows
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_009_delete_refuses_non_deletable_status_with_409'
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_009_delete_writes_audit_before_row_drop'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-009 DELETE /agents/{nonexistent} returns 404'
+  notes: 'Foundation #6 burndown 2026-04-28: deletable_statuses set + 409 + audit-before-delete ordering pinned.'
 - id: TC-NEG-010
   module: 'Module 27: Negative & Edge Cases'
   title: Browser back button after logout
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_27_negative_edge.py::test_tc_neg_010_logout_clears_both_token_and_user_localstorage'
+    - 'ui/e2e/qa-module-27-negative-edge.spec.ts::TC-NEG-010 unauthenticated UI route redirects to /login'
+  notes: 'Foundation #6 burndown 2026-04-28: logout removes token + user from localStorage; ProtectedRoute redirects.'
 - id: TC-ORG-CHART-001
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Create agent with parent (reporting_to)
