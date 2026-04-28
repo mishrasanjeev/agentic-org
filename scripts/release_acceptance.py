@@ -192,8 +192,22 @@ def check_coverage_gate() -> CheckResult:
 
 
 def check_qa_matrix_p0_p1_mapped() -> CheckResult:
-    """Parse ``docs/qa_test_matrix.yml``; fail if any P0 or P1
-    row has an empty ``automated_test_ref``."""
+    """Parse ``docs/qa_test_matrix.yml``; fail if any TC that is
+    expected to be automated lacks a reference.
+
+    The Foundation #1 matrix uses ``entries:`` as the row list and
+    classifies each TC by ``status`` (``automated`` /
+    ``needs-automation`` / ``manual_only`` / ``deprecated`` /
+    ``partial`` / ``unknown``) plus a ``references`` list. There is
+    no ``priority`` field today, so we treat any row whose status
+    implies "should be automated" (``needs-automation``,
+    ``partial``, ``unknown``) as a gap. ``manual_only`` and
+    ``deprecated`` are intentionally exempt.
+
+    We also accept the legacy ``test_cases`` + ``priority`` +
+    ``automated_test_ref`` schema so an upcoming matrix migration
+    doesn't silently break this gate.
+    """
     matrix = REPO / "docs" / "qa_test_matrix.yml"
     if not matrix.exists():
         return _missing("qa_matrix_p0_p1_mapped", str(matrix))
@@ -213,44 +227,65 @@ def check_qa_matrix_p0_p1_mapped() -> CheckResult:
             passed=False,
             message=f"qa_test_matrix.yml is not valid YAML: {exc}",
         )
-    rows = data.get("test_cases") if isinstance(data, dict) else data
+    if isinstance(data, dict):
+        rows = data.get("entries") or data.get("test_cases")
+    else:
+        rows = data
     if not isinstance(rows, list):
         return CheckResult(
             name="qa_matrix_p0_p1_mapped",
             passed=False,
-            message="qa_test_matrix.yml has no parseable test_cases list",
+            message=(
+                "qa_test_matrix.yml has no parseable rows under "
+                "'entries' or 'test_cases'."
+            ),
         )
+
+    gap_statuses = {"needs-automation", "partial", "unknown"}
     gaps: list[str] = []
-    p0_p1_count = 0
+    expected_total = 0
     for row in rows:
         if not isinstance(row, dict):
             continue
+        # Legacy schema first — preserves prior P0/P1 semantics.
         priority = str(row.get("priority", "")).upper()
-        if priority not in ("P0", "P1"):
+        if priority in ("P0", "P1"):
+            expected_total += 1
+            ref = row.get("automated_test_ref") or ""
+            if not str(ref).strip():
+                gaps.append(str(row.get("tc_id") or row.get("id") or "<unknown>"))
             continue
-        p0_p1_count += 1
-        ref = row.get("automated_test_ref") or ""
-        if not str(ref).strip():
-            gaps.append(str(row.get("tc_id") or "<unknown>"))
+        # Current schema — status + references.
+        status = str(row.get("status", "")).strip().lower()
+        if not status:
+            continue
+        if status == "automated":
+            expected_total += 1
+            refs = row.get("references") or []
+            if not (isinstance(refs, list) and any(str(r).strip() for r in refs)):
+                gaps.append(str(row.get("id") or "<unknown>"))
+        elif status in gap_statuses:
+            expected_total += 1
+            gaps.append(str(row.get("id") or "<unknown>"))
     if gaps:
         return CheckResult(
             name="qa_matrix_p0_p1_mapped",
             # The closure plan acknowledges Playwright burndown is
-            # in flight — treat unmapped P0/P1 as a WARNING until
-            # #6 lands, then promote to required.
+            # in flight — treat unmapped TCs as a WARNING until
+            # Foundation #6 fully lands, then promote to required.
             passed=False,
             severity="warning",
             message=(
-                f"{len(gaps)}/{p0_p1_count} P0/P1 TCs lack "
-                f"automated_test_ref (e.g. {', '.join(gaps[:3])}). "
+                f"{len(gaps)}/{expected_total} matrix TCs lack a "
+                f"test reference (e.g. {', '.join(gaps[:3])}). "
                 f"Foundation #6 burndown will close this."
             ),
-            details={"unmapped_tc_ids": gaps[:50], "p0_p1_total": p0_p1_count},
+            details={"unmapped_tc_ids": gaps[:50], "expected_total": expected_total},
         )
     return CheckResult(
         name="qa_matrix_p0_p1_mapped",
         passed=True,
-        message=f"All {p0_p1_count} P0/P1 TCs are mapped to automation.",
+        message=f"All {expected_total} expected-automated TCs have references.",
     )
 
 

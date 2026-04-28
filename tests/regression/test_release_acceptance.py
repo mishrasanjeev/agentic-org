@@ -107,6 +107,90 @@ def test_qa_matrix_check_handles_missing_file(monkeypatch, tmp_path) -> None:
     assert "Missing artefact" in r.message
 
 
+def test_qa_matrix_parses_current_entries_schema(monkeypatch, tmp_path) -> None:
+    """Foundation #1 ships ``entries:`` + ``status`` + ``references``.
+    A row with status=automated + a reference is GOOD; a row with
+    status=needs-automation is a gap (warning, not required fail).
+    The pre-fix gate read ``test_cases`` and broke the build with
+    'no parseable test_cases list' on every push to main."""
+    mod = _load_module()
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "qa_test_matrix.yml").write_text(
+        "version: 1\n"
+        "entries:\n"
+        "- id: TC-A-1\n"
+        "  status: automated\n"
+        "  references: [tests/unit/test_a.py]\n"
+        "- id: TC-A-2\n"
+        "  status: needs-automation\n"
+        "  references: []\n"
+        "- id: TC-A-3\n"
+        "  status: manual_only\n"
+        "  references: []\n"
+        "- id: TC-A-4\n"
+        "  status: deprecated\n"
+        "  references: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mod, "REPO", tmp_path)
+    r = mod.check_qa_matrix_p0_p1_mapped()
+    # 1 gap (TC-A-2) out of 2 expected-automated rows.
+    assert r.passed is False
+    assert r.severity == "warning", "gaps must not break the gate"
+    assert "1/2" in r.message or "1 / 2" in r.message
+    assert "TC-A-2" in r.message
+    # manual_only / deprecated must not count.
+    ids = r.details.get("unmapped_tc_ids", [])
+    assert "TC-A-3" not in ids
+    assert "TC-A-4" not in ids
+
+
+def test_qa_matrix_legacy_test_cases_schema_still_works(
+    monkeypatch, tmp_path
+) -> None:
+    """Backwards-compat: the older ``test_cases:`` + ``priority`` +
+    ``automated_test_ref`` schema must still parse so a future
+    matrix migration can land independently."""
+    mod = _load_module()
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "qa_test_matrix.yml").write_text(
+        "test_cases:\n"
+        "- tc_id: TC-OLD-1\n"
+        "  priority: P0\n"
+        "  automated_test_ref: tests/unit/test_x.py\n"
+        "- tc_id: TC-OLD-2\n"
+        "  priority: P1\n"
+        "  automated_test_ref: ''\n"
+        "- tc_id: TC-OLD-3\n"
+        "  priority: P2\n"  # P2 ignored by spec
+        "  automated_test_ref: ''\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mod, "REPO", tmp_path)
+    r = mod.check_qa_matrix_p0_p1_mapped()
+    assert r.passed is False
+    assert r.severity == "warning"
+    assert "TC-OLD-2" in r.message
+    # P2 must be ignored.
+    ids = r.details.get("unmapped_tc_ids", [])
+    assert "TC-OLD-3" not in ids
+
+
+def test_qa_matrix_real_repo_file_does_not_break_the_gate() -> None:
+    """Smoke against the real docs/qa_test_matrix.yml: the check
+    must not return a required FAIL (it can WARN). The pre-fix
+    behavior was a required FAIL on every CI run, which gated
+    every deploy."""
+    mod = _load_module()
+    r = mod.check_qa_matrix_p0_p1_mapped()
+    if not r.passed:
+        assert r.severity == "warning", (
+            f"qa_matrix check is failing the build: {r.message}"
+        )
+
+
 def test_required_artefacts_check_handles_missing(monkeypatch, tmp_path) -> None:
     """Missing required artefacts → fail with the list."""
     mod = _load_module()

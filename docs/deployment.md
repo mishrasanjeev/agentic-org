@@ -1,5 +1,28 @@
 # Deployment Guide
 
+> **2026-04-25 status:** the GKE Autopilot cluster was decommissioned to cut
+> costs. Production now runs on Cloud Run (`agenticorg-api` and
+> `agenticorg-ui` services in `asia-south1`). The CI deploy job in
+> `.github/workflows/deploy.yml` is still the disabled GKE block — it is
+> kept so the diff for the Cloud Run rewrite is reviewable, not because it
+> works.
+>
+> Until that rewrite lands, ship a release with:
+>
+> ```bash
+> # rebuild + roll out origin/main, then poll /health for the new commit
+> bash scripts/deploy_cloud_run.sh
+>
+> # also run alembic migrations as part of the same rollout
+> bash scripts/deploy_cloud_run.sh --with-migrations
+> ```
+>
+> The script refuses to touch a service it can't `gcloud run services
+> describe` first, prints every command before running it, and supports
+> `--dry-run`. The legacy GKE/Helm sections below are preserved for
+> reference and for the air-gapped/on-prem install path; ignore them for
+> day-to-day production deploys.
+
 ## Deployment Options
 
 | Option | Best For | Est. Cost/Month | Setup Time |
