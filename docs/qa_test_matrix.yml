@@ -653,39 +653,73 @@ entries:
 - id: TC-ORG-001
   module: 'Module 14: Organization Management'
   title: View organization profile
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_001_profile_endpoint_requires_tenant_admin'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_001_profile_returns_documented_fields'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-001 GET /profile returns documented org fields'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-001b GET /profile without auth is 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: admin-gating + shape pinned.'
 - id: TC-ORG-002
   module: 'Module 14: Organization Management'
   title: List organization members
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_002_members_endpoint_requires_tenant_admin'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_002_members_query_is_tenant_scoped_and_filters_deleted'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-002 GET /members returns list of tenant users'
+  notes: 'Foundation #6 burndown 2026-04-28: tenant scoping + soft-delete filter pinned.'
 - id: TC-ORG-003
   module: 'Module 14: Organization Management'
   title: Invite new member
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_003_invite_endpoint_admin_gated_201_status'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_003_invite_role_allowlist_pinned'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_003_duplicate_invite_returns_409'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-003 POST /invite rejects non-allowlisted role'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-003b POST /invite with valid analyst role accepts the call'
+  notes: 'Foundation #6 burndown 2026-04-28: role allowlist + duplicate guard pinned.'
 - id: TC-ORG-004
   module: 'Module 14: Organization Management'
   title: Accept invite
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_004_accept_invite_validates_password_policy'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_004_invite_token_claims_validated'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_004_invite_email_must_match_invited_user'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_004_accept_invite_returns_session_token'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-004 POST /accept-invite with no token AND no code is 400'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-004b POST /accept-invite with invalid token is 400'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-004c POST /accept-invite with weak password is 400'
+  notes: 'Foundation #6 burndown 2026-04-28: token claims + password policy + email match pinned.'
 - id: TC-ORG-005
   module: 'Module 14: Organization Management'
   title: Deactivate member
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_005_deactivate_endpoint_admin_gated'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_005_deactivate_is_soft_delete_not_hard_delete'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_005_self_deactivation_blocked'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_005_deactivate_query_is_tenant_scoped'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-005 DELETE /members/{nonexistent} returns 404 (not 5xx)'
+  notes: 'Foundation #6 burndown 2026-04-28: soft-delete + self-deactivation guard + tenant scoping pinned.'
 - id: TC-ORG-006
   module: 'Module 14: Organization Management'
   title: Update onboarding progress
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_006_onboarding_endpoint_admin_gated'
+    - 'tests/unit/test_module_14_organization.py::test_tc_org_006_onboarding_updates_only_provided_fields'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-006 PUT /onboarding accepts partial body + returns updated settings'
+    - 'ui/e2e/qa-module-14-organization.spec.ts::TC-ORG-006b PUT /onboarding without auth is 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: partial-update semantics + admin gating pinned.'
 - id: TC-SET-001
   module: 'Module 15: Settings'
   title: Settings page loads
