@@ -57,6 +57,22 @@ jobs:
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
       - uses: codecov/codecov-action@v6
+      # Foundation #9 release-acceptance gate runs in its own job
+      # and needs the .coverage + coverage.xml from this run to
+      # enforce per-module floors. Without artefact pass-through
+      # the gate fails closed with "no .coverage or coverage.xml"
+      # and blocks build → deploy.
+      - name: Upload coverage artefacts for release-acceptance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: |
+            .coverage
+            coverage.xml
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: true
 
   integration-tests:
     needs: unit-tests
@@ -109,6 +125,15 @@ jobs:
       - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install uv && uv pip install --system -e ".[dev]"
+      # Pull the .coverage + coverage.xml produced by unit-tests.
+      # The Foundation #9 coverage_gate check fails closed when
+      # those files are absent, so the artefact pass-through is
+      # what keeps the gate honest without re-running pytest here.
+      - name: Download coverage artefacts from unit-tests
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: .
       # Foundation #9 release-acceptance composite gate. Skip
       # frontend gates here because the build job below builds
       # the UI image — duplicating the build here would double
