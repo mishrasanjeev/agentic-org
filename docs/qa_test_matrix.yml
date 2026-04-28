@@ -1158,51 +1158,75 @@ entries:
 - id: TC-BUDGET-001
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Create agent with monthly budget cap
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_001_cost_controls_schema_accepts_monthly_cap'
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_001_agent_model_has_cost_controls_jsonb'
+  notes: 'Foundation #6 burndown 2026-04-28: schema + model contracts source-pinned.'
 - id: TC-BUDGET-002
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Cost tracking after execution
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_002_agent_cost_ledger_has_required_columns'
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_002_agent_run_writes_to_cost_ledger'
+  notes: 'Foundation #6 burndown 2026-04-28: ledger schema + write path pinned.'
 - id: TC-BUDGET-003
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: "Budget exceeded \u2014 execution blocked"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_003_pre_run_gate_returns_budget_exceeded_status'
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_003_pre_run_gate_uses_with_advisory_lock'
+  notes: 'Foundation #6 burndown 2026-04-28: pre-run gate + race-protection pinned.'
 - id: TC-BUDGET-004
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: "Agent without budget \u2014 unlimited execution"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_004_no_cap_means_no_block'
+  notes: 'Foundation #6 burndown 2026-04-28: zero-cap short-circuit pinned.'
 - id: TC-BUDGET-005
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Budget warning at 80% utilization
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_005_eighty_percent_warning_in_budget_endpoint'
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_005_one_hundred_percent_warning_phrasing'
+  notes: 'Foundation #6 burndown 2026-04-28: warning thresholds + phrasing pinned.'
 - id: TC-BUDGET-006
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Budget resets monthly
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_006_monthly_window_uses_first_of_month'
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_tc_budget_006_unique_constraint_keeps_one_row_per_period'
+  notes: 'Foundation #6 burndown 2026-04-28: month-start window + unique-per-period pinned.'
 - id: TC-BUDGET-007
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: Cost tab in Agent Detail UI
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'ui/e2e/qa-module-30-per-agent-budget.spec.ts::TC-BUDGET-007 Cost tab in Agent Detail shows monthly cap + utilization bar'
+    - 'ui/e2e/qa-module-30-per-agent-budget.spec.ts::TC-BUDGET-007b Cost tab flips to Approaching budget limit near 80%'
+    - 'ui/e2e/qa-module-30-per-agent-budget.spec.ts::TC-BUDGET-007c Cost tab shows Over budget when current > cap'
+    - 'tests/unit/test_module_30_per_agent_budget.py::test_ui_cost_tab_reads_legacy_cost_controls_shape'
+  notes: 'Foundation #6 burndown 2026-04-28: 3 Playwright sub-cases (within / approaching / over) + UI source pin.'
 - id: TC-BUDGET-008
   module: 'Module 30: Per-Agent Budget Enforcement'
   title: "Cost tab \u2014 no budget configured"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'ui/e2e/qa-module-30-per-agent-budget.spec.ts::TC-BUDGET-008 Cost tab shows No monthly cost cap configured when cap is 0'
+  notes: 'Foundation #6 burndown 2026-04-28: empty-state copy + no-bar render pinned.'
 - id: TC-ROUTE-001
   module: 'Module 31: Smart Routing (Multi-Agent)'
   title: Routing by routing_filter match
