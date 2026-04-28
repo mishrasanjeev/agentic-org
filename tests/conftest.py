@@ -14,6 +14,27 @@ os.environ.setdefault("TMP", str(_TEST_TMPDIR))
 os.environ.setdefault("TEMP", str(_TEST_TMPDIR))
 os.environ.setdefault("TMPDIR", str(_TEST_TMPDIR))
 
+# Foundation #7 PR-A: hermetic CI default. Every test run gets the
+# fake LLM unless a specific test opts back in to the real client by
+# clearing the flag in a fixture. This eliminates the "skipped
+# because no GEMINI_API_KEY in CI" pattern that's been the largest
+# silent coverage gap. See docs/hermetic_test_doubles.md.
+os.environ.setdefault("AGENTICORG_TEST_FAKE_LLM", "1")
+
+
+@pytest.fixture(autouse=True)
+def _reset_fake_llm_between_tests():
+    """Clear the fake LLM's registered responses + call log before
+    each test so prompts registered in test A can't bleed into B."""
+    try:
+        from core.test_doubles import fake_llm
+
+        fake_llm.reset()
+    except ImportError:
+        # Module isn't available in checkouts before Foundation #7.
+        pass
+    yield
+
 
 @pytest.fixture
 def tenant_id():

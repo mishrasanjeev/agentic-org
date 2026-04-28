@@ -426,14 +426,36 @@ class LLMRouter:
     ) -> LLMResponse:
         start = time.monotonic()
 
+        # Validate the model name FIRST so the fake LLM preserves
+        # the same contract as the real providers. Without this,
+        # a test asserting "unsupported model raises ValueError"
+        # would silently pass under the fake — exactly the false-
+        # green pattern Foundation #8 forbids.
+        if not any(prefix in model for prefix in ("gemini", "claude", "gpt")):
+            raise ValueError(f"Unsupported model: {model}")
+
+        # Foundation #7 PR-A: hermetic-CI seam. When the env flag is
+        # set, short-circuit ALL providers to the deterministic fake
+        # so PR CI never makes a real LLM call. The fake is keyed by
+        # prompt fingerprint so cost-cap and routing tests stay
+        # reproducible. See docs/hermetic_test_doubles.md.
+        from core.test_doubles import fake_llm  # noqa: PLC0415 — local import keeps prod cold-path lean
+
+        if fake_llm.is_active():
+            payload = fake_llm.fake_complete(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return LLMResponse(**payload)
+
         if "gemini" in model:
             return await self._call_gemini(model, messages, temperature, max_tokens, start)
         elif "claude" in model:
             return await self._call_claude(model, messages, temperature, max_tokens, start)
-        elif "gpt" in model:
+        else:  # gpt
             return await self._call_openai(model, messages, temperature, max_tokens, start)
-        else:
-            raise ValueError(f"Unsupported model: {model}")
 
     async def _call_gemini(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
         """Call Google Gemini via the google.genai SDK.
