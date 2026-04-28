@@ -48,6 +48,11 @@ jobs:
           git fetch origin ${{ github.base_ref }}
           BASE_REF=origin/${{ github.base_ref }} HEAD_REF=HEAD \
             python scripts/check_migration_required.py
+      - name: Enforce encrypted-column migration helpers (Foundation #5)
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE_REF=origin/${{ github.base_ref }} HEAD_REF=HEAD \
+            python scripts/check_encrypted_migration_uses_helpers.py
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml --cov-fail-under=55
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16

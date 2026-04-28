@@ -161,6 +161,11 @@ extend-immutable-calls = ["fastapi.Depends", "Depends"]
 # from the registered _SCANNERS list (module-level constants) into
 # UPDATE/SELECT statements. All row-level inputs land as bind params.
 "core/crypto/rewrap.py" = ["S608"]
+# Migration helpers (Foundation #5) build dynamic UPDATE/SELECT for
+# migration-author-controlled table + column names. Same shape as
+# rewrap.py: row-level inputs land as bind params; table/column
+# names are constants from the migration source.
+"core/crypto/migration_helpers.py" = ["S608"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
