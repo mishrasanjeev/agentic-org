@@ -68,12 +68,50 @@ These tests should be rare and should be marked
 `@pytest.mark.skipif(not os.getenv("AGENTICORG_GEMINI_API_KEY"))`
 so they skip cleanly when the key is absent.
 
+### Fake mail — `core/test_doubles/fake_mail.py`
+
+| | |
+|---|---|
+| Replaces | SMTP send in `core.email.send_email` |
+| Activation | `AGENTICORG_TEST_FAKE_MAIL=1` |
+| Default in tests | Yes — `tests/conftest.py` sets the flag at import time |
+| Capture | In-process `_OUTBOX` — every send becomes a `CapturedEmail` |
+| Inspection | `fake_mail.outbox()`, `last()`, `count()`, `count_to(addr)` |
+| Cleanup between tests | `fake_mail.reset()` runs in the autouse conftest fixture |
+
+#### Domain validation runs FIRST
+
+`send_email` validates the recipient domain BEFORE checking the
+fake-mail flag. Tests that assert "invalid domain → no send"
+(e.g. SECURITY tests for SSRF / open-relay protection) keep
+working under the fake. Foundation #8's claude-mistakes test
+forbids the false-green pattern where a fake masks a production
+validation contract.
+
+#### Adding a test that asserts an email was sent
+
+```python
+from core.test_doubles import fake_mail
+from core.email import send_welcome_email
+
+
+def test_welcome_email_sent_to_new_user():
+    send_welcome_email(to="alice@example.com", org_name="Acme", name="Alice")
+    rec = fake_mail.last()
+    assert rec is not None
+    assert rec.to == "alice@example.com"
+    assert "Welcome" in rec.subject
+```
+
+The autouse fixture resets the outbox between tests so captures
+don't leak.
+
 ## Planned doubles (Foundation #7 follow-up PRs)
 
 | Service | Double | Status |
 |---------|--------|--------|
-| LLM | Fake LLM | **Shipped (PR-A)** |
-| Mail | MailHog | PR-B |
+| LLM | Fake LLM | **Shipped (PR-A #357)** |
+| Mail | Fake mail | **Shipped (PR-B)** |
 | Object storage | LocalStack S3 / fake-gcs | PR-C |
 | Connector APIs | Stub server (httpx mock app) | PR-D |
 | Celery worker | service container in CI | PR-E |
