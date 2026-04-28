@@ -239,80 +239,128 @@ entries:
 - id: TC-AGT-001
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 displays all agents"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_001_list_endpoint_returns_paginated_response'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_001_list_orders_desc_by_created_at'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_001_list_per_page_capped_at_100_min_1'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-001 GET /agents returns paginated shape'
+  notes: 'Foundation #6 burndown 2026-04-28: paginated shape + desc order + per_page cap pinned.'
 - id: TC-AGT-002
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 filter by domain"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_002_domain_filter_pinned'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_002_rbac_domain_filter_runs_before_explicit_filter'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-002 GET /agents?domain=Finance only returns Finance agents'
+  notes: 'Foundation #6 burndown 2026-04-28: domain filter (query+count) + RBAC ordering pinned.'
 - id: TC-AGT-003
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 filter by status"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_003_status_filter_pinned'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-003 GET /agents?status=shadow only returns shadow agents'
+  notes: 'Foundation #6 burndown 2026-04-28: status filter (query+count) pinned.'
 - id: TC-AGT-004
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 search by name"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_004_list_endpoint_returns_dict_with_name'
+  notes: 'Foundation #6 burndown 2026-04-28: name field present in response (UI filters client-side).'
 - id: TC-AGT-005
   module: 'Module 4: Agent Fleet Management'
   title: "Agent list \u2014 kill switch (pause active agent)"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_005_pause_endpoint_admin_gated'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_005_pause_emits_lifecycle_event'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-005 POST /agents/{nonexistent}/pause returns 404'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-005b POST /agents/{id}/pause without auth is 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: admin gate + lifecycle event + 404/auth pinned.'
 - id: TC-AGT-006
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 overview tab"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_006_get_endpoint_returns_full_agent_dict'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-006 GET /agents/{nonexistent} returns 404'
+  notes: 'Foundation #6 burndown 2026-04-28: detail-dict shape + 404 on missing pinned.'
 - id: TC-AGT-007
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 config tab"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_007_patch_endpoint_admin_gated'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_007_patch_uses_agentupdate_partial_schema'
+  notes: 'Foundation #6 burndown 2026-04-28: PATCH admin-gated + AgentUpdate (partial) schema pinned.'
 - id: TC-AGT-008
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 prompt tab"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_008_put_endpoint_admin_gated'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_008_put_enforces_prompt_lock_on_active_agents'
+  notes: 'Foundation #6 burndown 2026-04-28: PUT admin-gated + active-agent prompt-lock pinned.'
 - id: TC-AGT-009
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 promote shadow to active"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_009_promote_endpoint_admin_gated'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_009_promote_map_only_shadow_to_active'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_009_promote_validates_min_samples'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_009_promote_validates_accuracy_floor'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-009 POST /agents/{nonexistent}/promote returns 404'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-009b POST /agents/{id}/promote without auth is 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: closed _PROMOTE_MAP + min-samples + accuracy-floor + 404/auth pinned.'
 - id: TC-AGT-010
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 rollback"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_010_rollback_endpoint_admin_gated'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_010_rollback_picks_previous_not_current_version'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_010_rollback_409_when_no_previous_version'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_010_rollback_emits_lifecycle_event'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-010 POST /agents/{nonexistent}/rollback returns 404'
+    - 'ui/e2e/qa-module-4-agent-fleet.spec.ts::TC-AGT-010b POST /agents/{id}/rollback without auth is 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: previous-not-current pick + 409 on no-prior + status-preserved + lifecycle event pinned.'
 - id: TC-AGT-011
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 shadow tab"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_011_shadow_min_samples_default_pinned'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_011_shadow_accuracy_floor_default_pinned'
+    - 'tests/unit/test_module_4_agent_fleet.py::test_tc_agt_011_shadow_promotion_floor_check_uses_current_accuracy'
+  notes: 'Foundation #6 burndown 2026-04-28: shadow_min_samples=10 + shadow_accuracy_floor=0.800 defaults + accuracy_current pinned.'
 - id: TC-AGT-012
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 cost tab"
   status: duplicate
-  references: []
-  notes: 'audit: title >=85% similar to TC-AGT-007 in same module (master=TC-AGT-007)'
+  references:
+    - 'See Module 30 (TC-BUDGET-007/008) \u2014 full Cost tab coverage.'
+  notes: 'audit: title >=85% similar to TC-AGT-007; cross-pin: Module 30 already covers the Cost tab.'
 - id: TC-AGT-013
   module: 'Module 4: Agent Fleet Management'
   title: "Agent detail \u2014 prompt history"
   status: duplicate
-  references: []
+  references:
+    - 'See TC-AGT-008 (prompt tab) \u2014 prompt history is a sub-view of the prompt tab.'
   notes: 'audit: title >=85% similar to TC-AGT-008 in same module (master=TC-AGT-008)'
 - id: TC-CRT-001
   module: 'Module 5: Agent Creation Wizard'
