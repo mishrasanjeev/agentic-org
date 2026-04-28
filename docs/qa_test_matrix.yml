@@ -593,39 +593,67 @@ entries:
 - id: TC-AUDIT-001
   module: 'Module 12: Audit Log'
   title: Audit log page loads
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_001_get_endpoint_returns_paginated_response'
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_001_audit_to_dict_includes_required_fields'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-001 GET /audit returns paginated shape'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-001b Audit page renders with title + table headers'
+  notes: 'Foundation #6 burndown 2026-04-28: endpoint contract + UI render pinned.'
 - id: TC-AUDIT-002
   module: 'Module 12: Audit Log'
   title: Filter by event type
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_002_event_type_uses_ilike_substring_pattern'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-002 GET /audit?event_type=auth substring filter accepted'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-002b UI filter input updates results'
+  notes: 'Foundation #6 burndown 2026-04-28: ILIKE substring + UI input pinned.'
 - id: TC-AUDIT-003
   module: 'Module 12: Audit Log'
   title: Pagination
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_003_per_page_capped_at_100'
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_003_page_one_minimum_enforced'
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_003_results_ordered_desc_by_created_at'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-003 page < 1 returns 422'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-003b per_page > 100 is silently clamped to 100'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-003c UI pagination buttons render with Previous disabled on page 1'
+  notes: 'Foundation #6 burndown 2026-04-28: cap + minimum + ordering + UI buttons pinned.'
 - id: TC-AUDIT-004
   module: 'Module 12: Audit Log'
   title: Export as CSV
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_004_csv_export_uses_blob_and_text_csv_mime'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-004 Download CSV button triggers a CSV download'
+  notes: 'Foundation #6 burndown 2026-04-28: client-side CSV blob + download trigger pinned.'
 - id: TC-AUDIT-005
   module: 'Module 12: Audit Log'
   title: Export evidence package (JSON)
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_005_evidence_json_export_filename_is_pinned'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-005 Export Evidence Package button triggers a JSON download'
+  notes: 'Foundation #6 burndown 2026-04-28: SOC-2-runbook-referenced filename pinned.'
 - id: TC-AUDIT-006
   module: 'Module 12: Audit Log'
   title: "Auditor role \u2014 read-only access"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_006_auditor_bypasses_domain_filter'
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_006_audit_log_is_db_level_append_only'
+    - 'tests/unit/test_module_12_audit_log.py::test_tc_audit_006_compliance_evidence_endpoint_is_read_only'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-006 GET /audit returns rows for the auditing identity'
+    - 'ui/e2e/qa-module-12-audit-log.spec.ts::TC-AUDIT-006b /audit endpoint has no POST/PUT/DELETE handler'
+  notes: 'Foundation #6 burndown 2026-04-28: route RBAC + DB-level append-only trigger + verb-only-GET pinned.'
 - id: TC-COMP-001
   module: 'Module 13: Compliance (DSAR)'
   title: DSAR access request
