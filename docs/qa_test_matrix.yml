@@ -913,75 +913,114 @@ entries:
 - id: TC-CC-001
   module: 'Module 22: Cross-Cutting Concerns'
   title: "RBAC \u2014 domain segregation for CFO"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_001_get_user_domains_returns_jwt_claim'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-001 unauthenticated request to admin route is 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: JWT-claim-based domain gating pinned.'
 - id: TC-CC-002
   module: 'Module 22: Cross-Cutting Concerns'
   title: "RBAC \u2014 admin sees all domains"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_002_admin_scope_bypass_is_pinned'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-002 admin token reaches admin route'
+  notes: 'Foundation #6 burndown 2026-04-28: agenticorg:admin prefix bypass pinned.'
 - id: TC-CC-003
   module: 'Module 22: Cross-Cutting Concerns'
   title: "RBAC \u2014 auditor denied write operations"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_003_auditor_role_does_not_get_write_scopes'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-003 GET /audit verb-only-GET \u2014 POST returns 405'
+  notes: 'Foundation #6 burndown 2026-04-28: auditor role + audit endpoint verb-only-GET pinned.'
 - id: TC-CC-004
   module: 'Module 22: Cross-Cutting Concerns'
   title: Tenant isolation
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_004_get_tenant_session_validates_uuid_before_set_local'
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_004_rls_policy_uses_current_setting'
+  notes: 'Foundation #6 burndown 2026-04-28: SET LOCAL UUID validation + RLS current_setting pinned. Cross-tenant scenario requires a 2nd tenant token; defer to integration suite.'
 - id: TC-CC-005
   module: 'Module 22: Cross-Cutting Concerns'
   title: Concurrent requests
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_005_per_agent_advisory_lock_pattern_pinned'
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_005_init_db_advisory_lock_for_startup_ddl'
+  notes: 'Foundation #6 burndown 2026-04-28: per-agent + startup-DDL advisory locks pinned.'
 - id: TC-CC-006
   module: 'Module 22: Cross-Cutting Concerns'
   title: "Error handling \u2014 invalid JSON body"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_006_value_error_returns_e2001_envelope'
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_006_500_returns_retryable_e1001_envelope'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-006 invalid JSON body returns the E-series error envelope'
+  notes: 'Foundation #6 burndown 2026-04-28: E-envelope keys + retryable asymmetry pinned.'
 - id: TC-CC-007
   module: 'Module 22: Cross-Cutting Concerns'
   title: "Error handling \u2014 missing required fields"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-007 missing required fields returns 422'
+  notes: 'Foundation #6 burndown 2026-04-28: 422 on missing required field pinned.'
 - id: TC-CC-008
   module: 'Module 22: Cross-Cutting Concerns'
   title: "Error handling \u2014 non-existent resource"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_008_404_returns_e1005_envelope'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-008 non-existent member returns 404 with NOT_FOUND envelope'
+  notes: 'Foundation #6 burndown 2026-04-28: 404 + E1005 / NOT_FOUND envelope pinned.'
 - id: TC-CC-009
   module: 'Module 22: Cross-Cutting Concerns'
   title: Prompt lock on active agents
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_009_prompt_lock_on_active_agents_returns_specific_message'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-009 active-agent prompt-lock message is the exact string the UI parses'
+  notes: 'Foundation #6 burndown 2026-04-28: exact-message contract for UI Clone CTA pinned.'
 - id: TC-CC-010
   module: 'Module 22: Cross-Cutting Concerns'
   title: SQL injection prevention
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_010_audit_event_type_uses_bind_parameter_not_concat'
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_010_set_local_uuid_validation_is_defense_in_depth'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-010 audit event_type filter handles SQL-meta characters safely'
+  notes: 'Foundation #6 burndown 2026-04-28: bind-param ILIKE + UUID-regex defense-in-depth pinned.'
 - id: TC-CC-011
   module: 'Module 22: Cross-Cutting Concerns'
   title: XSS prevention
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_011_defusedxml_used_for_xml_parsing'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-011 invite endpoint echoes user input unchanged (UI escapes)'
+  notes: 'Foundation #6 burndown 2026-04-28: defusedxml for XML + backend-echo / UI-escape contract pinned.'
 - id: TC-CC-012
   module: 'Module 22: Cross-Cutting Concerns'
   title: Large payload handling
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_012_pydantic_models_validate_request_bodies'
+    - 'tests/unit/test_module_22_cross_cutting.py::test_tc_cc_012_audit_per_page_caps_response_size'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-012 audit per_page=10000 is silently clamped to 100'
+    - 'ui/e2e/qa-module-22-cross-cutting.spec.ts::TC-CC-012b massive JSON body \u2014 server responds without 5xx'
+  notes: 'Foundation #6 burndown 2026-04-28: Pydantic boundary models + per_page cap + big-body no-5xx pinned.'
 - id: TC-PERF-001
   module: 'Module 23: Performance & Reliability'
   title: Initial page load time
