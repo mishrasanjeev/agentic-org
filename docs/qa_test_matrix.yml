@@ -996,33 +996,62 @@ entries:
 - id: TC-SET-001
   module: 'Module 15: Settings'
   title: Settings page loads
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_001_fleet_limits_get_endpoint_pinned'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_001_governance_get_endpoint_pinned'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_001_governance_get_creates_baseline_on_first_read'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-001 GET /config/fleet_limits returns documented schema'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-001b GET /governance/config returns documented schema'
+  notes: 'Foundation #6 burndown 2026-04-28: fleet + governance GET shapes + first-read baseline creation pinned.'
 - id: TC-SET-002
   module: 'Module 15: Settings'
   title: Update fleet limits
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_002_fleet_limits_put_endpoint_pinned'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_002_fleet_limits_defaults_pinned'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_002_fleet_limits_put_merges_into_existing_settings'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-002 PUT /config/fleet_limits round-trips a value'
+  notes: 'Foundation #6 burndown 2026-04-28: PUT endpoint + 35/50 defaults + JSONB MERGE (not replace) pinned. Cross-pin TC-ORG-006.'
 - id: TC-SET-003
   module: 'Module 15: Settings'
   title: Toggle PII masking
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_003_governance_put_admin_gated'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_003_pii_masking_partial_update_semantics'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_003_governance_change_writes_audit_log_in_same_txn'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_003_governance_change_records_old_and_new_values'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_003_no_op_put_skips_audit_log'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-003 PUT /governance/config no-op (empty body) returns current state'
+  notes: 'Foundation #6 burndown 2026-04-28: admin-gated + partial-update semantics + same-txn audit (failed audit rolls back config) + old/new values + no-op skip pinned.'
 - id: TC-SET-004
   module: 'Module 15: Settings'
   title: Change data region
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_004_data_region_is_closed_enum_pinned'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_004_audit_retention_bounded_in_schema'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-004 PUT /governance/config rejects invalid data_region'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-004b PUT /governance/config rejects audit_retention out of range'
+  notes: 'Foundation #6 burndown 2026-04-28: closed Literal[IN,EU,US] enum + audit_retention [1,10] bound pinned. SOC-2 compliance backbone.'
 - id: TC-SET-005
   module: 'Module 15: Settings'
   title: Non-admin cannot access settings
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_005_config_router_admin_gated_at_router_level'
+    - 'tests/unit/test_module_15_settings.py::test_tc_set_005_governance_router_admin_gated_on_writes'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-005 GET /config/fleet_limits without auth returns 401/403'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-005b PUT /config/fleet_limits without auth returns 401/403'
+    - 'ui/e2e/qa-module-15-settings.spec.ts::TC-SET-005c PUT /governance/config without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: /config router-level admin gate (every route inherits) + /governance per-route gate on writes pinned.'
 - id: TC-EMAIL-001
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 blocked domain"
