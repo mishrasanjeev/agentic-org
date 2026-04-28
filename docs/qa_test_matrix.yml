@@ -317,45 +317,72 @@ entries:
 - id: TC-CRT-001
   module: 'Module 5: Agent Creation Wizard'
   title: "Full agent creation \u2014 happy path"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_001_wizard_starts_at_nl_describe_step'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_001_create_handler_posts_to_agents_endpoint'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_001_success_navigates_to_agent_detail'
+    - 'ui/e2e/qa-module-5-agent-creation-wizard.spec.ts::TC-CRT-001 wizard page loads with NL describe step + Back-to-list link'
+  notes: 'Foundation #6 burndown 2026-04-28: NL initial step + create-payload schema + success navigation pinned.'
 - id: TC-CRT-002
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 custom agent type"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_002_use_custom_type_toggle_drives_final_type'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_002_custom_type_input_renders_when_toggled'
+    - 'ui/e2e/qa-module-5-agent-creation-wizard.spec.ts::TC-CRT-002 POST /agents accepts custom agent_type string'
+  notes: 'Foundation #6 burndown 2026-04-28: useCustomType derivation + input toggle JSX + API round-trip pinned.'
 - id: TC-CRT-003
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 template variable substitution"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_003_resolved_prompt_replaces_double_brace_vars'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_003_empty_var_keeps_placeholder_visible'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_003_resolved_prompt_used_in_create_payload_and_preview'
+  notes: 'Foundation #6 burndown 2026-04-28: {{var}} substitution pattern + empty-keeps-placeholder + same-source-for-payload-and-preview pinned.'
 - id: TC-CRT-004
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 step validation"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_004_can_next_gates_each_step_with_concrete_check'
+  notes: 'Foundation #6 burndown 2026-04-28: 4 per-step canNext gates (employee_name / finalType / promptText / max_retries+llmModel) pinned.'
 - id: TC-CRT-005
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 cancel"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_005_cancel_button_navigates_to_agents_list'
+    - 'ui/e2e/qa-module-5-agent-creation-wizard.spec.ts::TC-CRT-005 wizard Back button at top navigates to /dashboard/agents'
+  notes: 'Foundation #6 burndown 2026-04-28: Back button navigation target pinned.'
 - id: TC-CRT-006
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 back navigation"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_006_back_from_step_0_returns_to_nl_describe'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_006_back_button_label_changes_at_step_0'
+  notes: 'Foundation #6 burndown 2026-04-28: step-0\u2192step-(-1) back-jump + dynamic label pinned.'
 - id: TC-CRT-007
   module: 'Module 5: Agent Creation Wizard'
   title: "Agent creation \u2014 duplicate name+type"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_007_agent_model_unique_constraint_pinned'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_tc_crt_007_create_handler_surfaces_create_errors_to_ui'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_create_agent_enforces_shadow_fleet_limit'
+    - 'tests/unit/test_module_5_agent_creation_wizard.py::test_create_agent_validates_authorized_tools_against_registry'
+    - 'ui/e2e/qa-module-5-agent-creation-wizard.spec.ts::TC-CRT-007 duplicate (employee_name, agent_type, version) is rejected at DB layer'
+  notes: 'Foundation #6 burndown 2026-04-28: DB UniqueConstraint + UI error surface + shadow fleet 409 + invalid-tools 422 pinned.'
 - id: TC-EXEC-001
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 happy path"
