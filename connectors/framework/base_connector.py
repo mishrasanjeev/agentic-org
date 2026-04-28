@@ -94,11 +94,25 @@ class BaseConnector(abc.ABC):
                 "connector_skip_auth_no_credentials",
                 connector=self.name,
             )
+
+        # Foundation #7 PR-D: hermetic-CI seam. When the env flag
+        # is set, route every connector HTTP call through the
+        # fake-connectors MockTransport so PR CI never touches a
+        # real third-party API. See docs/hermetic_test_doubles.md.
+        from core.test_doubles import fake_connectors  # noqa: PLC0415 — lazy keeps prod cold-path lean
+
+        transport = (
+            fake_connectors.build_transport()
+            if fake_connectors.is_active()
+            else None
+        )
+
         # Create client with whatever auth headers were set (may be empty)
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_ms / 1000,
             headers=self._auth_headers,
+            transport=transport,
         )
 
     async def disconnect(self) -> None:
