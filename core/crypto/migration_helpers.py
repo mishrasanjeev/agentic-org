@@ -107,7 +107,7 @@ class EncryptedMigrationContext:
         """Return the table's row count and stash it in the audit."""
         # Table name comes from the migration author, not user input —
         # safe to interpolate.
-        sql = f"SELECT COUNT(*) FROM {self.table}"  # noqa: S608
+        sql = f"SELECT COUNT(*) FROM {self.table}"  # noqa: S608  # nosec B608 — table from migration author
         n = self.connection.execute(text(sql)).scalar_one()
         self.audit.setdefault("row_counts", {})[self.table] = int(n)
         return int(n)
@@ -128,7 +128,7 @@ class EncryptedMigrationContext:
         results: dict[str, int] = {}
         for col in self.columns:
             sql = (  # noqa: S608
-                f"SELECT {col} FROM {self.table} "
+                f"SELECT {col} FROM {self.table} "  # nosec B608 — table+col from migration author
                 f"WHERE {col} IS NOT NULL "
                 f"ORDER BY random() LIMIT :n"
             )
@@ -206,7 +206,7 @@ class EncryptedMigrationContext:
 
         offset = int(prog or 0)
         sql = (  # noqa: S608
-            f"SELECT COUNT(*) FROM {self.table} WHERE {pk} IS NOT NULL"
+            f"SELECT COUNT(*) FROM {self.table} WHERE {pk} IS NOT NULL"  # nosec B608 — table+pk from migration author
         )
         total = int(self.connection.execute(text(sql)).scalar_one())
 
@@ -269,7 +269,7 @@ class EncryptedMigrationContext:
         # 1. copy. Column + table names come from the migration
         # author, never from user input — safe to interpolate.
         copy_sql = (  # noqa: S608
-            f"UPDATE {self.table} SET {target_column} = {source_column} "
+            f"UPDATE {self.table} SET {target_column} = {source_column} "  # nosec B608 — table+cols from migration author
             f"WHERE {target_column} IS NULL "
             f"  AND {source_column} IS NOT NULL"
         )
@@ -283,7 +283,7 @@ class EncryptedMigrationContext:
             self.columns = original_columns
         # 3. only now is the source safe to clear.
         clear_sql = (  # noqa: S608
-            f"UPDATE {self.table} SET {source_column} = NULL "
+            f"UPDATE {self.table} SET {source_column} = NULL "  # nosec B608 — table+col from migration author
             f"WHERE {target_column} IS NOT NULL"
         )
         self.connection.execute(text(clear_sql))
