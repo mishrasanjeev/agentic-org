@@ -781,39 +781,64 @@ entries:
 - id: TC-EMAIL-001
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 blocked domain"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_001_blocked_domains_frozenset_pinned'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_001_validate_returns_documented_failure_reason'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_001_invalid_email_format_rejected'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-001 invite to mailinator.com is silently dropped (no capture)'
+  notes: 'Foundation #6 burndown 2026-04-28: blocklist contents + reason-string contract + invalid-format guard pinned.'
 - id: TC-EMAIL-002
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 fake domain (no MX)"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_002_mx_check_fails_closed_on_resolver_error'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_002_mx_check_uses_dnspython_resolver'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-002 invite to a no-MX domain doesn''t 5xx'
+  notes: 'Foundation #6 burndown 2026-04-28: dnspython resolver + fail-closed-on-exception pinned.'
 - id: TC-EMAIL-003
   module: 'Module 16: Email System'
   title: "Email domain validation \u2014 real domain"
   status: duplicate
-  references: []
+  references:
+    - 'See TC-EMAIL-001 \u2014 same coverage; audit flagged title >=85% similar.'
   notes: 'audit: title >=85% similar to TC-EMAIL-001 in same module (master=TC-EMAIL-001)'
 - id: TC-EMAIL-004
   module: 'Module 16: Email System'
   title: "Email \u2014 test domain blocked"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_004_local_and_test_tlds_rejected_before_mx_check'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-004 invite to .local TLD doesn''t 5xx'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-004b invite to .test TLD doesn''t 5xx'
+  notes: 'Foundation #6 burndown 2026-04-28: .local / .test TLD reject before MX call pinned.'
 - id: TC-EMAIL-005
   module: 'Module 16: Email System'
   title: Welcome email on signup
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_005_welcome_email_funnels_through_send_email'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_005_welcome_subject_includes_org_name'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_005_welcome_body_links_to_dashboard'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-005 signup endpoint exists and accepts well-formed input'
+  notes: 'Foundation #6 burndown 2026-04-28: send_email funnel + subject template + dashboard link pinned.'
 - id: TC-EMAIL-006
   module: 'Module 16: Email System'
   title: Invite email
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_006_invite_subject_includes_org_name'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_006_invite_body_includes_inviter_role_link'
+    - 'tests/unit/test_module_16_email_system.py::test_tc_email_006_password_reset_email_funnels_through_send_email'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-006 invite endpoint requires email field'
+    - 'ui/e2e/qa-module-16-email-system.spec.ts::TC-EMAIL-006b invite endpoint requires admin auth'
+  notes: 'Foundation #6 burndown 2026-04-28: invite subject + body + password-reset funnel + auth gate pinned.'
 - id: TC-DEMO-001
   module: 'Module 17: Demo Request Flow'
   title: "Submit demo request \u2014 no auth required"
