@@ -539,57 +539,99 @@ entries:
 - id: TC-SALES-001
   module: 'Module 11: Sales Pipeline'
   title: Sales pipeline page loads
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_001_pipeline_endpoint_returns_funnel_and_leads'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_001_lead_dict_carries_required_fields'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-001 GET /sales/pipeline returns funnel + total + leads'
+  notes: 'Foundation #6 burndown 2026-04-28: pipeline shape + lead-dict required fields pinned.'
 - id: TC-SALES-002
   module: 'Module 11: Sales Pipeline'
   title: Pipeline funnel visualization
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_002_funnel_groups_by_stage'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-002 GET /sales/pipeline?stage=new only returns ''new'' leads'
+  notes: 'Foundation #6 burndown 2026-04-28: GROUP BY stage + stage filter pinned.'
 - id: TC-SALES-003
   module: 'Module 11: Sales Pipeline'
   title: View lead details
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_003_get_lead_endpoint_pinned'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_003_lead_query_is_tenant_scoped'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_003_static_routes_declared_before_lead_id_route'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-003 GET /sales/pipeline/{nonexistent} returns 404'
+  notes: 'Foundation #6 burndown 2026-04-28: tenant-scoped query + FastAPI route ordering (static-before-dynamic) pinned.'
 - id: TC-SALES-004
   module: 'Module 11: Sales Pipeline'
   title: Run Sales Agent on lead
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_004_process_lead_requires_lead_id'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_004_process_lead_returns_only_safe_fields'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_004_process_lead_swaps_error_for_400'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-004 POST /sales/pipeline/process-lead missing lead_id returns 400'
+  notes: 'Foundation #6 burndown 2026-04-28: lead_id required + safe-fields-only response (NEVER forward agent internals) + agent-error → 400 pinned.'
 - id: TC-SALES-005
   module: 'Module 11: Sales Pipeline'
   title: Seed demo prospects
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_005_seed_endpoint_refuses_outside_demo_dev'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_005_seed_idempotency_via_email_dedupe'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-005 POST /sales/seed-prospects either succeeds (demo/dev) or 403 (prod)'
+  notes: 'Foundation #6 burndown 2026-04-28: prod env-gate (403 outside demo/dev) + email-dedupe idempotency pinned. Closure plan: no fabricated data in prod.'
 - id: TC-SALES-006
   module: 'Module 11: Sales Pipeline'
   title: Import CSV leads
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_006_csv_import_validates_extension'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_006_csv_import_validates_empty_file'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_006_csv_import_validates_encoding'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_006_csv_import_requires_name_and_email_headers'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-006 POST /sales/import-csv with non-CSV file is 422'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-006b POST /sales/import-csv with empty CSV is 422'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-006c POST /sales/import-csv with missing required headers is 422'
+  notes: 'Foundation #6 burndown 2026-04-28: extension + empty + encoding + required-header validations pinned (4 distinct 422 paths). Session 5 TC-002/TC-005 enforcement.'
 - id: TC-SALES-007
   module: 'Module 11: Sales Pipeline'
   title: Due follow-ups
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_007_due_followups_excludes_closed_deals'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_007_due_followups_ordered_by_score_desc'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-007 GET /sales/pipeline/due-followups never returns closed deals'
+  notes: 'Foundation #6 burndown 2026-04-28: closed_won/closed_lost exclusion + score DESC order pinned.'
 - id: TC-SALES-008
   module: 'Module 11: Sales Pipeline'
   title: Sales metrics
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_008_metrics_endpoint_returns_documented_keys'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_008_stale_leads_excludes_new_and_closed_stages'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_008_avg_score_excludes_zero_scored_leads'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-008 GET /sales/metrics returns documented shape'
+  notes: 'Foundation #6 burndown 2026-04-28: 6-key shape + stale-excludes-new-and-closed + avg_score>0 filter pinned. No fabricated KPIs.'
 - id: TC-SALES-009
   module: 'Module 11: Sales Pipeline'
   title: Lead score color coding
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P2
+  references:
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_009_score_color_thresholds_pinned'
+    - 'tests/unit/test_module_11_sales_pipeline.py::test_tc_sales_009_score_color_used_in_list_and_detail'
+    - 'ui/e2e/qa-module-11-sales-pipeline.spec.ts::TC-SALES-009 sales pipeline page renders without runtime errors'
+  notes: 'Foundation #6 burndown 2026-04-28: ≥70 emerald / ≥40 amber / else slate thresholds pinned + helper used in list/detail/agent-result.'
 - id: TC-AUDIT-001
   module: 'Module 12: Audit Log'
   title: Audit log page loads
