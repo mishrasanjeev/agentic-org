@@ -423,6 +423,106 @@ def _derive_default_tools(
     return sorted(connector_tool_names)
 
 
+# ──────────────────────────────────────────────────────────────────
+# Connector config resolver (Ramesh/Uday 2026-04-27 — Shadow Accuracy fix)
+# ──────────────────────────────────────────────────────────────────
+
+
+async def _load_connector_configs_for_agent(
+    tenant_id: str,
+    connector_ids: list[str],
+    agent_level_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Resolve an agent's ``connector_ids`` into a flat config dict.
+
+    For each ``connector_id`` (with optional ``registry-`` prefix
+    stripped), look up the matching :class:`ConnectorConfig` row,
+    decrypt ``credentials_encrypted``, merge with the row's non-secret
+    ``config`` JSONB, and merge into a single dict. Tools downstream
+    pull individual keys from this dict via ``config.get("api_key")``
+    etc.
+
+    The agent-level ``config`` (almost always None) is overlaid LAST
+    so an explicit override on the agent row wins. Failures on any
+    one connector log + skip — never block the run, since the LLM
+    can still call connectors that loaded successfully.
+
+    Per-connector namespacing (``{conn_name: {creds}}``) is the
+    next iteration; today the flat-merge shape matches what the
+    existing tools expect (single-connector agents, which are the
+    common case for shadow tests).
+    """
+    if not connector_ids:
+        return dict(agent_level_config or {})
+
+    import json as _json
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.connector_config import ConnectorConfig
+
+    try:
+        tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+    except (TypeError, ValueError):
+        logger.warning(
+            "load_connector_configs_invalid_tenant",
+            tenant_id=str(tenant_id),
+        )
+        return dict(agent_level_config or {})
+
+    merged: dict[str, Any] = {}
+    async with get_tenant_session(tid) as session:
+        for raw_id in connector_ids:
+            if not isinstance(raw_id, str) or not raw_id.strip():
+                continue
+            connector_name = raw_id.strip().removeprefix("registry-")
+            try:
+                cc_result = await session.execute(
+                    select(ConnectorConfig).where(
+                        ConnectorConfig.tenant_id == tid,
+                        ConnectorConfig.connector_name == connector_name,
+                    )
+                )
+                cc = cc_result.scalar_one_or_none()
+                if cc is None:
+                    logger.info(
+                        "connector_config_not_found",
+                        tenant_id=str(tid),
+                        connector=connector_name,
+                    )
+                    continue
+                # Non-secret config (URLs, options).
+                if cc.config:
+                    merged.update(cc.config)
+                # Encrypted credentials — same shape as gateway.py:241+.
+                if cc.credentials_encrypted:
+                    creds = cc.credentials_encrypted
+                    if isinstance(creds, str):
+                        creds = _json.loads(creds)
+                    if isinstance(creds, dict) and "_encrypted" in creds:
+                        from core.crypto import decrypt_for_tenant
+
+                        raw = decrypt_for_tenant(creds["_encrypted"])
+                        creds = _json.loads(raw)
+                    if isinstance(creds, dict):
+                        merged.update(creds)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "connector_config_load_failed",
+                    tenant_id=str(tid),
+                    connector=connector_name,
+                    error=str(exc),
+                )
+                # Don't propagate — partial connector availability is
+                # better than refusing the whole agent run.
+
+    if agent_level_config:
+        merged.update(agent_level_config)
+    return merged
+
+
 # ── GET /agents/default-tools/{agent_type} ───────────────────────────────────
 @router.get("/agents/default-tools/{agent_type}")
 async def get_default_tools(
@@ -1573,6 +1673,26 @@ async def run_agent(
     # 5b. Execute via LangGraph runner
     from core.langgraph.runner import run_agent as langgraph_run
 
+    # Ramesh/Uday CA Firms 2026-04-27: Shadow accuracy was stuck at
+    # ~40% because the agent's connector_ids never got resolved into
+    # actual decrypted credentials before tools ran. Tools called
+    # `connector_cls(config or {})` with the agent-level config dict
+    # (almost always None / vestigial) so every Zoho/GSTN/Tally tool
+    # call hit the connector with empty auth, returned an error, and
+    # the confidence-floor penalty fired. Resolving the connector_ids
+    # to encrypted ConnectorConfig rows + decrypting BEFORE the
+    # langgraph run fixes the root cause for any agent that has
+    # connector_ids set. The merged dict is passed flat into
+    # connector_config; tools currently consume `config.get(<key>)`
+    # for their auth (single-connector case is the common one — multi-
+    # connector with overlapping keys is a follow-up to scope into
+    # per-connector dicts).
+    resolved_connector_config = await _load_connector_configs_for_agent(
+        tenant_id=tenant_id,
+        connector_ids=agent_config.get("connector_ids") or [],
+        agent_level_config=agent_config.get("config"),
+    )
+
     try:
         lg_result = await langgraph_run(
             agent_id=str(agent_id),
@@ -1590,7 +1710,7 @@ async def run_agent(
             confidence_floor=float(agent_config.get("confidence_floor", 0.88)),
             hitl_condition=agent_config.get("hitl_condition", ""),
             grant_token=grant_token,
-            connector_config=agent_config.get("config"),
+            connector_config=resolved_connector_config,
         )
     except Exception as exc:
         # Surface enough information for the caller to act on without

@@ -270,7 +270,24 @@ def _embed_via_tei(texts: list[str]) -> list[list[float]]:
         logger.debug("tei_id_token_fetch_skipped", error=str(exc))
 
     payload = {"inputs": texts, "normalize": True, "truncate": True}
-    with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+    # Aishwarya 2026-04-27 TC_002: KB search returned 504 because the
+    # TEI service runs at min=0 (Option D — cost-cut) and the cold
+    # start takes 30-90s, while Google Frontend's HTTP/1 gateway
+    # timeout is ~30s. The api was waiting indefinitely on the TEI
+    # POST, GFE killed the upstream request, and the user saw 504.
+    #
+    # Cap the per-request wait at 25s so:
+    #   - on a WARM TEI (~50ms response), the call returns immediately
+    #   - on a COLD TEI (>25s), httpx raises TimeoutException, the
+    #     caller (api/v1/knowledge.py:884) falls through to keyword
+    #     search, and the user gets results (lower quality, never 504)
+    #   - the next call after the cold-start window will succeed
+    #     because TEI is now warm
+    #
+    # The previous default (60s) blew past the 30s GFE budget and
+    # surfaced as a 504 to the browser.
+    timeout = httpx.Timeout(25.0, connect=5.0)
+    with httpx.Client(timeout=timeout) as client:
         response = client.post(f"{base}/embed", json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()

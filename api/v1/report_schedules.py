@@ -440,20 +440,30 @@ async def list_report_schedules(
     except HTTPException:
         raise
     except Exception as exc:
+        # TC_001 sibling: same instrumentation as create — surface the
+        # exception class so testers don't have to grep through Cloud
+        # Run logs to figure out which DB column / row blew up.
         import structlog
 
+        exc_class = type(exc).__name__
+        exc_summary = str(exc).splitlines()[0][:240] if str(exc) else ""
         structlog.get_logger().error(
             "report_schedule_list_failed",
             tenant_id=tenant_id,
             company_id=company_id,
-            error=str(exc),
+            error_class=exc_class,
+            error_message=exc_summary,
             exc_info=True,
+        )
+        print(
+            f"[report_schedule_list_failed] {exc_class}: {exc_summary}",
+            flush=True,
         )
         raise HTTPException(
             status_code=500,
             detail=(
-                "Could not load report schedules. If the problem persists, "
-                "contact support."
+                f"Could not load report schedules ({exc_class}: "
+                f"{exc_summary}). If the problem persists, contact support."
             ),
         ) from exc
 
@@ -527,21 +537,37 @@ async def create_report_schedule(
     except HTTPException:
         raise
     except Exception as exc:
+        # TC_001 reopen 2026-04-27 (Aishwarya): the prior wrap returned a
+        # generic "could not create" detail and the structlog jsonPayload
+        # event wasn't surfacing in Cloud Run's log reader, so neither
+        # the user nor the operator could see why creation 500'd. Surface
+        # the exception class + short message in the response so the
+        # tester can flag the underlying cause AND ops can grep for it
+        # (no PII / secrets — just the SQLAlchemy / Pydantic error).
         import structlog
 
+        exc_class = type(exc).__name__
+        exc_summary = str(exc).splitlines()[0][:240] if str(exc) else ""
         structlog.get_logger().error(
             "report_schedule_create_failed",
             tenant_id=tenant_id,
             report_type=getattr(body, "report_type", None),
-            error=str(exc),
+            error_class=exc_class,
+            error_message=exc_summary,
             exc_info=True,
+        )
+        # Also print() so Cloud Run's text-log capture sees it even when
+        # structlog's jsonl pipe doesn't route through the gcloud reader.
+        print(
+            f"[report_schedule_create_failed] {exc_class}: {exc_summary}",
+            flush=True,
         )
         raise HTTPException(
             status_code=500,
             detail=(
-                "Could not create the report schedule. Check the recipient "
-                "and cron expression and try again. If the problem persists, "
-                "contact support."
+                f"Could not create the report schedule ({exc_class}: "
+                f"{exc_summary}). Check the recipient and cron expression "
+                "and try again. If the problem persists, contact support."
             ),
         ) from exc
 
