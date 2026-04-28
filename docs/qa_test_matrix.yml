@@ -606,39 +606,73 @@ entries:
 - id: TC-HITL-001
   module: 'Module 8: Approval Queue (HITL)'
   title: View pending approvals
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_001_list_endpoint_returns_paginated_response'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_001_list_per_page_capped_at_100'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_001_default_filters_to_pending_only'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_001_pending_excludes_expired_items'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_001_dict_carries_required_fields_for_ui'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-001 GET /approvals returns paginated shape'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-001b GET /approvals?per_page=10000 silently clamps to 100'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-001c GET /approvals default (no status param) returns only pending items'
+  notes: 'Foundation #6 burndown 2026-04-28: paginated shape + default-pending filter + expired exclusion + dict shape pinned.'
 - id: TC-HITL-002
   module: 'Module 8: Approval Queue (HITL)'
   title: Approve an item
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_002_decide_endpoint_pinned'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_002_decide_requires_sub_claim'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_002_decide_rejects_already_resolved_with_409'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-002 POST /approvals/{nonexistent}/decide returns 404'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-002b POST /approvals/{id}/decide without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: P2.1 sub-claim attribution + 409-on-resolved + 404/auth pinned.'
 - id: TC-HITL-003
   module: 'Module 8: Approval Queue (HITL)'
   title: Reject an item
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_003_decide_rejects_expired_with_410'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_003_decide_rejects_missing_assignee_role_with_422'
+  notes: 'Foundation #6 burndown 2026-04-28: 410-on-expired + 422-on-missing-assignee_role pinned (Foundation #8 false-green prevention).'
 - id: TC-HITL-004
   module: 'Module 8: Approval Queue (HITL)'
   title: Filter by priority
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_004_priority_filter_applies_to_both_query_and_count'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_004_status_filter_applies_to_both_query_and_count'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-004 GET /approvals?priority=high returns only high-priority items'
+  notes: 'Foundation #6 burndown 2026-04-28: priority + status filters apply to BOTH query AND count (otherwise total lies). Cross-pin TC-AGT-002 / TC-WF-001.'
 - id: TC-HITL-005
   module: 'Module 8: Approval Queue (HITL)'
   title: Decided tab shows history
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_005_decided_status_can_be_queried'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_005_decision_attribution_fields_exist'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-005 GET /approvals?status=approved returns only approved items'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-005b GET /approvals?status=rejected returns only rejected items'
+  notes: 'Foundation #6 burndown 2026-04-28: status filter parameter signature + decision_by/at/notes attribution fields pinned.'
 - id: TC-HITL-006
   module: 'Module 8: Approval Queue (HITL)'
   title: "Role-based approval visibility \u2014 CFO"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_006_role_hierarchy_pinned_with_documented_levels'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_006_unknown_role_returns_level_zero'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_006_admin_must_match_assignee_level'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_006_domain_check_runs_after_role_check'
+    - 'tests/unit/test_module_8_approval_queue.py::test_tc_hitl_006_delegation_override_records_actor_attribution'
+    - 'ui/e2e/qa-module-8-approval-queue.spec.ts::TC-HITL-006 GET /approvals returns items the caller can see (RBAC enforced server-side)'
+  notes: 'Foundation #6 burndown 2026-04-28: closed _ROLE_HIERARCHY (10/20/25/30/50/100) + unknown=0 fail-closed + P3.2 admin-not-blanket-bypass + role-before-domain ordering + delegation attribution pinned.'
 - id: TC-CONN-001
   module: 'Module 9: Connectors'
   title: Connector list page
