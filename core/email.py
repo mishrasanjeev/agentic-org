@@ -53,17 +53,31 @@ def send_email(to: str, subject: str, html: str) -> None:
     Uses AGENTICORG_SMTP_LOGIN for SMTP authentication (Gmail account)
     and AGENTICORG_DEMO_SENDER for the display From address.
     """
+    # Validate email domain BEFORE the fake-mail seam so tests
+    # asserting "invalid domain → no send" stay accurate even when
+    # the fake is active. Foundation #8 forbids the false-green
+    # pattern where a fake masks a production validation contract.
+    is_valid, reason = validate_email_domain(to)
+    if not is_valid:
+        logger.warning("Skipping email to %s: %s", to, reason)
+        return
+
+    # Foundation #7 PR-B: hermetic-CI seam. When the env flag is
+    # set, capture the email in-process instead of opening a real
+    # SMTP connection. See docs/hermetic_test_doubles.md.
+    from core.test_doubles import fake_mail  # noqa: PLC0415 — lazy keeps prod cold-path lean
+
+    if fake_mail.is_active():
+        display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
+        fake_mail.capture(to=to, subject=subject, html=html, sender=display_sender)
+        logger.info("[fake_mail] captured email to=%s subject=%r", to, subject)
+        return
+
     password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
     smtp_login = os.getenv("AGENTICORG_SMTP_LOGIN", os.getenv("AGENTICORG_DEMO_SENDER", ""))
     display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
     if not password or not smtp_login:
         logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set — skipping email")
-        return
-
-    # Validate email domain before sending
-    is_valid, reason = validate_email_domain(to)
-    if not is_valid:
-        logger.warning("Skipping email to %s: %s", to, reason)
         return
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
