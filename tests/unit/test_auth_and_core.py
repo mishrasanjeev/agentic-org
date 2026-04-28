@@ -963,9 +963,18 @@ class TestSendEmail:
 
     def test_sends_when_valid(self):
         from core.email import send_email
+        # This test verifies the real-SMTP wiring (login + send_message
+        # are called). It MUST opt out of the Foundation #7 PR-B
+        # fake-mail seam — otherwise send_email captures into the
+        # fake outbox and never reaches SMTP, so the mock assertions
+        # below see zero calls. See docs/hermetic_test_doubles.md.
         with patch.dict(
             "os.environ",
-            {"AGENTICORG_GMAIL_APP_PASSWORD": "pw", "AGENTICORG_SMTP_LOGIN": "sender@y.com"},
+            {
+                "AGENTICORG_GMAIL_APP_PASSWORD": "pw",
+                "AGENTICORG_SMTP_LOGIN": "sender@y.com",
+                "AGENTICORG_TEST_FAKE_MAIL": "",
+            },
             clear=False,
         ):
             with patch("core.email.validate_email_domain", return_value=(True, "OK")):
