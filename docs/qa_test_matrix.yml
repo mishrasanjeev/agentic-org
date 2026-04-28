@@ -1068,45 +1068,70 @@ entries:
 - id: TC-ORG-CHART-002
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: View hierarchy in agent detail
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_002_agent_model_has_parent_self_fk'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_002_agent_create_schema_accepts_parent_id'
+    - 'ui/e2e/qa-module-28-org-chart.spec.ts::TC-ORG-CHART-002 GET /agents/{id} returns parent_agent_id field'
+    - 'ui/e2e/qa-module-28-org-chart.spec.ts::TC-ORG-CHART-002b POST /agents accepts reporting_to alongside parent_agent_id'
+  notes: 'Foundation #6 burndown 2026-04-28: model self-FK + schema fields + GET shape pinned.'
 - id: TC-ORG-CHART-003
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Escalation to parent agent on HITL
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_003_escalate_returns_parent_agent_type'
+  notes: 'Foundation #6 burndown 2026-04-28: parent_agent escalation type + active-status check pinned.'
 - id: TC-ORG-CHART-004
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: "Escalation chain \u2014 3 levels deep"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_004_default_max_depth_is_five'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_004_walk_records_each_hop_in_chain'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_004_cycle_detection_via_visited_set'
+  notes: 'Foundation #6 burndown 2026-04-28: max_depth=5 + chain audit trail + cycle detection pinned.'
 - id: TC-ORG-CHART-005
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Escalation when parent is paused
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_005_inactive_statuses_set_pinned'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_005_inactive_parent_continues_walk_not_returns'
+  notes: 'Foundation #6 burndown 2026-04-28: paused/retired skip + continue (not return) pinned.'
 - id: TC-ORG-CHART-006
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: "Agent without parent \u2014 escalation to human"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_006_human_fallback_returns_human_type'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_006_domain_head_fallback_pinned'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_006_resolve_domain_head_query_predicates_pinned'
+  notes: 'Foundation #6 burndown 2026-04-28: 3-tier fallback (parent \u2192 domain_head \u2192 human) + domain-scoped query pinned.'
 - id: TC-ORG-CHART-007
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Update parent_agent_id via PATCH
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_007_agent_update_schema_accepts_parent_id'
+    - 'ui/e2e/qa-module-28-org-chart.spec.ts::TC-ORG-CHART-007 PATCH /agents/{id} can set parent_agent_id'
+  notes: 'Foundation #6 burndown 2026-04-28: AgentUpdate schema + PATCH read-back pinned.'
 - id: TC-ORG-CHART-008
   module: 'Module 28: Org Chart Hierarchy & Parent Escalation'
   title: Remove parent (set to null)
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_008_parent_id_is_nullable_so_remove_works'
+    - 'tests/unit/test_module_28_org_chart.py::test_tc_org_chart_008_starting_agent_not_found_returns_human'
+    - 'ui/e2e/qa-module-28-org-chart.spec.ts::TC-ORG-CHART-008 PATCH /agents/{id} can set parent_agent_id to null'
+  notes: 'Foundation #6 burndown 2026-04-28: nullable column + PATCH null + missing-agent \u2192 human fallback pinned.'
 - id: TC-LLM-001
   module: 'Module 29: Per-Agent LLM Model Selection'
   title: Create agent with Gemini model
