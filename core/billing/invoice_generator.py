@@ -196,19 +196,38 @@ def _render_pdf(
 
 async def _upload_pdf(tenant_id: uuid.UUID, invoice_number: str, data: bytes) -> str:
     """Upload the PDF to GCS and return its URL. Falls back to local /tmp on dev."""
-    try:
-        import os
+    import os
 
+    bucket_name = os.getenv("AGENTICORG_INVOICE_BUCKET", "")
+    key = f"invoices/{tenant_id}/{invoice_number}.pdf"
+
+    # Foundation #7 PR-C: hermetic-CI seam. When the env flag is
+    # set, capture the upload in-process instead of opening a real
+    # GCS client. See docs/hermetic_test_doubles.md.
+    from core.test_doubles import fake_storage  # noqa: PLC0415 — lazy keeps prod cold-path lean
+
+    if fake_storage.is_active():
+        if not bucket_name:
+            logger.debug("fake_storage_invoice_no_bucket")
+            return ""
+        fake_storage.upload(
+            bucket=bucket_name,
+            key=key,
+            data=data,
+            content_type="application/pdf",
+        )
+        return f"gs://{bucket_name}/{key}"
+
+    try:
         from google.cloud import storage
 
-        bucket_name = os.getenv("AGENTICORG_INVOICE_BUCKET", "")
         if not bucket_name:
             raise RuntimeError("AGENTICORG_INVOICE_BUCKET not set")
         client = storage.Client()
         bucket = client.bucket(bucket_name)
-        blob = bucket.blob(f"invoices/{tenant_id}/{invoice_number}.pdf")
+        blob = bucket.blob(key)
         blob.upload_from_string(data, content_type="application/pdf")
-        return f"gs://{bucket_name}/invoices/{tenant_id}/{invoice_number}.pdf"
+        return f"gs://{bucket_name}/{key}"
     except Exception:
         logger.debug("invoice_gcs_upload_skipped")
         return ""

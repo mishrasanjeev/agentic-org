@@ -106,13 +106,45 @@ def test_welcome_email_sent_to_new_user():
 The autouse fixture resets the outbox between tests so captures
 don't leak.
 
+### Fake storage — `core/test_doubles/fake_storage.py`
+
+| | |
+|---|---|
+| Replaces | GCS upload in `core.billing.invoice_generator._upload_pdf` (and any future GCS upload sites) |
+| Activation | `AGENTICORG_TEST_FAKE_STORAGE=1` |
+| Default in tests | Yes — `tests/conftest.py` sets the flag at import time |
+| Capture | In-process `_OBJECTS` list — every upload becomes a `StoredObject` |
+| Inspection | `fake_storage.objects()`, `last()`, `count()`, `get(bucket, key)`, `list_in(bucket)` |
+| Cleanup between tests | `fake_storage.reset()` runs in the autouse conftest fixture |
+
+#### Adding a test that asserts a file was uploaded
+
+```python
+import asyncio, uuid
+from core.test_doubles import fake_storage
+from core.billing.invoice_generator import _upload_pdf
+
+
+def test_invoice_pdf_uploaded(monkeypatch):
+    monkeypatch.setenv("AGENTICORG_INVOICE_BUCKET", "billing-bucket")
+    tenant_id = uuid.uuid4()
+    url = asyncio.run(_upload_pdf(tenant_id, "INV-001", b"%PDF-1.4..."))
+    assert url == f"gs://billing-bucket/invoices/{tenant_id}/INV-001.pdf"
+    obj = fake_storage.get("billing-bucket", f"invoices/{tenant_id}/INV-001.pdf")
+    assert obj.content_type == "application/pdf"
+    assert obj.data.startswith(b"%PDF-")
+```
+
+Re-uploads to the same `(bucket, key)` overwrite — `get()` always
+returns the most-recent object, matching real GCS semantics.
+
 ## Planned doubles (Foundation #7 follow-up PRs)
 
 | Service | Double | Status |
 |---------|--------|--------|
 | LLM | Fake LLM | **Shipped (PR-A #357)** |
-| Mail | Fake mail | **Shipped (PR-B)** |
-| Object storage | LocalStack S3 / fake-gcs | PR-C |
+| Mail | Fake mail | **Shipped (PR-B #358)** |
+| Object storage | Fake storage | **Shipped (PR-C)** |
 | Connector APIs | Stub server (httpx mock app) | PR-D |
 | Celery worker | service container in CI | PR-E |
 
