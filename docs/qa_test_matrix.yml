@@ -407,33 +407,70 @@ entries:
 - id: TC-WF-001
   module: 'Module 7: Workflows'
   title: Workflow list page
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_001_list_endpoint_returns_paginated_response'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_001_list_per_page_capped_at_100_and_min_1'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_001_list_orders_desc_by_created_at'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_001_list_applies_rbac_domain_filter_to_query_and_count'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-001 GET /workflows returns paginated shape'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-001b GET /workflows?per_page=10000 silently clamps to 100'
+  notes: 'Foundation #6 burndown 2026-04-28: paginated shape + per_page cap + desc order + RBAC apply-to-both-query-and-count pinned.'
 - id: TC-WF-002
   module: 'Module 7: Workflows'
   title: Create workflow
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_002_create_endpoint_admin_gated'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_002_create_validates_steps_array_present'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_002_create_rejects_zero_step_workflow'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_002_create_validates_company_id_belongs_to_tenant'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-002 POST /workflows with empty steps array returns 400'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-002b POST /workflows with non-array steps returns 400'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-002c POST /workflows without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: admin-gated + steps array required (must be list, must be non-empty) + company_id tenant-binding pinned.'
 - id: TC-WF-003
   module: 'Module 7: Workflows'
   title: Run workflow manually
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_003_run_endpoint_pinned'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_003_run_returns_immediate_running_status'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_003_run_404_on_missing_workflow'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_003_run_409_on_inactive_workflow'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_003_run_rejects_zero_step_def_at_runtime'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_003_run_ab_variant_picked_deterministically'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-003 POST /workflows/{nonexistent}/run returns 404'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-003b POST /workflows/{id}/run without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: immediate status=running + BackgroundTasks + 404/409/zero-step gates + deterministic A/B variant pick (subject = user_id || tenant_id) pinned.'
 - id: TC-WF-004
   module: 'Module 7: Workflows'
   title: View workflow run details
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_004_run_details_endpoint_pinned'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_004_run_details_loads_steps_via_selectinload'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_004_run_details_query_is_tenant_scoped'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-004 GET /workflows/runs/{nonexistent} returns 404'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-004b GET /workflows/runs/{id} without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: selectinload eager step loading + tenant-scoped query + 404/auth pinned.'
 - id: TC-WF-005
   module: 'Module 7: Workflows'
   title: Workflow with HITL step
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_005_waiting_hitl_step_keeps_completed_at_null'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_005_hitl_step_creates_queue_entry_with_documented_title'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_005_hitl_step_assignee_role_resolved_with_fallback'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_005_hitl_step_priority_pulled_from_step_def_with_default'
+    - 'tests/unit/test_module_7_workflows.py::test_tc_wf_005_hitl_timeout_default_is_four_hours'
+    - 'ui/e2e/qa-module-7-workflows.spec.ts::TC-WF-005 GET /workflows/templates returns list (workflow primitives present)'
+  notes: 'Foundation #6 burndown 2026-04-28: waiting_hitl no-completed_at + HITLQueue insert with workflow_step trigger_type + assignee_role chain + 4h timeout default pinned.'
 - id: TC-HITL-001
   module: 'Module 8: Approval Queue (HITL)'
   title: View pending approvals
