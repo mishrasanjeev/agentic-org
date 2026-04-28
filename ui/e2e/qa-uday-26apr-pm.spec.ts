@@ -165,15 +165,16 @@ test.describe("Uday CA Firms 2026-04-26 PM @qa @connector @agent", () => {
     const a = await pickAgent(page);
     await page.goto(`${APP}/dashboard/agents/${a.id}`, { waitUntil: "networkidle" });
 
-    // Try to click the Shadow tab if it exists. Some agent fixtures
-    // do not surface the Shadow tab if they're already in production
-    // stage — in that case skip the test rather than asserting on the
-    // wrong tab.
-    const shadowTab = page.getByRole("tab", { name: /Shadow/i }).first();
-    const shadowClickable = await shadowTab.isVisible().catch(() => false);
-    if (shadowClickable) {
-      await shadowTab.click();
-    }
+    // The agent detail page renders tabs as <button> elements (the
+    // text is literal lowercase "shadow", capitalised via CSS). Use a
+    // role+name button selector with an anchored regex so we don't
+    // accidentally match a "Shadow Samples" stat card heading.
+    const shadowTab = page.getByRole("button", { name: /^shadow$/i }).first();
+    await expect(
+      shadowTab,
+      "Shadow tab button must exist on the agent detail page",
+    ).toBeVisible({ timeout: 15_000 });
+    await shadowTab.click();
 
     const samplesInput = page.getByRole("spinbutton", { name: /Samples per click/i }).first();
     const visible = await samplesInput.isVisible({ timeout: 8_000 }).catch(() => false);
