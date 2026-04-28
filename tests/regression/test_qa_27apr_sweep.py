@@ -55,6 +55,24 @@ def test_tc_001_report_schedule_surfaces_exception_class() -> None:
     assert "Could not load report schedules ({exc_class}:" in src
 
 
+def test_tc_001_report_schedules_table_self_heal_in_init_db() -> None:
+    """init_db must create report_schedules + index + RLS.
+
+    Pinned because the 27-Apr re-reopen of TC_001 had a hidden second
+    layer: instrumentation surfaced the exception class but the
+    underlying error was ``UndefinedTableError: relation
+    "report_schedules" does not exist``. The v4.4.0 alembic migration
+    was the canonical creator, but envs stamped past that revision
+    (e.g. prod 2026-04-22 cutover) ended up with no table. Without
+    this safety net, every fresh prod env regresses TC_001.
+    """
+    src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS report_schedules" in src
+    assert "ix_report_schedules_tenant_company" in src
+    # Must be in the RLS list so cross-tenant reads are blocked.
+    assert '"report_schedules",' in src
+
+
 # ──────────────────────────────────────────────────────────────────
 # TC_004 — Stop button uses AbortController
 # ──────────────────────────────────────────────────────────────────
