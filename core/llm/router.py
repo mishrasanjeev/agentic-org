@@ -426,6 +426,22 @@ class LLMRouter:
     ) -> LLMResponse:
         start = time.monotonic()
 
+        # Foundation #7 PR-A: hermetic-CI seam. When the env flag is
+        # set, short-circuit ALL providers to the deterministic fake
+        # so PR CI never makes a real LLM call. The fake is keyed by
+        # prompt fingerprint so cost-cap and routing tests stay
+        # reproducible. See docs/hermetic_test_doubles.md.
+        from core.test_doubles import fake_llm  # noqa: PLC0415 — local import keeps prod cold-path lean
+
+        if fake_llm.is_active():
+            payload = fake_llm.fake_complete(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return LLMResponse(**payload)
+
         if "gemini" in model:
             return await self._call_gemini(model, messages, temperature, max_tokens, start)
         elif "claude" in model:
