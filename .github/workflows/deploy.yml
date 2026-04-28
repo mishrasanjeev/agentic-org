@@ -98,8 +98,37 @@ jobs:
           . .audit-env/bin/activate
           pip-audit --desc || echo "::warning::pip-audit found vulnerabilities in transitive dependencies"
 
-  build:
+  release-acceptance:
     needs: [unit-tests, integration-tests, security-scan]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - run: pip install uv && uv pip install --system -e ".[dev]"
+      # Foundation #9 release-acceptance composite gate. Skip
+      # frontend gates here because the build job below builds
+      # the UI image — duplicating the build here would double
+      # the CI cost. crypto verify-all needs a DB; skip in this
+      # static job and run it from the integration-tests job.
+      - name: Release acceptance gate
+        run: |
+          python scripts/release_acceptance.py \
+            --skip tsc,npm_build,vitest,playwright,crypto \
+            --json release_acceptance.json
+      - name: Upload release_acceptance.json artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-acceptance-${{ github.sha }}
+          path: release_acceptance.json
+          retention-days: 30
+
+  build:
+    needs: [unit-tests, integration-tests, security-scan, release-acceptance]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
