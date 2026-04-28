@@ -359,51 +359,87 @@ entries:
 - id: TC-EXEC-001
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 happy path"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_001_run_endpoint_pinned'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_001_run_requires_non_empty_inputs'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_001_run_returns_404_on_missing_agent'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_001_run_response_carries_canonical_run_result_keys'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-001 POST /agents/{nonexistent}/run returns 404'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-001b POST /agents/{id}/run with empty inputs returns 400'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-001c POST /agents/{id}/run without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: input validation + 404 + canonical AgentRunResult shape (run_id + task_id deprecated alias) pinned.'
 - id: TC-EXEC-002
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 HITL triggered (low confidence)"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_002_hitl_queue_entry_created_on_trigger'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_002_hitl_trigger_surfaced_in_run_response'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_002_shadow_accuracy_updates_on_hitl_runs_too'
+  notes: 'Foundation #6 burndown 2026-04-28: HITLQueue insert + has_hitl response field + hitl_triggered counts toward shadow accuracy pinned.'
 - id: TC-EXEC-003
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 LLM model fallback"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_003_router_falls_back_on_primary_failure'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_003_fallback_model_loaded_from_settings'
+  notes: 'Foundation #6 burndown 2026-04-28: llm_primary_failed log + llm_falling_back retry + settings.llm_fallback wiring pinned.'
 - id: TC-EXEC-004
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 budget exceeded"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_004_budget_check_uses_advisory_lock'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_004_budget_exceeded_returns_status_e1008'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_004_cost_ledger_failure_flags_hitl_trigger'
+  notes: 'Foundation #6 burndown 2026-04-28: pg_advisory_xact_lock serialization + E1008 envelope + AGENT-BUDGET-014 ledger-fail-flags-hitl pinned. Cross-pin: Module 22 TC-CC-005, Module 30 TC-BUDGET-003.'
 - id: TC-EXEC-005
   module: 'Module 6: Agent Execution'
   title: "Run agent \u2014 confidence string handling"
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_005_confidence_floor_decimal_conversion_via_str'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_005_confidence_string_input_parsed_into_decimal'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_005_only_measurable_runs_count_toward_accuracy'
+  notes: 'Foundation #6 burndown 2026-04-28: Decimal(str(...)) coercion (no float-rounding drift) + CSV-import string parse + 0.10 measurability floor pinned.'
 - id: TC-EXEC-006
   module: 'Module 6: Agent Execution'
   title: Run paused agent
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_006_only_retired_status_blocks_run_at_api_layer'
+  notes: 'Foundation #6 burndown 2026-04-28: HONEST pin \u2014 API only blocks retired (paused agents DO run via API; UI gates kill-switch UX). A future change adding paused here MUST update the kill-switch flow.'
 - id: TC-EXEC-007
   module: 'Module 6: Agent Execution'
   title: Clone agent
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P0
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_007_clone_endpoint_admin_gated'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_007_clone_enforces_scope_ceiling'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_007_clone_preserves_company_id_and_connector_ids'
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_007_clone_starts_in_shadow_status_by_default'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-007 POST /agents/{nonexistent}/clone returns 404'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-007b POST /agents/{id}/clone without admin auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: admin-gated + scope-ceiling 403 + Codex audit gap #6 (preserve company_id+connector_ids) + shadow default pinned.'
 - id: TC-EXEC-008
   module: 'Module 6: Agent Execution'
   title: Agent budget endpoint
-  status: needs-automation
-  references: []
-  notes: 'audit: no existing test match; not flagged manual or deprecated'
+  status: automated
+  priority: P1
+  references:
+    - 'tests/unit/test_module_6_agent_execution.py::test_tc_exec_008_budget_endpoint_pinned'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-008 GET /agents/{nonexistent}/budget returns 404'
+    - 'ui/e2e/qa-module-6-agent-execution.spec.ts::TC-EXEC-008b GET /agents/{id}/budget without auth returns 401/403'
+  notes: 'Foundation #6 burndown 2026-04-28: monthly_cap/spent/pct/warnings shape pinned. Cross-pin: Module 30 TC-BUDGET-005.'
 - id: TC-WF-001
   module: 'Module 7: Workflows'
   title: Workflow list page
