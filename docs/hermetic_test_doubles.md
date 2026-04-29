@@ -138,14 +138,57 @@ def test_invoice_pdf_uploaded(monkeypatch):
 Re-uploads to the same `(bucket, key)` overwrite — `get()` always
 returns the most-recent object, matching real GCS semantics.
 
+### Fake connectors — `core/test_doubles/fake_connectors.py`
+
+| | |
+|---|---|
+| Replaces | All third-party HTTP calls in `connectors.framework.base_connector.BaseConnector.connect()` |
+| Activation | `AGENTICORG_TEST_FAKE_CONNECTORS=1` |
+| Default in tests | Yes — `tests/conftest.py` sets the flag at import time |
+| Mechanism | `httpx.MockTransport` injected into every connector AsyncClient |
+| Default for unmatched URL | **404** with `no_rule_matched` body (Foundation #8 false-green prevention — surface gaps loudly) |
+| Inspection | `fake_connectors.request_log()`, `count()` |
+| Cleanup between tests | `fake_connectors.reset()` runs in the autouse conftest fixture |
+
+#### Adding a test that asserts a connector hit a specific endpoint
+
+```python
+from core.test_doubles import fake_connectors
+
+def test_gmail_connector_lists_messages():
+    fake_connectors.register(
+        method="GET",
+        url_contains="gmail.googleapis.com/gmail/v1/users/me/messages",
+        status=200,
+        json={"messages": [{"id": "m1"}, {"id": "m2"}]},
+    )
+    out = my_gmail_tool.list_messages()
+    assert len(out) == 2
+    # Optional: assert the URL the connector actually hit.
+    log = fake_connectors.request_log()
+    assert any("messages" in c.url for c in log)
+```
+
+Match precedence: most-recently-registered wins; `method="*"`
+matches any verb. Substring match is case-insensitive on the URL.
+
+#### Why 404 (not 200) for unmatched URLs
+
+The default response for an unregistered URL is a **404 with a
+"no_rule_matched" marker body**, NOT a generic 200. A test that
+hits an endpoint it didn't mock should fail loudly so the gap is
+visible. A silent 200 would hide the missing assertion — exactly
+the false-green pattern Foundation #8's claude-mistakes test
+forbids.
+
 ## Planned doubles (Foundation #7 follow-up PRs)
 
 | Service | Double | Status |
 |---------|--------|--------|
 | LLM | Fake LLM | **Shipped (PR-A #357)** |
 | Mail | Fake mail | **Shipped (PR-B #358)** |
-| Object storage | Fake storage | **Shipped (PR-C)** |
-| Connector APIs | Stub server (httpx mock app) | PR-D |
+| Object storage | Fake storage | **Shipped (PR-C #359)** |
+| Connector APIs | Fake connectors | **Shipped (PR-D)** |
 | Celery worker | service container in CI | PR-E |
 
 Each follow-up follows the same shape: env-var seam at the
