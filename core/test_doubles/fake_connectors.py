@@ -200,3 +200,48 @@ def build_transport() -> httpx.MockTransport:
     single transport works for the whole process.
     """
     return httpx.MockTransport(_handler)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Global httpx patch — covers auth-time + one-off clients
+# ─────────────────────────────────────────────────────────────────
+#
+# BaseConnector.connect() attaches the MockTransport to the long-
+# lived ``self._client``, but many connectors build their own
+# short-lived ``httpx.AsyncClient`` inside ``_authenticate`` (OAuth
+# refresh in Gmail, Google Calendar, Salesforce) or in one-off
+# helpers (GSTN, ServiceNow, Brandwatch, ...). Those clients bypass
+# the per-instance transport and would hit the real network.
+#
+# We patch ``httpx.AsyncClient.__init__`` once so that whenever the
+# flag is active AND the caller didn't pass an explicit
+# ``transport=``, the MockTransport is injected. Activation is re-
+# checked on every call, so per-test opt-out
+# (``AGENTICORG_TEST_FAKE_CONNECTORS=""``) still works. Explicit
+# ``transport=`` arguments are preserved.
+
+_original_async_client_init: Any = None
+_patch_installed = False
+
+
+def install_global_patch() -> None:
+    """Patch ``httpx.AsyncClient`` so auth-time clients also stub.
+
+    Idempotent. Called once from ``tests/conftest.py`` at import
+    time. Outside the test suite this is never installed, so the
+    production cold path is untouched.
+    """
+    global _original_async_client_init, _patch_installed
+    if _patch_installed:
+        return
+    _original_async_client_init = httpx.AsyncClient.__init__
+
+    def _patched_init(
+        self: httpx.AsyncClient, *args: Any, **kwargs: Any
+    ) -> None:
+        if is_active() and "transport" not in kwargs:
+            kwargs["transport"] = build_transport()
+        _original_async_client_init(self, *args, **kwargs)
+
+    httpx.AsyncClient.__init__ = _patched_init  # type: ignore[method-assign]
+    _patch_installed = True

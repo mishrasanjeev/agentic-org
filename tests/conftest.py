@@ -24,6 +24,16 @@ os.environ.setdefault("AGENTICORG_TEST_FAKE_MAIL", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_STORAGE", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_CONNECTORS", "1")
 
+# Foundation #7 PR-D: install the global httpx.AsyncClient patch so
+# auth-time + one-off clients (e.g. OAuth token refresh inside
+# connector ``_authenticate``) also route through MockTransport, not
+# just the long-lived BaseConnector.self._client. Re-checks the env
+# flag per call → per-test opt-out still works.
+__import__(
+    "core.test_doubles.fake_connectors",
+    fromlist=["install_global_patch"],
+).install_global_patch()
+
 
 @pytest.fixture(autouse=True)
 def _reset_fake_doubles_between_tests():
