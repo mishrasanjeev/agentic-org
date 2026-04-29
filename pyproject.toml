@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "fastapi>=0.135.0",
+    "fastapi>=0.136.1",
     "uvicorn[standard]>=0.46.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30.0",
