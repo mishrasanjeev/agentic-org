@@ -393,13 +393,38 @@ async def chat_query(
     tools_used = False
     confidence: float | None = None
 
-    # Build connector config from request state or default to empty dict (BUG #20)
+    # Resolve agent_type: prefer DB value, fall back to domain keyword (BUG #3)
+    resolved_agent_type = agent_type or domain
+
+    # Build connector config (Ramesh/Uday 2026-04-28). Previously chat
+    # only checked `request.state.connector_config` — but no middleware
+    # ever sets that attribute, so it was always {}. Same defect class
+    # as the original Ramesh BUG-012 sibling on /agents/{id}/run: tools
+    # downstream hit empty auth, producing the "shadow accuracy stuck
+    # at 40%" symptom for any agent invoked via chat. Resolve via the
+    # canonical helper so chat picks up Zoho/Tally/QuickBooks creds the
+    # same way the explicit /run route does.
     connector_config: dict[str, Any] = {}
     if hasattr(request.state, "connector_config") and request.state.connector_config:
         connector_config = request.state.connector_config
+    else:
+        try:
+            from api.v1.agents import (
+                _load_connector_configs_for_agent,
+                _resolve_agent_connector_ids_for_type,
+            )
 
-    # Resolve agent_type: prefer DB value, fall back to domain keyword (BUG #3)
-    resolved_agent_type = agent_type or domain
+            connector_ids = await _resolve_agent_connector_ids_for_type(
+                tenant_id=tenant_id, agent_type=resolved_agent_type,
+            )
+            connector_config = await _load_connector_configs_for_agent(
+                tenant_id=tenant_id, connector_ids=connector_ids,
+            )
+        except Exception:  # noqa: BLE001
+            # Resolver failures must not block chat — empty config falls
+            # through to the legacy behaviour and the agent still runs
+            # with whatever LLM-only reasoning it can produce.
+            _log.warning("chat_connector_resolve_failed", domain=domain)
 
     # Resolve authorized_tools: prefer agent's tools from DB lookup (BUG #2)
     resolved_tools = agent_tools or _AGENT_TYPE_DEFAULT_TOOLS.get(
