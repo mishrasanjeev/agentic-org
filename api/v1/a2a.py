@@ -123,6 +123,10 @@ async def create_task(
 
     # Execute via LangGraph
     try:
+        from api.v1.agents import (
+            _load_connector_configs_for_agent,
+            _resolve_agent_connector_ids_for_type,
+        )
         from core.langgraph.runner import run_agent as langgraph_run
 
         # Load prompt
@@ -140,6 +144,21 @@ async def create_task(
         tools = _AGENT_TYPE_DEFAULT_TOOLS.get(body.agent_type, [])
         grant_token = getattr(request.state, "grant_token", "")
 
+        # Ramesh/Uday 2026-04-28: A2A previously called langgraph_run
+        # with no connector_config — every Zoho/Tally/QuickBooks call
+        # downstream hit empty auth and returned an error, masking the
+        # symptom as "shadow accuracy stuck at 40%". Find an agent of
+        # the requested type for this tenant, resolve its connector_ids
+        # to decrypted creds, and pass them through. Same defect class
+        # as the original /agents/{id}/run fix — sibling-route sweep.
+        connector_ids = await _resolve_agent_connector_ids_for_type(
+            tenant_id=tenant_id, agent_type=body.agent_type,
+        )
+        connector_config = await _load_connector_configs_for_agent(
+            tenant_id=tenant_id,
+            connector_ids=connector_ids,
+        )
+
         result = await langgraph_run(
             agent_id=task_id,
             agent_type=body.agent_type,
@@ -153,6 +172,7 @@ async def create_task(
                 "context": body.context,
             },
             grant_token=grant_token,
+            connector_config=connector_config,
         )
 
         final_status = result.get("status", "completed")

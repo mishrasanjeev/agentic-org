@@ -59,10 +59,18 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "check_filing_status",
     ],
     "close_agent": [
+        # Tools the agent actually calls — see core/agents/finance/close_agent.py.
+        # Trial balance + P&L chain (zoho_books / quickbooks / tally) +
+        # balance sheet (zoho_books / quickbooks).
+        "get_trial_balance", "get_profit_loss", "get_balance_sheet",
         "list_invoices", "fetch_bank_statement",
         "get_balance", "search_content_fulltext",
     ],
     "fpa_agent": [
+        # Tools the agent actually calls — see core/agents/finance/fpa_agent.py.
+        # P&L chain (zoho_books / quickbooks / tally trial balance) plus
+        # the original ledger/invoice helpers used in MIS narration.
+        "get_profit_loss", "get_trial_balance",
         "list_invoices", "get_balance",
         "get_campaign_performance_metrics", "get_project_metrics",
     ],
@@ -425,7 +433,70 @@ def _derive_default_tools(
 
 # ──────────────────────────────────────────────────────────────────
 # Connector config resolver (Ramesh/Uday 2026-04-27 — Shadow Accuracy fix)
+# Ramesh/Uday 2026-04-28 — sibling-route sweep added below for chat,
+# MCP, and A2A which previously called langgraph_run with no
+# connector_config and reproduced the same shadow-accuracy 40%.
 # ──────────────────────────────────────────────────────────────────
+
+
+async def _resolve_agent_connector_ids_for_type(
+    tenant_id: str, agent_type: str,
+) -> list[str]:
+    """Find connector_ids for the first active/shadow agent matching agent_type.
+
+    Used by routes that don't have an agent_id (chat-by-domain, MCP,
+    A2A). When multiple agents of the same type exist, this picks the
+    one most likely to have working credentials — active before shadow,
+    shadow before any other status.
+
+    Returns ``[]`` when no matching agent is found, which causes the
+    downstream resolver to short-circuit and pass an empty config (the
+    legacy behaviour) rather than crash.
+    """
+    if not agent_type:
+        return []
+
+    import uuid as _uuid
+
+    from sqlalchemy import case, select
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+
+    try:
+        tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+    except (TypeError, ValueError):
+        return []
+
+    try:
+        async with get_tenant_session(tid) as session:
+            status_priority = case(
+                (Agent.status == "active", 0),
+                (Agent.status == "shadow", 1),
+                else_=2,
+            )
+            row = (
+                await session.execute(
+                    select(Agent)
+                    .where(
+                        Agent.tenant_id == tid,
+                        Agent.agent_type == agent_type,
+                    )
+                    .order_by(status_priority)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return []
+            return list(getattr(row, "connector_ids", None) or [])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "resolve_agent_connector_ids_failed",
+            tenant_id=str(tenant_id),
+            agent_type=agent_type,
+            error=str(exc),
+        )
+        return []
 
 
 async def _load_connector_configs_for_agent(

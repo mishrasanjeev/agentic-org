@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from core.agents.base import BaseAgent
+from core.agents.finance._pnl_chain import fetch_pnl_via_chain
 from core.agents.registry import AgentRegistry
 from core.schemas.messages import (
     DecisionOption,
@@ -47,83 +48,37 @@ class FpaAgentAgent(BaseAgent):
             inputs = task.task.inputs if hasattr(task.task, "inputs") else task.task.get("inputs", {})
             period = inputs.get("period", "")
             company = inputs.get("company", "")
-            budget_id = inputs.get("budget_id", "")
             trace.append(f"FP&A analysis: period={period}, company={company}")
 
-            # --- Step 1: Fetch actuals from Tally ---
-            actuals_result = await self._safe_tool_call(
-                "tally", "get_profit_and_loss",
-                {"period": period, "company": company},
-                trace, tool_calls,
+            # --- Step 1: Fetch actuals via P&L chain ---
+            actuals, source = await fetch_pnl_via_chain(
+                self, period, company, trace, tool_calls,
             )
-
-            actuals: dict[str, float] = {}
-            if actuals_result and "error" not in actuals_result:
-                actuals = {
-                    "revenue": float(actuals_result.get("total_revenue", actuals_result.get("income", 0))),
-                    "cogs": float(actuals_result.get("cost_of_goods_sold", actuals_result.get("cogs", 0))),
-                    "gross_profit": float(actuals_result.get("gross_profit", 0)),
-                    "opex": float(actuals_result.get("operating_expenses", actuals_result.get("opex", 0))),
-                    "ebitda": float(actuals_result.get("ebitda", 0)),
-                    "depreciation": float(actuals_result.get("depreciation", 0)),
-                    "interest": float(actuals_result.get("interest_expense", 0)),
-                    "tax": float(actuals_result.get("tax_expense", 0)),
-                    "net_profit": float(actuals_result.get("net_profit", 0)),
-                    "employee_costs": float(actuals_result.get("employee_costs", actuals_result.get("salaries", 0))),
-                    "marketing_spend": float(actuals_result.get("marketing_expenses", 0)),
-                    "admin_expenses": float(actuals_result.get("admin_expenses", 0)),
-                }
+            if actuals:
                 # Compute derived fields if missing
-                if not actuals["gross_profit"] and actuals["revenue"]:
-                    actuals["gross_profit"] = actuals["revenue"] - actuals["cogs"]
-                if not actuals["ebitda"] and actuals["gross_profit"]:
-                    actuals["ebitda"] = actuals["gross_profit"] - actuals["opex"]
+                if not actuals.get("gross_profit") and actuals.get("revenue"):
+                    actuals["gross_profit"] = actuals["revenue"] - actuals.get("cogs", 0)
+                if not actuals.get("ebitda") and actuals.get("gross_profit"):
+                    actuals["ebitda"] = actuals["gross_profit"] - actuals.get("opex", 0)
                 trace.append(
-                    f"Actuals loaded: revenue={actuals['revenue']:,.2f}, "
-                    f"net_profit={actuals['net_profit']:,.2f}"
+                    f"Actuals loaded from {source}: revenue={actuals.get('revenue', 0):,.2f}, "
+                    f"net_profit={actuals.get('net_profit', 0):,.2f}"
                 )
             else:
-                trace.append("Actuals fetch failed")
-
-            # --- Step 2: Fetch budget ---
-            budget_result = await self._safe_tool_call(
-                "google_sheets", "get_range",
-                {
-                    "spreadsheet_id": budget_id,
-                    "range": f"Budget_{period}!A:Z",
-                },
-                trace, tool_calls,
-            )
-
-            budget: dict[str, float] = {}
-            if budget_result and "error" not in budget_result:
-                # Parse budget from spreadsheet data
-                rows = budget_result.get("values", budget_result.get("rows", []))
-                for row in rows:
-                    if isinstance(row, dict):
-                        line_item = str(row.get("line_item", row.get("category", ""))).lower().replace(" ", "_")
-                        value = float(row.get("budget", row.get("amount", 0)))
-                        budget[line_item] = value
-                    elif isinstance(row, list) and len(row) >= 2:
-                        line_item = str(row[0]).lower().replace(" ", "_")
-                        try:
-                            value = float(row[1])
-                        except (ValueError, TypeError):
-                            continue
-                        budget[line_item] = value
-                trace.append(f"Budget loaded: {len(budget)} line items")
-            else:
-                # Fallback: try fetching budget from Zoho
-                budget_result = await self._safe_tool_call(
-                    "zoho_books", "get_budget",
-                    {"period": period, "company": company},
-                    trace, tool_calls,
+                trace.append(
+                    "Actuals unavailable: no P&L connector wired "
+                    "(expected zoho_books / quickbooks / tally)"
                 )
-                if budget_result and "error" not in budget_result:
-                    budget = {k: float(v) for k, v in budget_result.items() if isinstance(v, (int, float, str))}
-                    trace.append(f"Budget from Zoho: {len(budget)} items")
-                else:
-                    trace.append("Budget fetch failed")
+
+            # --- Step 2: Resolve budget ---
+            # Budget source-of-truth varies by customer. Accept it as a
+            # direct dict on the task input — no Google Sheets connector
+            # exists in this repo, and `zoho_books.get_budget` was a dead
+            # tool name (only oracle_fusion exposes get_budget). When the
+            # caller passes structured budget data, use it; otherwise
+            # skip variance analysis with a clear trace signal so shadow
+            # accuracy correctly reflects the missing input.
+            budget = self._resolve_budget(inputs, trace)
 
             # --- Step 3: Compute variances ---
             variances: list[dict] = []
@@ -310,3 +265,47 @@ class FpaAgentAgent(BaseAgent):
                 tool_name=f"{connector}.{tool}", status="error", latency_ms=latency,
             ))
             return {"error": str(exc)}
+
+    def _resolve_budget(
+        self, inputs: dict[str, Any], trace: list[str],
+    ) -> dict[str, float]:
+        """Accept a structured budget dict from inputs.
+
+        Two accepted shapes:
+        1. ``inputs["budget"]`` = ``{line_item: amount, ...}`` — flat.
+        2. ``inputs["budget"]`` = ``[{"line_item": str, "amount": float}, ...]``
+           — list of rows; line_item is normalised to lowercase + underscores.
+
+        When neither shape is provided, return ``{}`` and trace a clear
+        signal. The empty-budget path is a deliberate confidence-floor
+        signal — see _PNL_CHAIN docstring.
+        """
+        raw = inputs.get("budget")
+        if raw is None:
+            trace.append("Budget not provided in task.inputs.budget — variance analysis skipped")
+            return {}
+        budget: dict[str, float] = {}
+        if isinstance(raw, dict):
+            for k, v in raw.items():
+                try:
+                    budget[str(k).lower().replace(" ", "_")] = float(v)
+                except (TypeError, ValueError):
+                    continue
+        elif isinstance(raw, list):
+            for row in raw:
+                if not isinstance(row, dict):
+                    continue
+                key = str(row.get("line_item", row.get("category", ""))).lower().replace(" ", "_")
+                if not key:
+                    continue
+                try:
+                    budget[key] = float(row.get("amount", row.get("budget", 0)))
+                except (TypeError, ValueError):
+                    continue
+        if budget:
+            trace.append(f"Budget loaded from inputs: {len(budget)} line items")
+        else:
+            trace.append("Budget input present but empty/unparseable")
+        return budget
+
+

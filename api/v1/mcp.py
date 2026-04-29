@@ -133,10 +133,30 @@ async def call_tool(
         )
     grant_token = getattr(request.state, "grant_token", "")
 
-    # Build connector config from request context if available
+    # Build connector config (Ramesh/Uday 2026-04-28). Previously MCP
+    # only checked `request.state.connector_config`, but no middleware
+    # ever sets it — so connector tool calls hit empty auth. Same
+    # defect class as the original /agents/{id}/run sibling: resolve
+    # via the canonical helper so MCP picks up real creds the same
+    # way the explicit /run route does.
     connector_config: dict[str, Any] | None = None
-    if hasattr(request.state, "connector_config"):
+    if hasattr(request.state, "connector_config") and request.state.connector_config:
         connector_config = request.state.connector_config
+    else:
+        try:
+            from api.v1.agents import (
+                _load_connector_configs_for_agent,
+                _resolve_agent_connector_ids_for_type,
+            )
+
+            connector_ids = await _resolve_agent_connector_ids_for_type(
+                tenant_id=tenant_id, agent_type=agent_type,
+            )
+            connector_config = await _load_connector_configs_for_agent(
+                tenant_id=tenant_id, connector_ids=connector_ids,
+            )
+        except Exception:  # noqa: BLE001
+            _log.warning("mcp_connector_resolve_failed", agent_type=agent_type)
 
     # Execute via LangGraph
     from core.langgraph.runner import run_agent as langgraph_run

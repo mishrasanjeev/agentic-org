@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from core.agents.base import BaseAgent
+from core.agents.finance._pnl_chain import fetch_pnl_via_chain
 from core.agents.registry import AgentRegistry
 from core.schemas.messages import (
     DecisionOption,
@@ -102,51 +103,74 @@ class CloseAgentAgent(BaseAgent):
                 tb_summary = {"error": "fetch_failed"}
 
             # --- Step 3: Generate P&L ---
-            pnl_result = await self._safe_tool_call(
-                "tally", "get_profit_and_loss",
-                {"period": period, "company": company},
-                trace, tool_calls,
+            # Ramesh/Uday 2026-04-28: tally has no `get_profit_and_loss`
+            # tool. Use the same connector chain as the FP&A agent so
+            # whichever P&L connector the tenant has wired (Zoho/QB/
+            # Tally trial-balance) supplies the numbers.
+            pnl_result, pnl_source = await fetch_pnl_via_chain(
+                self, period, company, trace, tool_calls,
             )
 
             pnl_summary: dict[str, Any] = {}
-            if pnl_result and "error" not in pnl_result:
-                revenue = float(pnl_result.get("total_revenue", pnl_result.get("income", 0)))
-                expenses = float(pnl_result.get("total_expenses", pnl_result.get("expenditure", 0)))
-                net_profit = revenue - expenses
+            if pnl_result:
+                revenue = float(pnl_result.get("revenue", 0))
+                # Expenses ≈ revenue - net_profit when expenses isn't reported
+                # directly; fall back to opex/COGS sum if available.
+                if "expenses" in pnl_result:
+                    expenses = float(pnl_result["expenses"])
+                else:
+                    expenses = float(
+                        pnl_result.get("opex", 0) + pnl_result.get("cogs", 0)
+                    ) or max(revenue - float(pnl_result.get("net_profit", 0)), 0)
+                net_profit = float(pnl_result.get("net_profit", revenue - expenses))
                 pnl_summary = {
                     "revenue": revenue,
                     "expenses": expenses,
                     "net_profit": net_profit,
                     "margin_pct": round((net_profit / revenue * 100) if revenue else 0, 2),
+                    "source": pnl_source,
                 }
                 trace.append(
-                    f"P&L: revenue={revenue:,.2f}, expenses={expenses:,.2f}, "
-                    f"net={net_profit:,.2f}"
+                    f"P&L from {pnl_source}: revenue={revenue:,.2f}, "
+                    f"expenses={expenses:,.2f}, net={net_profit:,.2f}"
                 )
             else:
-                trace.append("P&L generation failed")
+                trace.append(
+                    "P&L generation failed: no P&L connector wired "
+                    "(expected zoho_books / quickbooks / tally)"
+                )
                 pnl_summary = {"error": "generation_failed"}
 
             # --- Step 4: Generate balance sheet ---
-            bs_result = await self._safe_tool_call(
-                "tally", "get_balance_sheet",
-                {"period": period, "company": company},
-                trace, tool_calls,
-            )
-
+            # tally has no `get_balance_sheet`. Try Zoho / QuickBooks
+            # which both register the tool, in priority order.
             bs_summary: dict[str, Any] = {}
-            if bs_result and "error" not in bs_result:
-                total_assets = float(bs_result.get("total_assets", 0))
-                total_liabilities = float(bs_result.get("total_liabilities", 0))
-                equity = float(bs_result.get("equity", total_assets - total_liabilities))
-                bs_summary = {
-                    "total_assets": total_assets,
-                    "total_liabilities": total_liabilities,
-                    "equity": equity,
-                }
-                trace.append(f"Balance sheet: assets={total_assets:,.2f}, liabilities={total_liabilities:,.2f}")
+            for bs_connector in ("zoho_books", "quickbooks"):
+                bs_result = await self._safe_tool_call(
+                    bs_connector, "get_balance_sheet",
+                    {"period": period, "company": company},
+                    trace, tool_calls,
+                )
+                if bs_result and "error" not in bs_result:
+                    total_assets = float(bs_result.get("total_assets", 0))
+                    total_liabilities = float(bs_result.get("total_liabilities", 0))
+                    equity = float(bs_result.get("equity", total_assets - total_liabilities))
+                    bs_summary = {
+                        "total_assets": total_assets,
+                        "total_liabilities": total_liabilities,
+                        "equity": equity,
+                        "source": bs_connector,
+                    }
+                    trace.append(
+                        f"Balance sheet from {bs_connector}: "
+                        f"assets={total_assets:,.2f}, liabilities={total_liabilities:,.2f}"
+                    )
+                    break
             else:
-                trace.append("Balance sheet fetch failed")
+                trace.append(
+                    "Balance sheet fetch failed: no balance-sheet "
+                    "connector wired (expected zoho_books / quickbooks)"
+                )
 
             # --- Step 5: Compute confidence ---
             factors: list[float] = []
