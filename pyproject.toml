@@ -81,7 +81,7 @@ dependencies = [
     "openpyxl>=3.1.0",
     "pywebpush>=2.0.0",
     "authlib>=1.7.0",
-    "reportlab>=4.4.10",
+    "reportlab>=4.5.0",
     "google-cloud-kms>=3.12.0",
     "fastembed>=0.7.0",
     # FlagEmbedding is BAAI's official loader for bge-m3 (8192 ctx,
