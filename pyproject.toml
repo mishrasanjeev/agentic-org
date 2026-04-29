@@ -83,7 +83,7 @@ dependencies = [
     "authlib>=1.7.0",
     "reportlab>=4.4.10",
     "google-cloud-kms>=3.12.0",
-    "fastembed>=0.8.0",
+    "fastembed>=0.7.0",
     # FlagEmbedding is BAAI's official loader for bge-m3 (8192 ctx,
     # 1024 dim, multilingual). fastembed does not ship bge-m3.
     # Loaded lazily — only the backfill job (PR-A) and PR-B's flipped
