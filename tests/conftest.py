@@ -35,6 +35,18 @@ __import__(
     fromlist=["install_global_patch"],
 ).install_global_patch()
 
+# Foundation #7 PR-E: explicitly switch the Celery app into eager
+# mode + invocation-capture for tests. Done HERE (not at celery_app
+# import time) so the flip is observable, reversible, and tied to
+# the current env-var state. Tests that need a real broker round-
+# trip can call ``fake_celery.deactivate(app)`` to opt back out
+# without being silently overridden by a latched module-level flag.
+__import__(
+    "core.test_doubles.fake_celery", fromlist=["activate"]
+).activate(
+    __import__("core.tasks.celery_app", fromlist=["app"]).app
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_fake_doubles_between_tests():

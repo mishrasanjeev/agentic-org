@@ -104,3 +104,59 @@ def reset() -> None:
     """Clear the invocation list. Call from a test fixture to keep
     captures isolated between cases."""
     _INVOCATIONS.clear()
+
+
+# ─────────────────────────────────────────────────────────────────
+# activate / deactivate — runtime-controllable eager mode
+# ─────────────────────────────────────────────────────────────────
+#
+# The earlier (rejected) design flipped ``task_always_eager`` at
+# module import time inside ``core.tasks.celery_app``. That latched
+# the flag on the singleton ``app``: once the module was first
+# imported with ``AGENTICORG_TEST_FAKE_CELERY=1`` (the conftest
+# default), later tests that tried to opt back to a real broker by
+# clearing the env var STILL ran eagerly, because the config had
+# already been mutated. Integration tests silently produced
+# false-greens — the exact failure pattern Foundation #8 forbids.
+#
+# Instead, ``celery_app`` ships unmodified. The conftest calls
+# ``activate(app)`` explicitly, and any test (or the integration
+# CI job) that wants real broker dispatch calls ``deactivate(app)``
+# first. State is on the app, not in module-level closure, so it's
+# observable and reversible.
+
+_handler_ref: Any = None  # keep signal-handler ref alive against GC
+
+
+def activate(celery_app: Any) -> None:  # noqa: ANN401
+    """Switch the given Celery app into eager mode + invocation capture.
+
+    Idempotent. Outside the test suite this is never called — the
+    production broker dispatch path is untouched.
+    """
+    global _handler_ref
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+    if _handler_ref is None:
+        from celery.signals import task_prerun  # noqa: PLC0415
+
+        @task_prerun.connect
+        def _record_task_invocation(  # noqa: ANN001
+            sender=None, args=None, kwargs=None, **_
+        ):
+            name = getattr(sender, "name", "") or ""
+            _record(name=name, args=args or (), kwargs=kwargs or {})
+
+        _handler_ref = _record_task_invocation
+
+
+def deactivate(celery_app: Any) -> None:  # noqa: ANN401
+    """Switch the given Celery app back to broker-dispatch mode.
+
+    Use this when a single test (or the integration-tests CI job)
+    needs to round-trip through a real worker. The signal handler
+    stays installed but is harmless under broker dispatch — no
+    eager runs happen in this process for it to capture.
+    """
+    celery_app.conf.task_always_eager = False
+    celery_app.conf.task_eager_propagates = False

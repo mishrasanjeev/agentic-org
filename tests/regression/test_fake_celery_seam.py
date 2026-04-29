@@ -133,3 +133,58 @@ def test_autouse_fixture_resets_part_1() -> None:
 def test_autouse_fixture_resets_part_2() -> None:
     """Bleed-check second half — must see clean state."""
     assert fake_celery.count() == 0
+
+
+def test_deactivate_unlatches_eager_mode_then_reactivate_restores() -> None:
+    """Codex PR-E P1: eager mode must be reversible. The earlier
+    design flipped ``task_always_eager=True`` at celery_app import
+    time gated on the env var, which permanently latched the flag
+    on the singleton ``app`` once the conftest set the env var.
+    Tests (or the integration-tests CI job) that tried to opt back
+    to a real broker by clearing the env var STILL ran eagerly,
+    silently turning broker round-trip tests into in-process eager
+    runs — the false-green pattern Foundation #8 forbids.
+
+    The fix moved activation into ``fake_celery.activate(app)`` /
+    ``deactivate(app)`` so the eager flag is observable + reversible
+    on the live app config. This pin verifies the round-trip.
+    """
+    from core.tasks.celery_app import app
+
+    # Conftest already called activate(app) → eager is on.
+    assert app.conf.task_always_eager is True
+    assert app.conf.task_eager_propagates is True
+
+    fake_celery.deactivate(app)
+    try:
+        assert app.conf.task_always_eager is False
+        assert app.conf.task_eager_propagates is False
+    finally:
+        # Restore so subsequent tests in this module + later modules
+        # don't inherit broker-dispatch mode (which would hang on
+        # any .delay() because there's no real broker in unit CI).
+        fake_celery.activate(app)
+
+    assert app.conf.task_always_eager is True
+    assert app.conf.task_eager_propagates is True
+
+
+def test_activate_is_idempotent() -> None:
+    """Calling ``activate(app)`` twice must not double-install the
+    task_prerun signal handler — that would cause every executed
+    task to be captured twice in ``invocations()``."""
+    from core.tasks.celery_app import app
+
+    fake_celery.activate(app)
+    fake_celery.activate(app)  # second call — must be a no-op for the signal
+
+    @app.task(name="tests.fake_celery.idempotent_marker")
+    def _marker() -> int:
+        return 1
+
+    _marker.delay().get(timeout=1)
+    captures = fake_celery.find(task_name="tests.fake_celery.idempotent_marker")
+    assert len(captures) == 1, (
+        f"expected exactly one capture, got {len(captures)} "
+        "— signal handler was installed multiple times"
+    )
