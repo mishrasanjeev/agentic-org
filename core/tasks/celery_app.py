@@ -103,3 +103,14 @@ app.conf.beat_schedule = {
 
 # ── Auto-discover tasks from the core.tasks package ─────────────────
 app.autodiscover_tasks(["core.tasks"])
+
+
+# ── Foundation #7 PR-E: hermetic-CI seam ────────────────────────────
+# Eager mode + invocation capture are NOT activated at module
+# import time — that latches the config on the singleton ``app``
+# even after the env var is later cleared, which silently turns
+# integration tests into eager runs. Activation is delegated to
+# ``core.test_doubles.fake_celery.activate(app)``, which the test
+# conftest calls explicitly. Tests (or the integration-tests CI
+# job) can call ``fake_celery.deactivate(app)`` to opt back to
+# real broker dispatch without leaving eager-mode latched.

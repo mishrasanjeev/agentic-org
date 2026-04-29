@@ -181,16 +181,64 @@ visible. A silent 200 would hide the missing assertion — exactly
 the false-green pattern Foundation #8's claude-mistakes test
 forbids.
 
-## Planned doubles (Foundation #7 follow-up PRs)
+### Fake Celery — `core/test_doubles/fake_celery.py`
+
+| | |
+|---|---|
+| Replaces | Real Celery broker round-trip in `core.tasks.celery_app:app` |
+| Activation | `AGENTICORG_TEST_FAKE_CELERY=1` |
+| Default in tests | Yes — `tests/conftest.py` sets the flag at import time |
+| Mechanism | Sets `task_always_eager=True` + `task_eager_propagates=True` on the prod Celery app at import time |
+| Capture | `task_prerun` signal records every executed task (name + args + kwargs) |
+| Inspection | `fake_celery.invocations()`, `last()`, `count()`, `find(task_name=...)` |
+| Cleanup between tests | `fake_celery.reset()` runs in the autouse conftest fixture |
+
+Eager runs the real task body — that's what unit tests want
+when they need to assert side-effects of a task. The
+`task_prerun` capture also records every invocation so tests
+can assert "task X was scheduled with these args" even if they
+don't care about the body's side-effects.
+
+#### Adding a test that asserts a task was scheduled
+
+```python
+from core.test_doubles import fake_celery
+from core.tasks.invoice_tasks import generate_monthly_invoices
+
+
+def test_invoice_task_runs():
+    generate_monthly_invoices.delay()  # eager → runs synchronously
+    assert fake_celery.find(
+        task_name="core.tasks.invoice_tasks.generate_monthly_invoices"
+    )
+```
+
+#### Opting out for a real worker round-trip
+
+```python
+def test_real_worker_roundtrip(monkeypatch):
+    monkeypatch.delenv("AGENTICORG_TEST_FAKE_CELERY", raising=False)
+    # Requires a running Redis + worker — only available in the
+    # integration-tests CI job (PR-E adds the worker as a service).
+```
+
+CI: the `integration-tests` job launches `celery worker --detach`
+bound to the Redis service so opt-out tests have a real worker
+listening on the standard queues (reports, delivery, maintenance,
+workflows, rpa).
+
+## Foundation #7 status — complete
 
 | Service | Double | Status |
 |---------|--------|--------|
 | LLM | Fake LLM | **Shipped (PR-A #357)** |
 | Mail | Fake mail | **Shipped (PR-B #358)** |
 | Object storage | Fake storage | **Shipped (PR-C #359)** |
-| Connector APIs | Fake connectors | **Shipped (PR-D)** |
-| Celery worker | service container in CI | PR-E |
+| Connector APIs | Fake connectors | **Shipped (PR-D #360)** |
+| Celery | Fake Celery + worker service | **Shipped (PR-E)** |
 
-Each follow-up follows the same shape: env-var seam at the
-boundary, in-process double, autouse fixture, regression test
-pinning the seam, doc entry above.
+PR CI no longer depends on prod LLM keys, real SMTP creds, GCS,
+third-party connector APIs, or a Redis broker. Each shipped
+double follows the same shape: env-var seam at the boundary,
+in-process double, autouse fixture, regression test pinning the
+seam, doc entry above.
