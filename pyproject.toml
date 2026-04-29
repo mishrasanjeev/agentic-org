@@ -89,7 +89,7 @@ dependencies = [
     # Loaded lazily — only the backfill job (PR-A) and PR-B's flipped
     # request path import it. The default request-path embedder stays
     # on fastembed/bge-small until PR-B cutover.
-    "FlagEmbedding>=1.2.0",
+    "FlagEmbedding>=1.4.0",
 ]
 
 [project.optional-dependencies]
