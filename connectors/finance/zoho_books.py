@@ -40,6 +40,7 @@ class ZohoBooksConnector(BaseConnector):
         self._tool_registry["get_profit_loss"] = self.get_profit_loss
         self._tool_registry["list_chartofaccounts"] = self.list_chartofaccounts
         self._tool_registry["reconcile_transaction"] = self.reconcile_transaction
+        self._tool_registry["get_organization"] = self.get_organization
 
     async def _authenticate(self):
         """OAuth2 refresh token flow for Zoho Books."""
@@ -240,6 +241,30 @@ class ZohoBooksConnector(BaseConnector):
             qp["to_date"] = params["to_date"]
         data = await self._get("/reports/profitandloss", params=self._org_params(qp))
         return self._unwrap(data, "profit_and_loss")
+
+    # ── Organization details ───────────────────────────────────────────
+
+    async def get_organization(self, **_params) -> dict[str, Any]:
+        """Get organization details (name, organization_id, address, currency).
+
+        Returns the active organization from the connected Zoho Books
+        account. Useful for agents whose prompts reference the
+        company by name or need the organization_id for follow-up
+        calls. Takes no parameters; the connector's configured
+        organization_id selects which org to fetch when the account
+        spans multiple.
+        """
+        # _get auto-injects organization_id from the connector config
+        # (see _get override below). Zoho returns the matching org
+        # under the "organizations" array even for the singleton query.
+        data = await self._get("/organizations")
+        orgs = data.get("organizations", []) if isinstance(data, dict) else []
+        if not orgs:
+            return {"organizations": []}
+        # Active org first; callers that asked for "company name and
+        # organization_id" want the configured one, which Zoho lists
+        # filtered by the organization_id query param we injected.
+        return {"organizations": orgs}
 
     # ── Chart of Accounts ──────────────────────────────────────────────
 

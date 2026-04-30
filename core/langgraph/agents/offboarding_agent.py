@@ -40,7 +40,7 @@ def load_prompt(variables: dict[str, str] | None = None) -> str:
 
     for key, val in (variables or {}).items():
 
-        template = template.replace("{{}" + key + "}}", val)
+        template = template.replace("{{" + key + "}}", val)
 
     return template
 
