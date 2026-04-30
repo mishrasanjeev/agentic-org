@@ -68,8 +68,10 @@ function extractReadableText(raw: unknown): string {
   const trimmed = raw.trim();
   if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return raw;
 
-  // Try JSON first.
-  let parsed: unknown = null;
+  // Try JSON first. Definite-assignment is enforced by the early returns
+  // in the catch path — TS tracks that ``parsed`` is set on every fall-
+  // through to the post-try block.
+  let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
@@ -150,7 +152,7 @@ export default function ChatPanel({
     }).catch(() => {
       // history endpoint unavailable — start fresh
     });
-  }, [open, agentId]);
+  }, [open, agentId, companyId]);
 
   // Focus input when panel opens
   useEffect(() => {

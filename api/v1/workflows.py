@@ -680,6 +680,102 @@ async def get_replan_history(
     }
 
 
+# ── POST /workflows/runs/{run_id}/cancel ──────────────────────────────────
+#
+# Phase 1 of the 2026-04-30 enterprise gap analysis: the UI's "Cancel"
+# button on `ui/src/pages/WorkflowRun.tsx` was POST'ing to a route that
+# didn't exist, so the button silently failed. The engine already ships
+# a cancel primitive (`workflows/engine.py:WorkflowEngine.cancel`) — we
+# just need a route that invokes it, persists the new status, and writes
+# an audit trail.
+
+
+@router.post("/workflows/runs/{run_id}/cancel")
+async def cancel_workflow_run(
+    run_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Cancel a running workflow run.
+
+    Idempotent: cancelling a run that's already terminal (completed,
+    failed, cancelled) is a 200 with the existing status — not a 409 —
+    so the UI button can be clicked twice without surfacing a confusing
+    error. The DB row + engine state both flip to ``cancelled`` for live
+    runs; an audit log entry is written for compliance traceability.
+    """
+    tid = _uuid.UUID(tenant_id)
+
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(WorkflowRun)
+            .options(selectinload(WorkflowRun.steps))
+            .where(WorkflowRun.id == run_id, WorkflowRun.tenant_id == tid)
+        )
+        run = result.scalar_one_or_none()
+        if not run:
+            raise HTTPException(404, "Workflow run not found")
+
+        terminal_states = {"completed", "failed", "cancelled"}
+        if run.status in terminal_states:
+            # Idempotent: don't error, just return current state.
+            return _run_to_dict(run, include_steps=True)
+
+        # 1. Tell the engine to stop pumping further steps. The engine
+        # holds its own state-store record keyed by ``engine_run_id``
+        # which the request handler persisted in ``run.context`` at
+        # start time.
+        engine_run_id = (run.context or {}).get("_engine_run_id")
+        if engine_run_id:
+            try:
+                from workflows.engine import WorkflowEngine  # noqa: PLC0415
+                from workflows.state_store import WorkflowStateStore  # noqa: PLC0415
+
+                state_store = WorkflowStateStore()
+                await state_store.init()
+                engine = WorkflowEngine(state_store)
+                await engine.cancel(engine_run_id)
+            except Exception as exc:  # noqa: BLE001 — engine cancel is best-effort
+                _log.warning(
+                    "workflow_engine_cancel_failed",
+                    run_id=str(run_id),
+                    engine_run_id=engine_run_id,
+                    error=str(exc),
+                )
+
+        # 2. Persist the new status on the DB row. Even if the engine
+        # call failed, this is the authoritative status the UI reads,
+        # so flip it now and let the engine reconcile lazily.
+        run.status = "cancelled"
+        run.error = run.error or "Cancelled by user request"
+        # Mark any pending steps as cancelled too, so the run-detail
+        # progress panel doesn't keep showing "running" cards.
+        for step in run.steps or []:
+            if step.status in ("pending", "running", "waiting_hitl"):
+                step.status = "cancelled"
+        await session.commit()
+        await session.refresh(run)
+
+    # 3. Audit log — control-plane action by a human user.
+    try:
+        from core.database import async_session_factory  # noqa: PLC0415
+        from core.tool_gateway.audit_logger import AuditLogger  # noqa: PLC0415
+
+        await AuditLogger(async_session_factory).log(
+            tenant_id=tenant_id,
+            workflow_run_id=str(run_id),
+            action="workflow_run.cancel",
+            outcome="success",
+            actor_type="user",
+            resource_type="workflow_run",
+            resource_id=str(run_id),
+            details={"run_id": str(run_id)},
+        )
+    except Exception as exc:  # noqa: BLE001 — audit best-effort, must not block cancel
+        _log.warning("workflow_cancel_audit_failed", run_id=str(run_id), error=str(exc))
+
+    return _run_to_dict(run, include_steps=True)
+
+
 # ── PUT /workflows/{wf_id}/replan-config ──────────────────────────────────
 
 

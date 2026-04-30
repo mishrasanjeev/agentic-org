@@ -51,6 +51,7 @@ const PERMISSIONS = ["All", "READ", "WRITE", "DELETE", "ADMIN"];
 export default function ScopeDashboard() {
   const [scopes, setScopes] = useState<AgentScope[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<string[]>([]);
   const [connectorFilter, setConnectorFilter] = useState("All");
   const [permissionFilter, setPermissionFilter] = useState("All");
   const [agentSearch, setAgentSearch] = useState("");
@@ -61,12 +62,33 @@ export default function ScopeDashboard() {
 
   async function fetchData() {
     setLoading(true);
+    setErrors([]);
     try {
       // Attempt to load real data from both endpoints
       const [agentsRes, enforceRes] = await Promise.allSettled([
         api.get("/agents"),
         api.get("/audit/enforce"),
       ]);
+
+      // 2026-04-30 enterprise gap fix: when EITHER endpoint fails,
+      // record the failure so the user sees an actionable banner
+      // instead of a silently-empty scope dashboard.
+      const fetchErrors: string[] = [];
+      if (agentsRes.status === "rejected") {
+        const reason: any = agentsRes.reason;
+        const status = reason?.response?.status;
+        fetchErrors.push(
+          `Agents endpoint unavailable${status ? ` (HTTP ${status})` : ""} — agent metadata may be incomplete.`
+        );
+      }
+      if (enforceRes.status === "rejected") {
+        const reason: any = enforceRes.reason;
+        const status = reason?.response?.status;
+        fetchErrors.push(
+          `Enforcement events endpoint unavailable${status ? ` (HTTP ${status})` : ""} — scope rows below reflect only what could be loaded.`
+        );
+      }
+      setErrors(fetchErrors);
 
       const agents = agentsRes.status === "fulfilled"
         ? (Array.isArray(agentsRes.value.data) ? agentsRes.value.data : agentsRes.value.data?.items || [])
@@ -98,8 +120,9 @@ export default function ScopeDashboard() {
         if (entry.result === "denied") scope.denials_24h += 1;
       }
       setScopes(Array.from(scopeMap.values()));
-    } catch {
+    } catch (e: any) {
       setScopes([]);
+      setErrors([`Failed to build scope dashboard: ${e?.message || "unknown error"}`]);
     } finally {
       setLoading(false);
     }
@@ -141,6 +164,23 @@ export default function ScopeDashboard() {
         <h2 className="text-2xl font-bold">Scope Dashboard</h2>
         <Button variant="outline" onClick={fetchData}>Refresh</Button>
       </div>
+
+      {/* Error banners — surface partial failures so the user knows
+          which numbers below are real and which are zeroed because
+          a backend call failed. */}
+      {errors.length > 0 && (
+        <div role="alert" className="space-y-2">
+          {errors.map((msg, i) => (
+            <div
+              key={i}
+              className="rounded border border-destructive/40 bg-destructive/5 p-3 text-sm flex items-start gap-3"
+            >
+              <span className="font-medium text-destructive shrink-0">Warning:</span>
+              <span className="flex-1">{msg}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Aggregate Stats */}
       <div className="grid grid-cols-4 gap-4">
