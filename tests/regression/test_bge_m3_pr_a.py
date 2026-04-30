@@ -76,11 +76,41 @@ def test_embed_with_bge_m3_returns_1024_dim_vectors() -> None:
     ~2.3 GB of weights and PyTorch on first call, which we don't want
     to install just to satisfy a unit-test runner. The Cloud Run
     backfill image MUST install it.
+
+    Also skipped when FlagEmbedding *is* installed but the BGE-M3
+    weights aren't already in the local HuggingFace cache. Without
+    this gate, a fresh dev machine with FlagEmbedding installed
+    triggers an unbounded ~2.3 GB cold download mid-pytest which
+    hangs the preflight gate and looks like a code regression
+    rather than a missing-cache environment issue.
     """
     flag = pytest.importorskip(
         "FlagEmbedding", reason="FlagEmbedding not installed in this env"
     )
     del flag
+    # Honor the docstring intent: only run when the env can produce
+    # vectors quickly. Probe the HF cache for the actual weight file
+    # (the large pytorch_model.bin or its safetensors equivalent) —
+    # checking the small config.json alone isn't enough because a
+    # partial / interrupted download may have landed only the
+    # metadata files. If the weights aren't cached, FlagEmbedding's
+    # constructor would trigger a multi-GB cold download mid-pytest
+    # which isn't acceptable in a unit-test gate.
+    from huggingface_hub import try_to_load_from_cache  # noqa: PLC0415
+
+    weights_cached = any(
+        try_to_load_from_cache("BAAI/bge-m3", fname) is not None
+        for fname in ("pytorch_model.bin", "model.safetensors")
+    )
+    if not weights_cached:
+        pytest.skip(
+            "BGE-M3 model weights not in local HuggingFace cache "
+            "(config.json may be present but the large weight file "
+            "isn't). Pre-download with `python -c \"from huggingface_hub "
+            "import snapshot_download; snapshot_download('BAAI/bge-m3')\"` "
+            "to enable this test, or run it inside the Cloud Run "
+            "backfill image which has the weights baked in."
+        )
     from core.embeddings import embed_bge_m3
 
     vectors = embed_bge_m3(["hello world", "second sample"])
