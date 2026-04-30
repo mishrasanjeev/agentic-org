@@ -196,6 +196,10 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_balance", "search_content_fulltext",
     ],
     "fpa_agent": [
+        # Mirrors api/v1/agents.py:_AGENT_TYPE_DEFAULT_TOOLS — same agent
+        # type, same canonical tool list. Drift between these dicts means
+        # newly-created agents miss tools their handlers expect.
+        "get_profit_loss", "get_trial_balance",
         "list_invoices", "get_balance",
         "get_campaign_performance_metrics", "get_project_metrics",
     ],

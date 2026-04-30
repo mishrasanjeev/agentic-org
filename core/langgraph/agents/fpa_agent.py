@@ -9,6 +9,12 @@ from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.runner import run_agent
 
 DEFAULT_TOOLS = [
+    # Mirrors api/v1/agents.py:_AGENT_TYPE_DEFAULT_TOOLS["fpa_agent"] —
+    # same agent type, same canonical tool list. Drift here means the
+    # generic LangGraph runner binds a narrower toolset than the REST
+    # creation path advertises.
+    'get_profit_loss',
+    'get_trial_balance',
     'list_invoices',
     'get_balance',
     'get_campaign_performance_metrics',
@@ -23,7 +29,7 @@ def load_prompt(variables: dict[str, str] | None = None) -> str:
     with open(path) as f:
         template = f.read()
     for key, val in (variables or {}).items():
-        template = template.replace("{{}" + key + "}}", val)
+        template = template.replace("{{" + key + "}}", val)
     return template
 
 
