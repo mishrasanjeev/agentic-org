@@ -59,10 +59,13 @@ async def consent_callback(payload: AACallbackPayload) -> dict[str, str]:
 @router.get("/consent/{consent_handle}/status")
 async def consent_status(
     consent_handle: str,
-    tenant: dict = Depends(get_current_tenant),
+    tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Check the status of a consent request."""
-    tenant_id = tenant.get("tenant_id", "")
+    # SEC-2026-05-P3-014: ``tenant_id`` is a string (UUID) returned
+    # directly by ``get_current_tenant``. Earlier code annotated it as
+    # ``dict`` and called ``.get("tenant_id")`` — that raised
+    # AttributeError on every consent request/status call.
     manager = _consent_managers.get(tenant_id)
     if not manager:
         raise HTTPException(status_code=404, detail="No consent manager for tenant")
@@ -76,7 +79,7 @@ async def consent_status(
 @router.post("/consent/request")
 async def create_consent_request(
     params: dict[str, Any],
-    tenant: dict = Depends(get_current_tenant),
+    tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, str]:
     """Create a new AA consent request.
 
@@ -84,7 +87,10 @@ async def create_consent_request(
     """
     from connectors.finance.aa_consent_types import ConsentRequest
 
-    tenant_id = tenant.get("tenant_id", "")
+    # SEC-2026-05-P3-014: ``tenant_id`` is a string (UUID) returned
+    # directly by ``get_current_tenant``. Earlier code annotated it as
+    # ``dict`` and called ``.get("tenant_id")`` — that raised
+    # AttributeError on every consent request/status call.
     manager = _get_consent_manager(tenant_id)
 
     request = ConsentRequest(**params)

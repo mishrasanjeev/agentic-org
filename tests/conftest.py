@@ -25,6 +25,15 @@ os.environ.setdefault("AGENTICORG_TEST_FAKE_STORAGE", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_CONNECTORS", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_CELERY", "1")
 
+# SEC-2026-05-P1-007 (docs/BRUTAL_SECURITY_SCAN_2026-05-01.md): the
+# webhook unsigned-bypass guard refuses to start in any non-local
+# environment. Default the test environment to ``test`` so existing
+# tests that flip ``AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1`` for payload-
+# parsing tests still work. Tests that explicitly set
+# ``AGENTICORG_ENV`` (e.g. the env-guard regression tests themselves)
+# override this default via ``monkeypatch.setenv``.
+os.environ.setdefault("AGENTICORG_ENV", "test")
+
 # Foundation #7 PR-D: install the global httpx.AsyncClient patch so
 # auth-time + one-off clients (e.g. OAuth token refresh inside
 # connector ``_authenticate``) also route through MockTransport, not

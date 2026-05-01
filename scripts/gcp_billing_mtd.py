@@ -19,6 +19,26 @@ PROJECT = "perfect-period-305406"
 DATASET = "billing_export"
 
 
+_BIGQUERY_API_BASE = "https://bigquery.googleapis.com/bigquery/v2"
+
+
+def _validate_https(url: str) -> str:
+    """SEC-2026-05-P2-011: defend against URL-scheme switching.
+
+    Bandit B310 / ruff S310 flag ``urllib.request.urlopen`` because it
+    silently accepts ``file://``, ``ftp://``, etc. — which could expose
+    local files if a config / env var is ever compromised. We hardcode
+    the BigQuery API host as the only acceptable URL prefix, so even if
+    PROJECT or DATASET ever come from less-trusted input the request
+    cannot be redirected at the URL-scheme layer.
+    """
+    if not url.startswith(_BIGQUERY_API_BASE + "/"):
+        raise ValueError(
+            f"refusing non-BigQuery URL (scheme/host hijack guard): {url!r}"
+        )
+    return url
+
+
 def run_query(sql: str) -> list[dict]:
     token = subprocess.check_output(  # noqa: S603
         ["gcloud", "auth", "print-access-token"],  # noqa: S607
@@ -26,8 +46,9 @@ def run_query(sql: str) -> list[dict]:
     ).strip()
     import urllib.request
 
-    req = urllib.request.Request(
-        f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT}/queries",
+    url = _validate_https(f"{_BIGQUERY_API_BASE}/projects/{PROJECT}/queries")
+    req = urllib.request.Request(  # noqa: S310 — scheme validated by _validate_https
+        url,
         data=json.dumps({"query": sql, "useLegacySql": False}).encode(),
         headers={
             "Authorization": f"Bearer {token}",
@@ -35,7 +56,7 @@ def run_query(sql: str) -> list[dict]:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:  # noqa: S310
+    with urllib.request.urlopen(req) as resp:  # noqa: S310  # nosec B310
         body = json.loads(resp.read())
     if not body.get("jobComplete"):
         sys.exit("Query did not complete synchronously; rerun.")
@@ -53,11 +74,14 @@ def find_billing_table() -> str:
     ).strip()
     import urllib.request
 
-    req = urllib.request.Request(
-        f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT}/datasets/{DATASET}/tables",
+    url = _validate_https(
+        f"{_BIGQUERY_API_BASE}/projects/{PROJECT}/datasets/{DATASET}/tables"
+    )
+    req = urllib.request.Request(  # noqa: S310 — scheme validated by _validate_https
+        url,
         headers={"Authorization": f"Bearer {token}"},
     )
-    with urllib.request.urlopen(req) as resp:  # noqa: S310
+    with urllib.request.urlopen(req) as resp:  # noqa: S310  # nosec B310
         body = json.loads(resp.read())
     tables = [t["tableReference"]["tableId"] for t in body.get("tables", [])]
     standard = [t for t in tables if t.startswith("gcp_billing_export_v1_")]
