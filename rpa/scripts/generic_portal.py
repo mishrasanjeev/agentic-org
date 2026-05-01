@@ -145,6 +145,44 @@ async def run(page: Any, params: dict[str, Any]) -> dict[str, Any]:
     if not username or not password:
         return {"logged_in": False, "error": "username and password are required"}
 
+    # SEC-2026-05-P1-006 (PR-E): validate every caller-supplied URL
+    # against the egress guard BEFORE the browser ever navigates. The
+    # guard rejects non-http(s) schemes, IP-literal URLs, and any
+    # hostname whose DNS resolution lands on a private / loopback /
+    # link-local / metadata range. ``apply_playwright_route_guard``
+    # also re-validates every request mid-navigation so DNS
+    # rebinding can't slip a metadata fetch past the initial check.
+    from rpa.egress_guard import (  # noqa: PLC0415 — runtime-only import for the RPA path
+        EgressBlocked,
+        apply_playwright_route_guard,
+        validate_egress_url,
+    )
+
+    try:
+        await validate_egress_url(portal_url)
+    except EgressBlocked as exc:
+        return {
+            "logged_in": False,
+            "error": f"egress blocked for portal_url: {exc}",
+            "error_class": "egress_blocked",
+            "egress_reason": exc.reason,
+        }
+    if target_url:
+        try:
+            await validate_egress_url(target_url)
+        except EgressBlocked as exc:
+            return {
+                "logged_in": False,
+                "error": f"egress blocked for target_url: {exc}",
+                "error_class": "egress_blocked",
+                "egress_reason": exc.reason,
+            }
+
+    # Mid-navigation route-level re-validation. Defends against DNS
+    # rebinding (host resolves to a public IP for the initial check
+    # but to ``169.254.169.254`` once the page is parked).
+    await apply_playwright_route_guard(page)
+
     result: dict[str, Any] = {
         "logged_in": False,
         "page_title": "",
