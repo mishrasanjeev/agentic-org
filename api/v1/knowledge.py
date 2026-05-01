@@ -487,6 +487,16 @@ async def upload_document(
       - ``?allow_duplicate=true``        → add a second doc with same name
       - ``?replace=true``                → soft-delete existing, ingest new
     """
+    # SEC-2026-05-P1-005 (PR-D): validate the upload BEFORE any byte is
+    # read. ``validate_upload`` raises HTTPException(415) on disallowed
+    # MIME / extension and HTTPException(413) on declared-size overrun.
+    # A subsequent ``stream_to_tempfile`` call enforces the same byte
+    # cap at the streaming layer in case the declared size was missing
+    # or spoofed.
+    from core.file_ingestion.limits import validate_upload  # noqa: PLC0415
+
+    validate_upload(file)
+
     filename = file.filename or "untitled"
 
     if allow_duplicate and replace:
@@ -592,30 +602,51 @@ async def upload_document(
                     error=str(exc),
                 )
 
-    content = await file.read()
-    doc_id = str(uuid.uuid4())
-
-    # Codex 2026-04-22 release-signoff residual: KB search fallback was
-    # filename-only because ``documents`` had no extracted text column.
-    # We can't add a column without a migration, but we can store the
-    # extracted content in the existing ``metadata`` JSONB so the
-    # search fallback has something real to match against. Scope is
-    # intentionally narrow — plain text / markdown / JSON / CSV only.
-    # PDF + XLSX extraction requires heavier deps and lives in the
-    # enhancement backlog.
-    extracted_text = ""
-    ctype = (file.content_type or "").lower()
-    is_textual = (
-        ctype.startswith("text/")
-        or ctype in {"application/json", "application/xml", "application/yaml"}
-        or filename.lower().endswith((".txt", ".md", ".markdown", ".csv", ".json", ".yaml", ".yml"))
+    # SEC-2026-05-P1-005 (PR-D): stream the upload to a tempfile in
+    # 64 KiB chunks rather than ``await file.read()`` which loads the
+    # entire body into memory. Aborts with HTTPException(413) the
+    # moment the running total exceeds MAX_UPLOAD_BYTES, so a 1 GiB
+    # upload can't OOM the worker before being rejected.
+    from core.file_ingestion.limits import (  # noqa: PLC0415
+        cleanup_tempfile,
+        read_text_bounded,
+        stream_to_tempfile,
     )
-    if is_textual:
-        try:
-            # Limit extraction to 256 KB to avoid bloating the JSONB row.
-            extracted_text = content[:256 * 1024].decode("utf-8", errors="ignore")
-        except Exception:
-            extracted_text = ""
+
+    upload_path, content_size = await stream_to_tempfile(file)
+    try:
+        # Read the bytes back for the RAGFlow upload. We still need
+        # the raw bytes downstream — but the tempfile means RSS
+        # tracks the worker's chunk buffer, not the full file × N
+        # concurrent uploads.
+        with upload_path.open("rb") as _f:
+            content = _f.read()
+        doc_id = str(uuid.uuid4())
+
+        # Codex 2026-04-22 release-signoff residual: KB search fallback was
+        # filename-only because ``documents`` had no extracted text column.
+        # We can't add a column without a migration, but we can store the
+        # extracted content in the existing ``metadata`` JSONB so the
+        # search fallback has something real to match against. Scope is
+        # intentionally narrow — plain text / markdown / JSON / CSV only.
+        # PDF + XLSX extraction requires heavier deps and lives in the
+        # enhancement backlog.
+        extracted_text = ""
+        ctype = (file.content_type or "").lower()
+        is_textual = (
+            ctype.startswith("text/")
+            or ctype in {"application/json", "application/xml", "application/yaml"}
+            or filename.lower().endswith(
+                (".txt", ".md", ".markdown", ".csv", ".json", ".yaml", ".yml")
+            )
+        )
+        if is_textual:
+            # Bounded text read — caps at 256 KiB at the FS layer
+            # so a 1 GiB log file doesn't materialise in RAM here
+            # either.
+            extracted_text = read_text_bounded(upload_path)
+    finally:
+        cleanup_tempfile(upload_path)
 
     doc_metadata: dict[str, Any] = {}
     if extracted_text:
