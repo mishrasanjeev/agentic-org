@@ -1,4 +1,7 @@
-FROM node:25-slim AS builder
+# SEC-010: production base images pinned by digest. Refresh via
+# scripts/refresh_image_digests.sh after a Renovate/Dependabot bump.
+# node:25-slim @ 2026-05-01
+FROM node:25-slim@sha256:e49fd70491eb042270f974167c874d6245287263ffc16422fcf93b3c150409d8 AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
 RUN npm install --legacy-peer-deps
@@ -11,7 +14,8 @@ ARG VITE_GA4_ID=""
 ENV VITE_GA4_ID=$VITE_GA4_ID
 RUN npm run build
 
-FROM nginx:alpine
+# nginx:alpine @ 2026-05-01
+FROM nginx:alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

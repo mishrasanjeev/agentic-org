@@ -48,7 +48,11 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 def _serve_health() -> None:
     port = int(os.environ.get("PORT", "8080"))
-    server = HTTPServer(("0.0.0.0", port), _HealthHandler)  # noqa: S104
+    # nosec B104 — Cloud Run requires the container to bind 0.0.0.0 so
+    # the managed load balancer can reach the listening port. Container
+    # is already isolated behind the Cloud Run network boundary; only
+    # ingress that the platform routes can reach this socket.
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)  # noqa: S104  # nosec B104
     server.serve_forever()
 
 

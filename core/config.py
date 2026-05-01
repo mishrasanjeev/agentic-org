@@ -55,26 +55,56 @@ class Settings(BaseSettings):
     default_confidence_floor: float = 0.88
     max_agent_retries: int = 3
 
+    # SEC-012: every environment except local / dev / test is treated
+    # as strict. Staging is internet-accessible, used for demos, pilots,
+    # and enterprise security review — weak staging secrets become real
+    # incidents when staging has production-like integrations.
+    _STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
+    _RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
+
     @model_validator(mode="after")
     def validate_production_secret(self) -> Settings:
-        """Prevent accidental use of development fallbacks in production."""
-        if self.env.lower() == "production":
-            if self.secret_key == "dev-only-secret-key":
-                raise ValueError(
-                    "AGENTICORG_SECRET_KEY must be explicitly set in production"
-                )
-            # Refuse to start with the dev DB URL — would silently use localhost
-            # with default credentials, causing data loss or auth bypass.
-            if "agenticorg_dev@localhost" in self.db_url:
-                raise ValueError(
-                    "AGENTICORG_DB_URL must be explicitly set in production "
-                    "(detected dev fallback with localhost credentials)"
-                )
-            if "localhost" in self.redis_url:
-                raise ValueError(
-                    "AGENTICORG_REDIS_URL must be explicitly set in production "
-                    "(detected localhost fallback)"
-                )
+        """Reject development fallbacks in any non-relaxed environment.
+
+        Strict envs (production, staging, preview) MUST set
+        AGENTICORG_SECRET_KEY, AGENTICORG_DB_URL, AGENTICORG_REDIS_URL
+        to explicit non-default values. Default placeholders, dev
+        credentials, and localhost-pinned URLs all fail closed.
+
+        Secret length is also enforced: minimum 32 chars (≈192 bits of
+        entropy) so JWT/HMAC operations don't operate over weak keys.
+        """
+        env_l = self.env.lower()
+        is_strict = env_l in self._STRICT_ENVS
+        # Anything not explicitly relaxed AND not explicitly strict
+        # ALSO fails strict — defaults to safe.
+        is_unknown = env_l not in self._RELAXED_ENVS and not is_strict
+        if not (is_strict or is_unknown):
+            return self
+
+        env_label = self.env  # preserve original casing in error msg
+        if self.secret_key == "dev-only-secret-key":
+            raise ValueError(
+                f"AGENTICORG_SECRET_KEY must be explicitly set in env={env_label!r} "
+                "(default 'dev-only-secret-key' is rejected outside local/dev/test)"
+            )
+        if len(self.secret_key) < 32:
+            raise ValueError(
+                f"AGENTICORG_SECRET_KEY must be at least 32 chars in env={env_label!r} "
+                f"(got {len(self.secret_key)}); JWT/HMAC need ≥192 bits of entropy"
+            )
+        # Refuse to start with the dev DB URL — would silently use localhost
+        # with default credentials, causing data loss or auth bypass.
+        if "agenticorg_dev@localhost" in self.db_url:
+            raise ValueError(
+                f"AGENTICORG_DB_URL must be explicitly set in env={env_label!r} "
+                "(detected dev fallback with localhost credentials)"
+            )
+        if "localhost" in self.redis_url or "127.0.0.1" in self.redis_url:
+            raise ValueError(
+                f"AGENTICORG_REDIS_URL must be explicitly set in env={env_label!r} "
+                "(detected localhost fallback)"
+            )
         return self
 
 
