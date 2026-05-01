@@ -188,7 +188,17 @@ class TestLogout:
             result = await logout(mock_request, mock_response)
             mock_blacklist.assert_called_once_with("some-token-value")
             assert result == {"status": "logged_out"}
-            mock_response.delete_cookie.assert_called_once()
+            # SEC-2026-05-P1-003 (PR-B): logout now clears BOTH the
+            # HttpOnly session cookie AND the paired CSRF cookie. An
+            # orphaned CSRF cookie post-logout is a stale token that
+            # should never have been left in place.
+            assert mock_response.delete_cookie.call_count == 2
+            cookie_keys = {
+                call.kwargs.get("key") or (call.args[0] if call.args else None)
+                for call in mock_response.delete_cookie.call_args_list
+            }
+            assert "agenticorg_session" in cookie_keys
+            assert "agenticorg_csrf" in cookie_keys
 
     @pytest.mark.asyncio
     async def test_logout_missing_header(self):

@@ -71,6 +71,7 @@ from api.v1 import (
     status as status_mod,
 )
 from api.websocket.feed import router as ws_feed_router
+from auth.csrf_middleware import CSRFMiddleware
 from auth.grantex_middleware import GrantexAuthMiddleware
 from bridge.server_handler import router as ws_bridge_router
 from core.config import settings
@@ -159,6 +160,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# SEC-2026-05-P1-003: CSRF middleware sits BETWEEN CORS and the auth
+# middleware in the chain. Starlette runs ``add_middleware``-registered
+# middleware in reverse insertion order — the LAST add_middleware call
+# is the outermost (runs first on the request). So with this ordering:
+#   request flow: Deprecation → GrantexAuth → CSRF → CORS → route
+# CSRF runs AFTER auth (so it only checks already-validated requests)
+# and BEFORE the route handler.
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(GrantexAuthMiddleware)
 app.add_middleware(DeprecationHeaderMiddleware)
 
