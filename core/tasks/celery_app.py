@@ -84,6 +84,15 @@ app.conf.beat_schedule = {
         "schedule": 300.0,
         "options": {"queue": "rpa"},
     },
+    "record-health-snapshot": {
+        # Phase 5 SLA telemetry: one /health snapshot recorded into
+        # health_check_history every 5 minutes so /health/checks +
+        # /health/uptime can return real history instead of a single
+        # live probe. See core/tasks/health_snapshot.py.
+        "task": "core.tasks.health_snapshot.record_health_snapshot",
+        "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
     "shadow-reconciliation-report": {
         "task": "core.tasks.report_tasks.generate_report",
         "schedule": crontab(hour=8, minute=0, day_of_week="monday"),  # weekly Mon 8 AM IST

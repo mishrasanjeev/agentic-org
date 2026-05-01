@@ -25,12 +25,16 @@ async def test_health_checks_returns_live_snapshot_with_data_source_field(
     monkeypatch,
 ) -> None:
     """The endpoint exists, returns 200, and is honest about being a live
-    snapshot (not persisted history). The ``data_source`` field is the
-    contract the UI uses to render the "history coming soon" banner.
+    snapshot when no persisted history is available. The ``data_source``
+    field is the contract the UI uses to render the right banner.
+
+    Note: the precise wording of the ``note`` field is pinned by the
+    Phase 5 tests in ``test_sla_telemetry_persistence.py``; here we
+    only assert the contract shape so this test stays robust across
+    note rewrites.
     """
     from api.v1 import health as health_module
 
-    # Mock health_readiness to avoid touching real DB/Redis
     fake_snapshot = {
         "status": "healthy",
         "version": "9.9.9-test",
@@ -41,12 +45,18 @@ async def test_health_checks_returns_live_snapshot_with_data_source_field(
     async def _fake_readiness():
         return fake_snapshot
 
+    async def _empty_history(_hours: int):
+        # Force the live-snapshot fallback path even on a host where
+        # health_check_history happens to have rows.
+        return []
+
     monkeypatch.setattr(health_module, "health_readiness", _fake_readiness)
+    monkeypatch.setattr(health_module, "_fetch_history", _empty_history)
 
     result = await health_module.health_checks()
 
     assert result["data_source"] == "live_snapshot"
-    assert "Telemetry history" in result["note"]
+    assert "note" in result and isinstance(result["note"], str) and result["note"]
     assert isinstance(result["items"], list)
     assert len(result["items"]) == 1
     item = result["items"][0]
@@ -59,8 +69,11 @@ async def test_health_checks_returns_live_snapshot_with_data_source_field(
 async def test_health_uptime_returns_current_status_and_data_source(
     monkeypatch,
 ) -> None:
-    """Uptime must include current_status (UI uses this directly) and
-    must mark data_source as a live snapshot until persistence ships."""
+    """Uptime must include current_status (UI uses this directly).
+
+    Phase 5 (test_sla_telemetry_persistence.py) covers the
+    persisted-history path; this test pins the live-snapshot
+    fallback contract by forcing _fetch_history → []."""
     from api.v1 import health as health_module
 
     async def _fake_readiness():
@@ -71,7 +84,11 @@ async def test_health_uptime_returns_current_status_and_data_source(
             "checks": {"db": "unhealthy: TimeoutError", "redis": "healthy"},
         }
 
+    async def _empty_history(_hours: int):
+        return []
+
     monkeypatch.setattr(health_module, "health_readiness", _fake_readiness)
+    monkeypatch.setattr(health_module, "_fetch_history", _empty_history)
     result = await health_module.health_uptime()
 
     assert result["data_source"] == "live_snapshot"
