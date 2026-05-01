@@ -61,7 +61,14 @@ class QuickbooksConnector(BaseConnector):
     async def _refresh_oauth(
         self, client_id: str, client_secret: str, refresh_token: str
     ) -> str | None:
-        """Exchange refresh_token for a fresh access_token via Intuit OAuth2."""
+        """Exchange refresh_token for a fresh access_token via Intuit OAuth2.
+
+        RU-May01-BUG-04: Intuit's token response includes a ``realmId``
+        field. We capture it here so connectors created without an
+        explicit ``realm_id`` in config still get one from the OAuth
+        flow itself. ``_ensure_realm_id`` covers the remaining gap
+        when the token response also lacks it (rare).
+        """
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
@@ -75,13 +82,84 @@ class QuickbooksConnector(BaseConnector):
                 resp.raise_for_status()
                 data = resp.json()
                 logger.info("quickbooks_token_refreshed", expires_in=data.get("expires_in"))
+                # Capture realmId opportunistically — Intuit ships it
+                # in the token response on most refresh flows.
+                if not self._realm_id:
+                    realm_from_token = data.get("realmId") or data.get("realm_id")
+                    if realm_from_token:
+                        self._realm_id = str(realm_from_token)
+                        logger.info(
+                            "quickbooks_realm_id_from_token",
+                            realm_id=self._realm_id,
+                        )
                 return data["access_token"]
         except Exception as exc:
             logger.warning("quickbooks_token_refresh_failed", error=str(exc))
             return None
 
+    async def connect(self) -> None:
+        """Connect, then ensure ``self._realm_id`` is populated.
+
+        RU-May01-BUG-04 (sibling to BUG-02): every QuickBooks Online
+        URL embeds the realm id (``/company/{realm_id}/...``). If the
+        config didn't supply one and the OAuth refresh didn't return
+        one, fall back to Intuit's ``/v1/openid_connect/userinfo``
+        which always returns the authenticated realm.
+        """
+        await super().connect()
+        if not self._realm_id and self._client:
+            await self._fetch_realm_id_from_userinfo()
+
+    async def _fetch_realm_id_from_userinfo(self) -> None:
+        """Pull realm id from Intuit's OpenID Connect userinfo endpoint."""
+        userinfo_url = "https://accounts.platform.intuit.com/v1/openid_connect/userinfo"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
+                resp = await client.get(
+                    userinfo_url,
+                    headers=self._auth_headers,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            realm = data.get("realmid") or data.get("realm_id") or data.get("realmId")
+            if realm:
+                self._realm_id = str(realm)
+                logger.info(
+                    "quickbooks_realm_id_auto_fetched",
+                    realm_id=self._realm_id,
+                )
+        except Exception as exc:  # noqa: BLE001 — best effort
+            logger.warning(
+                "quickbooks_realm_id_auto_fetch_failed", error=str(exc)
+            )
+
+    async def _ensure_realm_id(self) -> None:
+        """Lazy-fetch realm id immediately before tool dispatch.
+
+        Mirrors zoho_books._ensure_org_id — catches a cached connector
+        instance whose realm wasn't populated when first instantiated.
+        """
+        if not self._realm_id and self._client:
+            await self._fetch_realm_id_from_userinfo()
+
     async def execute_tool(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Execute tool with automatic 401 retry (re-authenticates and retries once)."""
+        """Execute tool with realm_id pre-flight + automatic 401 retry.
+
+        - Runs ``_ensure_realm_id()`` first (RU-May01-BUG-04 lazy fallback).
+        - If realm_id is STILL empty after that, return a clear error
+          rather than building a broken ``/company//...`` URL.
+        - On 401, re-authenticate and retry once.
+        """
+        await self._ensure_realm_id()
+        if not self._realm_id:
+            return {
+                "error": (
+                    "QuickBooks realm_id (company ID) is not configured. "
+                    "Reconnect the QuickBooks connector via Settings → "
+                    "Connectors so the OAuth flow captures the realm."
+                ),
+                "error_class": "missing_realm_id",
+            }
         try:
             return await super().execute_tool(tool_name, params)
         except httpx.HTTPStatusError as exc:
