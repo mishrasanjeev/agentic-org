@@ -436,6 +436,7 @@ class TestNetsuiteRealPaths:
 
     def test_base_url_lowercases_and_replaces_dots(self):
         from urllib.parse import urlparse
+
         from connectors.finance.netsuite import NetsuiteConnector
         c = NetsuiteConnector({"account_id": "TSTDRV.1234.567", "access_token": "x"})
         parsed = urlparse(c.base_url)
