@@ -135,3 +135,173 @@ async def query_audit(
         per_page=per_page,
         pages=pages,
     )
+
+
+# ── GET /audit/enforce ───────────────────────────────────────────────────────
+#
+# Tool-gateway enforcement events. Every tool_call that the gateway evaluates
+# (whether allowed or denied) is written to AuditLog by
+# ``core.tool_gateway.audit_logger.AuditLogger.log()`` with
+# ``resource_type='tool_call'``, ``outcome`` ∈ {"allowed", "denied"}, and
+# ``details.enforcement_action`` set to the specific reason for denial
+# (scope_denied, rate_limited, idempotency_replay, etc.). This endpoint
+# projects those rows into the shape ``ui/src/pages/EnforceAuditLog.tsx``
+# and ``ui/src/pages/ScopeDashboard.tsx`` consume.
+#
+# Authz: same shape as ``GET /audit`` — tenant-scoped via ``get_current_tenant``,
+# RBAC domain filtering for non-auditor roles. Enforcement audit is part of the
+# governance posture — auditors see all, domain roles see only their agents'
+# events.
+
+
+def _enforce_to_dict(entry: AuditLog, agent_name_by_id: dict[str, str]) -> dict:
+    """Project an AuditLog row into the EnforceAuditLog UI shape.
+
+    UI fields (from ``EnforceAuditLog.tsx`` table headers + filter logic):
+    timestamp, agent_name, connector, tool, permission, result, reason.
+
+    Connector is parsed from ``event_type`` which the gateway writes as
+    ``tool.<tool_name>``; native tool names like ``get_profit_loss`` don't
+    encode the connector, so we look in ``details.connector`` first (the
+    gateway populates it) and fall back to "unknown" when absent.
+    """
+    details = entry.details or {}
+    agent_id_str = str(entry.agent_id) if entry.agent_id else ""
+    return {
+        "id": str(entry.id),
+        "timestamp": entry.created_at.isoformat() if entry.created_at else None,
+        "agent_id": agent_id_str or None,
+        "agent_name": agent_name_by_id.get(agent_id_str, ""),
+        "connector": details.get("connector") or details.get("connector_name") or "",
+        "tool": entry.resource_id or "",
+        "permission": details.get("permission") or details.get("scope") or "",
+        "result": entry.outcome or "",
+        "reason": (
+            details.get("enforcement_action")
+            or details.get("reason")
+            or (entry.outcome if entry.outcome != "allowed" else "")
+            or ""
+        ),
+        "trace_id": entry.trace_id or None,
+    }
+
+
+@router.get("/audit/enforce", response_model=PaginatedResponse)
+async def query_enforce_audit(
+    result: str | None = None,  # "allowed" | "denied"
+    agent_id: str | None = None,
+    connector: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int = 1,
+    per_page: int = 50,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user_role: str = Depends(get_user_role),
+):
+    """Tool-gateway enforcement events for the current tenant.
+
+    Returns the rows the EnforceAuditLog and ScopeDashboard pages render.
+    Same authz shape as ``/audit``: tenant-scoped, with RBAC domain filtering
+    for non-auditor roles so domain owners only see their own agents' events.
+    """
+    if page < 1:
+        raise HTTPException(422, "page must be >= 1")
+    if result is not None and result not in ("allowed", "denied"):
+        raise HTTPException(422, "result must be 'allowed' or 'denied'")
+    per_page = min(max(per_page, 1), 100)
+    tid = _uuid.UUID(tenant_id)
+
+    async with get_tenant_session(tid) as session:
+        base = (
+            select(AuditLog)
+            .where(AuditLog.tenant_id == tid)
+            .where(AuditLog.resource_type == "tool_call")
+        )
+        count_base = (
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.tenant_id == tid)
+            .where(AuditLog.resource_type == "tool_call")
+        )
+
+        # RBAC domain filter — same logic as ``GET /audit``.
+        if user_domains is not None and user_role != "auditor":
+            domain_agent_ids = (
+                select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
+            )
+            domain_filter = or_(
+                AuditLog.agent_id.in_(domain_agent_ids),
+                AuditLog.agent_id.is_(None),
+            )
+            base = base.where(domain_filter)
+            count_base = count_base.where(domain_filter)
+
+        if result:
+            base = base.where(AuditLog.outcome == result)
+            count_base = count_base.where(AuditLog.outcome == result)
+
+        if agent_id:
+            try:
+                agent_uuid = _uuid.UUID(agent_id)
+            except (ValueError, AttributeError) as e:
+                raise HTTPException(400, "Invalid agent_id format") from e
+            base = base.where(AuditLog.agent_id == agent_uuid)
+            count_base = count_base.where(AuditLog.agent_id == agent_uuid)
+
+        if connector:
+            # connector lives in details JSON (gateway writes
+            # ``details.connector``). Use a JSON path filter.
+            from sqlalchemy import cast  # noqa: PLC0415
+            from sqlalchemy.dialects.postgresql import JSONB  # noqa: PLC0415
+
+            base = base.where(
+                cast(AuditLog.details, JSONB)["connector"].astext == connector
+            )
+            count_base = count_base.where(
+                cast(AuditLog.details, JSONB)["connector"].astext == connector
+            )
+
+        if date_from:
+            try:
+                dt_from = datetime.fromisoformat(date_from)
+            except ValueError as e:
+                raise HTTPException(400, "Invalid date_from format — use ISO 8601") from e
+            base = base.where(AuditLog.created_at >= dt_from)
+            count_base = count_base.where(AuditLog.created_at >= dt_from)
+
+        if date_to:
+            try:
+                dt_to = datetime.fromisoformat(date_to)
+            except ValueError as e:
+                raise HTTPException(400, "Invalid date_to format — use ISO 8601") from e
+            base = base.where(AuditLog.created_at <= dt_to)
+            count_base = count_base.where(AuditLog.created_at <= dt_to)
+
+        total = (await session.execute(count_base)).scalar() or 0
+
+        entries_q = (
+            base.order_by(AuditLog.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+        entries = (await session.execute(entries_q)).scalars().all()
+
+        # Resolve agent_id → agent_name in one round-trip rather than per-row.
+        agent_ids = {e.agent_id for e in entries if e.agent_id is not None}
+        agent_name_by_id: dict[str, str] = {}
+        if agent_ids:
+            name_rows = await session.execute(
+                select(Agent.id, Agent.name).where(Agent.id.in_(agent_ids))
+            )
+            for aid, name in name_rows.all():
+                agent_name_by_id[str(aid)] = name or ""
+
+    pages = max(1, (total + per_page - 1) // per_page)
+    return PaginatedResponse(
+        items=[_enforce_to_dict(e, agent_name_by_id) for e in entries],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )

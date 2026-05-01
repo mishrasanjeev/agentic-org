@@ -31,6 +31,8 @@ export default function WorkflowRun() {
   const { runId } = useParams();
   const [run, setRun] = useState<RunDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [cancelInFlight, setCancelInFlight] = useState(false);
 
   useEffect(() => {
     if (runId) fetchRun();
@@ -45,19 +47,45 @@ export default function WorkflowRun() {
 
   async function fetchRun() {
     setLoading(true);
+    setError(null);
     try {
       const { data } = await api.get(`/workflows/runs/${runId}`);
       setRun(data?.run_id ? { ...data, id: data.run_id } : data?.id ? data : null);
-    } catch {
+    } catch (e: any) {
       setRun(null);
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || e?.response?.data?.message;
+      setError(
+        status === 404
+          ? "Run not found — it may have been deleted, or the URL is wrong."
+          : status
+            ? `Failed to load workflow run (HTTP ${status})${detail ? `: ${detail}` : ""}`
+            : `Failed to load workflow run: ${e?.message || "network error"}`
+      );
     } finally {
       setLoading(false);
     }
   }
 
   async function cancelRun() {
-    await api.post(`/workflows/runs/${runId}/cancel`);
-    fetchRun();
+    setCancelInFlight(true);
+    setError(null);
+    try {
+      await api.post(`/workflows/runs/${runId}/cancel`);
+      // Re-fetch immediately so the UI reflects the new status without
+      // waiting for the next auto-refresh tick.
+      await fetchRun();
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || e?.response?.data?.message;
+      setError(
+        status
+          ? `Cancel failed (HTTP ${status})${detail ? `: ${detail}` : ""}`
+          : `Cancel failed: ${e?.message || "network error"}`
+      );
+    } finally {
+      setCancelInFlight(false);
+    }
   }
 
   const statusColor: Record<string, string> = {
@@ -72,7 +100,24 @@ export default function WorkflowRun() {
   };
 
   if (loading) return <p className="text-muted-foreground">Loading workflow run...</p>;
-  if (!run) return <p className="text-muted-foreground">Run not found.</p>;
+  if (!run) {
+    // 2026-04-30 enterprise gap fix: distinguish "load failed" from
+    // "run truly doesn't exist" so operators can act on the difference.
+    return (
+      <div className="space-y-4">
+        <div
+          role="alert"
+          className="rounded border border-destructive/40 bg-destructive/5 p-4 flex items-start gap-3"
+        >
+          <span className="font-medium text-destructive shrink-0">Error:</span>
+          <span className="flex-1">{error || "Run not found."}</span>
+          <Button size="sm" variant="outline" onClick={fetchRun}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const progress = run.steps_total > 0 ? Math.round((run.steps_completed / run.steps_total) * 100) : 0;
 
@@ -85,10 +130,30 @@ export default function WorkflowRun() {
         </div>
         <div className="flex gap-2 items-center">
           <Badge variant={(statusColor[run.status] || "default") as any}>{run.status}</Badge>
-          {run.status === "running" && <Button variant="destructive" size="sm" onClick={cancelRun}>Cancel</Button>}
+          {run.status === "running" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={cancelRun}
+              disabled={cancelInFlight}
+            >
+              {cancelInFlight ? "Cancelling…" : "Cancel"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={fetchRun}>Refresh</Button>
         </div>
       </div>
+
+      {/* Surface fetch / cancel errors so the buttons don't fail silently. */}
+      {error && (
+        <div
+          role="alert"
+          className="rounded border border-destructive/40 bg-destructive/5 p-3 text-sm flex items-start gap-3"
+        >
+          <span className="font-medium text-destructive shrink-0">Error:</span>
+          <span className="flex-1">{error}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4">
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Progress</CardTitle></CardHeader>

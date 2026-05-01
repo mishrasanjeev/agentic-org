@@ -21,6 +21,11 @@ export default function SLAMonitor() {
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
   const [uptimeData, setUptimeData] = useState<{ hour: string; uptime: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<string[]>([]);
+  // 2026-04-30 enterprise gap fix: surface the backend's
+  // ``data_source`` field so the page tells the truth about whether
+  // the chart shows real history or just a single live snapshot.
+  const [dataSourceNote, setDataSourceNote] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSLAData();
@@ -28,6 +33,8 @@ export default function SLAMonitor() {
 
   async function fetchSLAData() {
     setLoading(true);
+    setErrors([]);
+    setDataSourceNote(null);
     try {
       const [healthRes, checksRes, uptimeRes] = await Promise.allSettled([
         api.get("/health"),
@@ -41,6 +48,30 @@ export default function SLAMonitor() {
         ? healthData.status === "ok" || healthData.status === "healthy"
         : null;
 
+      const fetchErrors: string[] = [];
+      if (healthRes.status === "rejected") {
+        const reason: any = healthRes.reason;
+        const status = reason?.response?.status;
+        fetchErrors.push(
+          `/health unavailable${status ? ` (HTTP ${status})` : ""} — current platform status cannot be determined.`
+        );
+      }
+      if (checksRes.status === "rejected") {
+        const reason: any = checksRes.reason;
+        const status = reason?.response?.status;
+        fetchErrors.push(
+          `/health/checks unavailable${status ? ` (HTTP ${status})` : ""} — check history shows live snapshot only.`
+        );
+      }
+      if (uptimeRes.status === "rejected") {
+        const reason: any = uptimeRes.reason;
+        const status = reason?.response?.status;
+        fetchErrors.push(
+          `/health/uptime unavailable${status ? ` (HTTP ${status})` : ""} — uptime chart will be empty.`
+        );
+      }
+      setErrors(fetchErrors);
+
       setMetrics([
         { label: "Uptime", current: isHealthy === null ? "N/A" : isHealthy ? "Healthy" : "Degraded", target: "99.9%", ok: isHealthy },
         { label: "API P95 Latency", current: healthData?.p95_latency || "N/A", target: "< 2s", ok: isHealthy },
@@ -48,14 +79,22 @@ export default function SLAMonitor() {
         { label: "HITL Response Time", current: healthData?.hitl_response_time || "N/A", target: "< 4 hrs", ok: isHealthy },
       ]);
 
-      // Parse health checks from API (if endpoint exists)
+      // The /health/checks contract returns either a bare array (legacy)
+      // or { data_source, note, items: [...] } (Phase 1 honest shape).
       if (checksRes.status === "fulfilled") {
-        const rawChecks = Array.isArray(checksRes.value.data)
-          ? checksRes.value.data
-          : checksRes.value.data?.items || [];
+        const body = checksRes.value.data;
+        const rawChecks = Array.isArray(body)
+          ? body
+          : (body?.items || []);
         setHealthChecks(rawChecks);
+        // Capture the backend's honest "this is a live snapshot, not
+        // history" note so the user sees it explicitly.
+        if (body && body.data_source === "live_snapshot" && body.note) {
+          setDataSourceNote(body.note);
+        }
       } else {
-        // Single health check from the /health endpoint
+        // Fall back to the /health snapshot when /health/checks isn't
+        // available — but mark it explicitly so the user knows.
         if (healthData) {
           setHealthChecks([{
             timestamp: new Date().toISOString(),
@@ -66,16 +105,14 @@ export default function SLAMonitor() {
         }
       }
 
-      // Parse uptime data from API (if endpoint exists)
       if (uptimeRes.status === "fulfilled") {
-        const rawUptime = Array.isArray(uptimeRes.value.data)
-          ? uptimeRes.value.data
-          : uptimeRes.value.data?.items || [];
+        const body = uptimeRes.value.data;
+        const rawUptime = Array.isArray(body) ? body : (body?.items || []);
         setUptimeData(rawUptime);
       } else {
         setUptimeData([]);
       }
-    } catch {
+    } catch (e: any) {
       setMetrics([
         { label: "Uptime", current: "N/A", target: "99.9%", ok: null },
         { label: "API P95 Latency", current: "N/A", target: "< 2s", ok: null },
@@ -84,6 +121,7 @@ export default function SLAMonitor() {
       ]);
       setHealthChecks([]);
       setUptimeData([]);
+      setErrors([`Failed to load SLA data: ${e?.message || "unknown error"}`]);
     } finally {
       setLoading(false);
     }
@@ -96,6 +134,35 @@ export default function SLAMonitor() {
       </Helmet>
 
       <h2 className="text-2xl font-bold">SLA Monitor</h2>
+
+      {/* Backend's honest data-source note (Phase 1: live snapshot only,
+          history persistence is a follow-up). Surface it so users
+          don't mistake the chart's single point for a flatlined system. */}
+      {dataSourceNote && (
+        <div
+          role="status"
+          className="rounded border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm flex items-start gap-3"
+        >
+          <span className="font-medium shrink-0">Note:</span>
+          <span className="flex-1">{dataSourceNote}</span>
+        </div>
+      )}
+
+      {/* Errors banners — surface partial outages so users can tell which
+          metrics below are real vs. fallback. */}
+      {errors.length > 0 && (
+        <div role="alert" className="space-y-2">
+          {errors.map((msg, i) => (
+            <div
+              key={i}
+              className="rounded border border-destructive/40 bg-destructive/5 p-3 text-sm flex items-start gap-3"
+            >
+              <span className="font-medium text-destructive shrink-0">Warning:</span>
+              <span className="flex-1">{msg}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground">Loading SLA data...</p>

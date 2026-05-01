@@ -27,6 +27,7 @@ interface EnforceEntry {
 export default function EnforceAuditLog() {
   const [entries, setEntries] = useState<EnforceEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [resultFilter, setResultFilter] = useState<"All" | "allowed" | "denied">("All");
   const [agentFilter, setAgentFilter] = useState("All");
   const [connectorFilter, setConnectorFilter] = useState("All");
@@ -39,12 +40,24 @@ export default function EnforceAuditLog() {
 
   async function fetchEntries() {
     setLoading(true);
+    setError(null);
     try {
       const { data } = await api.get("/audit/enforce");
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setEntries(items);
-    } catch {
+    } catch (e: any) {
+      // 2026-04-30 enterprise gap fix: never silently render an empty
+      // table when the backend call fails — operators can't tell
+      // "no enforcement events" apart from "the API is down". Surface
+      // a real, actionable error.
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail || e?.response?.data?.message;
       setEntries([]);
+      setError(
+        status
+          ? `Failed to load enforcement events (HTTP ${status})${detail ? `: ${detail}` : ""}`
+          : `Failed to load enforcement events: ${e?.message || "network error"}`
+      );
     } finally {
       setLoading(false);
     }
@@ -166,12 +179,27 @@ export default function EnforceAuditLog() {
         </span>
       </div>
 
+      {/* Error banner — surfaced when the backend call fails so operators
+          don't mistake an outage for "no events". */}
+      {error && (
+        <div
+          role="alert"
+          className="rounded border border-destructive/40 bg-destructive/5 p-3 text-sm flex items-start gap-3"
+        >
+          <span className="font-medium text-destructive shrink-0">Error:</span>
+          <span className="flex-1">{error}</span>
+          <Button size="sm" variant="outline" onClick={fetchEntries}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <p className="text-muted-foreground">Loading enforce audit entries...</p>
-      ) : paginated.length === 0 ? (
+      ) : paginated.length === 0 && !error ? (
         <p className="text-muted-foreground">No enforce audit entries found.</p>
-      ) : (
+      ) : paginated.length === 0 ? null : (
         <div className="border rounded overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted">

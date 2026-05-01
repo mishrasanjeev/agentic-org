@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import UTC, datetime
 
 import redis.asyncio as aioredis
 import structlog
@@ -100,6 +101,87 @@ async def health_readiness():
 async def liveness():
     """Lightweight liveness probe — just confirms the process is running."""
     return {"status": "alive"}
+
+
+# ── GET /health/checks ─────────────────────────────────────────────────────
+#
+# 2026-04-30 enterprise gap analysis: ``ui/src/pages/SLAMonitor.tsx`` calls
+# ``/health/checks`` and ``/health/uptime`` to render check history and an
+# uptime chart. Those routes didn't exist, so the SLA monitor showed empty
+# panels with no error.
+#
+# Honest Phase 1 implementation: the platform doesn't yet persist health
+# check history (no telemetry table; no periodic snapshot Celery task). So
+# rather than fabricate fake history, these endpoints return a single
+# live-probe snapshot wrapped in the list shape the UI expects, with
+# ``data_source: "live_snapshot"`` so the UI can render an honest banner
+# ("Telemetry history not yet persisted — showing live snapshot only").
+# Adding real persistence is tracked as a separate ops effort with
+# migration + Celery task.
+
+
+@router.get("/health/checks")
+async def health_checks():
+    """Recent health check history.
+
+    Phase 1: returns a single live snapshot — telemetry persistence is a
+    follow-up. ``data_source`` makes the limitation explicit so the UI can
+    render an honest banner instead of a misleading empty chart.
+
+    Acceptance criteria from the gap analysis: the route must exist (so
+    UI doesn't 404) and the response shape must be stable across the
+    eventual persistence rollout.
+    """
+    snapshot = await health_readiness()
+    now = datetime.now(UTC).isoformat()
+    return {
+        "data_source": "live_snapshot",
+        "note": (
+            "Telemetry history is not yet persisted. This response contains "
+            "only the current live snapshot. Wire a periodic /health "
+            "snapshot recorder + a health_check_history table to enable "
+            "true history."
+        ),
+        "items": [
+            {
+                "timestamp": now,
+                "status": snapshot["status"],
+                "checks": snapshot["checks"],
+                "version": snapshot.get("version"),
+                "commit": snapshot.get("commit"),
+            }
+        ],
+    }
+
+
+@router.get("/health/uptime")
+async def health_uptime():
+    """Uptime chart data.
+
+    Phase 1: telemetry history isn't persisted yet, so this returns the
+    current snapshot only with an explicit ``data_source`` field. Once
+    health_check_history is wired, this endpoint will aggregate to bucketed
+    uptime percentages across configurable windows.
+    """
+    snapshot = await health_readiness()
+    now = datetime.now(UTC).isoformat()
+    is_up = snapshot["status"] == "healthy"
+    return {
+        "data_source": "live_snapshot",
+        "note": (
+            "Telemetry history is not yet persisted. Uptime percentage "
+            "and bucketed series will be available once health snapshots "
+            "are recorded periodically."
+        ),
+        "items": [
+            {
+                "timestamp": now,
+                "up": is_up,
+                "status": snapshot["status"],
+            }
+        ],
+        "current_status": snapshot["status"],
+    }
 
 
 @router.get(
