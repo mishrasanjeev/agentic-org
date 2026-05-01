@@ -32,7 +32,10 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: blob: https://*.googleusercontent.com https://www.google-analytics.com; font-src 'self' data:; connect-src 'self' wss: ws: https://accounts.google.com https://oauth2.googleapis.com https://www.google-analytics.com https://analytics.google.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';" always;
+    # SEC-2026-05-P2-009 (PR-G2): see ui/nginx.conf for the rationale.
+    # Hashes must match those in nginx.conf — kept in sync by
+    # scripts/refresh_csp_hashes.sh + the PR-G2 regression test.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-silDIMUzIKrZq4B8I/NYBH4Ic7prd8raP5PJeutQckU=' 'sha256-wQU8MF/7cTNkXkniFP5d4yS1lI7m9vSxDrFND7S5GMM=' 'sha256-y9ZZesBGLi8D5oZ75ilyd3jjqKx5ttGPp6uuyshRixk=' 'sha256-aYTMCdCcFWDgMLWpudyh/kYDQNuAW0E2KOmFtnvp/ZQ=' 'sha256-R/Z95IwKFgil2Ms/1UNrSYrHZzBKm3FlxjAl+RYEDX8=' 'sha256-AxFnxwoAtckVibGP4rshZMGuWGlHTQpcply4CbMuii0=' 'sha256-0nBVhm4XYImcYyrpyw6KLo+p0RTLwEuMZeyUlsBLQdQ=' https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: blob: https://*.googleusercontent.com https://www.google-analytics.com; font-src 'self' data:; connect-src 'self' wss: ws: https://accounts.google.com https://oauth2.googleapis.com https://www.google-analytics.com https://analytics.google.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';" always;
 
     location /assets/ {
         expires 1y;
