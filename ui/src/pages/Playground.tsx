@@ -240,11 +240,12 @@ const DOMAIN_COLORS: Record<string, { border: string; bg: string; text: string }
 /* ------------------------------------------------------------------ */
 
 async function getAuthToken(): Promise<string> {
-  // First try to use the logged-in user's token (needed for custom agents)
-  const userToken = localStorage.getItem("token");
-  if (userToken) return userToken;
-
-  // Fallback to demo token for public playground access
+  // SEC-002 (PR-F): authenticated users now ride on the HttpOnly
+  // session cookie — no localStorage token to grab. The demo path
+  // below still uses a sessionStorage cache (different key, short-
+  // lived, intentionally separate from the user session) so the
+  // public Playground works for anonymous visitors without
+  // requiring login.
   const cached = sessionStorage.getItem("playground_token");
   if (cached) return cached;
   const resp = await fetch("/api/v1/auth/login", {
@@ -401,10 +402,15 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
   const [inputErrors, setInputErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    fetch("/api/v1/agents?per_page=50", { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
+    // SEC-002 (PR-F): cookie-first. The browser ships the HttpOnly
+    // session cookie automatically because of credentials: "include".
+    // Server returns 401 when there is no session — we treat that as
+    // "no custom agents to show" (anonymous Playground visitor).
+    fetch("/api/v1/agents?per_page=50", { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) return { items: [] };
+        return r.json();
+      })
       .then((data) => {
         const items = data.items || [];
         // Filter to non-builtin agents only
@@ -559,10 +565,11 @@ export default function Playground() {
       });
 
       if (!resp.ok) {
-        // If 401, clear cached token and retry once
+        // If 401, clear cached demo token and retry once. We don't
+        // touch the real user session cookie here — that path goes
+        // through the global API client redirector in lib/api.ts.
         if (resp.status === 401) {
           sessionStorage.removeItem("playground_token");
-          localStorage.removeItem("token");
           const newToken = await getAuthToken();
           const retry = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
             method: "POST",

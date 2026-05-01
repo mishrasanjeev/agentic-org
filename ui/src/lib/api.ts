@@ -27,8 +27,11 @@ function readCookie(name: string): string {
 }
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // SEC-002 (PR-F): browser auth is COOKIE-FIRST. The browser ships
+  // the HttpOnly ``agenticorg_session`` cookie automatically because
+  // ``withCredentials: true`` is set above. We DO NOT read a bearer
+  // token from localStorage anymore — that was the SEC-002 attack
+  // surface.
 
   // CSRF: only attach for mutating methods. The server-side middleware
   // exempts safe methods + bearer-only API clients, but sending the
@@ -64,8 +67,18 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 && !isRedirectingTo401) {
       isRedirectingTo401 = true;
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      // SEC-002 (PR-F): cookie is HttpOnly so we can't clear it from
+      // JS. The redirect to /login itself is the user-visible signal;
+      // the backend will clear/expire the cookie on the next /logout
+      // call (or it expires server-side via JWT TTL). We still purge
+      // legacy localStorage entries in case an older client wrote
+      // them before the PR-F upgrade.
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+      } catch {
+        // ignore — private browsing or storage disabled
+      }
       window.location.href = "/login";
     }
     return Promise.reject(error);
