@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as aioredis
 import structlog
@@ -105,43 +105,92 @@ async def liveness():
 
 # ── GET /health/checks ─────────────────────────────────────────────────────
 #
-# 2026-04-30 enterprise gap analysis: ``ui/src/pages/SLAMonitor.tsx`` calls
-# ``/health/checks`` and ``/health/uptime`` to render check history and an
-# uptime chart. Those routes didn't exist, so the SLA monitor showed empty
-# panels with no error.
+# 2026-04-30 enterprise gap analysis flagged that the SLA Monitor page
+# calls ``/health/checks`` and ``/health/uptime`` but the routes didn't
+# exist. Phase 1 (PR #399) added them as honest live-snapshot stubs with
+# a ``data_source: "live_snapshot"`` field. Phase 5 (this PR) wires them
+# to the new ``health_check_history`` table populated every 5 minutes by
+# ``core.tasks.health_snapshot.record_health_snapshot``.
 #
-# Honest Phase 1 implementation: the platform doesn't yet persist health
-# check history (no telemetry table; no periodic snapshot Celery task). So
-# rather than fabricate fake history, these endpoints return a single
-# live-probe snapshot wrapped in the list shape the UI expects, with
-# ``data_source: "live_snapshot"`` so the UI can render an honest banner
-# ("Telemetry history not yet persisted — showing live snapshot only").
-# Adding real persistence is tracked as a separate ops effort with
-# migration + Celery task.
+# When history is present → ``data_source: "persisted"`` and the response
+# returns real rows from the last N hours. When the table is empty (e.g.
+# right after a deploy before the first snapshot lands, or in a dev env
+# without the Celery beat running) → fall back to ``"live_snapshot"`` so
+# the UI's existing data-source-aware banner still renders an honest
+# explanation instead of a misleading empty chart.
+
+# Default window for the chart endpoints. The SLA monitor renders a
+# 24-hour view; tweak via the ``hours`` query parameter.
+_DEFAULT_HISTORY_HOURS = 24
+_MAX_HISTORY_HOURS = 7 * 24  # match the Celery task's RETENTION_DAYS
+
+
+async def _fetch_history(hours: int) -> list[dict]:
+    """Pull the last ``hours`` of recorded health snapshots, newest first.
+
+    Returns an empty list when the table doesn't exist yet (fresh env
+    without the migration), when no snapshots have landed yet, or when
+    the query fails for any reason. Callers fall back to the live
+    snapshot in those cases.
+    """
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text(
+                    "SELECT recorded_at, status, checks, version, commit "
+                    "FROM health_check_history "
+                    "WHERE recorded_at >= :cutoff "
+                    "ORDER BY recorded_at DESC"
+                ),
+                {"cutoff": datetime.now(UTC) - timedelta(hours=hours)},
+            )
+            rows = result.all()
+    except Exception as exc:  # noqa: BLE001 — table absent / db blip → live fallback
+        logger.warning("health_history_query_failed", error=str(exc))
+        return []
+
+    return [
+        {
+            "timestamp": r.recorded_at.isoformat() if r.recorded_at else None,
+            "status": r.status,
+            "checks": r.checks or {},
+            "version": r.version,
+            "commit": r.commit,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/health/checks")
-async def health_checks():
-    """Recent health check history.
+async def health_checks(hours: int = _DEFAULT_HISTORY_HOURS):
+    """Recent health-check history (last ``hours`` of recorded snapshots).
 
-    Phase 1: returns a single live snapshot — telemetry persistence is a
-    follow-up. ``data_source`` makes the limitation explicit so the UI can
-    render an honest banner instead of a misleading empty chart.
-
-    Acceptance criteria from the gap analysis: the route must exist (so
-    UI doesn't 404) and the response shape must be stable across the
-    eventual persistence rollout.
+    Returns ``data_source: "persisted"`` + real rows when the periodic
+    Celery task has populated ``health_check_history``. Falls back to
+    a single ``data_source: "live_snapshot"`` row + an honest banner
+    note when the table is empty (e.g. before the first snapshot
+    lands after deploy).
     """
+    hours = max(1, min(hours, _MAX_HISTORY_HOURS))
+    history = await _fetch_history(hours)
+    if history:
+        return {
+            "data_source": "persisted",
+            "window_hours": hours,
+            "items": history,
+        }
+
     snapshot = await health_readiness()
     now = datetime.now(UTC).isoformat()
     return {
         "data_source": "live_snapshot",
         "note": (
-            "Telemetry history is not yet persisted. This response contains "
-            "only the current live snapshot. Wire a periodic /health "
-            "snapshot recorder + a health_check_history table to enable "
-            "true history."
+            "No persisted snapshots in the last "
+            f"{hours}h yet. The periodic recorder may not have run "
+            "since deploy, or the health_check_history table is "
+            "empty. Showing live probe only."
         ),
+        "window_hours": hours,
         "items": [
             {
                 "timestamp": now,
@@ -155,24 +204,49 @@ async def health_checks():
 
 
 @router.get("/health/uptime")
-async def health_uptime():
-    """Uptime chart data.
+async def health_uptime(hours: int = _DEFAULT_HISTORY_HOURS):
+    """Uptime aggregate over the last ``hours``.
 
-    Phase 1: telemetry history isn't persisted yet, so this returns the
-    current snapshot only with an explicit ``data_source`` field. Once
-    health_check_history is wired, this endpoint will aggregate to bucketed
-    uptime percentages across configurable windows.
+    Returns ``data_source: "persisted"`` with real bucketed series and a
+    computed ``uptime_pct`` when ``health_check_history`` has rows.
+    Falls back to ``data_source: "live_snapshot"`` when empty.
     """
+    hours = max(1, min(hours, _MAX_HISTORY_HOURS))
+    history = await _fetch_history(hours)
     snapshot = await health_readiness()
+
+    if history:
+        up_count = sum(1 for r in history if r["status"] == "healthy")
+        uptime_pct = round(100.0 * up_count / len(history), 2)
+        return {
+            "data_source": "persisted",
+            "window_hours": hours,
+            "uptime_pct": uptime_pct,
+            "samples": len(history),
+            "current_status": snapshot["status"],
+            "items": [
+                {
+                    "timestamp": r["timestamp"],
+                    "up": r["status"] == "healthy",
+                    "status": r["status"],
+                }
+                for r in history
+            ],
+        }
+
     now = datetime.now(UTC).isoformat()
     is_up = snapshot["status"] == "healthy"
     return {
         "data_source": "live_snapshot",
         "note": (
-            "Telemetry history is not yet persisted. Uptime percentage "
-            "and bucketed series will be available once health snapshots "
-            "are recorded periodically."
+            "No persisted snapshots in the last "
+            f"{hours}h yet — uptime percentage will be available "
+            "once the periodic recorder has run."
         ),
+        "window_hours": hours,
+        "uptime_pct": None,
+        "samples": 0,
+        "current_status": snapshot["status"],
         "items": [
             {
                 "timestamp": now,
@@ -180,7 +254,6 @@ async def health_uptime():
                 "status": snapshot["status"],
             }
         ],
-        "current_status": snapshot["status"],
     }
 
 

@@ -38,12 +38,20 @@ REPO = Path(__file__).resolve().parents[2]
 def test_tc_api_001_liveness_endpoint_is_lightweight() -> None:
     """Liveness must NOT touch DB or Redis — those are readiness
     concerns. K8s liveness probes that wait on external deps
-    cause cascading restarts when those deps blip."""
-    src = (REPO / "api" / "v1" / "health.py").read_text(encoding="utf-8")
-    # Find the liveness function block.
-    block = src.split('@router.get("/health/liveness")', 1)[1].split(
-        '@router.get(', 1
-    )[0]
+    cause cascading restarts when those deps blip.
+
+    Pin the actual liveness function body via ``inspect.getsource``,
+    not a brittle text-grep between decorators — sibling helpers
+    legitimately added to ``health.py`` (e.g. the Phase 5
+    ``_fetch_history`` helper that supports ``/health/checks``)
+    used to be captured by the previous "everything between
+    @router.get decorators" approach and produced false failures.
+    """
+    import inspect
+
+    from api.v1.health import liveness
+
+    block = inspect.getsource(liveness)
     assert '"status": "alive"' in block
     # Must NOT do DB or Redis work in liveness.
     assert "session" not in block
