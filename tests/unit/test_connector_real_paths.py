@@ -428,13 +428,18 @@ class TestNetsuiteRealPaths:
         return c
 
     def test_base_url_built_from_account_id(self):
+        from urllib.parse import urlparse
         c = self._make_connector()
-        assert c.base_url.startswith("https://tstdrv1234567.suitetalk.api.netsuite.com")
+        parsed = urlparse(c.base_url)
+        assert parsed.scheme == "https"
+        assert parsed.hostname == "tstdrv1234567.suitetalk.api.netsuite.com"
 
     def test_base_url_lowercases_and_replaces_dots(self):
+        from urllib.parse import urlparse
         from connectors.finance.netsuite import NetsuiteConnector
         c = NetsuiteConnector({"account_id": "TSTDRV.1234.567", "access_token": "x"})
-        assert "tstdrv_1234_567.suitetalk.api.netsuite.com" in c.base_url
+        parsed = urlparse(c.base_url)
+        assert parsed.hostname == "tstdrv_1234_567.suitetalk.api.netsuite.com"
 
     @pytest.mark.asyncio
     async def test_create_invoice_path(self):

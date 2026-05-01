@@ -105,10 +105,15 @@ _BUILTIN_SCRIPTS: dict[str, dict[str, Any]] = {
     },
 }
 
-# In-memory per-tenant execution history (per-process; Redis-backed in production).
-# SECURITY_AUDIT-2026-04-19 HIGH-08: pre-fix this was a single global list
-# shared across tenants, so any caller could read every tenant's history.
-_execution_history: dict[str, list[dict[str, Any]]] = {}
+# SEC-015 (2026-05-01): RPA execution history is now persisted via
+# ``core.rpa.history_store`` (Redis-backed, tenant-scoped, retention +
+# size capped). The previous module-level ``_execution_history`` dict
+# lost state on restart and produced inconsistent behavior across
+# replicas. The store falls back to a process-local dict ONLY in
+# relaxed envs (local/dev/test/ci) so unit tests still work without
+# Redis. SECURITY_AUDIT-2026-04-19 HIGH-08 (no cross-tenant reads) is
+# preserved by the store: every read + write is keyed by tenant_id at
+# the storage layer with no path that crosses tenants.
 
 
 # Generic portal RPA has no domain allowlist. It can be pointed at any
@@ -196,12 +201,14 @@ async def list_history(
 
     HIGH-08 fix: the store is keyed by tenant and this endpoint will only
     ever return entries tagged with the caller's authenticated tenant_id.
+    SEC-015 fix: durable store survives restarts + scales across replicas.
     """
-    tenant_history = _execution_history.get(str(tenant_id), [])
-    return [
-        RPAExecutionOut(**h)
-        for h in reversed(tenant_history[-limit:])
-    ]
+    from core.rpa import history_store  # noqa: PLC0415 — lazy keeps cold path lean
+
+    # Cap user-supplied limit to prevent unbounded reads.
+    safe_limit = max(1, min(int(limit), 500))
+    rows = await history_store.list_history(str(tenant_id), limit=safe_limit)
+    return [RPAExecutionOut(**row) for row in rows]
 
 
 @router.post("/scripts/{script_id}/run", response_model=RPAExecutionOut)
@@ -287,7 +294,15 @@ async def run_script(
             tenant_id=tenant_id,
         )
 
-    _execution_history.setdefault(str(tenant_id), []).append(execution.model_dump())
+    # SEC-015: persist via durable, tenant-scoped store. ``durable``
+    # is False when only the process-local fallback was used (relaxed
+    # envs, or strict-env Redis outage); strict envs already log a
+    # warning at the store layer in that case.
+    from core.rpa import history_store  # noqa: PLC0415
+
+    durable = await history_store.append(
+        str(tenant_id), execution.model_dump()
+    )
 
     logger.info(
         "rpa_script_executed",
@@ -295,6 +310,7 @@ async def run_script(
         tenant_id=tenant_id,
         success=execution.success,
         elapsed_ms=execution.elapsed_ms,
+        history_durable=durable,
     )
 
     return execution
