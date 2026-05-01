@@ -16,14 +16,10 @@ the strict-env-degraded-warning paths are all pinned.
 
 from __future__ import annotations
 
-import asyncio
 import json
-import os
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 
 # ─────────────────────────────────────────────────────────────────
 # Minimal in-process Redis double — enough surface for the store.
@@ -388,8 +384,8 @@ async def test_endpoint_history_delegates_to_store(fake_redis, monkeypatch):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from api.v1 import rpa as rpa_module
         from api.deps import get_current_tenant
+        from api.v1 import rpa as rpa_module
 
         app = FastAPI()
         app.include_router(rpa_module.router, prefix="/api/v1")
