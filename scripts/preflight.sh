@@ -28,6 +28,7 @@ FAST=${FAST:-0}
 SKIP_UI=${SKIP_UI:-0}
 SKIP_BANDIT=${SKIP_BANDIT:-0}
 SKIP_PYTEST=${SKIP_PYTEST:-0}
+SKIP_MYPY=${SKIP_MYPY:-0}
 SKIP_MODULE_COV=${SKIP_MODULE_COV:-0}
 SKIP_CONSISTENCY=${SKIP_CONSISTENCY:-0}
 SKIP_TAG_CHECK=${SKIP_TAG_CHECK:-0}
@@ -86,6 +87,27 @@ branch_check() {
 # ---------------------------------------------------------------------------
 ruff_check() {
   python -m ruff check .
+}
+
+# ---------------------------------------------------------------------------
+# 2b. Mypy — same invocation as the CI lint job (.github/workflows/deploy.yml).
+# Without this here, type errors fail CI on the FIRST gate even though
+# every local preflight passed. PR #399 (2026-04-30) was caught by this
+# exact gap — local green, CI red on a missing constructor argument.
+# ---------------------------------------------------------------------------
+mypy_check() {
+  if [[ "$SKIP_MYPY" == "1" ]]; then
+    echo "[preflight] skipped (SKIP_MYPY=1)"
+    return 0
+  fi
+  # ``codex-pytest-basetemp/`` is pytest's per-run scratch directory
+  # left behind by previous local runs. CI starts from a fresh checkout
+  # so it never sees those files; locally they trigger spurious
+  # "Duplicate module" mypy errors. Exclude it explicitly so the local
+  # gate matches CI's effective scope.
+  python -m mypy --ignore-missing-imports \
+    --exclude '(codex-pytest-basetemp|codex-pytest-temp)' \
+    .
 }
 
 # ---------------------------------------------------------------------------
@@ -217,6 +239,7 @@ critical_tag_check() {
 # ---------------------------------------------------------------------------
 run_step "branch safety"          branch_check
 run_step "ruff (whole tree)"      ruff_check
+run_step "mypy (whole tree)"      mypy_check
 run_step "bandit (api/auth/core)" bandit_check
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
