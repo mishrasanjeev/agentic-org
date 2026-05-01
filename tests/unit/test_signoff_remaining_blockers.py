@@ -18,9 +18,14 @@ class TestEvalsBaselineFallback:
 
         # Point the module's scorecard path at a non-existent location.
         monkeypatch.setattr(evals, "_SCORECARD_PATH", tmp_path / "nothere.json")
-        result = evals._load_scorecard()
+        # SEC-013 (PR-G): _load_scorecard now returns
+        # ``(scorecard, data_quality)``; data_quality is "demo" when
+        # the baseline branch fires.
+        result, quality = evals._load_scorecard()
 
         assert result["_is_baseline"] is True
+        assert quality == "demo"
+        assert result["data_quality"] == "demo"
         # The UI renders percentages from these four fields.
         pm = result["platform_metrics"]
         for key in ("stp_rate", "hitl_rate", "mean_confidence", "uptime_sla"):
