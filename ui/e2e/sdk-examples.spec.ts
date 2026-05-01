@@ -26,20 +26,7 @@ test.describe("Integrations page SDK snippet @sdk @mcp", () => {
     requireAuth();
 
     await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-    await page.evaluate((t) => {
-      localStorage.setItem("token", t);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          email: "demo@cafirm.agenticorg.ai",
-          name: "Demo Partner",
-          role: "admin",
-          domain: "all",
-          tenant_id: "58483c90-494b-445d-85c6-245a727fe372",
-          onboardingComplete: true,
-        }),
-      );
-    }, E2E_TOKEN);
+    await setSessionToken(page, E2E_TOKEN);
 
     await page.goto(`${APP}/dashboard/integrations`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});

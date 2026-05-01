@@ -7,7 +7,7 @@
  * mutate delete what they create at the end.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { APP, authenticate, canAuth, requireAuth } from "./helpers/auth";
+import { APP, E2E_TOKEN, authenticate, canAuth, requireAuth } from "./helpers/auth";
 
 /**
  * Selector helper — scope to <main> so the sidebar "Voice Agents" /
@@ -257,9 +257,14 @@ test.describe("Tally test-connection", () => {
   });
 
   test("BUG-S5-001 /companies/test-tally responds with 2xx or handled error, never 405", async ({ page }) => {
-    const token = await page.evaluate(() => localStorage.getItem("token"));
+    // SEC-002 (PR-F2): the cookie is automatically attached by
+    // page.request, so we no longer need to pull a bearer out of
+    // localStorage. The Authorization header still works for explicit
+    // API-client calls (the backend accepts both), so we keep it for
+    // tests that hit endpoints which haven't yet been audited for
+    // cookie-only acceptance.
     const resp = await page.request.post(`${APP}/api/v1/companies/test-tally`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${E2E_TOKEN}` },
       data: { bridge_url: "http://localhost:65535" },
     });
     expect(resp.status()).not.toBe(405);

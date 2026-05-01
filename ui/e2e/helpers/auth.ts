@@ -50,23 +50,71 @@ let _cachedProfile: AuthUser | null = null;
 let _cachedCompanyId: string | null = null;
 
 /**
- * Authenticate the page by seeding the real demo profile into localStorage.
+ * Authenticate the page by seeding the agenticorg_session HttpOnly cookie
+ * + the paired agenticorg_csrf cookie.
  *
- * Resolves the profile from `/api/v1/auth/me` the first time so the seeded
- * `user` matches what ProtectedRoute would have hydrated naturally — most
- * critically, the real `role` so sidebar filtering works.
+ * SEC-002 (PR-F2, 2026-05-01): production browser auth no longer reads a
+ * bearer token from localStorage. The HttpOnly session cookie is the only
+ * valid carrier, so the e2e fixtures match that posture exactly. Specs that
+ * called this helper get cookie-based auth automatically; specs that wrote
+ * ``localStorage.setItem("token", ...)`` directly should switch to
+ * ``setSessionToken`` (below).
+ *
+ * The CSRF cookie is also seeded here so mutating-method specs (POST/PUT
+ * /PATCH/DELETE) automatically attach the X-CSRF-Token header via the same
+ * double-submit pattern the app uses in production.
  */
 export async function authenticate(page: Page): Promise<void> {
   requireAuth();
+  await setSessionToken(page, E2E_TOKEN);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  const profile = await getProfile(page);
-  await page.evaluate(
-    ([tkn, user]) => {
-      localStorage.setItem("token", tkn as string);
-      localStorage.setItem("user", JSON.stringify(user));
+}
+
+function _appHost(): string {
+  // Strip protocol + path so Playwright's addCookies receives a bare host.
+  return APP.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
+
+/**
+ * Seed the agenticorg_session + agenticorg_csrf cookies into the browser
+ * context so subsequent navigations behave as if the user has a live
+ * session. Replaces the old ``localStorage.setItem("token", ...)``
+ * pattern that SEC-002 forbids.
+ */
+export async function setSessionToken(
+  page: Page,
+  token: string,
+  csrfToken: string = "e2e-csrf-token",
+): Promise<void> {
+  const host = _appHost();
+  const isHttps = APP.startsWith("https://");
+  await page.context().addCookies([
+    {
+      name: "agenticorg_session",
+      value: token,
+      domain: host,
+      path: "/",
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: "Lax",
     },
-    [E2E_TOKEN, profile],
-  );
+    {
+      name: "agenticorg_csrf",
+      value: csrfToken,
+      domain: host,
+      path: "/",
+      // CSRF cookie is intentionally NOT HttpOnly — the SPA needs to
+      // read it to echo back as X-CSRF-Token. Matches production.
+      httpOnly: false,
+      secure: isHttps,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
+/** Clear all cookies for the current page context — use to simulate logout. */
+export async function clearSession(page: Page): Promise<void> {
+  await page.context().clearCookies();
 }
 
 /**

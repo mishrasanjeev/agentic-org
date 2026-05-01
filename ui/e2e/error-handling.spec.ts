@@ -7,6 +7,7 @@
  * NO page.route() mocking -- all responses are real.
  */
 import { test, expect, Page } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
@@ -23,20 +24,7 @@ function requireAuth(): void {
 
 async function ensureAuth(page: Page, baseURL: string) {
   await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-  await page.evaluate((token) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "e2e@agenticorg.ai",
-        name: "E2E Runner",
-        role: "admin",
-        domain: "all",
-        tenant_id: "t-001",
-        onboardingComplete: true,
-      }),
-    );
-  }, E2E_TOKEN);
+  await setSessionToken(page, E2E_TOKEN);
 }
 
 // ===========================================================================
@@ -192,13 +180,10 @@ test.describe("Token Expiry", () => {
     baseURL,
   }) => {
     await page.goto(baseURL!, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      localStorage.setItem("token", "expired.invalid.token");
-    localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));      localStorage.setItem(
-        "user",
-        JSON.stringify({ email: "x@x.x", name: "X", role: "admin" }),
-      );
-    });
+    // SEC-002 (PR-F2): seed an invalid session cookie so the
+    // /auth/me hydration on the dashboard route returns 401 and
+    // ProtectedRoute redirects to /login.
+    await setSessionToken(page, "expired.invalid.token");
 
     await page.goto(`${baseURL}/dashboard/cfo`, {
       waitUntil: "domcontentloaded",
