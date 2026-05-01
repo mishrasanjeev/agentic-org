@@ -113,10 +113,19 @@ def test_high06_resolver_rejects_private_range():
 
 def test_high08_rpa_history_tenant_scoped():
     src = _read("api/v1/rpa.py")
-    # Shared global list must be gone; per-tenant dict in its place.
-    assert "_execution_history: dict[str, list[dict[str, Any]]]" in src
-    assert "_execution_history.get(str(tenant_id)" in src
-    assert "_execution_history.setdefault(str(tenant_id)" in src
+    # SEC-015 (PR-H, 2026-05-01): the old per-tenant dict was promoted
+    # to a durable Redis-backed store at ``core.rpa.history_store``.
+    # The HIGH-08 contract — every read + write is keyed by the
+    # caller's authenticated tenant_id and never crosses tenants — is
+    # preserved by the store. Checks here verify the rpa endpoint
+    # delegates to the store with the str(tenant_id) key.
+    assert "from core.rpa import history_store" in src
+    assert "history_store.list_history(str(tenant_id)" in src
+    assert "history_store.append(\n        str(tenant_id)" in src
+    # Shared global list must NOT be present.
+    assert "_execution_history: dict" not in src
+    assert "_execution_history.get(" not in src
+    assert "_execution_history.setdefault(" not in src
 
 
 def test_high09_rpa_generic_portal_admin_gated():
