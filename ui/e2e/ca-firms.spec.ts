@@ -27,30 +27,21 @@ function requireAuth(): void {
 // -- Helper: authenticate via localStorage token --
 async function authenticate(page: Page): Promise<void> {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  await page.evaluate((token) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "demo@cafirm.agenticorg.ai",
-        name: "Demo Partner",
-        role: "admin",
-        domain: "all",
-        tenant_id: "58483c90-494b-445d-85c6-245a727fe372",
-        onboardingComplete: true,
-      }),
-    );
-  }, E2E_TOKEN);
+  await setSessionToken(page, E2E_TOKEN);
 }
 
 // -- Helper: fetch the first real company ID from the API --
 let _cachedCompanyId: string | null = null;
 async function getCompanyId(page: Page): Promise<string> {
   if (_cachedCompanyId) return _cachedCompanyId;
-  const token = await page.evaluate(() => localStorage.getItem("token"));
+  // SEC-002 (PR-F2): page.request shares the BrowserContext cookies,
+  // so the agenticorg_session cookie is sent automatically. Keeping
+  // the explicit Bearer header as a belt-and-braces (the backend
+  // accepts both) so the request still works against API endpoints
+  // that haven't yet been audited for cookie-only acceptance.
   const resp = await page.request.get(
     `${APP}/api/v1/companies?page=1&per_page=1`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: { Authorization: `Bearer ${E2E_TOKEN}` } },
   );
   if (resp.ok()) {
     const data = await resp.json();

@@ -20,9 +20,7 @@ function requireAuth(): void {
 // Helper: authenticate via localStorage token
 async function authenticate(page: import("@playwright/test").Page) {
   await page.goto(`${APP}/login`);
-  await page.evaluate((token) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));  }, E2E_TOKEN);
+  await setSessionToken(page, E2E_TOKEN);
 }
 
 // ============================================================================

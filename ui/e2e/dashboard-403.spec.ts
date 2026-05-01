@@ -31,23 +31,7 @@ async function seedSession(
   role: string,
 ): Promise<void> {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  await page.evaluate(
-    ([t, r]) => {
-      localStorage.setItem("token", t);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          email: "demo@cafirm.agenticorg.ai",
-          name: "Demo Partner",
-          role: r,
-          domain: r === "admin" ? "all" : "finance",
-          tenant_id: "58483c90-494b-445d-85c6-245a727fe372",
-          onboardingComplete: true,
-        }),
-      );
-    },
-    [E2E_TOKEN, role],
-  );
+  await setSessionToken(page, E2E_TOKEN);
 }
 
 test.describe("Dashboard metrics — no hardcoded KPIs", () => {

@@ -22,20 +22,7 @@ const UNIQUE = Date.now().toString(36);
 
 async function ensureAuth(page: Page, baseURL: string) {
   await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-  await page.evaluate((token) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "e2e@agenticorg.ai",
-        name: "E2E Runner",
-        role: "admin",
-        domain: "all",
-        tenant_id: "t-001",
-        onboardingComplete: true,
-      }),
-    );
-  }, E2E_TOKEN);
+  await setSessionToken(page, E2E_TOKEN);
 }
 
 // ===========================================================================
@@ -143,14 +130,18 @@ test.describe("Onboarding Wizard", () => {
     baseURL,
   }) => {
     requireAuth();
-    await ensureAuth(page, baseURL!);
-
-    // Override onboardingComplete to false so onboarding page renders
-    await page.evaluate(() => {
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      user.onboardingComplete = false;
-      localStorage.setItem("user", JSON.stringify(user));
+    // SEC-002 (PR-F2): the AuthContext now hydrates onboarding state
+    // from /auth/me, not localStorage. Intercept that endpoint to
+    // force onboarding_complete=false so the onboarding page renders.
+    await page.route("**/api/v1/auth/me", async (route) => {
+      const upstream = await route.fetch();
+      const body = await upstream.json().catch(() => ({}));
+      await route.fulfill({
+        response: upstream,
+        json: { ...body, onboarding_complete: false },
+      });
     });
+    await ensureAuth(page, baseURL!);
 
     await page.goto(`${baseURL}/onboarding`, {
       waitUntil: "domcontentloaded",

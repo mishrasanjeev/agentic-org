@@ -27,16 +27,16 @@
  *     npx playwright test tests/regression/test_qa_28apr_fpa_shadow.spec.ts
  */
 import { test, expect, Page } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 
 async function authenticate(page: Page): Promise<void> {
+  // SEC-002 (PR-F2): cookie-first session seeding.
+  await setSessionToken(page, E2E_TOKEN);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  await page.evaluate((token) => {
-    localStorage.setItem("token", token);
-  }, E2E_TOKEN);
 }
 
 test.describe("FPA agent — shadow accuracy after 28-Apr tool-plumbing fix", () => {

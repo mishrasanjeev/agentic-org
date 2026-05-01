@@ -27,20 +27,7 @@ function requireAuth(): void {
 
 async function authenticate(page: Page): Promise<void> {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  await page.evaluate((token) => {
-    localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify({ email: "demo@cafirm.agenticorg.ai", name: "Demo Partner", role: "admin", domain: "all", tenant_id: "58483c90-494b-445d-85c6-245a727fe372", onboardingComplete: true }));    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email: "e2e@agenticorg.ai",
-        name: "E2E Runner",
-        role: "admin",
-        domain: "all",
-        tenant_id: "t-001",
-        onboardingComplete: true,
-      }),
-    );
-  }, E2E_TOKEN);
+  await setSessionToken(page, E2E_TOKEN);
 }
 
 async function goTo(page: Page, path: string): Promise<void> {
