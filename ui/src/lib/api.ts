@@ -2,10 +2,44 @@ import axios from "axios";
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api/v1`
   : "/api/v1";
-const api = axios.create({ baseURL: API_BASE, timeout: 30000 });
+// withCredentials=true is required so the browser ships the
+// agenticorg_session + agenticorg_csrf cookies on every request, even
+// for cross-origin deploys (VITE_API_URL set). Without this the
+// cookies stay on the document and CSRF middleware sees the request
+// as a bearer-only client.
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 30000,
+  withCredentials: true,
+});
+
+// SEC-2026-05-P1-003 (PR-B): read the CSRF token from the
+// agenticorg_csrf cookie and echo it back via X-CSRF-Token on every
+// mutating request. The double-submit pattern relies on this — the
+// server compares the cookie value against the header value with a
+// constant-time check. ``document.cookie`` is the only JS-readable
+// store; the session cookie remains HttpOnly and stays unreadable.
+function readCookie(name: string): string {
+  const match = document.cookie.match(
+    new RegExp("(?:^|; )" + name.replace(/[$()*+./?[\]\\^{|}]/g, "\\$&") + "=([^;]*)"),
+  );
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // CSRF: only attach for mutating methods. The server-side middleware
+  // exempts safe methods + bearer-only API clients, but sending the
+  // header on a GET is harmless and aligns with future hardening.
+  const method = (config.method || "get").toLowerCase();
+  if (method === "post" || method === "put" || method === "patch" || method === "delete") {
+    const csrf = readCookie("agenticorg_csrf");
+    if (csrf) {
+      config.headers["X-CSRF-Token"] = csrf;
+    }
+  }
   return config;
 });
 

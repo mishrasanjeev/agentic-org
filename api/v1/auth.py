@@ -32,13 +32,18 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 def _set_session_cookie(response: Response, token: str, max_age_seconds: int) -> None:
-    """Set the HttpOnly session cookie used by the browser SPA.
+    """Set the HttpOnly session cookie + a paired CSRF token cookie.
 
     SECURITY_AUDIT-2026-04-19 CRITICAL-01 remediation: the access token
     is still returned in the JSON body so that API clients, SDKs, CI,
     and the SSO callback can continue to function, but the browser is
     encouraged to use the cookie. Frontend migration to cookie-only
     happens in a follow-up PR which removes ``localStorage`` writes.
+
+    SEC-2026-05-P1-003 (PR-B): every browser session also gets a
+    ``agenticorg_csrf`` cookie. Non-HttpOnly so the SPA can read it and
+    echo via ``X-CSRF-Token`` on mutating requests. Enforced by
+    ``auth/csrf_middleware.CSRFMiddleware``.
     """
     is_prod = os.getenv("AGENTICORG_ENV", "development").lower() == "production"
     response.set_cookie(
@@ -51,10 +56,20 @@ def _set_session_cookie(response: Response, token: str, max_age_seconds: int) ->
         path="/",
     )
 
+    # Pair a CSRF token cookie with every session cookie. The middleware
+    # only enforces when BOTH cookies are present, so issuing here ties
+    # CSRF protection automatically to the session lifecycle.
+    from auth.csrf import generate_csrf_token, set_csrf_cookie  # noqa: PLC0415
+
+    set_csrf_cookie(response, generate_csrf_token(), max_age_seconds=max_age_seconds)
+
 
 def _clear_session_cookie(response: Response) -> None:
-    """Clear the HttpOnly session cookie on logout."""
+    """Clear the HttpOnly session cookie + paired CSRF cookie on logout."""
     response.delete_cookie(key="agenticorg_session", path="/")
+    from auth.csrf import clear_csrf_cookie  # noqa: PLC0415
+
+    clear_csrf_cookie(response)
 
 
 # Signup rate limiting now in core.auth_state (Redis-backed)
