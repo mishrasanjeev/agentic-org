@@ -217,18 +217,35 @@ def test_tc_neg_009_delete_writes_audit_before_row_drop() -> None:
 
 
 def test_tc_neg_010_logout_clears_both_token_and_user_localstorage() -> None:
-    """Logout must remove BOTH localStorage entries (token AND
-    user). If the user blob remains, the back button can
-    restore an "authenticated" state visually even though the
-    token is gone — confusing UX and a real session-fixation
-    risk if the token wasn't truly invalidated server-side."""
+    """Logout must clear BOTH the in-memory React state AND any
+    legacy localStorage entries left over from pre-PR-F clients.
+
+    SEC-002 (PR-F, 2026-05-01): cookie-first auth means the
+    HttpOnly ``agenticorg_session`` cookie is the source of truth.
+    Logout calls ``POST /auth/logout`` (backend clears the cookie),
+    then resets in-memory state, then runs
+    ``_purgeLegacyTokenStorage`` (which removes any pre-PR-F
+    ``localStorage.token`` / ``user`` left behind on this client).
+    Without the legacy purge, a back-button after upgrade could
+    flash a stale "authenticated" UI from the pre-PR-F user blob.
+    """
     src = (REPO / "ui" / "src" / "contexts" / "AuthContext.tsx").read_text(
         encoding="utf-8"
     )
-    logout_block = src.split("logout = useCallback", 1)[1][:400]
-    assert 'localStorage.removeItem("token")' in logout_block
-    assert 'localStorage.removeItem("user")' in logout_block
-    # And the in-memory state is cleared too — otherwise the
-    # current tab's React tree still shows logged-in until reload.
-    assert "setToken(null)" in logout_block
+    # Find the logout function body (no fixed length — the new
+    # implementation is larger because of the await-fetch logout call).
+    after_logout = src.split("logout = useCallback", 1)[1]
+    # The first }, []) marks the end of the useCallback body.
+    logout_block = after_logout.split("}, []);", 1)[0]
+    # Server-side logout call clears the HttpOnly cookie.
+    assert "/auth/logout" in logout_block
+    # In-memory state cleared.
     assert "setUser(null)" in logout_block
+    assert "setIsAuthenticated(false)" in logout_block
+    # Legacy storage purge runs (so back-button after upgrade
+    # doesn't show stale state from a pre-PR-F build).
+    assert "_purgeLegacyTokenStorage()" in logout_block
+    # The legacy purge helper itself MUST clear both keys.
+    purge_block = src.split("function _purgeLegacyTokenStorage", 1)[1].split("\n}", 1)[0]
+    assert 'localStorage.removeItem("token")' in purge_block
+    assert 'localStorage.removeItem("user")' in purge_block
