@@ -112,14 +112,14 @@ def _import_settings_cls():
 
 def test_sec_012_relaxed_env_accepts_default_secret() -> None:
     """``env=local|dev|test|ci`` keep working with the dev fallback."""
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     for env in ("local", "dev", "development", "test", "ci"):
         s = Settings(env=env, secret_key="dev-only-secret-key")
         assert s.secret_key == "dev-only-secret-key"
 
 
 def test_sec_012_production_rejects_default_secret() -> None:
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="AGENTICORG_SECRET_KEY"):
         Settings(env="production", secret_key="dev-only-secret-key")
 
@@ -127,13 +127,13 @@ def test_sec_012_production_rejects_default_secret() -> None:
 def test_sec_012_staging_also_rejects_default_secret() -> None:
     """Staging must be strict — it's internet-accessible and used for
     enterprise security review."""
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="AGENTICORG_SECRET_KEY"):
         Settings(env="staging", secret_key="dev-only-secret-key")
 
 
 def test_sec_012_preview_also_rejects_default_secret() -> None:
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="AGENTICORG_SECRET_KEY"):
         Settings(env="preview", secret_key="dev-only-secret-key")
 
@@ -141,20 +141,20 @@ def test_sec_012_preview_also_rejects_default_secret() -> None:
 def test_sec_012_unknown_env_is_strict_by_default() -> None:
     """An env value we don't recognise should default to STRICT, not
     relaxed — fail-closed posture."""
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="AGENTICORG_SECRET_KEY"):
         Settings(env="qa-cluster-3", secret_key="dev-only-secret-key")
 
 
 def test_sec_012_secret_key_min_length_enforced_in_strict_envs() -> None:
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     short_secret = "x" * 31  # one byte short of 32
     with pytest.raises(ValueError, match="32 chars"):
         Settings(env="production", secret_key=short_secret)
 
 
 def test_sec_012_secret_key_length_ok_with_32() -> None:
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     s = Settings(
         env="production",
         secret_key="x" * 32,
@@ -165,7 +165,7 @@ def test_sec_012_secret_key_length_ok_with_32() -> None:
 
 
 def test_sec_012_localhost_redis_rejected_in_strict_envs() -> None:
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="REDIS_URL"):
         Settings(
             env="production",
@@ -177,7 +177,7 @@ def test_sec_012_localhost_redis_rejected_in_strict_envs() -> None:
 
 def test_sec_012_127001_redis_also_rejected_in_strict_envs() -> None:
     """``127.0.0.1`` is the same fallback as ``localhost``."""
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="REDIS_URL"):
         Settings(
             env="production",
@@ -188,7 +188,7 @@ def test_sec_012_127001_redis_also_rejected_in_strict_envs() -> None:
 
 
 def test_sec_012_dev_db_rejected_in_strict_envs() -> None:
-    Settings = _import_settings_cls()
+    Settings = _import_settings_cls()  # noqa: N806
     with pytest.raises(ValueError, match="DB_URL"):
         Settings(
             env="production",
@@ -209,8 +209,9 @@ def test_sec_013_evals_baseline_marks_data_quality_demo(monkeypatch) -> None:
     """When the on-disk scorecard is missing, /api/v1/evals must
     return ``data_quality: "demo"`` in the body AND set
     ``X-Data-Quality: demo`` on the response."""
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
     from api.v1 import evals
 
     # Force the scorecard path to a non-existent file so the baseline
@@ -239,8 +240,9 @@ def test_sec_013_evals_measured_marks_data_quality_measured(
     ``measured`` — never silently fall back to baseline mid-flight."""
     import json
 
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
     from api.v1 import evals
 
     real_scorecard = tmp_path / "scorecard.json"
