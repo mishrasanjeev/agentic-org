@@ -183,6 +183,7 @@ class TestEvalsEndpoints:
     @pytest.mark.asyncio
     async def test_get_evals_returns_full_scorecard(self, tmp_path):
         from fastapi import Response
+
         from api.v1.evals import get_evals
 
         scorecard_file = tmp_path / "scorecard.json"
@@ -205,6 +206,7 @@ class TestEvalsEndpoints:
         404'ing. PR-G also marks the response ``data_quality: "demo"``
         so customer dashboards can flag baseline numbers honestly."""
         from fastapi import Response
+
         from api.v1.evals import get_evals
 
         missing = tmp_path / "no_such_file.json"
@@ -224,6 +226,7 @@ class TestEvalsEndpoints:
     @pytest.mark.asyncio
     async def test_get_agent_evals_happy(self, tmp_path):
         from fastapi import Response
+
         from api.v1.evals import get_agent_evals
 
         scorecard_file = tmp_path / "scorecard.json"
@@ -256,6 +259,7 @@ class TestEvalsEndpoints:
     @pytest.mark.asyncio
     async def test_get_agent_evals_filters_cases_correctly(self, tmp_path):
         from fastapi import Response
+
         from api.v1.evals import get_agent_evals
 
         scorecard_file = tmp_path / "scorecard.json"
