@@ -158,6 +158,464 @@ class TestZohoBooksRealPaths:
         args = c._client.get.call_args
         assert args[0][0] == "/reports/balancesheet"
 
+    @pytest.mark.asyncio
+    async def test_get_profit_loss_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"profit_and_loss": {"revenue": 1000}})
+        await c.get_profit_loss(from_date="2026-04-01", to_date="2026-04-30")
+        args = c._client.get.call_args
+        assert args[0][0] == "/reports/profitandloss"
+
+    @pytest.mark.asyncio
+    async def test_list_chartofaccounts_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"chartofaccounts": [{"account_id": "a1"}]})
+        out = await c.list_chartofaccounts(filter_by="AccountType.asset")
+        args = c._client.get.call_args
+        assert args[0][0] == "/chartofaccounts"
+        assert isinstance(out["chartofaccounts"], list)
+
+    @pytest.mark.asyncio
+    async def test_reconcile_transaction_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"bank_transaction": {"transaction_id": "T1"}})
+        await c.reconcile_transaction(
+            account_id="a1", amount=1000, date="2026-05-01", reference_number="R1"
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/banktransactions/uncategorized"
+
+    @pytest.mark.asyncio
+    async def test_get_organization_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"organizations": [{"organization_id": "1", "name": "Acme"}]}
+        )
+        out = await c.get_organization()
+        args = c._client.get.call_args
+        assert args[0][0] == "/organizations"
+        assert out["organizations"][0]["name"] == "Acme"
+
+    @pytest.mark.asyncio
+    async def test_get_organization_empty(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"organizations": []})
+        out = await c.get_organization()
+        assert out == {"organizations": []}
+
+    @pytest.mark.asyncio
+    async def test_health_check_returns_org_count(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"organizations": [{"organization_id": "1"}, {"organization_id": "2"}]}
+        )
+        out = await c.health_check()
+        assert out["status"] == "healthy"
+        assert out["organizations"] == 2
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_validates_required(self):
+        c = self._make_connector()
+        a = await c.create_invoice(line_items=[{"item_id": "i"}])
+        b = await c.create_invoice(customer_id="c")
+        assert "customer_id" in a["error"]
+        assert "line_items" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_record_expense_validates_required(self):
+        c = self._make_connector()
+        a = await c.record_expense(amount=100, date="2026-05-01")
+        b = await c.record_expense(account_id="a", date="2026-05-01")
+        d = await c.record_expense(account_id="a", amount=100)
+        assert "account_id" in a["error"]
+        assert "amount" in b["error"]
+        assert "date" in d["error"]
+
+    @pytest.mark.asyncio
+    async def test_reconcile_transaction_validates_required(self):
+        c = self._make_connector()
+        out = await c.reconcile_transaction(amount=100, date="2026-05-01")
+        assert "account_id" in out["error"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# QuickBooks Online — every tool method against a mocked AsyncClient
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestQuickbooksRealPaths:
+    """Verify QuickBooks Online connector hits correct QBO REST v3 paths."""
+
+    def _make_connector(self):
+        from connectors.finance.quickbooks import QuickbooksConnector
+        c = QuickbooksConnector(
+            {"access_token": "fake", "realm_id": "9341452961234567"}
+        )
+        c._client = MagicMock()
+        return c
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"Invoice": {"Id": "1", "TotalAmt": 100}})
+        out = await c.create_invoice(
+            Line=[{"Amount": 100, "DetailType": "SalesItemLineDetail"}],
+            CustomerRef={"value": "cust1"},
+            TxnDate="2026-05-01",
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/company/9341452961234567/invoice"
+        assert out.get("Id") == "1"
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_normalises_string_customer_ref(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"Invoice": {"Id": "2"}})
+        out = await c.create_invoice(
+            Line=[{"Amount": 50}], CustomerRef="cust-string"
+        )
+        assert out.get("Id") == "2"
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_validates_required(self):
+        c = self._make_connector()
+        a = await c.create_invoice(CustomerRef={"value": "c"})
+        b = await c.create_invoice(Line=[{}])
+        assert "Line" in a["error"]
+        assert "CustomerRef" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_record_payment_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"Payment": {"Id": "P1", "TotalAmt": 100}})
+        out = await c.record_payment(
+            TotalAmt=100,
+            CustomerRef={"value": "c"},
+            PaymentMethodRef={"value": "1"},
+            DepositToAccountRef={"value": "33"},
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/company/9341452961234567/payment"
+        assert out.get("Id") == "P1"
+
+    @pytest.mark.asyncio
+    async def test_record_payment_validates_required(self):
+        c = self._make_connector()
+        a = await c.record_payment(CustomerRef={"value": "c"})
+        b = await c.record_payment(TotalAmt=50)
+        assert "TotalAmt" in a["error"]
+        assert "CustomerRef" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_record_payment_normalises_string_customer_ref(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"Payment": {"Id": "P2"}})
+        out = await c.record_payment(TotalAmt=200, CustomerRef="cust-string")
+        assert out.get("Id") == "P2"
+
+    @pytest.mark.asyncio
+    async def test_get_profit_loss_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"Header": {"ReportName": "ProfitAndLoss"}, "Rows": {}}
+        )
+        out = await c.get_profit_loss(start_date="2026-04-01", end_date="2026-04-30")
+        args = c._client.get.call_args
+        assert args[0][0] == "/company/9341452961234567/reports/ProfitAndLoss"
+        assert out["Header"]["ReportName"] == "ProfitAndLoss"
+
+    @pytest.mark.asyncio
+    async def test_get_balance_sheet_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"Header": {"ReportName": "BalanceSheet"}, "Rows": {}}
+        )
+        out = await c.get_balance_sheet(date="2026-04-30")
+        args = c._client.get.call_args
+        assert args[0][0] == "/company/9341452961234567/reports/BalanceSheet"
+        assert out["Header"]["ReportName"] == "BalanceSheet"
+
+    @pytest.mark.asyncio
+    async def test_query_path_unwraps_query_response(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {
+                "QueryResponse": {"Invoice": [{"Id": "1"}, {"Id": "2"}]},
+                "time": "2026-05-01",
+            }
+        )
+        out = await c.query(query="SELECT * FROM Invoice")
+        args = c._client.get.call_args
+        assert args[0][0] == "/company/9341452961234567/query"
+        assert isinstance(out, list)
+        assert len(out) == 2
+
+    @pytest.mark.asyncio
+    async def test_query_validates_required(self):
+        c = self._make_connector()
+        out = await c.query()
+        assert "query is required" in out["error"]
+
+    @pytest.mark.asyncio
+    async def test_get_company_info_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"CompanyInfo": {"CompanyName": "Acme Corp"}}
+        )
+        out = await c.get_company_info()
+        args = c._client.get.call_args
+        assert (
+            args[0][0]
+            == "/company/9341452961234567/companyinfo/9341452961234567"
+        )
+        assert out.get("CompanyName") == "Acme Corp"
+
+    @pytest.mark.asyncio
+    async def test_health_check_returns_company_name(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"CompanyInfo": {"CompanyName": "Acme Corp"}}
+        )
+        out = await c.health_check()
+        assert out["status"] == "healthy"
+        assert out["company_name"] == "Acme Corp"
+
+    @pytest.mark.asyncio
+    async def test_health_check_unhealthy_on_error(self):
+        c = self._make_connector()
+        c._client.get = AsyncMock(side_effect=RuntimeError("boom"))
+        out = await c.health_check()
+        assert out["status"] == "unhealthy"
+
+    def test_company_path_embeds_realm_id(self):
+        c = self._make_connector()
+        assert c._company_path("invoice") == "/company/9341452961234567/invoice"
+
+    def test_unwrap_handles_query_response_envelope(self):
+        c = self._make_connector()
+        out = c._unwrap({"QueryResponse": {"Invoice": [{"Id": "1"}]}})
+        assert out == [{"Id": "1"}]
+
+    def test_unwrap_handles_direct_entity_envelope(self):
+        c = self._make_connector()
+        out = c._unwrap({"Invoice": {"Id": "1"}}, "Invoice")
+        assert out == {"Id": "1"}
+
+    def test_unwrap_skips_time_metadata_key(self):
+        c = self._make_connector()
+        out = c._unwrap({"time": "2026-05-01", "Invoice": {"Id": "1"}})
+        assert out == {"Id": "1"}
+
+    def test_unwrap_passes_through_non_dict(self):
+        c = self._make_connector()
+        assert c._unwrap("not a dict") == "not a dict"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NetSuite — every tool method against a mocked AsyncClient
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestNetsuiteRealPaths:
+    """Verify NetSuite SuiteTalk REST connector hits correct record paths."""
+
+    def _make_connector(self):
+        from connectors.finance.netsuite import NetsuiteConnector
+        c = NetsuiteConnector(
+            {"account_id": "TSTDRV1234567", "access_token": "fake-token"}
+        )
+        c._client = MagicMock()
+        return c
+
+    def test_base_url_built_from_account_id(self):
+        from urllib.parse import urlparse
+        c = self._make_connector()
+        parsed = urlparse(c.base_url)
+        assert parsed.scheme == "https"
+        assert parsed.hostname == "tstdrv1234567.suitetalk.api.netsuite.com"
+
+    def test_base_url_lowercases_and_replaces_dots(self):
+        from urllib.parse import urlparse
+
+        from connectors.finance.netsuite import NetsuiteConnector
+        c = NetsuiteConnector({"account_id": "TSTDRV.1234.567", "access_token": "x"})
+        parsed = urlparse(c.base_url)
+        assert parsed.hostname == "tstdrv_1234_567.suitetalk.api.netsuite.com"
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"id": "inv1"})
+        await c.create_invoice(
+            entity="cust1",
+            item=[{"item": {"id": "42"}, "quantity": 2, "rate": 150}],
+            tranDate="2026-05-01",
+            memo="May invoice",
+            department="DEPT-1",
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/invoice"
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_validates_required(self):
+        c = self._make_connector()
+        a = await c.create_invoice(item=[{}])
+        b = await c.create_invoice(entity="cust1")
+        assert "entity" in a["error"]
+        assert "item" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_get_invoice_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"id": "inv1"})
+        await c.get_invoice(id="inv1", expandSubResources=True)
+        args = c._client.get.call_args
+        assert args[0][0] == "/invoice/inv1"
+
+    @pytest.mark.asyncio
+    async def test_get_invoice_validates_required(self):
+        c = self._make_connector()
+        out = await c.get_invoice()
+        assert "id" in out["error"]
+
+    @pytest.mark.asyncio
+    async def test_create_journal_entry_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"id": "je1"})
+        await c.create_journal_entry(
+            subsidiary="1",
+            line=[
+                {"account": {"id": "10"}, "debit": 1000, "memo": "Rev"},
+                {"account": {"id": "20"}, "credit": 1000, "memo": "Cash"},
+            ],
+            tranDate="2026-05-01",
+            memo="Adj entry",
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/journalEntry"
+
+    @pytest.mark.asyncio
+    async def test_create_journal_entry_validates_required(self):
+        c = self._make_connector()
+        a = await c.create_journal_entry(line=[{}])
+        b = await c.create_journal_entry(subsidiary="1")
+        assert "subsidiary" in a["error"]
+        assert "line" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_get_account_balance_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"id": "10", "balance": 5000})
+        await c.get_account_balance(id="10")
+        args = c._client.get.call_args
+        assert args[0][0] == "/account/10"
+
+    @pytest.mark.asyncio
+    async def test_get_account_balance_validates_required(self):
+        c = self._make_connector()
+        out = await c.get_account_balance()
+        assert "id" in out["error"]
+
+    @pytest.mark.asyncio
+    async def test_create_vendor_bill_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"id": "vb1"})
+        await c.create_vendor_bill(
+            entity="vendor1",
+            item=[{"item": {"id": "55"}, "quantity": 1, "rate": 500}],
+            tranDate="2026-05-01",
+            memo="Office supplies",
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/vendorBill"
+
+    @pytest.mark.asyncio
+    async def test_create_vendor_bill_validates_required(self):
+        c = self._make_connector()
+        a = await c.create_vendor_bill(item=[{}])
+        b = await c.create_vendor_bill(entity="v")
+        assert "entity" in a["error"]
+        assert "item" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_create_purchase_order_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"id": "po1"})
+        await c.create_purchase_order(
+            entity="vendor1",
+            item=[{"item": {"id": "77"}, "quantity": 10, "rate": 25}],
+            tranDate="2026-05-01",
+            memo="Bulk order",
+            shipTo="100",
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/purchaseOrder"
+
+    @pytest.mark.asyncio
+    async def test_create_purchase_order_validates_required(self):
+        c = self._make_connector()
+        a = await c.create_purchase_order(item=[{}])
+        b = await c.create_purchase_order(entity="v")
+        assert "entity" in a["error"]
+        assert "item" in b["error"]
+
+    @pytest.mark.asyncio
+    async def test_get_trial_balance_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {
+                "items": [
+                    {
+                        "id": "10",
+                        "acctName": "Cash",
+                        "acctNumber": "1000",
+                        "acctType": {"refName": "Bank"},
+                        "balance": 50000,
+                    }
+                ],
+                "totalResults": 1,
+            }
+        )
+        out = await c.get_trial_balance(period="P1", subsidiary="1")
+        args = c._client.get.call_args
+        assert args[0][0] == "/account"
+        assert out["accounts"][0]["acctName"] == "Cash"
+        assert out["accounts"][0]["acctType"] == "Bank"
+
+    @pytest.mark.asyncio
+    async def test_search_records_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response(
+            {"items": [{"id": "1"}], "totalResults": 1, "hasMore": False}
+        )
+        out = await c.search_records(
+            record_type="invoice", q="status='open'", limit=50, offset=0
+        )
+        args = c._client.get.call_args
+        assert args[0][0] == "/invoice"
+        assert out["records"][0]["id"] == "1"
+
+    @pytest.mark.asyncio
+    async def test_search_records_validates_required(self):
+        c = self._make_connector()
+        out = await c.search_records()
+        assert "record_type" in out["error"]
+
+    @pytest.mark.asyncio
+    async def test_health_check_returns_total_results(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"totalResults": 7})
+        out = await c.health_check()
+        assert out["status"] == "healthy"
+        assert out["total_results"] == 7
+
+    @pytest.mark.asyncio
+    async def test_health_check_unhealthy_on_error(self):
+        c = self._make_connector()
+        c._client.get = AsyncMock(side_effect=RuntimeError("boom"))
+        out = await c.health_check()
+        assert out["status"] == "unhealthy"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Oracle Fusion

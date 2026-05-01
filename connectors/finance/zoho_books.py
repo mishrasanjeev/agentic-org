@@ -89,8 +89,59 @@ class ZohoBooksConnector(BaseConnector):
             logger.warning("zoho_books_token_refresh_failed", error=str(exc))
             return None
 
+    async def connect(self) -> None:
+        """Connect, then ensure ``self._org_id`` is populated.
+
+        RU-May01-BUG-02: every Zoho Books API call (except
+        ``GET /organizations``) requires ``organization_id`` as a
+        query param. Historical behavior: read from config only;
+        if missing, ``self._org_id = ""`` was injected into every
+        URL and Zoho returned 6041 ``This Organization is not
+        associated with this Zoho account``. Auto-fetch closes the
+        gap so a connector created without an explicit org_id (e.g.
+        a tester onboarding flow that doesn't know the value yet)
+        works on first use.
+        """
+        await super().connect()
+        if not self._org_id and self._client:
+            await self._fetch_org_id_from_api()
+
+    async def _fetch_org_id_from_api(self) -> None:
+        """Pull the first organization id from ``GET /organizations``.
+
+        Best effort — log + continue on failure so transient API
+        outage doesn't break unrelated tools.
+        """
+        try:
+            data = await self._get("/organizations")
+            orgs = data.get("organizations", []) if isinstance(data, dict) else []
+            if orgs:
+                self._org_id = str(orgs[0].get("organization_id", ""))
+                logger.info(
+                    "zoho_books_org_id_auto_fetched",
+                    org_id=self._org_id,
+                    org_name=orgs[0].get("name", ""),
+                )
+        except Exception as exc:  # noqa: BLE001 — best-effort fallback
+            logger.warning("zoho_books_org_id_auto_fetch_failed", error=str(exc))
+
+    async def _ensure_org_id(self) -> None:
+        """Lazy-fetch org_id immediately before tool dispatch.
+
+        Belt-and-braces with ``connect()``: if a cached connector
+        instance was created before the org_id was set, this catches
+        it on the next tool call without requiring a reconnect.
+        """
+        if not self._org_id and self._client:
+            await self._fetch_org_id_from_api()
+
     async def execute_tool(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Execute tool with automatic 401 retry (re-authenticates and retries once)."""
+        """Execute tool with org_id pre-flight + automatic 401 retry.
+
+        - Runs ``_ensure_org_id()`` first (RU-May01-BUG-02 lazy fallback).
+        - Runs the tool. On 401, re-authenticate and retry once.
+        """
+        await self._ensure_org_id()
         try:
             return await super().execute_tool(tool_name, params)
         except httpx.HTTPStatusError as exc:

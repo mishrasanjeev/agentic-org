@@ -557,13 +557,49 @@ async def _load_connector_configs_for_agent(
                     )
                 )
                 cc = cc_result.scalar_one_or_none()
+
+                # RU-May01-BUG-03: ``connector_ids`` historically stored
+                # connector NAME strings (``"zoho_books"``). Some agents
+                # (created via direct PATCH or older flows) instead store
+                # the ConnectorConfig **UUID primary key** as the value
+                # (``"a7e25e67-…"``). The name-based lookup above returns
+                # None and the connector was silently skipped — every
+                # tool then ran with empty config and failed.
+                #
+                # Fallback: if the value parses as a UUID, retry the
+                # lookup keyed on ConnectorConfig.id. Lookup failures
+                # for non-UUID strings are expected (the value really
+                # was a name and the row genuinely doesn't exist).
                 if cc is None:
-                    logger.info(
-                        "connector_config_not_found",
-                        tenant_id=str(tid),
-                        connector=connector_name,
+                    try:
+                        row_uuid = _uuid.UUID(connector_name)
+                    except (ValueError, AttributeError):
+                        logger.info(
+                            "connector_config_not_found",
+                            tenant_id=str(tid),
+                            connector=connector_name,
+                        )
+                        continue
+                    cc_result = await session.execute(
+                        select(ConnectorConfig).where(
+                            ConnectorConfig.tenant_id == tid,
+                            ConnectorConfig.id == row_uuid,
+                        )
                     )
-                    continue
+                    cc = cc_result.scalar_one_or_none()
+                    if cc is None:
+                        logger.info(
+                            "connector_config_not_found_by_uuid",
+                            tenant_id=str(tid),
+                            connector_uuid=str(row_uuid),
+                        )
+                        continue
+                    logger.info(
+                        "connector_config_found_by_uuid",
+                        tenant_id=str(tid),
+                        connector_uuid=str(row_uuid),
+                        connector_name=cc.connector_name,
+                    )
                 # Non-secret config (URLs, options).
                 if cc.config:
                     merged.update(cc.config)

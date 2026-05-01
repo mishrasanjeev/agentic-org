@@ -13,6 +13,7 @@ import json
 import time
 from typing import Any
 
+import httpx
 import structlog
 from langchain_core.tools import StructuredTool
 
@@ -21,8 +22,49 @@ from connectors.registry import ConnectorRegistry
 
 logger = structlog.get_logger()
 
-# Cache connector instances to avoid re-creating on every tool call
+# Cache connector instances to avoid re-creating on every tool call.
+#
+# RU-May01-BUG-01: the cache holds long-lived ``httpx.AsyncClient``
+# instances. After hours of idle, the underlying TCP connection is
+# closed by the remote (keep-alive timeout / network reset) but the
+# client object is still in this dict. The next tool call hits the
+# stale client and raises ``httpx.LocalProtocolError`` —
+# ``Illegal header value`` / ``Server disconnected without sending a
+# response``. The fix below evicts on transport errors and retries
+# once with a fresh instance.
 _connector_cache: dict[str, BaseConnector] = {}
+
+# Transport-level errors that indicate the cached client is no longer
+# usable. NOT 4xx/5xx — those are real server responses and must
+# surface to the caller. These are kept narrow on purpose: anything
+# wider (e.g. catching every httpx exception) would mask real
+# upstream-service errors as "stale cache".
+_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.LocalProtocolError,
+    httpx.RemoteProtocolError,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.WriteError,
+    httpx.PoolTimeout,
+)
+
+
+async def _build_connector(
+    connector_cls: type[BaseConnector],
+    config: dict[str, Any] | None,
+    connector_name: str,
+) -> BaseConnector | None:
+    """Instantiate + connect a fresh connector. Returns None on failure
+    so callers can map to a stable error shape."""
+    instance = connector_cls(config or {})
+    try:
+        await instance.connect()
+    except Exception as exc:  # noqa: BLE001 — connect failures already logged
+        logger.warning(
+            "connector_connect_failed", connector=connector_name, error=str(exc)
+        )
+        return None
+    return instance
 
 
 async def _execute_connector_tool(
@@ -31,7 +73,14 @@ async def _execute_connector_tool(
     params: dict[str, Any],
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Execute a connector tool and return the result."""
+    """Execute a connector tool and return the result.
+
+    On transport errors (stale cached client), evict the cache entry,
+    rebuild the connector once, and retry. Closes RU-May01-BUG-01
+    where every cached connector failed silently after the server
+    had been running long enough for the upstream HTTP keep-alive to
+    expire.
+    """
     connector_cls = ConnectorRegistry.get(connector_name)
     if not connector_cls:
         return {"error": f"Connector '{connector_name}' not found in registry"}
@@ -39,11 +88,8 @@ async def _execute_connector_tool(
     config_fingerprint = json.dumps(config or {}, sort_keys=True)
     cache_key = f"{connector_name}:{config_fingerprint}"
     if cache_key not in _connector_cache:
-        instance = connector_cls(config or {})
-        try:
-            await instance.connect()
-        except Exception as e:
-            logger.warning("connector_connect_failed", connector=connector_name, error=str(e))
+        instance = await _build_connector(connector_cls, config, connector_name)
+        if instance is None:
             return {"error": f"Failed to connect to {connector_name}"}
         _connector_cache[cache_key] = instance
 
@@ -60,6 +106,55 @@ async def _execute_connector_tool(
             status="success",
         )
         return result
+    except _TRANSPORT_ERRORS as transport_exc:
+        # RU-May01-BUG-01: cached client is dead. Evict, rebuild, retry
+        # once. If the retry still fails, return a clear error rather
+        # than the generic "Tool execution failed: <type>" — operators
+        # need to know the failure shape (transport vs upstream API).
+        logger.warning(
+            "connector_transport_error_reconnecting",
+            connector=connector_name,
+            tool=tool_name,
+            error=str(transport_exc),
+            error_type=type(transport_exc).__name__,
+        )
+        _connector_cache.pop(cache_key, None)
+
+        fresh = await _build_connector(connector_cls, config, connector_name)
+        if fresh is None:
+            return {
+                "error": (
+                    f"Tool execution failed: {type(transport_exc).__name__} "
+                    "and reconnect attempt also failed. The upstream service "
+                    "may be unreachable."
+                ),
+                "error_class": "transport_reconnect_failed",
+            }
+        _connector_cache[cache_key] = fresh
+
+        try:
+            result = await fresh.execute_tool(tool_name, params)
+            latency = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "tool_executed_after_reconnect",
+                connector=connector_name,
+                tool=tool_name,
+                latency_ms=latency,
+                status="success",
+            )
+            return result
+        except Exception as retry_exc:  # noqa: BLE001 — retry surface kept generic
+            logger.error(
+                "tool_execution_failed_after_reconnect",
+                connector=connector_name,
+                tool=tool_name,
+                error=str(retry_exc),
+                error_type=type(retry_exc).__name__,
+            )
+            return {
+                "error": f"Tool execution failed after reconnect: {type(retry_exc).__name__}",
+                "error_class": "retry_failed",
+            }
     except Exception as e:
         latency = int((time.monotonic() - start) * 1000)
         logger.error(
