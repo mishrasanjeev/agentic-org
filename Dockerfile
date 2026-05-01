@@ -1,4 +1,8 @@
-FROM python:3.14-slim AS builder
+# SEC-010: production base images pinned by digest to keep rebuilds
+# reproducible. Refresh via scripts/refresh_image_digests.sh after a
+# Renovate/Dependabot bump confirms upstream is safe.
+# python:3.14-slim @ 2026-05-01
+FROM python:3.14-slim@sha256:5b3879b6f3cb77e712644d50262d05a7c146b7312d784a18eff7ff5462e77033 AS builder
 WORKDIR /app
 # Build deps for Pillow (required by presidio) and other C extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,7 +27,7 @@ RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 # smallest English model into the image so PII redaction actually runs.
 RUN python -m spacy download en_core_web_sm
 
-FROM python:3.14-slim
+FROM python:3.14-slim@sha256:5b3879b6f3cb77e712644d50262d05a7c146b7312d784a18eff7ff5462e77033
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl libjpeg62-turbo zlib1g \
     && rm -rf /var/lib/apt/lists/*

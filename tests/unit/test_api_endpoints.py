@@ -176,31 +176,47 @@ _SAMPLE_SCORECARD = {
 
 class TestEvalsEndpoints:
 
+    # SEC-013 (PR-G): get_evals() and get_agent_evals() now take a
+    # FastAPI ``Response`` parameter so the handler can set the
+    # ``X-Data-Quality`` header. Tests pass a stub Response.
+
     @pytest.mark.asyncio
     async def test_get_evals_returns_full_scorecard(self, tmp_path):
+        from fastapi import Response
+
         from api.v1.evals import get_evals
 
         scorecard_file = tmp_path / "scorecard.json"
         scorecard_file.write_text(json.dumps(_SAMPLE_SCORECARD))
 
+        response = Response()
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
-            resp = await get_evals()
+            resp = await get_evals(response)
 
-        assert resp == _SAMPLE_SCORECARD
+        # The body still surfaces the on-disk scorecard plus a
+        # data_quality marker that didn't exist pre-PR-G.
+        assert {k: resp[k] for k in _SAMPLE_SCORECARD} == _SAMPLE_SCORECARD
+        assert resp["data_quality"] == "measured"
+        assert response.headers["X-Data-Quality"] == "measured"
 
     @pytest.mark.asyncio
     async def test_get_evals_file_not_found_returns_baseline(self, tmp_path):
         """Post-2026-04-23 contract: /api/v1/evals serves a baseline
         scorecard when evals/scorecard.json is missing instead of
-        404'ing. The old behaviour blanked the public /evals page and
-        tripped the evals-thorough e2e smoke."""
+        404'ing. PR-G also marks the response ``data_quality: "demo"``
+        so customer dashboards can flag baseline numbers honestly."""
+        from fastapi import Response
+
         from api.v1.evals import get_evals
 
         missing = tmp_path / "no_such_file.json"
+        response = Response()
         with patch("api.v1.evals._SCORECARD_PATH", missing):
-            result = await get_evals()
+            result = await get_evals(response)
 
         assert result["_is_baseline"] is True
+        assert result["data_quality"] == "demo"
+        assert response.headers["X-Data-Quality"] == "demo"
         assert "platform_metrics" in result
         pm = result["platform_metrics"]
         # The UI reads these four fields to render the "%" metrics.
@@ -209,41 +225,49 @@ class TestEvalsEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_agent_evals_happy(self, tmp_path):
+        from fastapi import Response
+
         from api.v1.evals import get_agent_evals
 
         scorecard_file = tmp_path / "scorecard.json"
         scorecard_file.write_text(json.dumps(_SAMPLE_SCORECARD))
 
+        response = Response()
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
-            resp = await get_agent_evals("finance")
+            resp = await get_agent_evals("finance", response)
 
         assert resp["agent_type"] == "finance"
         assert resp["aggregate"] == {"accuracy": 0.95}
         assert len(resp["cases"]) == 2
+        assert resp["data_quality"] == "measured"
 
     @pytest.mark.asyncio
     async def test_get_agent_evals_not_found(self, tmp_path):
-        from fastapi import HTTPException
+        from fastapi import HTTPException, Response
 
         from api.v1.evals import get_agent_evals
 
         scorecard_file = tmp_path / "scorecard.json"
         scorecard_file.write_text(json.dumps(_SAMPLE_SCORECARD))
 
+        response = Response()
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
             with pytest.raises(HTTPException) as exc_info:
-                await get_agent_evals("nonexistent")
+                await get_agent_evals("nonexistent", response)
             assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_agent_evals_filters_cases_correctly(self, tmp_path):
+        from fastapi import Response
+
         from api.v1.evals import get_agent_evals
 
         scorecard_file = tmp_path / "scorecard.json"
         scorecard_file.write_text(json.dumps(_SAMPLE_SCORECARD))
 
+        response = Response()
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
-            resp = await get_agent_evals("hr")
+            resp = await get_agent_evals("hr", response)
 
         assert len(resp["cases"]) == 1
         assert resp["cases"][0]["agent_type"] == "hr"
@@ -2286,6 +2310,11 @@ class TestCreateDsarAuditEntry:
 # ============================================================================
 
 class TestLoadScorecard:
+    """SEC-013 (PR-G): _load_scorecard now returns a tuple
+    ``(scorecard_dict, data_quality)`` where data_quality is
+    ``"measured"`` or ``"demo"``. The dict carries an additional
+    ``data_quality`` field too so dashboards consuming the body alone
+    still see the marker."""
 
     def test_load_scorecard_happy(self, tmp_path):
         from api.v1.evals import _load_scorecard
@@ -2294,9 +2323,10 @@ class TestLoadScorecard:
         scorecard_file.write_text(json.dumps({"test": True}))
 
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
-            data = _load_scorecard()
+            data, quality = _load_scorecard()
 
-        assert data == {"test": True}
+        assert data == {"test": True, "data_quality": "measured"}
+        assert quality == "measured"
 
     def test_load_scorecard_missing_file_returns_baseline(self, tmp_path):
         """Post-2026-04-23: _load_scorecard returns a labeled baseline
@@ -2305,9 +2335,11 @@ class TestLoadScorecard:
 
         missing = tmp_path / "nope.json"
         with patch("api.v1.evals._SCORECARD_PATH", missing):
-            result = _load_scorecard()
+            result, quality = _load_scorecard()
 
         assert result["_is_baseline"] is True
+        assert result["data_quality"] == "demo"
+        assert quality == "demo"
 
     def test_load_scorecard_reads_latest(self, tmp_path):
         from api.v1.evals import _load_scorecard
@@ -2316,12 +2348,12 @@ class TestLoadScorecard:
         scorecard_file.write_text(json.dumps({"version": 1}))
 
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
-            data1 = _load_scorecard()
+            data1, _ = _load_scorecard()
 
         scorecard_file.write_text(json.dumps({"version": 2}))
 
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
-            data2 = _load_scorecard()
+            data2, _ = _load_scorecard()
 
         assert data1["version"] == 1
         assert data2["version"] == 2

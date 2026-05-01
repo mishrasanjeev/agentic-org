@@ -47,20 +47,41 @@ class TestSecretKeyHardening:
             Settings(env="production", secret_key="dev-only-secret-key", _env_file=None)
 
     def test_staging_with_explicit_key_works(self):
-        """Staging with a real secret key should work."""
+        """Staging with a real ≥32-char secret key + non-localhost
+        URLs works.
+
+        SEC-012 (PR-G, 2026-05-01) tightened this rule: staging is
+        now strict (was previously relaxed), and the secret_key must
+        be ≥32 chars (was ≥16). Staging is internet-accessible and
+        used for enterprise security review — weak staging defaults
+        become real incidents when the env has production-like
+        integrations.
+        """
         from core.config import Settings
 
-        s = Settings(env="staging", secret_key="a-real-production-secret-key-here")
-        assert s.secret_key == "a-real-production-secret-key-here"
+        secret = "a-real-production-secret-key-here-32-plus-chars"  # 47 chars
+        s = Settings(
+            env="staging",
+            secret_key=secret,
+            db_url="postgresql+asyncpg://app:pw@db.staging.internal:5432/agenticorg",
+            redis_url="redis://redis.staging.internal:6379/0",
+        )
+        assert s.secret_key == secret
 
     def test_production_with_explicit_key_works(self):
-        """Production with a real secret key should work."""
+        """Production with a real ≥32-char secret key + non-localhost
+        URLs works.
+
+        SEC-012 (PR-G) raised the secret_key minimum from 16 to 32
+        chars (≥192 bits entropy floor for JWT/HMAC).
+        """
         from core.config import Settings
 
-        # Production also requires explicit non-localhost db/redis URLs
+        # Production requires explicit non-localhost db/redis URLs
+        # AND a secret_key of at least 32 chars (was 16 before PR-G).
         s = Settings(
             env="production",
-            secret_key="prod-secret-minimum-16-chars",
+            secret_key="prod-secret-key-with-32-or-more-chars-here",
             db_url="postgresql+asyncpg://app:pw@db.prod.internal:5432/agenticorg",
             redis_url="redis://redis.prod.internal:6379/0",
         )

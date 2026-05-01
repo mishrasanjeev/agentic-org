@@ -1,4 +1,12 @@
-"""Evaluation scorecard endpoints — public, no auth required."""
+"""Evaluation scorecard endpoints — public, no auth required.
+
+SEC-013 (2026-05-01): the baseline fallback is now flagged with a
+top-level ``data_quality: "demo"`` field AND an ``X-Data-Quality:
+demo`` response header so customer dashboards (and enterprise security
+reviewers) can distinguish optimistic baseline numbers from actual
+measured benchmark output. Real scorecards are flagged
+``data_quality: "measured"``.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +14,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 router = APIRouter()
 
@@ -67,26 +75,32 @@ _DEFAULT_SCORECARD: dict = {
 }
 
 
-def _load_scorecard() -> dict:
+def _load_scorecard() -> tuple[dict, str]:
     """Load the most recent scorecard from disk, or return a baseline.
 
-    Previously raised 404 when the scorecard file was missing, which
-    blanked the public /evals page. Now falls back to a baseline so
-    the page always renders while the runner is pending.
+    Returns ``(scorecard, data_quality)`` where ``data_quality`` is
+    ``"measured"`` when the on-disk scorecard was loaded successfully,
+    or ``"demo"`` when the baseline fallback was served. Callers should
+    use ``data_quality`` to set the response's ``X-Data-Quality``
+    header (SEC-013).
     """
     if not _SCORECARD_PATH.exists():
         baseline = dict(_DEFAULT_SCORECARD)
         baseline["served_at"] = datetime.now(UTC).isoformat()
-        return baseline
+        baseline["data_quality"] = "demo"
+        return baseline, "demo"
     try:
         with open(_SCORECARD_PATH, encoding="utf-8") as f:
-            return json.load(f)
+            scorecard = json.load(f)
+        scorecard["data_quality"] = "measured"
+        return scorecard, "measured"
     except (OSError, json.JSONDecodeError) as exc:
         # If the on-disk file is corrupt, still don't blank the page.
         baseline = dict(_DEFAULT_SCORECARD)
         baseline["_load_error"] = str(exc)
         baseline["served_at"] = datetime.now(UTC).isoformat()
-        return baseline
+        baseline["data_quality"] = "demo"
+        return baseline, "demo"
 
 
 def _require_scorecard() -> dict:
@@ -104,13 +118,21 @@ def _require_scorecard() -> dict:
 
 
 @router.get("/evals")
-async def get_evals():
-    """Return the full evaluation scorecard."""
-    return _load_scorecard()
+async def get_evals(response: Response):
+    """Return the full evaluation scorecard.
+
+    SEC-013: response always includes ``data_quality`` in the body and
+    an ``X-Data-Quality`` header so dashboards (and security review
+    tooling) can distinguish baseline demo numbers from measured
+    benchmark output.
+    """
+    scorecard, data_quality = _load_scorecard()
+    response.headers["X-Data-Quality"] = data_quality
+    return scorecard
 
 
 @router.get("/evals/agent/{agent_type}")
-async def get_agent_evals(agent_type: str):
+async def get_agent_evals(agent_type: str, response: Response):
     """Return scores for a single agent type."""
     # Use the strict loader so callers asking for a specific agent
     # still get an honest 404 when no real measurements exist.
@@ -122,8 +144,10 @@ async def get_agent_evals(agent_type: str):
 
     case_results = [c for c in scorecard.get("case_results", []) if c["agent_type"] == agent_type]
 
+    response.headers["X-Data-Quality"] = "measured"
     return {
         "agent_type": agent_type,
         "aggregate": agent_agg,
         "cases": case_results,
+        "data_quality": "measured",
     }
