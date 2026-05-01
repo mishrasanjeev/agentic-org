@@ -42,11 +42,12 @@ export default function SSOCallback() {
     auth
       .loginWithToken(token)
       .then(() => {
-        // Fail closed: if loginWithToken stored the token but could
-        // not hydrate a user object (e.g. /auth/me returned 404),
-        // don't proceed to the dashboard — redirect to login.
-        const stored = localStorage.getItem("user");
-        if (!stored || stored === "null") {
+        // SEC-002 (PR-F): cookie-first. Fail closed if /auth/me
+        // hydration didn't actually establish a user — the auth
+        // context's ``user`` would be null and ``isAuthenticated``
+        // false. We redirect to /login in that case so the user sees
+        // a clear failure rather than a half-rendered dashboard.
+        if (!auth.user || !auth.isAuthenticated) {
           setError("Could not verify your identity. Please sign in again.");
           window.setTimeout(() => navigate("/login", { replace: true }), 2000);
           return;

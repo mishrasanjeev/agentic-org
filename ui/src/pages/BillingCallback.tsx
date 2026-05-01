@@ -1,15 +1,21 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
 export default function BillingCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [status, setStatus] = useState<"loading" | "success" | "failed" | "pending">("loading");
   const [orderDetails, setOrderDetails] = useState<Record<string, string>>({});
   const [countdown, setCountdown] = useState(5);
-  const isLoggedIn = !!localStorage.getItem("token");
+  // SEC-002 (PR-F): cookie-first. ``isAuthenticated`` reflects the
+  // /auth/me hydration result; the HttpOnly session cookie is the
+  // browser auth carrier and is shipped automatically on the
+  // billing/order-status fetch via ``credentials: "include"``.
+  const isLoggedIn = isAuthenticated;
 
   const paymentStatus = searchParams.get("payment") || searchParams.get("status") || "";
   const orderId = searchParams.get("order_id") || searchParams.get("plural_order_id") || "";
@@ -24,14 +30,12 @@ export default function BillingCallback() {
   useEffect(() => {
     setOrderDetails({ orderId: orderId || sessionId, plan, provider });
 
-    const token = localStorage.getItem("token");
-
     if (orderId && provider === "plural") {
       fetch(`${API}/api/v1/billing/order-status`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ order_id: orderId }),
       })

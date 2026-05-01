@@ -137,7 +137,12 @@ describe("ReportScheduler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     globalThis.fetch = mockFetch;
-    localStorage.setItem("token", "test-token");
+    // SEC-002 (PR-F): cookie-first. The component no longer reads a
+    // bearer token from localStorage; the HttpOnly session cookie is
+    // shipped via credentials: "include". Set a CSRF cookie so the
+    // mutation paths attach the X-CSRF-Token header for parity with
+    // the production CSRF middleware.
+    document.cookie = "agenticorg_csrf=test-csrf-token; path=/";
     // Mock window.confirm
     vi.spyOn(window, "confirm").mockReturnValue(true);
     // Mock window.alert

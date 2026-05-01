@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
+// SEC-002 (PR-F): direct fetch() calls (instead of the global axios
+// client) need to read the agenticorg_csrf cookie + echo it as the
+// X-CSRF-Token header for the CSRF middleware to accept mutations.
+function readCsrf(): string {
+  const match = document.cookie.match(
+    /(?:^|; )agenticorg_csrf=([^;]*)/,
+  );
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 /* ── Types ─────────────────────────────────────────────────────────── */
 
 interface DeliveryChannel {
@@ -260,9 +270,10 @@ export default function ReportScheduler() {
   const fetchSchedules = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token") || "";
+      // SEC-002 (PR-F): cookie-first; HttpOnly session cookie is shipped
+      // automatically with credentials: "include".
       const resp = await fetch(`${API_BASE}/report-schedules`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data: ReportSchedule[] = await resp.json();
@@ -375,7 +386,6 @@ export default function ReportScheduler() {
     }
     setFormFieldErrors({});
     setSubmitting(true);
-    const token = localStorage.getItem("token") || "";
 
     try {
       const payload = {
@@ -385,20 +395,23 @@ export default function ReportScheduler() {
         format: formFormat,
         is_active: formActive,
       };
+      const csrf = readCsrf();
       const resp = editingId
         ? await fetch(`${API_BASE}/report-schedules/${editingId}`, {
             method: "PATCH",
+            credentials: "include",
             headers: {
-              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
+              ...(csrf ? { "X-CSRF-Token": csrf } : {}),
             },
             body: JSON.stringify(payload),
           })
         : await fetch(`${API_BASE}/report-schedules`, {
             method: "POST",
+            credentials: "include",
             headers: {
-              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
+              ...(csrf ? { "X-CSRF-Token": csrf } : {}),
             },
             body: JSON.stringify(payload),
           });
@@ -419,22 +432,24 @@ export default function ReportScheduler() {
   /* ── Delete ── */
   async function handleDelete(id: string) {
     if (!confirm("Delete this schedule?")) return;
-    const token = localStorage.getItem("token") || "";
+    const csrf = readCsrf();
     await fetch(`${API_BASE}/report-schedules/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+      headers: csrf ? { "X-CSRF-Token": csrf } : {},
     });
     fetchSchedules();
   }
 
   /* ── Toggle active ── */
   async function handleToggle(s: ReportSchedule) {
-    const token = localStorage.getItem("token") || "";
+    const csrf = readCsrf();
     await fetch(`${API_BASE}/report-schedules/${s.id}`, {
       method: "PATCH",
+      credentials: "include",
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...(csrf ? { "X-CSRF-Token": csrf } : {}),
       },
       body: JSON.stringify({ is_active: !s.is_active }),
     });
@@ -444,13 +459,14 @@ export default function ReportScheduler() {
   /* ── Run now ── */
   async function handleRunNow(id: string) {
     setActionLoading(id);
-    const token = localStorage.getItem("token") || "";
+    const csrf = readCsrf();
     try {
       const resp = await fetch(
         `${API_BASE}/report-schedules/${id}/run-now`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+          headers: csrf ? { "X-CSRF-Token": csrf } : {},
         }
       );
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

@@ -1,9 +1,13 @@
 import { useState, useEffect, FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 
 export default function InviteAccept() {
-  const navigate = useNavigate();
+  // SEC-002 (PR-F): after acceptance, we use a full-page navigation
+  // (window.location.assign) so AuthProvider re-mounts and re-runs
+  // the cookie-based hydration. The react-router useNavigate hook is
+  // not appropriate here because a SPA route change wouldn't re-run
+  // AuthProvider's mount effect.
   const [searchParams] = useSearchParams();
   // MEDIUM-10: ``code`` is the new opaque one-time identifier. ``token``
   // is kept for backward-compat with links issued before the change.
@@ -49,6 +53,7 @@ export default function InviteAccept() {
       else if (legacyToken) payload.token = legacyToken;
       const res = await fetch("/api/v1/org/accept-invite", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -56,10 +61,11 @@ export default function InviteAccept() {
         const err = await res.json().catch(() => ({ detail: "Failed to accept invite" }));
         throw new Error(err.detail || "Failed to accept invite");
       }
-      const data = await res.json();
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      navigate("/dashboard");
+      // SEC-002 (PR-F): backend has set the HttpOnly session cookie.
+      // We do NOT persist the access_token in localStorage. A full
+      // page reload to /dashboard re-runs AuthProvider hydration via
+      // /auth/me, which then knows about the new session.
+      window.location.assign("/dashboard");
     } catch (err: any) {
       setError(err.message || "Failed to accept invite");
     } finally {
