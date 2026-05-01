@@ -22,8 +22,61 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+# SEC-2026-05-P1-007 (docs/BRUTAL_SECURITY_SCAN_2026-05-01.md):
+# the unsigned-webhook bypass is a development convenience, NOT a
+# production safety valve. A single misset ``AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1``
+# in staging or production would silently turn every signed webhook
+# into an unauthenticated ingestion endpoint — the exact operational
+# mistake enterprise gates exist to prevent.
+#
+# Fail application startup hard if the bypass is enabled in any
+# non-local environment. The check runs at module import (not per-
+# request) so the misconfiguration is caught at process start, not
+# after the first attacker probe.
+
+_LOCAL_DEV_ENVS: frozenset[str] = frozenset({"local", "dev", "development", "test", "testing"})
+
+
+def _enforce_unsigned_bypass_env_guard() -> None:
+    """Refuse to import in staging/production when the dev bypass is set.
+
+    Raises RuntimeError at module-import time so the API process fails
+    to start rather than silently accepting unsigned webhooks. Pinned
+    by tests/regression/test_security_pr_a_pins.py.
+    """
+    if os.getenv("AGENTICORG_WEBHOOK_ALLOW_UNSIGNED") != "1":
+        return
+    env = (os.getenv("AGENTICORG_ENV") or "").strip().lower()
+    if env in _LOCAL_DEV_ENVS:
+        logger.warning(
+            "webhook_unsigned_bypass_enabled_local",
+            env=env,
+            note="AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1 — DEV ONLY",
+        )
+        return
+    raise RuntimeError(
+        "Refusing to start: AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1 is set "
+        f"in AGENTICORG_ENV={env!r}, but the unsigned webhook bypass is "
+        "ONLY allowed in local/dev/test environments. Either unset the "
+        "flag or set AGENTICORG_ENV=local for local debugging. "
+        "(SEC-2026-05-P1-007)"
+    )
+
+
+_enforce_unsigned_bypass_env_guard()
+
+
 def _dev_allow_unsigned() -> bool:
-    return os.getenv("AGENTICORG_WEBHOOK_ALLOW_UNSIGNED") == "1"
+    """Bypass is only honored when both the flag AND the env-guard pass.
+
+    The guard above raises if env is non-local; here we re-check at
+    request time so a runtime ``os.environ`` mutation by a misbehaving
+    plugin can't reactivate the bypass mid-process in production.
+    """
+    if os.getenv("AGENTICORG_WEBHOOK_ALLOW_UNSIGNED") != "1":
+        return False
+    env = (os.getenv("AGENTICORG_ENV") or "").strip().lower()
+    return env in _LOCAL_DEV_ENVS
 
 
 def _get_redis():

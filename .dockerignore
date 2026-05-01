@@ -1,0 +1,115 @@
+# Docker build context exclusions — defense layer for the runtime
+# image's ``COPY . .`` so workstation artifacts and secrets cannot
+# accidentally end up in the published image.
+#
+# SEC-2026-05-P0-001 (docs/BRUTAL_SECURITY_SCAN_2026-05-01.md):
+# Without this file, a local Docker build would include the entire
+# working tree — local .env, .venv, node_modules, coverage reports,
+# test outputs, and developer caches — all of which can leak secrets
+# or bloat the image.
+#
+# Patterns follow .gitignore syntax (which Docker also accepts).
+# ``!path`` re-includes a path that was excluded by an earlier rule.
+
+# ── Secrets and dotenv files ──────────────────────────────────────
+# Block every shape of dotenv. Only the example template is allowed,
+# because it ships in the repo as documentation.
+.env
+.env.*
+*.env
+!.env.example
+!.env.example.*
+
+# Private keys, certificates, signing material.
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.cer
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.gpg
+*.asc
+
+# GCP / AWS / cloud creds that occasionally land in working trees.
+gcloud-credentials*.json
+service-account*.json
+.aws/
+.gcloud/
+
+# ── Python build / test / cache artifacts ─────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+htmlcov/
+codex-pytest-basetemp/
+codex-pytest-temp/
+codex-pytest-cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage_report.json
+
+# ── Frontend node_modules — three locations ───────────────────────
+node_modules/
+ui/node_modules/
+sdk-ts/node_modules/
+mcp-server/node_modules/
+
+# ── Frontend build / test outputs ─────────────────────────────────
+ui/dist/
+ui/test-results/
+ui/playwright-report/
+ui/.vite/
+
+# ── VCS, IDE, OS noise ────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Logs, local DBs ───────────────────────────────────────────────
+*.log
+logs/
+*.sqlite
+*.sqlite3
+*.db
+celerybeat-schedule*
+celerybeat.pid
+
+# ── Documentation that doesn't belong in runtime ──────────────────
+# Keep README.md (the Dockerfile copies it for product_facts), but
+# block other docs (large, mutable, audit reports, etc.)
+docs/
+!docs/api/
+
+# ── Tests — runtime image doesn't need them ───────────────────────
+tests/
+e2e/
+ui/e2e/
+
+# ── Dev tooling / scratch ─────────────────────────────────────────
+scripts/preflight.sh
+scripts/install_hooks.sh
+scripts/check_critical_path_tags.py
+.cloudbuild-ui-deploy.yaml
+docker-compose*.yml
+
+# ── Claude Code session artifacts ─────────────────────────────────
+.claude/
+push_*.log
+pytest_out.log

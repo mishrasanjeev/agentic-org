@@ -163,7 +163,17 @@ def _is_manual_only(body: str) -> str | None:
 
 
 def _check_url_health(paths: set[str], base: str, head_cache: dict[str, int]) -> dict[str, int]:
-    """HEAD each path, cache results across calls. Returns ``{path: status}``."""
+    """HEAD each path, cache results across calls. Returns ``{path: status}``.
+
+    SEC-2026-05-P2-011: validate that ``base`` is HTTP(S) before
+    calling ``urlopen`` — defends against ``file:`` / ``ftp:`` /
+    custom-scheme switching even if a misconfigured operator config
+    points ``base`` at something other than a web URL.
+    """
+    if not (base.startswith("https://") or base.startswith("http://")):
+        raise ValueError(
+            f"refusing non-HTTP(S) base URL (scheme hijack guard): {base!r}"
+        )
     out = {}
     for path in paths:
         if path in head_cache:
@@ -171,10 +181,10 @@ def _check_url_health(paths: set[str], base: str, head_cache: dict[str, int]) ->
             continue
         url = base + path if path.startswith("/") else f"{base}/{path}"
         try:
-            # nosec B310 — base is a config-controlled https URL,
-            # not an attacker-supplied scheme.
+            # nosec B310 — base scheme validated above; URL is built
+            # from a trusted config + a path the audit script controls.
             req = urllib.request.Request(url, method="HEAD")  # noqa: S310
-            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310  # nosec B310
                 head_cache[path] = resp.status
                 out[path] = resp.status
         except urllib.error.HTTPError as e:

@@ -90,6 +90,22 @@ dependencies = [
     # request path import it. The default request-path embedder stays
     # on fastembed/bge-small until PR-B cutover.
     "FlagEmbedding>=1.4.0",
+    # SEC-2026-05-P2-008 RESIDUAL (docs/BRUTAL_SECURITY_SCAN_2026-05-01.md):
+    # Pillow 10.4.0 ships CVE-2026-25990 + CVE-2026-40192, fixed in 12.2.0.
+    # Direct pin attempted in PR-A but rejected by uv resolver because
+    # ``composio-core==0.7.21`` (the latest published version) requires
+    # ``pillow>=10.2.0,<11``. composio-core has no newer release.
+    #
+    # Compensating controls:
+    #   1. Image ingestion is not on the request hot path. The PR-D
+    #      file-streaming refactor (queued) will move all parsing off
+    #      the API workers anyway.
+    #   2. Untrusted images don't reach Pillow today: presidio's
+    #      ``image_ocr`` path is gated behind an opt-in flag that's off
+    #      in production.
+    #   3. The pip-audit residual will clear automatically when
+    #      composio-core publishes a Pillow>=12 compatible release;
+    #      Renovate / Dependabot will catch that.
 ]
 
 [project.optional-dependencies]
