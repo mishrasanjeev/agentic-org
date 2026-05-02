@@ -7,8 +7,27 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isHydrating } = useAuth();
   const location = useLocation();
+
+  // BUG-10 (Uday CA Firms 2026-05-02): on a hard refresh of a protected
+  // route, the AuthProvider mounts with isAuthenticated=false until
+  // /auth/me resolves. Without this gate, ProtectedRoute fires
+  // <Navigate to="/login"> on the first paint and the browser bounces
+  // the user before hydration ever finishes — even though the
+  // agenticorg_session cookie is valid. Defer the redirect decision
+  // until hydration completes.
+  if (isHydrating) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex min-h-screen items-center justify-center text-sm text-muted-foreground"
+      >
+        Loading session…
+      </div>
+    );
+  }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   // Fail closed: if the session has a token but no hydrated user

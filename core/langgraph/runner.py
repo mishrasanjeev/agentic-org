@@ -480,12 +480,41 @@ async def resume_agent(
 
 
 def _build_user_message(task_input: dict[str, Any]) -> str:
-    """Build the user message from task input."""
+    """Build the user message from task input.
+
+    BUG-08 (Uday CA Firms 2026-05-02): the dashboard "Generate Test
+    Sample" button posts ``action="shadow_sample"`` as a UI-internal
+    sentinel — it does NOT correspond to a registered tool. Before this
+    fix the runner concatenated the raw action verbatim into the user
+    message ("Action: shadow_sample"), which the LLM faithfully
+    interpreted as an unknown function and refused, dropping confidence
+    to 0.40 with empty tool_calls. The fix translates the sentinel into
+    an exploratory instruction so the LLM picks ONE of the agent's
+    registered tools and invokes it with safe defaults, producing a
+    real shadow sample run with confidence > 0.70.
+    """
     import json
 
     action = task_input.get("action", "process")
     inputs = task_input.get("inputs", {})
     context = task_input.get("context", {})
+
+    if action == "shadow_sample":
+        # Exploratory probe — the LLM has the agent's tool manifest
+        # bound to it via build_tools_for_agent. Tell it explicitly to
+        # exercise one read-only tool with safe defaults so the run
+        # generates a non-empty tool_calls trace (which is what shadow-
+        # accuracy scoring measures). The "do not fabricate data" line
+        # blocks the LLM-only fallback that drove confidence to 0.40.
+        return (
+            "This is a shadow-mode test sample run. Exercise ONE of the "
+            "tools available to you with conservative read-only "
+            "arguments (e.g. list operations, page=1, no filters, "
+            "default date ranges). Return the structured tool result "
+            "as JSON. Do NOT fabricate data — if the tool fails, "
+            "return the error verbatim with status='error' so shadow "
+            "scoring can record an honest signal."
+        )
 
     parts = [f"Action: {action}"]
     if inputs:

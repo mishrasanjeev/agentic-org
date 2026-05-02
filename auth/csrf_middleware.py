@@ -49,9 +49,23 @@ _EXEMPT_PREFIXES: Final[tuple[str, ...]] = (
 )
 
 # Exact path EXEMPTIONS — auth bootstrap endpoints with no prior session.
+#
+# These MUST stay aligned with ``auth.middleware.AuthMiddleware.EXEMPT_PATHS``
+# for every auth-bootstrap route. The two middlewares are independent — a
+# route that skips auth but is still CSRF-checked will reject a fresh
+# browser whose only crime is having a stale session cookie from a prior
+# tab. BUG-09 (Uday CA Firms 2026-05-02): "Sign in with Google" was
+# rejected with SEC-2026-05-P1-003 because /auth/google was missing here
+# while present in the auth exempt list. Same hole existed for
+# /forgot-password and /reset-password — neither requires (or can
+# usefully verify) a prior session, and both are POST so they triggered
+# the middleware.
 _EXEMPT_PATHS: Final[frozenset[str]] = frozenset({
     "/api/v1/auth/login",
     "/api/v1/auth/signup",
+    "/api/v1/auth/google",            # Google ID-token verification (no prior session)
+    "/api/v1/auth/forgot-password",   # public — issues reset email
+    "/api/v1/auth/reset-password",    # public — consumes one-time code
     "/api/v1/auth/sso/callback",
     "/api/v1/auth/sso/login",
     "/api/v1/auth/refresh",       # session refresh — verified by refresh-cookie + token
