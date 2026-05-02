@@ -369,7 +369,13 @@ async def test_credential(
     except Exception as exc:
         logger.exception("tenant_ai_credential_probe_failed")
         status_value = "failing"
-        err = f"{type(exc).__name__}: {exc}"[:500]
+        # CodeQL py/stack-trace-exposure (alert #69, 2026-05-02): the
+        # exception class alone is enough signal for the operator to
+        # correlate with server logs. ``str(exc)`` may include
+        # request context (URLs, headers, payload fragments) that
+        # shouldn't surface in API responses. The full traceback is
+        # captured by ``logger.exception`` above.
+        err = type(exc).__name__
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(

@@ -777,7 +777,8 @@ async def test_connector(
         _log.exception("connector_test_failed conn_id=%s name=%s", conn_id, connector.name)
         err_name = type(exc).__name__
         err_msg = str(exc)[:240]
-        # Map common failure classes to actionable hints.
+        # Use the lowered string only for routing — the response
+        # below uses ONLY ``err_name`` + a hand-mapped hint.
         lowered = (err_name + " " + err_msg).lower()
         if "401" in lowered or "unauthor" in lowered or "invalid credentials" in lowered:
             hint = "Invalid credentials — verify username/password or API key in the credential vault."
@@ -794,7 +795,14 @@ async def test_connector(
         elif "timeout" in lowered:
             hint = "Request timed out — endpoint is slow or unreachable from the platform."
         else:
-            hint = f"{err_name}: {err_msg}" if err_msg else f"{err_name} (no detail)"
+            # CodeQL py/stack-trace-exposure (alert #68, 2026-05-02):
+            # was f"{err_name}: {err_msg}" which leaked str(exc) — the
+            # exception message can carry request URLs, header
+            # fragments, or stack-trace lines on common driver errors.
+            # The exception class alone is enough signal for the
+            # operator; full traceback is in server logs via
+            # ``_log.exception`` above.
+            hint = f"{err_name} (see server logs for details)"
         return {
             "tested": False,
             "name": connector.name,
