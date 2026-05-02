@@ -23,11 +23,13 @@ from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant
 from core.database import get_tenant_session
+from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.marketing.intent_aggregator import IntentAggregator
 from core.models.abm import ABMAccount, ABMCampaign
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/abm", tags=["ABM"])
+MAX_ABM_CSV_UPLOAD_BYTES = 2 * 1024 * 1024
 
 _aggregator = IntentAggregator()
 
@@ -310,7 +312,11 @@ async def upload_accounts(
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(400, "Only CSV files are accepted")
 
-    content = await file.read()
+    upload_path, _ = await stream_to_tempfile(file, max_bytes=MAX_ABM_CSV_UPLOAD_BYTES, suffix=".csv")
+    try:
+        content = upload_path.read_bytes()
+    finally:
+        cleanup_tempfile(upload_path)
     if not content.strip():
         # TC_019: bytes-empty file — never even reaches the CSV parser.
         raise HTTPException(400, "CSV file is empty or contains no valid records")

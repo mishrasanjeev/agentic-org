@@ -22,6 +22,7 @@ from api.deps import (
     require_tenant_admin,
 )
 from core.database import get_tenant_session
+from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.audit import AuditLog
 from core.models.company import Company
@@ -35,6 +36,8 @@ from core.schemas.api import (
     FleetLimits,
     PaginatedResponse,
 )
+
+MAX_AGENT_CSV_IMPORT_BYTES = 2 * 1024 * 1024
 
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     # Finance
@@ -1088,8 +1091,20 @@ async def import_agents_csv(
 ):
     """Import agents from CSV with two-pass parent linking."""
     tid = _uuid.UUID(tenant_id)
-    content = await file.read()
-    text_content = content.decode("utf-8-sig")
+    filename = (file.filename or "").lower()
+    if filename and not filename.endswith(".csv"):
+        raise HTTPException(422, detail="Only .csv files are supported for agent import")
+    upload_path, _ = await stream_to_tempfile(file, max_bytes=MAX_AGENT_CSV_IMPORT_BYTES, suffix=".csv")
+    try:
+        content = upload_path.read_bytes()
+    finally:
+        cleanup_tempfile(upload_path)
+    if not content.strip():
+        raise HTTPException(422, detail="CSV missing required columns. Expected: name, agent_type, domain")
+    try:
+        text_content = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(422, detail="CSV must be UTF-8 encoded") from exc
     reader = csv.DictReader(io.StringIO(text_content))
 
     # TC-009: Validate CSV has proper headers

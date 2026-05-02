@@ -19,7 +19,12 @@ from sqlalchemy import func, select
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
-from core.config import settings
+from core.config import (
+    is_strict_runtime_env,
+    redis_socket_timeout_kwargs,
+    redis_url_from_env,
+    settings,
+)
 from core.database import async_session_factory
 from core.email import send_password_reset_email, send_welcome_email
 from core.models.tenant import Tenant
@@ -45,7 +50,7 @@ def _set_session_cookie(response: Response, token: str, max_age_seconds: int) ->
     echo via ``X-CSRF-Token`` on mutating requests. Enforced by
     ``auth/csrf_middleware.CSRFMiddleware``.
     """
-    is_prod = os.getenv("AGENTICORG_ENV", "development").lower() == "production"
+    is_prod = is_strict_runtime_env(os.getenv("AGENTICORG_ENV", settings.env))
     response.set_cookie(
         key="agenticorg_session",
         value=token,
@@ -244,8 +249,12 @@ async def _get_throttle_redis():
     try:
         import redis.asyncio as aioredis
 
-        url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-        _throttle_redis = aioredis.from_url(url, decode_responses=True)
+        url = redis_url_from_env(default_db=0)
+        _throttle_redis = aioredis.from_url(
+            url,
+            decode_responses=True,
+            **redis_socket_timeout_kwargs(),
+        )
         await _throttle_redis.ping()
         return _throttle_redis
     except Exception as exc:
@@ -553,7 +562,7 @@ async def reset_password(body: ResetPasswordRequest):
         await session.commit()
 
     # Blacklist the reset token so it can't be reused
-    blacklist_token(body.token)
+    blacklist_token(token_value)
 
     return {"status": "ok", "message": "Password has been reset. You can now sign in."}
 

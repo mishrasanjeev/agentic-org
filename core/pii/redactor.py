@@ -235,7 +235,8 @@ class PIIRedactor:
             token_map[token] = original
             text = text[:result.start] + token + text[result.end:]
 
-        logger.debug("pii_redacted", entities_found=len(token_map))
+        if os.environ.get("AGENTICORG_PII_DEBUG", "").lower() in ("1", "true", "yes"):
+            logger.debug("pii_redacted", entities_found=len(token_map))
         return text, token_map
 
     def deanonymize(self, text: str, token_map: dict[str, str]) -> str:

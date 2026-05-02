@@ -114,6 +114,17 @@ def test_sec_002_api_client_does_not_inject_bearer_from_localstorage() -> None:
     )
 
 
+def test_sec_002_onboarding_uses_cookie_api_client_not_context_token() -> None:
+    """Onboarding must not send ``Authorization: Bearer null`` after
+    AuthContext made browser ``token`` intentionally null."""
+    onboarding = (UI_SRC / "pages" / "Onboarding.tsx").read_text(encoding="utf-8")
+    assert "import api from" in onboarding
+    assert "const { user, token } = useAuth()" not in onboarding
+    assert "Authorization: `Bearer ${token}`" not in onboarding
+    assert 'api.post("/org/invite"' in onboarding
+    assert 'api.put("/org/onboarding"' in onboarding
+
+
 def test_sec_002_authcontext_purges_legacy_token_storage() -> None:
     """First-render cleanup must remove any legacy localStorage left
     over from pre-PR-F clients so the regression-test grep stays

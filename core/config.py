@@ -2,8 +2,76 @@
 
 from __future__ import annotations
 
+import os
+from urllib.parse import urlsplit, urlunsplit
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
+
+STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
+RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
+
+
+def normalize_env(env: str | None) -> str:
+    """Return the canonical lowercase runtime environment label."""
+    return (env or "").strip().lower()
+
+
+def is_relaxed_env(env: str | None) -> bool:
+    """Return True for explicitly local/test runtimes only."""
+    return normalize_env(env) in RELAXED_ENVS
+
+
+def is_strict_runtime_env(env: str | None) -> bool:
+    """Return True for every non-local runtime, including unknown labels."""
+    return not is_relaxed_env(env)
+
+
+def _redis_url_with_default_db(url: str, default_db: int) -> str:
+    """Return *url* with ``default_db`` applied without changing hosts.
+
+    ``redis_url_from_env(default_db=1)`` must not jump back to localhost
+    when the configured settings URL points at a production Redis host.
+    Explicit environment URLs stay authoritative; this only adjusts the
+    settings fallback path.
+    """
+    if default_db == 0:
+        return url
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return url
+    if parsed.scheme not in {"redis", "rediss"}:
+        return url
+    return urlunsplit(parsed._replace(path=f"/{default_db}"))
+
+
+def redis_url_from_env(default_db: int = 0) -> str:
+    """Resolve the Redis URL using the app's canonical env var first."""
+    default_url = f"redis://localhost:6379/{default_db}"
+    env_url = os.getenv("AGENTICORG_REDIS_URL") or os.getenv("REDIS_URL")
+    if env_url:
+        return env_url
+    configured_settings = globals().get("settings")
+    settings_url = getattr(configured_settings, "redis_url", default_url)
+    return _redis_url_with_default_db(settings_url, default_db)
+
+
+def redis_socket_timeout_kwargs() -> dict[str, float]:
+    """Return bounded Redis socket timeouts, configurable per deploy.
+
+    The defaults intentionally allow more room than the previous 500ms
+    cap so real production p99 latency and brief cross-zone jitter do not
+    force avoidable in-memory fallback. Deploys can tune these with
+    AGENTICORG_REDIS_SOCKET_* env vars.
+    """
+    configured_settings = globals().get("settings")
+    return {
+        "socket_connect_timeout": getattr(
+            configured_settings, "redis_socket_connect_timeout_seconds", 2.0
+        ),
+        "socket_timeout": getattr(configured_settings, "redis_socket_timeout_seconds", 2.0),
+    }
 
 
 class Settings(BaseSettings):
@@ -21,6 +89,8 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+    redis_socket_connect_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    redis_socket_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
 
     # Object Storage (GCS / S3-compatible)
     storage_bucket: str = "agenticorg-docs-dev"
@@ -59,8 +129,8 @@ class Settings(BaseSettings):
     # as strict. Staging is internet-accessible, used for demos, pilots,
     # and enterprise security review — weak staging secrets become real
     # incidents when staging has production-like integrations.
-    _STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
-    _RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
+    _STRICT_ENVS = STRICT_ENVS
+    _RELAXED_ENVS = RELAXED_ENVS
 
     @model_validator(mode="after")
     def validate_production_secret(self) -> Settings:
@@ -74,12 +144,8 @@ class Settings(BaseSettings):
         Secret length is also enforced: minimum 32 chars (≈192 bits of
         entropy) so JWT/HMAC operations don't operate over weak keys.
         """
-        env_l = self.env.lower()
-        is_strict = env_l in self._STRICT_ENVS
-        # Anything not explicitly relaxed AND not explicitly strict
-        # ALSO fails strict — defaults to safe.
-        is_unknown = env_l not in self._RELAXED_ENVS and not is_strict
-        if not (is_strict or is_unknown):
+        is_strict = is_strict_runtime_env(self.env)
+        if not is_strict:
             return self
 
         env_label = self.env  # preserve original casing in error msg

@@ -23,6 +23,8 @@ from collections import defaultdict
 
 import redis.asyncio as aioredis
 
+from core.config import redis_socket_timeout_kwargs, redis_url_from_env
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -42,8 +44,12 @@ async def _get_redis() -> aioredis.Redis | None:
     if _redis is not None:
         return _redis
     try:
-        url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-        _redis = aioredis.from_url(url, decode_responses=True)
+        url = redis_url_from_env(default_db=0)
+        _redis = aioredis.from_url(
+            url,
+            decode_responses=True,
+            **redis_socket_timeout_kwargs(),
+        )
         await _redis.ping()
         return _redis
     except Exception as exc:

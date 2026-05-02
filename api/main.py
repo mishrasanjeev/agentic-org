@@ -74,7 +74,7 @@ from api.websocket.feed import router as ws_feed_router
 from auth.csrf_middleware import CSRFMiddleware
 from auth.grantex_middleware import GrantexAuthMiddleware
 from bridge.server_handler import router as ws_bridge_router
-from core.config import settings
+from core.config import is_strict_runtime_env, settings
 
 
 @asynccontextmanager
@@ -119,7 +119,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-_is_production = settings.env == "production"
+_is_strict_runtime = is_strict_runtime_env(settings.env)
 
 app = FastAPI(
     title="AgenticOrg",
@@ -129,8 +129,9 @@ app = FastAPI(
     ),
     version=product_facts._version_from_pyproject(),
     lifespan=lifespan,
-    docs_url=None if _is_production else "/docs",
-    redoc_url=None if _is_production else "/redoc",
+    docs_url=None if _is_strict_runtime else "/docs",
+    redoc_url=None if _is_strict_runtime else "/redoc",
+    openapi_url=None if _is_strict_runtime else "/openapi.json",
 )
 
 # CORS: open in dev, explicit allowlist in production.
@@ -138,7 +139,7 @@ app = FastAPI(
 # and log a warning rather than crashing the process — a hard crash here
 # would prevent rolling deploys from completing (discovered in prod deploy
 # of GAP-15 fix).
-if settings.env in ("production", "staging") and not settings.cors_allowed_origins:
+if _is_strict_runtime and not settings.cors_allowed_origins:
     _logging.getLogger("agenticorg.cors").warning(
         "CORS_ALLOWED_ORIGINS not set in %s — falling back to default allowlist. "
         "Set the env var to silence this warning.",

@@ -10,9 +10,10 @@ Usage in async handlers:
 from __future__ import annotations
 
 import logging
-import os
 
 import redis.asyncio as aioredis
+
+from core.config import redis_socket_timeout_kwargs, redis_url_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,12 @@ async def get_async_redis() -> aioredis.Redis | None:
     if _pool is not None:
         return _pool
     try:
-        url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        url = redis_url_from_env(default_db=0)
         _pool = aioredis.from_url(
             url,
             decode_responses=True,
             max_connections=20,
+            **redis_socket_timeout_kwargs(),
         )
         await _pool.ping()
         return _pool

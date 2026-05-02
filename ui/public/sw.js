@@ -1,6 +1,6 @@
 // AgenticOrg Push Notification Service Worker
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -8,13 +8,20 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+function safeNotificationUrl(value) {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard/approvals";
+  }
+  return value;
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
   let payload;
   try {
     payload = event.data.json();
-  } catch (e) {
+  } catch {
     payload = { title: "AgenticOrg", body: event.data.text() };
   }
 
@@ -25,8 +32,7 @@ self.addEventListener("push", (event) => {
     badge: "/favicon-32x32.png",
     data: {
       hitl_id: hitlId,
-      url: payload.data?.url || "/dashboard/approvals",
-      token: payload.data?.token || "",
+      url: safeNotificationUrl(payload.data?.url),
     },
     actions: [
       { action: "approve", title: "Approve" },
@@ -44,55 +50,36 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   const notification = event.notification;
   const hitlId = notification.data?.hitl_id;
-  const token = notification.data?.token;
-  const url = notification.data?.url || "/dashboard/approvals";
+  const url = safeNotificationUrl(notification.data?.url);
   const action = event.action;
 
   notification.close();
 
   if (action === "approve" || action === "reject") {
-    const decision = action;
-    const notes =
-      decision === "approve"
-        ? "Approved via push notification"
-        : "Rejected via push notification";
-
     event.waitUntil(
-      fetch("/api/v1/approvals/" + hitlId + "/decide", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: "Bearer " + token } : {}),
-        },
-        body: JSON.stringify({ decision: decision, notes: notes }),
-      })
-        .then((response) => {
-          if (!response.ok) {
-            // If the inline action fails, open the approvals page
-            return self.clients.matchAll({ type: "window" }).then((clients) => {
-              if (clients.length > 0) {
-                return clients[0].focus();
-              }
-              return self.clients.openWindow("/dashboard/approvals");
-            });
-          }
-        })
-        .catch(() => {
-          return self.clients.openWindow("/dashboard/approvals");
-        })
-    );
-  } else {
-    // Default click — open the target URL
-    event.waitUntil(
-      self.clients.matchAll({ type: "window" }).then((windowClients) => {
-        // Focus existing window if one is already open
-        for (const client of windowClients) {
-          if (client.url.includes(url) && "focus" in client) {
+      self.clients.matchAll({ type: "window" }).then((clients) => {
+        const approvalUrl = hitlId
+          ? "/dashboard/approvals?hitl=" + encodeURIComponent(hitlId)
+          : url;
+        for (const client of clients) {
+          if (client.url.includes("/dashboard/approvals") && "focus" in client) {
             return client.focus();
           }
         }
-        return self.clients.openWindow(url);
+        return self.clients.openWindow(approvalUrl);
       })
     );
+    return;
   }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(url) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
 });
