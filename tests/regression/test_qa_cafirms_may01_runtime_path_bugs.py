@@ -714,3 +714,55 @@ def test_runner_run_agent_async_path_returns_both_keys() -> None:
         "BUG-11 fix dropped the ``tool_calls`` alias on the success "
         "return path — the API response field would be empty again."
     )
+
+
+def test_agent_graph_evaluate_populates_tool_calls_log_from_messages() -> None:
+    """BUG-11 root-cause pin (2026-05-02): the prior ``evaluate()``
+    in core/langgraph/agent_graph.py read ``tool_calls_log`` from
+    state but never wrote anything to it — and LangGraph's prebuilt
+    ``ToolNode`` records its results in ``state["messages"]`` as
+    ``ToolMessage`` objects, not in ``tool_calls_log``. Net effect:
+    ``tool_calls_log`` was always empty in the runner's return dict
+    even when tools fired successfully.
+
+    The fix: ``evaluate()`` now scans the message stream, pairs each
+    ``ToolMessage`` (result) with its invoking ``AIMessage.tool_calls``
+    entry (args), and returns a populated ``tool_calls_log`` in the
+    state-update dict so it survives to the runner + the api response.
+
+    Static pin: ``evaluate()`` is a closure inside ``build_agent_graph``
+    and LangGraph wraps the node so the function isn't reachable from
+    Python without refactoring. Pin the source file instead — assert
+    the population logic is present.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "core"
+        / "langgraph"
+        / "agent_graph.py"
+    ).read_text(encoding="utf-8")
+
+    # Pin: evaluate appends to tool_calls_log when iterating
+    # ToolMessage objects from the message stream.
+    assert "tool_calls_log.append(" in src, (
+        "evaluate() must append to tool_calls_log when iterating "
+        "ToolMessage objects from the message stream. The prior code "
+        "read tool_calls_log from state but never wrote — every API "
+        "response showed tool_calls: [] even when tools fired."
+    )
+    # Pin: evaluate returns tool_calls_log in the state-update dict so
+    # the populated list survives to the runner / api response.
+    assert '"tool_calls_log": tool_calls_log' in src, (
+        "evaluate() must return tool_calls_log in its state-update "
+        "dict so the populated list reaches the runner / API response."
+    )
+    # Pin: evaluate pairs each ToolMessage (result) with the invoking
+    # AIMessage.tool_calls entry (args) via tool_call_id.
+    assert "ai_tool_calls_by_id" in src, (
+        "evaluate() must build an AIMessage.tool_calls index keyed by "
+        "tool_call.id so each ToolMessage result can be paired with "
+        "the args of its invoking call (otherwise log entries lose the "
+        "args context the API response needs)."
+    )
