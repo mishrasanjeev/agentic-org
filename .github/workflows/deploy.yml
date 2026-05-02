@@ -53,7 +53,7 @@ jobs:
         run: |
           BASE_REF=origin/${{ github.base_ref }} HEAD_REF=HEAD \
             python scripts/check_encrypted_migration_uses_helpers.py
-      - run: pytest tests/unit/ tests/connector_harness/ tests/security/ --cov=. --cov-report=xml --cov-fail-under=55
+      - run: pytest tests/unit/ tests/connector_harness/ tests/security/ tests/regression/ --cov=. --cov-report=xml --cov-fail-under=55
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
       - uses: codecov/codecov-action@v6
