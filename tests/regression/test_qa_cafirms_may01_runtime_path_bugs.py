@@ -618,3 +618,99 @@ async def test_tool_adapter_initial_connect_failure_returns_error() -> None:
     # Cache should NOT contain a half-built instance after a failed
     # initial connect.
     assert 'fake:{}' not in tool_adapter._connector_cache
+
+
+# ──────────────────────────────────────────────────────────────────
+# BUG-11 (RU-May01 verification, 2026-05-02): the api response
+# serializer reads ``lg_result.get("tool_calls", [])`` but the
+# runner emits the log under ``tool_calls_log``. Result: every agent
+# run response showed ``tool_calls: []`` even when tools fired —
+# verified live against Zoho Books on 2026-05-02 with
+# ``tool_executed connector=zoho_books status=success`` in Cloud Run
+# logs but the API response field empty.
+#
+# The fix dual-emits ``tool_calls`` alongside ``tool_calls_log`` from
+# every return path in core.langgraph.runner.run_agent. These pins
+# lock that contract so a future refactor can't silently drop the
+# alias and reintroduce the empty-field bug.
+# ──────────────────────────────────────────────────────────────────
+
+
+def test_runner_dual_emits_tool_calls_alongside_tool_calls_log() -> None:
+    """Static-pin the runner module: every return-shape that emits
+    ``tool_calls_log`` also emits ``tool_calls``. Catches a future
+    contributor adding a new return path and forgetting the dual-emit.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    src = (
+        Path(__file__).resolve().parents[2]
+        / "core"
+        / "langgraph"
+        / "runner.py"
+    ).read_text(encoding="utf-8")
+    log_emits = src.count('"tool_calls_log":')
+    alias_emits = src.count('"tool_calls":')
+    # The initial state dict only seeds ``tool_calls_log`` (it doesn't
+    # produce a return-shape, so the alias isn't needed there). All
+    # OTHER ``tool_calls_log`` emissions must be paired with a
+    # ``tool_calls`` emission. Off-by-one tolerance accounts for the
+    # state-seed line.
+    assert alias_emits >= log_emits - 1, (
+        f"runner.py emits tool_calls_log {log_emits} times but only "
+        f"{alias_emits} matching tool_calls aliases. Every return-shape "
+        "that ships tool_calls_log to the api caller must also ship "
+        "tool_calls (BUG-11 dual-emit) so the api response field at "
+        "api/v1/agents.py:2059 isn't silently empty."
+    )
+
+
+def test_runner_run_agent_async_path_returns_both_keys() -> None:
+    """Stub the langgraph compile + invoke surface so we can run
+    ``runner.run_agent`` end-to-end without a real broker/LLM, and
+    assert the returned dict carries BOTH ``tool_calls`` and
+    ``tool_calls_log``.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from core.langgraph import runner
+
+    sentinel_log = [{"tool": "list_invoices", "status": "success"}]
+
+    fake_state = {
+        "status": "completed",
+        "output": {"data": "ok"},
+        "confidence": 0.9,
+        "reasoning_trace": ["did a thing"],
+        "tool_calls_log": sentinel_log,
+        "hitl_trigger": "",
+        "error": "",
+    }
+
+    fake_compiled = MagicMock()
+    fake_compiled.ainvoke = AsyncMock(return_value=fake_state)
+    fake_graph = MagicMock()
+    fake_graph.compile = MagicMock(return_value=fake_compiled)
+
+    with (
+        patch.object(runner, "build_agent_graph", return_value=fake_graph),
+        patch.object(runner, "generate_explanation", new=AsyncMock(return_value={})),
+    ):
+        result = asyncio.run(
+            runner.run_agent(
+                agent_id="a-id",
+                agent_type="t",
+                domain="ops",
+                tenant_id="00000000-0000-0000-0000-000000000000",
+                system_prompt="hi",
+                authorized_tools=["list_invoices"],
+                task_input={"action": "process", "inputs": {}, "context": {}},
+            )
+        )
+
+    assert result["tool_calls_log"] == sentinel_log
+    assert result["tool_calls"] == sentinel_log, (
+        "BUG-11 fix dropped the ``tool_calls`` alias on the success "
+        "return path — the API response field would be empty again."
+    )
