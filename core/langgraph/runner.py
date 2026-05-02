@@ -305,12 +305,25 @@ async def run_agent(
             except Exception as exc:
                 logger.warning("explanation_generation_failed", error=str(exc))
 
+        # BUG-11 (RU-May01 verification, 2026-05-02): the api response
+        # serializer at api/v1/agents.py:run_agent reads
+        # ``lg_result.get("tool_calls", [])`` while we emit the
+        # log under the key ``tool_calls_log``. Result: every agent
+        # run response showed ``tool_calls: []`` even when tools
+        # actually executed (verified live against Zoho Books on
+        # 2026-05-02 — the run wrote a ``list_invoices_response`` to
+        # output but the response field was empty). Dual-emit both
+        # keys so the api serializer stays accurate without a
+        # cross-module rename. ``tool_calls_log`` stays the canonical
+        # internal name.
+        tool_log = result.get("tool_calls_log", [])
         return {
             "status": run_status,
             "output": result.get("output", {}),
             "confidence": result.get("confidence", 0.0),
             "reasoning_trace": result.get("reasoning_trace", []),
-            "tool_calls_log": result.get("tool_calls_log", []),
+            "tool_calls_log": tool_log,
+            "tool_calls": tool_log,
             "hitl_trigger": result.get("hitl_trigger", ""),
             "error": result.get("error", ""),
             "explanation": explanation,
@@ -345,12 +358,15 @@ async def run_agent(
                     if hitl_trigger:
                         break
 
+        # BUG-11 dual-emit (see comment above): keep both keys.
+        hitl_tool_log = state_values.get("tool_calls_log", [])
         return {
             "status": state_values.get("status", "hitl_triggered"),
             "output": state_values.get("output", {}),
             "confidence": state_values.get("confidence", 0.0),
             "reasoning_trace": state_values.get("reasoning_trace", []),
-            "tool_calls_log": state_values.get("tool_calls_log", []),
+            "tool_calls_log": hitl_tool_log,
+            "tool_calls": hitl_tool_log,
             "hitl_trigger": hitl_trigger,
             "error": "",
             "thread_id": config["configurable"]["thread_id"],
@@ -374,6 +390,7 @@ async def run_agent(
             "confidence": 0.0,
             "reasoning_trace": ["Agent exceeded maximum allowed duration"],
             "tool_calls_log": [],
+            "tool_calls": [],  # BUG-11 dual-emit
             "hitl_trigger": "",
             "error": f"timeout: agent exceeded {MAX_AGENT_DURATION_SEC}s",
             "explanation": {},
@@ -402,6 +419,7 @@ async def run_agent(
             "confidence": 0.0,
             "reasoning_trace": fail_trace,
             "tool_calls_log": [],
+            "tool_calls": [],  # BUG-11 dual-emit
             "hitl_trigger": "",
             "error": str(e),
             "explanation": fail_explanation,
