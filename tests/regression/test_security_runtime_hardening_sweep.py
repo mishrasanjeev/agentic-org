@@ -73,7 +73,25 @@ def test_redis_url_resolution_uses_settings_fallback(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(config, "settings", _Settings())
 
     assert config.redis_url_from_env() == "redis://settings:6379/8"
-    assert config.redis_url_from_env(default_db=1) == "redis://localhost:6379/1"
+    assert config.redis_url_from_env(default_db=1) == "redis://settings:6379/1"
+
+
+def test_redis_url_resolution_preserves_settings_host_for_nonzero_default_db(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.config as config
+
+    class _Settings:
+        redis_url = "rediss://:secret@prod-redis.internal:6380/0?ssl_cert_reqs=required"
+
+    monkeypatch.delenv("AGENTICORG_REDIS_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.setattr(config, "settings", _Settings())
+
+    assert (
+        config.redis_url_from_env(default_db=1)
+        == "rediss://:secret@prod-redis.internal:6380/1?ssl_cert_reqs=required"
+    )
 
 
 def test_redis_helpers_do_not_read_legacy_redis_url_directly() -> None:
@@ -97,8 +115,24 @@ def test_redis_clients_use_bounded_socket_timeouts() -> None:
         "api/v1/chat.py",
     ):
         src = (REPO / rel).read_text(encoding="utf-8")
-        assert "socket_connect_timeout=0.5" in src
-        assert "socket_timeout=0.5" in src
+        assert "redis_socket_timeout_kwargs" in src
+        assert "socket_connect_timeout=0.5" not in src
+        assert "socket_timeout=0.5" not in src
+
+
+def test_redis_socket_timeouts_are_configurable(monkeypatch: pytest.MonkeyPatch) -> None:
+    import core.config as config
+
+    class _Settings:
+        redis_socket_connect_timeout_seconds = 3.5
+        redis_socket_timeout_seconds = 4.5
+
+    monkeypatch.setattr(config, "settings", _Settings())
+
+    assert config.redis_socket_timeout_kwargs() == {
+        "socket_connect_timeout": 3.5,
+        "socket_timeout": 4.5,
+    }
 
 
 def test_reset_password_blacklists_the_resolved_token_value() -> None:

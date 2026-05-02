@@ -13,7 +13,7 @@ import logging
 
 import redis.asyncio as aioredis
 
-from core.config import redis_url_from_env
+from core.config import redis_socket_timeout_kwargs, redis_url_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,7 @@ async def get_async_redis() -> aioredis.Redis | None:
             url,
             decode_responses=True,
             max_connections=20,
-            socket_connect_timeout=0.5,
-            socket_timeout=0.5,
+            **redis_socket_timeout_kwargs(),
         )
         await _pool.ping()
         return _pool

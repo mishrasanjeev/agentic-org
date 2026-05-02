@@ -19,7 +19,12 @@ from sqlalchemy import func, select
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
-from core.config import is_strict_runtime_env, redis_url_from_env, settings
+from core.config import (
+    is_strict_runtime_env,
+    redis_socket_timeout_kwargs,
+    redis_url_from_env,
+    settings,
+)
 from core.database import async_session_factory
 from core.email import send_password_reset_email, send_welcome_email
 from core.models.tenant import Tenant
@@ -248,8 +253,7 @@ async def _get_throttle_redis():
         _throttle_redis = aioredis.from_url(
             url,
             decode_responses=True,
-            socket_connect_timeout=0.5,
-            socket_timeout=0.5,
+            **redis_socket_timeout_kwargs(),
         )
         await _throttle_redis.ping()
         return _throttle_redis

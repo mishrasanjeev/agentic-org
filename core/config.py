@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
@@ -26,16 +27,51 @@ def is_strict_runtime_env(env: str | None) -> bool:
     return not is_relaxed_env(env)
 
 
+def _redis_url_with_default_db(url: str, default_db: int) -> str:
+    """Return *url* with ``default_db`` applied without changing hosts.
+
+    ``redis_url_from_env(default_db=1)`` must not jump back to localhost
+    when the configured settings URL points at a production Redis host.
+    Explicit environment URLs stay authoritative; this only adjusts the
+    settings fallback path.
+    """
+    if default_db == 0:
+        return url
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return url
+    if parsed.scheme not in {"redis", "rediss"}:
+        return url
+    return urlunsplit(parsed._replace(path=f"/{default_db}"))
+
+
 def redis_url_from_env(default_db: int = 0) -> str:
     """Resolve the Redis URL using the app's canonical env var first."""
     default_url = f"redis://localhost:6379/{default_db}"
+    env_url = os.getenv("AGENTICORG_REDIS_URL") or os.getenv("REDIS_URL")
+    if env_url:
+        return env_url
     configured_settings = globals().get("settings")
     settings_url = getattr(configured_settings, "redis_url", default_url)
-    return (
-        os.getenv("AGENTICORG_REDIS_URL")
-        or os.getenv("REDIS_URL")
-        or (settings_url if default_db == 0 else default_url)
-    )
+    return _redis_url_with_default_db(settings_url, default_db)
+
+
+def redis_socket_timeout_kwargs() -> dict[str, float]:
+    """Return bounded Redis socket timeouts, configurable per deploy.
+
+    The defaults intentionally allow more room than the previous 500ms
+    cap so real production p99 latency and brief cross-zone jitter do not
+    force avoidable in-memory fallback. Deploys can tune these with
+    AGENTICORG_REDIS_SOCKET_* env vars.
+    """
+    configured_settings = globals().get("settings")
+    return {
+        "socket_connect_timeout": getattr(
+            configured_settings, "redis_socket_connect_timeout_seconds", 2.0
+        ),
+        "socket_timeout": getattr(configured_settings, "redis_socket_timeout_seconds", 2.0),
+    }
 
 
 class Settings(BaseSettings):
@@ -53,6 +89,8 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+    redis_socket_connect_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    redis_socket_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
 
     # Object Storage (GCS / S3-compatible)
     storage_bucket: str = "agenticorg-docs-dev"

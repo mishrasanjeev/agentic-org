@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from api.deps import get_current_tenant
 from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS, _DOMAIN_DEFAULT_TOOLS
-from core.config import redis_url_from_env
+from core.config import redis_socket_timeout_kwargs, redis_url_from_env
 from core.database import get_tenant_session
 from core.models.agent import Agent
 
@@ -155,8 +155,7 @@ try:
     _redis_client = _aioredis.from_url(
         _redis_url,
         decode_responses=True,
-        socket_connect_timeout=0.5,
-        socket_timeout=0.5,
+        **redis_socket_timeout_kwargs(),
     )
 except Exception:
     _log.info("chat_redis_unavailable_using_memory_fallback")
