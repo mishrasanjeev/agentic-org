@@ -19,6 +19,15 @@ composio-core>=0.7.0
 # Without: All queries go to the agent's configured LLM model
 routellm>=0.2.0
 
+# SEC-2026-05-P2-008 (BRUTAL_SECURITY_SCAN_2026-05-01): pin transitive
+# litellm at the patched version. The 2026-05-01 nightly pip-audit
+# flagged litellm 1.83.0 GHSA-xqmj-j6mv-4862 (Server-Side Template
+# Injection in /prompts/test). routellm doesn't pin litellm itself,
+# so we constrain it explicitly here so resolution can't fall back to
+# the vulnerable release. Promote into pyproject.toml direct deps if
+# we ever add a request-path that imports litellm directly.
+litellm>=1.83.7
+
 # ─── Microsoft Presidio: Pre-LLM PII Redaction (MIT) ────────────────────────
 # Enables: Aadhaar, PAN, GSTIN, UPI, email, phone scrubbed BEFORE reaching LLM
 # Without: PII masking in logs only (post-LLM)
