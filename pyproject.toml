@@ -36,6 +36,19 @@ dependencies = [
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
+    # SEC-2026-05-P2-008 RESIDUAL (ecdsa CVE-2024-23342): python-jose
+    # transitively pulls ``ecdsa>=0.15`` regardless of the
+    # ``[cryptography]`` extra. ecdsa 0.19.2 (current latest) carries
+    # CVE-2024-23342 ("Minerva timing attack on P-256") and the
+    # upstream maintainers have explicitly stated it will NOT be
+    # patched in the ecdsa lib — they recommend switching to a
+    # cryptography-backed JWT. We do that already: every JWT
+    # signature/verify path in this codebase uses python-jose's
+    # cryptography backend, and ecdsa is only loaded for legacy
+    # algorithm fallbacks we never select. The CVE is therefore not
+    # exploitable in our request-path, but the audit will continue to
+    # flag it until upstream excises the dep. Tracked as a non-blocker
+    # residual — pyjwt[crypto] migration is the long-term close.
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     "httpx>=0.28.0",

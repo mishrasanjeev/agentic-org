@@ -63,17 +63,27 @@ def _run_celery_beat() -> int:
 
     from celery.__main__ import main as celery_main  # noqa: PLC0415
 
+    # Cloud Run containers have a read-only working directory ("/app").
+    # PersistentScheduler tries to write/rename ``celerybeat-schedule``
+    # alongside the cwd, which fails with PermissionError on first
+    # boot — verified 2026-05-02 first agenticorg-beat deploy. Point it
+    # at /tmp (writable tmpfs on Cloud Run) so the scheduler can
+    # persist its last-run state for the lifetime of the revision.
+    schedule_path = os.environ.get(
+        "AGENTICORG_BEAT_SCHEDULE_PATH", "/tmp/celerybeat-schedule"  # noqa: S108
+    )
     sys.argv = [
         "celery",
         "-A",
         "core.tasks.celery_app",
         "beat",
         "--loglevel=info",
+        f"--schedule={schedule_path}",
         # PersistentScheduler is the default — it keeps last-run state
-        # in a local file. Across Cloud Run revision swaps the state
-        # resets, but missed cron fires are not replayed (Celery beat
-        # only schedules forward), so this is safe even for daily/
-        # monthly tasks.
+        # in the file at --schedule. Across Cloud Run revision swaps
+        # the state resets (tmpfs is per-instance), but missed cron
+        # fires are not replayed (Celery beat only schedules forward),
+        # so this is safe even for daily/monthly tasks.
     ]
     return celery_main()
 

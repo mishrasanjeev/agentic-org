@@ -147,6 +147,59 @@ def test_run_beat_uses_correct_celery_argv(run_beat_module, monkeypatch) -> None
     assert "beat" in argv
 
 
+def test_run_beat_writes_schedule_to_writable_path(run_beat_module, monkeypatch) -> None:
+    """Cloud Run's working directory is read-only. The PersistentScheduler
+    default writes ``celerybeat-schedule`` alongside cwd, which fails with
+    ``PermissionError: [Errno 13]`` on first boot — verified 2026-05-02
+    on the first agenticorg-beat deploy. The wrapper MUST pass an explicit
+    ``--schedule=`` pointing at a writable location (``/tmp`` is the
+    Cloud Run-provided tmpfs).
+
+    Override path via the ``AGENTICORG_BEAT_SCHEDULE_PATH`` env var if a
+    future deploy mounts a persistent volume.
+    """
+    captured_argv: list[list[str]] = []
+
+    def _fake_celery_main():
+        import sys as _sys  # noqa: PLC0415
+        captured_argv.append(list(_sys.argv))
+        return 0
+
+    import celery.__main__ as celery_main_mod
+    monkeypatch.setattr(celery_main_mod, "main", _fake_celery_main)
+    monkeypatch.delenv("AGENTICORG_BEAT_SCHEDULE_PATH", raising=False)
+
+    run_beat_module._run_celery_beat()
+    argv = captured_argv[0]
+    schedule_args = [a for a in argv if a.startswith("--schedule=")]
+    assert len(schedule_args) == 1, (
+        "Beat wrapper must pass exactly one --schedule= flag so the "
+        "PersistentScheduler doesn't try to write to read-only cwd."
+    )
+    assert schedule_args[0] == "--schedule=/tmp/celerybeat-schedule", (  # noqa: S108
+        f"Default schedule path must be the Cloud Run tmpfs; got {schedule_args[0]}"
+    )
+
+
+def test_run_beat_schedule_path_env_override(run_beat_module, monkeypatch) -> None:
+    """Operators can point the beat schedule file at a mounted volume
+    (e.g. once we add a persistent disk) via env var."""
+    captured_argv: list[list[str]] = []
+
+    def _fake_celery_main():
+        import sys as _sys  # noqa: PLC0415
+        captured_argv.append(list(_sys.argv))
+        return 0
+
+    import celery.__main__ as celery_main_mod
+    monkeypatch.setattr(celery_main_mod, "main", _fake_celery_main)
+    monkeypatch.setenv("AGENTICORG_BEAT_SCHEDULE_PATH", "/data/beat.db")
+
+    run_beat_module._run_celery_beat()
+    argv = captured_argv[0]
+    assert "--schedule=/data/beat.db" in argv
+
+
 # ─────────────────────────────────────────────────────────────────
 # HTTP health stub pin — Cloud Run startup probe contract
 # ─────────────────────────────────────────────────────────────────
