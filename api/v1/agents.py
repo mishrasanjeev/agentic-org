@@ -1544,6 +1544,50 @@ async def update_agent(
                     "Use GET /connectors/registry or GET /tools to discover valid tool names.",
                 )
             agent.authorized_tools = update_data["authorized_tools"]
+            # BUG-07 (Uday CA Firms 2026-05-02): grantex_scopes are
+            # derived from authorized_tools at create time and stored in
+            # config.grantex.grantex_scopes, but PATCH to authorized_tools
+            # left the scopes stale — so an agent that was reassigned
+            # from QuickBooks/Stripe tools to Zoho tools kept advertising
+            # `tool:quickbooks:*` / `tool:stripe:*`, which would block
+            # every Zoho call once the agent received a real grant
+            # token. Recompute scopes in the same transaction so the
+            # two fields cannot drift apart again.
+            try:
+                from auth.grantex_registration import _tools_to_scopes
+
+                # Pass connector names (post-PATCH if the same call also
+                # changed connector_ids, otherwise the existing list) so
+                # ambiguous tool names like ``list_invoices`` resolve to
+                # the connector the agent is actually wired to instead
+                # of the alphabetically-first match in the global tool
+                # index. See _tools_to_scopes docstring.
+                effective_connector_ids = (
+                    update_data.get("connector_ids")
+                    if "connector_ids" in update_data
+                    else (agent.connector_ids or [])
+                ) or []
+                _, resolved_names = await _resolve_connector_configs(
+                    tenant_id=tenant_id,
+                    connector_ids=list(effective_connector_ids),
+                    agent_level_config=None,
+                )
+                refreshed_scopes = _tools_to_scopes(
+                    update_data["authorized_tools"],
+                    agent.domain,
+                    connector_names=resolved_names or None,
+                )
+                cfg = dict(agent.config or {})
+                grx = dict(cfg.get("grantex") or {})
+                grx["grantex_scopes"] = refreshed_scopes
+                cfg["grantex"] = grx
+                agent.config = cfg
+            except Exception:
+                logger.warning(
+                    "grantex_scopes_refresh_skipped",
+                    agent_id=str(agent_id),
+                    tenant_id=tenant_id,
+                )
         if "hitl_policy" in update_data and update_data["hitl_policy"] is not None:
             agent.hitl_condition = update_data["hitl_policy"]["condition"]
         if "confidence_floor" in update_data:

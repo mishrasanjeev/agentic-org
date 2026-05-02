@@ -106,23 +106,44 @@ def setup_delegation(
         return None
 
 
-def _tools_to_scopes(tools: list[str], domain: str) -> list[str]:
+def _tools_to_scopes(
+    tools: list[str],
+    domain: str,
+    connector_names: list[str] | None = None,
+) -> list[str]:
     """Map tool names to Grantex scopes.
 
     Format: tool:{connector}:execute:{tool_name}
     Also adds domain-level read scope.
+
+    BUG-07 (Uday CA Firms 2026-05-02): tool names like ``list_invoices``
+    and ``get_balance_sheet`` are registered by multiple connectors
+    (QuickBooks, Zoho Books, Xero, ...). The unscoped ``_build_tool_index``
+    returned the alphabetically-first connector that exposed each tool,
+    so a Zoho-only agent ended up with ``tool:quickbooks:*`` scopes.
+    When ``connector_names`` is supplied, scope resolution prefers a
+    match registered by one of those connectors and falls back to the
+    global index only if no scoped match exists. Agents that don't
+    declare any connector_ids continue to use the unscoped index — for
+    them we have no signal that *should* have constrained the choice.
     """
     scopes = [f"agenticorg:{domain}:read"]
 
     try:
         from core.langgraph.tool_adapter import _build_tool_index
-        index = _build_tool_index()
+
+        scoped_index = (
+            _build_tool_index(connector_names=connector_names)
+            if connector_names
+            else {}
+        )
+        global_index = _build_tool_index()
     except Exception:
         # Fallback: use tool names directly as scopes
         return scopes + [f"tool:agenticorg:execute:{t}" for t in tools]
 
     for tool_name in tools:
-        match = index.get(tool_name)
+        match = scoped_index.get(tool_name) or global_index.get(tool_name)
         if match:
             connector_name = match[0]
             scopes.append(f"tool:{connector_name}:execute:{tool_name}")
