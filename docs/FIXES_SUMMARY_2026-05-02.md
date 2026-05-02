@@ -1,16 +1,59 @@
-# Fixes Summary — 2026-05-02
+# Fixes Summary — 2026-05-01 + 2026-05-02
 
-This doc tracks everything that shipped on 2026-05-02. The session
-started with a red CI/CD pipeline (54.25% coverage gate) and a
-customer-reported bug (Uday Chauhan, Edumatica CA Firms) that had
-been "code-fixed" the previous day but still reproduced live in prod
-under the deployed SHA. It ended with: zero open PRs, zero open
-critical/high CodeQL alerts, the missing Celery worker + beat
-services live in prod for the first time, and the May-01 bug closed
-end-to-end with full tool-call telemetry visible in the API
-response.
+This doc tracks the two-day enterprise security + reliability program
+covering 2026-05-01 (PR-A through PR-H — the security backlog that
+came out of `BRUTAL_SECURITY_SCAN_2026-05-01.md` + the codex audit)
+and 2026-05-02 (the post-deploy honesty pass that uncovered + fixed
+BUG-08, BUG-11, the celery deploy gap, the CodeQL stack-trace alerts,
+and the CI coverage gate).
 
-## Pull requests merged today
+The 2026-05-01 work shipped the security PRs to main but every CI/CD
+build since PR-C #404 was red on the coverage gate (54.25% vs 55%
+required), so `deploy-production` was skipped on every push and zero
+of those PRs were live in prod. The 2026-05-02 session unblocked CI
+(PR #421), manually deployed the backlog via `gcloud run services
+update`, then ran the May-01 customer-reported bug verification
+spec against deployed prod — which still failed-RED because of two
+upstream bugs (BUG-08 + BUG-11) that PR #406 didn't touch. Today
+also stood up `agenticorg-worker` + `agenticorg-beat` Cloud Run
+services for the first time (per `celery_beat_not_deployed.md`
+memory: every periodic task in `core/tasks/celery_app.py` had been
+silently NOT firing in prod since the schedule was first declared).
+
+End state: zero open PRs, zero open critical/high CodeQL alerts,
+two new Cloud Run services consuming + succeeding, all 8 periodic
+tasks firing, and the May-01 bug verified GREEN end-to-end against
+deployed prod with full tool-call telemetry.
+
+## PR-A through PR-H — security backlog (shipped 2026-05-01)
+
+Driven by the codex enterprise audit + `BRUTAL_SECURITY_SCAN_2026-05-01.md`
+(`docs/BRUTAL_SECURITY_SCAN_2026-05-01.md`). The scan classified 15
+findings P0..P3; the program below closed everything except SEC-008
+(closed 2026-05-02 via PR #423) and the documented Pillow + ecdsa
+residuals.
+
+| PR | SEC items closed | Summary |
+|----|------------------|---------|
+| **PR-A #402** `sec/pr-a-quick-wins-and-gates` | SEC-001 + SEC-007 + SEC-014 + Pillow CVE residual + Bandit M cleanup | **Docker secret guard** — added strict `.dockerignore` excluding `.env`, `.venv`, `node_modules`, caches, coverage artifacts; replaced runtime stage `COPY . .` with explicit per-directory copies. CI guard rejects builds whose context includes `.env` / private keys. **Webhook env-bypass** hardening (SEC-007 — production now requires a signed webhook secret rather than a dev `unsigned=true` env override). **AA tenant-type fix** (SEC-014 runtime bug). **Pillow 10.4.0 CVE residual documented** in pyproject.toml as a composio-core constraint with three compensating controls (image ingestion off the request hot path, OCR opt-in flag off in prod, audit cleared on next composio-core release). **Bandit M findings** swept. |
+| **PR-B #403** `sec/pr-b-csrf-middleware` | SEC-003 | **CSRF middleware** — double-submit cookie pattern for cookie-authed mutations. Previously, cookie-authed POST/PUT/DELETE/PATCH endpoints had no CSRF protection — an attacker site could forge requests. Middleware now requires a matching CSRF cookie + header on every cookie-authed mutation; unsigned `Authorization: Bearer` flows (server-to-server) are exempt. Pinned by `tests/regression/test_security_pr_b_csrf.py`. |
+| **PR-C #404** `sec/pr-c-aa-callback-signing` | SEC-004 | **AA (Account Aggregator) callback HMAC signing + replay protection**. The consent callback was publicly exempt from auth and had no provider signature verification — anyone could POST to `/api/v1/aa/callback` with crafted JSON and trigger a tenant consent update. Now requires HMAC over `tenant_id + consent_handle + timestamp + nonce`, validates timestamp within ±5 min, stores nonces in Redis with 24h TTL to block replay, returns 403 on signature mismatch and 409 on replay. |
+| **PR-D #405** `sec/pr-d-file-ingestion-bounds` | SEC-005 | **Bounded file ingestion + streaming + MIME allowlist**. Knowledge-base uploads had no per-file size, page count, sheet/row count, or parser timeout — a 1 GB malformed PDF could exhaust API worker memory. Now: 50MB max upload at the reverse proxy and app layers; MIME + extension + content-sniff allowlist; PDF page cap (200), DOCX paragraph cap (5000), XLSX sheet cap (20) + row cap per sheet (50000); parser timeouts; uploads stream to GCS instead of `await file.read()` into memory. Oversized requests return 413; bad MIME returns 415. |
+| **PR-E #407** `sec/pr-e-rpa-egress-allowlist` | SEC-006 | **RPA egress guard — SSRF + DNS rebinding defense**. Generic-portal RPA jobs took an admin-supplied `portal_url` and `target_url` and navigated server-side Chromium without an egress allowlist — an admin could probe internal services, cloud metadata endpoints, or private networks. Now: tenant-approved domain registry; reject private/loopback/link-local/multicast/reserved/metadata IP destinations; resolve and re-validate hostnames before navigation AND on every Chromium request (DNS rebinding); Playwright route interception blocks disallowed hosts and non-`http(s)` schemes; redact secrets from screenshots. |
+| **PR-F #410** `sec/pr-f-cookie-auth` | SEC-002 P0 | **Cookie-first browser auth**. Browser SPA was reading `localStorage["token"]` and sending `Authorization: Bearer ...` on every request — vulnerable to XSS token exfiltration. Now: `/api/v1/auth/login` sets an HttpOnly + Secure + SameSite=Strict session cookie as the canonical auth surface; SPA uses cookie-first by default and falls back to header only for legacy server-to-server callers. Logout clears the cookie. |
+| **PR-F2 #412** `sec/pr-f2-e2e-cookie-sweep` | SEC-002 residual | Sweep of remaining `localStorage.getItem("token")` reads in `InviteAccept.tsx`, `Playground.tsx`, `ReportScheduler.tsx`, `BillingCallback.tsx` — migrated to the cookie-authed fetch helper. Plus Playwright e2e fixtures that drive the cookie flow end-to-end so future regressions are caught at PR-time. |
+| **PR-G #408** `sec/pr-g-hardening-sweep` | SEC-010 + SEC-011 + SEC-012 + SEC-013 | **Hardening sweep**. SEC-010: pinned all production base images by digest in Dockerfile + Compose so rebuilds are reproducible (`refresh_image_digests.sh` for safe upgrades). SEC-011: cleared the static security-lint backlog (32 ruff `S` findings → 0). SEC-012: refused to start in production when SECRET_KEY/VAULT_KEY/JWT keys are at their dev defaults — readiness probe returns 503 + the api logs `secret_default_in_production_refusing_boot`. SEC-013: public status + evaluation endpoints (`/api/v1/health`, `/api/v1/llm/status`, `/api/v1/rag/eval/last`) trimmed to non-sensitive fields only — no version strings of internal services, no connector counts, no internal IPs. |
+| **PR-G2 #411** `sec/pr-g2-csp-strict` | SEC-009 | **CSP `unsafe-inline` removal via JSON-LD hash pinning**. SPA `<script>` JSON-LD blocks were the only reason CSP needed `unsafe-inline` — now hash-pinned via `script-src 'self' 'sha256-...'`. Strict-CSP enforced in prod; report-only in staging. |
+| **PR-H #409** `sec/pr-h-rpa-state` | SEC-015 | **Durable RPA history store**. RPA execution state was kept in process-local memory — a worker restart erased every in-flight job's history, breaking idempotency on retries. Now persisted in `rpa_run_history` table (Alembic migration `0042_rpa_run_history`) with at-least-once semantics + replay-safe writes. |
+
+The codex audit also flagged seven discipline failures (admin-scope on
+list only, domain RBAC on list only, silent safety bypass, silent
+resource fallback, localStorage-switcher, PUT-as-half-replace, copy
+lies about governance). Those were addressed via the same security
+PRs above — see `feedback_enterprise_audit_discipline.md` memory
+for the rule-by-rule mapping.
+
+## Pull requests merged 2026-05-02
 
 | PR | Branch / Title | Why it shipped |
 |----|----------------|----------------|
@@ -29,17 +72,36 @@ in commit `f0932c1`).
 
 ## Production rollouts
 
-Three image builds + Cloud Run rollouts during the session, plus one
-new pair of services created from scratch.
+PR-A through PR-H all merged to main on 2026-05-01 but NEITHER
+`agenticorg-api` NOR `agenticorg-ui` was rolled out that day —
+the `deploy-production` CI job has been hard-coded `if: false`
+since 2026-04-25 (the GKE→Cloud Run migration), and the coverage
+gate was failing every push since PR-C #404 anyway. Prod stayed on
+`f0bacf2` (PR #400 SLA telemetry) until 2026-05-02 when PR #421
+unblocked CI and the security PRs were rolled out manually via
+`gcloud run services update`.
+
+Today's rollouts (all manual, all via `cloudbuild-api.yaml` →
+`gcloud run services update --image=... --update-env-vars=AGENTICORG_GIT_SHA=...`):
 
 ```
 api:  f0bacf2 → 5d799aa → a049126 → c865d52 → eecd78e → af037b8 → d90db46
                 (#421)    (#422)    (#426)    (#424)    (#425)    (#428)
-ui:   <unchanged on 5d799aa from prior deploy>
-embeddings: <unchanged>
-worker: NEW — agenticorg-worker on a049126, then af037b8
-beat:   NEW — agenticorg-beat on eecd78e
+ui:   unchanged on 5d799aa (no UI changes today; PR-F + PR-F2 +
+      PR-G2 already in the prior 5d799aa UI image)
+embeddings: unchanged on text-embeddings-inference:bge-m3-baked
+worker: NEW — agenticorg-worker created on a049126, then af037b8
+        (revisions 00001-9nk → 00002-7tg → 00003-zfg → 00004-9p5)
+beat:   NEW — agenticorg-beat created on eecd78e
+        (revisions 00001-jbc → 00002-hr6 → 00003-cmr → 00004-xks)
 ```
+
+Final state: api at `d90db46` (revision `agenticorg-api-00029-pv9`),
+worker at `af037b8` (revision `agenticorg-worker-00004-9p5`), beat at
+`eecd78e` (revision `agenticorg-beat-00004-xks`). The image-storage
+region is `asia-south1`; the service-running region is
+`asia-southeast1` (cross-region pull preserved for legacy reasons,
+documented in `feedback_deploy_pipeline_state.md` memory).
 
 `/api/v1/health.commit` returns `d90db46...` post-final-deploy.
 
