@@ -20,10 +20,45 @@ services for the first time (per `celery_beat_not_deployed.md`
 memory: every periodic task in `core/tasks/celery_app.py` had been
 silently NOT firing in prod since the schedule was first declared).
 
-End state: zero open PRs, zero open critical/high CodeQL alerts,
-two new Cloud Run services consuming + succeeding, all 8 periodic
-tasks firing, and the May-01 bug verified GREEN end-to-end against
-deployed prod with full tool-call telemetry.
+End state for the production rollout pass: zero open critical/high
+CodeQL alerts, two new Cloud Run services consuming + succeeding, all
+8 periodic tasks firing, and the May-01 bug verified GREEN end-to-end
+against deployed prod with full tool-call telemetry. A later same-day
+follow-up audit opened draft PR #432, documented below.
+
+## Follow-up audit PR #432 (draft, 2026-05-02)
+
+Branch: `codex/audit-security-fixes`
+
+PR: <https://github.com/mishrasanjeev/agentic-org/pull/432>
+
+This follow-up swept runtime-hardening, Redis, upload-memory, auth,
+service-worker, and PII hot-path issues that were still present after
+the earlier merged security backlog.
+
+| Area | Fix |
+|------|-----|
+| Strict runtime hardening | `production`, `prod`, `staging`, `stage`, `preview`, and unknown non-local environment labels now receive strict behavior. FastAPI docs, redoc, and OpenAPI are disabled in strict runtimes, and secure-cookie decisions use the same normalized runtime helper instead of checking only `production`. |
+| Redis URL resolution | Redis consumers now use the canonical `redis_url_from_env()` helper instead of directly reading legacy `REDIS_URL`. `AGENTICORG_REDIS_URL` remains authoritative, legacy `REDIS_URL` is still supported as fallback, and configured `settings.redis_url` is used before localhost. |
+| Redis `default_db` localhost trap | Claude Opus flagged that `redis_url_from_env(default_db=N)` could accidentally jump back to `redis://localhost:6379/N` when `settings.redis_url` pointed at a real Redis host. The helper now rewrites only the DB path on the configured settings URL while preserving scheme, host, auth, query string, and fragment. Explicit env URLs remain unchanged. |
+| Redis socket timeouts | Removed hard-coded 500ms Redis socket connect/read timeouts. Redis clients now use `redis_socket_timeout_kwargs()` with configurable defaults of 2.0s via `AGENTICORG_REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS` and `AGENTICORG_REDIS_SOCKET_TIMEOUT_SECONDS`, bounded from 0.1s to 30.0s. This gives production p99 latency and cross-zone jitter room before falling back to in-memory state. |
+| Reset-password one-time token reuse | One-time-code password resets now blacklist the resolved reset token value instead of blacklisting `None` from `body.token`, closing the token-reuse path for code-based resets. |
+| Upload memory bounds | CSV/SOP upload paths that still used unbounded `await file.read()` now stream uploads into capped temporary files before parsing. Covered paths include SOP import, sales lead import, agent import, and ABM account upload. Oversized uploads fail before loading the full body into worker memory. |
+| Cookie-first onboarding auth | Onboarding no longer sends `Authorization: Bearer ${token}` from the browser when `AuthContext.token` is intentionally null under cookie-first auth. It now uses the cookie-authenticated request flow. |
+| Push service worker auth and URL trust | Removed push-notification Bearer-token action handling from the service worker and stopped trusting arbitrary payload URLs for `openWindow`. Notification actions no longer perform approval/reject mutations from pushed bearer tokens. |
+| PII redaction hot path | Reduced debug logging overhead inside the PII redaction path so debug logging does not slow the security-sensitive redaction loop or destabilize the performance gate. |
+| Regression coverage | Added regression pins for strict runtime aliases, Redis canonical URL precedence, Redis settings fallback DB rewriting, configurable Redis socket timeouts, reset-token blacklist behavior, upload size enforcement, onboarding cookie-auth behavior, service-worker token removal, and PII redaction performance. |
+
+Validation for PR #432:
+
+- Full pre-push gate passed: Ruff whole tree, mypy whole tree, Bandit
+  api/auth/core, Alembic revision check, verify=False scan, pytest
+  regression+unit, UI tsc, UI build, consistency sweep, module coverage
+  floor, and critical-path tag check.
+- Review follow-up checks passed: targeted Ruff, targeted mypy, Redis
+  hardening regression tests, and affected auth/chat Redis unit slices.
+- Redis review-fix commit documented here:
+  `69538d1184f975c949a4f2459eeb441cd8bca0b1`.
 
 ## PR-A through PR-H — security backlog (shipped 2026-05-01)
 
