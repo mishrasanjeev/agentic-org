@@ -108,6 +108,7 @@ def build_agent_graph(
     confidence_floor: float = 0.88,
     hitl_condition: str = "",
     connector_config: dict[str, Any] | None = None,
+    connector_names: list[str] | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -118,12 +119,17 @@ def build_agent_graph(
         confidence_floor: Minimum confidence before HITL triggers.
         hitl_condition: Additional HITL condition expression.
         connector_config: Config dict passed to connectors for auth/secrets.
+        connector_names: BUG-08 fail-closed allow-list. When the runtime
+            has resolved the agent's ``connector_ids`` it passes the
+            resolved names here so ``list_invoices`` only matches the
+            agent's authorized connectors instead of falling through to
+            any globally-registered connector with the same tool name.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
     """
     # Build LangChain tools from authorized tools
-    tools = build_tools_for_agent(authorized_tools, connector_config)
+    tools = build_tools_for_agent(authorized_tools, connector_config, connector_names)
 
     # LLM is created lazily on first call to avoid API key validation at build time
     _llm_cache: dict[str, Any] = {}

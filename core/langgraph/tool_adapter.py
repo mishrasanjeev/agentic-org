@@ -170,6 +170,7 @@ async def _execute_connector_tool(
 def build_tools_for_agent(
     authorized_tools: list[str],
     connector_config: dict[str, Any] | None = None,
+    connector_names: list[str] | None = None,
 ) -> list[StructuredTool]:
     """Build LangChain tools from an agent's authorized_tools list.
 
@@ -177,13 +178,21 @@ def build_tools_for_agent(
     "create_payment_intent") is matched to a connector and wrapped as a
     LangChain StructuredTool.
 
+    ``connector_names`` (BUG-08, RU-May01 verification 2026-05-02) is
+    the agent runtime's resolved connector allow-list. ``None`` means
+    "no caller constraint" (used by tests and a few synthetic call
+    sites); ``[]`` is the fail-closed signal — the agent had
+    ``connector_ids`` but none resolved to a live ConnectorConfig, so
+    the index must be empty rather than fall back to every globally
+    registered connector.
+
     Returns a list of callable LangChain tools ready for LangGraph.
     """
     tools: list[StructuredTool] = []
     seen: set[str] = set()
 
     # Build a reverse index: tool_name -> (connector_name, handler_doc)
-    tool_index = _build_tool_index(connector_config)
+    tool_index = _build_tool_index(connector_config, connector_names)
 
     for tool_ref in authorized_tools:
         if tool_ref in seen:
@@ -230,8 +239,20 @@ def _build_tool_index(
     creation UI can populate authorized_tools with exactly the
     connectors the user picked, instead of every tool in the product.
     """
+    # BUG-08 (RU-May01 verification, 2026-05-02): the agent runtime is
+    # the security boundary that decides which connectors an agent may
+    # call. ``connector_names=None`` means "caller did not constrain";
+    # ``connector_names=[]`` means "caller explicitly resolved zero
+    # connectors for this agent". Treating those identically (the prior
+    # behaviour) was a fail-OPEN: an FpaAgent with
+    # connector_ids=["registry-zoho_books"] but no live Zoho
+    # ConnectorConfig fell back to *every* globally-registered native
+    # connector, so the LLM cheerfully called ``stripe.list_invoices``
+    # with no credentials and got 401-capped. Use ``is not None`` so
+    # the explicit-empty case fails closed (empty tool index → no
+    # tools → LLM has nothing to invoke).
     allowed: set[str] | None = None
-    if connector_names:
+    if connector_names is not None:
         # Normalise — strip any "registry-" UI prefix and lowercase.
         allowed = {
             n.removeprefix("registry-").strip().lower()
