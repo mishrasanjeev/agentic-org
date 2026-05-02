@@ -499,32 +499,26 @@ async def _resolve_agent_connector_ids_for_type(
         return []
 
 
-async def _load_connector_configs_for_agent(
+async def _resolve_connector_configs(
     tenant_id: str,
     connector_ids: list[str],
     agent_level_config: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Resolve an agent's ``connector_ids`` into a flat config dict.
+) -> tuple[dict[str, Any], list[str]]:
+    """Resolve an agent's ``connector_ids`` into (merged_config, resolved_names).
 
-    For each ``connector_id`` (with optional ``registry-`` prefix
-    stripped), look up the matching :class:`ConnectorConfig` row,
-    decrypt ``credentials_encrypted``, merge with the row's non-secret
-    ``config`` JSONB, and merge into a single dict. Tools downstream
-    pull individual keys from this dict via ``config.get("api_key")``
-    etc.
-
-    The agent-level ``config`` (almost always None) is overlaid LAST
-    so an explicit override on the agent row wins. Failures on any
-    one connector log + skip — never block the run, since the LLM
-    can still call connectors that loaded successfully.
-
-    Per-connector namespacing (``{conn_name: {creds}}``) is the
-    next iteration; today the flat-merge shape matches what the
-    existing tools expect (single-connector agents, which are the
-    common case for shadow tests).
+    Same lookup contract as :func:`_load_connector_configs_for_agent`,
+    but additionally returns the list of connector_names that actually
+    resolved to a live ``ConnectorConfig`` for this tenant. The runtime
+    uses that list as the **fail-closed allow-list** for the tool
+    index (BUG-08, RU-May01 verification): if an agent declares
+    ``connector_ids=["registry-zoho_books"]`` but no matching
+    ConnectorConfig exists for the tenant, ``resolved_names`` is empty
+    and the tool index is built empty too — no fall-through to
+    globally-registered connectors that happen to expose
+    ``list_invoices``.
     """
     if not connector_ids:
-        return dict(agent_level_config or {})
+        return dict(agent_level_config or {}), []
 
     import json as _json
     import uuid as _uuid
@@ -541,9 +535,10 @@ async def _load_connector_configs_for_agent(
             "load_connector_configs_invalid_tenant",
             tenant_id=str(tenant_id),
         )
-        return dict(agent_level_config or {})
+        return dict(agent_level_config or {}), []
 
     merged: dict[str, Any] = {}
+    resolved_names: list[str] = []
     async with get_tenant_session(tid) as session:
         for raw_id in connector_ids:
             if not isinstance(raw_id, str) or not raw_id.strip():
@@ -615,6 +610,10 @@ async def _load_connector_configs_for_agent(
                         creds = _json.loads(raw)
                     if isinstance(creds, dict):
                         merged.update(creds)
+                # Record the connector name that actually resolved so the
+                # caller can use it as the BUG-08 fail-closed allow-list.
+                if cc.connector_name and cc.connector_name not in resolved_names:
+                    resolved_names.append(cc.connector_name)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "connector_config_load_failed",
@@ -627,6 +626,27 @@ async def _load_connector_configs_for_agent(
 
     if agent_level_config:
         merged.update(agent_level_config)
+    return merged, resolved_names
+
+
+async def _load_connector_configs_for_agent(
+    tenant_id: str,
+    connector_ids: list[str],
+    agent_level_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible wrapper around :func:`_resolve_connector_configs`.
+
+    Returns just the merged config dict, preserving the contract used by
+    a2a.py / chat.py / mcp.py call sites. New runtime callers should use
+    ``_resolve_connector_configs`` directly so they can plumb the
+    resolved connector names through to the tool index for BUG-08
+    fail-closed dispatch.
+    """
+    merged, _names = await _resolve_connector_configs(
+        tenant_id=tenant_id,
+        connector_ids=connector_ids,
+        agent_level_config=agent_level_config,
+    )
     return merged
 
 
@@ -1794,11 +1814,34 @@ async def run_agent(
     # for their auth (single-connector case is the common one — multi-
     # connector with overlapping keys is a follow-up to scope into
     # per-connector dicts).
-    resolved_connector_config = await _load_connector_configs_for_agent(
+    raw_connector_ids = agent_config.get("connector_ids") or []
+    resolved_connector_config, resolved_connector_names = await _resolve_connector_configs(
         tenant_id=tenant_id,
-        connector_ids=agent_config.get("connector_ids") or [],
+        connector_ids=raw_connector_ids,
         agent_level_config=agent_config.get("config"),
     )
+    # BUG-08 (RU-May01 verification, 2026-05-02): when an agent has
+    # connector_ids declared but none resolve to a live ConnectorConfig
+    # (wrong UUID stored, OAuth never completed, tenant_id mismatch),
+    # the tool index must be built empty rather than fall through to
+    # every globally-registered connector that exposes the same tool
+    # name. The empty list is the explicit fail-closed signal to
+    # ``build_tools_for_agent`` (vs. ``None`` which means "no
+    # constraint — include all"). Agents that declare zero
+    # connector_ids still get the unconstrained behaviour, since for
+    # them the runtime has no signal that *should* have constrained
+    # tools.
+    if raw_connector_ids:
+        connector_names_for_tools: list[str] | None = resolved_connector_names
+        if not resolved_connector_names:
+            logger.warning(
+                "agent_run_connector_ids_unresolved_fail_closed",
+                agent_id=str(agent_id),
+                tenant_id=tenant_id,
+                declared_connector_ids=raw_connector_ids,
+            )
+    else:
+        connector_names_for_tools = None
 
     try:
         lg_result = await langgraph_run(
@@ -1818,6 +1861,7 @@ async def run_agent(
             hitl_condition=agent_config.get("hitl_condition", ""),
             grant_token=grant_token,
             connector_config=resolved_connector_config,
+            connector_names=connector_names_for_tools,
         )
     except Exception as exc:
         # Surface enough information for the caller to act on without

@@ -145,11 +145,19 @@ def test_ramesh_agents_loads_connector_configs_for_shadow_runs() -> None:
     call hits the connector with empty auth and shadow accuracy
     stays stuck at ~40%."""
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    # Loader function must exist.
+    # Loader functions must exist. Both the public-API
+    # ``_load_connector_configs_for_agent`` (used by a2a/chat/mcp) and
+    # the new ``_resolve_connector_configs`` helper (BUG-08 2026-05-02:
+    # also returns the resolved connector-name list so the runtime can
+    # build a fail-closed tool index instead of dispatching list_invoices
+    # to whichever connector registered last).
     assert "_load_connector_configs_for_agent" in src
+    assert "_resolve_connector_configs" in src
     # The langgraph_run call must use the resolved config, NOT the
-    # vestigial top-level agent_config.get("config").
-    assert "resolved_connector_config = await _load_connector_configs_for_agent" in src
+    # vestigial top-level agent_config.get("config"). After BUG-08 the
+    # runtime call site unpacks both the merged config AND the resolved
+    # connector names from the new helper.
+    assert "resolved_connector_config, resolved_connector_names = await _resolve_connector_configs" in src
     assert "connector_config=resolved_connector_config" in src
     # The loader must read encrypted credentials and decrypt them.
     assert "decrypt_for_tenant" in src
@@ -157,6 +165,11 @@ def test_ramesh_agents_loads_connector_configs_for_shadow_runs() -> None:
     # The "registry-" prefix stripping (Ramesh's TC body shows this
     # is the shape connector_ids arrive in).
     assert 'removeprefix("registry-")' in src
+    # BUG-08 fail-closed contract: the runtime must explicitly pass the
+    # resolved-names list down to the runner so the tool index can be
+    # restricted, otherwise list_invoices falls back to globally
+    # registered connectors (Stripe in the May-01 reproducer).
+    assert "connector_names=connector_names_for_tools" in src
 
 
 # ──────────────────────────────────────────────────────────────────

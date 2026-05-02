@@ -53,6 +53,7 @@ async def run_agent(
     hitl_condition: str = "",
     grant_token: str = "",
     connector_config: dict[str, Any] | None = None,
+    connector_names: list[str] | None = None,
     thread_id: str | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
@@ -124,6 +125,7 @@ async def run_agent(
         confidence_floor=confidence_floor,
         hitl_condition=hitl_condition,
         connector_config=connector_config,
+        connector_names=connector_names,
     )
 
     # Compile with checkpointer
@@ -421,6 +423,7 @@ async def resume_agent(
     confidence_floor: float = 0.88,
     hitl_condition: str = "",
     connector_config: dict[str, Any] | None = None,
+    connector_names: list[str] | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -436,6 +439,7 @@ async def resume_agent(
         confidence_floor=confidence_floor,
         hitl_condition=hitl_condition,
         connector_config=connector_config,
+        connector_names=connector_names,
     )
     compiled = graph.compile(checkpointer=_checkpointer)
 
