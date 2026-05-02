@@ -161,7 +161,7 @@ def build_agent_graph(
         """Extract structured output and compute confidence from the last AI message."""
         messages = state["messages"]
         trace = list(state.get("reasoning_trace") or [])
-        tool_calls_log = state.get("tool_calls_log") or []
+        tool_calls_log = list(state.get("tool_calls_log") or [])
 
         # Find the last AI message
         last_ai = None
@@ -175,6 +175,7 @@ def build_agent_graph(
                 "status": "failed",
                 "error": "No AI response received",
                 "reasoning_trace": [*trace, "ERROR: No AI message found"],
+                "tool_calls_log": tool_calls_log,
             }
 
         # Parse output — _parse_json_output guarantees a dict, but be
@@ -193,13 +194,45 @@ def build_agent_graph(
         from langchain_core.messages import ToolMessage
         tool_msg_count = 0
         tool_error_count = 0
+        # BUG-11 follow-up (2026-05-02): build tool_calls_log from the
+        # message stream. LangGraph's prebuilt ``ToolNode`` puts tool
+        # results into ``state["messages"]`` as ``ToolMessage`` objects
+        # — no other code path ever appended to ``tool_calls_log``, so
+        # the API response field stayed empty even when tools fired
+        # successfully. Pair each ToolMessage (the result) with its
+        # invoking AIMessage tool_call (the args) so the response
+        # carries both the call and the outcome.
+        ai_tool_calls_by_id: dict[str, dict[str, Any]] = {}
+        for msg in messages:
+            if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                for tc in msg.tool_calls:
+                    if not isinstance(tc, dict):
+                        continue
+                    raw_id = tc.get("id")
+                    if isinstance(raw_id, str) and raw_id:
+                        ai_tool_calls_by_id[raw_id] = tc
         for msg in messages:
             if isinstance(msg, ToolMessage):
                 tool_msg_count += 1
                 msg_content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                if "error" in msg_content.lower() or "failed" in msg_content.lower():
+                is_error = "error" in msg_content.lower() or "failed" in msg_content.lower()
+                if is_error:
                     tool_error_count += 1
                     any_tool_failed = True
+                tc_id: str | None = getattr(msg, "tool_call_id", None)
+                source = ai_tool_calls_by_id.get(tc_id, {}) if tc_id else {}
+                tool_calls_log.append(
+                    {
+                        "tool": getattr(msg, "name", None) or source.get("name", ""),
+                        "args": source.get("args", {}),
+                        "tool_call_id": tc_id,
+                        "status": "error" if is_error else "success",
+                        # Cap result body so a chatty connector response
+                        # doesn't bloat the agent run record. Operators
+                        # who need the full body get it from server logs.
+                        "result": (msg_content or "")[:2000],
+                    }
+                )
 
         output_incomplete = (
             not output
@@ -230,6 +263,7 @@ def build_agent_graph(
             "confidence": confidence,
             "status": "completed",
             "reasoning_trace": trace,
+            "tool_calls_log": tool_calls_log,
         }
 
     async def hitl_gate(state: AgentState) -> dict[str, Any]:
