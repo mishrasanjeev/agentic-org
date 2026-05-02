@@ -14,10 +14,28 @@ from celery.schedules import crontab
 
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
+# ``include=`` is what actually registers the @app.task decorators with
+# the worker. The historical ``app.autodiscover_tasks(["core.tasks"])``
+# call below looks for a module literally named ``tasks`` inside the
+# ``core.tasks`` package (i.e. ``core/tasks/tasks.py``) and silently
+# does nothing when it can't find one — which is the case here, since
+# our tasks live in ``core/tasks/{report,workflow,budget,rpa,...}_tasks.py``.
+# Verified 2026-05-02: every beat-dispatched task hit the worker as
+# ``Received unregistered task of type 'core.tasks.budget_tasks...'``
+# until this list was set.
 app = Celery(
     "agenticorg",
     broker=_redis_url,
     backend=_redis_url,
+    include=[
+        "core.tasks.budget_tasks",
+        "core.tasks.health_snapshot",
+        "core.tasks.invoice_tasks",
+        "core.tasks.report_tasks",
+        "core.tasks.rpa_tasks",
+        "core.tasks.token_refresh",
+        "core.tasks.workflow_tasks",
+    ],
 )
 
 # ── Celery configuration ────────────────────────────────────────────

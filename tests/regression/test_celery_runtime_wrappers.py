@@ -284,3 +284,68 @@ def test_celery_beat_schedule_registers_all_seven_periodic_tasks() -> None:
         f"Periodic tasks expected in beat_schedule are missing: {sorted(missing)}. "
         "If a task was intentionally removed, update this test in the same PR."
     )
+
+
+def test_worker_registers_all_task_modules_on_startup() -> None:
+    """Verified 2026-05-02 in production: every beat-dispatched task hit
+    the worker as ``ERROR/MainProcess Received unregistered task of type
+    'core.tasks.budget_tasks.run_budget_evaluator'`` because the prior
+    ``app.autodiscover_tasks(["core.tasks"])`` looks for
+    ``core/tasks/tasks.py`` — a module named literally ``tasks`` —
+    which doesn't exist in this codebase. The actual task files are
+    ``core/tasks/{report,budget,rpa,health_snapshot,...}_tasks.py`` so
+    autodiscover swallowed the ImportError and registered nothing.
+
+    The fix passes an explicit ``include=`` to the ``Celery()``
+    constructor; that list is read by ``app.loader.import_default_modules()``
+    at worker startup, which is what makes every ``@app.task`` decorator
+    actually run.
+
+    These pins lock the contract:
+    - ``app.conf.include`` enumerates every tasks module that has tasks.
+    - Calling ``import_default_modules`` registers every periodic task
+      named in ``app.conf.beat_schedule`` (so beat-dispatched tasks
+      can't slip through as "unregistered" again).
+    """
+    from core.tasks.celery_app import app
+
+    expected_includes = {
+        "core.tasks.budget_tasks",
+        "core.tasks.health_snapshot",
+        "core.tasks.invoice_tasks",
+        "core.tasks.report_tasks",
+        "core.tasks.rpa_tasks",
+        "core.tasks.token_refresh",
+        "core.tasks.workflow_tasks",
+    }
+    actual_includes = set(app.conf.include or [])
+    missing = expected_includes - actual_includes
+    assert not missing, (
+        f"app.conf.include is missing tasks modules: {sorted(missing)}. "
+        "If a module is intentionally removed, update this test in the "
+        "same PR."
+    )
+
+    # Simulate the worker startup path so we exercise that include=
+    # actually imports + registers the tasks (not just stores the list
+    # in conf).
+    app.loader.import_default_modules()
+    registered = {t for t in app.tasks if not t.startswith("celery.")}
+
+    expected_periodic = {
+        "core.tasks.report_tasks.generate_scheduled_reports",
+        "core.tasks.report_tasks.cleanup_old_reports",
+        "core.tasks.report_tasks.generate_report",
+        "core.tasks.budget_tasks.run_budget_evaluator",
+        "core.tasks.token_refresh.refresh_expiring_tokens",
+        "core.tasks.invoice_tasks.generate_monthly_invoices",
+        "core.tasks.rpa_tasks.dispatch_due_rpa_schedules",
+        "core.tasks.health_snapshot.record_health_snapshot",
+    }
+    missing_tasks = expected_periodic - registered
+    assert not missing_tasks, (
+        f"Periodic tasks NOT registered after import_default_modules(): "
+        f"{sorted(missing_tasks)}. The worker would reject these as "
+        "'unregistered' on receipt — the same bug that fired in "
+        "production today."
+    )
