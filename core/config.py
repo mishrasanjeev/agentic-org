@@ -2,8 +2,40 @@
 
 from __future__ import annotations
 
+import os
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
+
+STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
+RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
+
+
+def normalize_env(env: str | None) -> str:
+    """Return the canonical lowercase runtime environment label."""
+    return (env or "").strip().lower()
+
+
+def is_relaxed_env(env: str | None) -> bool:
+    """Return True for explicitly local/test runtimes only."""
+    return normalize_env(env) in RELAXED_ENVS
+
+
+def is_strict_runtime_env(env: str | None) -> bool:
+    """Return True for every non-local runtime, including unknown labels."""
+    return not is_relaxed_env(env)
+
+
+def redis_url_from_env(default_db: int = 0) -> str:
+    """Resolve the Redis URL using the app's canonical env var first."""
+    default_url = f"redis://localhost:6379/{default_db}"
+    configured_settings = globals().get("settings")
+    settings_url = getattr(configured_settings, "redis_url", default_url)
+    return (
+        os.getenv("AGENTICORG_REDIS_URL")
+        or os.getenv("REDIS_URL")
+        or (settings_url if default_db == 0 else default_url)
+    )
 
 
 class Settings(BaseSettings):
@@ -59,8 +91,8 @@ class Settings(BaseSettings):
     # as strict. Staging is internet-accessible, used for demos, pilots,
     # and enterprise security review — weak staging secrets become real
     # incidents when staging has production-like integrations.
-    _STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
-    _RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
+    _STRICT_ENVS = STRICT_ENVS
+    _RELAXED_ENVS = RELAXED_ENVS
 
     @model_validator(mode="after")
     def validate_production_secret(self) -> Settings:
@@ -74,12 +106,8 @@ class Settings(BaseSettings):
         Secret length is also enforced: minimum 32 chars (≈192 bits of
         entropy) so JWT/HMAC operations don't operate over weak keys.
         """
-        env_l = self.env.lower()
-        is_strict = env_l in self._STRICT_ENVS
-        # Anything not explicitly relaxed AND not explicitly strict
-        # ALSO fails strict — defaults to safe.
-        is_unknown = env_l not in self._RELAXED_ENVS and not is_strict
-        if not (is_strict or is_unknown):
+        is_strict = is_strict_runtime_env(self.env)
+        if not is_strict:
             return self
 
         env_label = self.env  # preserve original casing in error msg

@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from api.deps import get_current_tenant
 from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
+from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.models.audit import AuditLog
 from core.models.lead_pipeline import EmailSequence, LeadPipeline
 from core.schemas.messages import (
@@ -29,6 +30,7 @@ from core.schemas.messages import (
 
 logger = structlog.get_logger()
 router = APIRouter()
+MAX_CSV_IMPORT_BYTES = 2 * 1024 * 1024
 
 
 # ── Schemas ──
@@ -525,7 +527,11 @@ async def import_leads_csv(
             },
         )
 
-    content = await file.read()
+    upload_path, _ = await stream_to_tempfile(file, max_bytes=MAX_CSV_IMPORT_BYTES, suffix=".csv")
+    try:
+        content = upload_path.read_bytes()
+    finally:
+        cleanup_tempfile(upload_path)
     if not content.strip():
         raise HTTPException(
             422,

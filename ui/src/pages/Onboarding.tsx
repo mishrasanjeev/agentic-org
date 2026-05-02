@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "../contexts/AuthContext";
+import api from "../lib/api";
 
 /* ── Milestone Tracker Types ──────────────────────────────────────────── */
 interface MilestoneTask {
@@ -82,7 +83,7 @@ interface InviteRow {
 }
 
 export default function Onboarding() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [industry, setIndustry] = useState("");
@@ -134,13 +135,10 @@ export default function Onboarding() {
     try {
       const filled = invites.filter((r) => r.email.trim());
       for (const invite of filled) {
-        await fetch("/api/v1/org/invite", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ role: invite.role.toLowerCase(), name: invite.name, email: invite.email }),
+        await api.post("/org/invite", {
+          role: invite.role.toLowerCase(),
+          name: invite.name,
+          email: invite.email,
         });
       }
       setInviteSuccess(true);
@@ -154,14 +152,7 @@ export default function Onboarding() {
 
   const finishOnboarding = async () => {
     try {
-      await fetch("/api/v1/org/onboarding", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ complete: true }),
-      });
+      await api.put("/org/onboarding", { complete: true });
     } catch {
       // best-effort
     }

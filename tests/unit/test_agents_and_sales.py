@@ -44,6 +44,14 @@ def _make_tenant_session_ctx(mock_session):
     return ctx
 
 
+def _mock_upload_file(content: bytes, filename: str = "import.csv"):
+    """Return an upload mock that streams content once, then EOF."""
+    file = MagicMock()
+    file.filename = filename
+    file.read = AsyncMock(side_effect=[content, b""])
+    return file
+
+
 def make_mock_agent(**overrides):
     agent = MagicMock()
     agent.id = overrides.get("id", uuid.uuid4())
@@ -1241,8 +1249,7 @@ class TestImportAgentsCsv:
             "Agent1,ap_processor,finance,Analyst,1\n"
             "Agent2,hr_assistant,hr,Manager,0\n"
         )
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         with patch("api.v1.agents.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
@@ -1256,8 +1263,7 @@ class TestImportAgentsCsv:
         from api.v1.agents import import_agents_csv
 
         csv_content = "name,agent_type,domain\n,ap_processor,finance\n"
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         with patch("api.v1.agents.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
@@ -1275,8 +1281,7 @@ class TestImportAgentsCsv:
             "name,agent_type,domain,reporting_to_name\n"
             "Agent1,ap_processor,finance,Agent1\n"
         )
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         # For the second pass (parent linking), mock all_agents
         all_agents_result = MagicMock()
@@ -1318,8 +1323,7 @@ class TestImportAgentsCsv:
             "Boss,manager,finance,\n"
             "Worker,ap_processor,finance,Boss\n"
         )
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         boss_id = uuid.uuid4()
         worker_id = uuid.uuid4()
@@ -2164,8 +2168,7 @@ class TestImportLeadsCsv:
             "Amit Sharma,amit@test.com,TestCo,VP,+91-123\n"
             "Priya Mehta,priya@test.com,OtherCo,CFO,+91-456\n"
         )
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         # No duplicates
         exists_result = MagicMock()
@@ -2190,8 +2193,7 @@ class TestImportLeadsCsv:
             ",missing@test.com,X\n"
             "NoEmail,,Y\n"
         )
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
@@ -2210,8 +2212,7 @@ class TestImportLeadsCsv:
             "name,email,company\n"
             "Dup Lead,dup@test.com,Co\n"
         )
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8"))
+        file = _mock_upload_file(csv_content.encode("utf-8"))
 
         exists_result = MagicMock()
         exists_result.scalar_one_or_none.return_value = uuid.uuid4()  # exists
@@ -2233,8 +2234,7 @@ class TestImportLeadsCsv:
 
         # Encode with utf-8-sig to add a BOM prefix (no \ufeff in the string itself)
         csv_content = "name,email,company\nBOM Lead,bom@test.com,BomCo\n"
-        file = MagicMock()
-        file.read = AsyncMock(return_value=csv_content.encode("utf-8-sig"))
+        file = _mock_upload_file(csv_content.encode("utf-8-sig"))
 
         exists_result = MagicMock()
         exists_result.scalar_one_or_none.return_value = None

@@ -174,7 +174,7 @@ def validate_upload(file: UploadFile) -> None:
 
 
 async def stream_to_tempfile(
-    file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES
+    file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES, suffix: str = ""
 ) -> tuple[Path, int]:
     """Copy the upload to a NamedTemporaryFile in chunks; abort if
     the running total exceeds ``max_bytes``.
@@ -192,7 +192,7 @@ async def stream_to_tempfile(
     don't leak disk on the rejection path.
     """
     total = 0
-    fd, tmp_path_str = tempfile.mkstemp(prefix="agenticorg-upload-")
+    fd, tmp_path_str = tempfile.mkstemp(prefix="agenticorg-upload-", suffix=suffix)
     tmp_path = Path(tmp_path_str)
     try:
         with os.fdopen(fd, "wb") as out:

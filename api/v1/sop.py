@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from api.deps import get_current_tenant
+from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 
 router = APIRouter()
 _log = structlog.get_logger()
@@ -56,19 +56,12 @@ async def upload_and_parse_sop(
             400, f"Unsupported file type '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(400, f"File too large (max {MAX_FILE_SIZE // 1024 // 1024}MB)")
-
-    # Save to temp file for parsing
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    tmp_path, _ = await stream_to_tempfile(file, max_bytes=MAX_FILE_SIZE, suffix=ext)
 
     try:
         from core.langgraph.sop_parser import extract_text_from_document, parse_sop_document
 
-        document_text = extract_text_from_document(tmp_path, file.content_type or "")
+        document_text = extract_text_from_document(str(tmp_path), file.content_type or "")
         if not document_text.strip():
             raise HTTPException(400, "Could not extract text from document")
 
@@ -94,7 +87,7 @@ async def upload_and_parse_sop(
             "config": parsed,
         }
     finally:
-        os.unlink(tmp_path)
+        cleanup_tempfile(tmp_path)
 
 
 # ── POST /sop/parse-text — Parse plain text SOP ────────────────────────────

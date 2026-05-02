@@ -38,6 +38,8 @@ from typing import Final
 
 from fastapi import Response
 
+from core.config import is_strict_runtime_env
+
 CSRF_COOKIE_NAME: Final[str] = "agenticorg_csrf"
 CSRF_HEADER_NAME: Final[str] = "X-CSRF-Token"
 
@@ -68,7 +70,7 @@ def set_csrf_cookie(response: Response, token: str, max_age_seconds: int = 86400
        reads it, the browser still won't ship it cross-origin in the
        cases SameSite covers, providing defense-in-depth.
     """
-    is_prod = os.getenv("AGENTICORG_ENV", "development").lower() == "production"
+    is_prod = is_strict_runtime_env(os.getenv("AGENTICORG_ENV", "development"))
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
         value=token,
