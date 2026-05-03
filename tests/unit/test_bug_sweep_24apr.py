@@ -214,6 +214,55 @@ class TestChatFormatAgentOutput:
             assert "'" not in out or "ok" in out  # no {'..': '..'} dict repr
 
 
+class TestChatFormatAgentOutputStringDictRepr:
+    """Issue #438 (post-PR #434, prod observation 2026-05-03): TDS chat
+    rendered ``{'type': 'text', 'text': '...'}`` verbatim. Root cause:
+    ``_format_agent_output`` short-circuits on ``isinstance(output, str)``
+    and returned the Python repr without trying to unwrap it. Fix tries
+    JSON / ``ast.literal_eval`` on string-shaped dicts before treating
+    them as final text.
+    """
+
+    def test_python_repr_of_text_block_unwraps(self) -> None:
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output(
+            "{'type': 'text', 'text': 'I can help you file Form 26Q.'}"
+        )
+        assert out == "I can help you file Form 26Q."
+        assert "'type'" not in out
+
+    def test_json_text_block_string_unwraps(self) -> None:
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output('{"type": "text", "text": "Plain JSON answer"}')
+        assert out == "Plain JSON answer"
+
+    def test_python_repr_with_extras_unwraps_to_text_only(self) -> None:
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output(
+            "{'type': 'text', 'text': 'Hello', 'extras': {'signature': 'sig'}}"
+        )
+        assert out == "Hello"
+        assert "extras" not in out
+        assert "signature" not in out
+
+    def test_plain_string_passes_through_unchanged(self) -> None:
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output("Just a plain answer with no wrapper.")
+        assert out == "Just a plain answer with no wrapper."
+
+    def test_malformed_dict_string_falls_back_to_string(self) -> None:
+        """A near-dict-shaped string that doesn't actually parse must
+        not raise — fall through to the original string."""
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output("{not a real dict")
+        assert out == "{not a real dict"
+
+
 class TestConnectorHealthCheck:
     """Uday/Ramesh 2026-04-24 (UI-HEALTH-404): Gmail connector /test
     reported ``status=healthy, http_status=404`` because the base
