@@ -279,7 +279,17 @@ class TestSiblingRoutesUseResolver:
     def test_chat_calls_resolver(self) -> None:
         src = Path("api/v1/chat.py").read_text(encoding="utf-8")
         assert "_resolve_agent_connector_ids_for_type" in src
-        assert "_load_connector_configs_for_agent" in src
+        # Chat must call the canonical connector resolver before invoking
+        # langgraph_run. May-03 BUG-17 fix promoted chat to the richer
+        # `_resolve_connector_configs` (returns config + resolved
+        # connector_names for fail-closed dispatch); the old
+        # `_load_connector_configs_for_agent` is now a back-compat
+        # wrapper around it. Either function name is the canonical
+        # resolver path the original 28-Apr defense intended.
+        assert (
+            "_resolve_connector_configs" in src
+            or "_load_connector_configs_for_agent" in src
+        )
 
     def test_mcp_calls_resolver(self) -> None:
         src = Path("api/v1/mcp.py").read_text(encoding="utf-8")
