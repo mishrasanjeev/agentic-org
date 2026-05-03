@@ -16,7 +16,7 @@ compliance:
 agents:
   - type: gst_filing
     domain: finance
-    tools: [gstn:fetch_gstr2a, gstn:push_gstr1_data, gstn:file_gstr3b, gstn:file_gstr9, gstn:generate_einvoice_irn, gstn:generate_eway_bill, tally:get_trial_balance, tally:generate_gst_report]
+    tools: [gstn:fetch_gstr2a, gstn:push_gstr1_data, gstn:file_gstr3b, gstn:file_gstr9, gstn:generate_einvoice_irn, gstn:generate_eway_bill, tally:get_trial_balance, tally:generate_gst_report, zoho_books:get_trial_balance, zoho_books:generate_gst_report, zoho_books:list_invoices]
     llm_model: gpt-4o
     hitl_condition: always_before_filing
     system_prompt_suffix: >
@@ -26,7 +26,7 @@ agents:
       Never file a return with unresolved mismatches above 5% of return value.
   - type: tds_compliance
     domain: finance
-    tools: [income_tax:file_26q_return, income_tax:file_24q_return, income_tax:check_tds_credit_in_26as, income_tax:download_form_16a, income_tax:pay_tax_challan, tally:get_ledger_balance, tally:post_voucher]
+    tools: [zoho_books:calculate_tds, zoho_books:get_ledger_balance, income_tax_india:calculate_tds, income_tax_india:file_form_26q, income_tax_india:file_26q_return, income_tax_india:file_24q_return, income_tax_india:check_tds_credit_in_26as, income_tax_india:download_form_16a, income_tax_india:pay_tax_challan, tally:get_ledger_balance, tally:post_voucher]
     llm_model: gpt-4o
     hitl_condition: always_before_filing
     system_prompt_suffix: >
@@ -36,7 +36,7 @@ agents:
       Never proceed if 26AS credit does not reconcile with books within 1% tolerance.
   - type: bank_reconciliation
     domain: finance
-    tools: [banking_aa:fetch_bank_statement, banking_aa:check_account_balance, banking_aa:get_transaction_list, tally:get_ledger_balance, tally:get_trial_balance]
+    tools: [zoho_books:fetch_bank_statement, zoho_books:check_account_balance, zoho_books:get_transaction_list, zoho_books:get_ledger_balance, zoho_books:get_trial_balance, zoho_books:reconcile_bank, banking_aa:fetch_bank_statement, banking_aa:check_account_balance, banking_aa:get_transaction_list, tally:get_ledger_balance, tally:get_trial_balance]
     llm_model: gpt-4o-mini
     confidence_floor: 0.95
     system_prompt_suffix: >
@@ -45,7 +45,7 @@ agents:
       Never auto-post reconciliation entries without a confirmed GL account match.
   - type: fpa_analyst
     domain: finance
-    tools: [tally:get_trial_balance, tally:get_ledger_balance, zoho_books:get_profit_loss, zoho_books:get_balance_sheet]
+    tools: [tally:get_trial_balance, tally:get_ledger_balance, zoho_books:get_trial_balance, zoho_books:get_ledger_balance, zoho_books:get_profit_loss, zoho_books:get_balance_sheet]
     llm_model: gpt-4o-mini
     system_prompt_suffix: >
       Perform variance analysis, budget vs actual comparison, and MIS report generation.
@@ -53,7 +53,7 @@ agents:
       Flag variances exceeding 15% for partner review.
   - type: ar_collections
     domain: finance
-    tools: [tally:get_ledger_balance, zoho_books:list_invoices, email:send]
+    tools: [zoho_books:get_ledger_balance, zoho_books:list_overdue_invoices, tally:get_ledger_balance, zoho_books:list_invoices, sendgrid:send_email]
     llm_model: gpt-4o-mini
     system_prompt_suffix: >
       Track overdue invoices across all clients, send tiered reminders, and escalate aging items.

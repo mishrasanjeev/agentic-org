@@ -1488,9 +1488,66 @@ function PermissionBadge({ perm }: { perm: PermissionLevel }) {
   );
 }
 
-function buildScopeString(tool: string, domain: string, perm: PermissionLevel): string {
-  const connector = domain || "default";
-  return `tool:${connector}:${perm.toLowerCase()}:${tool}`;
+const TOOL_CONNECTOR_FALLBACK: Record<string, string> = {
+  calculate_tds: "zoho_books",
+  check_account_balance: "zoho_books",
+  check_tds_credit_in_26as: "income_tax_india",
+  download_form_16a: "income_tax_india",
+  fetch_bank_statement: "zoho_books",
+  file_24q_return: "income_tax_india",
+  file_26q_return: "income_tax_india",
+  file_form_26q: "income_tax_india",
+  generate_gst_report: "zoho_books",
+  get_balance_sheet: "zoho_books",
+  get_ledger_balance: "zoho_books",
+  get_profit_loss: "zoho_books",
+  get_transaction_list: "zoho_books",
+  get_trial_balance: "zoho_books",
+  list_invoices: "zoho_books",
+  list_overdue_invoices: "zoho_books",
+  pay_tax_challan: "income_tax_india",
+  reconcile_bank: "zoho_books",
+  send_email: "sendgrid",
+};
+
+type EnforcementEntry = {
+  timestamp?: string;
+  tool?: string;
+  connector?: string;
+  result?: string;
+  reason?: string;
+};
+
+function normalizeConnectorId(value: unknown): string {
+  return String(value || "").trim().replace(/^registry-/, "");
+}
+
+function connectorForTool(tool: string, agent: Agent): string {
+  const cfg = agent.config || {};
+  const configured = normalizeConnectorId(cfg.tool_connectors?.[tool]);
+  if (configured) return configured;
+
+  const linked = (agent.connector_ids || cfg.required_connector_ids || [])
+    .map(normalizeConnectorId)
+    .filter(Boolean);
+  if (linked.length === 1) return linked[0];
+
+  return TOOL_CONNECTOR_FALLBACK[tool] || agent.domain || "agenticorg";
+}
+
+function buildScopeString(tool: string, connector: string): string {
+  return `tool:${connector || "agenticorg"}:execute:${tool}`;
+}
+
+function grantexConfigured(agent: Agent): boolean {
+  const grantex = agent.config?.grantex || {};
+  return Boolean(grantex.grant_token || grantex.grantex_agent_id || grantex.grantex_did);
+}
+
+function enforcementEntries(agent: Agent): EnforcementEntry[] {
+  const cfg = agent.config || {};
+  const raw = cfg.enforcement_log || cfg.grantex?.enforcement_log || [];
+  return Array.isArray(raw) ? raw : [];
 }
 
 /* ─── Voice Tab ─── */
@@ -1577,23 +1634,11 @@ function VoiceTab({ agent }: { agent: Agent }) {
 /* ─── Scopes Tab ─── */
 function ScopesTab({ agent }: { agent: Agent }) {
   const tools = agent.authorized_tools || [];
-  const domain = agent.domain || "default";
-
-  // Mock enforcement log data
-  const enforcementLog = [
-    { timestamp: "2026-04-04T09:12:33Z", tool: tools[0] || "get_contact", connector: "salesforce", result: "allowed" as const, reason: "Scope matched: READ" },
-    { timestamp: "2026-04-04T09:10:15Z", tool: tools[1] || "update_record", connector: "salesforce", result: "allowed" as const, reason: "Scope matched: WRITE" },
-    { timestamp: "2026-04-04T08:55:42Z", tool: "delete_account", connector: "salesforce", result: "denied" as const, reason: "No DELETE scope granted" },
-    { timestamp: "2026-04-04T08:30:01Z", tool: "admin_reset_org", connector: "internal", result: "denied" as const, reason: "ADMIN scope not in grant token" },
-    { timestamp: "2026-04-04T08:15:22Z", tool: tools[0] || "get_contact", connector: "hubspot", result: "allowed" as const, reason: "Scope matched: READ" },
-  ];
-
-  // Mock token statuses: most active, one expiring, one expired
-  function getTokenStatus(idx: number): { color: string; label: string } {
-    if (idx === tools.length - 1 && tools.length > 2) return { color: "bg-red-500", label: "Expired" };
-    if (idx === tools.length - 2 && tools.length > 1) return { color: "bg-yellow-500", label: "Expiring soon" };
-    return { color: "bg-green-500", label: "Active" };
-  }
+  const hasGrantex = grantexConfigured(agent);
+  const tokenStatus = hasGrantex
+    ? { color: "bg-green-500", label: "Configured" }
+    : { color: "bg-muted-foreground", label: "Not issued" };
+  const enforcementLog = enforcementEntries(agent);
 
   return (
     <div className="space-y-4">
@@ -1618,17 +1663,17 @@ function ScopesTab({ agent }: { agent: Agent }) {
                 <tbody>
                   {tools.map((tool, idx) => {
                     const perm = getToolPermission(tool);
-                    const scope = buildScopeString(tool, domain, perm);
-                    const tokenStatus = getTokenStatus(idx);
+                    const connector = connectorForTool(tool, agent);
+                    const scope = buildScopeString(tool, connector);
                     return (
-                      <tr key={tool} className="border-b last:border-0">
+                      <tr key={`${tool}-${idx}`} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">{tool}</td>
                         <td className="py-2 pr-4"><PermissionBadge perm={perm} /></td>
-                        <td className="py-2 pr-4 text-xs">{domain}</td>
+                        <td className="py-2 pr-4 text-xs">{connector}</td>
                         <td className="py-2 pr-4"><code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{scope}</code></td>
                         <td className="py-2 pr-4">
-                          <Badge variant={tokenStatus.label === "Expired" ? "destructive" : tokenStatus.label === "Expiring soon" ? "warning" : "success"} className="text-[10px]">
-                            {tokenStatus.label === "Expired" ? "expired" : "active"}
+                          <Badge variant={hasGrantex ? "success" : "secondary"} className="text-[10px]">
+                            {hasGrantex ? "configured" : "not issued"}
                           </Badge>
                         </td>
                         <td className="py-2">
@@ -1644,7 +1689,7 @@ function ScopesTab({ agent }: { agent: Agent }) {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No tools configured — no scopes to display.</p>
+            <p className="text-sm text-muted-foreground">No tools configured; no scopes to display.</p>
           )}
         </CardContent>
       </Card>
@@ -1654,37 +1699,46 @@ function ScopesTab({ agent }: { agent: Agent }) {
           <CardTitle className="text-sm font-semibold">Enforcement Log</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
-                  <th className="pb-2 pr-4">Timestamp</th>
-                  <th className="pb-2 pr-4">Tool</th>
-                  <th className="pb-2 pr-4">Connector</th>
-                  <th className="pb-2 pr-4">Result</th>
-                  <th className="pb-2">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {enforcementLog.map((entry, idx) => (
-                  <tr key={idx} className="border-b last:border-0">
-                    <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </td>
-                    <td className="py-2 pr-4 font-medium">{entry.tool}</td>
-                    <td className="py-2 pr-4">{entry.connector}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant={entry.result === "allowed" ? "success" : "destructive"} className="text-[10px]">
-                        {entry.result}
-                      </Badge>
-                    </td>
-                    <td className="py-2 text-xs text-muted-foreground">{entry.reason}</td>
+          {enforcementLog.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
+                    <th className="pb-2 pr-4">Timestamp</th>
+                    <th className="pb-2 pr-4">Tool</th>
+                    <th className="pb-2 pr-4">Connector</th>
+                    <th className="pb-2 pr-4">Result</th>
+                    <th className="pb-2">Reason</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">Showing recent enforcement decisions. Full audit log available via API.</p>
+                </thead>
+                <tbody>
+                  {enforcementLog.map((entry, idx) => {
+                    const tool = String(entry.tool || "");
+                    const connector = normalizeConnectorId(entry.connector) || connectorForTool(tool, agent);
+                    const result = String(entry.result || "").toLowerCase();
+                    const allowed = result === "allowed" || result === "success";
+                    return (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
+                          {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "-"}
+                        </td>
+                        <td className="py-2 pr-4 font-medium">{tool || "-"}</td>
+                        <td className="py-2 pr-4">{connector || "-"}</td>
+                        <td className="py-2 pr-4">
+                          <Badge variant={allowed ? "success" : "destructive"} className="text-[10px]">
+                            {result || "denied"}
+                          </Badge>
+                        </td>
+                        <td className="py-2 text-xs text-muted-foreground">{entry.reason || "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No enforcement decisions recorded for this agent yet.</p>
+          )}
         </CardContent>
       </Card>
     </div>

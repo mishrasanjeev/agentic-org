@@ -309,7 +309,7 @@ export default function CompanyOnboard() {
         pf_registration: form.pf_reg || undefined,
         esi_registration: form.esi_reg || undefined,
         pt_registration: form.pt_reg || undefined,
-        gst_auto_file: form.gst_auto_file,
+        gst_auto_file: false,
         tally_config: tallyConfig,
       };
       await api.post("/companies/onboard", payload);
@@ -669,11 +669,15 @@ export default function CompanyOnboard() {
                   <input
                     type="checkbox"
                     checked={form.gst_auto_file}
+                    disabled
                     onChange={(e) => update("gst_auto_file", e.target.checked)}
                     className="w-4 h-4 rounded border-input"
                   />
                   <span className="text-sm font-medium">Enable GST Auto-Filing</span>
                 </label>
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  GST auto-filing can be enabled after this company is onboarded and an active GSTN portal credential is saved and verified.
+                </p>
                 {form.gst_auto_file && (
                   <div className="mt-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
                     <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Warning: Auto-filing enabled</p>

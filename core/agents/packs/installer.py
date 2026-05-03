@@ -72,6 +72,34 @@ def _normalize_tool_names(tools: list[str]) -> list[str]:
     return normalized
 
 
+_CONNECTOR_ALIASES: dict[str, str] = {
+    "email": "sendgrid",
+    "income_tax": "income_tax_india",
+}
+
+
+def _canonical_connector_name(connector_name: str) -> str:
+    raw = connector_name.strip().removeprefix("registry-")
+    return _CONNECTOR_ALIASES.get(raw, raw)
+
+
+def _tool_connector_map(tools: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for tool_ref in tools:
+        if ":" not in tool_ref:
+            continue
+        connector_name, tool_name = tool_ref.split(":", 1)
+        connector = _canonical_connector_name(connector_name)
+        if tool_name and tool_name not in mapping:
+            mapping[tool_name] = connector
+    return mapping
+
+
+def _connector_ids_for_tools(tools: list[str]) -> list[str]:
+    connectors = list(dict.fromkeys(_tool_connector_map(tools).values()))
+    return [f"registry-{connector}" for connector in connectors]
+
+
 def _resolve_pack_dir(pack_name: str) -> Path | None:
     # Resolve by string-matching against directories we discover ourselves.
     # `pack_name` never flows into a path expression — the set of discovered
@@ -420,9 +448,10 @@ async def _get_or_create_pack_agents(
         agent_cfg = raw_agent_cfg if isinstance(raw_agent_cfg, dict) else {"type": str(raw_agent_cfg)}
         display_name = _agent_display_name(pack_label, agent_cfg, index, company_name)
         agent_type = _agent_type(agent_cfg, index)
-        normalized_tools = _normalize_tool_names(
-            [str(tool) for tool in agent_cfg.get("tools", []) if tool]
-        )
+        raw_tools = [str(tool) for tool in agent_cfg.get("tools", []) if tool]
+        normalized_tools = _normalize_tool_names(raw_tools)
+        tool_connectors = _tool_connector_map(raw_tools)
+        connector_ids = _connector_ids_for_tools(raw_tools)
         llm_model = str(agent_cfg.get("llm_model") or _DEFAULT_LLM_MODEL)
         llm_config = {
             "model": llm_model,
@@ -463,6 +492,7 @@ async def _get_or_create_pack_agents(
                 ),
                 max_retries=3,
                 authorized_tools=normalized_tools,
+                connector_ids=connector_ids,
                 status="shadow",
                 version="1.0.0",
                 employee_name=display_name,
@@ -477,7 +507,9 @@ async def _get_or_create_pack_agents(
                         "source": "industry_pack",
                         **({"company_id": str(company_id)} if company_id else {}),
                         **({"company_name": company_name} if company_name else {}),
-                    }
+                    },
+                    "tool_connectors": tool_connectors,
+                    "required_connector_ids": connector_ids,
                 },
             )
             session.add(agent)
@@ -502,6 +534,40 @@ async def _get_or_create_pack_agents(
                     deployed_at=datetime.now(UTC),
                 )
             )
+        else:
+            # Idempotent repair path for previously provisioned pack
+            # agents. Several CA reopen bugs came from treating pack
+            # sync as "create-only": old rows kept empty connector_ids
+            # and stale tool manifests, so they still routed through
+            # unrelated global connectors after a successful resync.
+            agent.authorized_tools = normalized_tools
+            agent.connector_ids = connector_ids
+            agent.system_prompt_text = system_prompt_text
+            agent.llm_model = llm_model
+            agent.llm_fallback = _DEFAULT_FALLBACK_MODEL
+            agent.llm_config = llm_config
+            agent.confidence_floor = confidence_floor
+            agent.hitl_condition = str(
+                agent_cfg.get("hitl_condition")
+                or f"confidence < {confidence_floor}"
+            )
+            cfg = dict(agent.config or {})
+            pack_cfg = dict(cfg.get("pack_install") or {})
+            pack_cfg.update(
+                {
+                    "pack_name": pack_name,
+                    "display_name": pack_label,
+                    "agent_index": index,
+                    "source": "industry_pack",
+                    **({"company_id": str(company_id)} if company_id else {}),
+                    **({"company_name": company_name} if company_name else {}),
+                }
+            )
+            cfg["pack_install"] = pack_cfg
+            cfg["tool_connectors"] = tool_connectors
+            cfg["required_connector_ids"] = connector_ids
+            agent.config = cfg
+            session.add(agent)
 
         agent_specs.append(
             {

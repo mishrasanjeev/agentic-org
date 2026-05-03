@@ -435,6 +435,9 @@ export default function CompanyDetail() {
   const overdueDeadlines = deadlines.filter((deadline) => deadlineStatus(deadline) === "overdue").length;
   const upcomingDeadlines = deadlines.filter((deadline) => deadlineStatus(deadline) === "pending").length;
   const activeCredentials = credentials.filter((credential) => credential.is_active).length;
+  const hasActiveGstnCredential = credentials.some(
+    (credential) => credential.is_active && credential.portal_type === "gstn",
+  );
   const healthScore = company?.client_health_score ?? 0;
 
   const activities = useMemo<ActivityEntry[]>(() => {
@@ -486,6 +489,10 @@ export default function CompanyDetail() {
 
   const handleSaveCompany = async () => {
     if (!id) return;
+    if (editForm.gst_auto_file && !hasActiveGstnCredential) {
+      setError("Add and verify an active GSTN portal credential before enabling GST auto-file.");
+      return;
+    }
     setSavingCompany(true);
     setError(null);
     try {
@@ -1363,11 +1370,28 @@ export default function CompanyDetail() {
                     <input
                       type="checkbox"
                       checked={editForm.gst_auto_file}
-                      onChange={(event) => setEditForm((current) => ({ ...current, gst_auto_file: event.target.checked }))}
+                      disabled={!hasActiveGstnCredential && !editForm.gst_auto_file}
+                      onChange={(event) => {
+                        if (event.target.checked && !hasActiveGstnCredential) {
+                          setError("Add and verify an active GSTN portal credential before enabling GST auto-file.");
+                          return;
+                        }
+                        setEditForm((current) => ({ ...current, gst_auto_file: event.target.checked }));
+                      }}
                       className="h-4 w-4 rounded border-input"
                     />
                     Enable GST auto-file
                   </label>
+                  {!hasActiveGstnCredential && !editForm.gst_auto_file && (
+                    <p className="mt-2 text-xs text-amber-700">
+                      GST auto-file cannot be enabled until an active GSTN portal credential is saved and verified below.
+                    </p>
+                  )}
+                  {!hasActiveGstnCredential && editForm.gst_auto_file && (
+                    <p className="mt-2 text-xs text-amber-700">
+                      GST auto-file is currently enabled but no active GSTN portal credential exists, so filings will silently fail. Disable it here, or add a credential below before the next filing window.
+                    </p>
+                  )}
                 </div>
                 <div className="sm:col-span-2 flex items-center gap-3">
                   <Button disabled={savingCompany} onClick={() => void handleSaveCompany()}>

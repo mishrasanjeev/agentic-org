@@ -17,6 +17,20 @@ export interface Agent {
   parent_agent_id?: string | null;
   reporting_to?: string | null;
   org_level?: number;
+  connector_ids?: string[];
+  config?: {
+    tool_connectors?: Record<string, string>;
+    required_connector_ids?: string[];
+    enforcement_log?: any[];
+    grantex?: {
+      grant_token?: string;
+      grantex_agent_id?: string;
+      grantex_did?: string;
+      enforcement_log?: any[];
+      grantex_scopes?: string[];
+    };
+    [key: string]: any;
+  };
 }
 export interface PromptTemplate {
   id: string; name: string; agent_type: string; domain: string;

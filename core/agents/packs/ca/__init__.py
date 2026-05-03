@@ -27,6 +27,9 @@ CA_PACK: dict[str, Any] = {
                 "gstn:file_gstr9",
                 "gstn:generate_einvoice_irn",
                 "gstn:generate_eway_bill",
+                "zoho_books:get_trial_balance",
+                "zoho_books:generate_gst_report",
+                "zoho_books:list_invoices",
                 "tally:get_trial_balance",
                 "tally:generate_gst_report",
             ],
@@ -41,11 +44,15 @@ CA_PACK: dict[str, Any] = {
                 "generates Form 16A, reconciles 26AS"
             ),
             "tools": [
-                "income_tax:file_26q_return",
-                "income_tax:file_24q_return",
-                "income_tax:check_tds_credit_in_26as",
-                "income_tax:download_form_16a",
-                "income_tax:pay_tax_challan",
+                "zoho_books:calculate_tds",
+                "zoho_books:get_ledger_balance",
+                "income_tax_india:calculate_tds",
+                "income_tax_india:file_form_26q",
+                "income_tax_india:file_26q_return",
+                "income_tax_india:file_24q_return",
+                "income_tax_india:check_tds_credit_in_26as",
+                "income_tax_india:download_form_16a",
+                "income_tax_india:pay_tax_challan",
                 "tally:get_ledger_balance",
                 "tally:post_voucher",
             ],
@@ -60,6 +67,12 @@ CA_PACK: dict[str, Any] = {
                 "flags old outstanding items"
             ),
             "tools": [
+                "zoho_books:fetch_bank_statement",
+                "zoho_books:check_account_balance",
+                "zoho_books:get_transaction_list",
+                "zoho_books:get_ledger_balance",
+                "zoho_books:get_trial_balance",
+                "zoho_books:reconcile_bank",
                 "banking_aa:fetch_bank_statement",
                 "banking_aa:check_account_balance",
                 "banking_aa:get_transaction_list",
@@ -77,6 +90,8 @@ CA_PACK: dict[str, Any] = {
                 "MIS report generation"
             ),
             "tools": [
+                "zoho_books:get_trial_balance",
+                "zoho_books:get_ledger_balance",
                 "tally:get_trial_balance",
                 "tally:get_ledger_balance",
                 "zoho_books:get_profit_loss",
@@ -92,9 +107,11 @@ CA_PACK: dict[str, Any] = {
                 "escalates aging items"
             ),
             "tools": [
+                "zoho_books:get_ledger_balance",
+                "zoho_books:list_overdue_invoices",
                 "tally:get_ledger_balance",
                 "zoho_books:list_invoices",
-                "email:send",
+                "sendgrid:send_email",
             ],
             "llm_model": "gpt-4o-mini",
         },
