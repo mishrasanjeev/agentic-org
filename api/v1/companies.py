@@ -15,8 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from core.crypto import decrypt_for_tenant, encrypt_for_tenant
 from core.database import get_tenant_session
 from core.models.company import Company
+from core.models.gstn_credential import GSTNCredential
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -271,6 +273,20 @@ async def _ensure_ca_pack_ready(tenant_id: str) -> None:
     await ensure_ca_pack_subscription_sync_async(tenant_id)
 
 
+async def _has_active_gstn_credential(session, tid: _uuid.UUID, cid: _uuid.UUID) -> bool:
+    result = await session.execute(
+        select(GSTNCredential.id)
+        .where(
+            GSTNCredential.tenant_id == tid,
+            GSTNCredential.company_id == cid,
+            GSTNCredential.portal_type == "gstn",
+            GSTNCredential.is_active.is_(True),
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 # ---------------------------------------------------------------------------
 # LIST
 # ---------------------------------------------------------------------------
@@ -352,6 +368,15 @@ async def create_company(
             )
             if existing.scalar_one_or_none():
                 raise HTTPException(409, f"Company with GSTIN {body.gstin} already exists")
+        if body.gst_auto_file:
+            raise HTTPException(
+                409,
+                (
+                    "GST auto-file requires an active GSTN portal credential. "
+                    "Create the company first, add and verify GSTN credentials, "
+                    "then enable auto-file from Company Settings."
+                ),
+            )
 
         company = Company(
             tenant_id=tid,
@@ -472,6 +497,19 @@ async def update_company(
             )
             if dup.scalar_one_or_none():
                 raise HTTPException(409, f"Company with GSTIN {updates['gstin']} already exists")
+
+        if updates.get("gst_auto_file") is True and not await _has_active_gstn_credential(
+            session,
+            tid,
+            cid,
+        ):
+            raise HTTPException(
+                409,
+                (
+                    "GST auto-file requires an active GSTN portal credential. "
+                    "Add and verify a GSTN credential before enabling auto-file."
+                ),
+            )
 
         for key, value in updates.items():
             setattr(company, key, value)
@@ -641,6 +679,15 @@ async def onboard_company(
             )
             if existing.scalar_one_or_none():
                 raise HTTPException(409, f"Company with GSTIN {body.gstin} already exists")
+        if body.gst_auto_file:
+            raise HTTPException(
+                409,
+                (
+                    "GST auto-file requires an active GSTN portal credential. "
+                    "Onboard the company in manual mode, add and verify GSTN "
+                    "credentials, then enable auto-file from Company Settings."
+                ),
+            )
 
         # Assign current user as partner by default
         user_email = user.get("sub", "")
@@ -1451,13 +1498,6 @@ async def activate_ca_subscription(
 # ===========================================================================
 # GSTN Credential Vault schemas
 # ===========================================================================
-
-from core.crypto import (  # noqa: E402
-    decrypt_for_tenant,
-    encrypt_for_tenant,
-)
-from core.models.gstn_credential import GSTNCredential  # noqa: E402
-
 
 class GSTNCredentialCreate(BaseModel):
     gstin: str

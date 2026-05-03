@@ -35,10 +35,19 @@ class ZohoBooksConnector(BaseConnector):
     def _register_tools(self):
         self._tool_registry["create_invoice"] = self.create_invoice
         self._tool_registry["list_invoices"] = self.list_invoices
+        self._tool_registry["list_overdue_invoices"] = self.list_overdue_invoices
         self._tool_registry["record_expense"] = self.record_expense
         self._tool_registry["get_balance_sheet"] = self.get_balance_sheet
         self._tool_registry["get_profit_loss"] = self.get_profit_loss
+        self._tool_registry["get_ledger_balance"] = self.get_ledger_balance
+        self._tool_registry["get_trial_balance"] = self.get_trial_balance
+        self._tool_registry["generate_gst_report"] = self.generate_gst_report
+        self._tool_registry["calculate_tds"] = self.calculate_tds
         self._tool_registry["list_chartofaccounts"] = self.list_chartofaccounts
+        self._tool_registry["fetch_bank_statement"] = self.fetch_bank_statement
+        self._tool_registry["check_account_balance"] = self.check_account_balance
+        self._tool_registry["get_transaction_list"] = self.get_transaction_list
+        self._tool_registry["reconcile_bank"] = self.reconcile_bank
         self._tool_registry["reconcile_transaction"] = self.reconcile_transaction
         self._tool_registry["get_organization"] = self.get_organization
 
@@ -245,6 +254,15 @@ class ZohoBooksConnector(BaseConnector):
 
     # ── Expenses ───────────────────────────────────────────────────────
 
+    async def list_overdue_invoices(self, **params) -> dict[str, Any]:
+        """List overdue invoices from Zoho Books.
+
+        Optional: customer_id, page.
+        """
+        query = dict(params)
+        query["status"] = "overdue"
+        return await self.list_invoices(**query)
+
     async def record_expense(self, **params) -> dict[str, Any]:
         """Record an expense in Zoho Books.
 
@@ -295,6 +313,87 @@ class ZohoBooksConnector(BaseConnector):
 
     # ── Organization details ───────────────────────────────────────────
 
+    async def get_ledger_balance(self, **params) -> dict[str, Any]:
+        """Get a ledger report or account balance from Zoho Books.
+
+        Optional: account_id, account_name, from_date, to_date.
+        """
+        qp: dict[str, Any] = {}
+        for field in ("account_id", "account_name", "from_date", "to_date"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/reports/ledger", params=self._org_params(qp))
+        ledger = self._unwrap(data, "ledger")
+        if isinstance(ledger, dict):
+            return ledger
+        return {"ledger": ledger}
+
+    async def get_trial_balance(self, **params) -> dict[str, Any]:
+        """Get the trial balance report from Zoho Books.
+
+        Optional: date, from_date, to_date.
+        """
+        qp: dict[str, Any] = {}
+        for field in ("date", "from_date", "to_date"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/reports/trialbalance", params=self._org_params(qp))
+        return self._unwrap(data, "trial_balance")
+
+    async def generate_gst_report(self, **params) -> dict[str, Any]:
+        """Get a GST summary report from Zoho Books.
+
+        Optional: from_date, to_date, gstin.
+        """
+        qp: dict[str, Any] = {}
+        for field in ("from_date", "to_date", "gstin"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/reports/gstsummary", params=self._org_params(qp))
+        return self._unwrap(data, "gst_summary")
+
+    async def calculate_tds(self, **params) -> dict[str, Any]:
+        """Calculate Indian TDS for a supplied transaction.
+
+        Required: amount, section. Optional: deductee_type, pan_available.
+        This is a deterministic calculation helper and does not file a return.
+        """
+        try:
+            amount = float(params.get("amount") or params.get("payment_amount") or 0)
+        except (TypeError, ValueError):
+            return {"error": "amount must be numeric"}
+        if amount <= 0:
+            return {"error": "amount is required"}
+
+        section = str(params.get("section") or "").upper().replace("SECTION", "").strip()
+        section = section.replace(" ", "")
+        deductee_type = str(params.get("deductee_type") or "individual").lower()
+        pan_available = bool(params.get("pan_available", True))
+
+        section_rates = {
+            "194A": 0.10,
+            "194C": 0.01 if deductee_type in {"individual", "huf"} else 0.02,
+            "194H": 0.05,
+            "194I": 0.10,
+            "194J": 0.10,
+            "194O": 0.01,
+            "194Q": 0.001,
+        }
+        if section not in section_rates:
+            return {"error": f"unsupported TDS section: {section or 'missing'}"}
+
+        rate = max(section_rates[section], 0.20) if not pan_available else section_rates[section]
+        tds_amount = round(amount * rate, 2)
+        return {
+            "status": "calculated",
+            "section": section,
+            "amount": amount,
+            "rate": rate,
+            "tds_amount": tds_amount,
+            "net_payable": round(amount - tds_amount, 2),
+            "filing_required": True,
+        }
+
     async def get_organization(self, **_params) -> dict[str, Any]:
         """Get organization details (name, organization_id, address, currency).
 
@@ -334,6 +433,46 @@ class ZohoBooksConnector(BaseConnector):
         }
 
     # ── Bank Reconciliation ────────────────────────────────────────────
+
+    async def fetch_bank_statement(self, **params) -> dict[str, Any]:
+        """Fetch bank transactions from Zoho Books.
+
+        Optional: account_id, from_date, to_date, page.
+        """
+        return await self.get_transaction_list(**params)
+
+    async def check_account_balance(self, **params) -> dict[str, Any]:
+        """Fetch bank account balance details from Zoho Books.
+
+        Optional: account_id.
+        """
+        account_id = params.get("account_id")
+        path = f"/bankaccounts/{account_id}" if account_id else "/bankaccounts"
+        data = await self._get(path, params=self._org_params())
+        if account_id:
+            return self._unwrap(data, "bankaccount")
+        accounts = self._unwrap(data, "bankaccounts")
+        return {"bankaccounts": accounts if isinstance(accounts, list) else []}
+
+    async def get_transaction_list(self, **params) -> dict[str, Any]:
+        """List bank transactions from Zoho Books.
+
+        Optional: account_id, from_date, to_date, page.
+        """
+        qp: dict[str, Any] = {}
+        for field in ("account_id", "from_date", "to_date", "page"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/banktransactions", params=self._org_params(qp))
+        transactions = self._unwrap(data, "banktransactions")
+        return {
+            "transactions": transactions if isinstance(transactions, list) else [],
+            "page_context": data.get("page_context", {}),
+        }
+
+    async def reconcile_bank(self, **params) -> dict[str, Any]:
+        """Alias for reconcile_transaction used by CA pack prompts."""
+        return await self.reconcile_transaction(**params)
 
     async def reconcile_transaction(self, **params) -> dict[str, Any]:
         """Reconcile an uncategorized bank transaction.

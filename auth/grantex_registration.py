@@ -37,6 +37,7 @@ def register_agent(
     agent_type: str,
     domain: str,
     authorized_tools: list[str],
+    connector_names: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Register an agent on Grantex synchronously.
 
@@ -48,7 +49,7 @@ def register_agent(
         logger.info("grantex_registration_skipped", reason="no API key configured")
         return None
 
-    scopes = _tools_to_scopes(authorized_tools, domain)
+    scopes = _tools_to_scopes(authorized_tools, domain, connector_names=connector_names)
 
     try:
         agent = client.agents.register(

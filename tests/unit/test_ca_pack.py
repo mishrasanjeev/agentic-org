@@ -143,15 +143,18 @@ class TestGSTFilingAgentTools:
         assert "gstn:generate_einvoice_irn" in tools
         assert "gstn:generate_eway_bill" in tools
 
-        # Must have Tally tools
+        # Must have accounting source tools
+        assert "zoho_books:get_trial_balance" in tools
+        assert "zoho_books:generate_gst_report" in tools
+        assert "zoho_books:list_invoices" in tools
         assert "tally:get_trial_balance" in tools
         assert "tally:generate_gst_report" in tools
 
-    def test_gst_filing_agent_has_8_tools(self):
+    def test_gst_filing_agent_has_11_tools(self):
         from core.agents.packs.ca import CA_PACK
 
         gst_agent = next(a for a in CA_PACK["agents"] if a["name"] == "GST Filing Agent")
-        assert len(gst_agent["tools"]) == 8
+        assert len(gst_agent["tools"]) == 11
 
     def test_gst_filing_agent_hitl_always(self):
         """GST Filing Agent must require HITL before filing."""
@@ -175,22 +178,26 @@ class TestTDSComplianceAgentTools:
         tds_agent = next(a for a in CA_PACK["agents"] if a["name"] == "TDS Compliance Agent")
         tools = tds_agent["tools"]
 
-        # Income Tax tools
-        assert "income_tax:file_26q_return" in tools
-        assert "income_tax:file_24q_return" in tools
-        assert "income_tax:check_tds_credit_in_26as" in tools
-        assert "income_tax:download_form_16a" in tools
-        assert "income_tax:pay_tax_challan" in tools
+        # Income Tax + accounting source tools
+        assert "zoho_books:calculate_tds" in tools
+        assert "zoho_books:get_ledger_balance" in tools
+        assert "income_tax_india:calculate_tds" in tools
+        assert "income_tax_india:file_form_26q" in tools
+        assert "income_tax_india:file_26q_return" in tools
+        assert "income_tax_india:file_24q_return" in tools
+        assert "income_tax_india:check_tds_credit_in_26as" in tools
+        assert "income_tax_india:download_form_16a" in tools
+        assert "income_tax_india:pay_tax_challan" in tools
 
         # Tally tools
         assert "tally:get_ledger_balance" in tools
         assert "tally:post_voucher" in tools
 
-    def test_tds_compliance_agent_has_7_tools(self):
+    def test_tds_compliance_agent_has_11_tools(self):
         from core.agents.packs.ca import CA_PACK
 
         tds_agent = next(a for a in CA_PACK["agents"] if a["name"] == "TDS Compliance Agent")
-        assert len(tds_agent["tools"]) == 7
+        assert len(tds_agent["tools"]) == 11
 
     def test_tds_compliance_agent_hitl_always(self):
         """TDS agent must also require HITL before filing."""

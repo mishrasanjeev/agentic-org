@@ -879,6 +879,11 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             agent_type=agent.agent_type,
             domain=agent.domain,
             authorized_tools=tools,
+            connector_names=[
+                cid.strip().removeprefix("registry-")
+                for cid in (body.connector_ids or [])
+                if isinstance(cid, str) and cid.strip()
+            ] or None,
         )
         if grantex_info:
             # Store Grantex metadata in agent config JSONB
@@ -942,6 +947,52 @@ async def list_agents(
 
         total_result = await session.execute(count_query)
         total = total_result.scalar() or 0
+
+        if total == 0 and company_uuid is not None and domain in (None, "finance"):
+            from core.agents.packs.installer import (
+                is_pack_installed_for_session,
+                sync_company_pack_assets_for_session,
+            )
+
+            ca_pack_installed = await is_pack_installed_for_session(
+                session,
+                tid,
+                "ca-firm",
+            )
+            if ca_pack_installed:
+                company = (
+                    await session.execute(
+                        select(Company).where(
+                            Company.id == company_uuid,
+                            Company.tenant_id == tid,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if company is not None:
+                    await sync_company_pack_assets_for_session(
+                        session,
+                        tid,
+                        "ca-firm",
+                        company.id,
+                        company.name,
+                    )
+                    await session.flush()
+                    query = select(Agent).where(Agent.tenant_id == tid)
+                    count_query = select(func.count()).select_from(Agent).where(
+                        Agent.tenant_id == tid
+                    )
+                    if isinstance(user_domains, list):
+                        query = query.where(Agent.domain.in_(user_domains))
+                        count_query = count_query.where(Agent.domain.in_(user_domains))
+                    if domain:
+                        query = query.where(Agent.domain == domain)
+                        count_query = count_query.where(Agent.domain == domain)
+                    if status:
+                        query = query.where(Agent.status == status)
+                        count_query = count_query.where(Agent.status == status)
+                    query = query.where(Agent.company_id == company_uuid)
+                    count_query = count_query.where(Agent.company_id == company_uuid)
+                    total = (await session.execute(count_query)).scalar() or 0
 
         query = query.order_by(Agent.created_at.desc())
         query = query.offset((page - 1) * per_page).limit(per_page)

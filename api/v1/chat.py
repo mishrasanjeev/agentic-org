@@ -357,6 +357,8 @@ async def chat_query(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
+    agent_connector_ids: list[str] = []
+    agent_system_prompt = ""
     # If the caller specified an agent_id, look it up directly instead of
     # relying on keyword-based domain classification.
     if body.agent_id:
@@ -373,6 +375,8 @@ async def chat_query(
                     agent_id: str | None = str(agent.id)
                     agent_type = agent.agent_type
                     agent_tools = agent.authorized_tools or []
+                    agent_connector_ids = list(agent.connector_ids or [])
+                    agent_system_prompt = agent.system_prompt_text or ""
                     if not agent_tools:
                         agent_tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
                             agent.agent_type,
@@ -410,26 +414,39 @@ async def chat_query(
     # canonical helper so chat picks up Zoho/Tally/QuickBooks creds the
     # same way the explicit /run route does.
     connector_config: dict[str, Any] = {}
+    connector_names: list[str] | None = None
     if hasattr(request.state, "connector_config") and request.state.connector_config:
-        connector_config = request.state.connector_config
-    else:
-        try:
-            from api.v1.agents import (
-                _load_connector_configs_for_agent,
-                _resolve_agent_connector_ids_for_type,
-            )
+        connector_config = dict(request.state.connector_config)
 
-            connector_ids = await _resolve_agent_connector_ids_for_type(
-                tenant_id=tenant_id, agent_type=resolved_agent_type,
+    try:
+        from api.v1.agents import (
+            _resolve_agent_connector_ids_for_type,
+            _resolve_connector_configs,
+        )
+
+        connector_ids = agent_connector_ids or await _resolve_agent_connector_ids_for_type(
+            tenant_id=tenant_id,
+            agent_type=resolved_agent_type,
+        )
+        if connector_ids:
+            connector_config, resolved_names = await _resolve_connector_configs(
+                tenant_id=tenant_id,
+                connector_ids=connector_ids,
+                agent_level_config=connector_config or None,
             )
-            connector_config = await _load_connector_configs_for_agent(
-                tenant_id=tenant_id, connector_ids=connector_ids,
-            )
-        except Exception:  # noqa: BLE001
-            # Resolver failures must not block chat — empty config falls
-            # through to the legacy behaviour and the agent still runs
-            # with whatever LLM-only reasoning it can produce.
-            _log.warning("chat_connector_resolve_failed", domain=domain)
+            connector_names = resolved_names
+            if not resolved_names:
+                _log.warning(
+                    "chat_connector_ids_unresolved_fail_closed",
+                    domain=domain,
+                    agent_id=agent_id,
+                    connector_ids=connector_ids,
+                )
+    except Exception:  # noqa: BLE001
+        # Resolver failures must not block chat — empty config falls
+        # through to the legacy behaviour and the agent still runs
+        # with whatever LLM-only reasoning it can produce.
+        _log.warning("chat_connector_resolve_failed", domain=domain)
 
     # Resolve authorized_tools: prefer agent's tools from DB lookup (BUG #2)
     resolved_tools = agent_tools or _AGENT_TYPE_DEFAULT_TOOLS.get(
@@ -449,8 +466,14 @@ async def chat_query(
                 domain=_DOMAIN_TO_DB_DOMAIN.get(domain, domain),
                 tenant_id=tenant_id,
                 system_prompt=(
-                    f"You are {agent_name}, a domain expert for {domain}. "
-                    f"Answer the user's question concisely and helpfully."
+                    agent_system_prompt
+                    or (
+                        f"You are {agent_name}, a domain expert for {domain}. "
+                        "Answer the user's question concisely and helpfully. "
+                        "Extract amount, period, section, customer, ledger, "
+                        "and filing details already present before asking "
+                        "for clarification."
+                    )
                 ),
                 authorized_tools=resolved_tools,
                 task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
@@ -458,6 +481,7 @@ async def chat_query(
                 confidence_floor=0.88,
                 grant_token=grant_token,
                 connector_config=connector_config,
+                connector_names=connector_names,
             )
             if lg_result.get("status") == "completed" and lg_result.get("output"):
                 output = lg_result["output"]
@@ -468,7 +492,9 @@ async def chat_query(
                 raw_confidence = lg_result.get("confidence")
                 if isinstance(raw_confidence, (int, float)):
                     confidence = float(raw_confidence)
-                tools_used = bool(lg_result.get("tools_called"))
+                tools_used = bool(
+                    lg_result.get("tool_calls") or lg_result.get("tool_calls_log")
+                )
         except Exception:
             _log.warning("chat_langgraph_fallback", domain=domain, agent_id=agent_id)
 
