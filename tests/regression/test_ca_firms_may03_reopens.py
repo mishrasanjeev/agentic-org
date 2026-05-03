@@ -105,7 +105,13 @@ def test_gst_auto_file_is_gated_by_active_gstn_credentials() -> None:
     assert "_has_active_gstn_credential" in api_src
     assert "Add and verify a GSTN credential before enabling auto-file" in api_src
     assert "hasActiveGstnCredential" in detail_src
-    assert "GST auto-file is locked" in detail_src
+    assert "GST auto-file cannot be enabled" in detail_src
+    # Asymmetric gate: enabling without creds is blocked, but a row that is
+    # already gst_auto_file=true on a tenant with no GSTN cred MUST remain
+    # togglable to OFF — otherwise existing unsafe rows are locked into the
+    # silent-failure state. The disable predicate must AND not-currently-true.
+    assert "!hasActiveGstnCredential && !editForm.gst_auto_file" in detail_src
+    assert "filings will silently fail" in detail_src
     assert "gst_auto_file: false" in onboard_src
     assert "can be enabled after this company is onboarded" in onboard_src
 

@@ -1370,7 +1370,7 @@ export default function CompanyDetail() {
                     <input
                       type="checkbox"
                       checked={editForm.gst_auto_file}
-                      disabled={!hasActiveGstnCredential}
+                      disabled={!hasActiveGstnCredential && !editForm.gst_auto_file}
                       onChange={(event) => {
                         if (event.target.checked && !hasActiveGstnCredential) {
                           setError("Add and verify an active GSTN portal credential before enabling GST auto-file.");
@@ -1382,9 +1382,14 @@ export default function CompanyDetail() {
                     />
                     Enable GST auto-file
                   </label>
-                  {!hasActiveGstnCredential && (
+                  {!hasActiveGstnCredential && !editForm.gst_auto_file && (
                     <p className="mt-2 text-xs text-amber-700">
-                      GST auto-file is locked until an active GSTN portal credential is saved and verified below.
+                      GST auto-file cannot be enabled until an active GSTN portal credential is saved and verified below.
+                    </p>
+                  )}
+                  {!hasActiveGstnCredential && editForm.gst_auto_file && (
+                    <p className="mt-2 text-xs text-amber-700">
+                      GST auto-file is currently enabled but no active GSTN portal credential exists, so filings will silently fail. Disable it here, or add a credential below before the next filing window.
                     </p>
                   )}
                 </div>
