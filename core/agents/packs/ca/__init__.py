@@ -163,9 +163,14 @@ CA_PACK: dict[str, Any] = {
             "llm_model": "gpt-4o-mini",
             "system_prompt_suffix": (
                 "INTERACTIVE EXTRACTION (issue #440): When the user names a "
-                "customer_id or invoice number, call list_invoices / "
-                "list_overdue_invoices directly with those filters. Don't "
-                "re-prompt for values already in the message."
+                "customer_id, call list_invoices / list_overdue_invoices "
+                "directly with that filter (the Zoho list_invoices method "
+                "supports status/customer_id/date_start/date_end/page — do "
+                "NOT pass an invoice-number filter, the connector will "
+                "silently ignore it). When the user names a specific "
+                "invoice (e.g. \"INV-123\"), fetch the customer's invoice "
+                "list first and locate the target client-side before acting. "
+                "Don't re-prompt for values already in the message."
             ),
         },
     ],

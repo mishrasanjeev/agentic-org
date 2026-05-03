@@ -217,6 +217,38 @@ def test_every_ca_pack_agent_has_prompt_file_and_extraction_suffix() -> None:
         )
 
 
+def test_ar_collections_suffix_does_not_recommend_unsupported_filter() -> None:
+    """Issue #440 follow-up (Codex P2 on PR #443): the AR Collections
+    suffix must NOT instruct the LLM to filter ``list_invoices`` by
+    invoice number. The Zoho ``list_invoices`` method only accepts
+    status/customer_id/date_start/date_end/page; an invoice-number arg
+    gets silently ignored, the LLM receives a broad list, and may act
+    on the wrong record. Pin the supported-fields language and the
+    fetch-then-filter-client-side fallback for invoice-specific asks."""
+    from core.agents.packs.ca import CA_PACK
+
+    ar = next(
+        a for a in CA_PACK["agents"] if a.get("name") == "AR Collections Agent"
+    )
+    suffix = ar.get("system_prompt_suffix") or ""
+    # Hard-stop: no language asking the LLM to "filter by invoice number"
+    # (regardless of casing) — that's the unsupported-arg trap.
+    lower = suffix.lower()
+    assert "invoice number" not in lower or "do not pass" in lower or "do NOT pass" in suffix, (
+        "AR suffix tells the LLM to use an invoice-number filter without "
+        "the explicit 'do NOT pass' caveat. Zoho list_invoices doesn't "
+        "support that field; the LLM will pass an unsupported arg and "
+        "the connector will silently ignore it. Either remove the "
+        "instruction or call out the unsupported arg explicitly."
+    )
+    # Pin the safer fetch-then-filter-client-side fallback for
+    # invoice-specific asks like 'remind for INV-123'.
+    assert "client-side" in lower or "client side" in lower
+    # Pin the supported-fields list as documentation so a reader can
+    # verify against the connector signature.
+    assert "customer_id" in suffix
+
+
 def test_tds_compliance_suffix_carries_canonical_tester_example() -> None:
     """Issue #440: the TDS Compliance agent's suffix must carry the
     exact canonical tester prompt + the explicit extraction → tool-call
