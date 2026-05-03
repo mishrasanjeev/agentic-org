@@ -218,6 +218,32 @@ _INTERNAL_FIELDS = {
 _READABLE_KEYS = ("text", "content", "answer", "response", "message", "summary", "result")
 
 
+def _try_parse_dict_string(raw: str) -> Any | None:
+    """If ``raw`` is the JSON/Python-repr text of a dict or list, return
+    the parsed object. Otherwise return ``None``.
+
+    Used to unwrap LangChain message blocks that the runner sometimes
+    serializes as ``"{'type': 'text', 'text': '...'}"`` (single-quoted
+    Python repr) or as JSON. ``ast.literal_eval`` is intentionally used
+    instead of ``eval`` — it accepts only literal types (dict, list,
+    str, int, etc.) and raises on anything that would execute code.
+    """
+    stripped = raw.lstrip()
+    if not stripped.startswith(("{", "[")):
+        return None
+    import ast
+    import json as _json
+
+    for parser in (_json.loads, ast.literal_eval):
+        try:
+            parsed = parser(raw)
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    return None
+
+
 def _extract_readable(val: Any) -> str | None:
     """Best-effort extract of user-facing text from a nested LLM payload.
 
@@ -274,18 +300,9 @@ def _format_agent_output(output: dict | str | Any) -> str:
         # whole repr into the chat bubble. Try to parse it as JSON or a
         # Python literal and recurse so the unwrapped text is what the
         # user sees. Bare text strings fall through unchanged.
-        stripped = output.lstrip()
-        if stripped.startswith(("{", "[")):
-            import ast
-            import json as _json
-
-            for parser in (_json.loads, ast.literal_eval):
-                try:
-                    parsed = parser(output)
-                except (ValueError, SyntaxError):
-                    continue
-                if isinstance(parsed, (dict, list)):
-                    return _format_agent_output(parsed)
+        unwrapped = _try_parse_dict_string(output)
+        if unwrapped is not None:
+            return _format_agent_output(unwrapped)
         return output
     if not isinstance(output, dict):
         text = _extract_readable(output)
@@ -293,18 +310,18 @@ def _format_agent_output(output: dict | str | Any) -> str:
     # Free-text response (LLM didn't return JSON)
     if "raw_output" in output and output["raw_output"]:
         raw = output["raw_output"]
-        # The raw_output may itself be a JSON string — try to parse and
-        # extract a human-readable answer from it.
+        # The raw_output may itself be a JSON or Python-repr string — try
+        # both so the unwrap also works for runs where raw_output stores
+        # the LangChain {type, text} block as a Python repr (single
+        # quotes). Issue #438 part 2: prod-verified post-#439 deploy.
         if isinstance(raw, str):
-            try:
-                parsed = __import__("json").loads(raw)
-                if isinstance(parsed, dict):
-                    text = _extract_readable(parsed)
+            unwrapped = _try_parse_dict_string(raw)
+            if unwrapped is not None:
+                if isinstance(unwrapped, dict):
+                    text = _extract_readable(unwrapped)
                     if text:
                         return text
-                    return _format_agent_output(parsed)
-            except (ValueError, TypeError):
-                pass
+                return _format_agent_output(unwrapped)
             return raw
         text = _extract_readable(raw)
         if text:
