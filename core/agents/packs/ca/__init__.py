@@ -20,6 +20,7 @@ CA_PACK: dict[str, Any] = {
                 "Automates GSTR-1/3B/9 preparation, "
                 "2A reconciliation, and DSC-signed filing"
             ),
+            "prompt_file": "prompts/gst_filing.prompt.txt",
             "tools": [
                 "gstn:fetch_gstr2a",
                 "gstn:push_gstr1_data",
@@ -35,6 +36,14 @@ CA_PACK: dict[str, Any] = {
             ],
             "llm_model": "gpt-4o",
             "hitl_condition": "always_before_filing",
+            "system_prompt_suffix": (
+                "INTERACTIVE EXTRACTION (issue #440): When the user message "
+                "already names gstin, period (month/quarter), or return type "
+                "(GSTR-1/3B/9/2A), extract those values and call the relevant "
+                "tool directly with those arguments. Do not ask the user to "
+                "repeat values that are already in the prompt. Only ask for "
+                "clarification when a required parameter is genuinely missing."
+            ),
         },
         {
             "name": "TDS Compliance Agent",
@@ -43,6 +52,7 @@ CA_PACK: dict[str, Any] = {
                 "Computes TDS, files Form 26Q/24Q, "
                 "generates Form 16A, reconciles 26AS"
             ),
+            "prompt_file": "prompts/tds_compliance.prompt.txt",
             "tools": [
                 "zoho_books:calculate_tds",
                 "zoho_books:get_ledger_balance",
@@ -58,6 +68,26 @@ CA_PACK: dict[str, Any] = {
             ],
             "llm_model": "gpt-4o",
             "hitl_condition": "always_before_filing",
+            "system_prompt_suffix": (
+                "INTERACTIVE EXTRACTION (issue #440): When the user message "
+                "already provides amount, section (194A/194C/194H/194I/194J/"
+                "194O/194Q), deductee_type (individual/huf/company/firm), "
+                "pan_available, or period (e.g. 'April 2026'), extract those "
+                "values and invoke calculate_tds directly with the extracted "
+                "arguments. PAN can be requested separately ONLY if it is "
+                "genuinely needed for the filing step. Never ask the user to "
+                "repeat the amount, section, or period when they are already "
+                "in the prompt — that is the BUG-17 failure pattern.\n\n"
+                "Worked example for the canonical tester prompt 'Calculate "
+                "TDS for vendor payment of INR 50,000 under Section 194C for "
+                "April 2026 and file Form 26Q':\n"
+                "  1. Extract: amount=50000, section=194C, period=April 2026\n"
+                "  2. Call calculate_tds(amount=50000, section=\"194C\")\n"
+                "  3. Report the computed tds_amount, rate, net_payable\n"
+                "  4. For the Form 26Q step, ask only for PAN + deductee_type "
+                "if those are genuinely missing — do NOT re-ask for amount/"
+                "section."
+            ),
         },
         {
             "name": "Bank Reconciliation Agent",
@@ -66,6 +96,7 @@ CA_PACK: dict[str, Any] = {
                 "Auto-matches bank statement with books, "
                 "flags old outstanding items"
             ),
+            "prompt_file": "prompts/bank_reconciliation.prompt.txt",
             "tools": [
                 "zoho_books:fetch_bank_statement",
                 "zoho_books:check_account_balance",
@@ -81,6 +112,13 @@ CA_PACK: dict[str, Any] = {
             ],
             "llm_model": "gpt-4o-mini",
             "confidence_floor": 0.95,
+            "system_prompt_suffix": (
+                "INTERACTIVE EXTRACTION (issue #440): When the user message "
+                "already names account_id, from_date, or to_date, call "
+                "fetch_bank_statement / check_account_balance / "
+                "get_transaction_list directly with those arguments. Don't "
+                "ask the user to restate values already provided."
+            ),
         },
         {
             "name": "FP&A Analyst Agent",
@@ -89,6 +127,7 @@ CA_PACK: dict[str, Any] = {
                 "Variance analysis, budget vs actual, "
                 "MIS report generation"
             ),
+            "prompt_file": "prompts/fpa_analyst.prompt.txt",
             "tools": [
                 "zoho_books:get_trial_balance",
                 "zoho_books:get_ledger_balance",
@@ -98,6 +137,13 @@ CA_PACK: dict[str, Any] = {
                 "zoho_books:get_balance_sheet",
             ],
             "llm_model": "gpt-4o-mini",
+            "system_prompt_suffix": (
+                "INTERACTIVE EXTRACTION (issue #440): When the user names a "
+                "date range or period (e.g., 'Q1 FY26', 'April 2026'), call "
+                "get_profit_loss / get_balance_sheet / get_trial_balance "
+                "directly with the converted from_date / to_date / date "
+                "arguments. Don't re-prompt for the period."
+            ),
         },
         {
             "name": "AR Collections Agent",
@@ -106,6 +152,7 @@ CA_PACK: dict[str, Any] = {
                 "Tracks overdue invoices, sends reminders, "
                 "escalates aging items"
             ),
+            "prompt_file": "prompts/ar_collections.prompt.txt",
             "tools": [
                 "zoho_books:get_ledger_balance",
                 "zoho_books:list_overdue_invoices",
@@ -114,6 +161,12 @@ CA_PACK: dict[str, Any] = {
                 "sendgrid:send_email",
             ],
             "llm_model": "gpt-4o-mini",
+            "system_prompt_suffix": (
+                "INTERACTIVE EXTRACTION (issue #440): When the user names a "
+                "customer_id or invoice number, call list_invoices / "
+                "list_overdue_invoices directly with those filters. Don't "
+                "re-prompt for values already in the message."
+            ),
         },
     ],
     "workflows": [
