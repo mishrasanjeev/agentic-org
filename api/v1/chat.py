@@ -267,6 +267,25 @@ def _format_agent_output(output: dict | str | Any) -> str:
     Never returns a raw JSON/Python dict repr as the user-facing answer.
     """
     if isinstance(output, str):
+        # Issue #438 (post-#434 prod observation 2026-05-03): the runner
+        # sometimes hands us a string that is the *Python repr* of a
+        # ``{"type": "text", "text": "..."}`` LangChain message wrapper —
+        # single quotes, escaped \n's. Returning it verbatim leaks the
+        # whole repr into the chat bubble. Try to parse it as JSON or a
+        # Python literal and recurse so the unwrapped text is what the
+        # user sees. Bare text strings fall through unchanged.
+        stripped = output.lstrip()
+        if stripped.startswith(("{", "[")):
+            import ast
+            import json as _json
+
+            for parser in (_json.loads, ast.literal_eval):
+                try:
+                    parsed = parser(output)
+                except (ValueError, SyntaxError):
+                    continue
+                if isinstance(parsed, (dict, list)):
+                    return _format_agent_output(parsed)
         return output
     if not isinstance(output, dict):
         text = _extract_readable(output)
