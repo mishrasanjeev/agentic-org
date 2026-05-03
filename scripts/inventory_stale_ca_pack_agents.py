@@ -35,7 +35,13 @@ from typing import Any
 
 from sqlalchemy import text
 
-from core.database import get_engine
+# core.database exposes a module-level ``engine`` (an AsyncEngine
+# instance) — there is no ``get_engine()`` factory. The first cut of
+# this script imported ``get_engine`` and the Cloud Run job exited 1
+# with ``ImportError`` on first run (2026-05-03 audit). Use the real
+# attribute so this is repeatable from the repo without an inline
+# ``python -c`` workaround.
+from core.database import engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("inventory_stale_ca_pack_agents")
@@ -50,7 +56,6 @@ CA_PACK_AGENT_TYPES = (
 
 
 async def _inventory() -> int:
-    engine = get_engine()
     affected_tenants = 0
     total_stale_agents = 0
 
