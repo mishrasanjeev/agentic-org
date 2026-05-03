@@ -262,6 +262,42 @@ class TestChatFormatAgentOutputStringDictRepr:
         out = _format_agent_output("{not a real dict")
         assert out == "{not a real dict"
 
+    def test_raw_output_python_repr_unwraps(self) -> None:
+        """Issue #438 part 2 (prod-verified post-#439 deploy):
+        ``_format_agent_output({'raw_output': '<python repr>'})`` was
+        leaking the repr because the raw_output branch only tried
+        ``json.loads``. The shared helper now also tries
+        ``ast.literal_eval`` so single-quoted reprs unwrap.
+        """
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output(
+            {
+                "raw_output": (
+                    "{'type': 'text', 'text': 'I can help you with that.', "
+                    "'extras': {'signature': 'sig'}}"
+                )
+            }
+        )
+        assert out == "I can help you with that."
+        assert "'type'" not in out
+        assert "extras" not in out
+        assert "signature" not in out
+
+    def test_raw_output_json_string_still_unwraps(self) -> None:
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output(
+            {"raw_output": '{"type": "text", "text": "Plain JSON answer"}'}
+        )
+        assert out == "Plain JSON answer"
+
+    def test_raw_output_plain_text_passes_through(self) -> None:
+        from api.v1.chat import _format_agent_output
+
+        out = _format_agent_output({"raw_output": "Just a plain answer."})
+        assert out == "Just a plain answer."
+
 
 class TestConnectorHealthCheck:
     """Uday/Ramesh 2026-04-24 (UI-HEALTH-404): Gmail connector /test
