@@ -739,3 +739,44 @@ def test_api_run_agent_substitutes_shadow_fixture() -> None:
     assert "deterministic_route" in src
     assert "try_tds_deterministic_route" in src
     assert "#447" in src
+
+
+def test_api_run_agent_strips_caller_supplied_shadow_prompt() -> None:
+    """Codex P1 on PR #449: API callers must NEVER be able to supply
+    their own shadow_prompt for a shadow_sample dispatch. The runner
+    executes shadow_prompt verbatim, so honoring caller overrides
+    would let any client run arbitrary prompts (including ones that
+    request mutating tools) under the read-only shadow safety
+    guarantee. Pin both the strip + the unconditional fixture set."""
+    src = (
+        ROOT / "api" / "v1" / "agents.py"
+    ).read_text(encoding="utf-8")
+    # Caller's shadow_prompt + shadow_expected_tool must be stripped
+    # before fixture lookup
+    assert 'incoming_inputs.pop("shadow_prompt", None)' in src
+    assert 'incoming_inputs.pop("shadow_expected_tool", None)' in src
+    # Fixture set is unconditional (no setdefault — server-side wins)
+    assert 'incoming_inputs["shadow_prompt"] = str(fixture["prompt"])' in src
+    # Codex traceability tag
+    assert "Codex P1 on PR #449" in src or "Codex P1 on #449" in src
+
+
+def test_api_run_agent_gates_fixture_on_authorized_tools() -> None:
+    """Codex P2 on PR #449: every fixture path (deterministic bypass
+    AND structured-prompt injection) must verify the fixture's
+    expected_tool is currently in agent.authorized_tools. Otherwise a
+    removed/disabled tool would still get scored synthetically with
+    high confidence, masking real config drift and inflating
+    shadow_accuracy_current."""
+    src = (
+        ROOT / "api" / "v1" / "agents.py"
+    ).read_text(encoding="utf-8")
+    # The gate variable + its in-authorized check
+    assert "fixture_tool_authorized" in src
+    assert "in (authorized_tools or [])" in src
+    # Drift-warning log so operators see the fall-through
+    assert "agent_run_shadow_fixture_tool_not_authorized" in src
+    # When tool not authorized, fall through to generic hint
+    assert "fixture = {}" in src
+    # Codex traceability tag
+    assert "Codex P2 on PR #449" in src or "Codex P2 on #449" in src

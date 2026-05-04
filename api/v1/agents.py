@@ -1972,17 +1972,55 @@ async def run_agent(
     incoming_action = payload.get("action", "process")
     incoming_inputs = dict(payload.get("inputs", {}) or {})
     fixture: dict[str, Any] = {}
+    _shadow_route_taken = False
     if incoming_action == "shadow_sample":
+        # Codex P1 on PR #449: never trust caller-supplied
+        # shadow_prompt / shadow_expected_tool for shadow_sample. The
+        # runner now executes shadow_prompt verbatim, so honoring an
+        # API-caller override would let any client run arbitrary
+        # prompts (potentially asking for write tools) under the
+        # "shadow" safety guarantee. Strip them before we even read
+        # the agent's fixture so the only path to shadow_prompt is
+        # the trusted server-side fixture path below.
+        incoming_inputs.pop("shadow_prompt", None)
+        incoming_inputs.pop("shadow_expected_tool", None)
+
         cfg_block = agent_config.get("config") or {}
         if isinstance(cfg_block, dict):
             maybe_fixture = cfg_block.get("shadow_fixture")
             if isinstance(maybe_fixture, dict):
                 fixture = maybe_fixture
 
+        # Codex P2 on PR #449: gate every fixture path on the
+        # fixture's expected_tool actually being in the agent's
+        # current authorized_tools. Otherwise a removed/disabled
+        # tool would still get scored synthetically (deterministic
+        # route) or asked-for-by-name (LLM injection path), masking
+        # real configuration drift. This also keeps shadow_accuracy
+        # honest: if the operator removed a tool, the next shadow
+        # sample falls through to the generic LLM-only floor instead
+        # of producing inflated synthetic success.
+        fixture_expected = fixture.get("expected_tool")
+        fixture_tool_authorized = bool(
+            isinstance(fixture_expected, str)
+            and fixture_expected
+            and fixture_expected in (authorized_tools or [])
+        )
+        if fixture and not fixture_tool_authorized:
+            logger.warning(
+                "agent_run_shadow_fixture_tool_not_authorized",
+                agent_id=str(agent_id),
+                expected_tool=str(fixture_expected) if fixture_expected else "",
+                authorized_tools_sample=(authorized_tools or [])[:10],
+            )
+            # Fall through to the generic exploratory hint — never
+            # invent synthetic success for a removed tool.
+            fixture = {}
+
         # Path 1: deterministic-route bypass for TDS. Pure math, no LLM,
         # guaranteed tool_call + high confidence. The chat handler uses
         # the same helper for #440 / BUG-17 closure; here we reuse it
-        # for the shadow path.
+        # for the shadow path. Gated on fixture_tool_authorized above.
         if fixture.get("deterministic_route") == "tds" and fixture.get("prompt"):
             try:
                 from api.v1._tds_routing import try_tds_deterministic_route
@@ -2027,26 +2065,21 @@ async def run_agent(
                         "llm_cost_usd": 0,
                     },
                 }
-                # Skip langgraph dispatch — jump to result handling.
-                # We do this with a sentinel: set a local flag and the
-                # try/except below preserves lg_result.
-                _shadow_route_taken = True  # noqa: F841
-                # Fall through to the run_agent body that processes
-                # lg_result. We do NOT execute the langgraph_run call.
-            else:
-                _shadow_route_taken = False
-        else:
-            _shadow_route_taken = False
+                _shadow_route_taken = True
 
         # Path 2: structured prompt injection (for fixtures without
         # deterministic_route, or when the route helper bailed). The
         # runner's _build_user_message reads inputs.shadow_prompt and
         # uses it instead of the generic "exercise ONE tool" hint.
-        if not locals().get("_shadow_route_taken") and fixture.get("prompt"):
-            incoming_inputs.setdefault("shadow_prompt", str(fixture["prompt"]))
+        # Note: fixture_tool_authorized gate already cleared `fixture`
+        # to {} when expected_tool isn't in authorized_tools.
+        if not _shadow_route_taken and fixture.get("prompt"):
+            # Unconditional set — we already stripped any caller-
+            # supplied shadow_prompt above.
+            incoming_inputs["shadow_prompt"] = str(fixture["prompt"])
             if fixture.get("expected_tool"):
-                incoming_inputs.setdefault(
-                    "shadow_expected_tool", str(fixture["expected_tool"])
+                incoming_inputs["shadow_expected_tool"] = str(
+                    fixture["expected_tool"]
                 )
 
     try:
