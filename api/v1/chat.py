@@ -369,6 +369,12 @@ class ChatQueryResponse(BaseModel):
     agent: str
     confidence: float
     domain: str
+    # Issue #440 (TDS deterministic route): when the chat handler bypasses
+    # the LLM and invokes a tool deterministically, the tool_calls trace
+    # is surfaced here so audit/regression/UI can verify a real tool
+    # invocation happened. ``None`` means "LLM path was used" — that
+    # path persists tool_calls in the langgraph_run result instead.
+    tool_calls: list[dict] | None = None
 
 
 class ChatMessage(BaseModel):
@@ -437,9 +443,46 @@ async def chat_query(
     # still showed 60% even when the LLM had high-quality reasoning.
     tools_used = False
     confidence: float | None = None
+    deterministic_tool_calls: list[dict] | None = None
 
     # Resolve agent_type: prefer DB value, fall back to domain keyword (BUG #3)
     resolved_agent_type = agent_type or domain
+
+    # Issue #440 / BUG-17 closure: TDS Compliance Agent gets a narrow
+    # deterministic route. When the user message clearly contains the
+    # parameters calculate_tds needs (amount + section + an action verb),
+    # bypass the LLM, invoke the calculator directly (pure math, no
+    # Zoho API), and surface a tool_calls trace + a fail-closed filing
+    # blocker if Form 26Q was requested. Behavior independent of LLM
+    # tuning — closes the "agent asks for fields already in the same
+    # sentence" symptom that survived prompt-extraction fixes
+    # (PR #443) because gpt-4o was treating the worked example as a
+    # clarification template.
+    #
+    # Scope is intentionally narrow: only TDS Compliance Agent, only
+    # when all required signals are present, never invokes the actual
+    # filing API. If detection fails, returns None and the LLM path
+    # below runs unchanged.
+    try:
+        from api.v1._tds_routing import try_tds_deterministic_route
+
+        det = await try_tds_deterministic_route(
+            agent_type=resolved_agent_type,
+            query=body.query,
+        )
+    except Exception:  # noqa: BLE001
+        # Detection failure must never block the chat path. Fall through
+        # to the LLM and let the user get an answer somehow.
+        _log.warning("chat_tds_route_helper_raised", exc_info=True)
+        det = None
+    if det is not None:
+        return ChatQueryResponse(
+            answer=det["answer"],
+            agent=agent_name,
+            confidence=float(det["confidence"]),
+            domain=domain,
+            tool_calls=det.get("tool_calls") or None,
+        )
 
     # Build connector config (Ramesh/Uday 2026-04-28). Previously chat
     # only checked `request.state.connector_config` — but no middleware

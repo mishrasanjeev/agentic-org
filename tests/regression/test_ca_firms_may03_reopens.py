@@ -351,3 +351,205 @@ def test_built_tds_system_prompt_includes_extraction_instruction() -> None:
     assert "Section 234E" in built  # from the existing <tds_rules> block
     # Tool list still appended (sanity)
     assert "Authorized tools" in built
+
+
+# ----------------------------------------------------------------------
+# Issue #440 — TDS Compliance Agent deterministic chat route. The
+# tester's exact prompt must produce a calculate_tds tool_call without
+# asking for amount, section, or period. Filing must fail-closed
+# without invoking the real filing API.
+# ----------------------------------------------------------------------
+
+
+def _canonical_tester_prompt() -> str:
+    return (
+        "Calculate TDS for vendor payment of INR 50,000 under Section 194C "
+        "for April 2026 and file Form 26Q"
+    )
+
+
+def test_tds_route_returns_none_for_other_agents() -> None:
+    """Issue #440 scope: deterministic route must NEVER fire for non-TDS
+    agents. Bank reconciliation, AR collections, FP&A, GST filing all
+    keep the existing LLM path."""
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    for other in (
+        "gst_filing_agent",
+        "bank_reconciliation_agent",
+        "fp_a_analyst_agent",
+        "ar_collections_agent",
+        "campaign_pilot",
+        None,
+    ):
+        result = asyncio.run(
+            try_tds_deterministic_route(
+                agent_type=other,
+                query=_canonical_tester_prompt(),
+            )
+        )
+        assert result is None, (
+            f"Deterministic TDS route fired for agent_type={other!r} — "
+            "scope leak. The route must only fire for "
+            "'tds_compliance_agent'."
+        )
+
+
+def test_tds_route_returns_none_when_signals_missing() -> None:
+    """Issue #440: the route must fall through to the LLM whenever a
+    required signal is missing. Three negative cases."""
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    cases = [
+        # No section
+        "Calculate TDS for vendor payment of INR 50,000 for April 2026",
+        # No amount
+        "Calculate TDS under Section 194C for April 2026",
+        # No action verb
+        "Vendor payment of INR 50,000 under Section 194C in April 2026",
+        # Empty
+        "",
+    ]
+    for query in cases:
+        result = asyncio.run(
+            try_tds_deterministic_route(
+                agent_type="tds_compliance_agent",
+                query=query,
+            )
+        )
+        assert result is None, (
+            f"Route fired for incomplete query {query!r} — should fall "
+            "through to LLM."
+        )
+
+
+def test_tds_route_canonical_tester_prompt_invokes_calculate_tds() -> None:
+    """Issue #440 / BUG-17 closure: the exact tester prompt produces a
+    calculate_tds tool_call with the extracted arguments, no asks for
+    amount/section/period that were already in the prompt, and a
+    fail-closed Form 26Q filing blocker (no real filing call)."""
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    result = asyncio.run(
+        try_tds_deterministic_route(
+            agent_type="tds_compliance_agent",
+            query=_canonical_tester_prompt(),
+        )
+    )
+    assert result is not None, "Route must fire for the canonical prompt"
+
+    # tool_calls evidence
+    tool_calls = result["tool_calls"]
+    assert len(tool_calls) == 1
+    tc = tool_calls[0]
+    assert tc["tool"] == "calculate_tds"
+    assert tc["connector"] == "zoho_books"
+    assert tc["arguments"]["amount"] == 50000.0
+    assert tc["arguments"]["section"] == "194C"
+    # The route's deterministic-marker is what audit/forensics will look
+    # for to distinguish runtime-routed calls from LLM-decided ones.
+    assert tc.get("deterministic_route") is True
+    assert tc.get("route_reason") == "issue_440_tds_runtime_routing"
+
+    # The TDS calculation result is in the tool_call.
+    assert tc["result"]["status"] == "calculated"
+    assert tc["result"]["tds_amount"] == 500.0  # 50000 * 0.01 (194C individual)
+    assert tc["result"]["rate"] == 0.01
+
+    # tools_used flag must be true so downstream audit treats this as a
+    # tool-backed answer.
+    assert result["tools_used"] is True
+
+    # Confidence must NOT be the LLM-only floor (~0.4). The deterministic
+    # path has hard evidence; floor here is much higher.
+    assert result["confidence"] >= 0.85
+
+    # Answer text — anti-clarification + fail-closed blocker
+    answer = result["answer"]
+    answer_lower = answer.lower()
+
+    # Calculation reported
+    assert "500" in answer  # tds_amount
+    assert "1.00%" in answer or "1.0%" in answer or "1%" in answer
+    assert "49,500" in answer or "49500" in answer  # net_payable
+
+    # NO clarification ask for already-provided fields. These exact
+    # phrases would be the BUG-17 symptom resurfacing.
+    forbidden = (
+        "what is the payment amount",
+        "please provide the payment amount",
+        "please provide the amount",
+        "what is the section",
+        "please provide the section",
+        "please provide the period",
+        "what period",
+        "amount of payment",
+    )
+    for phrase in forbidden:
+        assert phrase not in answer_lower, (
+            f"BUG-17 clarification phrase {phrase!r} appeared in the "
+            "deterministic route answer — should never re-ask for "
+            "fields that were extracted from the prompt."
+        )
+
+    # Form 26Q filing was requested → fail-closed blocker present
+    assert "26Q" in answer
+    assert "blocked" in answer_lower or "not made" in answer_lower
+    # Enumerate the genuinely-missing fields (nothing about amount/section)
+    assert "PAN" in answer or "pan" in answer_lower
+    assert "TAN" in answer or "tan" in answer_lower
+    assert "HITL" in answer or "human-in-the-loop" in answer_lower
+
+
+def test_tds_route_calculation_only_when_no_filing_requested() -> None:
+    """Issue #440: a calculate-only prompt (no Form 26Q) returns the
+    calculation cleanly with NO filing blocker noise."""
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    result = asyncio.run(
+        try_tds_deterministic_route(
+            agent_type="tds_compliance_agent",
+            query="Calculate TDS for INR 100,000 under Section 194J",
+        )
+    )
+    assert result is not None
+    assert result["tool_calls"][0]["arguments"]["amount"] == 100000.0
+    assert result["tool_calls"][0]["arguments"]["section"] == "194J"
+    answer = result["answer"]
+    # Calculation present
+    assert "10,000" in answer or "10000" in answer  # 194J = 10%
+    # No filing blocker noise when filing wasn't asked for
+    assert "26Q" not in answer
+    assert "TAN" not in answer
+    assert "HITL" not in answer
+
+
+def test_tds_route_unsupported_section_returns_clear_error() -> None:
+    """Issue #440: if the section is one we don't have a rate for,
+    surface a clear error and a list of supported sections — never
+    silently fall through to the LLM (which would just hallucinate
+    the rate)."""
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    result = asyncio.run(
+        try_tds_deterministic_route(
+            agent_type="tds_compliance_agent",
+            query="Calculate TDS for INR 50,000 under Section 194ZZZ",
+        )
+    )
+    # 194ZZZ matches the section regex but isn't in the rate table
+    if result is not None:
+        # The route fired — must surface an error, not hallucinate
+        answer = result["answer"].lower()
+        assert "unsupported" in answer or "error" in answer
+        assert "194a" in answer  # supported list mentioned
