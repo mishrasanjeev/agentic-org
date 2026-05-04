@@ -500,12 +500,29 @@ def _build_user_message(task_input: dict[str, Any]) -> str:
     context = task_input.get("context", {})
 
     if action == "shadow_sample":
-        # Exploratory probe — the LLM has the agent's tool manifest
-        # bound to it via build_tools_for_agent. Tell it explicitly to
-        # exercise one read-only tool with safe defaults so the run
-        # generates a non-empty tool_calls trace (which is what shadow-
-        # accuracy scoring measures). The "do not fabricate data" line
-        # blocks the LLM-only fallback that drove confidence to 0.40.
+        # Issue #447 / BUG-11 closure: per-agent shadow fixtures. When
+        # the API caller (api/v1/agents.py:run_agent) finds a
+        # ``shadow_fixture`` in agent.config, it injects the fixture's
+        # structured prompt into ``inputs.shadow_prompt``. That prompt
+        # names a real, safe tool the agent is authorized to call —
+        # much higher LLM tool-call hit rate than the generic hint.
+        # Fall through to the generic exploratory hint when no fixture
+        # was supplied (covers non-CA agents and any future agent type
+        # without a registered fixture).
+        shadow_prompt = inputs.get("shadow_prompt")
+        if isinstance(shadow_prompt, str) and shadow_prompt.strip():
+            expected_tool = inputs.get("shadow_expected_tool")
+            tail = ""
+            if isinstance(expected_tool, str) and expected_tool.strip():
+                tail = (
+                    f"\n\n(Shadow sample — invoke the {expected_tool} tool "
+                    "with the parameters extracted above. Return the "
+                    "structured tool result as JSON.)"
+                )
+            return shadow_prompt.strip() + tail
+
+        # Generic exploratory hint — the original BUG-08 sentinel
+        # translation. Kept so non-CA agents continue to work.
         return (
             "This is a shadow-mode test sample run. Exercise ONE of the "
             "tools available to you with conservative read-only "
