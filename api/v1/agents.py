@@ -2011,7 +2011,7 @@ async def run_agent(
                     "confidence": float(det.get("confidence", 0.0)),
                     "reasoning_trace": [
                         "shadow_sample → deterministic TDS route (issue #447)",
-                        f"calculate_tds invoked with extracted args from fixture",
+                        "calculate_tds invoked with extracted args from fixture",
                     ],
                     "tool_calls_log": det.get("tool_calls", []),
                     "tool_calls": det.get("tool_calls", []),

@@ -717,9 +717,10 @@ def test_installer_persists_shadow_fixture_on_create_and_repair() -> None:
     src = (
         ROOT / "core" / "agents" / "packs" / "installer.py"
     ).read_text(encoding="utf-8")
-    assert src.count("shadow_fixture") >= 2, (
+    occurrences = src.count("shadow_fixture")
+    assert occurrences >= 2, (
         "installer.py should persist shadow_fixture in BOTH create + "
-        "repair branches. Found %d references." % src.count("shadow_fixture")
+        f"repair branches. Found {occurrences} references."
     )
     repair_block = src[src.find('cfg["pack_install"] = pack_cfg'):]
     assert "shadow_fixture" in repair_block, (
