@@ -40,10 +40,22 @@ from typing import Any
 # Detection patterns
 # ----------------------------------------------------------------------
 
-# Indian TDS sections the calculator supports (per
-# connectors.finance.zoho_books.calculate_tds rate table).
+# Indian TDS section detector. Matches any ``194<letter>`` form (and
+# 194A-Q variants). Codex P1 on PR #445: an earlier allowlist regex
+# (``194[ACHIJOQ]``) silently dropped unsupported variants like
+# ``194ZZZ`` to ``section=None`` → route returned None → fell through
+# to the LLM, contradicting the "never silently fall through" promise.
+# Now: detect any 194-series mention, let the calculator surface a
+# clear "unsupported section" error to the user.
+#
+# Section 192 (salary TDS) is intentionally NOT in this regex — Codex
+# P2: ``ZohoBooksConnector.calculate_tds`` has no 192 rate (salary TDS
+# is slab-based with HRA/standard-deduction/regime variants the
+# deterministic helper can't model). Salary prompts must fall through
+# to the LLM which can reason about slab tiers. Including 192 here
+# would intercept salary queries and surface a useless error.
 _TDS_SECTION_RE = re.compile(
-    r"\b(?:section\s+)?(194[ACHIJOQ]|192)\b",
+    r"\b(?:section\s+)?(194[A-Z]+)\b",
     re.IGNORECASE,
 )
 

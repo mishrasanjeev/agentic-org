@@ -533,10 +533,16 @@ def test_tds_route_calculation_only_when_no_filing_requested() -> None:
 
 
 def test_tds_route_unsupported_section_returns_clear_error() -> None:
-    """Issue #440: if the section is one we don't have a rate for,
-    surface a clear error and a list of supported sections — never
-    silently fall through to the LLM (which would just hallucinate
-    the rate)."""
+    """Issue #440 (Codex P1 on PR #445): if the section is a 194-series
+    code we don't have a rate for, the route MUST fire and surface an
+    explicit unsupported-section error. Never silently fall through to
+    the LLM — that would let the LLM hallucinate a rate.
+
+    Pre-fix: an allowlist regex (``194[ACHIJOQ]``) skipped ``194ZZZ``
+    entirely, so ``_extract_section`` returned None and the route
+    returned None too. Now the regex matches any ``194<letter>+`` and
+    the calculator's "unsupported TDS section" error reaches the user.
+    """
     import asyncio
 
     from api.v1._tds_routing import try_tds_deterministic_route
@@ -547,9 +553,44 @@ def test_tds_route_unsupported_section_returns_clear_error() -> None:
             query="Calculate TDS for INR 50,000 under Section 194ZZZ",
         )
     )
-    # 194ZZZ matches the section regex but isn't in the rate table
-    if result is not None:
-        # The route fired — must surface an error, not hallucinate
-        answer = result["answer"].lower()
-        assert "unsupported" in answer or "error" in answer
-        assert "194a" in answer  # supported list mentioned
+    assert result is not None, (
+        "Route must fire for any 194-series code (even unsupported ones) "
+        "and surface the calculator's error — never silently fall "
+        "through to the LLM where a hallucinated rate would slip past."
+    )
+    answer = result["answer"].lower()
+    assert "unsupported" in answer or "unable" in answer
+    assert "194a" in answer  # supported list mentioned
+    # Tools NOT used (calculator rejected the input)
+    assert result["tools_used"] is False
+    assert result["tool_calls"] == []
+
+
+def test_tds_route_section_192_falls_through_to_llm() -> None:
+    """Issue #440 (Codex P2 on PR #445): Section 192 (salary TDS) is
+    slab-based with HRA / standard-deduction / regime variants that
+    the deterministic calculator can't model. The route gate must
+    NOT include 192; salary-TDS prompts must reach the LLM which can
+    reason about the slabs.
+    """
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    for query in (
+        "Calculate TDS on salary of INR 50,00,000 under Section 192 for FY26",
+        "Compute Section 192 TDS for an employee earning INR 80,000/month",
+    ):
+        result = asyncio.run(
+            try_tds_deterministic_route(
+                agent_type="tds_compliance_agent",
+                query=query,
+            )
+        )
+        assert result is None, (
+            f"Section 192 prompt {query!r} must fall through to the LLM. "
+            "The deterministic calculator has no slab support; "
+            "intercepting it would surface a useless 'unsupported "
+            "section' error instead of letting the LLM walk the user "
+            "through salary-TDS slab math."
+        )
