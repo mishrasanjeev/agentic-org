@@ -877,6 +877,40 @@ def test_exception_wrapped_response_is_a_failure() -> None:
     ) is True
 
 
+def test_langgraph_toolnode_invocation_errors_are_failures() -> None:
+    """Issue #450 / Codex P1 on PR #452: LangGraph's ToolNode emits
+    plain-text wrappers like ``Error invoking tool ... with error: …``
+    when an LLM-supplied arg fails schema validation BEFORE the tool
+    body runs. Initial prefix list (\"Error: \", ...) missed these
+    exact strings and would classify them as success, capping nothing
+    and inflating shadow scoring.
+    """
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    # Canonical LangGraph ToolNode patterns
+    assert _tool_message_indicates_failure(
+        "Error invoking tool calculate_tds with error: amount is required"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "Error executing tool list_invoices: connection timeout"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "Error in tool call get_trial_balance: invalid date format"
+    ) is True
+    # langchain-core exception classes
+    assert _tool_message_indicates_failure(
+        "ToolException: rate limit exceeded"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "ToolInvocationError: bad args"
+    ) is True
+    # Pydantic validation failures (surface when LLM passes wrong
+    # arg shape — common with structured tool calls)
+    assert _tool_message_indicates_failure(
+        "ValidationError: 1 validation error for CalculateTdsArgs"
+    ) is True
+
+
 def test_structured_status_error_is_failure() -> None:
     """Issue #450: a connector that returned a structured dict with
     ``status="error"`` is the canonical "tool failed cleanly" signal.

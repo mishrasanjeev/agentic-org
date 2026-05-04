@@ -63,8 +63,23 @@ logger = structlog.get_logger()
 
 _EXPLICIT_ERROR_PREFIXES = (
     "Error: ",
+    # LangGraph ToolNode emits these for invocation/argument-validation
+    # failures BEFORE the tool body runs — "Error invoking tool X with
+    # error: …" / "Error executing tool …". Codex P1 on PR #452: the
+    # initial prefix list missed these and would have classified
+    # ToolInvocationError as success, inflating shadow scoring on bad
+    # arg shapes.
+    "Error invoking tool",
+    "Error executing tool",
+    "Error in tool call",
     "Exception: ",
     "Traceback (most recent call last):",
+    # langchain-core
+    "ToolException",
+    "ToolInvocationError",
+    # pydantic — surfaces when an LLM-supplied arg fails schema validation
+    "ValidationError",
+    # httpx / aiohttp / asyncpg surface these directly
     "HTTPStatusError",
     "ClientError",
     "ConnectError",
