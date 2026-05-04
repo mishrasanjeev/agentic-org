@@ -608,7 +608,11 @@ def test_tds_route_section_192_falls_through_to_llm() -> None:
 
 _EXPECTED_FIXTURES: dict[str, dict[str, object]] = {
     "GST Filing Agent": {
-        "expected_tool": "generate_gst_report",
+        # Issue #450: was ``generate_gst_report`` (Zoho India v3 ``/reports/
+        # gstsummary`` returns 404 — endpoint missing on the IN region).
+        # Now ``list_invoices`` — read-only, structured response on any
+        # tenant, aligned with the GST workflow seed-data step.
+        "expected_tool": "list_invoices",
         "must_not_contain_write": ("file_gstr", "push_gstr1", "generate_eway_bill"),
     },
     "TDS Compliance Agent": {
@@ -621,7 +625,10 @@ _EXPECTED_FIXTURES: dict[str, dict[str, object]] = {
         "must_not_contain_write": ("reconcile_bank", "post_voucher"),
     },
     "FP&A Analyst Agent": {
-        "expected_tool": "get_trial_balance",
+        # Issue #450: was ``get_trial_balance`` (Zoho v3 ``/reports/
+        # trialbalance`` returned 400 without explicit date params).
+        # Now ``get_profit_loss`` with from_date/to_date in the prompt.
+        "expected_tool": "get_profit_loss",
         "must_not_contain_write": ("post_voucher",),
     },
     "AR Collections Agent": {
@@ -780,3 +787,195 @@ def test_api_run_agent_gates_fixture_on_authorized_tools() -> None:
     assert "fixture = {}" in src
     # Codex traceability tag
     assert "Codex P2 on PR #449" in src or "Codex P2 on #449" in src
+
+
+# ----------------------------------------------------------------------
+# Issue #450 — structured tool-result failure detection. The previous
+# ``"error" in msg_content.lower()`` substring scan in
+# core/langgraph/agent_graph.py:218 capped confidence to 0.5 on
+# legitimately-empty tool responses (e.g. AR list_overdue_invoices on
+# a tenant with zero overdue invoices). The fix replaces it with
+# ``_tool_message_indicates_failure`` which classifies based on
+# structured signals.
+# ----------------------------------------------------------------------
+
+
+def test_empty_list_response_is_not_a_failure() -> None:
+    """Issue #450: AR Collections returned ``{"invoices": [], ...}`` on
+    Uday's tenant (no overdue invoices). Pre-fix: substring scan saw
+    no "error"/"failed" but other paths still capped. Post-fix: this
+    response classifies as success and the tool's empty result is
+    treated as legitimate data."""
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    # AR Collections actual response from prod 2026-05-04
+    ar_resp = (
+        '{"invoices": [], "page_context": {"page": 1, "per_page": 200, '
+        '"has_more_page": false, "report_name": "Invoices", '
+        '"applied_filter": "Status.All", "search_criteria": '
+        '[{"column_name": "status", "search_text": "overdue", '
+        '"comparator": "equal"}]}}'
+    )
+    assert _tool_message_indicates_failure(ar_resp) is False
+
+    # Empty dict — also success
+    assert _tool_message_indicates_failure("{}") is False
+    # Empty list — also success
+    assert _tool_message_indicates_failure("[]") is False
+    # Bank Reconciliation's actual successful response
+    bank_resp = (
+        '{"bankaccounts": [{"account_id": "3711099000000000459", '
+        '"account_name": "Petty Cash", "balance": -30000.0}]}'
+    )
+    assert _tool_message_indicates_failure(bank_resp) is False
+
+
+def test_response_with_word_error_in_field_name_is_not_failure() -> None:
+    """Issue #450: a response that happens to contain the word
+    "error" or "failed" in normal field names (validation_errors,
+    failed_attempts as a counter, etc.) was misclassified as failure
+    by the prior substring scan. Structured detection only flags
+    actual error signals."""
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    # Common Zoho-style response with empty validation_errors list
+    resp1 = '{"invoices": [{"id": 1}], "validation_errors": []}'
+    assert _tool_message_indicates_failure(resp1) is False
+
+    # Counter field named with "failed"
+    resp2 = '{"data": {"total_attempts": 10, "failed_attempts": 0}}'
+    assert _tool_message_indicates_failure(resp2) is False
+
+    # Documentation string mentioning errors in a successful payload
+    resp3 = (
+        '{"status": "calculated", "tds_amount": 500.0, '
+        '"notes": "Section 206AA error rate would apply if PAN missing"}'
+    )
+    assert _tool_message_indicates_failure(resp3) is False
+
+
+def test_exception_wrapped_response_is_a_failure() -> None:
+    """Issue #450: real failures still cap correctly. Tool that raised
+    is wrapped by LangGraph's ToolNode with an Error: prefix; that
+    must be detected."""
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    # Direct exception class name (LangGraph ToolNode exception wrap)
+    assert _tool_message_indicates_failure(
+        "Error: HTTPStatusError('Client error \\'400 \\' for url ...')"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "HTTPStatusError: Client error '404' for url ..."
+    ) is True
+    # Python traceback
+    assert _tool_message_indicates_failure(
+        "Traceback (most recent call last):\n  File \"x\", line 1\n..."
+    ) is True
+    # Generic Exception: prefix
+    assert _tool_message_indicates_failure(
+        "Exception: tenant has no active connector"
+    ) is True
+
+
+def test_langgraph_toolnode_invocation_errors_are_failures() -> None:
+    """Issue #450 / Codex P1 on PR #452: LangGraph's ToolNode emits
+    plain-text wrappers like ``Error invoking tool ... with error: …``
+    when an LLM-supplied arg fails schema validation BEFORE the tool
+    body runs. Initial prefix list (\"Error: \", ...) missed these
+    exact strings and would classify them as success, capping nothing
+    and inflating shadow scoring.
+    """
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    # Canonical LangGraph ToolNode patterns
+    assert _tool_message_indicates_failure(
+        "Error invoking tool calculate_tds with error: amount is required"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "Error executing tool list_invoices: connection timeout"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "Error in tool call get_trial_balance: invalid date format"
+    ) is True
+    # langchain-core exception classes
+    assert _tool_message_indicates_failure(
+        "ToolException: rate limit exceeded"
+    ) is True
+    assert _tool_message_indicates_failure(
+        "ToolInvocationError: bad args"
+    ) is True
+    # Pydantic validation failures (surface when LLM passes wrong
+    # arg shape — common with structured tool calls)
+    assert _tool_message_indicates_failure(
+        "ValidationError: 1 validation error for CalculateTdsArgs"
+    ) is True
+
+
+def test_structured_status_error_is_failure() -> None:
+    """Issue #450: a connector that returned a structured dict with
+    ``status="error"`` is the canonical "tool failed cleanly" signal.
+    Connector authors set this to communicate failure without raising."""
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    assert _tool_message_indicates_failure(
+        '{"status": "error", "message": "missing required field"}'
+    ) is True
+    assert _tool_message_indicates_failure(
+        '{"status": "ERROR"}'  # case insensitive
+    ) is True
+    # ``error`` field with a non-empty string value
+    assert _tool_message_indicates_failure(
+        '{"error": "rate limit exceeded"}'
+    ) is True
+    # ``error`` field with truthy dict
+    assert _tool_message_indicates_failure(
+        '{"error": {"code": 429, "message": "rate limit"}}'
+    ) is True
+
+
+def test_blank_tool_message_is_failure() -> None:
+    """Issue #450: a tool that returned literally nothing didn't
+    communicate a result. Treat as failure so we don't silently score
+    blank responses as success."""
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    assert _tool_message_indicates_failure("") is True
+    assert _tool_message_indicates_failure("   \n  ") is True
+    assert _tool_message_indicates_failure(None) is True
+
+
+def test_python_repr_of_dict_is_handled() -> None:
+    """Issue #450: ToolNode sometimes str()'s a dict response which
+    produces a Python repr (single-quoted keys). Both JSON-style and
+    Python-style dict reprs must classify the same way."""
+    from core.langgraph.agent_graph import _tool_message_indicates_failure
+
+    # Python repr of empty success dict
+    assert _tool_message_indicates_failure(
+        "{'invoices': [], 'page_context': {'page': 1}}"
+    ) is False
+    # Python repr of structured error
+    assert _tool_message_indicates_failure(
+        "{'status': 'error', 'message': 'no creds'}"
+    ) is True
+
+
+def test_agent_graph_uses_structured_detection() -> None:
+    """Issue #450 wiring guard: the ToolMessage classification path in
+    agent_graph.py must call ``_tool_message_indicates_failure`` and
+    NOT use the old substring scan. Source-pin so a future cleanup
+    doesn't reintroduce the brittle heuristic."""
+    src = (
+        ROOT / "core" / "langgraph" / "agent_graph.py"
+    ).read_text(encoding="utf-8")
+    # Helper exists
+    assert "def _tool_message_indicates_failure" in src
+    # Wired into the ToolMessage loop
+    assert "is_error = _tool_message_indicates_failure(msg_content)" in src
+    # The old substring scan must NOT be present — that was the bug
+    assert (
+        '"error" in msg_content.lower() or "failed" in msg_content.lower()'
+        not in src
+    )
+    # Issue traceability
+    assert "Issue #450" in src or "issue #450" in src.lower()

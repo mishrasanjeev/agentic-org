@@ -14,6 +14,7 @@ The graph supports:
 
 from __future__ import annotations
 
+import ast
 import json
 from typing import Any
 
@@ -29,6 +30,116 @@ from core.langgraph.state import AgentState
 from core.langgraph.tool_adapter import _build_tool_index, build_tools_for_agent
 
 logger = structlog.get_logger()
+
+
+# ----------------------------------------------------------------------
+# Issue #450 — structured tool-result classification.
+#
+# The previous heuristic (``"error" in msg_content.lower() or "failed"
+# in msg_content.lower()``) was a substring scan against the entire
+# ToolMessage content. That misclassified clean tool responses as
+# failures any time the response carried the word "error" or "failed"
+# anywhere — for example, Zoho responses with empty ``validation_errors``
+# fields, AR shadow samples on a tenant with zero overdue invoices,
+# or any data containing those terms in normal field names. The cap
+# then dropped confidence to 0.5 → 0.24 floor → BUG-11 stayed open
+# for GST/FP&A/AR even though the tool actually executed correctly.
+#
+# The fix below replaces the substring scan with structured signals
+# that match how tools actually fail in this stack:
+#
+#   1. Tool raised an exception → ToolNode wraps the message with
+#      ``Error: <ExceptionClassName>(...)`` (LangGraph convention).
+#      That exact prefix or a Python traceback marker is a real
+#      failure.
+#   2. Tool returned a dict with explicit ``status="error"`` or a
+#      truthy ``error`` field → the connector author's signal that
+#      the call failed.
+#   3. Empty data structures (``[]``, ``{}``) are SUCCESS — the tool
+#      executed correctly and the answer is "no data". The agent
+#      should learn from that, not be penalized.
+# ----------------------------------------------------------------------
+
+
+_EXPLICIT_ERROR_PREFIXES = (
+    "Error: ",
+    # LangGraph ToolNode emits these for invocation/argument-validation
+    # failures BEFORE the tool body runs — "Error invoking tool X with
+    # error: …" / "Error executing tool …". Codex P1 on PR #452: the
+    # initial prefix list missed these and would have classified
+    # ToolInvocationError as success, inflating shadow scoring on bad
+    # arg shapes.
+    "Error invoking tool",
+    "Error executing tool",
+    "Error in tool call",
+    "Exception: ",
+    "Traceback (most recent call last):",
+    # langchain-core
+    "ToolException",
+    "ToolInvocationError",
+    # pydantic — surfaces when an LLM-supplied arg fails schema validation
+    "ValidationError",
+    # httpx / aiohttp / asyncpg surface these directly
+    "HTTPStatusError",
+    "ClientError",
+    "ConnectError",
+)
+
+
+def _tool_message_indicates_failure(msg_content: str | None) -> bool:
+    """Decide whether a ToolMessage represents a failed tool call.
+
+    Returns ``True`` only when the content carries an explicit error
+    signal — exception wrapper from LangGraph's ToolNode, or a
+    structured-result dict whose author marked it as an error. Empty
+    / no-data results return ``False`` (those are successful tool
+    runs).
+
+    Issue #450: the prior substring-scan heuristic ("error" / "failed"
+    anywhere in the content) caused brittle false positives that
+    capped confidence on legitimately empty responses.
+    """
+    if not isinstance(msg_content, str) or not msg_content.strip():
+        # Treat truly empty content as suspicious — a tool that
+        # returned literally nothing didn't communicate a result.
+        return True
+
+    stripped = msg_content.strip()
+
+    # 1) Exception wrapper from ToolNode / Python traceback.
+    if any(stripped.startswith(prefix) for prefix in _EXPLICIT_ERROR_PREFIXES):
+        return True
+
+    # 2) Structured-result dict (JSON or Python repr). Try both
+    # parsers — connectors return Python dicts that ToolNode str()'s.
+    parsed: Any = None
+    if stripped.startswith(("{", "[")):
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                parsed = parser(stripped)
+            except (ValueError, SyntaxError):
+                continue
+            else:
+                break
+
+    if isinstance(parsed, dict):
+        status = parsed.get("status")
+        if isinstance(status, str) and status.lower() == "error":
+            return True
+        # ``error`` field with a truthy non-empty value (string, dict,
+        # non-empty list). Booleans / 0 / None do not count.
+        err = parsed.get("error")
+        if isinstance(err, str) and err.strip():
+            return True
+        if isinstance(err, dict) and err:
+            return True
+        if isinstance(err, list) and err:
+            return True
+
+    # 3) Anything else is success — including empty lists, empty
+    # dicts, and rich responses that happen to contain the substring
+    # "error" or "failed" in normal field names.
+    return False
 
 
 async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
@@ -215,7 +326,13 @@ def build_agent_graph(
             if isinstance(msg, ToolMessage):
                 tool_msg_count += 1
                 msg_content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                is_error = "error" in msg_content.lower() or "failed" in msg_content.lower()
+                # Issue #450: structured failure detection. See
+                # ``_tool_message_indicates_failure`` docstring. Replaces
+                # the prior substring scan that misclassified empty
+                # responses (and any field literally named "error_*")
+                # as failures, capping confidence on tools that actually
+                # ran correctly.
+                is_error = _tool_message_indicates_failure(msg_content)
                 if is_error:
                     tool_error_count += 1
                     any_tool_failed = True

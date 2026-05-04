@@ -48,6 +48,10 @@ _CA_SHADOW_FIXTURES: dict[str, dict[str, Any]] = {
     "ar_collections_agent": {
         # ``list_overdue_invoices`` calls list_invoices with status=overdue.
         # No mutation. Per #441 fix: never pass an invoice-number filter.
+        # On a tenant with zero overdue invoices the connector returns
+        # ``{"invoices": [], ...}`` — issue #450's structured failure
+        # detection now correctly treats that as a successful tool run
+        # (was misclassified as failure pre-#450, capping confidence).
         "prompt": (
             "List all currently-overdue invoices for this company "
             "(no customer or invoice-number filter, page 1)"
@@ -55,22 +59,33 @@ _CA_SHADOW_FIXTURES: dict[str, dict[str, Any]] = {
         "expected_tool": "list_overdue_invoices",
     },
     "fp_a_analyst_agent": {
-        # ``get_trial_balance`` is the canonical FP&A read tool.
+        # Issue #450: the previous fixture called ``get_trial_balance``
+        # without date params and Zoho v3 ``/reports/trialbalance``
+        # returned 400 → real failure cap. Switch to ``get_profit_loss``
+        # with explicit ``from_date``/``to_date`` for the previous
+        # calendar month — Zoho's profit-loss endpoint accepts a date
+        # range cleanly and returns structured data even when the
+        # period has zero transactions.
         "prompt": (
-            "Fetch the trial balance for this company as of 31 March 2026 "
-            "(default scope, no period filter beyond the as-of date)"
+            "Fetch the profit and loss report for this company for the "
+            "period from_date=2026-03-01 to_date=2026-03-31"
         ),
-        "expected_tool": "get_trial_balance",
+        "expected_tool": "get_profit_loss",
     },
     "gst_filing_agent": {
-        # ``generate_gst_report`` summarizes — does NOT file. Distinct
-        # from the gstn:* write tools we never want to invoke from a
-        # shadow sample.
+        # Issue #450: the previous fixture called ``generate_gst_report``
+        # → Zoho India v3 ``/reports/gstsummary`` returns 404 (endpoint
+        # doesn't exist on the IN region — separate connector ticket
+        # filed). Switch to ``list_invoices`` with no filters so the
+        # call returns a structured response on any tenant. Still
+        # read-only and aligned with the GST workflow (invoices are
+        # the seed data for any GSTR-1 / GSTR-3B prep).
         "prompt": (
-            "Generate a GST summary report for the previous calendar "
-            "month (no GSTIN override, no filing — read-only summary)"
+            "List the invoices for this company (page 1, no filters) — "
+            "used to seed GSTR data review. This is read-only — do NOT "
+            "invoke any gstn: filing tool."
         ),
-        "expected_tool": "generate_gst_report",
+        "expected_tool": "list_invoices",
     },
 }
 
