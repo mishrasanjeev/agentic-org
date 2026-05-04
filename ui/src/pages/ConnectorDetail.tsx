@@ -29,6 +29,7 @@ export default function ConnectorDetailPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [oauthStarting, setOauthStarting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   // Editable fields
@@ -38,15 +39,10 @@ export default function ConnectorDetailPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [baseUrlError, setBaseUrlError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(60);
-  // OAuth2-specific fields
-  // UI-OAUTH-001 (Uday/Ramesh 2026-04-24): Edit form previously had
-  // only Client ID, Token URL, Redirect URI — Client Secret and
-  // Refresh Token were missing, so Gmail-style OAuth2 connectors could
-  // not be re-authenticated here. Add the two missing fields and
-  // forward them through handleSave.auth_config.
+  // OAuth2-specific fields. Refresh tokens are intentionally not pasted
+  // into the UI anymore; re-auth uses /connectors/oauth/initiate.
   const [oauth2ClientId, setOauth2ClientId] = useState("");
   const [oauth2ClientSecret, setOauth2ClientSecret] = useState("");
-  const [oauth2RefreshToken, setOauth2RefreshToken] = useState("");
   const [oauth2TokenUrl, setOauth2TokenUrl] = useState("");
   const [oauth2RedirectUri, setOauth2RedirectUri] = useState("");
   // TC_008 (Aishwarya 2026-04-23): basic auth needs its own
@@ -122,13 +118,11 @@ export default function ConnectorDetailPage() {
         authType === "basic"
           ? buildBasicAuthConfig(basicUsername, authToken)
           : buildAuthConfig(authType, authToken);
-      // Add OAuth2-specific fields — UI-OAUTH-001 (2026-04-24): Gmail
-      // OAuth2 needs client_id + client_secret + refresh_token to mint
-      // access tokens; Edit had only client_id.
+      // Add editable OAuth2 metadata. The refresh_token itself is minted
+      // through the provider authorization flow and stored server-side.
       if (authType === "oauth2") {
         if (oauth2ClientId.trim()) authConfig.client_id = oauth2ClientId.trim();
         if (oauth2ClientSecret.trim()) authConfig.client_secret = oauth2ClientSecret.trim();
-        if (oauth2RefreshToken.trim()) authConfig.refresh_token = oauth2RefreshToken.trim();
         if (oauth2TokenUrl.trim()) authConfig.token_url = oauth2TokenUrl.trim();
         if (oauth2RedirectUri.trim()) authConfig.redirect_uri = oauth2RedirectUri.trim();
       }
@@ -159,6 +153,53 @@ export default function ConnectorDetailPage() {
       setFeedback({ type: data.healthy ? "success" : "error", msg: `Health: ${data.status} (${data.healthy ? "healthy" : "unhealthy"})` });
     } catch (e: unknown) {
       setFeedback({ type: "error", msg: extractApiError(e, "Health check failed") });
+    }
+  }
+
+  async function handleOAuthReauthorize() {
+    if (!connector) return;
+    setExtraConfigError("");
+    let extraParsed: Record<string, unknown> = {};
+    if (extraConfig.trim()) {
+      try {
+        const parsed = JSON.parse(extraConfig);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          setExtraConfigError("Extra config must be a JSON object.");
+          return;
+        }
+        extraParsed = parsed as Record<string, unknown>;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Invalid JSON";
+        setExtraConfigError(`Invalid JSON: ${msg}`);
+        return;
+      }
+    }
+    const clientId = oauth2ClientId.trim();
+    const clientSecret = oauth2ClientSecret.trim();
+    if (!clientId || !clientSecret) {
+      setFeedback({
+        type: "error",
+        msg: "Client ID and Client Secret are required before authorization.",
+      });
+      return;
+    }
+    setOauthStarting(true);
+    setFeedback(null);
+    try {
+      const { data } = await api.post("/connectors/oauth/initiate", {
+        connector_name: connector.name,
+        client_id: clientId,
+        client_secret: clientSecret,
+        base_url: baseUrl.trim() || connector.base_url || undefined,
+        category: connector.category,
+        extra_config: extraParsed,
+      });
+      if (!data?.authorization_url) throw new Error("Missing authorization URL");
+      window.location.assign(String(data.authorization_url));
+    } catch (e: unknown) {
+      setFeedback({ type: "error", msg: extractApiError(e, "Failed to start OAuth authorization") });
+    } finally {
+      setOauthStarting(false);
     }
   }
 
@@ -300,18 +341,20 @@ export default function ConnectorDetailPage() {
                           <label className="text-sm font-medium">Client ID</label>
                           <input type="text" value={oauth2ClientId} onChange={(e) => setOauth2ClientId(e.target.value)} placeholder="OAuth2 Client ID" className="border rounded px-3 py-2 text-sm w-full mt-1" />
                         </div>
-                        {/* UI-OAUTH-001 (Uday/Ramesh 2026-04-24):
-                            Gmail / Google OAuth2 needs client_secret +
-                            refresh_token on this form or the connector
-                            can't mint access tokens at runtime. */}
+                        {/* Gmail / Google OAuth2 needs the client secret
+                            before the backend can exchange an auth code. */}
                         <div>
                           <label className="text-sm font-medium">Client Secret</label>
                           <input type="password" value={oauth2ClientSecret} onChange={(e) => setOauth2ClientSecret(e.target.value)} placeholder="Enter new client secret (leave blank to keep existing)" autoComplete="new-password" className="border rounded px-3 py-2 text-sm w-full mt-1" />
                         </div>
-                        <div>
-                          <label className="text-sm font-medium">Refresh Token</label>
-                          <input type="password" value={oauth2RefreshToken} onChange={(e) => setOauth2RefreshToken(e.target.value)} placeholder="Paste refresh token (required for Gmail/Google APIs)" autoComplete="new-password" className="border rounded px-3 py-2 text-sm w-full mt-1" />
-                          <p className="text-xs text-muted-foreground mt-1">Gmail, Google Drive, and Google Calendar connectors require a refresh token obtained via the OAuth consent flow.</p>
+                        <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                          <p className="text-sm font-medium">OAuth Refresh Token</p>
+                          <p className="text-xs text-muted-foreground">
+                            Refresh tokens are no longer pasted manually. Authorize in the provider consent screen and the backend will exchange the code and store the token encrypted.
+                          </p>
+                          <Button size="sm" variant="outline" onClick={handleOAuthReauthorize} disabled={oauthStarting}>
+                            {oauthStarting ? "Starting authorization..." : "Authorize with provider"}
+                          </Button>
                         </div>
                         <div>
                           <label className="text-sm font-medium">Token URL</label>

@@ -159,7 +159,10 @@ export default function CompanyDashboard() {
     return matchSearch && matchIndustry && matchState;
   });
 
-  const isActive = (c: Company) => c.status === "active" || c.is_active === true || (c.is_active !== false && !c.status);
+  const isActive = (c: Company) =>
+    c.is_active === false
+      ? false
+      : c.status === "active" || c.is_active === true || !c.status;
   const activeCount = summary.active_clients || companies.filter(isActive).length;
   const totalCount = summary.total_clients || companies.length;
   const inactiveCount = Math.max(totalCount - activeCount, 0);
@@ -292,7 +295,7 @@ export default function CompanyDashboard() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-2xl font-bold text-red-600">{summary.total_overdue}</p>
-            <p className="text-xs text-muted-foreground">Overdue</p>
+            <p className="text-xs text-muted-foreground">Overdue Filings</p>
           </CardContent>
         </Card>
       </div>

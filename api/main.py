@@ -44,6 +44,7 @@ from api.v1 import (
     knowledge,
     kpis,
     mcp,
+    oauth_connector,
     packs,
     product_facts,
     prompt_templates,
@@ -192,6 +193,7 @@ app.include_router(approval_policies.router, prefix="/api/v1", tags=["Approvals"
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
+app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
 app.include_router(governance.router, prefix="/api/v1", tags=["Governance"])
