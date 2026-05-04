@@ -177,3 +177,177 @@ def test_each_ca_pack_agent_binds_callable_tools_in_zoho_only_env() -> None:
             f"{agent_cfg['name']} leaked tools through the empty "
             "allow-list — fail-closed broken."
         )
+
+
+# ----------------------------------------------------------------------
+# Issue #440 — BUG-11/17 prompt-runtime residual: every CA pack agent
+# must carry an interactive-extraction instruction so the LLM extracts
+# already-provided fields (amount/section/period/etc.) and calls the
+# tool directly instead of asking the user to repeat them. The TDS
+# agent additionally carries a worked example of the canonical tester
+# prompt → calculate_tds invocation.
+# ----------------------------------------------------------------------
+
+
+def test_every_ca_pack_agent_has_prompt_file_and_extraction_suffix() -> None:
+    """Issue #440: each CA pack agent must wire a prompt_file (so the
+    SOP-level prompt is loaded into system_prompt_text by the installer)
+    AND carry the INTERACTIVE EXTRACTION instruction in its
+    system_prompt_suffix. Without these, BUG-17's 'agent asks for
+    fields already in the user prompt' symptom can't close even after
+    the tool-binding repair."""
+    from core.agents.packs.ca import CA_PACK
+
+    for agent_cfg in CA_PACK["agents"]:
+        name = agent_cfg.get("name", "?")
+        prompt_file = agent_cfg.get("prompt_file") or ""
+        suffix = agent_cfg.get("system_prompt_suffix") or ""
+        assert prompt_file.endswith(".prompt.txt"), (
+            f"{name} is missing prompt_file — installer's _build_system_prompt "
+            "won't pick up the SOP. Issue #440."
+        )
+        assert "INTERACTIVE EXTRACTION" in suffix, (
+            f"{name} is missing INTERACTIVE EXTRACTION clause — LLM will keep "
+            "asking the user to repeat already-provided fields. Issue #440."
+        )
+        # Pin the wording reviewer should not regress.
+        assert "issue #440" in suffix.lower() or "440" in suffix, (
+            f"{name} suffix should reference issue #440 so a future cleanup "
+            "doesn't drop the extraction clause silently."
+        )
+
+
+def test_ar_collections_suffix_does_not_recommend_unsupported_filter() -> None:
+    """Issue #440 follow-up (Codex P2 on PR #443): the AR Collections
+    suffix must NOT instruct the LLM to filter ``list_invoices`` by
+    invoice number. The Zoho ``list_invoices`` method only accepts
+    status/customer_id/date_start/date_end/page; an invoice-number arg
+    gets silently ignored, the LLM receives a broad list, and may act
+    on the wrong record. Pin the supported-fields language and the
+    fetch-then-filter-client-side fallback for invoice-specific asks."""
+    from core.agents.packs.ca import CA_PACK
+
+    ar = next(
+        a for a in CA_PACK["agents"] if a.get("name") == "AR Collections Agent"
+    )
+    suffix = ar.get("system_prompt_suffix") or ""
+    # Hard-stop: no language asking the LLM to "filter by invoice number"
+    # (regardless of casing) — that's the unsupported-arg trap.
+    lower = suffix.lower()
+    assert "invoice number" not in lower or "do not pass" in lower or "do NOT pass" in suffix, (
+        "AR suffix tells the LLM to use an invoice-number filter without "
+        "the explicit 'do NOT pass' caveat. Zoho list_invoices doesn't "
+        "support that field; the LLM will pass an unsupported arg and "
+        "the connector will silently ignore it. Either remove the "
+        "instruction or call out the unsupported arg explicitly."
+    )
+    # Pin the safer fetch-then-filter-client-side fallback for
+    # invoice-specific asks like 'remind for INV-123'.
+    assert "client-side" in lower or "client side" in lower
+    # Pin the supported-fields list as documentation so a reader can
+    # verify against the connector signature.
+    assert "customer_id" in suffix
+
+
+def test_tds_compliance_suffix_carries_canonical_tester_example() -> None:
+    """Issue #440: the TDS Compliance agent's suffix must carry the
+    exact canonical tester prompt + the explicit extraction → tool-call
+    walkthrough so the LLM has a concrete pattern to mimic, not just an
+    abstract instruction."""
+    from core.agents.packs.ca import CA_PACK
+
+    tds = next(
+        a for a in CA_PACK["agents"] if a.get("name") == "TDS Compliance Agent"
+    )
+    suffix = tds.get("system_prompt_suffix") or ""
+    # Canonical tester prompt fragments
+    assert "INR 50,000" in suffix
+    assert "Section 194C" in suffix
+    assert "April 2026" in suffix
+    assert "Form 26Q" in suffix
+    # Concrete extraction → tool-call walkthrough
+    assert "amount=50000" in suffix
+    assert 'section="194C"' in suffix or "section='194C'" in suffix
+    assert "calculate_tds" in suffix
+    # Explicit anti-pattern callout
+    assert "BUG-17" in suffix
+
+
+def test_tds_compliance_prompt_file_has_interactive_extraction_section() -> None:
+    """Issue #440: the SOP prompt itself must carry the extraction
+    section so the LLM sees it whether it landed via the prompt_file
+    path or the suffix path. Belt-and-braces — the procedural sequence
+    that follows is correct for filing flows but was driving BUG-17 for
+    ad-hoc calculate-only chat queries."""
+    src = (
+        ROOT / "core" / "agents" / "packs" / "ca" / "prompts"
+        / "tds_compliance.prompt.txt"
+    ).read_text(encoding="utf-8")
+    assert "<interactive_extraction>" in src
+    assert "Issue #440" in src
+    # The worked example mirrors the suffix
+    assert "INR 50,000" in src
+    assert "Section 194C" in src
+    assert "calculate_tds(amount=50000" in src
+    # Anti-restate-and-ask language
+    assert "Never restate-and-ask" in src or "do NOT re-ask" in src.lower()
+
+
+def test_ca_pack_agent_types_match_existing_db_rows() -> None:
+    """Issue #440 wiring guard: ``_agent_type`` is the value the
+    installer's lookup key (Agent.agent_type) is compared against.
+    Existing prod rows have agent_types derived from the pre-PR-#434
+    slugified-name path: ``gst_filing_agent``, ``tds_compliance_agent``,
+    ``bank_reconciliation_agent``, ``fp_a_analyst_agent``,
+    ``ar_collections_agent``. Adding an explicit ``type:`` to any pack
+    agent dict (a tempting refactor) would change ``_agent_type`` output
+    and miss every existing row on backfill, creating duplicate agents.
+    Pin the derived types to the live DB convention so this stays
+    impossible without an explicit migration."""
+    from core.agents.packs.ca import CA_PACK
+    from core.agents.packs.installer import _agent_type
+
+    expected_types = {
+        "GST Filing Agent": "gst_filing_agent",
+        "TDS Compliance Agent": "tds_compliance_agent",
+        "Bank Reconciliation Agent": "bank_reconciliation_agent",
+        "FP&A Analyst Agent": "fp_a_analyst_agent",
+        "AR Collections Agent": "ar_collections_agent",
+    }
+    for index, agent_cfg in enumerate(CA_PACK["agents"]):
+        name = agent_cfg["name"]
+        derived = _agent_type(agent_cfg, index)
+        assert derived == expected_types[name], (
+            f"_agent_type({name!r}) returned {derived!r}, expected "
+            f"{expected_types[name]!r}. This drift would create duplicate "
+            "agents on the next idempotent backfill — the Agent.agent_type "
+            "lookup key would no longer match existing rows. If you really "
+            "need to rename, ship a data migration first."
+        )
+
+
+def test_built_tds_system_prompt_includes_extraction_instruction() -> None:
+    """Issue #440 runtime contract: the actual string the installer
+    persists to ``agent.system_prompt_text`` (and that the LLM sees
+    on every chat / shadow turn) must contain BOTH the suffix's
+    INTERACTIVE EXTRACTION clause AND the SOP's worked example. This
+    pins the wiring end-to-end — if a refactor breaks _build_system_prompt
+    or _read_pack_prompt or the prompt_file path resolution, this fires."""
+    from core.agents.packs.ca import CA_PACK
+    from core.agents.packs.installer import _build_system_prompt, get_pack_detail
+
+    detail = get_pack_detail("ca-firm")
+    assert detail is not None, "CA pack must resolve via get_pack_detail"
+    tds_index, tds_cfg = next(
+        (i, a) for i, a in enumerate(CA_PACK["agents"])
+        if a.get("name") == "TDS Compliance Agent"
+    )
+    built = _build_system_prompt("ca-firm", detail, tds_cfg, tds_index)
+    # Suffix signals
+    assert "INTERACTIVE EXTRACTION" in built
+    assert "calculate_tds" in built
+    # SOP signals (proves prompt_file was loaded)
+    assert "<interactive_extraction>" in built
+    assert "Section 234E" in built  # from the existing <tds_rules> block
+    # Tool list still appended (sanity)
+    assert "Authorized tools" in built
