@@ -41,7 +41,7 @@ def test_bug1_no_duplicate_client_secret_for_oauth2() -> None:
     # The generic helper field must be guarded
     assert 'authType !== "oauth2"' in src, (
         "Generic credential helper field must be skipped when the "
-        "OAuth2-specific Client Secret/Refresh Token block is in play "
+        "OAuth2-specific Client Secret/authorization block is in play "
         "— otherwise both inputs render with the same 'Client Secret' "
         "label."
     )

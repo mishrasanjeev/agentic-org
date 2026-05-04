@@ -123,6 +123,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ name: "", email: "", firm: "", clients: "" });
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -142,6 +143,8 @@ function DemoModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ ...form, source: "ca-firms-solution" }),
       });
       if (!res.ok) throw new Error("Request failed");
+      const data = await res.json().catch(() => ({}));
+      setConfirmationSent(Boolean(data?.email?.requester_confirmation_sent));
       setDone(true);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -173,7 +176,11 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours to set up your CA firm trial.</p>
+            <p className="text-slate-600">
+              {confirmationSent
+                ? "We sent a confirmation email and will contact you within 24 hours to set up your CA firm trial."
+                : "Your CA firm trial request was saved. We will contact you within 24 hours to set it up."}
+            </p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all">
               Close
             </button>
