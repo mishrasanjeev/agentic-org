@@ -510,6 +510,17 @@ async def _get_or_create_pack_agents(
                     },
                     "tool_connectors": tool_connectors,
                     "required_connector_ids": connector_ids,
+                    # Issue #447: persist the per-agent shadow_fixture
+                    # so api/v1/agents.py:run_agent can substitute a
+                    # structured task on shadow_sample dispatches
+                    # instead of the runner's generic exploratory
+                    # prompt. Empty-dict default keeps non-CA packs
+                    # unaffected.
+                    **(
+                        {"shadow_fixture": agent_cfg["shadow_fixture"]}
+                        if isinstance(agent_cfg.get("shadow_fixture"), dict)
+                        else {}
+                    ),
                 },
             )
             session.add(agent)
@@ -566,6 +577,13 @@ async def _get_or_create_pack_agents(
             cfg["pack_install"] = pack_cfg
             cfg["tool_connectors"] = tool_connectors
             cfg["required_connector_ids"] = connector_ids
+            # Issue #447 repair branch: refresh the persisted
+            # shadow_fixture so existing agents on tenants that
+            # backfilled before #447 pick up the new behavior on
+            # the next sync. Same shape as the create-branch above.
+            fixture = agent_cfg.get("shadow_fixture")
+            if isinstance(fixture, dict):
+                cfg["shadow_fixture"] = fixture
             agent.config = cfg
             session.add(agent)
 

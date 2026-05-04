@@ -594,3 +594,189 @@ def test_tds_route_section_192_falls_through_to_llm() -> None:
             "section' error instead of letting the LLM walk the user "
             "through salary-TDS slab math."
         )
+
+
+# ----------------------------------------------------------------------
+# Issue #447 — CA shadow fixtures. Each CA pack agent must carry a
+# shadow_fixture in its pack manifest so api/v1/agents.py:run_agent
+# substitutes a structured task when shadow_sample is dispatched.
+# Without these, the runner's generic "exercise ONE tool" hint kept
+# gpt-4o picking zero tools → BUG-11 shadow accuracy stuck at 0.24
+# floor across 4+ samples on Uday's prod tenant.
+# ----------------------------------------------------------------------
+
+
+_EXPECTED_FIXTURES: dict[str, dict[str, object]] = {
+    "GST Filing Agent": {
+        "expected_tool": "generate_gst_report",
+        "must_not_contain_write": ("file_gstr", "push_gstr1", "generate_eway_bill"),
+    },
+    "TDS Compliance Agent": {
+        "expected_tool": "calculate_tds",
+        "deterministic_route": "tds",
+        "must_not_contain_write": ("file_form_26q", "file_26q_return", "pay_tax_challan"),
+    },
+    "Bank Reconciliation Agent": {
+        "expected_tool": "check_account_balance",
+        "must_not_contain_write": ("reconcile_bank", "post_voucher"),
+    },
+    "FP&A Analyst Agent": {
+        "expected_tool": "get_trial_balance",
+        "must_not_contain_write": ("post_voucher",),
+    },
+    "AR Collections Agent": {
+        "expected_tool": "list_overdue_invoices",
+        "must_not_contain_write": ("send_email", "send"),
+    },
+}
+
+
+def test_every_ca_agent_has_a_shadow_fixture() -> None:
+    from core.agents.packs.ca import CA_PACK
+
+    for agent_cfg in CA_PACK["agents"]:
+        name = agent_cfg["name"]
+        fixture = agent_cfg.get("shadow_fixture")
+        assert isinstance(fixture, dict), (
+            f"{name} missing shadow_fixture — shadow_sample will fall "
+            "back to the generic exploratory hint and BUG-11's "
+            "no-tool-call floor will resurface."
+        )
+        prompt = fixture.get("prompt")
+        expected_tool = fixture.get("expected_tool")
+        assert isinstance(prompt, str) and prompt.strip(), (
+            f"{name} fixture has no prompt"
+        )
+        assert isinstance(expected_tool, str) and expected_tool.strip(), (
+            f"{name} fixture has no expected_tool"
+        )
+        spec = _EXPECTED_FIXTURES[name]
+        assert expected_tool == spec["expected_tool"], (
+            f"{name} expected_tool={expected_tool!r} differs from spec "
+            f"{spec['expected_tool']!r}."
+        )
+        for forbidden in spec.get("must_not_contain_write", ()):
+            assert forbidden not in expected_tool, (
+                f"{name} shadow fixture names a write tool "
+                f"({forbidden}). Shadow samples must be read-only."
+            )
+
+
+def test_tds_fixture_is_deterministic_route() -> None:
+    from core.agents.packs.ca import CA_PACK
+
+    tds = next(a for a in CA_PACK["agents"] if a["name"] == "TDS Compliance Agent")
+    fixture = tds["shadow_fixture"]
+    assert fixture.get("deterministic_route") == "tds"
+    import asyncio
+
+    from api.v1._tds_routing import try_tds_deterministic_route
+
+    result = asyncio.run(
+        try_tds_deterministic_route(
+            agent_type="tds_compliance_agent",
+            query=fixture["prompt"],
+        )
+    )
+    assert result is not None, (
+        f"TDS shadow fixture prompt {fixture['prompt']!r} does NOT "
+        "match the chat deterministic route's detection — bypass "
+        "would fall through to LLM and BUG-11 stays open."
+    )
+    tc = result["tool_calls"][0]
+    assert tc["tool"] == "calculate_tds"
+    assert tc["arguments"]["amount"] == 50000.0
+    assert tc["arguments"]["section"] == "194C"
+    assert result["confidence"] >= 0.85
+
+
+def test_runner_uses_shadow_prompt_when_fixture_supplies_one() -> None:
+    from core.langgraph.runner import _build_user_message
+
+    msg = _build_user_message({
+        "action": "shadow_sample",
+        "inputs": {
+            "shadow_prompt": "Fetch the trial balance as of 31 March 2026",
+            "shadow_expected_tool": "get_trial_balance",
+        },
+    })
+    assert "Fetch the trial balance as of 31 March 2026" in msg
+    assert "get_trial_balance" in msg
+    assert "Exercise ONE of the" not in msg
+
+
+def test_runner_falls_through_to_generic_hint_without_fixture() -> None:
+    from core.langgraph.runner import _build_user_message
+
+    msg = _build_user_message({"action": "shadow_sample", "inputs": {}})
+    assert "Exercise ONE of the" in msg
+    assert "shadow-mode test sample run" in msg
+
+
+def test_installer_persists_shadow_fixture_on_create_and_repair() -> None:
+    src = (
+        ROOT / "core" / "agents" / "packs" / "installer.py"
+    ).read_text(encoding="utf-8")
+    occurrences = src.count("shadow_fixture")
+    assert occurrences >= 2, (
+        "installer.py should persist shadow_fixture in BOTH create + "
+        f"repair branches. Found {occurrences} references."
+    )
+    repair_block = src[src.find('cfg["pack_install"] = pack_cfg'):]
+    assert "shadow_fixture" in repair_block, (
+        "Repair branch missing shadow_fixture refresh — existing "
+        "agents on tenants backfilled before #447 won't pick up the "
+        "new behavior on the next sync."
+    )
+
+
+def test_api_run_agent_substitutes_shadow_fixture() -> None:
+    src = (
+        ROOT / "api" / "v1" / "agents.py"
+    ).read_text(encoding="utf-8")
+    assert "shadow_fixture" in src
+    assert "shadow_prompt" in src
+    assert "deterministic_route" in src
+    assert "try_tds_deterministic_route" in src
+    assert "#447" in src
+
+
+def test_api_run_agent_strips_caller_supplied_shadow_prompt() -> None:
+    """Codex P1 on PR #449: API callers must NEVER be able to supply
+    their own shadow_prompt for a shadow_sample dispatch. The runner
+    executes shadow_prompt verbatim, so honoring caller overrides
+    would let any client run arbitrary prompts (including ones that
+    request mutating tools) under the read-only shadow safety
+    guarantee. Pin both the strip + the unconditional fixture set."""
+    src = (
+        ROOT / "api" / "v1" / "agents.py"
+    ).read_text(encoding="utf-8")
+    # Caller's shadow_prompt + shadow_expected_tool must be stripped
+    # before fixture lookup
+    assert 'incoming_inputs.pop("shadow_prompt", None)' in src
+    assert 'incoming_inputs.pop("shadow_expected_tool", None)' in src
+    # Fixture set is unconditional (no setdefault — server-side wins)
+    assert 'incoming_inputs["shadow_prompt"] = str(fixture["prompt"])' in src
+    # Codex traceability tag
+    assert "Codex P1 on PR #449" in src or "Codex P1 on #449" in src
+
+
+def test_api_run_agent_gates_fixture_on_authorized_tools() -> None:
+    """Codex P2 on PR #449: every fixture path (deterministic bypass
+    AND structured-prompt injection) must verify the fixture's
+    expected_tool is currently in agent.authorized_tools. Otherwise a
+    removed/disabled tool would still get scored synthetically with
+    high confidence, masking real config drift and inflating
+    shadow_accuracy_current."""
+    src = (
+        ROOT / "api" / "v1" / "agents.py"
+    ).read_text(encoding="utf-8")
+    # The gate variable + its in-authorized check
+    assert "fixture_tool_authorized" in src
+    assert "in (authorized_tools or [])" in src
+    # Drift-warning log so operators see the fall-through
+    assert "agent_run_shadow_fixture_tool_not_authorized" in src
+    # When tool not authorized, fall through to generic hint
+    assert "fixture = {}" in src
+    # Codex traceability tag
+    assert "Codex P2 on PR #449" in src or "Codex P2 on #449" in src

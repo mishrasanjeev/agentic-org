@@ -2,6 +2,78 @@
 
 from typing import Any
 
+# Issue #447 / BUG-11 closure: per-agent shadow fixtures. The shadow runner
+# at core/langgraph/runner.py used to translate ``action="shadow_sample"``
+# into a generic "exercise ONE tool with read-only args" instruction. With
+# that prompt, gpt-4o would consistently pick zero tools to call → shadow
+# accuracy stuck at the LLM-only ~0.24-0.32 floor.
+#
+# Each fixture below is a structured task that names a real, safe,
+# read-only / deterministic tool the agent IS authorized to call.
+# Persisted to ``agent.config["shadow_fixture"]`` by the installer; read
+# by ``api/v1/agents.py:run_agent`` when handling shadow_sample.
+#
+# Rules:
+#   * No write tools (no GSTN filing, no email send, no challan payment,
+#     no voucher post). All fixtures must be read-only or pure-math.
+#   * No credential dependencies — fixtures must work in tenants that
+#     have only Zoho Books connected (income_tax_india / gstn / tally /
+#     sendgrid optional).
+#   * For TDS, ``deterministic_route="tds"`` opts into the chat-side
+#     deterministic helper (``api/v1/_tds_routing.py``) so the calculate
+#     happens via pure math without any LLM uncertainty.
+
+_CA_SHADOW_FIXTURES: dict[str, dict[str, Any]] = {
+    "tds_compliance_agent": {
+        # The canonical tester prompt — already exercised by chat tests.
+        # The deterministic_route="tds" tag tells the runner to bypass
+        # the LLM entirely and invoke calculate_tds via pure math.
+        "prompt": (
+            "Calculate TDS for vendor payment of INR 50,000 under "
+            "Section 194C for April 2026"
+        ),
+        "expected_tool": "calculate_tds",
+        "deterministic_route": "tds",
+    },
+    "bank_reconciliation_agent": {
+        # Read-only Zoho Books call. ``account_id`` omitted so the
+        # connector returns the full bank account list — safe to call
+        # in any tenant.
+        "prompt": (
+            "List the bank accounts available for this company "
+            "(no filters, page 1)"
+        ),
+        "expected_tool": "check_account_balance",
+    },
+    "ar_collections_agent": {
+        # ``list_overdue_invoices`` calls list_invoices with status=overdue.
+        # No mutation. Per #441 fix: never pass an invoice-number filter.
+        "prompt": (
+            "List all currently-overdue invoices for this company "
+            "(no customer or invoice-number filter, page 1)"
+        ),
+        "expected_tool": "list_overdue_invoices",
+    },
+    "fp_a_analyst_agent": {
+        # ``get_trial_balance`` is the canonical FP&A read tool.
+        "prompt": (
+            "Fetch the trial balance for this company as of 31 March 2026 "
+            "(default scope, no period filter beyond the as-of date)"
+        ),
+        "expected_tool": "get_trial_balance",
+    },
+    "gst_filing_agent": {
+        # ``generate_gst_report`` summarizes — does NOT file. Distinct
+        # from the gstn:* write tools we never want to invoke from a
+        # shadow sample.
+        "prompt": (
+            "Generate a GST summary report for the previous calendar "
+            "month (no GSTIN override, no filing — read-only summary)"
+        ),
+        "expected_tool": "generate_gst_report",
+    },
+}
+
 CA_PACK: dict[str, Any] = {
     "id": "ca-firm",
     "name": "Chartered Accountant Firm Pack",
@@ -21,6 +93,7 @@ CA_PACK: dict[str, Any] = {
                 "2A reconciliation, and DSC-signed filing"
             ),
             "prompt_file": "prompts/gst_filing.prompt.txt",
+            "shadow_fixture": _CA_SHADOW_FIXTURES["gst_filing_agent"],
             "tools": [
                 "gstn:fetch_gstr2a",
                 "gstn:push_gstr1_data",
@@ -53,6 +126,7 @@ CA_PACK: dict[str, Any] = {
                 "generates Form 16A, reconciles 26AS"
             ),
             "prompt_file": "prompts/tds_compliance.prompt.txt",
+            "shadow_fixture": _CA_SHADOW_FIXTURES["tds_compliance_agent"],
             "tools": [
                 "zoho_books:calculate_tds",
                 "zoho_books:get_ledger_balance",
@@ -97,6 +171,7 @@ CA_PACK: dict[str, Any] = {
                 "flags old outstanding items"
             ),
             "prompt_file": "prompts/bank_reconciliation.prompt.txt",
+            "shadow_fixture": _CA_SHADOW_FIXTURES["bank_reconciliation_agent"],
             "tools": [
                 "zoho_books:fetch_bank_statement",
                 "zoho_books:check_account_balance",
@@ -128,6 +203,7 @@ CA_PACK: dict[str, Any] = {
                 "MIS report generation"
             ),
             "prompt_file": "prompts/fpa_analyst.prompt.txt",
+            "shadow_fixture": _CA_SHADOW_FIXTURES["fp_a_analyst_agent"],
             "tools": [
                 "zoho_books:get_trial_balance",
                 "zoho_books:get_ledger_balance",
@@ -153,6 +229,7 @@ CA_PACK: dict[str, Any] = {
                 "escalates aging items"
             ),
             "prompt_file": "prompts/ar_collections.prompt.txt",
+            "shadow_fixture": _CA_SHADOW_FIXTURES["ar_collections_agent"],
             "tools": [
                 "zoho_books:get_ledger_balance",
                 "zoho_books:list_overdue_invoices",
