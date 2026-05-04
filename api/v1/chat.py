@@ -443,7 +443,6 @@ async def chat_query(
     # still showed 60% even when the LLM had high-quality reasoning.
     tools_used = False
     confidence: float | None = None
-    deterministic_tool_calls: list[dict] | None = None
 
     # Resolve agent_type: prefer DB value, fall back to domain keyword (BUG #3)
     resolved_agent_type = agent_type or domain
