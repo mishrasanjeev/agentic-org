@@ -148,7 +148,7 @@ jobs:
       # those files are absent, so the artefact pass-through is
       # what keeps the gate honest without re-running pytest here.
       - name: Download coverage artefacts from unit-tests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-${{ github.sha }}
           path: .
