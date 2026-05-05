@@ -86,9 +86,7 @@ _TDS_AMOUNT_RES: tuple[re.Pattern[str], ...] = (
 )
 
 # Period: month + year, quarter, or financial year.
-_MONTH_YEAR_RE = re.compile(r"\b(?P<month>[A-Za-z]+)\s+(?P<year>\d{4})\b")
-_QUARTER_RE = re.compile(r"\bQ[1-4]\s+(?:FY)?\s*\d{2,4}\b", re.IGNORECASE)
-_FINANCIAL_YEAR_RE = re.compile(r"\bFY\s*\d{2,4}(?:-\d{2,4})?\b", re.IGNORECASE)
+_PERIOD_TOKEN_RE = re.compile(r"[A-Za-z0-9-]+")
 _MONTH_TOKENS = {
     "january",
     "february",
@@ -163,15 +161,57 @@ def _extract_section(query: str) -> str | None:
     return match.group(1).upper()
 
 
+def _looks_like_year_token(token: str) -> bool:
+    parts = token.split("-")
+    return all(part.isdigit() and 2 <= len(part) <= 4 for part in parts)
+
+
+def _format_quarter_period(tokens: list[str], index: int) -> str | None:
+    quarter = tokens[index].upper()
+    if len(quarter) != 2 or quarter[0] != "Q" or quarter[1] not in "1234":
+        return None
+    if index + 1 >= len(tokens):
+        return None
+
+    next_token = tokens[index + 1]
+    next_upper = next_token.upper()
+    if next_upper == "FY" and index + 2 < len(tokens):
+        year_token = tokens[index + 2]
+        if _looks_like_year_token(year_token):
+            return f"{quarter} FY {year_token}"
+    if next_upper.startswith("FY") and _looks_like_year_token(next_token[2:]):
+        return f"{quarter} {next_token}"
+    if _looks_like_year_token(next_token):
+        return f"{quarter} {next_token}"
+    return None
+
+
+def _format_financial_year_period(tokens: list[str], index: int) -> str | None:
+    token = tokens[index]
+    upper = token.upper()
+    if upper == "FY" and index + 1 < len(tokens):
+        year_token = tokens[index + 1]
+        if _looks_like_year_token(year_token):
+            return f"FY {year_token}"
+    if upper.startswith("FY") and _looks_like_year_token(token[2:]):
+        return token
+    return None
+
+
 def _extract_period(query: str) -> str | None:
-    for match in _MONTH_YEAR_RE.finditer(query):
-        if match.group("month").lower() in _MONTH_TOKENS:
-            return match.group(0)
-    match = _QUARTER_RE.search(query)
-    if match:
-        return match.group(0)
-    match = _FINANCIAL_YEAR_RE.search(query)
-    return match.group(0) if match else None
+    tokens = _PERIOD_TOKEN_RE.findall(query)
+    for index, token in enumerate(tokens[:-1]):
+        if token.lower() in _MONTH_TOKENS and tokens[index + 1].isdigit() and len(tokens[index + 1]) == 4:
+            return f"{token} {tokens[index + 1]}"
+    for index in range(len(tokens)):
+        quarter = _format_quarter_period(tokens, index)
+        if quarter:
+            return quarter
+    for index in range(len(tokens)):
+        financial_year = _format_financial_year_period(tokens, index)
+        if financial_year:
+            return financial_year
+    return None
 
 
 def _extract_deductee_type(query: str) -> str | None:

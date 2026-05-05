@@ -42,6 +42,16 @@ def test_zoho_india_gst_report_avoids_missing_gstsummary_endpoint() -> None:
     assert '"/reports/gstsummary"' not in india_branch
 
 
+def test_tds_period_parser_avoids_redos_prone_quarter_regex() -> None:
+    from api.v1._tds_routing import _extract_period
+
+    src = _read("api/v1/_tds_routing.py")
+    assert "_QUARTER_RE" not in src
+    assert _extract_period("Calculate TDS for Q1 FY26") == "Q1 FY26"
+    assert _extract_period("Calculate TDS for Q2 FY 2026") == "Q2 FY 2026"
+    assert _extract_period("Calculate TDS for April 2026") == "April 2026"
+
+
 def test_db_pool_size_is_settings_configurable() -> None:
     config_src = _read("core/config.py")
     database_src = _read("core/database.py")
