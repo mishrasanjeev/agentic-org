@@ -22,7 +22,11 @@ the leak will trip the test before CodeQL re-flags it.
 """
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -51,6 +55,65 @@ def test_tenant_ai_credentials_error_field_does_not_leak_str_exc() -> None:
         "tenant_ai_credentials.py probe error path must assign "
         "``err = type(exc).__name__`` (no exception message)."
     )
+
+
+def test_probe_provider_errors_do_not_leak_exception_messages() -> None:
+    """``probe_provider`` feeds tenant_ai_credentials.py's response.
+
+    It must not format provider/resolver exception text into the
+    returned ``error`` field.
+    """
+    src = (REPO / "core" / "ai_providers" / "health.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'f"Resolver refused: {exc}"' not in src, (
+        "probe_provider must not return ProviderNotConfigured details "
+        "to the tenant credential test endpoint."
+    )
+    assert 'f"{type(exc).__name__}: {exc}"' not in src, (
+        "probe_provider must not return provider exception messages "
+        "to the tenant credential test endpoint."
+    )
+    assert "error=str(exc)" not in src, (
+        "probe_provider should log stable exception metadata only."
+    )
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_resolver_error_is_type_name_only(monkeypatch) -> None:
+    from core.ai_providers import health
+    from core.ai_providers.resolver import ProviderNotConfigured
+
+    async def refused(*_args, **_kwargs):
+        raise ProviderNotConfigured(
+            "tenant=7 secret=sk-live-internal traceback=/srv/app/core.py:42"
+        )
+
+    monkeypatch.setattr(health, "get_provider_credential", refused)
+
+    result = await health.probe_provider(uuid.uuid4(), "openai", "default")
+
+    assert result == {"ok": False, "error": "ProviderNotConfigured"}
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_runtime_error_is_type_name_only(monkeypatch) -> None:
+    from core.ai_providers import health
+
+    async def resolved(*_args, **_kwargs):
+        return SimpleNamespace(secret="sk-test", provider_config={})
+
+    async def failing_probe(*_args, **_kwargs):
+        raise RuntimeError(
+            "Authorization: Bearer sk-live-internal at /srv/app/core.py:42"
+        )
+
+    monkeypatch.setattr(health, "get_provider_credential", resolved)
+    monkeypatch.setattr(health, "_probe_openai", failing_probe)
+
+    result = await health.probe_provider(uuid.uuid4(), "openai", "default")
+
+    assert result == {"ok": False, "error": "RuntimeError"}
 
 
 def test_connectors_test_endpoint_does_not_leak_err_msg_in_fallback_branch() -> None:
