@@ -1,7 +1,7 @@
 export const AUTH_TYPES = ["oauth2", "api_key", "basic", "bolt_bot_token", "certificate", "none"] as const;
 
 export const AUTH_FIELD_HINTS: Record<string, string> = {
-  oauth2: "Client ID, Client Secret, Token URL",
+  oauth2: "Client ID and Client Secret; refresh token is created by the authorization flow",
   api_key: "API key or token",
   basic: "Username and password",
   bolt_bot_token: "Slack Bot User OAuth Token (xoxb-...)",

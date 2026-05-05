@@ -2435,6 +2435,25 @@ class PartnerDashboardOut(BaseModel):
     upcoming_deadlines: list[dict]
 
 
+def _effective_client_health(
+    stored_score: int | None,
+    *,
+    pending_filings: int,
+    overdue_filings: int,
+) -> int:
+    """Return the dashboard health score after live filing risk.
+
+    ``companies.client_health_score`` is a baseline, not the whole truth.
+    Aishwarya 2026-05-04 TC_006 found dashboards sitting at 100% while
+    compliance_deadlines already had overdue rows. Penalize overdue and
+    pending filing risk at read time so the dashboard cannot show a
+    perfect health score beside overdue statutory work.
+    """
+    base = 100 if stored_score is None else max(0, min(int(stored_score), 100))
+    penalty = (max(overdue_filings, 0) * 25) + (max(pending_filings, 0) * 5)
+    return max(0, min(100, base - penalty))
+
+
 # ---------------------------------------------------------------------------
 # PARTNER DASHBOARD -- GET
 # ---------------------------------------------------------------------------
@@ -2466,43 +2485,65 @@ async def get_partner_dashboard(
         total_clients = len(companies)
         active_clients = sum(1 for c in companies if c.is_active)
 
-        # Average health score (skip None values)
-        health_scores = [c.client_health_score for c in companies if c.client_health_score is not None]
-        avg_health = round(sum(health_scores) / len(health_scores), 1) if health_scores else 0.0
-
-        # Pending filings count
-        pending_q = select(func.count()).select_from(FilingApproval).where(
-            FilingApproval.tenant_id == tid,
-            FilingApproval.status == "pending",
+        pending_by_company_result = await session.execute(
+            select(FilingApproval.company_id, func.count())
+            .where(
+                FilingApproval.tenant_id == tid,
+                FilingApproval.status == "pending",
+            )
+            .group_by(FilingApproval.company_id)
         )
-        total_pending = (await session.execute(pending_q)).scalar() or 0
+        pending_by_company = {
+            company_id: int(count or 0)
+            for company_id, count in pending_by_company_result.all()
+        }
+        total_pending = sum(pending_by_company.values())
 
-        # Overdue deadlines: not filed and due_date < today
-        overdue_q = select(func.count()).select_from(ComplianceDeadline).where(
-            ComplianceDeadline.tenant_id == tid,
-            ComplianceDeadline.filed == False,  # noqa: E712
-            ComplianceDeadline.due_date < today,
+        overdue_by_company_result = await session.execute(
+            select(ComplianceDeadline.company_id, func.count())
+            .where(
+                ComplianceDeadline.tenant_id == tid,
+                ComplianceDeadline.filed == False,  # noqa: E712
+                ComplianceDeadline.due_date < today,
+            )
+            .group_by(ComplianceDeadline.company_id)
         )
-        total_overdue = (await session.execute(overdue_q)).scalar() or 0
+        overdue_by_company = {
+            company_id: int(count or 0)
+            for company_id, count in overdue_by_company_result.all()
+        }
+        total_overdue = sum(overdue_by_company.values())
 
         # Per-client summary
         clients_list: list[dict] = []
+        active_health_scores: list[int] = []
         for c in companies:
-            # Pending filings for this company
-            cp_q = select(func.count()).select_from(FilingApproval).where(
-                FilingApproval.tenant_id == tid,
-                FilingApproval.company_id == c.id,
-                FilingApproval.status == "pending",
+            pending_count = pending_by_company.get(c.id, 0)
+            overdue_count = overdue_by_company.get(c.id, 0)
+            health_score = _effective_client_health(
+                c.client_health_score,
+                pending_filings=pending_count,
+                overdue_filings=overdue_count,
             )
-            pending_count = (await session.execute(cp_q)).scalar() or 0
+            if c.is_active:
+                active_health_scores.append(health_score)
 
             clients_list.append({
                 "id": str(c.id),
                 "name": c.name,
-                "health_score": c.client_health_score,
+                "health_score": health_score,
+                "stored_health_score": c.client_health_score,
                 "pending_filings": pending_count,
+                "overdue_filings": overdue_count,
+                "is_active": bool(c.is_active),
+                "status": "active" if c.is_active else "inactive",
                 "subscription_status": c.subscription_status or "trial",
             })
+        avg_health = (
+            round(sum(active_health_scores) / len(active_health_scores), 1)
+            if active_health_scores
+            else 0.0
+        )
 
         # Revenue estimate: count of active companies * base price
         revenue_per_month_inr = active_clients * 4999

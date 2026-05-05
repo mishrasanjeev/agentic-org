@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import uuid as _uuid
+from html import escape
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -23,8 +24,23 @@ class DemoRequest(BaseModel):
     name: str
     email: str
     company: str = ""
+    firm: str = ""
     role: str = ""
     phone: str = ""
+    clients: str = ""
+    source: str = ""
+
+    @property
+    def effective_company(self) -> str:
+        return self.company or self.firm
+
+    @property
+    def effective_role(self) -> str:
+        if self.role:
+            return self.role
+        if self.source == "ca-firms-solution":
+            return "CA firm trial"
+        return ""
 
 
 # ── Admin: seed demo data ───────────────────────────────────────────
@@ -42,19 +58,36 @@ async def seed_demo_data(tenant_id: str = Depends(get_current_tenant)):
     return {"status": "seeded", "tenant_id": tenant_id, **result}
 
 
-def _send_email_notification(body: DemoRequest) -> None:
+def _send_email_notification(body: DemoRequest) -> bool:
     """Send demo request notification email via shared email utility."""
-    subject = f"AgenticOrg Demo Request — {body.name} ({body.role or 'Not specified'})"
+    subject = f"AgenticOrg Demo Request - {body.name} ({body.effective_role or 'Not specified'})"
+    company = escape(body.effective_company or "-")
+    role = escape(body.effective_role or "-")
+    clients = escape(body.clients or "-")
+    source = escape(body.source or "-")
     html = f"""<h2>New Demo Request</h2>
 <table style="border-collapse:collapse;font-family:sans-serif;">
-<tr><td style="padding:8px;font-weight:bold;">Name:</td><td style="padding:8px;">{body.name}</td></tr>
-<tr><td style="padding:8px;font-weight:bold;">Email:</td><td style="padding:8px;">{body.email}</td></tr>
-<tr><td style="padding:8px;font-weight:bold;">Company:</td><td style="padding:8px;">{body.company or '—'}</td></tr>
-<tr><td style="padding:8px;font-weight:bold;">Role:</td><td style="padding:8px;">{body.role or '—'}</td></tr>
-<tr><td style="padding:8px;font-weight:bold;">Phone:</td><td style="padding:8px;">{body.phone or '—'}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Name:</td><td style="padding:8px;">{escape(body.name)}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Email:</td><td style="padding:8px;">{escape(body.email)}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Company:</td><td style="padding:8px;">{company}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Role:</td><td style="padding:8px;">{role}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Phone:</td><td style="padding:8px;">{escape(body.phone or '-')}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Client range:</td><td style="padding:8px;">{clients}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Source:</td><td style="padding:8px;">{source}</td></tr>
 </table>
 <p style="color:#666;font-size:12px;margin-top:20px;">Sent from agenticorg.ai</p>"""
-    send_email(NOTIFY_TO, subject, html)
+    return send_email(NOTIFY_TO, subject, html)
+
+
+def _send_trial_confirmation(body: DemoRequest) -> bool:
+    """Send the requester a confirmation instead of only notifying sales."""
+    product = "CA Firm trial" if body.source == "ca-firms-solution" else "AgenticOrg demo"
+    html = f"""<h2>{escape(product)} request received</h2>
+<p>Hi {escape(body.name)},</p>
+<p>We received your request for {escape(body.effective_company or 'your organization')}.</p>
+<p>Our team will contact you with next steps. No password or OAuth token is required by email.</p>
+<p style="color:#666;font-size:12px;margin-top:20px;">AgenticOrg</p>"""
+    return send_email(body.email, f"AgenticOrg {product} request received", html)
 
 
 @router.post("/demo-request", status_code=201)
@@ -78,8 +111,8 @@ async def submit_demo_request(body: DemoRequest):
             {
                 "name": body.name,
                 "email": body.email,
-                "company": body.company,
-                "role": body.role,
+                "company": body.effective_company,
+                "role": body.effective_role,
                 "phone": body.phone,
             },
         )
@@ -115,7 +148,9 @@ async def submit_demo_request(body: DemoRequest):
                     {
                         "id": new_id, "tid": tid,
                         "name": body.name, "email": body.email,
-                        "company": body.company, "role": body.role, "phone": body.phone,
+                        "company": body.effective_company,
+                        "role": body.effective_role,
+                        "phone": body.phone,
                     },
                 )
                 await session.commit()
@@ -124,11 +159,17 @@ async def submit_demo_request(body: DemoRequest):
     except Exception:
         logger.exception("Failed to create lead in pipeline (non-blocking)")
 
-    # 3. Send email notification to founder (non-blocking)
+    # 3. Send email notification to founder and requester (non-blocking)
+    internal_notification_sent = False
+    requester_confirmation_sent = False
     try:
-        _send_email_notification(body)
+        internal_notification_sent = _send_email_notification(body)
     except Exception:
         logger.exception("Email send failed but request was saved")
+    try:
+        requester_confirmation_sent = _send_trial_confirmation(body)
+    except Exception:
+        logger.exception("Requester confirmation email failed but request was saved")
 
     # 4. Trigger sales agent to qualify + send personalized email (non-blocking)
     agent_status = None
@@ -146,4 +187,8 @@ async def submit_demo_request(body: DemoRequest):
         "message": "We'll be in touch within 2 minutes.",
         "lead_id": lead_id,
         "agent_triggered": agent_status is not None,
+        "email": {
+            "internal_notification_sent": internal_notification_sent,
+            "requester_confirmation_sent": requester_confirmation_sent,
+        },
     }

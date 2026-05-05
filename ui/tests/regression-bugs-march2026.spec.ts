@@ -714,11 +714,11 @@ test.describe("INT-CONN-012: Gmail connector in registry", () => {
 });
 
 // =============================================================================
-//  INT-CONN-014: Connector creation UI has multi-auth fields for oauth2
+//  INT-CONN-014: Connector creation UI starts automated OAuth2 authorization
 // =============================================================================
 
-test.describe("INT-CONN-014: Connector creation multi-auth fields for oauth2", () => {
-  test("Selecting oauth2 auth type shows client_id, client_secret, refresh_token fields", async ({ page }) => {
+test.describe("INT-CONN-014: Connector creation automated OAuth2 setup", () => {
+  test("Selecting oauth2 auth type shows client credentials and no refresh-token paste field", async ({ page }) => {
     await loginAsCeo(page);
 
     await page.goto(`${APP}/dashboard/connectors/new`);
@@ -730,11 +730,12 @@ test.describe("INT-CONN-014: Connector creation multi-auth fields for oauth2", (
     await authSelect.selectOption("oauth2");
     await page.waitForTimeout(500);
 
-    // Verify multi-auth fields appear
+    // Verify client credential fields appear and the refresh token is no longer pasted manually.
     const bodyText = await page.textContent("body");
     expect(bodyText).toContain("Client ID");
     expect(bodyText).toContain("Client Secret");
-    expect(bodyText).toContain("Refresh Token");
+    expect(bodyText).toContain("Authorize Connector");
+    expect(bodyText).not.toContain("Paste refresh token");
   });
 
   test("Selecting api_key shows only API Key field", async ({ page }) => {

@@ -47,7 +47,7 @@ def validate_email_domain(email: str) -> tuple[bool, str]:
     return True, "OK"
 
 
-def send_email(to: str, subject: str, html: str) -> None:
+def send_email(to: str, subject: str, html: str) -> bool:
     """Send HTML email via Gmail SMTP. Validates domain before sending.
 
     Uses AGENTICORG_SMTP_LOGIN for SMTP authentication (Gmail account)
@@ -60,7 +60,7 @@ def send_email(to: str, subject: str, html: str) -> None:
     is_valid, reason = validate_email_domain(to)
     if not is_valid:
         logger.warning("Skipping email to %s: %s", to, reason)
-        return
+        return False
 
     # Foundation #7 PR-B: hermetic-CI seam. When the env flag is
     # set, capture the email in-process instead of opening a real
@@ -71,14 +71,14 @@ def send_email(to: str, subject: str, html: str) -> None:
         display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
         fake_mail.capture(to=to, subject=subject, html=html, sender=display_sender)
         logger.info("[fake_mail] captured email to=%s subject=%r", to, subject)
-        return
+        return True
 
     password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
     smtp_login = os.getenv("AGENTICORG_SMTP_LOGIN", os.getenv("AGENTICORG_DEMO_SENDER", ""))
     display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
     if not password or not smtp_login:
-        logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set — skipping email")
-        return
+        logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set - skipping email")
+        return False
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
     msg["From"] = f"AgenticOrg <{display_sender}>"
@@ -89,8 +89,10 @@ def send_email(to: str, subject: str, html: str) -> None:
             smtp.login(smtp_login, password)
             smtp.send_message(msg)
         logger.info("Email sent to %s from %s (via %s)", to, display_sender, smtp_login)
+        return True
     except Exception:
         logger.exception("Failed to send email")
+        return False
 
 
 def send_welcome_email(to: str, org_name: str, name: str) -> None:

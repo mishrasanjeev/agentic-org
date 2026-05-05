@@ -15,7 +15,6 @@ const AUTH_TYPE_FIELDS: Record<string, { key: string; label: string; placeholder
   oauth2: [
     { key: "client_id", label: "Client ID", placeholder: "Enter client ID" },
     { key: "client_secret", label: "Client Secret", placeholder: "Enter client secret" },
-    { key: "refresh_token", label: "Refresh Token", placeholder: "Enter refresh token (optional)" },
   ],
   basic: [
     // TC_008 (Aishwarya 2026-04-23): basic-auth creates were landing
@@ -55,6 +54,7 @@ export default function ConnectorCreate() {
   const [extraConfigError, setExtraConfigError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(100);
   const [submitting, setSubmitting] = useState(false);
+  const [oauthStarting, setOauthStarting] = useState(false);
   const [error, setError] = useState("");
 
   function handleAuthTypeChange(newType: string) {
@@ -74,29 +74,68 @@ export default function ConnectorCreate() {
     return config;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) { setError("Connector name is required"); return; }
+  function parseExtraConfig(): Record<string, unknown> | null {
     setExtraConfigError("");
-    let extraParsed: Record<string, unknown> | null = null;
     if (extraConfig.trim()) {
       try {
         const parsed = JSON.parse(extraConfig);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           setExtraConfigError("Extra config must be a JSON object.");
-          return;
+          return null;
         }
-        extraParsed = parsed as Record<string, unknown>;
+        return parsed as Record<string, unknown>;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Invalid JSON";
         setExtraConfigError(`Invalid JSON: ${msg}`);
-        return;
+        return null;
       }
     }
+    return {};
+  }
+
+  async function startOAuthAuthorization() {
+    if (!name.trim()) { setError("Connector name is required"); return; }
+    const extraParsed = parseExtraConfig();
+    if (extraParsed === null) return;
+    const clientId = (authFields.client_id || "").trim();
+    const clientSecret = (authFields.client_secret || "").trim();
+    if (!clientId || !clientSecret) {
+      setError("Client ID and Client Secret are required before authorization.");
+      return;
+    }
+    setOauthStarting(true);
+    setError("");
+    try {
+      const { data } = await api.post("/connectors/oauth/initiate", {
+        connector_name: name.trim(),
+        client_id: clientId,
+        client_secret: clientSecret,
+        base_url: baseUrl.trim() || undefined,
+        category,
+        extra_config: extraParsed,
+      });
+      if (!data?.authorization_url) throw new Error("Missing authorization URL");
+      window.location.assign(String(data.authorization_url));
+    } catch (e: unknown) {
+      setError(extractApiError(e, "Failed to start OAuth authorization."));
+    } finally {
+      setOauthStarting(false);
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (authType === "oauth2") {
+      await startOAuthAuthorization();
+      return;
+    }
+    if (!name.trim()) { setError("Connector name is required"); return; }
+    const extraParsed = parseExtraConfig();
+    if (extraParsed === null) return;
     setSubmitting(true);
     setError("");
     try {
-      const authConfig = { ...buildMultiAuthConfig(), ...(extraParsed || {}) } as Record<string, unknown>;
+      const authConfig = { ...buildMultiAuthConfig(), ...extraParsed } as Record<string, unknown>;
       await api.post("/connectors", {
         name: name.trim(),
         category,
@@ -158,6 +197,12 @@ export default function ConnectorCreate() {
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <p className="text-sm font-medium">Authentication</p>
               <p className="text-xs text-muted-foreground">{AUTH_FIELD_HINTS[authType] || "Configure authentication credentials"}</p>
+              {authType === "oauth2" && (
+                <p className="text-xs text-muted-foreground">
+                  Enter the OAuth app credentials, then authorize in the provider consent screen.
+                  AgenticOrg will exchange the code server-side and store the refresh token encrypted.
+                </p>
+              )}
               {authType !== "none" && (
                 <>
                   {(AUTH_TYPE_FIELDS[authType] || []).map((field) => (
@@ -207,7 +252,11 @@ export default function ConnectorCreate() {
             {error && <p className="text-sm text-destructive">{error}</p>}
 
             <div className="flex gap-3">
-              <Button type="submit" disabled={submitting}>{submitting ? "Registering..." : "Register Connector"}</Button>
+              <Button type="submit" disabled={submitting || oauthStarting}>
+                {authType === "oauth2"
+                  ? (oauthStarting ? "Starting authorization..." : "Authorize Connector")
+                  : (submitting ? "Registering..." : "Register Connector")}
+              </Button>
               <Button type="button" variant="outline" onClick={() => navigate("/dashboard/connectors")}>Cancel</Button>
             </div>
           </form>

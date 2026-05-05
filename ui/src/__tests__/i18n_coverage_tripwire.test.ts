@@ -14,6 +14,8 @@
  * types (the repo's tsconfig excludes ``@types/node``).
  */
 import { describe, it, expect } from "vitest";
+import en from "../locales/en.json";
+import hi from "../locales/hi.json";
 
 // Load every page source as a raw string at test time. Vite resolves
 // these into inline strings, so no fs/path imports are required.
@@ -33,6 +35,7 @@ const chatPanelSource = (
 
 const CRITICAL_PAGES = [
   "Dashboard.tsx",
+  "PartnerDashboard.tsx",
   "ABMDashboard.tsx",
   "ReportScheduler.tsx",
   "KnowledgeBase.tsx",
@@ -78,6 +81,28 @@ describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
     const source = findSource("Dashboard.tsx");
     const matches = source.match(/\bt\(\s*["']/g) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("PartnerDashboard.tsx has translated dashboard metric labels", () => {
+    const source = findSource("PartnerDashboard.tsx");
+    const matches = source.match(/\bt\(\s*["']partnerDashboard\./g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(20);
+    expect(source).toContain("partnerDashboard.overdueFilings");
+    expect(source).not.toContain(">Overdue<");
+    expect(source).not.toContain("{overdueFilings} clients");
+  });
+
+  it("PartnerDashboard locale keys exist in English and Hindi", () => {
+    const source = findSource("PartnerDashboard.tsx");
+    const keys = Array.from(
+      source.matchAll(/\bt\(\s*["']partnerDashboard\.([^"']+)/g),
+      (match) => match[1],
+    );
+
+    for (const key of keys) {
+      expect(en.partnerDashboard).toHaveProperty(key);
+      expect(hi.partnerDashboard).toHaveProperty(key);
+    }
   });
 
   it("Dashboard.tsx no longer documents English-fallback policy", () => {
