@@ -147,7 +147,14 @@ async def run_agent(
     # Apply redaction at the source (each task_input field) so no concatenation
     # ever sees raw PII.
     pii_token_map: dict[str, str] = {}
-    if pii_mode in ("before_llm", "before_log"):
+    trusted_shadow_fixture_prompt = (
+        isinstance(task_input, dict)
+        and task_input.get("action") == "shadow_sample"
+        and isinstance(task_input.get("inputs"), dict)
+        and task_input["inputs"].get("shadow_fixture_origin") is True
+        and isinstance(task_input["inputs"].get("shadow_prompt"), str)
+    )
+    if pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
         # Recursively redact all string values in task_input
         from copy import deepcopy
         redacted_input = deepcopy(task_input) if isinstance(task_input, dict) else task_input
@@ -164,6 +171,8 @@ async def run_agent(
         if pii_token_map:
             logger.info("pii_redacted_before_llm", entities=len(pii_token_map), agent_id=agent_id)
     else:
+        if trusted_shadow_fixture_prompt and pii_mode in ("before_llm", "before_log"):
+            logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
         user_message = _build_user_message(task_input)
 
     initial_state: AgentState = {

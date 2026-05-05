@@ -65,25 +65,55 @@ _TDS_ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Amount patterns — covers "INR 50,000", "Rs. 50000", "₹50,000", and the
-# bare-number-after-amount-keyword case ("amount of 50000"). Captures
-# the numeric group in either alternation.
-_TDS_AMOUNT_RE = re.compile(
-    r"(?:(?:INR|Rs\.?|₹)\s*([\d,]+(?:\.\d+)?))"
-    r"|(?:\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{4,}(?:\.\d+)?)\s*(?:INR|Rs\.?|rupees|/-)\b)"
-    r"|(?:(?:amount\s+of|payment\s+of|paid|paying)\s+(?:INR|Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?))",
-    re.IGNORECASE,
+# Amount patterns cover "INR 50,000", "Rs. 50000", "₹50,000", and
+# "amount/payment of 50000". Keep these deliberately simple: chat
+# messages are untrusted input and CodeQL flags overlapping/nested
+# extraction regexes as ReDoS-prone.
+_TDS_AMOUNT_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"(?:INR|Rs\.?|₹)\s*(?P<num>\d[\d,]*(?:\.\d+)?)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?P<num>\d[\d,]*(?:\.\d+)?)\s*(?:INR|Rs\.?|rupees|/-)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:amount\s+of|payment\s+of|paid|paying)\s+"
+        r"(?:INR|Rs\.?|₹)?\s*(?P<num>\d[\d,]*(?:\.\d+)?)",
+        re.IGNORECASE,
+    ),
 )
 
-# Period — month + year, quarter, or financial year.
-_TDS_PERIOD_RE = re.compile(
-    r"\b(?:January|February|March|April|May|June|July|August|"
-    r"September|October|November|December|Jan|Feb|Mar|Apr|Jun|"
-    r"Jul|Aug|Sep|Oct|Nov|Dec)[A-Za-z]*\s+\d{4}\b"
-    r"|\bQ[1-4]\s+(?:FY)?\s*\d{2,4}\b"
-    r"|\bFY\s*\d{2,4}(?:-\d{2,4})?\b",
-    re.IGNORECASE,
-)
+# Period: month + year, quarter, or financial year.
+_MONTH_YEAR_RE = re.compile(r"\b(?P<month>[A-Za-z]+)\s+(?P<year>\d{4})\b")
+_QUARTER_RE = re.compile(r"\bQ[1-4]\s+(?:FY)?\s*\d{2,4}\b", re.IGNORECASE)
+_FINANCIAL_YEAR_RE = re.compile(r"\bFY\s*\d{2,4}(?:-\d{2,4})?\b", re.IGNORECASE)
+_MONTH_TOKENS = {
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+}
 
 # Form 26Q / 24Q filing intent.
 _FILING_FORM_RE = re.compile(
@@ -112,10 +142,12 @@ _NO_PAN_RE = re.compile(
 
 
 def _extract_amount(query: str) -> float | None:
-    match = _TDS_AMOUNT_RE.search(query)
-    if not match:
-        return None
-    raw = next((g for g in match.groups() if g), None)
+    raw = None
+    for pattern in _TDS_AMOUNT_RES:
+        match = pattern.search(query)
+        if match:
+            raw = match.group("num")
+            break
     if not raw:
         return None
     try:
@@ -132,7 +164,13 @@ def _extract_section(query: str) -> str | None:
 
 
 def _extract_period(query: str) -> str | None:
-    match = _TDS_PERIOD_RE.search(query)
+    for match in _MONTH_YEAR_RE.finditer(query):
+        if match.group("month").lower() in _MONTH_TOKENS:
+            return match.group(0)
+    match = _QUARTER_RE.search(query)
+    if match:
+        return match.group(0)
+    match = _FINANCIAL_YEAR_RE.search(query)
     return match.group(0) if match else None
 
 

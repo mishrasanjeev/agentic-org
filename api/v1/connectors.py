@@ -85,23 +85,35 @@ router = APIRouter(dependencies=[require_tenant_admin])
 def _connector_to_dict(conn: Connector) -> dict:
     # Return a boolean flag for whether credentials are configured —
     # NEVER return the actual auth_config (secrets) in the API response.
-    has_creds = bool(conn.auth_config) or bool(getattr(conn, "secret_ref", None))
+    auth_config = getattr(conn, "auth_config", None)
+    tool_functions = getattr(conn, "tool_functions", None)
+    has_creds = bool(auth_config) or bool(getattr(conn, "secret_ref", None))
+    health_check_at = getattr(conn, "health_check_at", None)
+    created_at = getattr(conn, "created_at", None)
     return {
         "id": str(conn.id),
         "connector_id": str(conn.id),  # kept for backward compat
-        "name": conn.name,
-        "category": conn.category,
-        "description": conn.description,
-        "base_url": conn.base_url,
-        "auth_type": conn.auth_type,
+        "name": str(conn.name or ""),
+        "category": str(conn.category or ""),
+        "description": conn.description or "",
+        "base_url": conn.base_url or "",
+        "auth_type": str(conn.auth_type or ""),
         "has_credentials": has_creds,
-        "tool_functions": conn.tool_functions,
-        "data_schema_ref": conn.data_schema_ref,
-        "rate_limit_rpm": conn.rate_limit_rpm,
-        "timeout_ms": conn.timeout_ms,
-        "status": conn.status,
-        "health_check_at": conn.health_check_at.isoformat() if conn.health_check_at else None,
-        "created_at": conn.created_at.isoformat() if conn.created_at else None,
+        "tool_functions": tool_functions if isinstance(tool_functions, list) else [],
+        "data_schema_ref": conn.data_schema_ref or "",
+        "rate_limit_rpm": int(conn.rate_limit_rpm or 0),
+        "timeout_ms": int(conn.timeout_ms or 0),
+        "status": str(conn.status or "active"),
+        "health_check_at": (
+            health_check_at.isoformat()
+            if hasattr(health_check_at, "isoformat")
+            else None
+        ),
+        "created_at": (
+            created_at.isoformat()
+            if hasattr(created_at, "isoformat")
+            else None
+        ),
     }
 
 

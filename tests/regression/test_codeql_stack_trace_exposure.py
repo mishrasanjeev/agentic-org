@@ -41,6 +41,10 @@ def test_tenant_ai_credentials_error_field_does_not_leak_str_exc() -> None:
         "CodeQL alert #69 will re-fire. The fix must keep err to "
         "type(exc).__name__ only."
     )
+    assert "err = str(exc)" not in src, (
+        "tenant_ai_credentials.py must not return exception messages "
+        "through the probe error field."
+    )
     # Positive contract — the type-name-only assignment must be
     # present so we don't regress to a different leaky shape.
     assert "err = type(exc).__name__" in src, (

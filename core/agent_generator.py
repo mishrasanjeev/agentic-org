@@ -247,9 +247,9 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "manage_publishing_queue", "approve_draft_post", "create_page",
     ],
     "campaign_pilot": [
-        "get_campaign_performance_metrics", "adjust_campaign_budget",
-        "get_campaign_performance", "reallocate_ad_budget",
-        "get_reach_and_frequency_data",
+        "search_campaigns", "get_campaign_performance",
+        "mutate_campaign_budget", "get_search_terms",
+        "get_analytics", "get_stats",
     ],
     "seo_strategist": [
         "get_campaign_performance_metrics", "get_search_term_report",

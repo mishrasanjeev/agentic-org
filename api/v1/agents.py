@@ -125,9 +125,9 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "create_page",
     ],
     "campaign_pilot": [
-        "get_campaign_performance_metrics",
-        "adjust_campaign_budget", "get_campaign_performance",
-        "reallocate_ad_budget", "get_reach_and_frequency_data",
+        "search_campaigns", "get_campaign_performance",
+        "mutate_campaign_budget", "get_search_terms",
+        "get_analytics", "get_stats",
     ],
     "seo_strategist": [
         "get_campaign_performance_metrics",
@@ -207,6 +207,14 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "chat_agent": [
         "slack_send_message", "send_email", "read_inbox",
+    ],
+}
+
+_AGENT_TYPE_DEFAULT_CONNECTOR_IDS: dict[str, list[str]] = {
+    "campaign_pilot": [
+        "registry-google_ads",
+        "registry-linkedin_ads",
+        "registry-sendgrid",
     ],
 }
 
@@ -711,6 +719,11 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             body.domain,
             body.connector_ids or None,
         )
+    connector_ids = (
+        list(body.connector_ids)
+        if body.connector_ids
+        else list(_AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(body.agent_type, []))
+    )
 
     # Validate user-provided tools against the registry (skip for auto-populated)
     if body.authorized_tools and tools:
@@ -835,7 +848,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             parent_agent_id=(
                 _uuid.UUID(body.parent_agent_id) if body.parent_agent_id else None
             ),
-            connector_ids=list(body.connector_ids) if body.connector_ids else [],
+            connector_ids=connector_ids,
         )
         session.add(agent)
         await session.flush()  # populate agent.id
@@ -1925,6 +1938,10 @@ async def run_agent(
     # connector with overlapping keys is a follow-up to scope into
     # per-connector dicts).
     raw_connector_ids = agent_config.get("connector_ids") or []
+    if not raw_connector_ids:
+        raw_connector_ids = list(
+            _AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(agent_config.get("agent_type"), [])
+        )
     resolved_connector_config, resolved_connector_names = await _resolve_connector_configs(
         tenant_id=tenant_id,
         connector_ids=raw_connector_ids,
@@ -1984,6 +2001,7 @@ async def run_agent(
         # the trusted server-side fixture path below.
         incoming_inputs.pop("shadow_prompt", None)
         incoming_inputs.pop("shadow_expected_tool", None)
+        incoming_inputs.pop("shadow_fixture_origin", None)
 
         cfg_block = agent_config.get("config") or {}
         if isinstance(cfg_block, dict):
@@ -2077,6 +2095,7 @@ async def run_agent(
             # Unconditional set — we already stripped any caller-
             # supplied shadow_prompt above.
             incoming_inputs["shadow_prompt"] = str(fixture["prompt"])
+            incoming_inputs["shadow_fixture_origin"] = True
             if fixture.get("expected_tool"):
                 incoming_inputs["shadow_expected_tool"] = str(
                     fixture["expected_tool"]

@@ -2,6 +2,8 @@ name: insurance
 display_name: Insurance Pack
 description: AI agents for underwriting, claims adjudication, policy management, and fraud detection
 version: "1.0.0"
+installable: false
+install_disabled_reason: "Insurance pack is gated until Composio insurance/CRM tool bindings are implemented."
 pricing:
   inr_monthly_per_client: 7999
   usd_monthly_per_client: 95

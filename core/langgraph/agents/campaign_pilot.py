@@ -12,15 +12,17 @@ from core.langgraph.runner import run_agent
 
 DEFAULT_TOOLS = [
 
-    'get_campaign_performance_metrics',
-
-    'adjust_campaign_budget',
+    'search_campaigns',
 
     'get_campaign_performance',
 
-    'reallocate_ad_budget',
+    'mutate_campaign_budget',
 
-    'get_reach_and_frequency_data',
+    'get_search_terms',
+
+    'get_analytics',
+
+    'get_stats',
 
 ]
 

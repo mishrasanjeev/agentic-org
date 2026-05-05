@@ -49,6 +49,22 @@ _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
 )
 
 
+def _flatten_structured_tool_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Unwrap LangChain's ``**kwargs`` schema artifact for var-kw tools.
+
+    Connector methods are registered as ``method(**params)``. LangChain's
+    schema inference can expose that signature as one argument named
+    ``kwargs`` and then call the wrapper with ``{"kwargs": {...}}``.
+    Passing that through unchanged sends a bogus ``kwargs`` query param to
+    upstream APIs. Flatten the single-field wrapper at the LangGraph
+    boundary so connectors receive the params they declared.
+    """
+    nested = kwargs.get("kwargs")
+    if len(kwargs) == 1 and isinstance(nested, dict):
+        return dict(nested)
+    return kwargs
+
+
 async def _build_connector(
     connector_cls: type[BaseConnector],
     config: dict[str, Any] | None,
@@ -208,7 +224,8 @@ def build_tools_for_agent(
         # Create an async wrapper that calls the connector
         def _make_tool_fn(cn: str, tn: str, desc: str):
             async def _tool_fn(**kwargs: Any) -> dict[str, Any]:
-                return await _execute_connector_tool(cn, tn, kwargs, connector_config)
+                params = _flatten_structured_tool_kwargs(kwargs)
+                return await _execute_connector_tool(cn, tn, params, connector_config)
             _tool_fn.__name__ = tn
             _tool_fn.__doc__ = desc or f"Execute {tn} on {cn} connector"
             return _tool_fn
