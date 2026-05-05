@@ -151,7 +151,13 @@ async def probe_provider(
     try:
         resolved = await get_provider_credential(tenant_id, provider, kind)
     except ProviderNotConfigured as exc:
-        return {"ok": False, "error": f"Resolver refused: {exc}"}
+        logger.warning(
+            "provider_probe_resolver_refused",
+            provider=provider,
+            kind=kind,
+            error_type=type(exc).__name__,
+        )
+        return {"ok": False, "error": type(exc).__name__}
 
     secret = resolved.secret
     base_url = (
@@ -198,6 +204,6 @@ async def probe_provider(
             "provider_probe_failed",
             provider=provider,
             kind=kind,
-            error=str(exc),
+            error_type=type(exc).__name__,
         )
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "error": type(exc).__name__}
