@@ -64,7 +64,7 @@ jobs:
       # and blocks build → deploy.
       - name: Upload coverage artefacts for release-acceptance
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ github.sha }}
           path: |
@@ -164,7 +164,7 @@ jobs:
             --json release_acceptance.json
       - name: Upload release_acceptance.json artefact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-acceptance-${{ github.sha }}
           path: release_acceptance.json
