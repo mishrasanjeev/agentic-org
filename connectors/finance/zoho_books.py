@@ -349,6 +349,31 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("from_date", "to_date", "gstin"):
             if params.get(field):
                 qp[field] = params[field]
+
+        if self.config.get("region") == "in" or self.base_url == _ZOHO_IN_BASE:
+            # Zoho Books India does not expose /reports/gstsummary on the
+            # regional API host. Build a read-only GST data slice from the
+            # supported invoices endpoint instead of advertising a tool that
+            # deterministically 404s for India tenants.
+            invoice_qp = {
+                "date_start": qp.get("from_date"),
+                "date_end": qp.get("to_date"),
+                "page": params.get("page"),
+            }
+            invoice_data = await self.list_invoices(
+                **{k: v for k, v in invoice_qp.items() if v is not None}
+            )
+            return {
+                "gst_summary": {
+                    "source": "invoices",
+                    "region": "in",
+                    "gstin": qp.get("gstin"),
+                    "from_date": qp.get("from_date"),
+                    "to_date": qp.get("to_date"),
+                    "invoices": invoice_data.get("invoices", []),
+                    "page_context": invoice_data.get("page_context", {}),
+                }
+            }
         data = await self._get("/reports/gstsummary", params=self._org_params(qp))
         return self._unwrap(data, "gst_summary")
 

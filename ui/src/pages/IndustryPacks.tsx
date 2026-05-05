@@ -28,6 +28,8 @@ interface IndustryPack {
   workflows: PackWorkflow[];
   required_connectors: string[];
   installed: boolean;
+  installable: boolean;
+  install_disabled_reason: string;
 }
 
 const ICON_COLORS: Record<string, string> = {
@@ -141,6 +143,8 @@ function normalizePack(rawPack: unknown, installedIds: Set<string>): IndustryPac
     workflows,
     required_connectors: deriveRequiredConnectors(record, agents),
     installed: installedIds.has(id),
+    installable: record.installable !== false,
+    install_disabled_reason: String(record.install_disabled_reason || ""),
   };
 }
 
@@ -203,6 +207,7 @@ export default function IndustryPacks() {
   }, [fetchData]);
 
   const handleInstall = async (pack: IndustryPack) => {
+    if (!pack.installable) return;
     setActionLoading(pack.id);
     try {
       await api.post(`/packs/${pack.id}/install`);
@@ -214,7 +219,22 @@ export default function IndustryPacks() {
     setActionLoading(null);
   };
 
+  const handleRepair = async (pack: IndustryPack) => {
+    if (!pack.installable) return;
+    setActionLoading(pack.id);
+    try {
+      await api.post(`/packs/${pack.id}/install`);
+      await fetchData();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleUninstall = async (pack: IndustryPack) => {
+    const confirmed = window.confirm(
+      `Uninstalling ${pack.name} permanently deletes its pack agents and shadow history for this tenant. Use Repair to refresh metadata while preserving history. Continue?`
+    );
+    if (!confirmed) return;
     setActionLoading(pack.id);
     try {
       await api.delete(`/packs/${pack.id}`);
@@ -266,21 +286,36 @@ export default function IndustryPacks() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">{pack.agent_count} agents</span>
                 {pack.installed ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={actionLoading === pack.id}
-                    onClick={(e) => { e.stopPropagation(); handleUninstall(pack); }}
-                  >
-                    {actionLoading === pack.id ? "..." : "Uninstall"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      title="Refresh pack metadata, connectors, and prompts in place while preserving agent IDs and history."
+                      disabled={actionLoading === pack.id || !pack.installable}
+                      onClick={(e) => { e.stopPropagation(); handleRepair(pack); }}
+                    >
+                      {actionLoading === pack.id ? "..." : "Repair"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      title="Remove pack agents and history for this tenant."
+                      disabled={actionLoading === pack.id}
+                      onClick={(e) => { e.stopPropagation(); handleUninstall(pack); }}
+                    >
+                      Uninstall
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     size="sm"
-                    disabled={actionLoading === pack.id}
+                    title={pack.install_disabled_reason || undefined}
+                    disabled={actionLoading === pack.id || !pack.installable}
                     onClick={(e) => { e.stopPropagation(); handleInstall(pack); }}
                   >
-                    {actionLoading === pack.id ? "Installing..." : "Install"}
+                    {pack.installable
+                      ? actionLoading === pack.id ? "Installing..." : "Install"
+                      : "Unavailable"}
                   </Button>
                 )}
               </div>
@@ -301,7 +336,12 @@ export default function IndustryPacks() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold">{selectedPack.name}</h3>
-                  <p className="text-sm text-muted-foreground">{selectedPack.agent_count} agents</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">{selectedPack.agent_count} agents</p>
+                    {!selectedPack.installable && (
+                      <Badge variant="secondary">Unavailable</Badge>
+                    )}
+                  </div>
                 </div>
               </div>
               <button onClick={() => setSelectedPack(null)} className="p-1 rounded hover:bg-muted" aria-label="Close">
@@ -310,6 +350,11 @@ export default function IndustryPacks() {
             </div>
 
             <p className="text-sm text-muted-foreground mb-4">{selectedPack.description}</p>
+            {selectedPack.install_disabled_reason && (
+              <p className="text-sm text-muted-foreground mb-4">
+                {selectedPack.install_disabled_reason}
+              </p>
+            )}
 
             {/* Agents */}
             <h4 className="text-sm font-semibold mb-2">Agents</h4>
@@ -355,19 +400,32 @@ export default function IndustryPacks() {
             <div className="flex justify-end gap-2 pt-2 border-t">
               <Button variant="outline" onClick={() => setSelectedPack(null)}>Close</Button>
               {selectedPack.installed ? (
-                <Button
-                  variant="destructive"
-                  disabled={actionLoading === selectedPack.id}
-                  onClick={() => handleUninstall(selectedPack)}
-                >
-                  {actionLoading === selectedPack.id ? "Removing..." : "Uninstall Pack"}
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    title="Refresh pack metadata, connectors, and prompts in place while preserving agent IDs and history."
+                    disabled={actionLoading === selectedPack.id || !selectedPack.installable}
+                    onClick={() => handleRepair(selectedPack)}
+                  >
+                    {actionLoading === selectedPack.id ? "Repairing..." : "Repair Pack"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={actionLoading === selectedPack.id}
+                    onClick={() => handleUninstall(selectedPack)}
+                  >
+                    {actionLoading === selectedPack.id ? "Removing..." : "Uninstall Pack"}
+                  </Button>
+                </>
               ) : (
                 <Button
-                  disabled={actionLoading === selectedPack.id}
+                  title={selectedPack.install_disabled_reason || undefined}
+                  disabled={actionLoading === selectedPack.id || !selectedPack.installable}
                   onClick={() => handleInstall(selectedPack)}
                 >
-                  {actionLoading === selectedPack.id ? "Installing..." : "Install Pack"}
+                  {selectedPack.installable
+                    ? actionLoading === selectedPack.id ? "Installing..." : "Install Pack"
+                    : "Unavailable"}
                 </Button>
               )}
             </div>

@@ -2,6 +2,8 @@ name: legal
 display_name: Legal Pack
 description: AI agents for contract review, case research, document drafting, and compliance checking
 version: "1.0.0"
+installable: false
+install_disabled_reason: "Legal pack is gated until Composio legal/document tool bindings are implemented."
 pricing:
   inr_monthly_per_client: 7999
   usd_monthly_per_client: 95

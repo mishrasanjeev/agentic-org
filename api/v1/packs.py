@@ -45,6 +45,8 @@ async def install(name: str, tenant_id: str = Depends(get_current_tenant)):
     try:
         result = await install_pack_async(name, tenant_id)
     except ValueError as exc:
+        if "not installable" in str(exc):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return result
 

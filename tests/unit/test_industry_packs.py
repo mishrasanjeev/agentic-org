@@ -50,11 +50,11 @@ def test_install_creates_agents_in_shadow():
 
 def test_uninstall_removes_agents():
     """Uninstalling a pack removes agents and workflows."""
-    install_pack("legal", "tenant-002")
-    result = uninstall_pack("legal", "tenant-002")
+    install_pack("healthcare", "tenant-002")
+    result = uninstall_pack("healthcare", "tenant-002")
     assert result["status"] == "uninstalled"
     assert len(result["agents_removed"]) >= 1
-    assert "legal" not in get_installed_packs("tenant-002")
+    assert "healthcare" not in get_installed_packs("tenant-002")
 
 
 def test_healthcare_has_hipaa_prompts():
@@ -79,12 +79,12 @@ def test_pack_detail_returns_config():
 def test_installed_packs_per_tenant():
     """Installed packs are tracked per tenant — no cross-tenant leakage."""
     install_pack("healthcare", "tenant-A")
-    install_pack("legal", "tenant-B")
+    install_pack("manufacturing", "tenant-B")
 
     assert "healthcare" in get_installed_packs("tenant-A")
-    assert "legal" not in get_installed_packs("tenant-A")
+    assert "manufacturing" not in get_installed_packs("tenant-A")
 
-    assert "legal" in get_installed_packs("tenant-B")
+    assert "manufacturing" in get_installed_packs("tenant-B")
     assert "healthcare" not in get_installed_packs("tenant-B")
 
 

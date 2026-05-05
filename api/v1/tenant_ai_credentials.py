@@ -363,9 +363,11 @@ async def test_credential(
         status_value = "active" if probe_result["ok"] else "failing"
         err = None if probe_result["ok"] else probe_result.get("error", "")
     except ProviderNotConfigured as exc:
-        # Shouldn't happen — we just loaded the row — but surface honestly
+        # Shouldn't happen — we just loaded the row. Keep response details
+        # class-name-only; provider config details belong in server logs.
+        logger.warning("tenant_ai_credential_provider_not_configured")
         status_value = "failing"
-        err = str(exc)[:500]
+        err = type(exc).__name__
     except Exception as exc:
         logger.exception("tenant_ai_credential_probe_failed")
         status_value = "failing"

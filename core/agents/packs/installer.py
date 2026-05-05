@@ -373,6 +373,8 @@ def list_packs() -> list[dict[str, Any]]:
                 "compliance": cfg.get("compliance", []),
                 "pricing": cfg.get("pricing", {}),
                 "version": cfg.get("version", "0.0.0"),
+                "installable": cfg.get("installable", True),
+                "install_disabled_reason": cfg.get("install_disabled_reason", ""),
             }
         )
 
@@ -391,6 +393,8 @@ def list_packs() -> list[dict[str, Any]]:
                 "compliance": pack_cfg.get("compliance", []),
                 "pricing": pack_cfg.get("pricing", {}),
                 "version": pack_cfg.get("version", "0.0.0"),
+                "installable": pack_cfg.get("installable", True),
+                "install_disabled_reason": pack_cfg.get("install_disabled_reason", ""),
             }
         )
 
@@ -410,6 +414,8 @@ def get_pack_detail(pack_name: str) -> dict[str, Any] | None:
             "compliance": cfg.get("compliance", []),
             "pricing": cfg.get("pricing", {}),
             "version": cfg.get("version", "0.0.0"),
+            "installable": cfg.get("installable", True),
+            "install_disabled_reason": cfg.get("install_disabled_reason", ""),
         }
 
     for pack in list_packs():
@@ -670,6 +676,9 @@ def install_pack(pack_name: str, tenant_id: str) -> dict[str, Any]:
     detail = get_pack_detail(pack_name)
     if detail is None:
         raise ValueError(f"Pack '{pack_name}' not found")
+    if detail.get("installable") is False:
+        reason = detail.get("install_disabled_reason") or "Pack is not installable"
+        raise ValueError(f"Pack '{pack_name}' is not installable: {reason}")
 
     tenant_packs = _installed.setdefault(tenant_id, set())
     if pack_name in tenant_packs:
@@ -928,6 +937,9 @@ async def install_pack_async(pack_name: str, tenant_id: str) -> dict[str, Any]:
     detail = get_pack_detail(pack_name)
     if detail is None:
         raise ValueError(f"Pack '{pack_name}' not found")
+    if detail.get("installable") is False:
+        reason = detail.get("install_disabled_reason") or "Pack is not installable"
+        raise ValueError(f"Pack '{pack_name}' is not installable: {reason}")
 
     tid = UUID(tenant_id)
 
