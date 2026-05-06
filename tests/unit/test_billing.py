@@ -859,6 +859,103 @@ class TestStripeWebhookActivation:
         mock_deactivate.assert_called_once_with("t1")
 
 
+class TestStripeSubscriptionPlanChanges:
+    """Stripe paid-to-paid plan changes update the existing subscription."""
+
+    @patch("core.billing.stripe_client._get_stripe")
+    @patch("core.billing.usage_tracker._get_redis")
+    def test_change_subscription_plan_modifies_existing_subscription(
+        self, mock_redis_fn, mock_get_stripe
+    ):
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = "sub_existing"
+        mock_redis_fn.return_value = mock_redis
+
+        mock_stripe = MagicMock()
+        mock_stripe.Subscription.retrieve.return_value = {
+            "id": "sub_existing",
+            "items": {"data": [{"id": "si_existing", "price": {"id": "price_pro"}}]},
+            "metadata": {"tenant_id": "t1", "plan": "pro"},
+        }
+        mock_stripe.Subscription.modify.return_value = {
+            "id": "sub_existing",
+            "status": "active",
+            "customer": "cus_existing",
+            "items": {
+                "data": [{"id": "si_existing", "price": {"id": "price_enterprise"}}]
+            },
+            "metadata": {"tenant_id": "t1", "plan": "enterprise"},
+        }
+        mock_get_stripe.return_value = mock_stripe
+
+        from core.billing.stripe_client import change_subscription_plan
+
+        with patch(
+            "core.billing.stripe_client.PLAN_PRICE_MAP",
+            {"pro": "price_pro", "enterprise": "price_enterprise"},
+        ):
+            result = change_subscription_plan("t1", "enterprise")
+
+        assert result["updated"] is True
+        assert result["plan"] == "enterprise"
+        mock_stripe.checkout.Session.create.assert_not_called()
+        mock_stripe.Subscription.modify.assert_called_once_with(
+            "sub_existing",
+            items=[{"id": "si_existing", "price": "price_enterprise"}],
+            metadata={"tenant_id": "t1", "plan": "enterprise"},
+            proration_behavior="create_prorations",
+        )
+        mock_redis.set.assert_any_call("tenant_tier:t1", "enterprise")
+        mock_redis.set.assert_any_call("tenant:t1:plan", "enterprise")
+        mock_redis.set.assert_any_call("tenant:t1:stripe_subscription_id", "sub_existing")
+
+    @patch("core.billing.stripe_client._get_stripe")
+    @patch("core.billing.usage_tracker._get_redis")
+    def test_subscription_updated_webhook_syncs_plan_from_price(
+        self, mock_redis_fn, mock_get_stripe
+    ):
+        mock_redis = MagicMock()
+        mock_redis_fn.return_value = mock_redis
+
+        mock_stripe = MagicMock()
+        mock_stripe.Webhook.construct_event.return_value = {
+            "type": "customer.subscription.updated",
+            "created": int(time.time()),
+            "data": {
+                "object": {
+                    "id": "sub_updated",
+                    "status": "active",
+                    "customer": "cus_updated",
+                    "metadata": {"tenant_id": "t1"},
+                    "items": {
+                        "data": [
+                            {
+                                "id": "si_updated",
+                                "price": {"id": "price_enterprise"},
+                            }
+                        ]
+                    },
+                }
+            },
+        }
+        mock_get_stripe.return_value = mock_stripe
+
+        from core.billing.stripe_client import handle_webhook
+
+        with patch(
+            "core.billing.stripe_client.PLAN_PRICE_MAP",
+            {"pro": "price_pro", "enterprise": "price_enterprise"},
+        ):
+            result = handle_webhook(b'{"type":"customer.subscription.updated"}', "sig")
+
+        assert result["processed"] is True
+        assert result["tenant_id"] == "t1"
+        assert result["plan"] == "enterprise"
+        mock_redis.set.assert_any_call("tenant_tier:t1", "enterprise")
+        mock_redis.set.assert_any_call("tenant:t1:plan", "enterprise")
+        mock_redis.set.assert_any_call("tenant:t1:billing_order_id", "sub_updated")
+
+
 class TestStripeCustomerPortal:
     """Stripe Customer Portal session creation."""
 
