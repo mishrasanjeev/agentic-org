@@ -113,4 +113,10 @@ def test_partner_dashboard_source_uses_filing_units_for_overdue_labels() -> None
     assert "partnerDashboard.overdueFilings" in src
     assert "overdue_filings" in src
     assert "{overdueFilings} clients" not in src
-    assert "health_score: Number(c.health_score" in src
+    # May 4 fix coerced health_score with Number(...). The May 6 fix kept that
+    # coercion but split it across lines so inactive companies (health_score
+    # === null) can render as N/A. Assert the field is still mapped AND the
+    # Number() coercion path still exists, without requiring the original
+    # contiguous substring.
+    assert "health_score:" in src
+    assert "Number(c.health_score" in src
