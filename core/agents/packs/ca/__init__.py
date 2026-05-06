@@ -146,7 +146,6 @@ CA_PACK: dict[str, Any] = {
                 "zoho_books:calculate_tds",
                 "zoho_books:get_ledger_balance",
                 "income_tax_india:calculate_tds",
-                "income_tax_india:file_form_26q",
                 "income_tax_india:file_26q_return",
                 "income_tax_india:file_24q_return",
                 "income_tax_india:check_tds_credit_in_26as",

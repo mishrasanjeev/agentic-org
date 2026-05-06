@@ -2427,6 +2427,8 @@ async def generate_company_bridge(
 class PartnerDashboardOut(BaseModel):
     total_clients: int
     active_clients: int
+    inactive_clients: int = 0
+    metrics_scope: str = "active_clients_only"
     avg_health_score: float
     total_pending_filings: int
     total_overdue: int
@@ -2484,6 +2486,13 @@ async def get_partner_dashboard(
 
         total_clients = len(companies)
         active_clients = sum(1 for c in companies if c.is_active)
+        inactive_clients = total_clients - active_clients
+        active_company_ids = {c.id for c in companies if c.is_active}
+
+        sub_result = await session.execute(
+            select(CASubscription).where(CASubscription.tenant_id == tid)
+        )
+        ca_subscription = sub_result.scalar_one_or_none()
 
         pending_by_company_result = await session.execute(
             select(FilingApproval.company_id, func.count())
@@ -2497,7 +2506,11 @@ async def get_partner_dashboard(
             company_id: int(count or 0)
             for company_id, count in pending_by_company_result.all()
         }
-        total_pending = sum(pending_by_company.values())
+        total_pending = sum(
+            count
+            for company_id, count in pending_by_company.items()
+            if company_id in active_company_ids
+        )
 
         overdue_by_company_result = await session.execute(
             select(ComplianceDeadline.company_id, func.count())
@@ -2512,7 +2525,11 @@ async def get_partner_dashboard(
             company_id: int(count or 0)
             for company_id, count in overdue_by_company_result.all()
         }
-        total_overdue = sum(overdue_by_company.values())
+        total_overdue = sum(
+            count
+            for company_id, count in overdue_by_company.items()
+            if company_id in active_company_ids
+        )
 
         # Per-client summary
         clients_list: list[dict] = []
@@ -2520,14 +2537,29 @@ async def get_partner_dashboard(
         for c in companies:
             pending_count = pending_by_company.get(c.id, 0)
             overdue_count = overdue_by_company.get(c.id, 0)
-            health_score = _effective_client_health(
-                c.client_health_score,
-                pending_filings=pending_count,
-                overdue_filings=overdue_count,
-            )
-            if c.is_active:
+            is_active_client = bool(c.is_active)
+            health_score: int | None = None
+            if is_active_client:
+                health_score = _effective_client_health(
+                    c.client_health_score,
+                    pending_filings=pending_count,
+                    overdue_filings=overdue_count,
+                )
                 active_health_scores.append(health_score)
 
+            subscription_status = c.subscription_status or (
+                ca_subscription.status if ca_subscription else "trial"
+            )
+            trial_ends_at = (
+                ca_subscription.trial_ends_at
+                if subscription_status == "trial" and ca_subscription
+                else None
+            )
+            trial_days_remaining = (
+                max(0, (trial_ends_at.date() - today).days)
+                if trial_ends_at
+                else None
+            )
             clients_list.append({
                 "id": str(c.id),
                 "name": c.name,
@@ -2535,9 +2567,12 @@ async def get_partner_dashboard(
                 "stored_health_score": c.client_health_score,
                 "pending_filings": pending_count,
                 "overdue_filings": overdue_count,
-                "is_active": bool(c.is_active),
-                "status": "active" if c.is_active else "inactive",
-                "subscription_status": c.subscription_status or "trial",
+                "is_active": is_active_client,
+                "status": "active" if is_active_client else "inactive",
+                "subscription_status": subscription_status,
+                "trial_ends_at": trial_ends_at.isoformat() if trial_ends_at else None,
+                "trial_days_remaining": trial_days_remaining,
+                "metrics_included": is_active_client,
             })
         avg_health = (
             round(sum(active_health_scores) / len(active_health_scores), 1)
@@ -2549,30 +2584,53 @@ async def get_partner_dashboard(
         revenue_per_month_inr = active_clients * 4999
 
         # Upcoming deadlines (next 30 days, unfiled)
-        upcoming_q = select(ComplianceDeadline).where(
-            ComplianceDeadline.tenant_id == tid,
-            ComplianceDeadline.filed == False,  # noqa: E712
-            ComplianceDeadline.due_date >= today,
-            ComplianceDeadline.due_date <= today + timedelta(days=30),
-        ).order_by(ComplianceDeadline.due_date).limit(20)
+        upcoming_q = (
+            select(ComplianceDeadline)
+            .join(Company, ComplianceDeadline.company_id == Company.id)
+            .where(
+                ComplianceDeadline.tenant_id == tid,
+                Company.tenant_id == tid,
+                Company.is_active.is_(True),
+                ComplianceDeadline.filed == False,  # noqa: E712
+                ComplianceDeadline.due_date >= today,
+                ComplianceDeadline.due_date <= today + timedelta(days=30),
+            )
+            .order_by(ComplianceDeadline.due_date)
+            .limit(20)
+        )
         upcoming_result = await session.execute(upcoming_q)
         upcoming_deadlines = upcoming_result.scalars().all()
 
         # Map company_id -> name for the deadlines
         company_map = {c.id: c.name for c in companies}
+        company_status_map = {
+            c.id: "active" if c.is_active else "inactive"
+            for c in companies
+        }
 
         deadlines_list: list[dict] = []
         for dl in upcoming_deadlines:
+            days_remaining = (
+                (dl.due_date - today).days
+                if dl.due_date
+                else None
+            )
             deadlines_list.append({
+                "id": str(dl.id),
+                "company_id": str(dl.company_id),
                 "deadline_type": dl.deadline_type,
                 "filing_period": dl.filing_period,
                 "due_date": dl.due_date.isoformat() if dl.due_date else "",
                 "company_name": company_map.get(dl.company_id, "Unknown"),
+                "company_status": company_status_map.get(dl.company_id, "active"),
+                "days_remaining": days_remaining,
             })
 
     return PartnerDashboardOut(
         total_clients=total_clients,
         active_clients=active_clients,
+        inactive_clients=inactive_clients,
+        metrics_scope="active_clients_only",
         avg_health_score=avg_health,
         total_pending_filings=total_pending,
         total_overdue=total_overdue,
