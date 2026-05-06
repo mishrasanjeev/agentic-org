@@ -45,6 +45,8 @@ PLAN_AMOUNT_USD: dict[str, int] = {
     "enterprise": 499_00,  # $499/mo
 }
 
+ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
+
 _APP_BASE_URL = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
 
 _API_CALLBACK_URL = os.getenv(
@@ -59,6 +61,43 @@ def _get_stripe():
         raise RuntimeError("stripe package is not installed — run: pip install stripe")
     _stripe.api_key = _STRIPE_SECRET_KEY
     return _stripe
+
+
+def _get_value(obj: Any, key: str, default: Any = None) -> Any:
+    """Read ``key`` from StripeObject-like or dict payloads."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _price_to_plan(price_id: str) -> str:
+    for plan, mapped_price_id in PLAN_PRICE_MAP.items():
+        if mapped_price_id and mapped_price_id == price_id:
+            return plan
+    return ""
+
+
+def _first_subscription_item_id(subscription: Any) -> str:
+    items = _get_value(subscription, "items", {})
+    data = _get_value(items, "data", [])
+    if not data:
+        return ""
+    return _get_value(data[0], "id", "")
+
+
+def _plan_from_subscription(subscription: Any) -> str:
+    metadata = _get_value(subscription, "metadata", {}) or {}
+    plan = metadata.get("plan", "") if isinstance(metadata, dict) else ""
+    if plan:
+        return plan
+
+    items = _get_value(subscription, "items", {})
+    data = _get_value(items, "data", [])
+    if not data:
+        return ""
+    price = _get_value(data[0], "price", {})
+    price_id = _get_value(price, "id", "")
+    return _price_to_plan(price_id)
 
 
 # ── Create Customer ─────────────────────────────────────────────────
@@ -278,12 +317,19 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
     elif event_type == "customer.subscription.updated":
         tenant_id = data_obj.get("metadata", {}).get("tenant_id", "")
         status = data_obj.get("status", "")
+        plan = _sync_subscription_state(data_obj)
         result.update(
             processed=True,
             tenant_id=tenant_id,
+            plan=plan,
             subscription_status=status,
         )
-        logger.info("stripe_subscription_updated", tenant_id=tenant_id, status=status)
+        logger.info(
+            "stripe_subscription_updated",
+            tenant_id=tenant_id,
+            plan=plan,
+            status=status,
+        )
 
     elif event_type == "customer.subscription.deleted":
         tenant_id = data_obj.get("metadata", {}).get("tenant_id", "")
@@ -313,6 +359,7 @@ def _activate_subscription(
     redis.set(f"tenant_tier:{tenant_id}", plan)
     redis.set(f"tenant:{tenant_id}:plan", plan)
     redis.set(f"tenant:{tenant_id}:billing_provider", "stripe")
+    redis.set(f"tenant:{tenant_id}:billing_order_id", subscription_id)
     redis.set(f"tenant:{tenant_id}:stripe_subscription_id", subscription_id)
     redis.set(f"tenant:{tenant_id}:stripe_customer_id", customer_id)
 
@@ -332,6 +379,7 @@ def _deactivate_subscription(tenant_id: str) -> None:
     redis = _get_redis()
     redis.set(f"tenant_tier:{tenant_id}", "free")
     redis.set(f"tenant:{tenant_id}:plan", "free")
+    redis.delete(f"tenant:{tenant_id}:billing_order_id")
     redis.delete(f"tenant:{tenant_id}:stripe_subscription_id")
 
     logger.info("subscription_deactivated", tenant_id=tenant_id)
@@ -347,6 +395,108 @@ def cancel_subscription(subscription_id: str) -> bool:
     except Exception:
         logger.exception("stripe_cancel_failed", subscription_id=subscription_id)
         return False
+
+
+def _sync_subscription_state(
+    subscription: Any,
+    *,
+    fallback_tenant_id: str = "",
+    fallback_plan: str = "",
+) -> str:
+    """Mirror a Stripe subscription object into Redis billing state.
+
+    Stripe sends plan changes through ``customer.subscription.updated``.
+    We derive the plan from metadata first, then from the active price id.
+    """
+    from core.billing.usage_tracker import _get_redis
+
+    metadata = _get_value(subscription, "metadata", {}) or {}
+    tenant_id = (
+        metadata.get("tenant_id", "")
+        if isinstance(metadata, dict)
+        else fallback_tenant_id
+    ) or fallback_tenant_id
+    plan = _plan_from_subscription(subscription) or fallback_plan
+    status = _get_value(subscription, "status", "")
+    subscription_id = _get_value(subscription, "id", "")
+    customer_id = _get_value(subscription, "customer", "")
+
+    if not tenant_id:
+        logger.warning(
+            "stripe_subscription_sync_missing_tenant",
+            subscription_id=subscription_id,
+            status=status,
+        )
+        return plan
+
+    if status in ACTIVE_SUBSCRIPTION_STATUSES and plan:
+        redis = _get_redis()
+        redis.set(f"tenant_tier:{tenant_id}", plan)
+        redis.set(f"tenant:{tenant_id}:plan", plan)
+        redis.set(f"tenant:{tenant_id}:billing_provider", "stripe")
+        if subscription_id:
+            redis.set(f"tenant:{tenant_id}:billing_order_id", subscription_id)
+            redis.set(f"tenant:{tenant_id}:stripe_subscription_id", subscription_id)
+        if customer_id:
+            redis.set(f"tenant:{tenant_id}:stripe_customer_id", customer_id)
+        logger.info(
+            "subscription_synced",
+            tenant_id=tenant_id,
+            plan=plan,
+            provider="stripe",
+            status=status,
+            subscription_id=subscription_id,
+        )
+    elif status in {"canceled", "incomplete_expired", "unpaid"}:
+        _deactivate_subscription(tenant_id)
+
+    return plan
+
+
+def change_subscription_plan(tenant_id: str, plan: str) -> dict[str, Any]:
+    """Change an existing Stripe subscription to a different paid plan.
+
+    This updates the stored subscription in place. Creating a new Checkout
+    Session for paid-to-paid changes can leave the old subscription active.
+    """
+    s = _get_stripe()
+    price_id = PLAN_PRICE_MAP.get(plan)
+    if not price_id:
+        raise ValueError(f"Unknown plan or missing price ID: {plan}")
+
+    from core.billing.usage_tracker import _get_redis
+
+    redis = _get_redis()
+    stored = redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
+    subscription_id = stored if isinstance(stored, str) else (stored or b"").decode()
+    if not subscription_id:
+        raise ValueError(f"No active Stripe subscription found for tenant {tenant_id}")
+
+    current = s.Subscription.retrieve(subscription_id)
+    item_id = _first_subscription_item_id(current)
+    if not item_id:
+        raise ValueError(f"No subscription item found for subscription {subscription_id}")
+
+    updated = s.Subscription.modify(
+        subscription_id,
+        items=[{"id": item_id, "price": price_id}],
+        metadata={"tenant_id": tenant_id, "plan": plan},
+        proration_behavior="create_prorations",
+    )
+    synced_plan = _sync_subscription_state(
+        updated,
+        fallback_tenant_id=tenant_id,
+        fallback_plan=plan,
+    )
+
+    return {
+        "updated": True,
+        "tenant_id": tenant_id,
+        "plan": synced_plan or plan,
+        "subscription_id": _get_value(updated, "id", subscription_id),
+        "status": _get_value(updated, "status", ""),
+        "provider": "stripe",
+    }
 
 
 # ── Customer Portal ─────────────────────────────────────────────────

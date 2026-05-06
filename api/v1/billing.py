@@ -267,6 +267,29 @@ async def subscribe_stripe(
     import asyncio
 
     try:
+        from core.async_redis import get_async_redis
+
+        redis = await get_async_redis()
+        if redis is not None:
+            current_plan_raw = await redis.get(f"tenant:{tenant_id}:plan")
+            current_plan = (
+                current_plan_raw.decode()
+                if isinstance(current_plan_raw, bytes)
+                else current_plan_raw
+            ) or "free"
+            sub_id_raw = await redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
+            sub_id = (
+                sub_id_raw.decode() if isinstance(sub_id_raw, bytes) else sub_id_raw
+            ) or ""
+            if sub_id and current_plan != "free":
+                from core.billing.stripe_client import change_subscription_plan
+
+                return await asyncio.to_thread(
+                    change_subscription_plan,
+                    tenant_id=tenant_id,
+                    plan=body.plan,
+                )
+
         result = await asyncio.to_thread(
             create_checkout_session,
             tenant_id=tenant_id,

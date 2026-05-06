@@ -97,8 +97,14 @@ export default function Billing() {
       const resp = await api.post("/billing/subscribe", { plan });
       const data = resp.data;
       const url = data.challenge_url || data.checkout_url;
-      if (url) window.location.href = url;
-      else setError("No payment URL returned");
+      if (url) {
+        window.location.href = url;
+      } else if (data.updated) {
+        const sub = await api.get("/billing/subscription").then((r) => r.data);
+        setSubscription(sub);
+      } else {
+        setError("No payment URL returned");
+      }
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to start payment");
     } finally {
@@ -228,8 +234,8 @@ export default function Billing() {
                 {!isCurrent && p.plan !== "free" && subscription?.is_paid && (
                   <p className="text-xs text-muted-foreground mb-2 bg-muted rounded px-2 py-1">
                     {isUpgrade
-                      ? "You'll be charged the price difference for the remaining billing period."
-                      : "Your account will be credited the difference on your next invoice."}
+                      ? "Stripe applies prorated charges according to your billing settings."
+                      : "Stripe applies prorated credits according to your billing settings."}
                   </p>
                 )}
 
