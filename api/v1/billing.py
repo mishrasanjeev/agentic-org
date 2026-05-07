@@ -439,17 +439,21 @@ async def plural_callback(request: Request) -> RedirectResponse:
             tenant_id=tenant_id,
         )
 
-    # Redirect to frontend callback page with server-verified result
+    # Redirect to frontend callback page with server-verified result.
+    # Use a distinct local name (qs) — the function already binds
+    # `params: dict[str, str]` for the inbound query+form parser,
+    # and reusing the same name for the outbound query string trips
+    # mypy with "Unsupported left operand type for + (dict[str, str])".
     fe_url = "/dashboard/billing/callback"
-    params = f"?payment={verified_status}&provider=plural"
+    qs = f"?payment={verified_status}&provider=plural"
     if tenant_id:
-        params += f"&tenant_id={tenant_id}"
+        qs += f"&tenant_id={tenant_id}"
     if plan:
-        params += f"&plan={plan}"
+        qs += f"&plan={plan}"
     if effective_order_id:
-        params += f"&order_id={effective_order_id}"
+        qs += f"&order_id={effective_order_id}"
 
-    return RedirectResponse(url=f"{fe_url}{params}", status_code=303)
+    return RedirectResponse(url=f"{fe_url}{qs}", status_code=303)
 
 
 # ── Stripe Callback (Checkout Return) ────────────────────────────────
