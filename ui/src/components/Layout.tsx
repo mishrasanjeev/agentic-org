@@ -14,7 +14,7 @@ const ChatPanel = lazy(() => import("./ChatPanel"));
 const CompanySwitcher = lazy(() => import("./CompanySwitcher"));
 const NotificationBell = lazy(() => import("./NotificationBell"));
 
-// Nav labels use i18n keys (nav.<key>) with English fallback.
+// Nav labels use i18n keys (nav.<key>).
 // See ui/src/locales/en.json and hi.json for translations.
 const ALL_NAV = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
@@ -54,13 +54,13 @@ const ALL_NAV = [
   { path: "/dashboard/settings", labelKey: "nav.settings", label: "Settings", roles: ["admin"] },
 ];
 
-const ROLE_LABELS: Record<string, { title: string; domain: string }> = {
-  cfo: { title: "CFO", domain: "Finance" },
-  chro: { title: "CHRO", domain: "HR" },
-  cmo: { title: "CMO", domain: "Marketing" },
-  coo: { title: "COO", domain: "Operations" },
-  admin: { title: "CEO/Admin", domain: "All Domains" },
-  auditor: { title: "Auditor", domain: "Read-only" },
+const ROLE_LABELS: Record<string, { titleKey: string; domainKey: string }> = {
+  cfo: { titleKey: "roles.cfo", domainKey: "roles.domainFinance" },
+  chro: { titleKey: "roles.chro", domainKey: "roles.domainHr" },
+  cmo: { titleKey: "roles.cmo", domainKey: "roles.domainMarketing" },
+  coo: { titleKey: "roles.coo", domainKey: "roles.domainOperations" },
+  admin: { titleKey: "roles.admin", domainKey: "roles.domainAll" },
+  auditor: { titleKey: "roles.auditor", domainKey: "roles.domainReadOnly" },
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -111,7 +111,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             )}
             {roleLabel && (
               <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
-                {roleLabel.title} | {roleLabel.domain}
+                {t(roleLabel.titleKey)} | {t(roleLabel.domainKey)}
               </span>
             )}
           </div>
@@ -170,7 +170,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <p className="text-sm font-medium truncate">{auth.user.name || auth.user.email}</p>
               {roleLabel && (
                 <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
-                  {roleLabel.title} | {roleLabel.domain}
+                  {t(roleLabel.titleKey)} | {t(roleLabel.domainKey)}
                 </span>
               )}
             </div>

@@ -311,7 +311,7 @@ export default function KnowledgeBase() {
       // "API offline" line, which misled testers into filing bugs
       // against a working search.
       if (results.length === 0) {
-        setSearchError(t("knowledge.search.noResults", "No matching chunks in the knowledge base for this query."));
+        setSearchError(t("knowledge.searchNoResults", "No matching chunks in the knowledge base for this query."));
       }
     } catch (e) {
       // TC_002 (Aishwarya 2026-04-23): the bare catch previously
@@ -320,7 +320,7 @@ export default function KnowledgeBase() {
       // the backend's structured error detail so testers and operators
       // see what actually failed.
       setSearchResults([]);
-      setSearchError(extractApiError(e, t("knowledge.search.failed", "Search failed — please try again.")));
+      setSearchError(extractApiError(e, t("knowledge.searchFailed", "Search failed. Please try again.")));
     }
   };
 

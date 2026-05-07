@@ -33,6 +33,14 @@ const chatPanelSource = (
   }) as Record<string, string>
 )["../components/ChatPanel.tsx"];
 
+const layoutSource = (
+  import.meta.glob("../components/Layout.tsx", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>
+)["../components/Layout.tsx"];
+
 const CRITICAL_PAGES = [
   "Dashboard.tsx",
   "PartnerDashboard.tsx",
@@ -51,6 +59,13 @@ function findSource(filename: string): string {
   const key = Object.keys(pageSources).find((k) => k.endsWith(`/${filename}`));
   if (!key) throw new Error(`page source not found: ${filename}`);
   return pageSources[key];
+}
+
+function getNested(obj: unknown, keyPath: string): unknown {
+  return keyPath.split(".").reduce<unknown>((acc, key) => {
+    if (!acc || typeof acc !== "object") return undefined;
+    return (acc as Record<string, unknown>)[key];
+  }, obj);
 }
 
 describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
@@ -102,6 +117,46 @@ describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
     for (const key of keys) {
       expect(en.partnerDashboard).toHaveProperty(key);
       expect(hi.partnerDashboard).toHaveProperty(key);
+    }
+  });
+
+  it("Layout nav and role translation keys exist in English and Hindi", () => {
+    expect(layoutSource).toBeTruthy();
+    const keys = new Set([
+      ...Array.from(
+        layoutSource.matchAll(/labelKey:\s*["']([^"']+)["']/g),
+        (match) => match[1],
+      ),
+      ...Array.from(
+        layoutSource.matchAll(/(?:titleKey|domainKey):\s*["']([^"']+)["']/g),
+        (match) => match[1],
+      ),
+    ]);
+
+    expect(keys.size).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(getNested(en, key), key).toBeDefined();
+      expect(getNested(hi, key), key).toBeDefined();
+    }
+  });
+
+  it("static page/component t() keys exist in English and Hindi", () => {
+    const sources = {
+      ...pageSources,
+      "../components/Layout.tsx": layoutSource,
+      "../components/ChatPanel.tsx": chatPanelSource,
+    };
+    const keys = new Set<string>();
+    for (const source of Object.values(sources)) {
+      for (const match of source.matchAll(/\bt\(\s*["']([A-Za-z0-9_.-]+)["']/g)) {
+        keys.add(match[1]);
+      }
+    }
+
+    expect(keys.size).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(getNested(en, key), key).toBeDefined();
+      expect(getNested(hi, key), key).toBeDefined();
     }
   });
 

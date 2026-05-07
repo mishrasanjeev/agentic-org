@@ -29,7 +29,8 @@ class TestCAPack:
     def test_tds_agent_tools(self):
         from core.agents.packs.ca import CA_PACK
         tds = next(a for a in CA_PACK["agents"] if "TDS" in a["name"])
-        assert "income_tax:file_26q_return" in tds["tools"]
+        assert "income_tax_india:file_26q_return" in tds["tools"]
+        assert "income_tax_india:file_form_26q" not in tds["tools"]
 
     def test_all_finance(self):
         from core.agents.packs.ca import CA_PACK

@@ -14,11 +14,15 @@ import api from "@/lib/api";
 interface ClientHealth {
   id: string;
   name: string;
-  health_score: number;
+  health_score: number | null;
   pending_filings: number;
   overdue_filings: number;
   status: string;
   subscription: string;
+  is_active: boolean;
+  trial_ends_at: string | null;
+  trial_days_remaining: number | null;
+  metrics_included: boolean;
 }
 
 interface Deadline {
@@ -27,11 +31,15 @@ interface Deadline {
   period: string;
   company: string;
   due_date: string;
+  days_remaining: number | null;
+  company_status: string;
 }
 
 interface PartnerSummary {
   total_clients: number;
   active_clients: number;
+  inactive_clients: number;
+  metrics_scope: string;
   avg_health_score: number;
   total_pending_filings: number;
   total_overdue: number;
@@ -55,17 +63,39 @@ function healthTextColor(score: number): string {
   return "text-red-600";
 }
 
+function normalizeStatus(value: unknown): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized || "active";
+}
+
+function parseDateOnly(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
+function daysUntilDate(value: string): number | null {
+  const dueDate = parseDateOnly(value);
+  if (!dueDate) return null;
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.ceil((dueDate.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
 export default function PartnerDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [clients, setClients] = useState<ClientHealth[]>([]);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [summary, setSummary] = useState<PartnerSummary>({
     total_clients: 0,
     active_clients: 0,
+    inactive_clients: 0,
+    metrics_scope: "active_clients_only",
     avg_health_score: 0,
     total_pending_filings: 0,
     total_overdue: 0,
@@ -82,6 +112,8 @@ export default function PartnerDashboard() {
       setSummary({
         total_clients: Number(data.total_clients || 0),
         active_clients: Number(data.active_clients || 0),
+        inactive_clients: Number(data.inactive_clients || 0),
+        metrics_scope: String(data.metrics_scope || "active_clients_only"),
         avg_health_score: Number(data.avg_health_score || 0),
         total_pending_filings: Number(data.total_pending_filings || 0),
         total_overdue: Number(data.total_overdue || 0),
@@ -92,11 +124,23 @@ export default function PartnerDashboard() {
         setClients(data.clients.map((c: Record<string, unknown>) => ({
           id: String(c.id || c.company_id || ""),
           name: String(c.name || c.company_name || ""),
-          health_score: Number(c.health_score ?? c.client_health_score ?? 0),
+          health_score: c.health_score === null
+            ? null
+            : c.health_score === undefined && c.client_health_score === undefined
+            ? null
+            : Number(c.health_score ?? c.client_health_score ?? 0),
           pending_filings: Number(c.pending_filings ?? c.pending_approvals ?? 0),
           overdue_filings: Number(c.overdue_filings ?? 0),
-          status: c.is_active === false ? "inactive" : String(c.status || "active"),
-          subscription: String(c.subscription || c.subscription_status || "active"),
+          status: c.is_active === false ? "inactive" : normalizeStatus(c.status || "active"),
+          subscription: normalizeStatus(c.subscription || c.subscription_status || "active"),
+          is_active: c.is_active !== false && normalizeStatus(c.status || "active") !== "inactive",
+          trial_ends_at: c.trial_ends_at ? String(c.trial_ends_at) : null,
+          trial_days_remaining: typeof c.trial_days_remaining === "number"
+            ? c.trial_days_remaining
+            : null,
+          metrics_included: c.metrics_included !== false
+            && c.is_active !== false
+            && normalizeStatus(c.status || "active") !== "inactive",
         })));
       } else {
         setClients([]);
@@ -108,13 +152,19 @@ export default function PartnerDashboard() {
           ? data.upcoming_deadlines
           : [];
 
-      if (rawDeadlines.length > 0) {
-        setDeadlines(rawDeadlines.map((d: Record<string, unknown>, index: number) => ({
+      const activeDeadlines = rawDeadlines.filter(
+        (d: Record<string, unknown>) => normalizeStatus(d.company_status || "active") !== "inactive",
+      );
+
+      if (activeDeadlines.length > 0) {
+        setDeadlines(activeDeadlines.map((d: Record<string, unknown>, index: number) => ({
           id: String(d.id || `${d.company_name || d.company || "company"}-${d.deadline_type || d.type || index}`),
           type: String(d.type || d.deadline_type || ""),
           period: String(d.period || d.filing_period || ""),
           company: String(d.company || d.company_name || ""),
           due_date: String(d.due_date || ""),
+          days_remaining: typeof d.days_remaining === "number" ? d.days_remaining : null,
+          company_status: normalizeStatus(d.company_status || "active"),
         })));
       } else {
         setDeadlines([]);
@@ -126,6 +176,8 @@ export default function PartnerDashboard() {
       setSummary({
         total_clients: 0,
         active_clients: 0,
+        inactive_clients: 0,
+        metrics_scope: "active_clients_only",
         avg_health_score: 0,
         total_pending_filings: 0,
         total_overdue: 0,
@@ -140,22 +192,57 @@ export default function PartnerDashboard() {
     fetchPartnerData();
   }, [fetchPartnerData]);
 
+  const dateLocale = i18n.language === "hi" ? "hi-IN" : "en-IN";
+
+  const formatDate = useCallback((value: string | null) => {
+    if (!value) return "";
+    const parsed = parseDateOnly(value);
+    if (!parsed) return "";
+    return parsed.toLocaleDateString(dateLocale, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, [dateLocale]);
+
+  const formatSubscription = useCallback((client: ClientHealth) => {
+    if (client.subscription === "trial") {
+      if (client.trial_days_remaining !== null) {
+        return t("partnerDashboard.trialDaysLeft", {
+          count: client.trial_days_remaining,
+        });
+      }
+      if (client.trial_ends_at) {
+        return t("partnerDashboard.trialExpiresOn", {
+          date: formatDate(client.trial_ends_at),
+        });
+      }
+      return t("partnerDashboard.subscriptionTrial");
+    }
+    if (client.subscription === "expired") return t("partnerDashboard.subscriptionExpired");
+    if (client.subscription === "cancelled") return t("partnerDashboard.subscriptionCancelled");
+    if (client.subscription === "active") return t("partnerDashboard.subscriptionActive");
+    return client.subscription;
+  }, [formatDate, t]);
+
   const totalClients = summary.total_clients > 0 ? summary.total_clients : clients.length;
   const activeClients = summary.active_clients > 0
     ? summary.active_clients
-    : clients.filter((c) => c.status === "active").length;
+    : clients.filter((c) => c.is_active).length;
+  const activeMetricClients = clients.filter((c) => c.metrics_included);
   const avgHealth = summary.avg_health_score;
   const totalPending = summary.total_pending_filings > 0
     ? summary.total_pending_filings
-    : clients.reduce((sum, c) => sum + c.pending_filings, 0);
+    : activeMetricClients.reduce((sum, c) => sum + c.pending_filings, 0);
   const overdueFilings = summary.total_overdue > 0
     ? summary.total_overdue
-    : clients.reduce((sum, c) => sum + c.overdue_filings, 0);
+    : activeMetricClients.reduce((sum, c) => sum + c.overdue_filings, 0);
 
-  const filedCount = clients.filter((c) => c.pending_filings === 0 && c.overdue_filings === 0 && c.status === "active").length;
-  const filedWidth = totalClients > 0 ? (filedCount / totalClients) * 100 : 0;
-  const pendingWidth = totalClients > 0 ? Math.min(100, (totalPending / totalClients) * 100) : 0;
-  const overdueWidth = totalClients > 0 ? Math.min(100, (overdueFilings / totalClients) * 100) : 0;
+  const filedCount = activeMetricClients.filter((c) => c.pending_filings === 0 && c.overdue_filings === 0).length;
+  const activeMetricTotal = activeClients > 0 ? activeClients : activeMetricClients.length;
+  const filedWidth = activeMetricTotal > 0 ? (filedCount / activeMetricTotal) * 100 : 0;
+  const pendingWidth = activeMetricTotal > 0 ? Math.min(100, (totalPending / activeMetricTotal) * 100) : 0;
+  const overdueWidth = activeMetricTotal > 0 ? Math.min(100, (overdueFilings / activeMetricTotal) * 100) : 0;
 
   if (loading) {
     return (
@@ -230,7 +317,7 @@ export default function PartnerDashboard() {
             <div>
               <p className="text-sm text-muted-foreground">{t("partnerDashboard.monthlyRecurringRevenue")}</p>
               <p className="text-3xl font-bold mt-1">
-                INR {summary.revenue_per_month_inr.toLocaleString("en-IN")}/month
+                INR {summary.revenue_per_month_inr.toLocaleString(dateLocale)}/{t("partnerDashboard.monthUnit")}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {t("partnerDashboard.revenueBasis")}
@@ -271,24 +358,33 @@ export default function PartnerDashboard() {
               </thead>
               <tbody>
                 {clients.map((client) => (
-                  <tr key={client.id} className="border-b last:border-0 hover:bg-muted/50">
+                  <tr
+                    key={client.id}
+                    className={`border-b last:border-0 hover:bg-muted/50 ${client.is_active ? "" : "bg-muted/30 text-muted-foreground"}`}
+                  >
                     <td className="py-2 px-3 font-medium">
                       <Link to={`/dashboard/companies/${client.id}`} className="hover:underline text-primary">
                         {client.name}
                       </Link>
                     </td>
                     <td className="py-2 px-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${healthColor(client.health_score)}`}
-                            style={{ width: `${client.health_score}%` }}
-                          />
+                      {client.health_score === null ? (
+                        <Badge variant="secondary" title={t("partnerDashboard.inactiveHealthTooltip")}>
+                          {t("partnerDashboard.notApplicable")}
+                        </Badge>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${healthColor(client.health_score)}`}
+                              style={{ width: `${client.health_score}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-semibold ${healthTextColor(client.health_score)}`}>
+                            {client.health_score}%
+                          </span>
                         </div>
-                        <span className={`text-xs font-semibold ${healthTextColor(client.health_score)}`}>
-                          {client.health_score}%
-                        </span>
-                      </div>
+                      )}
                     </td>
                     <td className="py-2 px-3">
                       {client.pending_filings > 0 ? (
@@ -305,8 +401,8 @@ export default function PartnerDashboard() {
                       )}
                     </td>
                     <td className="py-2 px-3">
-                      <Badge variant={client.status === "active" ? "success" : "secondary"}>
-                        {client.status === "active" ? t("partnerDashboard.active") : t("partnerDashboard.inactive")}
+                      <Badge variant={client.is_active ? "success" : "secondary"}>
+                        {client.is_active ? t("partnerDashboard.active") : t("partnerDashboard.inactive")}
                       </Badge>
                     </td>
                     <td className="py-2 px-3">
@@ -314,7 +410,7 @@ export default function PartnerDashboard() {
                         client.subscription === "active" ? "success" :
                         client.subscription === "expired" ? "destructive" : "warning"
                       }>
-                        {client.subscription}
+                        {formatSubscription(client)}
                       </Badge>
                     </td>
                   </tr>
@@ -338,10 +434,12 @@ export default function PartnerDashboard() {
             ) : (
             <div className="space-y-3">
               {deadlines.map((dl) => {
-                const dueDate = new Date(dl.due_date);
-                const today = new Date();
-                const daysUntil = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                const urgent = daysUntil <= 7;
+                const daysUntil = dl.days_remaining ?? daysUntilDate(dl.due_date);
+                const urgent = daysUntil !== null && daysUntil <= 7;
+                const overdue = daysUntil !== null && daysUntil < 0;
+                const dueToday = daysUntil === 0;
+                const deadlineBadge: "destructive" | "warning" | "secondary" =
+                  overdue ? "destructive" : urgent ? "warning" : "secondary";
                 return (
                   <div key={dl.id} className="flex items-center justify-between border-b last:border-0 pb-2 last:pb-0">
                     <div>
@@ -350,13 +448,17 @@ export default function PartnerDashboard() {
                     </div>
                     <div className="text-right">
                       <p className={`text-xs font-semibold ${urgent ? "text-red-600" : "text-muted-foreground"}`}>
-                        {dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        {formatDate(dl.due_date)}
                       </p>
-                      {urgent && (
-                        <Badge variant="destructive" className="text-[10px] mt-0.5">
-                          {daysUntil <= 0 ? t("partnerDashboard.overdue") : t("partnerDashboard.daysLeft", { count: daysUntil })}
-                        </Badge>
-                      )}
+                      <Badge variant={deadlineBadge} className="text-[10px] mt-0.5">
+                        {daysUntil === null
+                          ? t("partnerDashboard.dateUnavailable")
+                          : overdue
+                            ? t("partnerDashboard.overdue")
+                            : dueToday
+                              ? t("partnerDashboard.dueToday")
+                              : t("partnerDashboard.daysLeft", { count: daysUntil })}
+                      </Badge>
                     </div>
                   </div>
                 );
@@ -373,10 +475,13 @@ export default function PartnerDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                {t("partnerDashboard.activeClientScopeHint")}
+              </p>
               {/* Filed */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium">{t("partnerDashboard.noPendingFilingClients")}</span>
+                  <span className="text-sm font-medium">{t("partnerDashboard.activeNoPendingFilingClients")}</span>
                   <span className="text-sm text-emerald-600 font-semibold">{t("partnerDashboard.clientsCount", { count: filedCount })}</span>
                 </div>
                 <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
@@ -418,7 +523,7 @@ export default function PartnerDashboard() {
               {/* Summary */}
               <div className="border-t pt-3 mt-3">
                 <div className="flex items-center gap-4 text-xs">
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500" /> {t("partnerDashboard.noPendingFilingClients")}</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500" /> {t("partnerDashboard.activeNoPendingFilingClients")}</span>
                   <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-500" /> {t("partnerDashboard.pendingFilings")}</span>
                   <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500" /> {t("partnerDashboard.overdueFilings")}</span>
                 </div>

@@ -32,10 +32,27 @@
     "knowledge": "Knowledge Base",
     "voiceAgents": "Voice Agents",
     "rpa": "RPA Scripts",
+    "rpaSchedules": "RPA Schedules",
+    "aiCredentials": "AI Credentials",
+    "aiConfig": "AI Configuration",
     "packs": "Industry Packs",
     "sla": "SLA Monitor",
     "billing": "Billing",
     "settings": "Settings"
+  },
+  "roles": {
+    "cfo": "CFO",
+    "chro": "CHRO",
+    "cmo": "CMO",
+    "coo": "COO",
+    "admin": "CEO/Admin",
+    "auditor": "Auditor",
+    "domainFinance": "Finance",
+    "domainHr": "HR",
+    "domainMarketing": "Marketing",
+    "domainOperations": "Operations",
+    "domainAll": "All Domains",
+    "domainReadOnly": "Read-only"
   },
   "header": {
     "search": "Search or ask anything...",
@@ -70,7 +87,12 @@
     "completed": "Completed",
     "failed": "Failed",
     "approved": "Approved",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "active": "Active",
+    "inactive": "Inactive",
+    "trial": "Trial",
+    "expired": "Expired",
+    "cancelled": "Cancelled"
   },
   "auth": {
     "login": "Log In",
@@ -146,6 +168,7 @@
     "overdue": "Overdue",
     "overdueFilings": "Overdue Filings",
     "monthlyRecurringRevenue": "Monthly Recurring Revenue",
+    "monthUnit": "month",
     "revenueBasis": "Based on current client portfolio and CA plan pricing",
     "noCaData": "No CA data",
     "revenueEmptyHint": "Revenue is zero until CA clients and subscription data exist",
@@ -155,10 +178,22 @@
     "healthScore": "Health Score",
     "status": "Status",
     "subscription": "Subscription",
+    "subscriptionActive": "Active",
+    "subscriptionTrial": "Trial",
+    "subscriptionExpired": "Expired",
+    "subscriptionCancelled": "Cancelled",
+    "trialDaysLeft": "Trial - {{count}} days left",
+    "trialExpiresOn": "Trial expires on {{date}}",
+    "notApplicable": "N/A",
+    "inactiveHealthTooltip": "Inactive clients are excluded from dashboard health scoring.",
     "upcomingDeadlines": "Upcoming Deadlines",
     "daysLeft": "{{count}} days left",
+    "dueToday": "Due today",
+    "dateUnavailable": "Date unavailable",
     "complianceWorkload": "Compliance Workload Across Clients",
     "noPendingFilingClients": "Clients with no pending filings",
+    "activeNoPendingFilingClients": "Active clients with no pending filings",
+    "activeClientScopeHint": "Compliance workload and health KPIs include active clients only; inactive clients are excluded.",
     "clientsCount": "{{count}} clients",
     "filingsCount": "{{count}} filings"
   },
@@ -239,6 +274,7 @@
   "common": {
     "actions": "Actions",
     "search": "Search",
+    "loading": "Loading...",
     "noData": "No data available",
     "tryAgain": "Try Again",
     "yes": "Yes",
@@ -278,6 +314,8 @@
     "title": "Knowledge Base",
     "upload": "Upload",
     "search": "Search",
+    "searchFailed": "Search failed. Please try again.",
+    "searchNoResults": "No matching chunks in the knowledge base for this query.",
     "searchPlaceholder": "Search policies, contracts, reports...",
     "totalDocuments": "Total Documents",
     "totalChunks": "Total Chunks",
@@ -287,6 +325,23 @@
     "size": "Size",
     "uploaded": "Uploaded",
     "noDocuments": "No documents yet. Upload to get started."
+  },
+  "cost": {
+    "title": "Cost Dashboard",
+    "period": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "totalSpend": "Total spend",
+    "periodLabel": "this {{period}}",
+    "taskCount": "Tasks executed",
+    "avgCost": "avg",
+    "perTask": "per task",
+    "domains": "Domains",
+    "trend": "30-day cost trend",
+    "byDomain": "Spend by domain",
+    "topAgents": "Top agents (30d)"
   },
   "reportSchedules": {
     "title": "Report Schedules",

@@ -182,7 +182,6 @@ class TestTDSComplianceAgentTools:
         assert "zoho_books:calculate_tds" in tools
         assert "zoho_books:get_ledger_balance" in tools
         assert "income_tax_india:calculate_tds" in tools
-        assert "income_tax_india:file_form_26q" in tools
         assert "income_tax_india:file_26q_return" in tools
         assert "income_tax_india:file_24q_return" in tools
         assert "income_tax_india:check_tds_credit_in_26as" in tools
@@ -193,11 +192,21 @@ class TestTDSComplianceAgentTools:
         assert "tally:get_ledger_balance" in tools
         assert "tally:post_voucher" in tools
 
-    def test_tds_compliance_agent_has_11_tools(self):
+    def test_tds_compliance_agent_has_10_tools(self):
         from core.agents.packs.ca import CA_PACK
 
         tds_agent = next(a for a in CA_PACK["agents"] if a["name"] == "TDS Compliance Agent")
-        assert len(tds_agent["tools"]) == 11
+        assert len(tds_agent["tools"]) == 10
+
+    def test_tds_compliance_agent_uses_canonical_26q_tool_only(self):
+        from core.agents.packs.ca import CA_PACK
+
+        tds_agent = next(a for a in CA_PACK["agents"] if a["name"] == "TDS Compliance Agent")
+        tools = tds_agent["tools"]
+
+        assert "income_tax_india:file_26q_return" in tools
+        assert "income_tax_india:file_form_26q" not in tools
+        assert len(tools) == len(set(tools))
 
     def test_tds_compliance_agent_hitl_always(self):
         """TDS agent must also require HITL before filing."""

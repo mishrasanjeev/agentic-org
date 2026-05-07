@@ -566,7 +566,8 @@ class TestPartnerDashboardSchemas:
 
         fields = set(PartnerDashboardOut.model_fields.keys())
         expected = {
-            "total_clients", "active_clients", "avg_health_score",
+            "total_clients", "active_clients", "inactive_clients",
+            "metrics_scope", "avg_health_score",
             "total_pending_filings", "total_overdue",
             "revenue_per_month_inr", "clients", "upcoming_deadlines",
         }
