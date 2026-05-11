@@ -263,6 +263,8 @@ _PROMOTE_MAP: dict[str, str] = {
     "shadow": "active",
 }
 
+_MIN_PRODUCTION_SHADOW_ACCURACY = Decimal("0.600")
+
 
 def _agent_to_dict(agent: Agent) -> dict:
     """Convert an Agent ORM instance to a JSON-serialisable dict."""
@@ -469,8 +471,37 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
     """
     from core.langgraph.tool_adapter import _build_tool_index
 
-    index = _build_tool_index()
+    index = _build_tool_index(include_connector_aliases=True)
     return [t for t in tools if t not in index]
+
+
+def _tool_ref_matches(tool_ref: str, expected_tool: str) -> bool:
+    raw = str(tool_ref or "").strip()
+    expected = str(expected_tool or "").strip()
+    if not raw or not expected:
+        return False
+    if raw == expected:
+        return True
+    if ":" in raw and not raw.startswith("tool:"):
+        return raw.split(":", 1)[1] == expected
+    if "__" in raw:
+        return raw.split("__", 1)[1] == expected
+    return False
+
+
+def _is_tool_authorized(authorized_tools: list[str], expected_tool: str) -> bool:
+    return any(_tool_ref_matches(tool_ref, expected_tool) for tool_ref in authorized_tools or [])
+
+
+def _effective_shadow_accuracy_floor(agent: Agent) -> Decimal:
+    floor = agent.shadow_accuracy_floor or Decimal("0")
+    return max(Decimal(str(floor)), _MIN_PRODUCTION_SHADOW_ACCURACY)
+
+
+def _active_agent_below_production_floor(agent: Agent) -> bool:
+    if agent.status != "active" or agent.shadow_accuracy_current is None:
+        return False
+    return Decimal(str(agent.shadow_accuracy_current)) < _effective_shadow_accuracy_floor(agent)
 
 
 def _derive_default_tools(
@@ -1030,6 +1061,9 @@ async def list_agents(
         if status:
             query = query.where(Agent.status == status)
             count_query = count_query.where(Agent.status == status)
+        else:
+            query = query.where(Agent.status.notin_(["deleted", "error", "broken"]))
+            count_query = count_query.where(Agent.status.notin_(["deleted", "error", "broken"]))
         if company_uuid is not None:
             query = query.where(Agent.company_id == company_uuid)
             count_query = count_query.where(Agent.company_id == company_uuid)
@@ -1079,6 +1113,11 @@ async def list_agents(
                     if status:
                         query = query.where(Agent.status == status)
                         count_query = count_query.where(Agent.status == status)
+                    else:
+                        query = query.where(Agent.status.notin_(["deleted", "error", "broken"]))
+                        count_query = count_query.where(
+                            Agent.status.notin_(["deleted", "error", "broken"])
+                        )
                     query = query.where(Agent.company_id == company_uuid)
                     count_query = count_query.where(Agent.company_id == company_uuid)
                     total = (await session.execute(count_query)).scalar() or 0
@@ -1816,6 +1855,16 @@ async def run_agent(
             raise HTTPException(404, "Agent not found")
         if agent_row.status == "retired":
             raise HTTPException(409, "Cannot run a retired agent")
+        if _active_agent_below_production_floor(agent_row):
+            raise HTTPException(
+                409,
+                (
+                    "Active agent is below the production shadow-accuracy "
+                    f"floor ({agent_row.shadow_accuracy_current} < "
+                    f"{_effective_shadow_accuracy_floor(agent_row)}). "
+                    "Rollback to shadow and retest before running live work."
+                ),
+            )
 
         agent_config = _agent_to_dict(agent_row)
 
@@ -2095,7 +2144,7 @@ async def run_agent(
         fixture_tool_authorized = bool(
             isinstance(fixture_expected, str)
             and fixture_expected
-            and fixture_expected in (authorized_tools or [])
+            and _is_tool_authorized(authorized_tools or [], fixture_expected)
         )
         if fixture and not fixture_tool_authorized:
             logger.warning(
@@ -2494,6 +2543,15 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
                     f"floor {agent.shadow_accuracy_floor}; "
                     f"use /agents/{agent_id}/retest to re-evaluate",
                 )
+        elif resume_to == "active" and _active_agent_below_production_floor(agent):
+            raise HTTPException(
+                409,
+                (
+                    "Cannot resume to active: shadow accuracy "
+                    f"{agent.shadow_accuracy_current} is below production "
+                    f"floor {_effective_shadow_accuracy_floor(agent)}"
+                ),
+            )
 
         agent.status = resume_to
 
@@ -2547,10 +2605,11 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                     409,
                     "Shadow accuracy not yet computed; run shadow samples first",
                 )
-            if agent.shadow_accuracy_current < agent.shadow_accuracy_floor:
+            required_accuracy = _effective_shadow_accuracy_floor(agent)
+            if agent.shadow_accuracy_current < required_accuracy:
                 raise HTTPException(
                     409,
-                    f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {agent.shadow_accuracy_floor}",
+                    f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {required_accuracy}",
                 )
 
         old_status = agent.status

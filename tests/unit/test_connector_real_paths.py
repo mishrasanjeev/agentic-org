@@ -177,13 +177,20 @@ class TestZohoBooksRealPaths:
 
     @pytest.mark.asyncio
     async def test_reconcile_transaction_path(self):
+        """Ramesh 2026-05-11 #5: reconcile_transaction now PUTs to the real
+        Zoho ``/banktransactions/{id}/match`` endpoint with a
+        ``transactions_to_be_matched`` body, instead of POSTing the
+        unrelated /uncategorized create-uncategorized-transaction path.
+        """
         c = self._make_connector()
-        c._client.post = _async_response({"bank_transaction": {"transaction_id": "T1"}})
-        await c.reconcile_transaction(
-            account_id="a1", amount=1000, date="2026-05-01", reference_number="R1"
-        )
-        args = c._client.post.call_args
-        assert args[0][0] == "/banktransactions/uncategorized"
+        c._client.put = _async_response({"bank_transaction": {"transaction_id": "T1"}})
+        await c.reconcile_transaction(transaction_id="T1", match_id="M2", match_type="expense")
+        args = c._client.put.call_args
+        assert args[0][0] == "/banktransactions/T1/match"
+        body = args[1]["json"]
+        assert body["transactions_to_be_matched"] == [
+            {"transaction_id": "M2", "transaction_type": "expense"}
+        ]
 
     @pytest.mark.asyncio
     async def test_get_organization_path(self):
@@ -233,9 +240,14 @@ class TestZohoBooksRealPaths:
 
     @pytest.mark.asyncio
     async def test_reconcile_transaction_validates_required(self):
+        """Ramesh 2026-05-11 #5: required params are now transaction_id +
+        match_id (the legacy account_id/amount/date were for creating an
+        uncategorized transaction, not matching one)."""
         c = self._make_connector()
-        out = await c.reconcile_transaction(amount=100, date="2026-05-01")
-        assert "account_id" in out["error"]
+        missing_txn = await c.reconcile_transaction(match_id="M1")
+        assert "transaction_id" in missing_txn["error"]
+        missing_match = await c.reconcile_transaction(transaction_id="T1")
+        assert "match_id" in missing_match["error"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

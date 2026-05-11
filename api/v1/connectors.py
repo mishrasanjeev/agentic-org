@@ -20,6 +20,46 @@ from core.schemas.api import ConnectorCreate, ConnectorUpdate
 
 _log = logging.getLogger(__name__)
 
+_ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
+_ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
+
+
+def _normalise_connector_base_url(name: str, base_url: str | None) -> str | None:
+    """Normalize known provider URL footguns before storing or displaying."""
+    value = (base_url or "").strip()
+    if (name or "").strip().lower() != "zoho_books":
+        return value or None
+    lowered = value.lower()
+    if "zohoapis.in" in lowered or "books.zoho.in" in lowered:
+        return _ZOHO_IN_BASE
+    return value or _ZOHO_GLOBAL_BASE
+
+
+def _connector_tool_functions(conn: Connector) -> list[str]:
+    raw_tools = getattr(conn, "tool_functions", None)
+    if isinstance(raw_tools, list) and raw_tools:
+        return [str(tool) for tool in raw_tools]
+    try:
+        import connectors  # noqa: F401, PLC0415
+        from connectors.registry import ConnectorRegistry
+
+        connector_cls = ConnectorRegistry.get(str(conn.name or ""))
+        class_tools = getattr(connector_cls, "tools", None) if connector_cls else None
+        if class_tools:
+            return [
+                tool if isinstance(tool, str) else getattr(tool, "name", str(tool))
+                for tool in class_tools
+            ]
+        if connector_cls and hasattr(connector_cls, "_register_tools"):
+            instance = connector_cls.__new__(connector_cls)
+            instance.config = {}
+            instance._tool_registry = {}
+            instance._register_tools()
+            return sorted(instance._tool_registry.keys())
+    except Exception:
+        _log.debug("connector_tool_discovery_failed", exc_info=True)
+    return []
+
 
 def _assert_public_base_url(base_url: str) -> None:
     """Reject connector base_urls that resolve to private/reserved ranges.
@@ -86,7 +126,6 @@ def _connector_to_dict(conn: Connector) -> dict:
     # Return a boolean flag for whether credentials are configured —
     # NEVER return the actual auth_config (secrets) in the API response.
     auth_config = getattr(conn, "auth_config", None)
-    tool_functions = getattr(conn, "tool_functions", None)
     has_creds = bool(auth_config) or bool(getattr(conn, "secret_ref", None))
     health_check_at = getattr(conn, "health_check_at", None)
     created_at = getattr(conn, "created_at", None)
@@ -96,10 +135,10 @@ def _connector_to_dict(conn: Connector) -> dict:
         "name": str(conn.name or ""),
         "category": str(conn.category or ""),
         "description": conn.description or "",
-        "base_url": conn.base_url or "",
+        "base_url": _normalise_connector_base_url(conn.name, conn.base_url) or "",
         "auth_type": str(conn.auth_type or ""),
         "has_credentials": has_creds,
-        "tool_functions": tool_functions if isinstance(tool_functions, list) else [],
+        "tool_functions": _connector_tool_functions(conn),
         "data_schema_ref": conn.data_schema_ref or "",
         "rate_limit_rpm": int(conn.rate_limit_rpm or 0),
         "timeout_ms": int(conn.timeout_ms or 0),
@@ -293,9 +332,10 @@ async def register_connector(
     tenant_id: str = Depends(get_current_tenant),
 ):
     tid = _uuid.UUID(tenant_id)
+    normalised_base_url = _normalise_connector_base_url(body.name, body.base_url)
 
     # MEDIUM-12: reject SSRF-capable base_urls before persisting.
-    _assert_public_base_url(body.base_url or "")
+    _assert_public_base_url(normalised_base_url or "")
 
     # Separate secret material from non-secret config.
     # auth_config on the Connector model is deprecated for secrets —
@@ -303,7 +343,7 @@ async def register_connector(
     # tenant-aware encryption.
     secret_fields = body.auth_config or {}
     non_secret_config = {
-        "base_url": body.base_url,
+        "base_url": normalised_base_url,
         "auth_type": body.auth_type,
         "data_schema_ref": body.data_schema_ref,
         "rate_limit_rpm": body.rate_limit_rpm,
@@ -314,7 +354,7 @@ async def register_connector(
             tenant_id=tid,
             name=body.name,
             category=body.category,
-            base_url=body.base_url,
+            base_url=normalised_base_url,
             auth_type=body.auth_type,
             auth_config={},  # no longer store secrets here
             secret_ref=body.secret_ref,
@@ -357,7 +397,7 @@ async def register_connector(
             if existing is not None and (existing.status or "").lower() == "deleted":
                 existing.status = "active"
                 existing.category = body.category
-                existing.base_url = body.base_url
+                existing.base_url = normalised_base_url
                 existing.auth_type = body.auth_type
                 existing.auth_config = {}
                 existing.secret_ref = body.secret_ref
@@ -459,6 +499,10 @@ async def update_connector(
         updates = body.model_dump(exclude_none=True)
         # MEDIUM-12: same SSRF guard on update paths.
         if "base_url" in updates:
+            updates["base_url"] = _normalise_connector_base_url(
+                connector.name,
+                updates["base_url"],
+            )
             _assert_public_base_url(updates["base_url"] or "")
         for field, value in updates.items():
             if field in _blocked_fields:
@@ -605,14 +649,35 @@ async def connector_health(
     if not connector:
         raise HTTPException(404, "Connector not found")
 
+    probe = await test_connector(conn_id, tenant_id)
+    health = probe.get("health") if isinstance(probe, dict) else None
+    status = (
+        health.get("status")
+        if isinstance(health, dict)
+        else ("error" if probe.get("error") else connector.status)
+    )
+    healthy = bool(probe.get("tested") and isinstance(health, dict) and status == "healthy")
+
+    async with get_tenant_session(tid) as session:
+        refreshed = (
+            await session.execute(
+                select(Connector).where(Connector.id == conn_id, Connector.tenant_id == tid)
+            )
+        ).scalar_one_or_none()
+        if refreshed is not None:
+            connector = refreshed
+
     return {
         "connector_id": str(connector.id),
         "name": connector.name,
-        "status": connector.status,
+        "status": status,
         "health_check_at": connector.health_check_at.isoformat()
         if connector.health_check_at
         else None,
-        "healthy": connector.status == "active",
+        "healthy": healthy,
+        "tested": bool(probe.get("tested")),
+        "health": health or {},
+        "error": probe.get("error"),
     }
 
 
@@ -648,7 +713,10 @@ async def test_connector(
     # MEDIUM-12: even if the stored base_url was valid when saved, re-check
     # at test time so a stale DNS record flipped to a private IP can't be
     # used as an SSRF primitive.
-    effective_base_url = (connector.base_url or getattr(connector_cls, "base_url", "") or "")
+    effective_base_url = _normalise_connector_base_url(
+        connector.name,
+        connector.base_url or getattr(connector_cls, "base_url", "") or "",
+    )
     _assert_public_base_url(effective_base_url)
 
     # Load credentials from ENCRYPTED connector_configs first,

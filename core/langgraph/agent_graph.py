@@ -27,7 +27,11 @@ from langgraph.types import interrupt
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import create_chat_model
 from core.langgraph.state import AgentState
-from core.langgraph.tool_adapter import _build_tool_index, build_tools_for_agent
+from core.langgraph.tool_adapter import (
+    _actual_tool_name,
+    _build_tool_index,
+    build_tools_for_agent,
+)
 
 logger = structlog.get_logger()
 
@@ -168,7 +172,7 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
 
     # _build_tool_index() returns dict[str, tuple[str, str]]
     # where each value is (connector_name, description)
-    index = _build_tool_index()
+    index = _build_tool_index(include_connector_aliases=True)
 
     for tc in last_ai.tool_calls:
         # tc is normally a dict with 'name'/'args'/'id'; handle legacy
@@ -184,12 +188,13 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
         # Resolve connector name from tool index
         match = index.get(tool_name)
         connector_name = match[0] if match else "unknown"
+        actual_tool_name = _actual_tool_name(tool_name)
 
         # One call — Grantex handles JWT verification + manifest lookup + permission check
         result = grantex.enforce(
             grant_token=grant_token,
             connector=connector_name,
-            tool=tool_name,
+            tool=actual_tool_name,
         )
 
         if not result.allowed:
@@ -203,7 +208,7 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
             return {
                 "messages": [AIMessage(
                     content=f"Access denied: {result.reason}. "
-                    f"Tool '{tool_name}' on '{connector_name}' is not permitted by your current authorization."
+                    f"Tool '{actual_tool_name}' on '{connector_name}' is not permitted by your current authorization."
                 )],
                 "status": "failed",
                 "error": f"Scope denied: {result.reason}",

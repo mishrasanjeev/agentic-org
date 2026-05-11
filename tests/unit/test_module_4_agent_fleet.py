@@ -252,12 +252,15 @@ def test_tc_agt_009_promote_validates_min_samples() -> None:
 
 
 def test_tc_agt_009_promote_validates_accuracy_floor() -> None:
-    """Sample count alone isn't enough — accuracy floor must
-    also be met. Both gates required to flip shadow→active."""
+    """Sample count alone isn't enough — accuracy floor must also be met.
+    Ramesh 2026-05-11 hardened the gate so the comparison runs against
+    ``max(row_floor, 0.60)`` via ``_effective_shadow_accuracy_floor`` —
+    legacy 0.20 rows can no longer authorize live agents.
+    """
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    assert (
-        "if agent.shadow_accuracy_current < agent.shadow_accuracy_floor:" in src
-    )
+    assert "required_accuracy = _effective_shadow_accuracy_floor(agent)" in src
+    assert "if agent.shadow_accuracy_current < required_accuracy:" in src
+    assert "_MIN_PRODUCTION_SHADOW_ACCURACY = Decimal(\"0.600\")" in src
     assert "is below floor" in src
 
 

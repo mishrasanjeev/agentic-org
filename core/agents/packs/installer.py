@@ -52,6 +52,15 @@ _installed: dict[str, set[str]] = {}
 _DEFAULT_LLM_MODEL = "gpt-4o-mini"
 _DEFAULT_FALLBACK_MODEL = "gpt-4o-mini"
 _DEFAULT_TIMEOUT_HOURS = 4
+_MIN_PACK_ACTIVE_ACCURACY = Decimal("0.600")
+
+WORKFLOW_SCHEDULES: dict[str, str] = {
+    "bank_recon_daily": "0 6 * * *",
+    "gstr_filing_monthly": "0 9 1 * *",
+    "tds_quarterly_filing": "0 9 1 */3 *",
+    "month_end_close": "0 9 1 * *",
+    "tax_calendar": "0 8 * * 1",
+}
 
 
 def _slugify(value: str) -> str:
@@ -63,13 +72,7 @@ def _title_case(value: str) -> str:
 
 
 def _normalize_tool_names(tools: list[str]) -> list[str]:
-    normalized: list[str] = []
-    for tool_name in tools:
-        if ":" in tool_name:
-            normalized.append(tool_name.rsplit(":", 1)[-1])
-        else:
-            normalized.append(tool_name)
-    return normalized
+    return list(dict.fromkeys(str(tool_name).strip() for tool_name in tools if str(tool_name).strip()))
 
 
 _CONNECTOR_ALIASES: dict[str, str] = {
@@ -90,7 +93,10 @@ def _tool_connector_map(tools: list[str]) -> dict[str, str]:
             continue
         connector_name, tool_name = tool_ref.split(":", 1)
         connector = _canonical_connector_name(connector_name)
-        if tool_name and tool_name not in mapping:
+        if not tool_name:
+            continue
+        mapping[tool_ref] = connector
+        if tool_name not in mapping:
             mapping[tool_name] = connector
     return mapping
 
@@ -98,6 +104,58 @@ def _tool_connector_map(tools: list[str]) -> dict[str, str]:
 def _connector_ids_for_tools(tools: list[str]) -> list[str]:
     connectors = list(dict.fromkeys(_tool_connector_map(tools).values()))
     return [f"registry-{connector}" for connector in connectors]
+
+
+def _pack_agent_sort_key(agent: Agent) -> tuple[int, int, datetime]:
+    status_rank = 0 if agent.status == "active" else 1
+    sample_rank = -(agent.shadow_sample_count or 0)
+    created_at = agent.created_at or datetime.min.replace(tzinfo=UTC)
+    return (status_rank, sample_rank, created_at)
+
+
+async def _mark_duplicate_pack_agents_deleted(
+    session,
+    tid: UUID,
+    agents: list[Agent],
+) -> Agent | None:
+    """Keep one company pack agent per tenant/company/type and hide the rest."""
+    if not agents:
+        return None
+    ordered = sorted(agents, key=_pack_agent_sort_key)
+    keep = ordered[0]
+    for duplicate in ordered[1:]:
+        if duplicate.status == "deleted":
+            continue
+        old_status = duplicate.status
+        duplicate.status = "deleted"
+        session.add(duplicate)
+        session.add(
+            AgentLifecycleEvent(
+                tenant_id=tid,
+                agent_id=duplicate.id,
+                from_status=old_status,
+                to_status="deleted",
+                triggered_by="pack_installer",
+                reason=(
+                    "Duplicate industry-pack agent suppressed during "
+                    "idempotent pack sync; canonical agent is "
+                    f"{keep.id}"
+                ),
+                shadow_accuracy=duplicate.shadow_accuracy_current,
+                shadow_samples=duplicate.shadow_sample_count,
+            )
+        )
+    return keep
+
+
+def _pack_agent_below_active_floor(agent: Agent) -> bool:
+    if agent.status != "active" or agent.shadow_accuracy_current is None:
+        return False
+    floor = max(
+        Decimal(str(agent.shadow_accuracy_floor or 0)),
+        _MIN_PACK_ACTIVE_ACCURACY,
+    )
+    return Decimal(str(agent.shadow_accuracy_current)) < floor
 
 
 def _resolve_pack_dir(pack_name: str) -> Path | None:
@@ -280,6 +338,7 @@ def _build_workflow_definition(
     if selected_agents:
         review_step = {
             "id": "human_review",
+            "title": "CA partner approval",
             "type": "human_in_loop",
             "assignee_role": "admin",
             "timeout_hours": _DEFAULT_TIMEOUT_HOURS,
@@ -299,16 +358,20 @@ def _build_workflow_definition(
         if scope_name
         else f"{workflow_title} workflow provisioned by {pack_label}."
     )
+    cron = WORKFLOW_SCHEDULES.get(workflow_name)
+    trigger_config = {
+        "source_pack": pack_name,
+        **({"company_id": str(company_id)} if company_id else {}),
+    }
+    if cron:
+        trigger_config["cron"] = cron
     return {
         "name": workflow_display_name,
         "version": "1.0",
         "description": workflow_description,
         "domain": selected_agents[0]["domain"] if selected_agents else "ops",
-        "trigger_type": "manual",
-        "trigger_config": {
-            "source_pack": pack_name,
-            **({"company_id": str(company_id)} if company_id else {}),
-        },
+        "trigger_type": "schedule" if cron else "manual",
+        "trigger_config": trigger_config,
         "timeout_hours": _DEFAULT_TIMEOUT_HOURS,
         "metadata": {
             "source": "industry_pack",
@@ -472,11 +535,14 @@ async def _get_or_create_pack_agents(
                 Agent.tenant_id == tid,
                 Agent.company_id == company_id,
                 Agent.agent_type == agent_type,
-                Agent.employee_name == display_name,
-                Agent.version == "1.0.0",
+                Agent.status != "deleted",
             )
         )
-        agent = existing.scalar_one_or_none()
+        agent = await _mark_duplicate_pack_agents_deleted(
+            session,
+            tid,
+            list(existing.scalars().all()),
+        )
 
         if agent is None:
             agent = Agent(
@@ -591,6 +657,24 @@ async def _get_or_create_pack_agents(
             if isinstance(fixture, dict):
                 cfg["shadow_fixture"] = fixture
             agent.config = cfg
+            if _pack_agent_below_active_floor(agent):
+                old_status = agent.status
+                agent.status = "shadow"
+                session.add(
+                    AgentLifecycleEvent(
+                        tenant_id=tid,
+                        agent_id=agent.id,
+                        from_status=old_status,
+                        to_status="shadow",
+                        triggered_by="pack_installer",
+                        reason=(
+                            "Demoted active industry-pack agent below "
+                            f"production accuracy floor {_MIN_PACK_ACTIVE_ACCURACY}"
+                        ),
+                        shadow_accuracy=agent.shadow_accuracy_current,
+                        shadow_samples=agent.shadow_sample_count,
+                    )
+                )
             session.add(agent)
 
         agent_specs.append(
@@ -658,6 +742,14 @@ async def _get_or_create_pack_workflows(
             )
             session.add(workflow)
             await session.flush()
+        else:
+            workflow.description = str(definition.get("description") or "")
+            workflow.domain = str(definition.get("domain") or "ops")
+            workflow.definition = definition
+            workflow.trigger_type = str(definition.get("trigger_type") or "manual")
+            workflow.trigger_config = definition.get("trigger_config") or {}
+            workflow.is_active = True
+            session.add(workflow)
 
         workflows_created.append(
             {

@@ -61,6 +61,13 @@ export default function ConnectorDetailPage() {
     return /^https?:\/\/.+/.test(url.trim());
   }
 
+  function oauthTokenUrlPlaceholder(): string {
+    if (connector?.name === "zoho_books") {
+      return "https://accounts.zoho.in/oauth/v2/token";
+    }
+    return "https://oauth2.googleapis.com/token";
+  }
+
   useEffect(() => {
     fetchConnector();
   }, [id]);
@@ -358,7 +365,7 @@ export default function ConnectorDetailPage() {
                         </div>
                         <div>
                           <label className="text-sm font-medium">Token URL</label>
-                          <input type="url" value={oauth2TokenUrl} onChange={(e) => setOauth2TokenUrl(e.target.value)} placeholder="https://accounts.google.com/o/oauth2/token" className="border rounded px-3 py-2 text-sm w-full mt-1" />
+                          <input type="url" value={oauth2TokenUrl} onChange={(e) => setOauth2TokenUrl(e.target.value)} placeholder={oauthTokenUrlPlaceholder()} className="border rounded px-3 py-2 text-sm w-full mt-1" />
                         </div>
                         <div>
                           <label className="text-sm font-medium">Redirect URI</label>

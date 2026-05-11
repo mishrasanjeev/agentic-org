@@ -282,9 +282,12 @@ class BaseAgent:
         tools: list[dict[str, Any]] = []
         seen: set[str] = set()
         for tool_ref in self.authorized_tools:
-            # Format: "connector.tool_name" or "tool:connector:perm:resource"
+            # Format: "connector.tool_name", "connector:tool_name", or
+            # "tool:connector:perm:resource"
             if "." in tool_ref:
                 connector_name, tool_name = tool_ref.split(".", 1)
+            elif ":" in tool_ref and not tool_ref.startswith("tool:"):
+                connector_name, tool_name = tool_ref.split(":", 1)
             elif ":" in tool_ref:
                 parts = tool_ref.split(":")
                 connector_name = parts[1] if len(parts) > 1 else ""
