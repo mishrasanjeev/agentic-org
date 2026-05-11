@@ -340,6 +340,82 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
         raise HTTPException(400, "Invalid company_id format") from exc
 
 
+def _has_meaningful_run_text(value: str) -> bool:
+    text = value.strip()
+    return len(text) >= 3 and any(ch.isalpha() for ch in text)
+
+
+def _iter_input_strings(value: Any) -> list[str]:
+    strings: list[str] = []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        for nested in value.values():
+            strings.extend(_iter_input_strings(nested))
+        return strings
+    if isinstance(value, (list, tuple, set)):
+        for nested in value:
+            strings.extend(_iter_input_strings(nested))
+        return strings
+    return strings
+
+
+def _validate_run_inputs(payload: dict) -> dict:
+    raw_inputs = payload.get("inputs", {})
+    if isinstance(raw_inputs, str):
+        inputs = {"task": raw_inputs}
+        payload["inputs"] = inputs
+    elif isinstance(raw_inputs, dict):
+        inputs = raw_inputs
+    else:
+        raise HTTPException(400, "inputs field must be an object")
+
+    if not inputs:
+        raise HTTPException(400, "inputs field is required and cannot be empty")
+
+    if payload.get("action") == "shadow_sample":
+        return inputs
+
+    if not any(_has_meaningful_run_text(s) for s in _iter_input_strings(inputs)):
+        raise HTTPException(400, "Please enter a valid task or prompt.")
+
+    return inputs
+
+
+def _next_agent_version(version: str | None) -> str:
+    raw = (version or "1.0.0").strip()
+    parts = raw.split(".")
+    if len(parts) >= 3 and all(part.isdigit() for part in parts[-3:]):
+        prefix = parts[:-3]
+        major, minor, patch = (int(part) for part in parts[-3:])
+        next_parts = [*prefix, str(major), str(minor), str(patch + 1)]
+        candidate = ".".join(next_parts)
+        return candidate[:20]
+    if raw and raw[-1].isdigit():
+        return f"{raw}.1"[:20]
+    return "1.0.1"
+
+
+def _agent_version_snapshot(
+    agent: Agent,
+    version: str,
+    *,
+    is_verified_good: bool = False,
+) -> AgentVersion:
+    return AgentVersion(
+        tenant_id=agent.tenant_id,
+        agent_id=agent.id,
+        version=version,
+        system_prompt=agent.system_prompt_ref,
+        authorized_tools=agent.authorized_tools,
+        hitl_policy={"condition": agent.hitl_condition},
+        llm_config=agent.llm_config,
+        confidence_floor=agent.confidence_floor,
+        is_verified_good=is_verified_good,
+        deployed_at=datetime.now(UTC),
+    )
+
+
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
@@ -1727,10 +1803,7 @@ async def run_agent(
     """Instantiate agent from registry and execute against user input."""
     if payload is None:
         payload = {}
-    # Validate that inputs are not empty
-    inputs = payload.get("inputs", {})
-    if not inputs:
-        raise HTTPException(400, "inputs field is required and cannot be empty")
+    _validate_run_inputs(payload)
     tid = _uuid.UUID(tenant_id)
 
     # 1. Load agent config from DB
@@ -2481,7 +2554,38 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                 )
 
         old_status = agent.status
+        old_version = agent.version or "1.0.0"
+        new_version = _next_agent_version(old_version)
+        while (
+            await session.execute(
+                select(AgentVersion).where(
+                    AgentVersion.agent_id == agent.id,
+                    AgentVersion.version == new_version,
+                )
+            )
+        ).scalar_one_or_none():
+            new_version = _next_agent_version(new_version)
+
+        existing_shadow_snapshot = (
+            await session.execute(
+                select(AgentVersion).where(
+                    AgentVersion.agent_id == agent.id,
+                    AgentVersion.version == old_version,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing_shadow_snapshot is None:
+            session.add(
+                _agent_version_snapshot(
+                    agent,
+                    old_version,
+                    is_verified_good=True,
+                )
+            )
+
         agent.status = new_status
+        agent.version = new_version
+        session.add(_agent_version_snapshot(agent, new_version, is_verified_good=True))
 
         event = AgentLifecycleEvent(
             tenant_id=tid,
@@ -2495,7 +2599,14 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         )
         session.add(event)
 
-    return {"id": str(agent_id), "promoted": True, "from": old_status, "to": new_status}
+    return {
+        "id": str(agent_id),
+        "promoted": True,
+        "from": old_status,
+        "to": new_status,
+        "from_version": old_version,
+        "to_version": new_version,
+    }
 
 
 # ── POST /agents/{id}/retire ───────────────────────────────────────────────────
@@ -2613,6 +2724,7 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
         versions_result = await session.execute(
             select(AgentVersion)
             .where(
+                AgentVersion.tenant_id == tid,
                 AgentVersion.agent_id == agent_id,
                 AgentVersion.version != agent.version,
             )
@@ -2621,6 +2733,44 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
         )
         prev_version = versions_result.scalar_one_or_none()
         if not prev_version:
+            transition = (
+                await session.execute(
+                    select(AgentLifecycleEvent)
+                    .where(
+                        AgentLifecycleEvent.tenant_id == tid,
+                        AgentLifecycleEvent.agent_id == agent_id,
+                        AgentLifecycleEvent.from_status == "shadow",
+                        AgentLifecycleEvent.to_status == "active",
+                    )
+                    .order_by(AgentLifecycleEvent.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if agent.status == "active" and transition is not None:
+                old_status = agent.status
+                agent.status = "shadow"
+                event = AgentLifecycleEvent(
+                    tenant_id=tid,
+                    agent_id=agent.id,
+                    from_status=old_status,
+                    to_status="shadow",
+                    triggered_by="api",
+                    reason=(
+                        "Rolled back active agent to shadow using lifecycle "
+                        "checkpoint; no prior version snapshot existed"
+                    ),
+                    shadow_accuracy=agent.shadow_accuracy_current,
+                    shadow_samples=agent.shadow_sample_count,
+                )
+                session.add(event)
+                return {
+                    "id": str(agent_id),
+                    "rolled_back": True,
+                    "from_version": agent.version,
+                    "to_version": agent.version,
+                    "from_status": old_status,
+                    "to_status": "shadow",
+                }
             raise HTTPException(409, "No previous version to rollback to")
 
         old_status = agent.status
@@ -2635,14 +2785,20 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
         agent.llm_fallback = prev_version.llm_config.get("fallback_model", agent.llm_fallback)
         agent.confidence_floor = prev_version.confidence_floor
         agent.version = prev_version.version
+        new_status = "shadow" if old_status == "active" else old_status
+        agent.status = new_status
 
         event = AgentLifecycleEvent(
             tenant_id=tid,
             agent_id=agent.id,
             from_status=old_status,
-            to_status=old_status,  # status stays the same
+            to_status=new_status,
             triggered_by="api",
-            reason=f"Rolled back from version {old_version} to {prev_version.version}",
+            reason=(
+                f"Rolled back from version {old_version} to {prev_version.version}"
+            ),
+            shadow_accuracy=agent.shadow_accuracy_current,
+            shadow_samples=agent.shadow_sample_count,
         )
         session.add(event)
 
@@ -2651,6 +2807,8 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
         "rolled_back": True,
         "from_version": old_version,
         "to_version": prev_version.version,
+        "from_status": old_status,
+        "to_status": new_status,
     }
 
 

@@ -4,7 +4,7 @@ import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { agentsApi } from "@/lib/api";
 import type { Agent, HITLItem, AuditEntry } from "@/types";
 import { useProductFacts } from "@/lib/productFacts";
 import {
@@ -53,14 +53,13 @@ export default function Dashboard() {
     const warnings: string[] = [];
     try {
       const [agentsResp, approvalsResp, auditResp] = await Promise.allSettled([
-        api.get("/agents"),
+        agentsApi.listAll(),
         api.get("/approvals"),
         api.get("/audit", { params: { limit: 10 } }),
       ]);
 
       if (agentsResp.status === "fulfilled") {
-        const d = agentsResp.value.data;
-        setAgents(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []);
+        setAgents(agentsResp.value);
       } else {
         warnings.push("Agents data could not be loaded");
       }

@@ -128,10 +128,9 @@ export default function AgentCreate() {
 
   // Load available parent agents when domain changes
   useEffect(() => {
-    agentsApi.list({ domain, status: "active" }).then(({ data }) => {
-      const items = Array.isArray(data) ? data : data.items || [];
-      setAvailableParents(items);
-    }).catch(() => setAvailableParents([]));
+    agentsApi.listAll({ domain, status: "active" })
+      .then((items) => setAvailableParents(items))
+      .catch(() => setAvailableParents([]));
   }, [domain]);
 
   // Load available connectors for the picker (UR-Bug-1).

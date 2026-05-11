@@ -96,8 +96,44 @@ export function extractApiError(e: unknown, fallback = "An error occurred"): str
   return fallback;
 }
 export default api;
+
+async function listAllPages<T>(
+  path: string,
+  params?: Record<string, string>,
+): Promise<T[]> {
+  const items: T[] = [];
+  let page = 1;
+  let pages = 1;
+  const perPage = "100";
+
+  do {
+    const { data } = await api.get(path, {
+      params: { ...(params || {}), page: String(page), per_page: perPage },
+    });
+    const pageItems: T[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.items)
+        ? data.items
+        : [];
+
+    items.push(...pageItems);
+    pages = Number.isFinite(Number(data?.pages)) ? Number(data.pages) : page;
+
+    if (!data?.pages) {
+      const total = Number(data?.total ?? items.length);
+      if (items.length >= total || pageItems.length < Number(perPage)) break;
+      pages = page + 1;
+    }
+
+    page += 1;
+  } while (page <= pages);
+
+  return items;
+}
+
 export const agentsApi = {
   list: (params?: Record<string, string>) => api.get("/agents", { params }),
+  listAll: (params?: Record<string, string>) => listAllPages<any>("/agents", params),
   get: (id: string) => api.get(`/agents/${id}`),
   create: (data: any) => api.post("/agents", data),
   update: (id: string, data: any) => api.patch(`/agents/${id}`, data),

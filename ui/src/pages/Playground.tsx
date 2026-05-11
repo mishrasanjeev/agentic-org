@@ -406,13 +406,26 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
     // session cookie automatically because of credentials: "include".
     // Server returns 401 when there is no session — we treat that as
     // "no custom agents to show" (anonymous Playground visitor).
-    fetch("/api/v1/agents?per_page=50", { credentials: "include" })
-      .then((r) => {
-        if (!r.ok) return { items: [] };
-        return r.json();
-      })
-      .then((data) => {
-        const items = data.items || [];
+    async function fetchAgents() {
+      const all: any[] = [];
+      let page = 1;
+      let pages = 1;
+      do {
+        const r = await fetch(`/api/v1/agents?page=${page}&per_page=100`, {
+          credentials: "include",
+        });
+        if (!r.ok) return [];
+        const data = await r.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        all.push(...items);
+        pages = Number(data?.pages || page);
+        page += 1;
+      } while (page <= pages);
+      return all;
+    }
+
+    fetchAgents()
+      .then((items) => {
         // Filter to non-builtin agents only
         const custom = items.filter((a: any) => !a.is_builtin);
         setAgents(custom);

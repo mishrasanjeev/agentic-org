@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
 import KillSwitch from "@/components/KillSwitch";
-import api, { agentsApi } from "@/lib/api";
+import { agentsApi } from "@/lib/api";
 import type { Agent } from "@/types";
 
 const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice", "comms"];
@@ -33,10 +33,9 @@ export default function Agents() {
       const params: Record<string, string> = {};
       if (domainFilter !== "all") params.domain = domainFilter;
       if (statusFilter !== "all") params.status = statusFilter;
-      const { data } = await api.get("/agents", { params: { ...params, per_page: "500" } });
-      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      const items = await agentsApi.listAll(params);
       setAgents(items);
-      if (data?.total !== undefined) setTotalCount(data.total);
+      setTotalCount(items.length);
     } catch {
       setAgents([]);
     } finally {

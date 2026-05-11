@@ -13,6 +13,26 @@ import {
 
 const ChatPanel = lazy(() => import("@/components/ChatPanel"));
 
+function isMeaningfulRunTask(value: string): boolean {
+  const task = value.trim();
+  return task.length >= 3 && /\p{L}/u.test(task);
+}
+
+function formatRunOutput(output: unknown): string {
+  if (output == null || output === "") return "No output returned.";
+  if (typeof output === "string") return output;
+  if (typeof output === "object") {
+    const record = output as Record<string, unknown>;
+    const preferred = record.answer || record.response || record.summary || record.message;
+    if (preferred) return String(preferred);
+  }
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return String(output);
+  }
+}
+
 export default function AgentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -41,6 +61,7 @@ export default function AgentDetail() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<any | null>(null);
 
   // Run-task dialog (replaces window.prompt, which is blocked in
   // embedded browsers and some desktop shells).
@@ -108,23 +129,30 @@ export default function AgentDetail() {
     setRunTask("");
     setActionError(null);
     setActionNotice(null);
+    setRunResult(null);
     setRunDialogOpen(true);
   }
 
   async function submitRun() {
     const task = runTask.trim();
-    if (!task) return;
+    if (!isMeaningfulRunTask(task)) {
+      setActionError("Please enter a valid task or prompt.");
+      return;
+    }
 
     setRunDialogOpen(false);
     setActionLoading("run");
     setActionError(null);
     setActionNotice(null);
+    setRunResult(null);
     try {
-      await api.post(`/agents/${id}/run`, {
+      const { data } = await api.post(`/agents/${id}/run`, {
         action: "run",
         inputs: { task },
       });
-      setActionNotice("Agent run started successfully.");
+      setRunResult(data);
+      setActionNotice(`Agent run ${data?.status || "completed"}.`);
+      fetchAgent();
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Run failed");
     } finally {
@@ -147,6 +175,9 @@ export default function AgentDetail() {
 
   const confidenceFloor = agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A";
   const shadowAccuracy = agent.shadow_accuracy_current != null ? `${(agent.shadow_accuracy_current * 100).toFixed(1)}%` : "N/A";
+  const runTaskError = runTask.trim() && !isMeaningfulRunTask(runTask)
+    ? "Please enter a valid task or prompt."
+    : "";
 
   const displayName = agent.employee_name || agent.name;
 
@@ -196,12 +227,12 @@ export default function AgentDetail() {
                 {actionLoading === "promote" ? "Promoting..." : "Promote"}
               </Button>
             )}
-            <span title={!agent.version || agent.version === "1.0" || (!agent.shadow_sample_count && agent.status === "active") ? "No previous version available" : undefined}>
+            <span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleRollback}
-                disabled={actionLoading !== null || (!agent.version || agent.version === "1.0" || (!agent.shadow_sample_count && agent.status === "active"))}
+                disabled={actionLoading !== null || agent.status !== "active"}
               >
                 {actionLoading === "rollback" ? "Rolling back..." : "Rollback"}
               </Button>
@@ -253,6 +284,31 @@ export default function AgentDetail() {
           <CardContent><p className="text-xl font-bold">{shadowAccuracy}</p></CardContent></Card>
       </div>
 
+      {runResult && (
+        <Card data-testid="agent-run-result">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-sm font-semibold">Run Result</CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant={runResult.status === "completed" ? "success" : "secondary"}>
+                  {runResult.status || "completed"}
+                </Badge>
+                {runResult.confidence != null && (
+                  <span className="text-xs text-muted-foreground">
+                    Confidence {(Number(runResult.confidence) * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+              {formatRunOutput(runResult.output)}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex gap-4 border-b pb-2">
         {(["overview", "config", "prompt", "shadow", "cost", "scopes", "learning", "voice"] as const).map((tab) => (
           <button key={tab} onClick={() => { setActiveTab(tab); setActionError(null); }} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
@@ -298,6 +354,9 @@ export default function AgentDetail() {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] focus:outline-none focus:ring-1 focus:ring-primary"
               autoFocus
             />
+            {runTaskError && (
+              <p className="mt-2 text-xs text-destructive">{runTaskError}</p>
+            )}
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" size="sm" onClick={() => setRunDialogOpen(false)}>
                 Cancel
@@ -306,7 +365,7 @@ export default function AgentDetail() {
                 variant="default"
                 size="sm"
                 onClick={() => void submitRun()}
-                disabled={!runTask.trim()}
+                disabled={!runTask.trim() || Boolean(runTaskError)}
               >
                 Run
               </Button>
@@ -327,10 +386,9 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
 
   useEffect(() => {
     if (editingParent) {
-      agentsApi.list({ domain: agent.domain, status: "active" }).then(({ data }) => {
-        const items = (Array.isArray(data) ? data : data.items || []).filter((a: Agent) => a.id !== agent.id);
-        setParentCandidates(items);
-      }).catch(() => setParentCandidates([]));
+      agentsApi.listAll({ domain: agent.domain, status: "active" })
+        .then((items) => setParentCandidates(items.filter((a: Agent) => a.id !== agent.id)))
+        .catch(() => setParentCandidates([]));
     }
   }, [editingParent, agent.domain, agent.id]);
 
