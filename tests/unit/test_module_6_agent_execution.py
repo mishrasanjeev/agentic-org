@@ -66,11 +66,44 @@ def test_tc_exec_001_run_requires_non_empty_inputs() -> None:
     run_block = src.split('@router.post("/agents/{agent_id}/run")', 1)[1].split(
         "@router.", 1
     )[0]
-    assert "if not inputs:" in run_block
+    assert "_validate_run_inputs(payload)" in run_block
+    assert "def _validate_run_inputs" in src
     assert (
         'HTTPException(400, "inputs field is required and cannot be empty")'
-        in run_block
+        in src
     )
+
+
+def test_tc_exec_001_run_rejects_non_meaningful_prompts() -> None:
+    """Aishwarya 2026-05-11 TC_003/004/006: a non-empty inputs
+    object is not enough. Empty strings, numeric-only strings, and
+    punctuation-only strings must be stopped before LangGraph runs so
+    shadow metrics are not polluted."""
+    from fastapi import HTTPException
+
+    from api.v1.agents import _has_meaningful_run_text, _validate_run_inputs
+
+    assert not _has_meaningful_run_text("")
+    assert not _has_meaningful_run_text("@@@@@")
+    assert not _has_meaningful_run_text("123456")
+    assert _has_meaningful_run_text("Prepare TDS filing summary")
+
+    for payload in (
+        {"action": "run", "inputs": {"task": ""}},
+        {"action": "run", "inputs": {"task": "@@@@@"}},
+        {"action": "run", "inputs": {"task": "123456"}},
+    ):
+        try:
+            _validate_run_inputs(payload)
+        except HTTPException as exc:
+            assert exc.status_code == 400
+            assert "valid task or prompt" in str(exc.detail)
+        else:  # pragma: no cover - failure branch
+            raise AssertionError(f"payload unexpectedly accepted: {payload}")
+
+    assert _validate_run_inputs(
+        {"action": "run", "inputs": {"task": "Prepare TDS filing summary"}}
+    ) == {"task": "Prepare TDS filing summary"}
 
 
 def test_tc_exec_001_run_returns_404_on_missing_agent() -> None:
@@ -325,3 +358,25 @@ def test_tc_exec_008_budget_endpoint_pinned() -> None:
     for key in ('"monthly_cap_usd"', '"monthly_spent_usd"',
                 '"monthly_pct_used"', '"warnings"'):
         assert key in budget_block, f"budget endpoint missing key {key}"
+
+
+def test_aishwarya_20260511_promote_creates_rollback_checkpoint() -> None:
+    """Shadow-to-active promotion must leave rollback with a prior
+    shadow checkpoint and rollback must return active agents to shadow."""
+    from api.v1.agents import _next_agent_version
+
+    assert _next_agent_version("1.0.0") == "1.0.1"
+    assert _next_agent_version("2.3.9") == "2.3.10"
+
+    src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+    promote_block = src.split("async def promote_agent", 1)[1].split(
+        "async def retire_agent", 1
+    )[0]
+    rollback_block = src.split("async def rollback_agent", 1)[1].split(
+        "async def clone_agent", 1
+    )[0]
+    assert "existing_shadow_snapshot" in promote_block
+    assert "agent.version = new_version" in promote_block
+    assert "session.add(_agent_version_snapshot(agent, new_version" in promote_block
+    assert 'new_status = "shadow" if old_status == "active" else old_status' in rollback_block
+    assert '"to_status": new_status' in rollback_block

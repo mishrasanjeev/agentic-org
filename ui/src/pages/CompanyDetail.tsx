@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import api, { extractApiError } from "@/lib/api";
+import api, { agentsApi, extractApiError } from "@/lib/api";
 import { stateNameFromCode } from "@/lib/indianStates";
 
 interface CompanyInfo {
@@ -305,7 +305,7 @@ export default function CompanyDetail() {
       api.get(`/companies/${id}/gstn-uploads`),
       api.get(`/companies/${id}/roles`),
       api.get(`/companies/${id}/credentials`),
-      api.get("/agents", { params: { page: 1, per_page: 200, domain: "finance", company_id: id } }),
+      agentsApi.listAll({ domain: "finance", company_id: id }),
       api.get("/workflows", { params: { page: 1, per_page: 200, company_id: id } }),
       api.get("/audit", { params: { page: 1, per_page: 200, company_id: id } }),
     ]);
@@ -378,7 +378,7 @@ export default function CompanyDetail() {
     );
 
     if (agentsResult.status === "fulfilled") {
-      const agentItems = itemsFromResponse<Record<string, unknown>>(agentsResult.value.data);
+      const agentItems = agentsResult.value as Record<string, unknown>[];
       setAgents(
         agentItems
           .map((record) => ({

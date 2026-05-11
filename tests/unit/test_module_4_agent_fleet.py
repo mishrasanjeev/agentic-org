@@ -283,22 +283,36 @@ def test_tc_agt_010_rollback_picks_previous_not_current_version() -> None:
 
 
 def test_tc_agt_010_rollback_409_when_no_previous_version() -> None:
-    """If there's no prior version (first-ever release), 409 with
-    the documented message — NOT a 500 / silent no-op."""
+    """If there's no prior version (first-ever release) AND no
+    shadow→active lifecycle checkpoint, the rollback returns 409
+    with the documented message — NOT a 500 / silent no-op.
+
+    Aishwarya 2026-05-11 TC_AGENT_007 expanded the no-previous-version
+    branch with a lifecycle-checkpoint fallback for active agents, so
+    the 409 raise now appears further down inside the rollback body.
+    """
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
     assert "No previous version to rollback to" in src
-    assert "HTTPException(409" in src.split("rollback_agent", 1)[1][:1500]
+    rollback_block = src.split("async def rollback_agent", 1)[1].split(
+        "async def clone_agent", 1
+    )[0]
+    assert "HTTPException(409" in rollback_block
 
 
 def test_tc_agt_010_rollback_emits_lifecycle_event() -> None:
-    """The rollback emits a lifecycle event so the activity feed
-    shows "rolled back from version X to Y". Status is preserved
-    (to_status = old_status) — rolling back code shouldn't
-    unpause a paused agent."""
+    """The rollback emits a lifecycle event so the activity feed shows
+    "rolled back from version X to Y". Aishwarya 2026-05-11 TC_AGENT_007
+    changed the semantics: an active agent now demotes to shadow on
+    rollback (giving the user time to revalidate before re-promoting),
+    while paused/other statuses are preserved.
+    """
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    rollback_block = src.split("async def rollback_agent", 1)[1][:2500]
+    rollback_block = src.split("async def rollback_agent", 1)[1].split(
+        "async def clone_agent", 1
+    )[0]
     assert "AgentLifecycleEvent(" in rollback_block
-    assert "to_status=old_status" in rollback_block
+    assert "to_status=new_status" in rollback_block
+    assert 'new_status = "shadow" if old_status == "active" else old_status' in rollback_block
     assert "Rolled back from version" in rollback_block
 
 

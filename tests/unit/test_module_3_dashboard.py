@@ -44,9 +44,33 @@ def test_tc_dash_001_dashboard_fetches_three_apis() -> None:
     src = (REPO / "ui" / "src" / "pages" / "Dashboard.tsx").read_text(
         encoding="utf-8"
     )
-    assert 'api.get("/agents")' in src
+    assert "agentsApi.listAll()" in src
     assert 'api.get("/approvals")' in src
     assert 'api.get("/audit"' in src
+
+
+def test_tc_dash_001_dashboard_fetches_all_agent_pages() -> None:
+    """Aishwarya 2026-05-11 TC_001: the dashboard must not stop at
+    the /agents default page of 20. It uses the shared listAll helper,
+    which walks every page at the backend cap of 100."""
+    api_src = (REPO / "ui" / "src" / "lib" / "api.ts").read_text(
+        encoding="utf-8"
+    )
+    dashboard_src = (REPO / "ui" / "src" / "pages" / "Dashboard.tsx").read_text(
+        encoding="utf-8"
+    )
+    agents_src = (REPO / "ui" / "src" / "pages" / "Agents.tsx").read_text(
+        encoding="utf-8"
+    )
+    playground_src = (REPO / "ui" / "src" / "pages" / "Playground.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "async function listAllPages" in api_src
+    assert 'per_page: perPage' in api_src
+    assert "agentsApi.listAll()" in dashboard_src
+    assert "await agentsApi.listAll(params)" in agents_src
+    assert "per_page=100" in playground_src
+    assert "per_page=50" not in playground_src
 
 
 def test_tc_dash_001_uses_promise_allsettled_not_all() -> None:

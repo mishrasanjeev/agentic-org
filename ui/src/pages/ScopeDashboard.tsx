@@ -3,7 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { agentsApi } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -66,7 +66,7 @@ export default function ScopeDashboard() {
     try {
       // Attempt to load real data from both endpoints
       const [agentsRes, enforceRes] = await Promise.allSettled([
-        api.get("/agents"),
+        agentsApi.listAll(),
         api.get("/audit/enforce"),
       ]);
 
@@ -90,9 +90,7 @@ export default function ScopeDashboard() {
       }
       setErrors(fetchErrors);
 
-      const agents = agentsRes.status === "fulfilled"
-        ? (Array.isArray(agentsRes.value.data) ? agentsRes.value.data : agentsRes.value.data?.items || [])
-        : [];
+      const agents = agentsRes.status === "fulfilled" ? agentsRes.value : [];
       const enforceData = enforceRes.status === "fulfilled"
         ? (Array.isArray(enforceRes.value.data) ? enforceRes.value.data : enforceRes.value.data?.items || [])
         : [];
