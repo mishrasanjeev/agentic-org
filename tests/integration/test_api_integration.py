@@ -640,7 +640,14 @@ class TestFullPipeline:
 
         health_resp = await client.get(f"/api/v1/connectors/{conn_id}/health", headers=auth_headers)
         assert health_resp.status_code == 200
-        assert health_resp.json()["status"] in ("healthy", "active")
+        # Ramesh 2026-05-11 #9: /health now reflects the live probe result,
+        # not the cached DB status. In the integration env the test connector
+        # has no real Tally backend, so the probe legitimately reports
+        # "error" — the envelope is the contract, not the verdict.
+        body = health_resp.json()
+        assert "tested" in body
+        assert "healthy" in body
+        assert body["status"] in ("healthy", "active", "error", "degraded")
 
     async def test_approval_flow_after_workflow_trigger(
         self, client: AsyncClient, auth_headers: dict
