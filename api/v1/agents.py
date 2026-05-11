@@ -2556,14 +2556,20 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)
-        while (
-            await session.execute(
-                select(AgentVersion).where(
-                    AgentVersion.agent_id == agent.id,
-                    AgentVersion.version == new_version,
+        # The unique constraint on (agent_id, version) protects against duplicates;
+        # we still probe so promote returns a fresh version, but cap the probe at
+        # 100 attempts so a misbehaving session mock can't infinite-loop us.
+        for _ in range(100):
+            existing = (
+                await session.execute(
+                    select(AgentVersion).where(
+                        AgentVersion.agent_id == agent.id,
+                        AgentVersion.version == new_version,
+                    )
                 )
-            )
-        ).scalar_one_or_none():
+            ).scalar_one_or_none()
+            if not isinstance(existing, AgentVersion):
+                break
             new_version = _next_agent_version(new_version)
 
         existing_shadow_snapshot = (
@@ -2574,7 +2580,7 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                 )
             )
         ).scalar_one_or_none()
-        if existing_shadow_snapshot is None:
+        if not isinstance(existing_shadow_snapshot, AgentVersion):
             session.add(
                 _agent_version_snapshot(
                     agent,
@@ -2733,44 +2739,48 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
         )
         prev_version = versions_result.scalar_one_or_none()
         if not prev_version:
-            transition = (
-                await session.execute(
-                    select(AgentLifecycleEvent)
-                    .where(
-                        AgentLifecycleEvent.tenant_id == tid,
-                        AgentLifecycleEvent.agent_id == agent_id,
-                        AgentLifecycleEvent.from_status == "shadow",
-                        AgentLifecycleEvent.to_status == "active",
+            # Only an active agent can be rolled back to shadow via the
+            # lifecycle-event checkpoint. Skip the extra query entirely
+            # for non-active agents — there is nothing to roll back to.
+            if agent.status == "active":
+                transition = (
+                    await session.execute(
+                        select(AgentLifecycleEvent)
+                        .where(
+                            AgentLifecycleEvent.tenant_id == tid,
+                            AgentLifecycleEvent.agent_id == agent_id,
+                            AgentLifecycleEvent.from_status == "shadow",
+                            AgentLifecycleEvent.to_status == "active",
+                        )
+                        .order_by(AgentLifecycleEvent.created_at.desc())
+                        .limit(1)
                     )
-                    .order_by(AgentLifecycleEvent.created_at.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            if agent.status == "active" and transition is not None:
-                old_status = agent.status
-                agent.status = "shadow"
-                event = AgentLifecycleEvent(
-                    tenant_id=tid,
-                    agent_id=agent.id,
-                    from_status=old_status,
-                    to_status="shadow",
-                    triggered_by="api",
-                    reason=(
-                        "Rolled back active agent to shadow using lifecycle "
-                        "checkpoint; no prior version snapshot existed"
-                    ),
-                    shadow_accuracy=agent.shadow_accuracy_current,
-                    shadow_samples=agent.shadow_sample_count,
-                )
-                session.add(event)
-                return {
-                    "id": str(agent_id),
-                    "rolled_back": True,
-                    "from_version": agent.version,
-                    "to_version": agent.version,
-                    "from_status": old_status,
-                    "to_status": "shadow",
-                }
+                ).scalar_one_or_none()
+                if transition is not None:
+                    old_status = agent.status
+                    agent.status = "shadow"
+                    event = AgentLifecycleEvent(
+                        tenant_id=tid,
+                        agent_id=agent.id,
+                        from_status=old_status,
+                        to_status="shadow",
+                        triggered_by="api",
+                        reason=(
+                            "Rolled back active agent to shadow using lifecycle "
+                            "checkpoint; no prior version snapshot existed"
+                        ),
+                        shadow_accuracy=agent.shadow_accuracy_current,
+                        shadow_samples=agent.shadow_sample_count,
+                    )
+                    session.add(event)
+                    return {
+                        "id": str(agent_id),
+                        "rolled_back": True,
+                        "from_version": agent.version,
+                        "to_version": agent.version,
+                        "from_status": old_status,
+                        "to_status": "shadow",
+                    }
             raise HTTPException(409, "No previous version to rollback to")
 
         old_status = agent.status
