@@ -61,8 +61,11 @@ def test_ca_pack_has_connector_policy_for_every_authorized_tool() -> None:
     for agent in CA_PACK["agents"]:
         tool_map = _tool_connector_map(agent["tools"])
         connector_ids = _connector_ids_for_tools(agent["tools"])
-        normalized_tools = [tool.rsplit(":", 1)[-1] for tool in agent["tools"]]
-        assert set(tool_map) == set(normalized_tools)
+        normalized_tools = list(agent["tools"])
+        assert set(normalized_tools).issubset(set(tool_map))
+        for tool_ref in normalized_tools:
+            connector, _tool = tool_ref.split(":", 1)
+            assert tool_map[tool_ref] == connector
         assert connector_ids
         assert all(cid.startswith("registry-") for cid in connector_ids)
 
@@ -138,7 +141,7 @@ def test_agent_scopes_tab_has_no_fabricated_security_state() -> None:
     assert "salesforce" not in block
     assert "hubspot" not in block
     assert "No enforcement decisions recorded" in block
-    assert "tool:${connector || \"agenticorg\"}:execute:${tool}" in src
+    assert "tool:${actualConnector || \"agenticorg\"}:execute:${actualTool}" in src
 
 
 def test_each_ca_pack_agent_binds_callable_tools_in_zoho_only_env() -> None:
@@ -780,7 +783,7 @@ def test_api_run_agent_gates_fixture_on_authorized_tools() -> None:
     ).read_text(encoding="utf-8")
     # The gate variable + its in-authorized check
     assert "fixture_tool_authorized" in src
-    assert "in (authorized_tools or [])" in src
+    assert "_is_tool_authorized(authorized_tools or [], fixture_expected)" in src
     # Drift-warning log so operators see the fall-through
     assert "agent_run_shadow_fixture_tool_not_authorized" in src
     # When tool not authorized, fall through to generic hint

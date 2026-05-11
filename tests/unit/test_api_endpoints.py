@@ -580,6 +580,13 @@ class TestConnectorsEndpoints:
 
     @pytest.mark.asyncio
     async def test_connector_health_happy(self, tenant_id, mock_session):
+        """Ramesh 2026-05-11 #9: connector health now runs the live probe path,
+        so this fixture (which doesn't supply credentials or a connector class
+        capable of network I/O) must report ``healthy=False`` with the new
+        ``tested``/``health``/``error`` envelope. The old assertion that
+        ``healthy`` mirrored the stored ``status`` column was the false-healthy
+        bug Ramesh reopened.
+        """
         from api.v1.connectors import connector_health
 
         conn = _make_connector(status="active")
@@ -591,8 +598,10 @@ class TestConnectorsEndpoints:
         finally:
             ctx.stop()
 
-        assert resp["healthy"] is True
-        assert resp["status"] == "active"
+        assert resp["healthy"] is False
+        assert "tested" in resp
+        assert "health" in resp
+        assert "error" in resp
 
     @pytest.mark.asyncio
     async def test_connector_health_not_found(self, tenant_id, mock_session):

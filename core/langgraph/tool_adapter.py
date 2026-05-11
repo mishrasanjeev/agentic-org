@@ -49,6 +49,50 @@ _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
 )
 
 
+def _canonical_connector_name(connector_name: str) -> str:
+    return connector_name.removeprefix("registry-").strip().lower()
+
+
+def _split_connector_tool_ref(tool_ref: str) -> tuple[str | None, str]:
+    """Return (connector, tool) for connector-qualified tool references.
+
+    CA pack tools intentionally use ``connector:tool`` because bare tool
+    names like ``get_trial_balance`` exist on both Tally and Zoho Books.
+    ``tool:connector:execute:resource`` is a Grantex scope, not an
+    authorized-tool reference, so it is left untouched.
+    """
+    raw = str(tool_ref or "").strip()
+    if raw.startswith("tool:"):
+        return None, raw
+    if ":" not in raw:
+        return None, raw
+    connector_name, tool_name = raw.split(":", 1)
+    connector_name = _canonical_connector_name(connector_name)
+    tool_name = tool_name.strip()
+    if not connector_name or not tool_name or ":" in tool_name:
+        return None, raw
+    return connector_name, tool_name
+
+
+def _llm_safe_tool_name(connector_name: str | None, tool_name: str) -> str:
+    """Map connector-qualified names to provider-safe function names."""
+    if not connector_name:
+        return tool_name
+    return f"{connector_name}__{tool_name}"[:64]
+
+
+def _actual_tool_name(tool_ref: str) -> str:
+    connector_name, tool_name = _split_connector_tool_ref(tool_ref)
+    if connector_name:
+        return tool_name
+    raw = str(tool_ref or "").strip()
+    if "__" in raw:
+        maybe_connector, maybe_tool = raw.split("__", 1)
+        if ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
+            return maybe_tool
+    return raw
+
+
 def _flatten_structured_tool_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Unwrap LangChain's ``**kwargs`` schema artifact for var-kw tools.
 
@@ -207,8 +251,15 @@ def build_tools_for_agent(
     tools: list[StructuredTool] = []
     seen: set[str] = set()
 
-    # Build a reverse index: tool_name -> (connector_name, handler_doc)
-    tool_index = _build_tool_index(connector_config, connector_names)
+    # Build a reverse index. Connector-qualified aliases are included so
+    # CA pack tools can keep ``zoho_books:get_trial_balance`` and
+    # ``tally:get_trial_balance`` separate instead of collapsing into a
+    # bare-name collision.
+    tool_index = _build_tool_index(
+        connector_config,
+        connector_names,
+        include_connector_aliases=True,
+    )
 
     for tool_ref in authorized_tools:
         if tool_ref in seen:
@@ -220,6 +271,13 @@ def build_tools_for_agent(
             continue
 
         connector_name, description = match
+        connector_hint, parsed_tool_name = _split_connector_tool_ref(tool_ref)
+        actual_tool_name = parsed_tool_name if connector_hint else _actual_tool_name(tool_ref)
+        public_tool_name = (
+            _llm_safe_tool_name(connector_name, actual_tool_name)
+            if connector_hint
+            else actual_tool_name
+        )
 
         # Create an async wrapper that calls the connector
         def _make_tool_fn(cn: str, tn: str, desc: str):
@@ -231,9 +289,10 @@ def build_tools_for_agent(
             return _tool_fn
 
         tool = StructuredTool.from_function(
-            coroutine=_make_tool_fn(connector_name, tool_ref, description),
-            name=tool_ref,
-            description=description or f"Execute {tool_ref}",
+            coroutine=_make_tool_fn(connector_name, actual_tool_name, description),
+            name=public_tool_name,
+            description=description
+            or f"Execute {actual_tool_name} on {connector_name}",
         )
         tools.append(tool)
 
@@ -243,12 +302,17 @@ def build_tools_for_agent(
 def _build_tool_index(
     connector_config: dict[str, Any] | None = None,
     connector_names: list[str] | None = None,
+    *,
+    include_connector_aliases: bool = False,
 ) -> dict[str, tuple[str, str]]:
     """Build a reverse index: tool_name -> (connector_name, description).
 
     Scans all registered native connectors and their tool registries,
     then appends Composio tools (with ``composio:`` prefix) from the
-    ConnectorRegistry.  Native tools always take priority.
+    ConnectorRegistry.  Native bare tool names keep their historical
+    first-wins behavior; when ``include_connector_aliases`` is true,
+    connector-qualified aliases are also indexed so duplicate bare
+    tools can be addressed unambiguously.
 
     UR-Bug-2 (Uday/Ramesh 2026-04-21): when ``connector_names`` is
     provided, the index is restricted to tools registered by those
@@ -301,9 +365,15 @@ def _build_tool_index(
             continue  # Skip connectors that fail to register tools
 
         for tool_name, handler in instance._tool_registry.items():
+            doc = (handler.__doc__ or "").strip().split("\n")[0]
             if tool_name not in index:
-                doc = (handler.__doc__ or "").strip().split("\n")[0]
                 index[tool_name] = (connector_name, doc)
+            if include_connector_aliases:
+                index[f"{connector_name}:{tool_name}"] = (connector_name, doc)
+                index[_llm_safe_tool_name(connector_name, tool_name)] = (
+                    connector_name,
+                    doc,
+                )
 
     # 2. Composio tools (already filtered for native priority in registry)
     if allowed is None or "composio" in allowed:

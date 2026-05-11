@@ -1580,7 +1580,18 @@ function normalizeConnectorId(value: unknown): string {
   return String(value || "").trim().replace(/^registry-/, "");
 }
 
+function splitConnectorTool(tool: string): { connector: string; tool: string } | null {
+  if (!tool.includes(":") || tool.startsWith("tool:")) return null;
+  const [connector, toolName] = tool.split(":", 2);
+  const normalized = normalizeConnectorId(connector);
+  if (!normalized || !toolName) return null;
+  return { connector: normalized, tool: toolName };
+}
+
 function connectorForTool(tool: string, agent: Agent): string {
+  const qualified = splitConnectorTool(tool);
+  if (qualified) return qualified.connector;
+
   const cfg = agent.config || {};
   const configured = normalizeConnectorId(cfg.tool_connectors?.[tool]);
   if (configured) return configured;
@@ -1594,7 +1605,10 @@ function connectorForTool(tool: string, agent: Agent): string {
 }
 
 function buildScopeString(tool: string, connector: string): string {
-  return `tool:${connector || "agenticorg"}:execute:${tool}`;
+  const qualified = splitConnectorTool(tool);
+  const actualTool = qualified?.tool || tool;
+  const actualConnector = qualified?.connector || connector;
+  return `tool:${actualConnector || "agenticorg"}:execute:${actualTool}`;
 }
 
 function grantexConfigured(agent: Agent): boolean {

@@ -265,13 +265,13 @@ def _tools_to_scopes(tools: list[str]) -> list[str]:
 
     "fetch_bank_statement" -> "tool:banking_aa:execute:fetch_bank_statement"
     """
-    from core.langgraph.tool_adapter import _build_tool_index
+    from core.langgraph.tool_adapter import _actual_tool_name, _build_tool_index
 
-    index = _build_tool_index()
+    index = _build_tool_index(include_connector_aliases=True)
     scopes: list[str] = []
     for tool_name in tools:
         match = index.get(tool_name)
         if match:
             connector_name = match[0]
-            scopes.append(f"tool:{connector_name}:execute:{tool_name}")
+            scopes.append(f"tool:{connector_name}:execute:{_actual_tool_name(tool_name)}")
     return scopes

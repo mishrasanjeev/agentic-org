@@ -15,6 +15,20 @@ logger = structlog.get_logger()
 _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
 _ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
 _ZOHO_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
+_ZOHO_IN_TOKEN_URL = "https://accounts.zoho.in/oauth/v2/token"
+
+
+def _is_india_config(config: dict[str, Any]) -> bool:
+    region = str(config.get("region") or "").strip().lower()
+    if region in {"in", "india", "in_dc"}:
+        return True
+    base_url = str(config.get("base_url") or "").strip().lower()
+    token_url = str(config.get("token_url") or "").strip().lower()
+    return (
+        "zohoapis.in" in base_url
+        or "books.zoho.in" in base_url
+        or "accounts.zoho.in" in token_url
+    )
 
 
 class ZohoBooksConnector(BaseConnector):
@@ -23,13 +37,35 @@ class ZohoBooksConnector(BaseConnector):
     auth_type = "oauth2"
     base_url = _ZOHO_GLOBAL_BASE
     rate_limit_rpm = 100
+    tools = [
+        "create_invoice",
+        "list_invoices",
+        "list_overdue_invoices",
+        "record_expense",
+        "get_balance_sheet",
+        "get_profit_loss",
+        "get_ledger_balance",
+        "get_trial_balance",
+        "generate_gst_report",
+        "calculate_tds",
+        "list_chartofaccounts",
+        "fetch_bank_statement",
+        "check_account_balance",
+        "get_transaction_list",
+        "reconcile_bank",
+        "reconcile_transaction",
+        "get_organization",
+    ]
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        # India-specific base URL if configured
-        region = self.config.get("region", "global")
-        if region == "in" and "base_url" not in self.config:
+        if _is_india_config(self.config):
             self.base_url = _ZOHO_IN_BASE
+            self.config["region"] = "in"
+            self.config["base_url"] = _ZOHO_IN_BASE
+            self.config.setdefault("token_url", _ZOHO_IN_TOKEN_URL)
+        else:
+            self.base_url = self.config.get("base_url") or _ZOHO_GLOBAL_BASE
         self._org_id: str = self.config.get("organization_id", "")
 
     def _register_tools(self):
@@ -500,24 +536,27 @@ class ZohoBooksConnector(BaseConnector):
         return await self.reconcile_transaction(**params)
 
     async def reconcile_transaction(self, **params) -> dict[str, Any]:
-        """Reconcile an uncategorized bank transaction.
+        """Match a bank transaction to an existing book transaction.
 
-        Required: account_id, amount, date.
-        Optional: reference_number.
+        Required: transaction_id, match_id. Optional: match_type.
         """
-        for required in ("account_id", "amount", "date"):
-            if not params.get(required):
-                return {"error": f"{required} is required"}
+        transaction_id = params.get("transaction_id")
+        match_id = params.get("match_id") or params.get("matched_transaction_id")
+        if not transaction_id:
+            return {"error": "transaction_id is required"}
+        if not match_id:
+            return {"error": "match_id is required"}
 
         body: dict[str, Any] = {
-            "account_id": params["account_id"],
-            "amount": params["amount"],
-            "date": params["date"],
+            "transactions_to_be_matched": [
+                {
+                    "transaction_id": match_id,
+                    "transaction_type": params.get("match_type", "expense"),
+                }
+            ],
         }
-        if params.get("reference_number"):
-            body["reference_number"] = params["reference_number"]
 
-        data = await self._post("/banktransactions/uncategorized", data=body)
+        data = await self._put(f"/banktransactions/{transaction_id}/match", data=body)
         return self._unwrap(data, "bank_transaction")
 
     # ── Internal: override _get/_post to inject organization_id ────────
@@ -536,6 +575,18 @@ class ZohoBooksConnector(BaseConnector):
         if not self._client:
             raise RuntimeError("Connector not connected")
         resp = await self._client.post(
+            path,
+            json=data,
+            params={"organization_id": self._org_id},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _put(self, path: str, data: dict | None = None) -> dict[str, Any]:
+        """PUT with organization_id injected as query param."""
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        resp = await self._client.put(
             path,
             json=data,
             params={"organization_id": self._org_id},
