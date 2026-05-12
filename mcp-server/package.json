@@ -40,6 +40,8 @@
     "typescript": "^5.7.0"
   },
   "overrides": {
-    "hono": ">=4.12.14"
+    "hono": ">=4.12.18",
+    "fast-uri": ">=3.1.2",
+    "ip-address": ">=10.1.1"
   }
 }
