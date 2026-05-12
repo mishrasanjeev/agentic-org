@@ -1,7 +1,7 @@
 # SEC-010: production base images pinned by digest. Refresh via
 # scripts/refresh_image_digests.sh after a Renovate/Dependabot bump.
 # node:25-slim @ 2026-05-01
-FROM node:25-slim@sha256:e49fd70491eb042270f974167c874d6245287263ffc16422fcf93b3c150409d8 AS builder
+FROM node:26-slim@sha256:424cafd2a035ed2b2d74acc3142b68b426fb62a47742c80a75e7117db02d6b30 AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
 RUN npm install --legacy-peer-deps
