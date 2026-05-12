@@ -68,7 +68,7 @@ langsmith==0.8.2
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0
-google-cloud-secret-manager==2.27.0
+google-cloud-secret-manager==2.28.0
 google-api-python-client==2.196.0
 google-auth==2.50.0
 
