@@ -33,7 +33,9 @@ no global runtime change, no impact on any other agent.
 
 from __future__ import annotations
 
+import math
 import re
+from datetime import date
 from typing import Any
 
 # ----------------------------------------------------------------------
@@ -61,7 +63,24 @@ _TDS_SECTION_RE = re.compile(
 
 # Action verbs that signal computation/filing intent.
 _TDS_ACTION_RE = re.compile(
-    r"\b(calculate|compute|compute\s+tds|file|filing|submit|prepare|deduct|withhold)\b",
+    r"\b(calculate|compute|compute\s+tds|file|filing|submit|prepare|generate|deduct|withhold|pay)\b",
+    re.IGNORECASE,
+)
+
+HIGH_VALUE_TDS_TRANSACTION_THRESHOLD = 500_000.0
+
+_CHALLAN_281_RE = re.compile(
+    r"\b(?:challan\s*281|281\s+challan|tds\s+payment)\b",
+    re.IGNORECASE,
+)
+
+_LATE_FILING_RE = re.compile(
+    r"\b(?:late\s+fil(?:e|ing)|delayed\s+fil(?:e|ing)|234E|201\s*\(?1A\)?|penalt(?:y|ies)|interest)\b",
+    re.IGNORECASE,
+)
+
+_DELAY_DAYS_RE = re.compile(
+    r"\b(?:delayed\s+by|delay\s+of|late\s+by)\s+(?P<days>\d{1,4})\s+days?\b",
     re.IGNORECASE,
 )
 
@@ -154,6 +173,26 @@ def _extract_amount(query: str) -> float | None:
         return None
 
 
+def _extract_tds_amount(query: str) -> float | None:
+    for pattern in (
+        re.compile(
+            r"\bTDS\s+(?:amount|payable|due)\s+(?:of\s+)?(?:INR|Rs\.?|₹)?\s*(?P<num>\d[\d,]*(?:\.\d+)?)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:INR|Rs\.?|₹)\s*(?P<num>\d[\d,]*(?:\.\d+)?)\s+(?:TDS|tax\s+deducted)\b",
+            re.IGNORECASE,
+        ),
+    ):
+        match = pattern.search(query)
+        if match:
+            try:
+                return float(match.group("num").replace(",", ""))
+            except ValueError:
+                return None
+    return None
+
+
 def _extract_section(query: str) -> str | None:
     match = _TDS_SECTION_RE.search(query)
     if not match:
@@ -232,6 +271,174 @@ def _filing_requested(query: str) -> str | None:
     return (match.group(1) or match.group(2) or "").upper() or None
 
 
+def _challan_281_requested(query: str) -> bool:
+    return bool(_CHALLAN_281_RE.search(query))
+
+
+def _late_filing_requested(query: str) -> bool:
+    return bool(_LATE_FILING_RE.search(query) and _FILING_FORM_RE.search(query))
+
+
+def _extract_delay_days(query: str) -> int | None:
+    match = _DELAY_DAYS_RE.search(query)
+    if not match:
+        return None
+    try:
+        return int(match.group("days"))
+    except ValueError:
+        return None
+
+
+def _tds_return_due_date(period: str | None, form_name: str | None) -> date | None:
+    if not period or not form_name:
+        return None
+    # TDS quarterly returns: Q1 Jul 31, Q2 Oct 31, Q3 Jan 31, Q4 May 31.
+    # For an FY token "2025-26", the FY starts in 2025 and ends in 2026.
+    match = re.search(r"\bQ(?P<quarter>[1-4])\b.*?\bFY\s*(?P<start>\d{4})(?:-(?P<end>\d{2,4}))?", period, re.IGNORECASE)
+    if not match:
+        return None
+    quarter = int(match.group("quarter"))
+    start_year = int(match.group("start"))
+    end_token = match.group("end")
+    if end_token:
+        end_year = int(end_token)
+        if end_year < 100:
+            end_year = (start_year // 100) * 100 + end_year
+    else:
+        end_year = start_year + 1
+    if quarter == 1:
+        return date(start_year, 7, 31)
+    if quarter == 2:
+        return date(start_year, 10, 31)
+    if quarter == 3:
+        return date(end_year, 1, 31)
+    return date(end_year, 5, 31)
+
+
+def _build_challan_281_response(
+    *,
+    amount: float,
+    period: str | None,
+    section: str | None,
+    pan: str | None,
+    deductee_type: str | None,
+) -> dict[str, Any]:
+    missing: list[str] = []
+    if not section:
+        missing.append("TDS section for the payment, e.g. 194C / 194J")
+    if not pan:
+        missing.append("PAN of the deductee")
+    if not deductee_type:
+        missing.append("deductee type (individual / HUF / company / firm)")
+    missing.extend(
+        [
+            "TAN of the deductor",
+            "assessment year and minor head (200 or 400)",
+            "bank / BSR details after the Challan 281 payment is made",
+            "explicit partner-review approval before payment submission",
+        ]
+    )
+
+    parts = [
+        "Challan 281 preparation started from the values already present in the prompt:",
+        f"  • TDS amount to pay: INR {amount:,.2f}",
+    ]
+    if period:
+        parts.append(f"  • Period: {period}")
+    if section:
+        parts.append(f"  • Section: {section}")
+    parts.append(
+        "\nNo amount clarification is needed. The actual Challan 281 payment is blocked "
+        "fail-closed until these genuinely missing fields/approvals are supplied:"
+    )
+    parts.extend(f"  ✗ {item}" for item in missing)
+    parts.append("\nNo payment call was made.")
+
+    return {
+        "answer": "\n".join(parts),
+        "tool_calls": [],
+        "confidence": 0.82,
+        "tools_used": False,
+        "hitl_trigger": "challan_281_payment_requires_partner_review",
+        "hitl_context": {
+            "workflow": "challan_281",
+            "transaction_amount": amount,
+            "tds_amount": amount,
+            "period": period,
+            "section": section,
+            "missing_fields": missing,
+        },
+    }
+
+
+def _build_late_filing_response(
+    *,
+    query: str,
+    period: str | None,
+    form_name: str | None,
+) -> dict[str, Any]:
+    tds_amount = _extract_tds_amount(query)
+    delay_days = _extract_delay_days(query)
+    due_date = _tds_return_due_date(period, form_name)
+
+    missing: list[str] = []
+    if tds_amount is None:
+        missing.append("TDS amount payable for the quarter")
+    if delay_days is None:
+        missing.append("actual delay in days or the actual filing/deposit date")
+
+    parts = [
+        f"Section 234E / 201(1A) computation route selected for Form {form_name or '26Q/24Q'}.",
+    ]
+    if period:
+        parts.append(f"  • Period extracted: {period}")
+    if due_date:
+        parts.append(f"  • Statutory filing due date: {due_date.isoformat()}")
+
+    if tds_amount is not None and delay_days is not None:
+        late_fee = min(tds_amount, 200.0 * delay_days)
+        months_for_interest = max(1, math.ceil(delay_days / 30))
+        late_deposit_interest = round(tds_amount * 0.015 * months_for_interest, 2)
+        parts.extend(
+            [
+                f"  • Section 234E late fee: INR {late_fee:,.2f} "
+                f"(INR 200/day × {delay_days} days, capped at TDS amount)",
+                f"  • Section 201(1A) late-deposit interest estimate: INR {late_deposit_interest:,.2f} "
+                f"(1.5% per month or part month × {months_for_interest} month(s))",
+                "  • Final 201(1A) split still needs deduction date vs deposit date "
+                "if late deduction and late deposit both apply.",
+            ]
+        )
+    else:
+        parts.extend(
+            [
+                "The statutory rules are configured and available:",
+                "  • Section 234E: INR 200 per day, capped at the TDS amount payable.",
+                "  • Section 201(1A): 1% per month or part month for late deduction "
+                "and 1.5% per month or part month for late deposit.",
+                "Exact rupee computation needs only the missing inputs below:",
+            ]
+        )
+        parts.extend(f"  ✗ {item}" for item in missing)
+
+    return {
+        "answer": "\n".join(parts),
+        "tool_calls": [],
+        "confidence": 0.80 if missing else 0.90,
+        "tools_used": False,
+        "hitl_trigger": "tds_late_fee_or_interest_requires_partner_review",
+        "hitl_context": {
+            "workflow": "tds_late_filing",
+            "period": period,
+            "form": form_name,
+            "due_date": due_date.isoformat() if due_date else None,
+            "tds_amount": tds_amount,
+            "delay_days": delay_days,
+            "missing_fields": missing,
+        },
+    }
+
+
 # ----------------------------------------------------------------------
 # Public entrypoint
 # ----------------------------------------------------------------------
@@ -269,15 +476,31 @@ async def try_tds_deterministic_route(
     if not query or not _TDS_ACTION_RE.search(query):
         return None
 
+    period = _extract_period(query)
+    requested_form = _filing_requested(query)
+    if _late_filing_requested(query):
+        return _build_late_filing_response(
+            query=query,
+            period=period,
+            form_name=requested_form,
+        )
+
     amount = _extract_amount(query)
     section = _extract_section(query)
+    pan = _extract_pan(query)
+    deductee_type = _extract_deductee_type(query)
+    if _challan_281_requested(query) and amount is not None:
+        return _build_challan_281_response(
+            amount=amount,
+            period=period,
+            section=section,
+            pan=pan,
+            deductee_type=deductee_type,
+        )
     if amount is None or section is None:
         return None
 
-    period = _extract_period(query)
     deductee_type = _extract_deductee_type(query) or "individual"
-    pan = _extract_pan(query)
-    requested_form = _filing_requested(query)
 
     # PAN handling: only treat PAN as unavailable when the user
     # *explicitly* says so. A query like "calculate TDS for INR 50,000
@@ -331,6 +554,11 @@ async def try_tds_deterministic_route(
         "result": calc,
         "deterministic_route": True,
         "route_reason": "issue_440_tds_runtime_routing",
+        "governance": {
+            "transaction_amount": amount,
+            "tds_amount": calc["tds_amount"],
+            "high_value_threshold": HIGH_VALUE_TDS_TRANSACTION_THRESHOLD,
+        },
     }
 
     parts: list[str] = []
@@ -399,9 +627,33 @@ async def try_tds_deterministic_route(
     else:
         confidence = 0.92  # Pure calculation, no follow-up gate needed
 
+    high_value_trigger = ""
+    if amount > HIGH_VALUE_TDS_TRANSACTION_THRESHOLD:
+        high_value_trigger = (
+            "transaction_amount "
+            f"{amount:.2f} > {HIGH_VALUE_TDS_TRANSACTION_THRESHOLD:.2f}"
+        )
+        parts.append(
+            "\nHITL triggered: gross transaction amount "
+            f"INR {amount:,.2f} exceeds the INR "
+            f"{HIGH_VALUE_TDS_TRANSACTION_THRESHOLD:,.0f} threshold. "
+            "The calculation above is prepared for partner review; no filing, "
+            "challan payment, voucher posting, or other processing step was "
+            "auto-submitted."
+        )
+
     return {
         "answer": "\n".join(parts),
         "tool_calls": [tool_call],
         "confidence": confidence,
         "tools_used": True,
+        "hitl_trigger": high_value_trigger or None,
+        "hitl_context": {
+            "workflow": "tds_calculation",
+            "transaction_amount": amount,
+            "tds_amount": calc["tds_amount"],
+            "section": section,
+            "period": period,
+            "requested_form": requested_form,
+        },
     }

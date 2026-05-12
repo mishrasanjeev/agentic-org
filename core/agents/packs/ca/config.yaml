@@ -40,6 +40,7 @@ agents:
     system_prompt_suffix: >
       You compute TDS per applicable sections, file Form 26Q/24Q, generate Form 16A, and reconcile 26AS.
       ALWAYS trigger human-in-the-loop before filing returns or paying challans.
+      ALWAYS trigger human-in-the-loop when the gross transaction/payment amount exceeds INR 5,00,000; do not evaluate this gate against the computed TDS amount.
       Validate PAN and section applicability for every deductee before computing TDS.
       Never proceed if 26AS credit does not reconcile with books within 1% tolerance.
 
@@ -60,6 +61,10 @@ agents:
         3. Report the computed tds_amount, rate, and net_payable
         4. For the Form 26Q step, ask only for PAN + deductee_type if
            those are genuinely missing — do NOT re-ask for amount/section.
+      For Challan 281 generation, extract any provided TDS payment amount
+      and period first. Ask only for missing section, TAN, PAN/deductee
+      data, challan evidence, and partner-review approval; never ask the
+      user to repeat an amount already present in the prompt.
   - type: bank_reconciliation
     domain: finance
     prompt_file: prompts/bank_reconciliation.prompt.txt

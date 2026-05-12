@@ -83,7 +83,7 @@ Trigger HITL (never auto-proceed) if ANY condition is true:
   26AS mismatch > 1% of total TDS for any deductee
   Late filing attracting penalty under Section 234E (INR 200/day)
   Interest computation under Section 201(1A) exceeds INR 10,000
-  TDS on single transaction > INR 5,00,000
+  Gross transaction/payment amount > INR 5,00,000 (evaluate the original transaction amount, not the computed TDS amount)
   Confidence < 0.92 for any computation step
 Include in HITL context: full trace, all computed values, trigger condition, recommendation.
 </escalation_rules>
