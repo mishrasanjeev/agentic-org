@@ -34,7 +34,7 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "alembic>=1.14.0",
     "redis[hiredis]>=5.2.0",
-    "pydantic>=2.13.3",
+    "pydantic>=2.13.4",
     "pydantic-settings>=2.14.0",
     # SEC-2026-05-P2-008 RESIDUAL (ecdsa CVE-2024-23342): python-jose
     # transitively pulls ``ecdsa>=0.15`` regardless of the
