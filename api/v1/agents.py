@@ -418,6 +418,44 @@ def _agent_version_snapshot(
     )
 
 
+def _tool_calls_contain_failure(tool_calls: Any) -> bool:
+    if not isinstance(tool_calls, list):
+        return False
+    for call in tool_calls:
+        if not isinstance(call, dict):
+            continue
+        status = str(call.get("status") or "").strip().lower()
+        if status in {"error", "failed", "failure"}:
+            return True
+        error = call.get("error")
+        if error:
+            return True
+        result = call.get("result")
+        if isinstance(result, dict) and result.get("error"):
+            return True
+    return False
+
+
+def _is_shadow_accuracy_measurable(
+    *,
+    task_status: str,
+    task_confidence: float | None,
+    tool_calls: Any,
+) -> bool:
+    """Decide whether a run should move shadow accuracy.
+
+    Shadow accuracy measures model/task correctness. Tool infrastructure,
+    connector, and invocation failures are tracked separately through tool
+    error metrics and must not be averaged into model accuracy.
+    """
+    return (
+        task_status in ("completed", "hitl_triggered")
+        and task_confidence is not None
+        and float(task_confidence) >= 0.10
+        and not _tool_calls_contain_failure(tool_calls)
+    )
+
+
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
@@ -2363,10 +2401,11 @@ async def run_agent(
     # skip them entirely. Also bump the sample count only when we're
     # actually scoring. The min-samples gate still prevents promotion
     # until enough real samples have accumulated.
-    is_measurable = (
-        task_status in ("completed", "hitl_triggered")
-        and task_confidence is not None
-        and float(task_confidence) >= 0.10
+    task_tool_calls = lg_result.get("tool_calls") or lg_result.get("tool_calls_log") or []
+    is_measurable = _is_shadow_accuracy_measurable(
+        task_status=task_status,
+        task_confidence=task_confidence,
+        tool_calls=task_tool_calls,
     )
     if (
         agent_config.get("status") in ("shadow", "active")

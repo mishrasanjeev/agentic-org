@@ -166,6 +166,9 @@ CA_PACK: dict[str, Any] = {
                 "genuinely needed for the filing step. Never ask the user to "
                 "repeat the amount, section, or period when they are already "
                 "in the prompt — that is the BUG-17 failure pattern.\n\n"
+                "HIGH-VALUE HITL: Escalate when the gross transaction/"
+                "payment amount exceeds INR 5,00,000. This gate must use "
+                "the original payment amount, not the computed TDS amount.\n\n"
                 "Worked example for the canonical tester prompt 'Calculate "
                 "TDS for vendor payment of INR 50,000 under Section 194C for "
                 "April 2026 and file Form 26Q':\n"
@@ -174,7 +177,12 @@ CA_PACK: dict[str, Any] = {
                 "  3. Report the computed tds_amount, rate, net_payable\n"
                 "  4. For the Form 26Q step, ask only for PAN + deductee_type "
                 "if those are genuinely missing — do NOT re-ask for amount/"
-                "section."
+                "section.\n\n"
+                "For Challan 281 generation, extract any provided TDS payment "
+                "amount and period first. Ask only for missing section, TAN, "
+                "PAN/deductee data, challan evidence, and partner-review "
+                "approval; never ask the user to repeat an amount already "
+                "present in the prompt."
             ),
         },
         {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json as _json
 import re
 import uuid as _uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -18,6 +18,7 @@ from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS, _DOMAIN_DEFAULT_TOOLS
 from core.config import redis_socket_timeout_kwargs, redis_url_from_env
 from core.database import get_tenant_session
 from core.models.agent import Agent
+from core.models.hitl import HITLQueue
 
 router = APIRouter()
 _log = structlog.get_logger()
@@ -369,12 +370,74 @@ class ChatQueryResponse(BaseModel):
     agent: str
     confidence: float
     domain: str
+    hitl_trigger: str | None = None
     # Issue #440 (TDS deterministic route): when the chat handler bypasses
     # the LLM and invokes a tool deterministically, the tool_calls trace
     # is surfaced here so audit/regression/UI can verify a real tool
     # invocation happened. ``None`` means "LLM path was used" — that
     # path persists tool_calls in the langgraph_run result instead.
     tool_calls: list[dict] | None = None
+
+
+async def _record_chat_hitl(
+    *,
+    tenant_id: str,
+    agent_id: str | None,
+    agent_type: str | None,
+    agent_name: str,
+    domain: str,
+    query: str,
+    hitl_trigger: str | None,
+    confidence: float,
+    hitl_context: dict[str, Any] | None = None,
+) -> None:
+    """Persist chat-triggered HITL so the approval queue is not bypassed.
+
+    The /agents/{id}/run endpoint creates HITLQueue rows after LangGraph
+    execution. Chat previously only surfaced text, so deterministic policy
+    gates such as high-value TDS calculations had no approval artifact.
+    """
+    if not hitl_trigger or not agent_id:
+        return
+    try:
+        tid = _uuid.UUID(tenant_id)
+        aid = _uuid.UUID(agent_id)
+    except (TypeError, ValueError):
+        return
+
+    context = {
+        "source": "chat",
+        "query": query[:2000],
+        "agent_type": agent_type,
+        "agent_name": agent_name,
+        "domain": domain,
+        "confidence": confidence,
+        "trigger": hitl_trigger,
+    }
+    if hitl_context:
+        context.update(hitl_context)
+
+    try:
+        async with get_tenant_session(tid) as session:
+            session.add(
+                HITLQueue(
+                    tenant_id=tid,
+                    agent_id=aid,
+                    workflow_run_id=None,
+                    title=f"HITL: {agent_type or agent_name} — {hitl_trigger}",
+                    trigger_type="chat_policy",
+                    priority="high",
+                    assignee_role=domain or "admin",
+                    decision_options={
+                        "options": ["approve", "reject", "override"],
+                        "context": context,
+                    },
+                    context=context,
+                    expires_at=datetime.now(UTC) + timedelta(hours=4),
+                )
+            )
+    except Exception:  # noqa: BLE001
+        _log.warning("chat_hitl_queue_create_failed", agent_id=agent_id, exc_info=True)
 
 
 class ChatMessage(BaseModel):
@@ -443,6 +506,7 @@ async def chat_query(
     # still showed 60% even when the LLM had high-quality reasoning.
     tools_used = False
     confidence: float | None = None
+    hitl_trigger: str | None = None
 
     # Resolve agent_type: prefer DB value, fall back to domain keyword (BUG #3)
     resolved_agent_type = agent_type or domain
@@ -475,11 +539,25 @@ async def chat_query(
         _log.warning("chat_tds_route_helper_raised", exc_info=True)
         det = None
     if det is not None:
+        hitl_trigger = det.get("hitl_trigger") or None
+        det_confidence = float(det["confidence"])
+        await _record_chat_hitl(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            agent_type=resolved_agent_type,
+            agent_name=agent_name,
+            domain=domain,
+            query=body.query,
+            hitl_trigger=hitl_trigger,
+            confidence=det_confidence,
+            hitl_context=det.get("hitl_context") or None,
+        )
         return ChatQueryResponse(
             answer=det["answer"],
             agent=agent_name,
-            confidence=float(det["confidence"]),
+            confidence=det_confidence,
             domain=domain,
+            hitl_trigger=hitl_trigger,
             tool_calls=det.get("tool_calls") or None,
         )
 
@@ -561,7 +639,8 @@ async def chat_query(
                 connector_config=connector_config,
                 connector_names=connector_names,
             )
-            if lg_result.get("status") == "completed" and lg_result.get("output"):
+            hitl_trigger = lg_result.get("hitl_trigger") or None
+            if lg_result.get("status") in ("completed", "hitl_triggered") and lg_result.get("output"):
                 output = lg_result["output"]
                 answer = _format_agent_output(output)
                 # Extract real confidence from LLM response (BUG #21).
@@ -573,6 +652,29 @@ async def chat_query(
                 tools_used = bool(
                     lg_result.get("tool_calls") or lg_result.get("tool_calls_log")
                 )
+            if hitl_trigger:
+                confidence_for_hitl = (
+                    float(confidence)
+                    if isinstance(confidence, (int, float))
+                    else float(lg_result.get("confidence") or 0.0)
+                )
+                await _record_chat_hitl(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    agent_type=resolved_agent_type,
+                    agent_name=agent_name,
+                    domain=domain,
+                    query=body.query,
+                    hitl_trigger=hitl_trigger,
+                    confidence=confidence_for_hitl,
+                    hitl_context={
+                        "output": lg_result.get("output", {}),
+                        "tool_calls": lg_result.get("tool_calls") or lg_result.get("tool_calls_log") or [],
+                    },
+                )
+                if not answer:
+                    answer = f"HITL triggered: {hitl_trigger}. The agent stopped and queued this for human review."
+                    confidence = confidence_for_hitl
         except Exception:
             _log.warning("chat_langgraph_fallback", domain=domain, agent_id=agent_id)
 
@@ -647,6 +749,7 @@ async def chat_query(
         agent=agent_name,
         confidence=confidence,
         domain=domain,
+        hitl_trigger=hitl_trigger,
     )
 
 

@@ -8,6 +8,7 @@ interface Message {
   agent?: string;
   confidence?: number;
   domain?: string;
+  hitlTrigger?: string;
   timestamp: Date;
 }
 
@@ -16,6 +17,7 @@ interface ChatQueryResponse {
   agent: string;
   confidence: number;
   domain: string;
+  hitl_trigger?: string | null;
 }
 
 // Some LangGraph agents return a JSON-shaped answer (e.g.
@@ -146,6 +148,7 @@ export default function ChatPanel({
         agent: m.agent,
         confidence: m.confidence,
         domain: m.domain,
+        hitlTrigger: m.hitl_trigger || undefined,
         timestamp: new Date(m.timestamp || m.created_at || Date.now()),
       }));
       if (loaded.length > 0) setMessages(loaded);
@@ -189,6 +192,7 @@ export default function ChatPanel({
         agent: res.data.agent,
         confidence: res.data.confidence,
         domain: res.data.domain,
+        hitlTrigger: res.data.hitl_trigger || undefined,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);
@@ -289,6 +293,11 @@ export default function ChatPanel({
                       {msg.confidence != null && (
                         <span className="text-[10px] text-slate-500">
                           {Math.round(msg.confidence * 100)}%
+                        </span>
+                      )}
+                      {msg.hitlTrigger && (
+                        <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                          HITL
                         </span>
                       )}
                     </div>
