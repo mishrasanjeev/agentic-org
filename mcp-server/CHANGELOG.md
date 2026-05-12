@@ -1,5 +1,24 @@
 # agenticorg-mcp-server changelog
 
+## 4.0.4 — 2026-05-12
+
+Security republish — same runtime as 4.0.3, with patched transitive
+dependencies.
+
+### Security
+- Bumped overrides for transitive deps inside `@modelcontextprotocol/sdk`
+  to close 8 GitHub Dependabot advisories (PR #504):
+  - `hono` `>=4.12.18` (was `>=4.12.14`) — closes 4 medium + 1 low
+    (CSS Declaration Injection, cache `Vary` leakage, JSX HTML injection,
+    `bodyLimit` bypass, JWT NumericDate validation).
+  - `fast-uri` `>=3.1.2` (new) — closes 2 high (host confusion via
+    percent-encoded authority delimiters; path traversal via percent-encoded
+    dot segments).
+  - `ip-address` `>=10.1.1` (new) — closes 1 medium (XSS in `Address6`
+    HTML-emitting methods).
+
+`npm audit --omit=dev` returns 0 vulnerabilities after this release.
+
 ## 4.0.3 — 2026-04-19
 
 Republish to pick up the runtime fixes that landed on main after 4.0.2
