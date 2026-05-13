@@ -10,6 +10,7 @@ import pytest
 from tests.connector_harness.conftest import get_all_connector_names, make_connector
 
 ALL_NAMES = get_all_connector_names()
+VALID_CONNECTOR_CATEGORIES = {"finance", "hr", "comms", "marketing", "ops", "commerce"}
 
 pytestmark = pytest.mark.asyncio
 
@@ -58,9 +59,9 @@ class TestConnectorToolExecution:
         """Each connector has name, category, and auth_type set."""
         connector = await make_connector(connector_name, mock_server_url)
         assert connector.name == connector_name
-        assert connector.category in (
-            "finance", "hr", "comms", "marketing", "ops"
-        ), f"{connector_name} category '{connector.category}' not valid"
+        assert connector.category in VALID_CONNECTOR_CATEGORIES, (
+            f"{connector_name} category '{connector.category}' not valid"
+        )
         assert connector.auth_type, f"{connector_name} has no auth_type"
 
     async def test_health_check(self, connector_name, mock_server_url):
@@ -83,7 +84,7 @@ class TestConnectorRegistry:
         assert len(names) >= 50, f"Expected ~54 connectors, got {len(names)}: {names}"
 
     def test_all_categories_present(self):
-        """All 5 categories have connectors."""
+        """All connector categories have connectors."""
         import connectors  # noqa: F401
         from connectors.registry import ConnectorRegistry
 
@@ -92,7 +93,7 @@ class TestConnectorRegistry:
             cls = ConnectorRegistry.get(name)
             categories.add(cls.category)
 
-        expected = {"finance", "hr", "comms", "marketing", "ops"}
+        expected = VALID_CONNECTOR_CATEGORIES
         assert categories == expected, f"Missing categories: {expected - categories}"
 
     def test_total_tool_count(self):

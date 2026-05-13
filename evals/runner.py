@@ -22,7 +22,7 @@ from evals.scorer import (
 )
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden_datasets"
-DOMAINS = ["finance", "hr", "marketing", "ops"]
+DOMAINS = ["finance", "hr", "marketing", "ops", "commerce"]
 
 
 # ---------------------------------------------------------------------------
