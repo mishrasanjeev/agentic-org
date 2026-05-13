@@ -220,6 +220,7 @@ async def call_tool(
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 _DOMAIN_MAP = {
+    "commerce_sales_agent": "commerce",
     "ap_processor": "finance", "ar_collections": "finance", "recon_agent": "finance",
     "tax_compliance": "finance", "close_agent": "finance", "fpa_agent": "finance",
     "treasury": "finance", "expense_manager": "finance", "rev_rec": "finance", "fixed_assets": "finance",

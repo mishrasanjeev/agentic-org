@@ -1,5 +1,6 @@
 """Connector layer — 54 typed adapters (340+ tools), auto-loaded and registered."""
 
+from connectors.commerce import grantex_commerce as _  # noqa: F401, F811
 from connectors.comms import github_connector as _  # noqa: F401, F811
 from connectors.comms import gmail as _  # noqa: F401, F811
 from connectors.comms import google_calendar as _  # noqa: F401, F811

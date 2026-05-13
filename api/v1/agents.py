@@ -21,6 +21,7 @@ from api.deps import (
     get_user_domains,
     require_tenant_admin,
 )
+from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
@@ -40,6 +41,8 @@ from core.schemas.api import (
 MAX_AGENT_CSV_IMPORT_BYTES = 2 * 1024 * 1024
 
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
+    # Commerce
+    "commerce_sales_agent": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     # Finance
     "ap_processor": [
         "fetch_bank_statement", "check_account_balance",
@@ -219,6 +222,7 @@ _AGENT_TYPE_DEFAULT_CONNECTOR_IDS: dict[str, list[str]] = {
 }
 
 _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
+    "commerce": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "finance": [
         "fetch_bank_statement", "create_payment_intent",
         "get_balance", "list_invoices",
