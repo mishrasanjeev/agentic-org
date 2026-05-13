@@ -45,8 +45,8 @@ export default function AgentDetail() {
     if (id) fetchAgent();
   }, [id]);
 
-  async function fetchAgent() {
-    setLoading(true);
+  async function fetchAgent(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const resp = await api.get(`/agents/${id}`);
       const data = resp.data;
@@ -54,7 +54,7 @@ export default function AgentDetail() {
     } catch {
       setAgent(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -73,7 +73,7 @@ export default function AgentDetail() {
     setActionError(null);
     try {
       await api.post(`/agents/${id}/promote`);
-      fetchAgent();
+      void fetchAgent(true);
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Promote failed");
     } finally {
@@ -86,13 +86,13 @@ export default function AgentDetail() {
     setActionError(null);
     try {
       await api.post(`/agents/${id}/rollback`);
-      fetchAgent();
+      void fetchAgent(true);
     } catch (err: any) {
       const detail = err.response?.data?.detail || "Rollback failed";
       if (detail.toLowerCase().includes("no previous") || detail.toLowerCase().includes("version")) {
-        setActionError("No previous version available. Switch to Shadow mode first to create a version checkpoint.");
+        setActionError("No previous version checkpoint is available for this agent.");
       } else {
-        setActionError(`${detail} — Switch to Shadow mode first to create a version checkpoint.`);
+        setActionError(detail);
       }
     } finally {
       setActionLoading(null);
@@ -104,7 +104,7 @@ export default function AgentDetail() {
     setActionError(null);
     try {
       await agentsApi.resume(id || "");
-      fetchAgent();
+      void fetchAgent(true);
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Resume failed");
     } finally {
@@ -152,7 +152,7 @@ export default function AgentDetail() {
       });
       setRunResult(data);
       setActionNotice(`Agent run ${data?.status || "completed"}.`);
-      fetchAgent();
+      void fetchAgent(true);
     } catch (err: any) {
       setActionError(err.response?.data?.detail || "Run failed");
     } finally {
@@ -320,7 +320,7 @@ export default function AgentDetail() {
       {activeTab === "overview" && <OverviewTab agent={agent} onUpdated={fetchAgent} />}
       {activeTab === "config" && <ConfigTab agent={agent} />}
       {activeTab === "prompt" && <PromptTab agent={agent} />}
-      {activeTab === "shadow" && <ShadowTab agent={agent} />}
+      {activeTab === "shadow" && <ShadowTab agent={agent} onUpdated={() => fetchAgent(true)} />}
       {activeTab === "cost" && <CostTab agent={agent} />}
       {activeTab === "scopes" && <ScopesTab agent={agent} />}
       {activeTab === "learning" && <LearningTab agent={agent} />}
@@ -1174,7 +1174,7 @@ function PromptTab({ agent }: { agent: Agent }) {
 }
 
 /* ─── Shadow Tab ─── */
-function ShadowTab({ agent }: { agent: Agent }) {
+function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
   const [generating, setGenerating] = useState(false);
   const [retesting, setRetesting] = useState(false);
   const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -1242,7 +1242,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
             type: "success",
             msg:
               `Stopped after ${successes} sample${successes === 1 ? "" : "s"} ` +
-              `(of ${plannedRuns} planned). Refresh to see updated count and accuracy.`,
+              `(of ${plannedRuns} planned). Updated count and accuracy.`,
           });
           return;
         }
@@ -1263,6 +1263,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
           );
           successes += 1;
           consecutiveFailures = 0;
+          await onUpdated();
         } catch (err: any) {
           // Treat axios CanceledError as a clean stop, not a failure.
           if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
@@ -1270,7 +1271,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
               type: "success",
               msg:
                 `Stopped after ${successes} sample${successes === 1 ? "" : "s"} ` +
-                `(of ${plannedRuns} planned). Refresh to see updated count and accuracy.`,
+                `(of ${plannedRuns} planned). Updated count and accuracy.`,
             });
             return;
           }
@@ -1284,7 +1285,7 @@ function ShadowTab({ agent }: { agent: Agent }) {
         type: "success",
         msg:
           `Generated ${successes} shadow sample${successes === 1 ? "" : "s"} (of ${plannedRuns} attempted). ` +
-          "Refresh to see updated count and accuracy.",
+          "Updated count and accuracy.",
       });
     } catch (err: any) {
       setGenResult({ type: "error", msg: err.response?.data?.detail || "Failed to generate sample. The agent may need to be configured first." });
@@ -1300,7 +1301,8 @@ function ShadowTab({ agent }: { agent: Agent }) {
     setGenResult(null);
     try {
       await api.post(`/agents/${agent.id}/retest`);
-      setGenResult({ type: "success", msg: "Shadow retest completed. Refresh to see updated results." });
+      await onUpdated();
+      setGenResult({ type: "success", msg: "Shadow retest completed. Updated results." });
     } catch (err: any) {
       const detail =
         err?.response?.data?.detail ||

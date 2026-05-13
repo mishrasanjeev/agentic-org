@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 # ----------------------------------------------------------------------
@@ -323,24 +323,23 @@ def _build_challan_281_response(
     pan: str | None,
     deductee_type: str | None,
 ) -> dict[str, Any]:
-    missing: list[str] = []
+    critical_missing: list[str] = []
     if not section:
-        missing.append("TDS section for the payment, e.g. 194C / 194J")
-    if not pan:
-        missing.append("PAN of the deductee")
-    if not deductee_type:
-        missing.append("deductee type (individual / HUF / company / firm)")
-    missing.extend(
+        critical_missing.append("TDS section / nature-of-payment code, e.g. 194C / 194J")
+    critical_missing.extend(
         [
             "TAN of the deductor",
-            "assessment year and minor head (200 or 400)",
-            "bank / BSR details after the Challan 281 payment is made",
+            "assessment year and minor head confirmation (200 or 400)",
             "explicit partner-review approval before payment submission",
         ]
     )
+    deferred_fields = [
+        "deductee PAN and deductee type for the later TDS return mapping",
+        "bank BSR code, challan serial, and deposit date after payment",
+    ]
 
     parts = [
-        "Challan 281 preparation started from the values already present in the prompt:",
+        "Challan 281 draft prepared from the values already present in the prompt:",
         f"  • TDS amount to pay: INR {amount:,.2f}",
     ]
     if period:
@@ -348,10 +347,13 @@ def _build_challan_281_response(
     if section:
         parts.append(f"  • Section: {section}")
     parts.append(
-        "\nNo amount clarification is needed. The actual Challan 281 payment is blocked "
-        "fail-closed until these genuinely missing fields/approvals are supplied:"
+        "\nNo amount clarification is needed. The draft can proceed; actual Challan 281 "
+        "payment submission is blocked fail-closed until these payment-critical fields "
+        "and approvals are supplied:"
     )
-    parts.extend(f"  ✗ {item}" for item in missing)
+    parts.extend(f"  - {item}" for item in critical_missing)
+    parts.append("\nDeferred for later compliance evidence; not blocking this draft:")
+    parts.extend(f"  - {item}" for item in deferred_fields)
     parts.append("\nNo payment call was made.")
 
     return {
@@ -366,7 +368,8 @@ def _build_challan_281_response(
             "tds_amount": amount,
             "period": period,
             "section": section,
-            "missing_fields": missing,
+            "missing_fields": critical_missing,
+            "deferred_fields": deferred_fields,
         },
     }
 
@@ -381,11 +384,18 @@ def _build_late_filing_response(
     delay_days = _extract_delay_days(query)
     due_date = _tds_return_due_date(period, form_name)
 
-    missing: list[str] = []
+    assumptions: list[str] = []
     if tds_amount is None:
-        missing.append("TDS amount payable for the quarter")
+        tds_amount = 100_000.0
+        assumptions.append(
+            "TDS amount payable was not supplied; used INR 1,00,000 as a working assumption."
+        )
     if delay_days is None:
-        missing.append("actual delay in days or the actual filing/deposit date")
+        delay_days = 30
+        assumed_date = (due_date + timedelta(days=delay_days)).isoformat() if due_date else "30 days after due date"
+        assumptions.append(
+            f"Actual filing/deposit date was not supplied; assumed {delay_days} days late ({assumed_date})."
+        )
 
     parts = [
         f"Section 234E / 201(1A) computation route selected for Form {form_name or '26Q/24Q'}.",
@@ -394,37 +404,31 @@ def _build_late_filing_response(
         parts.append(f"  • Period extracted: {period}")
     if due_date:
         parts.append(f"  • Statutory filing due date: {due_date.isoformat()}")
+    if assumptions:
+        parts.append("  • Assumptions used for this provisional computation:")
+        parts.extend(f"    - {item}" for item in assumptions)
 
-    if tds_amount is not None and delay_days is not None:
-        late_fee = min(tds_amount, 200.0 * delay_days)
-        months_for_interest = max(1, math.ceil(delay_days / 30))
-        late_deposit_interest = round(tds_amount * 0.015 * months_for_interest, 2)
-        parts.extend(
-            [
-                f"  • Section 234E late fee: INR {late_fee:,.2f} "
-                f"(INR 200/day × {delay_days} days, capped at TDS amount)",
-                f"  • Section 201(1A) late-deposit interest estimate: INR {late_deposit_interest:,.2f} "
-                f"(1.5% per month or part month × {months_for_interest} month(s))",
-                "  • Final 201(1A) split still needs deduction date vs deposit date "
-                "if late deduction and late deposit both apply.",
-            ]
-        )
-    else:
-        parts.extend(
-            [
-                "The statutory rules are configured and available:",
-                "  • Section 234E: INR 200 per day, capped at the TDS amount payable.",
-                "  • Section 201(1A): 1% per month or part month for late deduction "
-                "and 1.5% per month or part month for late deposit.",
-                "Exact rupee computation needs only the missing inputs below:",
-            ]
-        )
-        parts.extend(f"  ✗ {item}" for item in missing)
+    late_fee = min(tds_amount, 200.0 * delay_days)
+    months_for_interest = max(1, math.ceil(delay_days / 30))
+    late_deduction_interest = round(tds_amount * 0.01 * months_for_interest, 2)
+    late_deposit_interest = round(tds_amount * 0.015 * months_for_interest, 2)
+    parts.extend(
+        [
+            f"  • Section 234E late fee: INR {late_fee:,.2f} "
+            f"(INR 200/day × {delay_days} days, capped at TDS amount)",
+            f"  • Section 201(1A) late-deduction interest scenario: INR {late_deduction_interest:,.2f} "
+            f"(1% per month or part month × {months_for_interest} month(s))",
+            f"  • Section 201(1A) late-deposit interest scenario: INR {late_deposit_interest:,.2f} "
+            f"(1.5% per month or part month × {months_for_interest} month(s))",
+            "  • Replace assumptions with actual TDS payable, deduction date, deposit date, "
+            "and filing date before filing or payment. No filing/payment call was made.",
+        ]
+    )
 
     return {
         "answer": "\n".join(parts),
         "tool_calls": [],
-        "confidence": 0.80 if missing else 0.90,
+        "confidence": 0.82 if assumptions else 0.90,
         "tools_used": False,
         "hitl_trigger": "tds_late_fee_or_interest_requires_partner_review",
         "hitl_context": {
@@ -434,7 +438,7 @@ def _build_late_filing_response(
             "due_date": due_date.isoformat() if due_date else None,
             "tds_amount": tds_amount,
             "delay_days": delay_days,
-            "missing_fields": missing,
+            "assumptions": assumptions,
         },
     }
 

@@ -21,6 +21,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/demo-request",
         "/api/v1/billing/callback",  # Plural redirect callback
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
+        "/api/v1/oauth/callback",  # Native connector OAuth callback (pre-session; state-validated)
         "/api/v1/billing/plans",  # Public pricing page
         # Codex 2026-04-23 prod re-verification: the billing + knowledge
         # health probes were declared auth-free in their route files but

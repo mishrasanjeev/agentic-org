@@ -57,15 +57,21 @@ def test_challan_281_extracts_amount_and_does_not_reask_it() -> None:
     lower = answer.lower()
     assert "125,000" in answer or "125000" in answer
     assert "april 2026" in lower
+    assert "draft prepared" in lower
     assert "section" in lower
     assert "tan" in lower
-    assert "pan" in lower
+    assert "payment-critical" in lower
+    assert "deferred" in lower
+    assert "deductee pan" not in lower.split("payment-critical", 1)[1].split("deferred", 1)[0]
     for forbidden in (
         "amount of tds to be paid",
         "please provide the amount",
         "what is the amount",
+        "PAN of the deductee",
+        "deductee type (individual / HUF / company / firm)",
+        "bank / BSR details after the Challan 281 payment is made",
     ):
-        assert forbidden not in lower
+        assert forbidden.lower() not in lower
 
 
 def test_tds_late_filing_route_uses_234e_and_201_1a_logic() -> None:
@@ -88,8 +94,15 @@ def test_tds_late_filing_route_uses_234e_and_201_1a_logic() -> None:
     assert "201(1a)" in lower
     assert "q4 fy 2025-26" in lower
     assert "2026-05-31" in lower
-    assert "tds amount payable" in lower
-    assert "actual delay" in lower
+    assert "assumptions used" in lower
+    assert "1,00,000" in answer
+    assert "30 days late" in lower
+    assert "6,000.00" in answer
+    assert "1,000.00" in answer
+    assert "1,500.00" in answer
+    assert result["hitl_context"]["tds_amount"] == 100_000.0
+    assert result["hitl_context"]["delay_days"] == 30
+    assert result["hitl_context"]["assumptions"]
     assert "cannot directly compute" not in lower
 
 
