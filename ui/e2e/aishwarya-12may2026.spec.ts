@@ -17,8 +17,17 @@ const tdsAgent = {
   created_at: "2026-05-12T00:00:00Z",
 };
 
-async function installRoutes(page: Page) {
-  let detailAgent = { ...tdsAgent };
+const shadowTdsAgent = {
+  ...tdsAgent,
+  status: "shadow",
+  shadow_sample_count: 0,
+  shadow_accuracy_current: null,
+  shadow_min_samples: 2,
+  shadow_accuracy_floor: 0.8,
+};
+
+async function installRoutes(page: Page, initialAgent: any = tdsAgent) {
+  let detailAgent: any = { ...initialAgent };
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -52,6 +61,30 @@ async function installRoutes(page: Page) {
     }
 
     if (path.endsWith("/agents/agent-tds/run") && request.method() === "POST") {
+      const body = request.postDataJSON() as { action?: string };
+      if (body.action === "shadow_sample") {
+        detailAgent = {
+          ...detailAgent,
+          shadow_sample_count: (detailAgent.shadow_sample_count ?? 0) + 1,
+          shadow_accuracy_current: 0.91,
+        };
+        await route.fulfill({
+          json: {
+            run_id: "run-shadow-sample",
+            task_id: "run-shadow-sample",
+            agent_id: "agent-tds",
+            status: "completed",
+            confidence: 0.91,
+            output: { answer: "Shadow sample completed with calculate_tds." },
+            reasoning_trace: ["shadow sample scored"],
+            tool_calls: [{ tool: "calculate_tds", status: "success" }],
+            performance: { total_latency_ms: 10, llm_tokens_used: 0, llm_cost_usd: 0 },
+            hitl_trigger: null,
+            error: null,
+          },
+        });
+        return;
+      }
       await route.fulfill({
         json: {
           run_id: "run-tool-failure",
@@ -110,7 +143,7 @@ async function installRoutes(page: Page) {
         await route.fulfill({
           json: {
             answer:
-              "Challan 281 preparation started. TDS amount to pay: INR 125,000.00. Missing: section, TAN, PAN, partner-review approval. No payment call was made.",
+              "Challan 281 draft prepared. TDS amount to pay: INR 125,000.00. Period: April 2026. Payment-critical missing fields: section, TAN, assessment year, partner-review approval. Deferred for later compliance evidence: deductee PAN and BSR after payment. No payment call was made.",
             agent: "TDS Compliance Agent",
             confidence: 0.82,
             domain: "finance",
@@ -122,7 +155,7 @@ async function installRoutes(page: Page) {
       await route.fulfill({
         json: {
           answer:
-            "Section 234E / 201(1A) computation route selected for Form 26Q. Period extracted: Q4 FY 2025-26. Statutory filing due date: 2026-05-31. Missing: TDS amount payable and actual delay.",
+            "Section 234E / 201(1A) computation route selected for Form 26Q. Period extracted: Q4 FY 2025-26. Statutory filing due date: 2026-05-31. Assumptions used: TDS amount INR 1,00,000 and 30 days late. Section 234E late fee: INR 6,000.00. Section 201(1A) late-deduction interest scenario: INR 1,000.00. Section 201(1A) late-deposit interest scenario: INR 1,500.00. No filing/payment call was made.",
           agent: "TDS Compliance Agent",
           confidence: 0.8,
           domain: "finance",
@@ -188,11 +221,37 @@ test.describe("Aishwarya 12 May 2026 TDS regressions", () => {
     await input.fill("Generate Challan 281 for April 2026 TDS payment of INR 1,25,000.");
     await input.press("Enter");
     await expect(page.locator("body")).toContainText("TDS amount to pay: INR 125,000.00");
+    await expect(page.locator("body")).toContainText("draft prepared");
+    await expect(page.locator("body")).toContainText("Deferred for later compliance evidence");
+    await expect(page.locator("body")).not.toContainText("Missing: section, TAN, PAN");
     await expect(page.locator("body")).not.toContainText("Amount of TDS to be paid");
 
     await input.fill("Compute late filing interest and penalty for delayed Form 26Q filing for Q4 FY 2025-26.");
     await input.press("Enter");
     await expect(page.locator("body")).toContainText("Section 234E / 201(1A)");
     await expect(page.locator("body")).toContainText("2026-05-31");
+    await expect(page.locator("body")).toContainText("Assumptions used");
+    await expect(page.locator("body")).toContainText("INR 6,000.00");
+    await expect(page.locator("body")).toContainText("INR 1,000.00");
+    await expect(page.locator("body")).toContainText("INR 1,500.00");
+  });
+
+  test("shadow sample generation refreshes persisted sample count and accuracy", async ({
+    page,
+    baseURL,
+  }) => {
+    await installRoutes(page, shadowTdsAgent);
+
+    await page.goto(`${baseURL}/dashboard/agents/agent-tds`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "shadow" }).click();
+    await expect(page.locator("main")).toContainText("Samples generated");
+    await expect(page.locator("main")).toContainText("Sample count (0/2)");
+
+    await page.getByRole("button", { name: "Generate Test Sample" }).click();
+
+    await expect(page.locator("main")).toContainText("Generated 1 shadow sample");
+    await expect(page.locator("main")).toContainText("Sample count (1/2)");
+    await expect(page.locator("main")).toContainText("Accuracy (91.0% / 80.0%)");
+    await expect(page.locator("main")).not.toContainText("Refresh to see updated");
   });
 });

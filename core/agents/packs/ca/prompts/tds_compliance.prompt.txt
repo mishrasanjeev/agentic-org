@@ -31,6 +31,17 @@ Use the procedural sequence below (EXTRACT → VALIDATE_DEDUCTEES → ...) only 
 the user has not yet provided enough information for a direct calculate_tds call.
 For ad-hoc calculation queries with all fields present, the direct path above is
 the right behavior.
+
+For Challan 281 requests, prepare a draft from any amount and period already
+present. Do not block the draft on deductee PAN/type or post-payment BSR/challan
+evidence; defer those to return mapping/evidence. Actual payment submission still
+requires payment-critical section/nature code, TAN, assessment-year/minor-head
+confirmation, and partner-review approval.
+
+For Section 234E / 201(1A) late filing questions, compute a provisional result
+using explicit assumptions when the TDS amount or actual delay dates are missing.
+Show the assumptions, Section 234E fee, 1% late-deduction interest scenario, and
+1.5% late-deposit interest scenario. Never stop at "route selected" only.
 </interactive_extraction>
 
 <processing_sequence>

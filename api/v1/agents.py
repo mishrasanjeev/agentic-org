@@ -2858,31 +2858,36 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
                         .limit(1)
                     )
                 ).scalar_one_or_none()
-                if transition is not None:
-                    old_status = agent.status
-                    agent.status = "shadow"
-                    event = AgentLifecycleEvent(
-                        tenant_id=tid,
-                        agent_id=agent.id,
-                        from_status=old_status,
-                        to_status="shadow",
-                        triggered_by="api",
-                        reason=(
-                            "Rolled back active agent to shadow using lifecycle "
-                            "checkpoint; no prior version snapshot existed"
-                        ),
-                        shadow_accuracy=agent.shadow_accuracy_current,
-                        shadow_samples=agent.shadow_sample_count,
-                    )
-                    session.add(event)
-                    return {
-                        "id": str(agent_id),
-                        "rolled_back": True,
-                        "from_version": agent.version,
-                        "to_version": agent.version,
-                        "from_status": old_status,
-                        "to_status": "shadow",
-                    }
+                old_status = agent.status
+                agent.status = "shadow"
+                checkpoint_note = (
+                    "using lifecycle checkpoint; no prior version snapshot existed"
+                    if transition is not None
+                    else "without a prior checkpoint; restoring shadow state for re-evaluation"
+                )
+                event = AgentLifecycleEvent(
+                    tenant_id=tid,
+                    agent_id=agent.id,
+                    from_status=old_status,
+                    to_status="shadow",
+                    triggered_by="api",
+                    reason=(
+                        "Rolled back active agent to shadow "
+                        f"{checkpoint_note}"
+                    ),
+                    shadow_accuracy=agent.shadow_accuracy_current,
+                    shadow_samples=agent.shadow_sample_count,
+                )
+                session.add(event)
+                return {
+                    "id": str(agent_id),
+                    "rolled_back": True,
+                    "from_version": agent.version,
+                    "to_version": agent.version,
+                    "from_status": old_status,
+                    "to_status": "shadow",
+                    "checkpoint_available": transition is not None,
+                }
             raise HTTPException(409, "No previous version to rollback to")
 
         old_status = agent.status

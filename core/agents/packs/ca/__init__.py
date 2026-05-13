@@ -179,10 +179,15 @@ CA_PACK: dict[str, Any] = {
                 "if those are genuinely missing — do NOT re-ask for amount/"
                 "section.\n\n"
                 "For Challan 281 generation, extract any provided TDS payment "
-                "amount and period first. Ask only for missing section, TAN, "
-                "PAN/deductee data, challan evidence, and partner-review "
-                "approval; never ask the user to repeat an amount already "
-                "present in the prompt."
+                "amount and period first and prepare a draft. Do not block the "
+                "draft on deductee PAN/type or post-payment BSR/challan evidence; "
+                "defer those to return mapping/evidence. Before actual payment "
+                "submission, require only payment-critical section/nature code, "
+                "TAN, assessment-year/minor-head confirmation, and partner-review "
+                "approval. For Section 234E / 201(1A) late filing questions, "
+                "compute a provisional result with explicit assumptions when "
+                "TDS amount or delay dates are missing; never stop at route "
+                "selection only."
             ),
         },
         {

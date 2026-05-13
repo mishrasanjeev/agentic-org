@@ -58,6 +58,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/push/vapid-key",  # VAPID public key (browser needs before login)
         "/api/v1/billing/callback",  # Plural redirect callback (browser returning from gateway)
         "/api/v1/billing/callback/stripe",  # Stripe redirect callback
+        "/api/v1/oauth/callback",  # Native connector OAuth callback (pre-session; state-validated)
         "/api/v1/billing/plans",  # Public pricing — no tenant data
         # Codex 2026-04-23 prod re-verification: /billing/health +
         # /knowledge/health are declared auth-free in their route
