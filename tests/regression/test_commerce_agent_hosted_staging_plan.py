@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 PLAN = Path("docs/commerce-agent-hosted-staging-plan.md")
 
 
