@@ -210,6 +210,26 @@ export default function ConnectorDetailPage() {
     }
   }
 
+  async function handleReconnect() {
+    if (!connector) return;
+    setOauthStarting(true);
+    setFeedback(null);
+    try {
+      const { data } = await api.post("/connectors/oauth/revoke-and-retry", {
+        connector_name: connector.name,
+      });
+      if (!data?.authorization_url) throw new Error("Missing authorization URL");
+      window.location.assign(String(data.authorization_url));
+    } catch (e: unknown) {
+      setFeedback({
+        type: "error",
+        msg: extractApiError(e, "Reconnect failed — start a new Authorize flow from the connector list."),
+      });
+    } finally {
+      setOauthStarting(false);
+    }
+  }
+
   async function handleTestConnection() {
     setTesting(true);
     setFeedback(null);
@@ -277,6 +297,16 @@ export default function ConnectorDetailPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleTestConnection} disabled={testing}>{testing ? "Testing..." : "Test Connection"}</Button>
           <Button variant="outline" onClick={handleHealthCheck}>Health Check</Button>
+          {connector.auth_type === "oauth2" && (
+            <Button
+              variant="outline"
+              onClick={handleReconnect}
+              disabled={oauthStarting}
+              data-testid="connector-reconnect"
+            >
+              {oauthStarting ? "Starting Reconnect..." : "Reconnect"}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => navigate("/dashboard/connectors")}>Back</Button>
         </div>
       </div>

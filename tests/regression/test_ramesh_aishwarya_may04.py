@@ -9,13 +9,19 @@ from fastapi import HTTPException
 
 
 def test_oauth_authorization_url_has_offline_consent_and_no_client_secret() -> None:
-    from api.v1.oauth_connector import OAUTH_PROVIDERS, _build_authorization_url
+    # Uday CA-Firms 2026-05-14 refactor: ``OAUTH_PROVIDERS`` was replaced
+    # by the provider registry. Re-pin the contract through the new API.
+    from api.v1.oauth_connector import _build_authorization_url
+    from core.connectors.provider_registry import get_provider
 
+    spec = get_provider("gmail")
+    assert spec is not None
     url = _build_authorization_url(
-        OAUTH_PROVIDERS["gmail"],
+        spec,
         client_id="client-id-123",
         redirect_uri="https://app.agenticorg.ai/api/v1/oauth/callback",
         state="opaque-state",
+        extra_config={},
     )
     parsed = urlparse(url)
     params = parse_qs(parsed.query)
@@ -30,13 +36,21 @@ def test_oauth_authorization_url_has_offline_consent_and_no_client_secret() -> N
 
 
 def test_oauth_automation_covers_reported_native_connectors() -> None:
-    from api.v1.oauth_connector import OAUTH_PROVIDERS
+    from core.connectors.provider_registry import all_providers, get_provider
 
-    assert {"gmail", "google_calendar", "youtube", "zoho_books"} <= set(OAUTH_PROVIDERS)
-    for provider in OAUTH_PROVIDERS.values():
-        assert provider.authorization_url.startswith("https://")
-        assert provider.token_url.startswith("https://")
-        assert provider.scopes
+    names = {spec.connector_name for spec in all_providers()}
+    assert {"gmail", "google_calendar", "youtube", "zoho_books"} <= names
+    for connector_name in ("gmail", "google_calendar", "youtube"):
+        spec = get_provider(connector_name)
+        assert spec is not None
+        urls = spec.urls_for({})
+        assert urls["authorize_url"].startswith("https://")
+        assert urls["token_url"].startswith("https://")
+        assert spec.scopes
+    zoho_in = get_provider("zoho_books").urls_for({"region": "in"})
+    zoho_us = get_provider("zoho_books").urls_for({"region": "us"})
+    assert zoho_in["authorize_url"].startswith("https://accounts.zoho.in")
+    assert zoho_us["authorize_url"].startswith("https://accounts.zoho.com")
 
 
 def test_oauth_automation_router_is_mounted() -> None:
