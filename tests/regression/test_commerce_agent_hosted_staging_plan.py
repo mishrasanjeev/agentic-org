@@ -5,6 +5,7 @@ from pathlib import Path
 PLAN = Path("docs/commerce-agent-hosted-staging-plan.md")
 DATA_SETUP = Path("docs/commerce-agent-staging-data-setup.md")
 E2E = Path("docs/commerce-agent-hosted-staging-e2e.md")
+CONTRACT_GAP = Path("docs/commerce-agent-contract-gap-report.md")
 
 
 def test_commerce_agent_hosted_staging_plan_pins_staging_topology() -> None:
@@ -188,3 +189,64 @@ def test_commerce_agent_hosted_staging_e2e_lists_negative_evals_and_no_secrets()
     assert not any(ord(char) > 127 for char in content)
     assert "does not deploy" in content
     assert "create cloud resources" in content
+
+
+def test_commerce_agent_contract_gap_report_classifies_required_items() -> None:
+    content = CONTRACT_GAP.read_text(encoding="utf-8")
+
+    for status in ["`done`", "`partial`", "`blocked`", "`deferred`", "`not-started`"]:
+        assert status in content
+
+    for required in [
+        "Grantex-only commerce connector",
+        "Safe tool aliases",
+        "Consent/passport guardrails",
+        "Amount cap guardrails",
+        "Disabled merchant/agent guardrails",
+        "Stale inventory behavior",
+        "Unsupported EMI/discount/warranty behavior",
+        "No direct Stripe/Plural/Pine/provider credential path",
+        "Mocked eval/demo status",
+        "Real hosted staging eval gap",
+        "Broader PRD Commerce Agent Pack",
+    ]:
+        assert required in content
+
+
+def test_commerce_agent_contract_gap_report_preserves_no_provider_boundary() -> None:
+    content = CONTRACT_GAP.read_text(encoding="utf-8")
+
+    assert "No direct Stripe/Plural/Pine/provider credential commerce path is allowed." in content
+    assert "The only commerce execution path is Grantex" in content
+    assert "GRANTEX_COMMERCE_BASE_URL=https://api-staging.grantex.dev" in content
+    assert "GRANTEX_BASE_URL=https://api-staging.grantex.dev" in content
+    assert "GRANTEX_COMMERCE_BASE_URL=https://api.grantex.dev" not in content
+    assert "GRANTEX_BASE_URL=https://api.grantex.dev" not in content
+    assert "retry a refused Grantex payment through another provider path" in content
+
+
+def test_commerce_agent_contract_gap_report_preserves_real_staging_gap_and_no_secrets() -> None:
+    content = CONTRACT_GAP.read_text(encoding="utf-8")
+
+    for required in [
+        "The real-staging gap is still blocked",
+        "current local demo/eval path uses mocked Grantex responses",
+        "No redacted hosted staging evidence exists yet",
+        "demos/commerce_sales_agent_demo.py --mode=hosted-staging",
+        "python -m pytest tests/evals/test_commerce_sales_agent_evals.py -q --hosted-staging",
+    ]:
+        assert required in content
+
+    forbidden_values = [
+        "sk_live_",
+        "pk_live_",
+        "-----BEGIN",
+        "Bearer ",
+        "passport.jwt",
+        "idempotency-key:",
+        "mock-webhook-secret",
+    ]
+    for forbidden in forbidden_values:
+        assert forbidden not in content
+
+    assert not any(ord(char) > 127 for char in content)
