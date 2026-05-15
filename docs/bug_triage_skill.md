@@ -199,6 +199,38 @@ Reference: `tests/regression/test_bugs_uday_14may2026.py`,
 
 ---
 
+## Rule 11 - Connector registration must not produce false healthy state
+
+Added 2026-05-15 after the Zoho Books registration reopen on Uday's
+CA-Firms sweep. The failure pattern was not just a button label. It was
+contract drift between the UI, provider registry, encrypted credential
+store, connector health checks, and agent activation.
+
+1. **Do not mark a connector healthy from static fields alone.** Client ID,
+   client secret, organization_id, or base URL formatting are not evidence
+   that runtime tool execution can call the provider. A connector is healthy
+   only after the same encrypted credential path used by runtime execution
+   passes the connector's health check.
+2. **No-redirect registration must require refreshable token material.**
+   If the UI is not opening a provider consent screen, the registration
+   payload must include refresh_token or an exchangeable one-time code.
+   Otherwise the correct verdict is "not ready", not "registered".
+3. **Agent activation is downstream of connector health.** Creating,
+   resuming, or promoting an active agent must fail closed when any linked
+   connector has missing encrypted credentials, non-configured status,
+   unhealthy/unknown health, or a missing refresh_token for refresh-token
+   providers such as Zoho Books.
+4. **When changing connector onboarding, update old tests that assert the
+   previous UI contract.** A stale Playwright test looking for an old
+   "Authorize Connector" button is a regression source, not harmless
+   historical coverage.
+
+Reference: `tests/regression/test_uday_15may_connector_registration.py`,
+`ui/e2e/qa-uday-15may2026.spec.ts`, `api/v1/connectors.py`,
+`api/v1/agents.py`, `core/tasks/token_refresh.py`.
+
+---
+
 ## Why this file lives in the repo, not my memory
 
 Memory files live under `~/.claude/` and don't ship with the product. This skill lives in `docs/` so:

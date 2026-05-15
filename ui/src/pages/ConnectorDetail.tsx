@@ -39,8 +39,8 @@ export default function ConnectorDetailPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [baseUrlError, setBaseUrlError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(60);
-  // OAuth2-specific fields. Refresh tokens are intentionally not pasted
-  // into the UI anymore; re-auth uses /connectors/oauth/initiate.
+  // OAuth2-specific fields. Zoho Books is registered without a browser
+  // redirect; other OAuth providers can still use the consent handoff.
   const [oauth2ClientId, setOauth2ClientId] = useState("");
   const [oauth2ClientSecret, setOauth2ClientSecret] = useState("");
   const [oauth2TokenUrl, setOauth2TokenUrl] = useState("");
@@ -67,6 +67,8 @@ export default function ConnectorDetailPage() {
     }
     return "https://oauth2.googleapis.com/token";
   }
+
+  const isZohoBooks = connector?.name === "zoho_books";
 
   useEffect(() => {
     fetchConnector();
@@ -125,8 +127,8 @@ export default function ConnectorDetailPage() {
         authType === "basic"
           ? buildBasicAuthConfig(basicUsername, authToken)
           : buildAuthConfig(authType, authToken);
-      // Add editable OAuth2 metadata. The refresh_token itself is minted
-      // through the provider authorization flow and stored server-side.
+      // Add editable OAuth2 metadata. Zoho refresh tokens are pasted in
+      // Extra config; other providers can still mint tokens server-side.
       if (authType === "oauth2") {
         if (oauth2ClientId.trim()) authConfig.client_id = oauth2ClientId.trim();
         if (oauth2ClientSecret.trim()) authConfig.client_secret = oauth2ClientSecret.trim();
@@ -186,7 +188,7 @@ export default function ConnectorDetailPage() {
     if (!clientId || !clientSecret) {
       setFeedback({
         type: "error",
-        msg: "Client ID and Client Secret are required before authorization.",
+        msg: "Client ID and Client Secret are required before provider connection.",
       });
       return;
     }
@@ -204,7 +206,7 @@ export default function ConnectorDetailPage() {
       if (!data?.authorization_url) throw new Error("Missing authorization URL");
       window.location.assign(String(data.authorization_url));
     } catch (e: unknown) {
-      setFeedback({ type: "error", msg: extractApiError(e, "Failed to start OAuth authorization") });
+      setFeedback({ type: "error", msg: extractApiError(e, "Failed to start provider connection") });
     } finally {
       setOauthStarting(false);
     }
@@ -223,7 +225,7 @@ export default function ConnectorDetailPage() {
     } catch (e: unknown) {
       setFeedback({
         type: "error",
-        msg: extractApiError(e, "Reconnect failed — start a new Authorize flow from the connector list."),
+        msg: extractApiError(e, "Reconnect failed — start a fresh provider connection from the connector list."),
       });
     } finally {
       setOauthStarting(false);
@@ -297,7 +299,7 @@ export default function ConnectorDetailPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleTestConnection} disabled={testing}>{testing ? "Testing..." : "Test Connection"}</Button>
           <Button variant="outline" onClick={handleHealthCheck}>Health Check</Button>
-          {connector.auth_type === "oauth2" && (
+          {connector.auth_type === "oauth2" && !isZohoBooks && (
             <Button
               variant="outline"
               onClick={handleReconnect}
@@ -384,15 +386,24 @@ export default function ConnectorDetailPage() {
                           <label className="text-sm font-medium">Client Secret</label>
                           <input type="password" value={oauth2ClientSecret} onChange={(e) => setOauth2ClientSecret(e.target.value)} placeholder="Enter new client secret (leave blank to keep existing)" autoComplete="new-password" className="border rounded px-3 py-2 text-sm w-full mt-1" />
                         </div>
-                        <div className="rounded-md border bg-muted/40 p-3 space-y-2">
-                          <p className="text-sm font-medium">OAuth Refresh Token</p>
-                          <p className="text-xs text-muted-foreground">
-                            Refresh tokens are no longer pasted manually. Authorize in the provider consent screen and the backend will exchange the code and store the token encrypted.
-                          </p>
-                          <Button size="sm" variant="outline" onClick={handleOAuthReauthorize} disabled={oauthStarting}>
-                            {oauthStarting ? "Starting authorization..." : "Authorize with provider"}
-                          </Button>
-                        </div>
+                        {isZohoBooks ? (
+                          <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                            <p className="text-sm font-medium">Zoho Refresh Token</p>
+                            <p className="text-xs text-muted-foreground">
+                              Add refresh_token and organization_id in Extra config, then Save. This path registers credentials server-side without opening Zoho OAuth.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                            <p className="text-sm font-medium">OAuth Refresh Token</p>
+                            <p className="text-xs text-muted-foreground">
+                              Refresh tokens are stored encrypted after the provider consent screen returns a code.
+                            </p>
+                            <Button size="sm" variant="outline" onClick={handleOAuthReauthorize} disabled={oauthStarting}>
+                              {oauthStarting ? "Starting connection..." : "Connect with provider"}
+                            </Button>
+                          </div>
+                        )}
                         <div>
                           <label className="text-sm font-medium">Token URL</label>
                           <input type="url" value={oauth2TokenUrl} onChange={(e) => setOauth2TokenUrl(e.target.value)} placeholder={oauthTokenUrlPlaceholder()} className="border rounded px-3 py-2 text-sm w-full mt-1" />

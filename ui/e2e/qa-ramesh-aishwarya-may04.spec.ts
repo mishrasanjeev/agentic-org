@@ -65,7 +65,7 @@ test("Partner dashboard labels overdue values as filings and reflects inactive c
   await expect(page.getByText("Overdue Filings").first()).toBeVisible();
   await expect(page.getByText("3 filings")).toBeVisible();
   await expect(page.getByText("Archived CA Client")).toBeVisible();
-  await expect(page.getByText("Inactive")).toBeVisible();
+  await expect(page.getByText("Inactive", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Avg Health Score")).toBeVisible();
   await expect(page.getByText("75%").first()).toBeVisible();
   await expect(page.getByText("Overdue (score < 50)")).toHaveCount(0);
@@ -80,44 +80,47 @@ test("Hindi language switch reaches partner dashboard metric labels", async ({ p
 
   await expect(page.getByRole("heading", { name: "पार्टनर डैशबोर्ड" })).toBeVisible();
   await expect(page.getByText("अतिदेय फाइलिंग").first()).toBeVisible();
-  await expect(page.getByText("निष्क्रिय")).toBeVisible();
+  await expect(page.getByText("निष्क्रिय", { exact: true }).first()).toBeVisible();
 });
 
-test("OAuth2 connector setup starts backend authorization and never asks for refresh-token paste", async ({ page }) => {
+test("OAuth2 connector setup registers internally without external authorization", async ({ page }) => {
   await mockAuthenticatedApp(page);
-  await page.route("https://accounts.google.com/**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "text/html", body: "<h1>Google OAuth</h1>" });
-  });
-  let initiateBody: any = null;
-  await page.route("**/api/v1/connectors/oauth/initiate", async (route) => {
-    initiateBody = route.request().postDataJSON();
+  let createBody: any = null;
+  await page.route("**/api/v1/connectors", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    createBody = route.request().postDataJSON();
     await route.fulfill({
-      status: 200,
+      status: 201,
       contentType: "application/json",
       body: JSON.stringify({
-        authorization_url: "https://accounts.google.com/o/oauth2/v2/auth?state=opaque-state",
-        state: "opaque-state",
-        redirect_uri: "http://localhost:4173/api/v1/oauth/callback",
-        expires_in: 600,
+        id: "connector-1",
+        connector_id: "connector-1",
+        name: "gmail",
+        status: "active",
       }),
     });
   });
 
   await page.goto("/dashboard/connectors/new");
   await page.locator("select").filter({ has: page.locator('option[value="oauth2"]') }).selectOption("oauth2");
-  await page.getByPlaceholder("e.g. Slack, SAP S/4HANA").fill("gmail");
+  await page.getByPlaceholder(/zoho_books/).fill("gmail");
   await page.getByPlaceholder("Enter client ID").fill("client-id");
   await page.getByPlaceholder("Enter client secret").fill("client-secret");
 
   await expect(page.getByPlaceholder(/refresh token/i)).toHaveCount(0);
-  await page.getByRole("button", { name: "Authorize Connector" }).click();
-  await expect(page.getByRole("heading", { name: "Google OAuth" })).toBeVisible();
+  await page.getByRole("button", { name: "Register Connector" }).click();
 
-  expect(initiateBody).toMatchObject({
-    connector_name: "gmail",
-    client_id: "client-id",
-    client_secret: "client-secret",
+  expect(createBody).toMatchObject({
+    name: "gmail",
+    auth_type: "oauth2",
     category: "finance",
+    auth_config: {
+      client_id: "client-id",
+      client_secret: "client-secret",
+    },
   });
 });
 

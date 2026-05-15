@@ -372,6 +372,17 @@ def test_zoho_books_lists_all_supported_regions() -> None:
     region_field = next(
         f for f in schema["user_fields"] if f["key"] == "region"
     )
-    assert region_field["required"] is True
+    assert region_field["required"] is False
     option_keys = {opt["value"] for opt in region_field["options"]}
     assert {"us", "in", "eu", "au", "jp"} <= option_keys
+
+
+def test_zoho_region_is_inferred_from_base_url_without_data_center() -> None:
+    from core.connectors.provider_registry import get_provider
+
+    spec = get_provider("zoho_books")
+    assert spec is not None
+
+    assert spec.resolve_region({"base_url": "https://www.zohoapis.in/books/v3"}) == "in"
+    assert spec.resolve_region({"base_url": "https://www.zohoapis.com/books/v3"}) == "us"
+    assert spec.resolve_region({"base_url": "https://www.zohoapis.eu/books/v3"}) == "eu"

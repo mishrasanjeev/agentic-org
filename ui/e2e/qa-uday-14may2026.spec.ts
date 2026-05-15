@@ -265,7 +265,7 @@ test.describe("Uday CA Firms 2026-05-14 — Zoho Books OAuth onboarding", () => 
     // main bug-1+2 test above is what gates the verdict.
   });
 
-  test("Connector wizard renders provider-specific fields, not the raw JSON blob", async ({
+  test("Connector wizard exposes only generic provider registration", async ({
     page,
     request,
   }) => {
@@ -279,18 +279,15 @@ test.describe("Uday CA Firms 2026-05-14 — Zoho Books OAuth onboarding", () => 
       waitUntil: "domcontentloaded",
     });
 
-    // Provider dropdown must list Zoho Books.
+    // May-15 reopening: the create page must not list managed providers
+    // or send admins through OAuth redirects. Backend provider support
+    // stays available via API, but the UI exposes only generic setup.
     const providerSelect = page.getByTestId("provider-select");
     await expect(providerSelect).toBeVisible({ timeout: 10_000 });
-    await providerSelect.selectOption("zoho_books");
-
-    // The new dynamic form must render:
-    //   region picker (with India option), organization_id field,
-    //   client_id + client_secret. The old JSON-blob form should be gone.
-    await expect(page.getByTestId("field-region")).toBeVisible();
-    await expect(page.getByTestId("field-organization_id")).toBeVisible();
-    await expect(page.getByTestId("field-client_id")).toBeVisible();
-    await expect(page.getByTestId("field-client_secret")).toBeVisible();
-    await expect(page.locator("text=Extra config")).toHaveCount(0);
+    await expect(providerSelect.locator("option")).toHaveCount(1);
+    await expect(providerSelect.locator("option")).toHaveText("Custom / Generic Connector");
+    await expect(page.getByText("Extra config")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Register Connector" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Authorize Connector" })).toHaveCount(0);
   });
 });

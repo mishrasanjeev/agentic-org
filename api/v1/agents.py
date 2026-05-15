@@ -811,6 +811,104 @@ async def _load_connector_configs_for_agent(
 
 
 # ── GET /agents/default-tools/{agent_type} ───────────────────────────────────
+async def _assert_connectors_ready_for_activation(
+    session: Any,
+    tenant_id: _uuid.UUID,
+    connector_ids: list[str] | None,
+) -> None:
+    """Block active status unless every linked connector is truly ready."""
+    if not connector_ids:
+        return
+
+    import json as _json
+
+    from core.crypto import decrypt_for_tenant
+    from core.models.connector import Connector
+    from core.models.connector_config import ConnectorConfig
+
+    not_ready: list[dict[str, str]] = []
+    for raw_id in connector_ids:
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            continue
+        raw = raw_id.strip()
+        connector_name = raw.removeprefix("registry-")
+
+        cc = (
+            await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tenant_id,
+                    ConnectorConfig.connector_name == connector_name,
+                )
+            )
+        ).scalar_one_or_none()
+        if cc is None:
+            try:
+                cc_uuid = _uuid.UUID(connector_name)
+            except (TypeError, ValueError):
+                cc_uuid = None
+            if cc_uuid is not None:
+                cc = (
+                    await session.execute(
+                        select(ConnectorConfig).where(
+                            ConnectorConfig.tenant_id == tenant_id,
+                            ConnectorConfig.id == cc_uuid,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+        if cc is None:
+            not_ready.append({"connector": connector_name, "reason": "missing_connector_config"})
+            continue
+
+        connector_name = str(cc.connector_name)
+        connector = (
+            await session.execute(
+                select(Connector).where(
+                    Connector.tenant_id == tenant_id,
+                    Connector.name == connector_name,
+                )
+            )
+        ).scalar_one_or_none()
+        if connector is None or str(connector.status or "").lower() != "active":
+            not_ready.append({"connector": connector_name, "reason": "connector_not_active"})
+            continue
+        if str(cc.status or "").lower() != "configured":
+            not_ready.append({"connector": connector_name, "reason": "connector_config_not_configured"})
+            continue
+        if str(cc.health_status or "").lower() != "healthy":
+            not_ready.append({"connector": connector_name, "reason": "connector_health_not_healthy"})
+            continue
+
+        creds = cc.credentials_encrypted or {}
+        if isinstance(creds, str):
+            creds = _json.loads(creds)
+        encrypted = creds.get("_encrypted") if isinstance(creds, dict) else None
+        if not encrypted:
+            not_ready.append({"connector": connector_name, "reason": "missing_encrypted_credentials"})
+            continue
+        try:
+            decrypted = _json.loads(decrypt_for_tenant(encrypted))
+        except Exception:
+            not_ready.append({"connector": connector_name, "reason": "credentials_not_decryptable"})
+            continue
+        if (
+            connector_name == "zoho_books"
+            and str(cc.auth_type or "").lower() == "oauth2"
+            and not decrypted.get("refresh_token")
+        ):
+            not_ready.append({"connector": connector_name, "reason": "missing_refresh_token"})
+
+    if not_ready:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "connector_not_ready_for_activation",
+                "message": "Agents can become active only when all linked connectors are healthy and refreshable.",
+                "connectors": not_ready,
+            },
+        )
+
+
 @router.get("/agents/default-tools/{agent_type}")
 async def get_default_tools(
     agent_type: str,
@@ -903,6 +1001,12 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             )
             if company_exists.scalar_one_or_none() is None:
                 raise HTTPException(404, "Company not found")
+        if initial_status == "active":
+            await _assert_connectors_ready_for_activation(
+                session,
+                tid,
+                connector_ids,
+            )
         # ── SET-008: Enforce shadow agent limit ────────────────────────
         #
         # Codex 2026-04-22 audit gap #7 — fail-closed on safety errors.
@@ -2596,6 +2700,12 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
                 ),
             )
 
+        if resume_to == "active":
+            await _assert_connectors_ready_for_activation(
+                session,
+                tid,
+                list(agent.connector_ids or []),
+            )
         agent.status = resume_to
 
         event = AgentLifecycleEvent(
@@ -2655,6 +2765,11 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                     f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {required_accuracy}",
                 )
 
+        await _assert_connectors_ready_for_activation(
+            session,
+            tid,
+            list(agent.connector_ids or []),
+        )
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)

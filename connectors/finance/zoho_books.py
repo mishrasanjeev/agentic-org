@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -16,19 +17,72 @@ _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
 _ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
 _ZOHO_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
 _ZOHO_IN_TOKEN_URL = "https://accounts.zoho.in/oauth/v2/token"
+_ZOHO_BASE_URLS = {
+    "in": _ZOHO_IN_BASE,
+    "us": _ZOHO_GLOBAL_BASE,
+    "eu": "https://www.zohoapis.eu/books/v3",
+    "au": "https://www.zohoapis.com.au/books/v3",
+    "jp": "https://www.zohoapis.jp/books/v3",
+}
+_ZOHO_TOKEN_URLS = {
+    "in": _ZOHO_IN_TOKEN_URL,
+    "us": _ZOHO_TOKEN_URL,
+    "eu": "https://accounts.zoho.eu/oauth/v2/token",
+    "au": "https://accounts.zoho.com.au/oauth/v2/token",
+    "jp": "https://accounts.zoho.jp/oauth/v2/token",
+}
+_ZOHO_REGION_HOSTS = {
+    "in": ("zohoapis.in", "books.zoho.in", "accounts.zoho.in"),
+    "eu": ("zohoapis.eu", "accounts.zoho.eu"),
+    "au": ("zohoapis.com.au", "accounts.zoho.com.au"),
+    "jp": ("zohoapis.jp", "accounts.zoho.jp"),
+    "us": ("zohoapis.com", "accounts.zoho.com"),
+}
+
+
+def _host_from_urlish(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    candidate = text if "://" in text else f"https://{text}"
+    parsed = urlparse(candidate)
+    return (parsed.hostname or "").rstrip(".").lower()
+
+
+def _host_matches(host: str, domain: str) -> bool:
+    return host == domain or host.endswith(f".{domain}")
+
+
+def _region_from_config(config: dict[str, Any]) -> str:
+    region = str(config.get("region") or "").strip().lower().replace(".", "")
+    aliases = {
+        "india": "in",
+        "in_dc": "in",
+        "global": "us",
+        "us_dc": "us",
+        "europe": "eu",
+        "eu_dc": "eu",
+        "australia": "au",
+        "au_dc": "au",
+        "japan": "jp",
+        "jp_dc": "jp",
+    }
+    region = aliases.get(region, region)
+    if region in _ZOHO_BASE_URLS:
+        return region
+
+    for value in (config.get("base_url"), config.get("api_base_url"), config.get("token_url")):
+        host = _host_from_urlish(value)
+        if not host:
+            continue
+        for candidate_region, domains in _ZOHO_REGION_HOSTS.items():
+            if any(_host_matches(host, domain) for domain in domains):
+                return candidate_region
+    return "us"
 
 
 def _is_india_config(config: dict[str, Any]) -> bool:
-    region = str(config.get("region") or "").strip().lower()
-    if region in {"in", "india", "in_dc"}:
-        return True
-    base_url = str(config.get("base_url") or "").strip().lower()
-    token_url = str(config.get("token_url") or "").strip().lower()
-    return (
-        "zohoapis.in" in base_url
-        or "books.zoho.in" in base_url
-        or "accounts.zoho.in" in token_url
-    )
+    return _region_from_config(config) == "in"
 
 
 class ZohoBooksConnector(BaseConnector):
@@ -59,13 +113,11 @@ class ZohoBooksConnector(BaseConnector):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        if _is_india_config(self.config):
-            self.base_url = _ZOHO_IN_BASE
-            self.config["region"] = "in"
-            self.config["base_url"] = _ZOHO_IN_BASE
-            self.config.setdefault("token_url", _ZOHO_IN_TOKEN_URL)
-        else:
-            self.base_url = self.config.get("base_url") or _ZOHO_GLOBAL_BASE
+        region = _region_from_config(self.config)
+        self.base_url = _ZOHO_BASE_URLS[region]
+        self.config["region"] = region
+        self.config["base_url"] = self.base_url
+        self.config["token_url"] = _ZOHO_TOKEN_URLS[region]
         self._org_id: str = self.config.get("organization_id", "")
 
     def _register_tools(self):
@@ -114,7 +166,7 @@ class ZohoBooksConnector(BaseConnector):
         self, client_id: str, client_secret: str, refresh_token: str
     ) -> str | None:
         """Exchange refresh_token for a fresh access_token via Zoho OAuth2."""
-        token_url = self.config.get("token_url", _ZOHO_TOKEN_URL)
+        token_url = _ZOHO_TOKEN_URLS.get(str(self.config.get("region") or "us"), _ZOHO_TOKEN_URL)
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
@@ -131,7 +183,7 @@ class ZohoBooksConnector(BaseConnector):
                 logger.info("zoho_books_token_refreshed", expires_in=data.get("expires_in"))
                 return data["access_token"]
         except Exception as exc:
-            logger.warning("zoho_books_token_refresh_failed", error=str(exc))
+            logger.warning("zoho_books_token_refresh_failed", error_type=type(exc).__name__)
             return None
 
     async def connect(self) -> None:
@@ -168,7 +220,7 @@ class ZohoBooksConnector(BaseConnector):
                     org_name=orgs[0].get("name", ""),
                 )
         except Exception as exc:  # noqa: BLE001 — best-effort fallback
-            logger.warning("zoho_books_org_id_auto_fetch_failed", error=str(exc))
+            logger.warning("zoho_books_org_id_auto_fetch_failed", error_type=type(exc).__name__)
 
     async def _ensure_org_id(self) -> None:
         """Lazy-fetch org_id immediately before tool dispatch.
@@ -232,7 +284,7 @@ class ZohoBooksConnector(BaseConnector):
             orgs = data.get("organizations", [])
             return {"status": "healthy", "organizations": len(orgs)}
         except Exception as e:
-            return {"status": "unhealthy", "error": str(e)}
+            return {"status": "unhealthy", "error": type(e).__name__}
 
     # ── Invoices ───────────────────────────────────────────────────────
 

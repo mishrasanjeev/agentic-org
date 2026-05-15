@@ -244,14 +244,14 @@ test.describe("Flow 2: Connector Registration E2E", () => {
     }
   });
 
-  test("OAuth2 auth type shows client credentials and authorization button", async ({ page }) => {
+  test("OAuth2 auth type shows client credentials and registration button", async ({ page }) => {
     const authTypeSelect = page.locator("select").filter({ has: page.locator('option[value="oauth2"]') });
     await authTypeSelect.selectOption("oauth2");
 
     // Wait for auth fields to render
     await page.waitForTimeout(500);
 
-    // Verify client credential fields appear, but refresh token paste is gone.
+    // Verify client credential fields appear, but external authorization is gone.
     const clientIdField = page.locator('input[placeholder="Enter client ID"]');
     const clientSecretField = page.locator('input[placeholder="Enter client secret"]');
     const refreshTokenField = page.locator('input[placeholder*="refresh token"]');
@@ -259,7 +259,8 @@ test.describe("Flow 2: Connector Registration E2E", () => {
     await expect(clientIdField).toBeVisible();
     await expect(clientSecretField).toBeVisible();
     await expect(refreshTokenField).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Authorize Connector" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Register Connector" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Authorize Connector" })).toHaveCount(0);
   });
 
   test("API Key auth type shows 1 credential field", async ({ page }) => {
@@ -296,13 +297,14 @@ test.describe("Flow 2: Connector Registration E2E", () => {
   test("Switching auth types updates fields correctly", async ({ page }) => {
     const authTypeSelect = page.locator("select").filter({ has: page.locator('option[value="oauth2"]') });
 
-    // Start with oauth2: client credentials plus provider authorization.
+    // Start with oauth2: client credentials plus server-side registration.
     await authTypeSelect.selectOption("oauth2");
     await page.waitForTimeout(300);
     await expect(page.locator('input[placeholder="Enter client ID"]')).toBeVisible();
     await expect(page.locator('input[placeholder="Enter client secret"]')).toBeVisible();
     await expect(page.locator('input[placeholder*="refresh token"]')).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Authorize Connector" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Register Connector" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Authorize Connector" })).toHaveCount(0);
 
     // Switch to api_key — 1 field
     await authTypeSelect.selectOption("api_key");

@@ -714,11 +714,11 @@ test.describe("INT-CONN-012: Gmail connector in registry", () => {
 });
 
 // =============================================================================
-//  INT-CONN-014: Connector creation UI starts automated OAuth2 authorization
+//  INT-CONN-014: Connector creation UI registers OAuth2 without browser redirects
 // =============================================================================
 
-test.describe("INT-CONN-014: Connector creation automated OAuth2 setup", () => {
-  test("Selecting oauth2 auth type shows client credentials and no refresh-token paste field", async ({ page }) => {
+test.describe("INT-CONN-014: Connector creation OAuth2 registration", () => {
+  test("Selecting oauth2 auth type shows client credentials and no external authorization button", async ({ page }) => {
     await loginAsCeo(page);
 
     await page.goto(`${APP}/dashboard/connectors/new`);
@@ -734,7 +734,8 @@ test.describe("INT-CONN-014: Connector creation automated OAuth2 setup", () => {
     const bodyText = await page.textContent("body");
     expect(bodyText).toContain("Client ID");
     expect(bodyText).toContain("Client Secret");
-    expect(bodyText).toContain("Authorize Connector");
+    expect(bodyText).toContain("Register Connector");
+    expect(bodyText).not.toContain("Authorize Connector");
     expect(bodyText).not.toContain("Paste refresh token");
   });
 

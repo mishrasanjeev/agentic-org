@@ -64,6 +64,8 @@ async def _refresh_all() -> dict:
                 except Exception:
                     skipped += 1
                     continue
+            if isinstance(creds, dict):
+                creds = {**(cc.config or {}), **creds}
 
             refresh_token = creds.get("refresh_token", "")
             token_url = creds.get("token_url", "")
@@ -129,6 +131,7 @@ async def _refresh_all() -> dict:
                 fresh = row.scalar_one_or_none()
                 if fresh:
                     fresh.credentials_encrypted = {"_encrypted": encrypted}
+                    fresh.health_status = "healthy"
                     await write_session.commit()
 
             refreshed += 1
@@ -140,11 +143,29 @@ async def _refresh_all() -> dict:
             )
         except Exception as exc:
             failed += 1
+            try:
+                async with async_session_factory() as write_session:
+                    from sqlalchemy import select as _sel
+
+                    row = await write_session.execute(
+                        _sel(ConnectorConfig).where(ConnectorConfig.id == cc.id)
+                    )
+                    fresh = row.scalar_one_or_none()
+                    if fresh:
+                        fresh.health_status = "unhealthy"
+                        fresh.sync_error = type(exc).__name__
+                        await write_session.commit()
+            except Exception:
+                logger.warning(
+                    "token_refresh_health_status_update_failed",
+                    connector=cc.connector_name,
+                    tenant_id=str(cc.tenant_id),
+                )
             logger.warning(
                 "token_refresh_failed",
                 connector=cc.connector_name,
                 tenant_id=str(cc.tenant_id),
-                error=str(exc)[:200],
+                error_type=type(exc).__name__,
             )
 
     summary = {"refreshed": refreshed, "failed": failed, "skipped": skipped}
