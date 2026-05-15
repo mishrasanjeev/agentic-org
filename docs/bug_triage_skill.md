@@ -157,6 +157,48 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 
 ---
 
+## Rule 10 — OAuth surfaces must use canonical redirect URIs and provider-aware regions
+
+Added 2026-05-14 after the Zoho OAuth reopen on Uday's CA-Firms sweep.
+The same root cause reopened four times (May-04, May-11, two on May-14)
+because every fix patched a per-request URL derivation instead of the
+underlying invariants:
+
+1. **Redirect URIs are never computed from request data in production.**
+   Cloud Run terminates TLS at the edge — the in-container request is
+   `http://` while the registered provider URL is `https://`. The
+   resulting redirect URI mismatches and the provider rejects every
+   authorize attempt. The canonical fix is a single
+   `settings.public_api_base_url` (env: `AGENTICORG_PUBLIC_API_BASE_URL`)
+   pinned to the https host the operator registered with the provider.
+   Strict envs validate https-only.
+2. **Authorize/token URLs are region-aware, picked from a registry.** A
+   hardcoded `accounts.zoho.com` works for US tenants but bounces .in
+   accounts through a redirect that drops the carry-over (and may not
+   mint a refresh_token on re-consent). Every multi-region provider
+   declares its DC variants in
+   `core/connectors/provider_registry.py:ZOHO_REGIONS` (or equivalent).
+   Adding a region is a registry entry, not a code refactor.
+3. **Missing-refresh-token must surface a structured error, not prose.**
+   When a provider returns `code` without a `refresh_token` because the
+   app was already consented, the user has no way to recover from a
+   400 free-text instruction. The handler raises
+   `OAuthNeedsReconsent` (HTTP 409,
+   `code=oauth_refresh_token_missing`) and the UI matches on that code
+   to render a Reconnect button that POSTs
+   `/connectors/oauth/revoke-and-retry`.
+4. **Every OAuth PR adds a Playwright spec that exercises the live
+   `/connectors/oauth/initiate` endpoint and asserts the produced
+   authorize URL is https + correct region + `access_type=offline` +
+   `prompt=consent`.** Source-grep tests are not sufficient — they
+   would have caught none of the May-04..May-14 reopens.
+
+Reference: `tests/regression/test_bugs_uday_14may2026.py`,
+`api/v1/oauth_connector.py`, `core/connectors/provider_registry.py`,
+`ui/e2e/qa-uday-14may2026.spec.ts`.
+
+---
+
 ## Why this file lives in the repo, not my memory
 
 Memory files live under `~/.claude/` and don't ship with the product. This skill lives in `docs/` so:

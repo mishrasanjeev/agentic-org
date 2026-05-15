@@ -118,6 +118,14 @@ class Settings(BaseSettings):
     # CORS
     cors_allowed_origins: str = ""  # Comma-separated origins; empty = allow all in dev
 
+    # Public-facing API base URL — single source of truth for OAuth redirect
+    # URIs. Required for every non-relaxed env because Cloud Run terminates
+    # TLS at the edge, so ``request.url_for`` inside the container returns
+    # ``http://`` and the resulting redirect_uri never matches the
+    # ``https://`` value registered on Zoho / Google / etc.
+    # Must include scheme + host (and optionally a path prefix).
+    public_api_base_url: str = ""
+
     # Platform behaviour
     pii_masking: bool = True
     data_region: str = "IN"
@@ -173,6 +181,22 @@ class Settings(BaseSettings):
                 f"AGENTICORG_REDIS_URL must be explicitly set in env={env_label!r} "
                 "(detected localhost fallback)"
             )
+        # Uday CA-Firms 2026-05-14: OAuth redirect_uri was being computed
+        # from ``request.url_for`` which returns ``http://`` on Cloud Run
+        # (TLS terminated at the edge). When set, the value MUST be https
+        # so the redirect URI we send to Zoho / Google / etc. matches what
+        # the provider has registered. We do NOT block strict-env startup
+        # on a missing value — the OAuth handler has a proxy-aware
+        # fallback path that upgrades to https — but we DO refuse a
+        # half-configured non-https value, which would silently downgrade.
+        if self.public_api_base_url:
+            parsed = urlsplit(self.public_api_base_url)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise ValueError(
+                    "AGENTICORG_PUBLIC_API_BASE_URL must start with https:// "
+                    "and include a host. Got: "
+                    f"{self.public_api_base_url!r}"
+                )
         return self
 
 
