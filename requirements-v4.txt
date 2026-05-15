@@ -26,7 +26,7 @@ routellm>=0.2.0
 # so we constrain it explicitly here so resolution can't fall back to
 # the vulnerable release. Promote into pyproject.toml direct deps if
 # we ever add a request-path that imports litellm directly.
-litellm>=1.83.14
+litellm>=1.84.0
 
 # ─── Microsoft Presidio: Pre-LLM PII Redaction (MIT) ────────────────────────
 # Enables: Aadhaar, PAN, GSTIN, UPI, email, phone scrubbed BEFORE reaching LLM
