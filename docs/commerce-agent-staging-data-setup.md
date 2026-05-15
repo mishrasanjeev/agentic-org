@@ -14,6 +14,7 @@ AgenticOrg staging should consume the synthetic Grantex Commerce V1 staging data
 - Category: `electronics_appliances`
 - Provider: `mock`
 - Grantex API base: `https://api-staging.grantex.dev`
+- Option A smoke data source: Grantex manifest `docs/examples/commerce-staging-seed.manifest.json`
 
 AgenticOrg should treat these as synthetic staging identifiers only. They are not production customer identifiers.
 
@@ -50,7 +51,7 @@ Do not place values for those names in docs, logs, fixtures, local env files, or
 For C1, AgenticOrg can run locally against an approved Grantex staging or smoke URL. This proves the connector/demo/eval path against real Grantex endpoints without deploying AgenticOrg hosting.
 
 ```bash
-AGENTICORG_COMMERCE_EVAL_MODE=real-staging
+AGENTICORG_COMMERCE_REAL_STAGING=1
 GRANTEX_COMMERCE_BASE_URL=https://api-staging.grantex.dev
 GRANTEX_BASE_URL=https://api-staging.grantex.dev
 AGENTICORG_COMMERCE_EVIDENCE_REPORT=docs/reports/commerce-agent-real-staging-evidence.md
@@ -65,12 +66,42 @@ Expected real-staging run configuration:
 - `AGENTICORG_BASE_URL=https://staging.agenticorg.ai`
 - `GRANTEX_COMMERCE_BASE_URL=https://api-staging.grantex.dev`
 - `GRANTEX_BASE_URL=https://api-staging.grantex.dev`
-- `AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL=<exact approved smoke origin>` only for temporary smoke runs
+- `GRANTEX_COMMERCE_BASE_URL=<approved smoke URL>` for temporary Option A smoke
+- `GRANTEX_BASE_URL=<approved smoke URL>` for temporary Option A smoke
+- `AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL=<approved smoke URL>` only for temporary smoke runs
+- `AGENTICORG_COMMERCE_REAL_STAGING=1`
+- exactly one of `GRANTEX_COMMERCE_BEARER_TOKEN`, `GRANTEX_AGENT_ASSERTION`, or `GRANTEX_API_KEY`
 - Merchant ID `mch_staging_electronics_pilot`
 - Agent ID `cag_staging_agenticorg_sales`
 - Provider `mock`
 
 The real-staging demo/eval must redact auth headers, generated Commerce Passport material, generated payment references, and any generated request correlation material from logs and reports.
+
+## Option A Smoke Coverage
+
+The Grantex Option A smoke manifest provides enough synthetic data for these C1 local-to-smoke cases:
+
+- connector health and tool discovery
+- merchant profile
+- catalog search
+- catalog get item
+- inventory check
+- cart create
+- consent request
+- local guardrail refusal for missing consent
+- local guardrail refusal for amount cap breach
+- local guardrail refusal for unsupported EMI, discount, and warranty claims
+- no direct provider call regression
+
+These remain skipped unless the approved smoke run also provisions synthetic consent/passport fixtures and safe payment references for the AgenticOrg eval:
+
+- consent exchange
+- payment intent create
+- checkout create
+- payment status polling
+- denied, revoked, or expired passport cases
+- disabled merchant and untrusted agent cases
+- invalid webhook signature and replay checks, which stay Grantex-side evidence
 
 ## Expected Positive Cases
 

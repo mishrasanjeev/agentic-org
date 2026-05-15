@@ -139,9 +139,28 @@ def test_commerce_agent_hosted_staging_e2e_has_real_staging_command_plan() -> No
         "python demos/commerce_sales_agent_demo.py --mode=real-staging",
         "python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q",
         "AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL",
+        "AGENTICORG_COMMERCE_REAL_STAGING=1",
+        "GRANTEX_COMMERCE_BASE_URL=<approved smoke URL>",
+        "GRANTEX_BASE_URL=<approved smoke URL>",
         "fails closed before connector creation, auth lookup, or network use",
         "python demos/commerce_sales_agent_demo.py --mode=mock",
         "Do not present mocked results as hosted staging evidence.",
+    ]:
+        assert required in content
+
+
+def test_commerce_agent_hosted_staging_e2e_documents_option_a_local_smoke_sequence() -> None:
+    content = E2E.read_text(encoding="utf-8")
+
+    for required in [
+        "For repeatable Grantex Option A smoke",
+        "Set exactly one Grantex auth env var securely outside logs.",
+        "connector health and MCP tools list",
+        "merchant profile through Grantex staging or smoke",
+        "cart create through Grantex staging or smoke",
+        "These cases remain skipped unless the approved synthetic Grantex consent/passport fixtures exist",
+        "payment intent create",
+        "checkout create",
     ]:
         assert required in content
 
@@ -191,6 +210,25 @@ def test_commerce_agent_hosted_staging_e2e_lists_negative_evals_and_no_secrets()
     assert not any(ord(char) > 127 for char in content)
     assert "does not deploy" in content
     assert "create cloud resources" in content
+
+
+def test_commerce_agent_staging_data_setup_documents_option_a_smoke_case_boundaries() -> None:
+    content = DATA_SETUP.read_text(encoding="utf-8")
+
+    for required in [
+        "Option A smoke data source: Grantex manifest `docs/examples/commerce-staging-seed.manifest.json`",
+        "AGENTICORG_COMMERCE_REAL_STAGING=1",
+        "GRANTEX_COMMERCE_BASE_URL=<approved smoke URL>",
+        "GRANTEX_BASE_URL=<approved smoke URL>",
+        "AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL=<approved smoke URL>",
+        "Option A Smoke Coverage",
+        "local guardrail refusal for missing consent",
+        "payment intent create",
+        "checkout create",
+        "remain skipped unless the approved smoke run also provisions synthetic consent/passport fixtures",
+        "no direct provider call regression",
+    ]:
+        assert required in content
 
 
 def test_commerce_agent_contract_gap_report_classifies_required_items() -> None:
