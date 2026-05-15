@@ -49,8 +49,16 @@ def test_oauth_automation_covers_reported_native_connectors() -> None:
         assert spec.scopes
     zoho_in = get_provider("zoho_books").urls_for({"region": "in"})
     zoho_us = get_provider("zoho_books").urls_for({"region": "us"})
-    assert zoho_in["authorize_url"].startswith("https://accounts.zoho.in")
-    assert zoho_us["authorize_url"].startswith("https://accounts.zoho.com")
+    # Parse the URL and compare the host exactly — a startswith() on a
+    # raw URL string would also accept e.g. ``accounts.zoho.in.attacker
+    # .com`` (CodeQL py/incomplete-url-substring-sanitization). The host
+    # comparison closes that class for the whole spec.
+    zoho_in_parsed = urlparse(zoho_in["authorize_url"])
+    zoho_us_parsed = urlparse(zoho_us["authorize_url"])
+    assert zoho_in_parsed.scheme == "https"
+    assert zoho_in_parsed.hostname == "accounts.zoho.in"
+    assert zoho_us_parsed.scheme == "https"
+    assert zoho_us_parsed.hostname == "accounts.zoho.com"
 
 
 def test_oauth_automation_router_is_mounted() -> None:
