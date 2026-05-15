@@ -1,6 +1,6 @@
 """OAuth connector authorization-code automation.
 
-Powers the "Authorize Connector" button in the UI. Each request flows
+Powers provider OAuth handoffs for legacy and re-connect flows. Each request flows
 through a provider-isolated ``ProviderSpec`` (see
 ``core/connectors/provider_registry.py``):
 
@@ -188,6 +188,8 @@ def _coerce_user_fields(
     # Legacy ``extra_config`` blob — preserve, but let user_fields win.
     for k, v in (body.extra_config or {}).items():
         coerced.setdefault(k, v)
+    if body.base_url:
+        coerced.setdefault("base_url", body.base_url.strip())
 
     missing = []
     for field_spec in spec.user_fields:
@@ -644,6 +646,8 @@ async def initiate_connector_oauth(
         )
 
     extra_config: dict[str, Any] = dict(body.extra_config or {})
+    if body.base_url:
+        extra_config.setdefault("base_url", body.base_url.strip())
     # Surface region from user_fields into extra_config so the connector
     # row stores it for downstream tools.
     if "region" in user_fields:
@@ -704,7 +708,7 @@ async def revoke_and_retry(
             status_code=400,
             detail=(
                 "No prior authorization attempt found for this connector. "
-                "Start a fresh Authorize Connector flow instead."
+                "Start a fresh connector authorization flow instead."
             ),
         )
     # Best-effort revoke using whatever token material we have.

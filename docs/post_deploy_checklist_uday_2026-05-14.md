@@ -31,21 +31,23 @@ Run this AFTER `deploy-production` lands the new commit on
 ## 1) OAuth — Zoho Books India authorize URL
 
 - Open `https://agenticorg.ai/dashboard/connectors/new`.
-- Pick **Zoho Books** from the provider dropdown.
-- **Region** = `India (zoho.in)`.
-- Fill Client ID / Client Secret / Organization ID from the bug report.
-- Click **Authorize Connector**.
+- Confirm the provider dropdown contains only **Custom / Generic Connector**.
+- Set connector name to `zoho_books`.
+- Set Base URL to `https://www.zohoapis.in/books/v3`.
+- Set Auth Type to `OAuth2`.
+- Fill Client ID / Client Secret.
+- Add `organization_id` and `refresh_token` in Extra config JSON.
+- Click **Register Connector**.
 
 Expected:
-- Browser navigates to `https://accounts.zoho.in/oauth/v2/auth?...`
-  (NOT `accounts.zoho.com`).
-- The `redirect_uri` query param starts with `https://`.
-- `access_type=offline` and `prompt=consent` are present.
-- Zoho prompts you to consent (no "Invalid Redirect Uri" error page).
+- Browser stays inside AgenticOrg; no Zoho OAuth page is opened.
+- The connector is saved with encrypted credentials.
+- The region is inferred as India from the base URL.
+- Agent activation is blocked unless the connector health status is `healthy`.
 
-If "Invalid Redirect Uri" appears: the env var hasn't rolled out OR the
-Zoho Developer Console is missing the https value. Re-run step 1 of
-pre-requisites and confirm step 2.
+If registration returns `zoho_token_material_required`, the payload is
+missing refreshable token material. Do not mark the connector fixed or
+healthy from Client ID / Client Secret alone.
 
 ## 2) OAuth — refresh_token issuance
 

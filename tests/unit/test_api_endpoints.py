@@ -425,6 +425,8 @@ def _make_connector(**overrides):
     conn.description = overrides.get("description", "Slack connector")
     conn.base_url = overrides.get("base_url", "https://slack.com/api")
     conn.auth_type = overrides.get("auth_type", "oauth2")
+    conn.auth_config = overrides.get("auth_config", None)
+    conn.secret_ref = overrides.get("secret_ref", None)
     conn.tool_functions = overrides.get("tool_functions", [])
     conn.data_schema_ref = overrides.get("data_schema_ref", None)
     conn.rate_limit_rpm = overrides.get("rate_limit_rpm", 60)
@@ -470,10 +472,11 @@ class TestConnectorsEndpoints:
         from api.v1.connectors import list_connectors
 
         connectors = [_make_connector(name="Slack"), _make_connector(name="Jira")]
-        # First execute returns count, second returns list
+        # Count, connector page, then encrypted credential names.
         mock_session.execute.side_effect = [
             _make_result(scalar_value=2),
             _make_result(scalars_list=connectors),
+            _make_result(scalars_list=["Slack"]),
         ]
 
         ctx = _patch_tenant_session("connectors", mock_session)
@@ -485,6 +488,8 @@ class TestConnectorsEndpoints:
         assert resp["total"] == 2
         assert len(resp["items"]) == 2
         assert resp["page"] == 1
+        assert resp["items"][0]["has_credentials"] is True
+        assert resp["items"][1]["has_credentials"] is False
 
     @pytest.mark.asyncio
     async def test_list_connectors_empty(self, tenant_id, mock_session):
@@ -512,6 +517,7 @@ class TestConnectorsEndpoints:
         mock_session.execute.side_effect = [
             _make_result(scalar_value=1),
             _make_result(scalars_list=connectors),
+            _make_result(scalars_list=[]),
         ]
 
         ctx = _patch_tenant_session("connectors", mock_session)
@@ -529,6 +535,7 @@ class TestConnectorsEndpoints:
         mock_session.execute.side_effect = [
             _make_result(scalar_value=100),
             _make_result(scalars_list=[_make_connector()]),
+            _make_result(scalars_list=[]),
         ]
 
         ctx = _patch_tenant_session("connectors", mock_session)

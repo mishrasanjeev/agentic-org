@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import socket
 import uuid as _uuid
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -22,6 +25,51 @@ _log = logging.getLogger(__name__)
 
 _ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
 _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
+_ZOHO_API_BASE_URLS = {
+    "in": _ZOHO_IN_BASE,
+    "us": _ZOHO_GLOBAL_BASE,
+    "eu": "https://www.zohoapis.eu/books/v3",
+    "au": "https://www.zohoapis.com.au/books/v3",
+    "jp": "https://www.zohoapis.jp/books/v3",
+}
+_ZOHO_TOKEN_URLS = {
+    "in": "https://accounts.zoho.in/oauth/v2/token",
+    "us": "https://accounts.zoho.com/oauth/v2/token",
+    "eu": "https://accounts.zoho.eu/oauth/v2/token",
+    "au": "https://accounts.zoho.com.au/oauth/v2/token",
+    "jp": "https://accounts.zoho.jp/oauth/v2/token",
+}
+_ZOHO_REGION_HOSTS = {
+    "in": ("zohoapis.in", "books.zoho.in", "accounts.zoho.in"),
+    "eu": ("zohoapis.eu", "accounts.zoho.eu"),
+    "au": ("zohoapis.com.au", "accounts.zoho.com.au"),
+    "jp": ("zohoapis.jp", "accounts.zoho.jp"),
+    "us": ("zohoapis.com", "accounts.zoho.com"),
+}
+
+
+def _host_from_urlish(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    candidate = text if "://" in text else f"https://{text}"
+    parsed = urlparse(candidate)
+    return (parsed.hostname or "").rstrip(".").lower()
+
+
+def _host_matches(host: str, domain: str) -> bool:
+    return host == domain or host.endswith(f".{domain}")
+
+
+def _zoho_region_from_urls(values: tuple[Any, ...]) -> str | None:
+    for value in values:
+        host = _host_from_urlish(value)
+        if not host:
+            continue
+        for region, domains in _ZOHO_REGION_HOSTS.items():
+            if any(_host_matches(host, domain) for domain in domains):
+                return region
+    return None
 
 
 def _normalise_connector_base_url(name: str, base_url: str | None) -> str | None:
@@ -29,10 +77,217 @@ def _normalise_connector_base_url(name: str, base_url: str | None) -> str | None
     value = (base_url or "").strip()
     if (name or "").strip().lower() != "zoho_books":
         return value or None
-    lowered = value.lower()
-    if "zohoapis.in" in lowered or "books.zoho.in" in lowered:
-        return _ZOHO_IN_BASE
-    return value or _ZOHO_GLOBAL_BASE
+    region = _zoho_region_from_urls((value,))
+    if region:
+        return _ZOHO_API_BASE_URLS[region]
+    return _ZOHO_GLOBAL_BASE
+
+
+def _infer_zoho_region(base_url: str | None, auth_config: dict[str, Any] | None) -> str:
+    """Infer Zoho data center from explicit config or provider URLs."""
+    config = auth_config or {}
+    raw = config.get("region") or config.get("data_center") or config.get("zoho_region")
+    if raw:
+        normalized = str(raw).strip().lower().replace(".", "")
+        aliases = {
+            "india": "in",
+            "in_dc": "in",
+            "global": "us",
+            "us_dc": "us",
+            "europe": "eu",
+            "eu_dc": "eu",
+            "australia": "au",
+            "au_dc": "au",
+            "japan": "jp",
+            "jp_dc": "jp",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized in _ZOHO_TOKEN_URLS:
+            return normalized
+
+    return _zoho_region_from_urls(
+        (
+            base_url,
+            config.get("base_url"),
+            config.get("api_base_url"),
+            config.get("token_url"),
+            config.get("authorize_url"),
+        )
+    ) or "in"
+
+
+def _clean_auth_config(auth_config: dict[str, Any] | None) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+    for key, value in (auth_config or {}).items():
+        if value is None:
+            continue
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                continue
+            cleaned[str(key)] = stripped
+        else:
+            cleaned[str(key)] = value
+    return cleaned
+
+
+def _prepare_zoho_books_registration(
+    body: ConnectorCreate,
+    normalised_base_url: str | None,
+) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
+    """Normalize and validate no-redirect Zoho Books registration.
+
+    Client ID + client secret identify the OAuth app, but they are not
+    usable Zoho API credentials by themselves. No-redirect registration
+    must therefore include refresh token material (or a one-time grant
+    code that the backend can exchange) before the connector can be
+    marked ready for agent execution.
+    """
+    secret_fields = _clean_auth_config(body.auth_config)
+    region = _infer_zoho_region(normalised_base_url or body.base_url, secret_fields)
+    token_url = _ZOHO_TOKEN_URLS[region]
+    secret_fields["region"] = region
+    secret_fields["token_url"] = token_url
+
+    missing = [
+        label
+        for key, label in (
+            ("client_id", "Client ID"),
+            ("client_secret", "Client Secret"),
+            ("organization_id", "organization_id"),
+        )
+        if not str(secret_fields.get(key) or "").strip()
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "connector_validation_failed",
+                "connector": "zoho_books",
+                "message": "Missing required fields for Zoho Books: " + ", ".join(missing),
+                "missing": missing,
+            },
+        )
+
+    if not any(secret_fields.get(key) for key in ("refresh_token", "authorization_code", "grant_token", "code")):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "zoho_token_material_required",
+                "connector": "zoho_books",
+                "message": (
+                    "Zoho Books no-redirect registration needs a refresh_token "
+                    "or one-time authorization_code/grant_token in Extra config. "
+                    "Client ID and Client Secret alone cannot call Zoho Books "
+                    "or prove token refresh capability."
+                ),
+            },
+        )
+
+    non_secret_config = {
+        "base_url": normalised_base_url,
+        "auth_type": body.auth_type,
+        "data_schema_ref": body.data_schema_ref,
+        "rate_limit_rpm": body.rate_limit_rpm,
+        "region": region,
+        "token_url": token_url,
+        "oauth_refresh_token_present": bool(secret_fields.get("refresh_token")),
+    }
+    return normalised_base_url, secret_fields, non_secret_config
+
+
+async def _exchange_zoho_one_time_code(secret_fields: dict[str, Any], region: str) -> None:
+    code = (
+        secret_fields.pop("authorization_code", None)
+        or secret_fields.pop("grant_token", None)
+        or secret_fields.pop("code", None)
+    )
+    if not code:
+        return
+    import httpx
+
+    token_url = _ZOHO_TOKEN_URLS[region]
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(
+            token_url,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "client_id": secret_fields["client_id"],
+                "client_secret": secret_fields["client_secret"],
+                "redirect_uri": secret_fields.get("redirect_uri", "https://agenticorg.ai"),
+            },
+            headers={"Accept": "application/json"},
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "zoho_authorization_code_rejected",
+                "connector": "zoho_books",
+                "message": "Zoho rejected the supplied one-time authorization code.",
+                "status_code": resp.status_code,
+            },
+        )
+    token_data = resp.json()
+    if token_data.get("refresh_token"):
+        secret_fields["refresh_token"] = token_data["refresh_token"]
+    if token_data.get("access_token"):
+        secret_fields["access_token"] = token_data["access_token"]
+    if token_data.get("expires_in"):
+        expires_in = int(token_data.get("expires_in") or 3600)
+        secret_fields["expires_in"] = expires_in
+        secret_fields["expires_at"] = (datetime.now(UTC) + timedelta(seconds=expires_in)).isoformat()
+    if not secret_fields.get("refresh_token") and not secret_fields.get("access_token"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "zoho_token_exchange_missing_token",
+                "connector": "zoho_books",
+                "message": "Zoho accepted the code but did not return usable token material.",
+            },
+        )
+
+
+async def _validate_zoho_books_readiness(secret_fields: dict[str, Any]) -> None:
+    """Run the same connector path agents will use before persisting."""
+    region = _infer_zoho_region(secret_fields.get("base_url"), secret_fields)
+    secret_fields["region"] = region
+    secret_fields["token_url"] = _ZOHO_TOKEN_URLS[region]
+    await _exchange_zoho_one_time_code(secret_fields, region)
+    if not secret_fields.get("refresh_token"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "zoho_refresh_token_required",
+                "connector": "zoho_books",
+                "message": (
+                    "Zoho Books registration requires refresh_token for production "
+                    "readiness. Access tokens expire and are not sufficient for "
+                    "agent activation."
+                ),
+            },
+        )
+
+    from connectors.finance.zoho_books import ZohoBooksConnector
+
+    connector = ZohoBooksConnector(dict(secret_fields))
+    try:
+        await connector.connect()
+        health = await connector.health_check()
+    finally:
+        await connector.disconnect()
+
+    if health.get("status") != "healthy":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "zoho_readiness_check_failed",
+                "connector": "zoho_books",
+                "message": "Zoho Books credentials could not be validated against the Books API.",
+                "health_status": health.get("status", "unknown"),
+            },
+        )
 
 
 def _connector_tool_functions(conn: Connector) -> list[str]:
@@ -122,11 +377,15 @@ def _assert_public_base_url(base_url: str) -> None:
 router = APIRouter(dependencies=[require_tenant_admin])
 
 
-def _connector_to_dict(conn: Connector) -> dict:
+def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None = None) -> dict:
     # Return a boolean flag for whether credentials are configured —
     # NEVER return the actual auth_config (secrets) in the API response.
     auth_config = getattr(conn, "auth_config", None)
-    has_creds = bool(auth_config) or bool(getattr(conn, "secret_ref", None))
+    has_creds = (
+        bool(auth_config)
+        or bool(getattr(conn, "secret_ref", None))
+        or bool(has_encrypted_credentials)
+    )
     health_check_at = getattr(conn, "health_check_at", None)
     created_at = getattr(conn, "created_at", None)
     return {
@@ -317,8 +576,21 @@ async def list_connectors(
         query = query.offset((page - 1) * per_page).limit(per_page)
         result = await session.execute(query)
         connectors = result.scalars().all()
+        encrypted_names: set[str] = set()
+        if connectors:
+            from core.models.connector_config import ConnectorConfig
+
+            names = [str(c.name) for c in connectors if c.name]
+            cc_result = await session.execute(
+                select(ConnectorConfig.connector_name).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name.in_(names),
+                    ConnectorConfig.credentials_encrypted != {},
+                )
+            )
+            encrypted_names = {str(name) for name in cc_result.scalars().all()}
     return {
-        "items": [_connector_to_dict(c) for c in connectors],
+        "items": [_connector_to_dict(c, c.name in encrypted_names) for c in connectors],
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -341,13 +613,23 @@ async def register_connector(
     # auth_config on the Connector model is deprecated for secrets —
     # new writes go to connector_configs.credentials_encrypted via
     # tenant-aware encryption.
-    secret_fields = body.auth_config or {}
+    secret_fields = _clean_auth_config(body.auth_config)
     non_secret_config = {
         "base_url": normalised_base_url,
         "auth_type": body.auth_type,
         "data_schema_ref": body.data_schema_ref,
         "rate_limit_rpm": body.rate_limit_rpm,
     }
+    if (body.name or "").strip().lower() == "zoho_books":
+        normalised_base_url, secret_fields, non_secret_config = _prepare_zoho_books_registration(
+            body,
+            normalised_base_url,
+        )
+        await _validate_zoho_books_readiness(secret_fields)
+        _log.info(
+            "connector_registration_validated",
+            extra={"connector": "zoho_books"},
+        )
 
     async with get_tenant_session(tid) as session:
         connector = Connector(
@@ -416,9 +698,7 @@ async def register_connector(
             from core.crypto import encrypt_for_tenant
             from core.models.connector_config import ConnectorConfig
 
-            encrypted_creds = await encrypt_for_tenant(
-                __import__("json").dumps(secret_fields), tid
-            )
+            encrypted_creds = await encrypt_for_tenant(json.dumps(secret_fields), tid)
             # Uday 2026-04-26 (BUG 1): connector_configs has its own
             # UniqueConstraint(tenant_id, connector_name). When the
             # Connector was reactivated above, an old ConnectorConfig
@@ -439,6 +719,11 @@ async def register_connector(
                 cc_existing.config = non_secret_config
                 cc_existing.auth_type = body.auth_type or "api_key"
                 cc_existing.status = "configured"
+                cc_existing.health_status = (
+                    "healthy"
+                    if (body.name or "").strip().lower() == "zoho_books"
+                    else cc_existing.health_status
+                )
             else:
                 cc = ConnectorConfig(
                     tenant_id=tid,
@@ -448,11 +733,16 @@ async def register_connector(
                     credentials_encrypted={"_encrypted": encrypted_creds},
                     config=non_secret_config,
                     status="configured",
+                    health_status=(
+                        "healthy"
+                        if (body.name or "").strip().lower() == "zoho_books"
+                        else "unknown"
+                    ),
                 )
                 session.add(cc)
             await session.flush()
 
-    return _connector_to_dict(connector)
+    return _connector_to_dict(connector, bool(secret_fields))
 
 
 # ── GET /connectors/{conn_id} ────────────────────────────────────────────────
@@ -469,9 +759,21 @@ async def get_connector(
             )
         )
         connector = result.scalar_one_or_none()
+        has_encrypted_credentials = False
+        if connector is not None:
+            from core.models.connector_config import ConnectorConfig
+
+            cc_result = await session.execute(
+                select(ConnectorConfig.id).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                    ConnectorConfig.credentials_encrypted != {},
+                )
+            )
+            has_encrypted_credentials = cc_result.scalar_one_or_none() is not None
     if not connector:
         raise HTTPException(404, "Connector not found")
-    return _connector_to_dict(connector)
+    return _connector_to_dict(connector, has_encrypted_credentials)
 
 
 # ── PUT /connectors/{conn_id} ──────────────────────────────────────────────
@@ -525,6 +827,9 @@ async def update_connector(
         # want to replace all creds still can — they just have to send
         # every key they intend to keep.
         new_secrets = body.model_dump(exclude_none=True).get("auth_config")
+        credential_surface_changed = bool(new_secrets) or any(
+            field in updates for field in ("base_url", "auth_type")
+        )
         if new_secrets:
             from core.crypto import encrypt_for_tenant
             from core.crypto.tenant_secrets import decrypt_for_tenant
@@ -576,12 +881,52 @@ async def update_connector(
                         ) from exc
             # New keys win on collision so admins can rotate creds.
             merged_secrets.update(new_secrets)
+            zoho_non_secret_config: dict[str, Any] | None = None
+            if (connector.name or "").strip().lower() == "zoho_books":
+                zoho_body = ConnectorCreate(
+                    name=connector.name,
+                    category=connector.category,
+                    base_url=connector.base_url,
+                    auth_type=connector.auth_type,
+                    auth_config=merged_secrets,
+                    data_schema_ref=connector.data_schema_ref,
+                    rate_limit_rpm=connector.rate_limit_rpm,
+                )
+                (
+                    connector.base_url,
+                    merged_secrets,
+                    zoho_non_secret_config,
+                ) = _prepare_zoho_books_registration(
+                    zoho_body,
+                    _normalise_connector_base_url(
+                        connector.name,
+                        connector.base_url,
+                    ),
+                )
+                await _validate_zoho_books_readiness(merged_secrets)
 
             encrypted = await encrypt_for_tenant(
                 __import__("json").dumps(merged_secrets), tid
             )
             if cc:
                 cc.credentials_encrypted = {"_encrypted": encrypted}
+                cc.auth_type = connector.auth_type or cc.auth_type
+                cc.config = (
+                    zoho_non_secret_config
+                    if zoho_non_secret_config is not None
+                    else {
+                        **(cc.config or {}),
+                        "base_url": connector.base_url,
+                        "auth_type": connector.auth_type,
+                    }
+                )
+                cc.status = "configured"
+                cc.health_status = (
+                    "healthy"
+                    if zoho_non_secret_config is not None
+                    else "unknown"
+                )
+                cc.sync_error = None
             else:
                 new_cc = ConnectorConfig(
                     tenant_id=tid,
@@ -589,10 +934,39 @@ async def update_connector(
                     display_name=connector.name,
                     auth_type=connector.auth_type or "api_key",
                     credentials_encrypted={"_encrypted": encrypted},
-                    config={},
+                    config=zoho_non_secret_config or {},
                     status="configured",
+                    health_status=(
+                        "healthy"
+                        if zoho_non_secret_config is not None
+                        else "unknown"
+                    ),
                 )
                 session.add(new_cc)
+        elif credential_surface_changed:
+            from core.models.connector_config import ConnectorConfig
+
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc:
+                next_config = {
+                    **(cc.config or {}),
+                    "base_url": connector.base_url,
+                    "auth_type": connector.auth_type,
+                }
+                if (connector.name or "").strip().lower() == "zoho_books":
+                    region = _infer_zoho_region(connector.base_url, next_config)
+                    next_config["region"] = region
+                    next_config["token_url"] = _ZOHO_TOKEN_URLS[region]
+                cc.config = next_config
+                cc.auth_type = connector.auth_type or cc.auth_type
+                cc.health_status = "unknown"
+                cc.sync_error = "credential_surface_changed"
 
         await session.commit()
         await session.refresh(connector)
@@ -806,6 +1180,22 @@ async def test_connector(
                 "credential is marked Active — the connector test "
                 "automatically uses the most recent active vault entry."
             )
+        from datetime import UTC, datetime
+
+        from core.models.connector_config import ConnectorConfig
+
+        async with get_tenant_session(tid) as session:
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc:
+                cc.last_health_check = datetime.now(UTC)
+                cc.health_status = "unhealthy"
+                cc.sync_error = "missing_encrypted_credentials"
         return {
             "tested": False,
             "name": connector.name,
@@ -828,6 +1218,23 @@ async def test_connector(
             if db_conn:
                 db_conn.health_check_at = datetime.now(UTC)
                 db_conn.status = "active" if health.get("status") == "healthy" else "error"
+            from core.models.connector_config import ConnectorConfig
+
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc:
+                cc.last_health_check = datetime.now(UTC)
+                cc.health_status = str(health.get("status") or "unknown")
+                cc.sync_error = (
+                    None
+                    if health.get("status") == "healthy"
+                    else str(health.get("error") or "health_check_failed")
+                )
 
         return {
             "tested": True,
@@ -835,6 +1242,22 @@ async def test_connector(
             "health": health,
         }
     except TimeoutError:
+        from datetime import UTC, datetime
+
+        from core.models.connector_config import ConnectorConfig
+
+        async with get_tenant_session(tid) as session:
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc:
+                cc.last_health_check = datetime.now(UTC)
+                cc.health_status = "unhealthy"
+                cc.sync_error = "TimeoutError"
         # TC_007 (Aishwarya 2026-04-23): "Connection timed out (10s)" is
         # specific; return a hint about what to check.
         return {
@@ -848,6 +1271,22 @@ async def test_connector(
             ),
         }
     except Exception as exc:
+        from datetime import UTC, datetime
+
+        from core.models.connector_config import ConnectorConfig
+
+        async with get_tenant_session(tid) as session:
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == connector.name,
+                )
+            )
+            cc = cc_result.scalar_one_or_none()
+            if cc:
+                cc.last_health_check = datetime.now(UTC)
+                cc.health_status = "unhealthy"
+                cc.sync_error = type(exc).__name__
         # TC_007 (Aishwarya 2026-04-23): the route used to always return
         # "Connector test failed" regardless of the actual cause (401,
         # SSL, DNS, auth token expired, etc.). Surface a specific,

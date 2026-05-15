@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 # ── Region helpers ────────────────────────────────────────────────────────────
 
@@ -60,33 +61,73 @@ ZOHO_REGIONS: dict[str, dict[str, str]] = {
         "api_base_url": "https://www.zohoapis.jp/books/v3",
     },
 }
+ZOHO_REGION_HOSTS: dict[str, tuple[str, ...]] = {
+    "in": ("zohoapis.in", "books.zoho.in", "accounts.zoho.in"),
+    "eu": ("zohoapis.eu", "accounts.zoho.eu"),
+    "au": ("zohoapis.com.au", "accounts.zoho.com.au"),
+    "jp": ("zohoapis.jp", "accounts.zoho.jp"),
+    "us": ("zohoapis.com", "accounts.zoho.com"),
+}
+
+
+def _host_from_urlish(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    candidate = text if "://" in text else f"https://{text}"
+    parsed = urlparse(candidate)
+    return (parsed.hostname or "").rstrip(".").lower()
+
+
+def _host_matches(host: str, domain: str) -> bool:
+    return host == domain or host.endswith(f".{domain}")
+
+
+def _zoho_region_from_urls(values: tuple[Any, ...]) -> str | None:
+    for value in values:
+        host = _host_from_urlish(value)
+        if not host:
+            continue
+        for region, domains in ZOHO_REGION_HOSTS.items():
+            if any(_host_matches(host, domain) for domain in domains):
+                return region
+    return None
 
 
 def _zoho_region(extra: dict[str, Any]) -> str:
     """Pick the Zoho data-center suffix from user-supplied config.
 
     Accepts any of ``region``, ``data_center``, or ``zoho_region`` and
-    falls back to ``in`` for India (the default region for AgenticOrg's
-    primary CA-firms market).
+    falls back to the Zoho API/account host when no explicit region is
+    provided. India remains the default for AgenticOrg's primary CA-firms
+    market.
     """
     raw = (
         extra.get("region")
         or extra.get("data_center")
         or extra.get("zoho_region")
-        or "in"
     )
-    normalized = str(raw).strip().lower().replace(".", "")
-    aliases = {
-        "india": "in",
-        "in_dc": "in",
-        "us_dc": "us",
-        "global": "us",
-        "eu_dc": "eu",
-        "au_dc": "au",
-        "jp_dc": "jp",
-    }
-    normalized = aliases.get(normalized, normalized)
-    return normalized if normalized in ZOHO_REGIONS else "in"
+    if raw:
+        normalized = str(raw).strip().lower().replace(".", "")
+        aliases = {
+            "india": "in",
+            "in_dc": "in",
+            "us_dc": "us",
+            "global": "us",
+            "eu_dc": "eu",
+            "europe": "eu",
+            "au_dc": "au",
+            "australia": "au",
+            "jp_dc": "jp",
+            "japan": "jp",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized in ZOHO_REGIONS:
+            return normalized
+
+    return _zoho_region_from_urls(
+        tuple(extra.get(key) for key in ("base_url", "api_base_url", "token_url", "authorize_url"))
+    ) or "in"
 
 
 # ── Spec dataclass ────────────────────────────────────────────────────────────
@@ -369,12 +410,12 @@ def _bootstrap() -> None:
                 ),
                 ProviderField(
                     key="region",
-                    label="Data Center",
+                    label="Zoho Region",
                     help_text=(
-                        "Pick the Zoho region your account belongs to. "
-                        "Defaults to India."
+                        "Optional override. When omitted, AgenticOrg "
+                        "infers the region from the Zoho API base URL."
                     ),
-                    required=True,
+                    required=False,
                     options=(
                         ("in", "India (zoho.in)"),
                         ("us", "United States / Global (zoho.com)"),
