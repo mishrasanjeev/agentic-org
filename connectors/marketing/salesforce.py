@@ -13,6 +13,14 @@ from typing import Any
 import httpx
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_https_origin
+
+SALESFORCE_LOGIN_URLS = {
+    "production": "https://login.salesforce.com/services/oauth2/token",
+    "login": "https://login.salesforce.com/services/oauth2/token",
+    "sandbox": "https://test.salesforce.com/services/oauth2/token",
+    "test": "https://test.salesforce.com/services/oauth2/token",
+}
 
 
 class SalesforceConnector(BaseConnector):
@@ -39,9 +47,7 @@ class SalesforceConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         username = self.config.get("username", "")
         password = self.config.get("password", "")
-        login_url = self.config.get(
-            "login_url", "https://login.salesforce.com/services/oauth2/token"
-        )
+        login_url = self._login_url()
 
         data: dict[str, str] = {
             "client_id": client_id,
@@ -58,12 +64,23 @@ class SalesforceConnector(BaseConnector):
             resp = await client.post(login_url, data=data)
             resp.raise_for_status()
             body = resp.json()
-            self._instance_url = body["instance_url"]
+            self._instance_url = require_https_origin(
+                body["instance_url"],
+                field="Salesforce instance_url",
+                allowed_exact_hosts=("login.salesforce.com", "test.salesforce.com"),
+                allowed_host_suffixes=(".salesforce.com", ".force.com"),
+            )
             token = body["access_token"]
 
         # Update base_url to use the instance URL from auth response
         self.base_url = f"{self._instance_url}/services/data/v60.0"
         self._auth_headers = {"Authorization": f"Bearer {token}"}
+
+    def _login_url(self) -> str:
+        environment = str(
+            self.config.get("environment") or self.config.get("login_domain") or "production"
+        ).strip().lower()
+        return SALESFORCE_LOGIN_URLS.get(environment, SALESFORCE_LOGIN_URLS["production"])
 
     async def health_check(self) -> dict[str, Any]:
         try:

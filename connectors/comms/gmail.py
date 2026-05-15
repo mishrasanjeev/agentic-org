@@ -10,6 +10,8 @@ import httpx
 
 from connectors.framework.base_connector import BaseConnector
 
+GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
 
 class GmailConnector(BaseConnector):
     name = "gmail"
@@ -29,15 +31,12 @@ class GmailConnector(BaseConnector):
         refresh_token = self._get_secret("refresh_token")
         client_id = self._get_secret("client_id")
         client_secret = self._get_secret("client_secret")
-        token_url = self.config.get(
-            "token_url", "https://oauth2.googleapis.com/token"
-        )
 
         if refresh_token and client_id and client_secret:
             # Exchange refresh token for access token
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    token_url,
+                    GOOGLE_OAUTH_TOKEN_URL,
                     data={
                         "grant_type": "refresh_token",
                         "refresh_token": refresh_token,

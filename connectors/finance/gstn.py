@@ -21,16 +21,31 @@ from connectors.framework.base_connector import BaseConnector
 
 logger = structlog.get_logger()
 
+GSTN_API_BASE_URL = "https://gsp.adaequare.com/gsp"
+GSTN_SANDBOX_API_BASE_URL = "https://gsp.adaequare.com/test/enriched/gsp"
+GSTN_ALLOWED_BASE_URLS = {GSTN_API_BASE_URL, GSTN_SANDBOX_API_BASE_URL}
+
+
+def _provider_base_url(connector_cls: type[GstnConnector]) -> str:
+    base_url = getattr(connector_cls, "base_url", GSTN_API_BASE_URL)
+    if base_url not in GSTN_ALLOWED_BASE_URLS:
+        raise ValueError("GSTN base URL must be an Adaequare provider endpoint")
+    return base_url
+
 
 class GstnConnector(BaseConnector):
     name = "gstn"
     category = "finance"
     auth_type = "gsp_dsc"
-    base_url = "https://gsp.adaequare.com/gsp"
+    base_url = GSTN_API_BASE_URL
     rate_limit_rpm = 50
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        provider_base_url = _provider_base_url(type(self))
+        safe_config = dict(config or {})
+        safe_config["base_url"] = provider_base_url
+        super().__init__(safe_config)
+        self._provider_base_url = provider_base_url
         self._dsc_adapter = None
 
         dsc_path = self.config.get("dsc_path", "")
@@ -61,7 +76,7 @@ class GstnConnector(BaseConnector):
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{self.base_url}/authenticate",
+                f"{self._provider_base_url}/authenticate",
                 json={
                     "action": "ACCESSTOKEN",
                     "username": username,

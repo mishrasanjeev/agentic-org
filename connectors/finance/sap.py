@@ -8,6 +8,7 @@ import httpx
 import structlog
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label, require_sap_region
 
 logger = structlog.get_logger()
 
@@ -20,14 +21,16 @@ class SapConnector(BaseConnector):
     rate_limit_rpm = 300
 
     def __init__(self, config: dict[str, Any] | None = None):
-        config = config or {}
-        # Build the real base_url from the host config key
+        config = dict(config or {})
         host = config.get("host", "")
         if host:
-            config.setdefault(
-                "base_url",
-                f"https://{host}.s4hana.cloud.sap/sap/opu/odata/sap",
+            safe_host = require_dns_label(host, "SAP host")
+            config["host"] = safe_host
+            config["base_url"] = (
+                f"https://{safe_host}.s4hana.cloud.sap/sap/opu/odata/sap"
             )
+        else:
+            config.pop("base_url", None)
         super().__init__(config)
 
     def _register_tools(self):
@@ -43,25 +46,20 @@ class SapConnector(BaseConnector):
         """OAuth2 client_credentials flow via SAP XSUAA."""
         client_id = self._get_secret("client_id")
         client_secret = self._get_secret("client_secret")
-        subdomain = self.config.get("subdomain", "")
-        region = self.config.get("region", "eu10")
+        subdomain = self.config.get("subdomain") or self.config.get("host", "")
+        region = require_sap_region(self.config.get("region", "eu10"))
 
         if not subdomain:
-            # Fallback: allow explicit token_url in config
-            token_url = self.config.get("token_url", "")
-            if not token_url:
-                raise ValueError(
-                    "SAP connector requires config['subdomain'] or config['token_url']"
-                )
+            raise ValueError("SAP connector requires config['subdomain'] or config['host']")
         else:
-            token_url = (
-                f"https://{subdomain}.authentication.{region}.hana.ondemand.com"
-                "/oauth/token"
+            safe_subdomain = require_dns_label(subdomain, "SAP subdomain")
+            token_origin = (
+                f"https://{safe_subdomain}.authentication.{region}.hana.ondemand.com"
             )
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(base_url=token_origin) as client:
             resp = await client.post(
-                token_url,
+                "/oauth/token",
                 data={
                     "grant_type": "client_credentials",
                     "client_id": client_id,

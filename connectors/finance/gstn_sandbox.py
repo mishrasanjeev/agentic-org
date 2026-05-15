@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from connectors.finance.gstn import GstnConnector
+from connectors.finance.gstn import GSTN_SANDBOX_API_BASE_URL, GstnConnector
 
 # Adaequare sandbox environment
-SANDBOX_BASE_URL = "https://gsp.adaequare.com/test/enriched/gsp"
+SANDBOX_BASE_URL = GSTN_SANDBOX_API_BASE_URL
 
 # Test GSTINs available in Adaequare sandbox
 SANDBOX_GSTINS = [

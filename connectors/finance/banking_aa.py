@@ -20,16 +20,21 @@ import httpx
 
 from connectors.framework.base_connector import BaseConnector
 
+FINVU_API_BASE_URL = "https://aa.finvu.in/api/v1"
+FINVU_TOKEN_URL = f"{FINVU_API_BASE_URL}/oauth2/token"
+
 
 class BankingAaConnector(BaseConnector):
     name = "banking_aa"
     category = "finance"
     auth_type = "aa_oauth2"
-    base_url = "https://aa.finvu.in/api/v1"
+    base_url = FINVU_API_BASE_URL
     rate_limit_rpm = 100
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config["base_url"] = FINVU_API_BASE_URL
+        super().__init__(safe_config)
         self._consent_manager = None
 
         # Initialize consent manager if callback_url is configured
@@ -38,7 +43,7 @@ class BankingAaConnector(BaseConnector):
             from connectors.finance.aa_consent import AAConsentManager
 
             self._consent_manager = AAConsentManager(
-                base_url=self.base_url,
+                base_url=FINVU_API_BASE_URL,
                 client_id=self.config.get("client_id", ""),
                 client_secret=self.config.get("client_secret", ""),
                 callback_url=callback_url,
@@ -55,10 +60,9 @@ class BankingAaConnector(BaseConnector):
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
         client_secret = self._get_secret("client_secret")
-        token_url = self.config.get("token_url", f"{self.base_url}/oauth2/token")
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                token_url,
+                FINVU_TOKEN_URL,
                 data={
                     "grant_type": "client_credentials",
                     "client_id": client_id,
