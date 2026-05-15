@@ -12,16 +12,20 @@ import httpx
 
 from connectors.framework.base_connector import BaseConnector
 
+BRANDWATCH_API_BASE_URL = "https://api.brandwatch.com"
+
 
 class BrandwatchConnector(BaseConnector):
     name = "brandwatch"
     category = "marketing"
     auth_type = "oauth2"
-    base_url = "https://api.brandwatch.com"
+    base_url = BRANDWATCH_API_BASE_URL
     rate_limit_rpm = 60
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config["base_url"] = BRANDWATCH_API_BASE_URL
+        super().__init__(safe_config)
         self._project_id = self.config.get("project_id", "")
 
     def _register_tools(self):
@@ -37,7 +41,7 @@ class BrandwatchConnector(BaseConnector):
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{self.base_url}/oauth/token",
+                f"{BRANDWATCH_API_BASE_URL}/oauth/token",
                 data={
                     "grant_type": "api-password",
                     "username": username,

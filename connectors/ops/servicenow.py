@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 
 class ServicenowConnector(BaseConnector):
@@ -19,6 +20,13 @@ class ServicenowConnector(BaseConnector):
     auth_type = "rest_oauth2"
     base_url = "https://org.service-now.com/api/now"
     rate_limit_rpm = 100
+
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        instance = require_dns_label(safe_config.get("instance", "org"), "ServiceNow instance")
+        safe_config["instance"] = instance
+        safe_config["base_url"] = f"https://{instance}.service-now.com/api/now"
+        super().__init__(safe_config)
 
     def _register_tools(self):
         self._tool_registry["create_incident"] = self.create_incident
@@ -34,12 +42,12 @@ class ServicenowConnector(BaseConnector):
         username = self.config.get("username", "")
         password = self.config.get("password", "")
 
-        instance = self.config.get("instance", "org")
-        token_url = f"https://{instance}.service-now.com/oauth_token.do"
+        instance = require_dns_label(self.config.get("instance", "org"), "ServiceNow instance")
+        token_origin = f"https://{instance}.service-now.com"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(base_url=token_origin) as client:
             resp = await client.post(
-                token_url,
+                "/oauth_token.do",
                 data={
                     "grant_type": "password",
                     "client_id": client_id,
