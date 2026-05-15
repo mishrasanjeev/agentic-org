@@ -136,9 +136,11 @@ def test_commerce_agent_hosted_staging_e2e_has_real_staging_command_plan() -> No
     content = E2E.read_text(encoding="utf-8")
 
     for required in [
-        "python demos/commerce_sales_agent_demo.py --mode=hosted-staging",
-        "python -m pytest tests/evals/test_commerce_sales_agent_evals.py -q --hosted-staging",
-        "The current local demo/eval path is mocked.",
+        "python demos/commerce_sales_agent_demo.py --mode=real-staging",
+        "python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q",
+        "AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL",
+        "fails closed before connector creation, auth lookup, or network use",
+        "python demos/commerce_sales_agent_demo.py --mode=mock",
         "Do not present mocked results as hosted staging evidence.",
     ]:
         assert required in content
@@ -229,11 +231,11 @@ def test_commerce_agent_contract_gap_report_preserves_real_staging_gap_and_no_se
     content = CONTRACT_GAP.read_text(encoding="utf-8")
 
     for required in [
-        "The real-staging gap is still blocked",
-        "current local demo/eval path uses mocked Grantex responses",
-        "No redacted hosted staging evidence exists yet",
-        "demos/commerce_sales_agent_demo.py --mode=hosted-staging",
-        "python -m pytest tests/evals/test_commerce_sales_agent_evals.py -q --hosted-staging",
+        "The real-staging gap is now partial",
+        "refuses production URLs, arbitrary `run.app` URLs, credentialed URLs, and non-HTTPS URLs",
+        "No redacted hosted AgenticOrg evidence exists yet",
+        "demos/commerce_sales_agent_demo.py --mode=real-staging",
+        "python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q",
     ]:
         assert required in content
 

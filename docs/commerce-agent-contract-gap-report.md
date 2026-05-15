@@ -23,7 +23,7 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 | Unsupported EMI/discount/warranty behavior | `done` | Claim grounding refuses unbacked EMI, discount, offer, return, tax, and warranty claims. |
 | No direct Stripe/Plural/Pine/provider credential path | `done` | Regression tests statically block provider imports and default Commerce Sales Agent tools are Grantex-only. |
 | Mocked eval/demo status | `partial` | Local demo and evals cover the safety path, but they use mocked Grantex responses. |
-| Real hosted staging eval gap | `blocked` | M11 documents commands only; non-mocked hosted staging connector/demo/eval mode and hosted services do not exist yet. |
+| Real hosted staging eval gap | `partial` | C1 adds explicit local AgenticOrg real-staging mode against approved Grantex staging or exact smoke URLs; hosted AgenticOrg services and full negative fixture coverage remain pending. |
 | Broader PRD Commerce Agent Pack | `deferred` | Only the Sales Agent slice exists; catalog enrichment, offer, support, reconciliation, and store operations agent pack work remains roadmap. |
 
 ## Contract Surface Inventory
@@ -41,9 +41,10 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 | `payment_create_intent` alias | `done` | Requires idempotency key, local guardrail pass, then maps to `payment.create_intent`. | Hosted staging evidence pending. |
 | `checkout_create` alias | `done` | Requires idempotency key, local guardrail pass, then maps to `checkout.create`. | Hosted staging evidence pending. |
 | `payment_get_status` alias | `done` | Maps to `payment.get_status`. | Hosted staging evidence pending. |
-| Production default base URL | `partial` | Connector default is production-shaped when env is absent. | Staging must set `GRANTEX_COMMERCE_BASE_URL=https://api-staging.grantex.dev`; future hosted mode should fail closed when staging env is absent. |
-| Mocked demo | `partial` | `demos/commerce_sales_agent_demo.py` proves ordered Grantex aliases and no provider credential handling. | It is not hosted evidence and must not be reported as such. |
-| Mocked evals | `partial` | `tests/evals/test_commerce_sales_agent_evals.py` covers 14 local mocked cases. | A real-staging eval mode is still blocked. |
+| Production default base URL | `partial` | Connector default is production-shaped when env is absent for existing runtime compatibility. | C1 real-staging entry points fail closed unless an approved Grantex staging or exact smoke URL is supplied. |
+| Mocked demo | `partial` | `demos/commerce_sales_agent_demo.py --mode=mock` proves ordered Grantex aliases and no provider credential handling. | It is not hosted evidence and must not be reported as such. |
+| Mocked evals | `partial` | `tests/evals/test_commerce_sales_agent_evals.py` covers 14 local mocked cases. | Real-staging eval coverage is separate and gated behind explicit approval env. |
+| Real-staging demo/eval mode | `partial` | `demos/commerce_sales_agent_demo.py --mode=real-staging` and `tests/evals/test_commerce_sales_agent_real_staging.py` run only against approved Grantex staging or exact smoke URLs. | Passport exchange, checkout, disabled merchant, and untrusted agent cases need approved synthetic staging fixtures. |
 | Direct provider calls | `done` | `tests/regression/test_commerce_sales_agent_no_provider_calls.py` blocks provider imports/calls in commerce code. | Keep this static guard whenever adding agent pack features. |
 
 ## Guardrail Coverage
@@ -84,14 +85,14 @@ Do not record values for those names.
 
 ## Real Hosted Staging Gap
 
-The real-staging gap is still blocked because:
+The real-staging gap is now partial because:
 
-- Grantex hosted staging infrastructure does not exist yet.
-- AgenticOrg hosted staging services do not exist yet.
-- `demos/commerce_sales_agent_demo.py --mode=hosted-staging` is only a documented command plan.
-- `python -m pytest tests/evals/test_commerce_sales_agent_evals.py -q --hosted-staging` is only a documented command plan.
-- The current local demo/eval path uses mocked Grantex responses.
-- No redacted hosted staging evidence exists yet.
+- C1 real-staging mode refuses production URLs, arbitrary `run.app` URLs, credentialed URLs, and non-HTTPS URLs before connector creation, auth lookup, or network use.
+- `demos/commerce_sales_agent_demo.py --mode=real-staging` can run local AgenticOrg against an approved Grantex staging or exact smoke URL.
+- `python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q` is gated behind explicit approval env and remains skipped by default.
+- Full hosted AgenticOrg services do not exist yet.
+- Passport exchange, checkout, disabled merchant, and untrusted agent real-staging cases still require approved synthetic fixtures.
+- No redacted hosted AgenticOrg evidence exists yet.
 
 ## Broader PRD Commerce Agent Pack Gap
 
@@ -110,13 +111,13 @@ The PRD calls for AgenticOrg commerce agents beyond the current Sales Agent. Cur
 
 - Added this gap report.
 - Added regression coverage that pins no-provider-call language, real-staging gap language, staging URL usage, status classifications, and no secret values.
-- Did not implement real hosted staging mode, provider integration, broad agent pack features, or production config changes.
+- Implemented explicit local AgenticOrg real-staging mode and kept provider integration, broad agent pack features, hosted AgenticOrg services, and production config unchanged.
 
 ## Exact Future Implementation Prompts
 
 ### AgenticOrg Real Hosted Staging Eval Mode
 
-`Task: M12A-Agent only - implement AgenticOrg real hosted staging eval mode for the Commerce Sales Agent after Grantex staging exists. Do not deploy, merge, create cloud resources, change production config, enable live payments, or enable live Plural. Add an explicit hosted-staging mode that refuses production URLs, requires GRANTEX_COMMERCE_BASE_URL=https://api-staging.grantex.dev, uses only grantex_commerce:* tools, redacts auth/passport/idempotency material, and produces a redacted evidence report. Add focused tests for production URL refusal, missing staging env refusal, no direct provider calls, and no mocked results being reported as hosted evidence.`
+`Task: C1-run only - run AgenticOrg Commerce Sales Agent real-staging demo/eval against an approved Grantex staging or exact smoke URL. Do not deploy, merge, create cloud resources, change production config, enable live payments, or enable live Plural. Set GRANTEX_COMMERCE_BASE_URL and GRANTEX_BASE_URL to the approved URL, set exactly one Grantex auth env var securely outside logs, set AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL only for an exact run.app smoke origin, run demos/commerce_sales_agent_demo.py --mode=real-staging with a redacted evidence report path, and run python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q. Do not print bearer tokens, passports, idempotency keys, provider material, or raw payloads.`
 
 ### Broader Commerce Agent Pack Planning
 

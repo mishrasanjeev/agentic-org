@@ -1,10 +1,12 @@
-"""Local mocked Commerce Sales Agent demo for Grantex Commerce V1 internal sandbox."""
+"""Commerce Sales Agent demo for mocked and approved real-staging Grantex runs."""
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -20,11 +22,15 @@ from connectors.commerce.grantex_commerce import (  # noqa: E402
     GrantexCommerceConnector,
 )
 from core.commerce.sales_guardrails import inventory_caution, validate_claims_against_tool_data  # noqa: E402
+from core.commerce.staging_evidence import StagingEvidence  # noqa: E402
+from core.commerce.staging_runtime import RealStagingConfigError, validate_real_staging_config  # noqa: E402
 
 DATASET = REPO_ROOT / "evals" / "golden_datasets" / "commerce.json"
 GRANTEX_TO_ALIAS = {value: key for key, value in TOOL_ALIAS_TO_GRANTEX.items()}
 REST_PATH_TO_ALIAS = {value: key for key, value in REST_CONSENT_ENDPOINTS.items()}
 PROVIDER_MARKERS = ("stripe", "plural", "pine", "provider_credentials", "credential_payload")
+STAGING_MERCHANT_ID = "mch_staging_electronics_pilot"
+STAGING_AGENT_ID = "cag_staging_agenticorg_sales"
 
 DEMO_MCP_RESPONSES: dict[str, dict[str, Any]] = {
     "merchant_get_profile": {
@@ -113,11 +119,8 @@ def make_mock_grantex_connector(
 
         return httpx.Response(404, json={"error": {"code": "not_found", "message": "Unknown mocked path"}})
 
-    connector = GrantexCommerceConnector(
-        {"base_url": "https://grantex.mock", "bearer_token": "demo_agent_assertion"}
-    )
+    connector = GrantexCommerceConnector({"base_url": "https://grantex.mock"})
     connector._auth_headers = {
-        "Authorization": "Bearer demo_agent_assertion",
         "Accept": "application/json",
     }
     connector._client = httpx.AsyncClient(
@@ -151,6 +154,56 @@ def _no_provider_calls(tool_sequence: list[str]) -> bool:
     )
 
 
+def _data(payload: dict[str, Any]) -> dict[str, Any]:
+    value = payload.get("data", payload)
+    return value if isinstance(value, dict) else {}
+
+
+def _items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = _data(payload)
+    raw_items = data.get("items") or data.get("products") or []
+    return [item for item in raw_items if isinstance(item, dict)]
+
+
+def _first_id(record: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def _first_variant_id(item: dict[str, Any]) -> str | None:
+    raw_variants = item.get("variants") or item.get("items") or []
+    if not isinstance(raw_variants, list):
+        return None
+    for variant in raw_variants:
+        if isinstance(variant, dict):
+            variant_id = _first_id(variant, "variant_id", "id")
+            if variant_id:
+                return variant_id
+    return _first_id(item, "variant_id")
+
+
+def _amount_minor_units(item: dict[str, Any]) -> int:
+    for container in (item, item.get("price") if isinstance(item.get("price"), dict) else {}):
+        value = container.get("amount_minor_units") if isinstance(container, dict) else None
+        if isinstance(value, int) and value >= 0:
+            return value
+    raw_variants = item.get("variants") or []
+    if isinstance(raw_variants, list):
+        for variant in raw_variants:
+            if isinstance(variant, dict):
+                value = variant.get("price_amount") or variant.get("amount_minor_units")
+                if isinstance(value, int) and value >= 0:
+                    return value
+    return 0
+
+
+def _case_status(result: dict[str, Any]) -> str:
+    return "fail" if result.get("error") else "pass"
+
+
 async def _run_inventory_negative(case_id: str, name: str) -> dict[str, Any]:
     tool_sequence: list[str] = []
     connector = make_mock_grantex_connector(tool_sequence, (case_id,))
@@ -167,6 +220,231 @@ async def _run_inventory_negative(case_id: str, name: str) -> dict[str, Any]:
             "behavior": "cautious" if caution["caution_required"] else "allowed",
             "message": caution["message"],
             "tool_sequence": tool_sequence,
+        }
+    finally:
+        await connector.disconnect()
+
+
+async def run_real_staging_demo(
+    *,
+    grantex_base_url: str | None = None,
+    allow_smoke_cloud_run_url: str | None = None,
+    evidence_report: str | None = None,
+) -> dict[str, Any]:
+    config = validate_real_staging_config(
+        grantex_base_url=grantex_base_url,
+        allow_smoke_cloud_run_url=allow_smoke_cloud_run_url,
+        evidence_report=evidence_report,
+    )
+    tool_sequence: list[str] = []
+    steps: list[dict[str, Any]] = []
+    negative_scenarios: list[dict[str, Any]] = []
+    evidence = StagingEvidence(
+        run_mode="real-staging",
+        grantex_host=config.grantex_host,
+        auth_source_env_name=config.auth_env_name,
+    )
+
+    connector = GrantexCommerceConnector({"base_url": config.grantex_base_url})
+    await connector.connect()
+    try:
+        health = await connector.health_check()
+        evidence.add_case(name="connector_health_tools_list", status=_case_status(health), result=health)
+
+        profile = await connector.merchant_get_profile(merchant_id=STAGING_MERCHANT_ID)
+        alias = "grantex_commerce:merchant_get_profile"
+        tool_sequence.append(alias)
+        evidence.add_case(name="merchant_get_profile", status=_case_status(profile), tool_alias=alias, result=profile)
+        profile_data = _data(profile)
+        steps.append(
+            _step(
+                "Merchant profile",
+                "Load the approved staging merchant profile.",
+                alias,
+                {
+                    "merchant_id": profile_data.get("merchant_id") or STAGING_MERCHANT_ID,
+                    "commerce_status": profile_data.get("commerce_status") or profile_data.get("status"),
+                },
+                "Loaded the Grantex staging merchant profile.",
+            )
+        )
+
+        search = await connector.catalog_search(merchant_id=STAGING_MERCHANT_ID, query="electronics appliances")
+        alias = "grantex_commerce:catalog_search"
+        tool_sequence.append(alias)
+        evidence.add_case(name="catalog_search", status=_case_status(search), tool_alias=alias, result=search)
+        search_items = _items(search)
+        first_search_item = search_items[0] if search_items else {}
+        product_id = _first_id(first_search_item, "product_id", "id")
+        steps.append(
+            _step(
+                "Catalog search",
+                "Search the approved staging catalog.",
+                alias,
+                {"items_returned": len(search_items), "product_id": product_id},
+                "Catalog search ran through Grantex staging.",
+            )
+        )
+
+        item_data: dict[str, Any] = {}
+        variant_id: str | None = None
+        if product_id:
+            item = await connector.catalog_get_item(merchant_id=STAGING_MERCHANT_ID, product_id=product_id)
+            alias = "grantex_commerce:catalog_get_item"
+            tool_sequence.append(alias)
+            evidence.add_case(name="catalog_get_item", status=_case_status(item), tool_alias=alias, result=item)
+            item_data = _data(item)
+            variant_id = _first_variant_id(item_data)
+            steps.append(
+                _step(
+                    "Catalog item",
+                    "Get the first staging catalog item.",
+                    alias,
+                    {"product_id": product_id, "variant_id": variant_id},
+                    "Catalog item details came from Grantex staging.",
+                )
+            )
+        else:
+            evidence.add_case(name="catalog_get_item", status="skipped", blocker="catalog search returned no product")
+
+        if variant_id:
+            inventory = await connector.inventory_check(merchant_id=STAGING_MERCHANT_ID, variant_ids=[variant_id])
+            alias = "grantex_commerce:inventory_check"
+            tool_sequence.append(alias)
+            evidence.add_case(
+                name="inventory_check",
+                status=_case_status(inventory),
+                tool_alias=alias,
+                result=inventory,
+            )
+            caution = inventory_caution(inventory.get("data", inventory))
+            steps.append(
+                _step(
+                    "Inventory check",
+                    "Check staging inventory for the first variant.",
+                    alias,
+                    {"variant_id": variant_id, "caution_required": caution["caution_required"]},
+                    "Inventory was checked through Grantex staging.",
+                )
+            )
+
+            cart = await connector.cart_create(
+                merchant_id=STAGING_MERCHANT_ID,
+                currency="INR",
+                line_items=[
+                    {
+                        "variant_id": variant_id,
+                        "quantity": 1,
+                        "unit_amount_minor_units": _amount_minor_units(item_data),
+                    }
+                ],
+                idempotency_key=f"agenticorg-real-staging-cart-{uuid.uuid4().hex}",
+            )
+            alias = "grantex_commerce:cart_create"
+            tool_sequence.append(alias)
+            evidence.add_case(name="cart_create", status=_case_status(cart), tool_alias=alias, result=cart)
+            steps.append(
+                _step(
+                    "Cart draft",
+                    "Create a staging cart draft.",
+                    alias,
+                    {"cart_id": _data(cart).get("cart_id"), "status": _data(cart).get("status")},
+                    "Cart creation ran through Grantex staging.",
+                )
+            )
+        else:
+            evidence.add_case(name="inventory_check", status="skipped", blocker="no variant ID available")
+            evidence.add_case(name="cart_create", status="skipped", blocker="no variant ID available")
+
+        consent = await connector.consent_request(
+            merchant_id=STAGING_MERCHANT_ID,
+            passport_type="checkout",
+            requested_scopes=["checkout:create", "payment:create"],
+            max_amount=250000,
+            currency="INR",
+        )
+        alias = "grantex_commerce:consent_request"
+        tool_sequence.append(alias)
+        evidence.add_case(name="consent_request", status=_case_status(consent), tool_alias=alias, result=consent)
+        steps.append(
+            _step(
+                "Consent request",
+                "Create a staging checkout consent request.",
+                alias,
+                {
+                    "consent_request_id": _data(consent).get("consent_request_id"),
+                    "passport_type": _data(consent).get("passport_type"),
+                },
+                "Consent request was created without exposing auth or passport material.",
+            )
+        )
+
+        missing_consent = await connector.payment_create_intent(
+            merchant_id=STAGING_MERCHANT_ID,
+            cart_id="staging-cart-without-passport",
+            amount_minor_units=199900,
+            currency="INR",
+            idempotency_key=f"agenticorg-real-staging-missing-consent-{uuid.uuid4().hex}",
+            provider_key="mock",
+        )
+        negative_scenarios.append(
+            {
+                "name": "missing_consent_checkout",
+                "behavior": "refused" if missing_consent.get("error") == "consent_required" else "unexpected",
+                "error": missing_consent.get("error"),
+                "message": missing_consent.get("message", ""),
+                "tool_sequence": [],
+            }
+        )
+        unsupported_emi = validate_claims_against_tool_data(
+            "This product includes no-cost EMI and a discount offer.",
+            {"price": {"amount_minor_units": 349900, "currency": "INR"}},
+        )
+        negative_scenarios.append(
+            {
+                "name": "unsupported_emi_discount",
+                "behavior": "refused" if not unsupported_emi.get("allowed") else "unexpected",
+                "error": unsupported_emi.get("error"),
+                "message": unsupported_emi.get("message", ""),
+                "tool_sequence": [],
+            }
+        )
+
+        for skipped in (
+            "consent_exchange",
+            "payment_create_intent",
+            "checkout_create",
+            "payment_get_status",
+            "denied_revoked_expired_passport",
+            "disabled_merchant_untrusted_agent",
+            "hosted_agenticorg_discovery",
+        ):
+            evidence.add_case(
+                name=skipped,
+                status="skipped",
+                blocker="requires approved synthetic staging fixture or hosted AgenticOrg service",
+            )
+
+        evidence.no_provider_call_confirmation = _no_provider_calls(tool_sequence)
+        if evidence_report:
+            evidence.write_markdown(evidence_report)
+
+        return {
+            "title": "AgenticOrg Commerce Sales Agent Real-Staging Demo",
+            "scope": "real_staging_only",
+            "grantex_dependency": config.grantex_host,
+            "steps": steps,
+            "negative_scenarios": negative_scenarios,
+            "audit_summary": {
+                "tool_sequence": tool_sequence,
+                "no_direct_provider_calls": _no_provider_calls(tool_sequence),
+                "no_provider_credential_handling": True,
+                "internal_sandbox_only": False,
+                "real_staging_only": True,
+                "final_payment_confirmation_user_controlled": True,
+                "auth_source_env_name": config.auth_env_name,
+                "evidence_report": evidence_report,
+            },
         }
     finally:
         await connector.disconnect()
@@ -432,9 +710,33 @@ def format_demo_output(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def _amain() -> None:
-    print(format_demo_output(await run_demo()))
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run the Commerce Sales Agent demo.")
+    parser.add_argument("--mode", choices=("mock", "real-staging"), default="mock")
+    parser.add_argument("--grantex-base", default=None)
+    parser.add_argument("--allow-smoke-cloud-run-url", default=None)
+    parser.add_argument("--evidence-report", default=None)
+    return parser
+
+
+async def _amain() -> int:
+    args = _parser().parse_args()
+    try:
+        if args.mode == "real-staging":
+            result = await run_real_staging_demo(
+                grantex_base_url=args.grantex_base,
+                allow_smoke_cloud_run_url=args.allow_smoke_cloud_run_url,
+                evidence_report=args.evidence_report,
+            )
+        else:
+            result = await run_demo()
+    except RealStagingConfigError as exc:
+        print(f"{exc.code}: {exc.message}", file=sys.stderr)
+        return 2
+
+    print(format_demo_output(result))
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(_amain())
+    raise SystemExit(asyncio.run(_amain()))

@@ -52,17 +52,30 @@ Plural sandbox may remain available only for unrelated non-commerce app areas if
 
 ## Real Staging Demo And Eval Command Plan
 
-These commands are for later hosted staging execution after non-mocked staging connector support is explicitly implemented and reviewed:
+The C1 real-staging mode runs local AgenticOrg demo/evals against an approved Grantex staging or smoke URL. Mock mode remains the default and must not be reported as hosted evidence.
 
 ```powershell
 $env:AGENTICORG_BASE_URL='https://staging.agenticorg.ai'
+$env:AGENTICORG_COMMERCE_EVAL_MODE='real-staging'
 $env:GRANTEX_COMMERCE_BASE_URL='https://api-staging.grantex.dev'
 $env:GRANTEX_BASE_URL='https://api-staging.grantex.dev'
-python demos/commerce_sales_agent_demo.py --mode=hosted-staging
-python -m pytest tests/evals/test_commerce_sales_agent_evals.py -q --hosted-staging
+# Set exactly one Grantex auth env var securely outside logs.
+python demos/commerce_sales_agent_demo.py --mode=real-staging --evidence-report docs/reports/commerce-agent-real-staging-evidence.md
+python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q
 ```
 
-The current local demo/eval path is mocked. Do not present mocked results as hosted staging evidence.
+For a temporary approved Grantex Cloud Run smoke URL, add an exact allowlist. Arbitrary `run.app` URLs are refused:
+
+```powershell
+$env:GRANTEX_COMMERCE_BASE_URL='<approved-smoke-run-app-origin>'
+$env:GRANTEX_BASE_URL='<approved-smoke-run-app-origin>'
+$env:AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL='<same-approved-smoke-run-app-origin>'
+python demos/commerce_sales_agent_demo.py --mode=real-staging --grantex-base '<approved-smoke-run-app-origin>' --allow-smoke-cloud-run-url '<same-approved-smoke-run-app-origin>'
+```
+
+The local mock demo remains available with `python demos/commerce_sales_agent_demo.py --mode=mock`. Do not present mocked results as hosted staging evidence.
+
+Real-staging mode fails closed before connector creation, auth lookup, or network use when pointed at production URLs, credentialed URLs, arbitrary `run.app` URLs, or non-HTTPS URLs such as local development origins.
 
 ## Positive Hosted Checks
 
@@ -99,21 +112,25 @@ The later hosted staging evidence should include only redacted metadata:
 
 ```json
 {
-  "report_type": "agenticorg-commerce-hosted-staging-e2e",
-  "agenticorg_base": "https://staging.agenticorg.ai",
-  "grantex_commerce_base": "https://api-staging.grantex.dev",
+  "report_type": "agenticorg-commerce-real-staging-e2e",
+  "run_mode": "real-staging",
+  "grantex_host": "api-staging.grantex.dev",
+  "auth_source_env_name": "GRANTEX_AGENT_ASSERTION",
   "merchant_id": "mch_staging_electronics_pilot",
   "agent_id": "cag_staging_agenticorg_sales",
   "provider": "mock",
-  "mcp_discovery": "pass|fail|blocked",
-  "a2a_discovery": "pass|fail|blocked",
-  "positive_evals": [],
-  "negative_evals": [],
+  "case_table": [
+    {"case": "catalog_search", "status": "pass|fail|skipped", "http_status": 200, "latency_ms": 0, "error_code": null}
+  ],
+  "tool_sequence": ["grantex_commerce:catalog_search"],
+  "no_provider_call_confirmation": true,
   "redaction": {
     "secret_values_recorded": false,
     "bearer_tokens_recorded": false,
     "passports_recorded": false,
-    "provider_credentials_recorded": false
+    "request_correlation_values_recorded": false,
+    "provider_material_recorded": false,
+    "raw_payloads_recorded": false
   }
 }
 ```
