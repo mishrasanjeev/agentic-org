@@ -1425,7 +1425,7 @@
     "path": "/api/v1/bridge/list",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 127,
+    "source_line": 137,
     "tenant_required": null
   },
   {
@@ -1442,7 +1442,7 @@
     "path": "/api/v1/bridge/register",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 50,
+    "source_line": 55,
     "tenant_required": null
   },
   {
@@ -1459,7 +1459,7 @@
     "path": "/api/v1/bridge/route/{connector_type}",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 185,
+    "source_line": 200,
     "tenant_required": null
   },
   {
@@ -1476,7 +1476,7 @@
     "path": "/api/v1/bridge/{bridge_id}",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 162,
+    "source_line": 177,
     "tenant_required": null
   },
   {
@@ -1493,7 +1493,7 @@
     "path": "/api/v1/bridge/{bridge_id}/status",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 94,
+    "source_line": 99,
     "tenant_required": null
   },
   {
@@ -1544,7 +1544,24 @@
     "path": "/api/v1/cdc/events",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 58,
+    "source_line": 84,
+    "tenant_required": null
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "replay_cdc_event_endpoint",
+    "idempotency": null,
+    "key": "POST /api/v1/cdc/events/{event_id}/replay api/v1/cdc_webhooks.py:replay_cdc_event_endpoint",
+    "metadata_present": false,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/cdc_webhooks.py",
+    "path": "/api/v1/cdc/events/{event_id}/replay",
+    "public_exempt_reason": null,
+    "rate_limit": null,
+    "source_line": 115,
     "tenant_required": null
   },
   {
@@ -2718,6 +2735,23 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "source_line": 115,
+    "tenant_required": null
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "list_feed_events",
+    "idempotency": null,
+    "key": "GET /api/v1/feed/events api/websocket/feed.py:list_feed_events",
+    "metadata_present": false,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/websocket/feed.py",
+    "path": "/api/v1/feed/events",
+    "public_exempt_reason": null,
+    "rate_limit": null,
+    "source_line": 226,
     "tenant_required": null
   },
   {
@@ -4485,7 +4519,7 @@
     "path": "/api/v1/webhooks/cdc/{connector}",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 39,
+    "source_line": 65,
     "tenant_required": null
   },
   {
@@ -4502,7 +4536,7 @@
     "path": "/api/v1/webhooks/cdc/{tenant_id}/{connector}",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 16,
+    "source_line": 18,
     "tenant_required": null
   },
   {
@@ -4808,7 +4842,7 @@
     "path": "/api/v1/ws/bridge/{bridge_id}",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 61,
+    "source_line": 119,
     "tenant_required": null
   },
   {
@@ -4825,7 +4859,7 @@
     "path": "/api/v1/ws/feed/{tenant_id}",
     "public_exempt_reason": null,
     "rate_limit": null,
-    "source_line": 41,
+    "source_line": 244,
     "tenant_required": null
   }
 ]
