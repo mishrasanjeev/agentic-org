@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.bridge import BridgeRegistration
 
@@ -52,6 +53,14 @@ class BridgeStatus(BaseModel):
 
 
 @router.post("/register", response_model=BridgeRegisterResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="bridge.register",
+    rate_limit="admin-mutating",
+    idempotency="not-idempotent-credential-issuance",
+    audit_event="bridge.register",
+)
 async def register_bridge(
     req: BridgeRegisterRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -96,6 +105,14 @@ async def register_bridge(
 
 
 @router.get("/{bridge_id}/status", response_model=BridgeStatus)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="bridge.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="bridge.status.read",
+)
 async def bridge_status(
     bridge_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -134,6 +151,14 @@ async def bridge_status(
 
 
 @router.get("/list")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="bridge.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="bridge.list",
+)
 async def list_bridges(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[dict[str, Any]]:
@@ -174,6 +199,14 @@ async def list_bridges(
 
 
 @router.delete("/{bridge_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="bridge.delete",
+    rate_limit="admin-mutating",
+    idempotency="bridge-id-terminal-delete",
+    audit_event="bridge.deregister",
+)
 async def deregister_bridge(
     bridge_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -197,6 +230,14 @@ async def deregister_bridge(
 
 
 @router.post("/route/{connector_type}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="bridge.route",
+    rate_limit="bridge-routing",
+    idempotency="idempotency-key-or-request-id",
+    audit_event="bridge.route.requested",
+)
 async def route_through_bridge(
     connector_type: str,
     payload: dict[str, Any],

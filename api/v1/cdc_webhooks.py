@@ -9,12 +9,22 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from api.route_metadata import route_meta
 from core.cdc.receiver import handle_cdc_webhook, list_stored_events, replay_cdc_event
 
 router = APIRouter()
 
 
 @router.post("/webhooks/cdc/{tenant_id}/{connector}")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:cdc.webhook.ingest",
+    rate_limit="provider-webhook",
+    idempotency="tenant-connector-provider-event-or-fingerprint",
+    audit_event="cdc.webhook.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def cdc_webhook(
     tenant_id: str,
     connector: str,
@@ -62,6 +72,15 @@ async def cdc_webhook(
 
 
 @router.post("/webhooks/cdc/{connector}", status_code=410)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:cdc.webhook.legacy-removed",
+    rate_limit="provider-webhook",
+    idempotency="not-applicable-410",
+    audit_event="cdc.webhook.legacy_rejected",
+    public_reason="removed-endpoint-always-410",
+)
 async def cdc_webhook_legacy(connector: str) -> dict[str, Any]:
     """Legacy unscoped CDC URL — 410 Gone.
 
@@ -81,6 +100,14 @@ async def cdc_webhook_legacy(connector: str) -> dict[str, Any]:
 
 
 @router.get("/cdc/events")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="cdc.events.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="cdc.events.list",
+)
 async def list_cdc_events(
     connector: str | None = Query(None, description="Filter by connector name"),
     event_type: str | None = Query(None, description="Filter by event type"),
@@ -112,6 +139,14 @@ async def list_cdc_events(
 
 
 @router.post("/cdc/events/{event_id}/replay")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="cdc.events.replay.admin",
+    rate_limit="admin-mutating",
+    idempotency="tenant-event-replay-idempotent",
+    audit_event="cdc.events.replay",
+)
 async def replay_cdc_event_endpoint(
     event_id: str,
     tenant_id: str = Depends(get_current_tenant),

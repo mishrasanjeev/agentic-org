@@ -17,6 +17,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 
+from api.route_metadata import route_meta
 from workflows.event_waits import WorkflowEventWaitStore
 
 logger = structlog.get_logger()
@@ -363,6 +364,14 @@ def _verify_moengage_signature(payload: bytes, signature: str) -> bool:
 
 
 @router.get("/webhooks")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="webhooks.discovery.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="webhooks.discovery.list",
+)
 async def list_webhook_endpoints():
     """List available webhook receiver endpoints."""
     return {
@@ -375,6 +384,15 @@ async def list_webhook_endpoints():
 
 
 @router.post("/webhooks/email/sendgrid")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:webhooks.email.sendgrid",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.sendgrid.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def sendgrid_webhook(request: Request) -> dict[str, Any]:
     """Parse SendGrid Event Webhook JSON array.
 
@@ -442,6 +460,15 @@ async def sendgrid_webhook(request: Request) -> dict[str, Any]:
 
 
 @router.post("/webhooks/email/mailchimp")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:webhooks.email.mailchimp",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.mailchimp.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def mailchimp_webhook(request: Request) -> dict[str, Any]:
     """Parse Mailchimp webhook POST form data.
 
@@ -498,6 +525,15 @@ async def mailchimp_webhook(request: Request) -> dict[str, Any]:
 
 
 @router.post("/webhooks/email/moengage")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:webhooks.email.moengage",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.moengage.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def moengage_webhook(request: Request) -> dict[str, Any]:
     """Parse MoEngage callback JSON.
 

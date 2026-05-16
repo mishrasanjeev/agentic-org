@@ -109,6 +109,7 @@ class RouteEntry:
     function: str
     auth_required: bool | None
     tenant_required: bool | None
+    scope: str | None
     public_exempt_reason: str | None
     idempotency: str | None
     rate_limit: str | None
@@ -183,6 +184,31 @@ def _route_metadata(lines: list[str], start_line: int, end_line: int) -> dict[st
                 continue
             key, value = token.split("=", 1)
             metadata[key.strip()] = value.strip()
+    return metadata
+
+
+def _route_meta_decorator_metadata(decorator: ast.AST) -> dict[str, str]:
+    if not isinstance(decorator, ast.Call):
+        return {}
+    func = decorator.func
+    name = ""
+    if isinstance(func, ast.Name):
+        name = func.id
+    elif isinstance(func, ast.Attribute):
+        name = func.attr
+    if name != "route_meta":
+        return {}
+
+    metadata: dict[str, str] = {}
+    for kw in decorator.keywords:
+        if not kw.arg:
+            continue
+        value = kw.value
+        if isinstance(value, ast.Constant):
+            if isinstance(value.value, bool):
+                metadata[kw.arg] = "true" if value.value else "false"
+            elif isinstance(value.value, str):
+                metadata[kw.arg] = value.value
     return metadata
 
 
@@ -526,6 +552,8 @@ def scan_routes(paths: list[Path], root: Path = REPO_ROOT) -> list[RouteEntry]:
                 full_path = _join_path(_route_base_prefix(rel_path), route_prefix, decorator_path or "")
                 first_decorator_line = min(getattr(dec, "lineno", node.lineno) for dec in node.decorator_list)
                 metadata = _route_metadata(lines, first_decorator_line, node.lineno)
+                for route_decorator in node.decorator_list:
+                    metadata.update(_route_meta_decorator_metadata(route_decorator))
                 metadata_present = bool(metadata) or has_openapi_extra
                 auth_required = _bool_value(metadata.get("auth_required"))
                 if auth_required is None:
@@ -539,6 +567,7 @@ def scan_routes(paths: list[Path], root: Path = REPO_ROOT) -> list[RouteEntry]:
                         function=node.name,
                         auth_required=auth_required,
                         tenant_required=_bool_value(metadata.get("tenant_required")),
+                        scope=metadata.get("scope"),
                         public_exempt_reason=public_reason,
                         idempotency=metadata.get("idempotency"),
                         rate_limit=metadata.get("rate_limit"),
@@ -562,8 +591,9 @@ def route_metadata_findings(routes: list[RouteEntry]) -> list[Finding]:
                 route.module,
                 route.source_line,
                 f"{methods} {route.path}",
-                "Route needs `# enterprise-route: auth_required=<true|false> tenant_required=<true|false> "
-                "idempotency=<...> rate_limit=<...> audit_event=<...>` near the decorator.",
+                "Route needs `@route_meta(...)` or `# enterprise-route: auth_required=<true|false> "
+                "tenant_required=<true|false> scope=<...> idempotency=<...> rate_limit=<...> "
+                "audit_event=<...>` near the decorator.",
             )
         )
         if route.auth_required is False and any(method in MUTATING_METHODS for method in route.methods):
