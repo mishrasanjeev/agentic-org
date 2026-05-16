@@ -49,7 +49,7 @@ async def execute_parallel(
         return results
     else:
         count = int(wait_for) if wait_for.isdigit() else n
-        results: list[dict[str, Any]] = []
+        collected_results: list[dict[str, Any]] = []
         coros = [
             asyncio.create_task(_run_one(index, task))
             for index, task in enumerate(tasks)
@@ -57,7 +57,7 @@ async def execute_parallel(
         successes = 0
         for coro in asyncio.as_completed(coros):
             result = await coro
-            results.append(result)
+            collected_results.append(result)
             if result.get("status") == "completed":
                 successes += 1
             if successes >= count:
@@ -65,4 +65,4 @@ async def execute_parallel(
                     c.cancel()
                 await asyncio.gather(*coros, return_exceptions=True)
                 break
-        return results
+        return collected_results

@@ -310,7 +310,7 @@ async def _execute_parallel(step: dict, state: dict) -> dict[str, Any]:
 
 async def _execute_loop(step: dict, state: dict) -> dict[str, Any]:
     items = step.get("items", [])
-    results = []
+    results: list[dict[str, Any]] = []
     for item in items:
         child_step = step.get(
             "step",
