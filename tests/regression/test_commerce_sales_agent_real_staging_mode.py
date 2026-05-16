@@ -31,6 +31,8 @@ def _fixture_env_content(
     amount: int = 100,
     cap: int = 200,
     include_browse_passport: bool = True,
+    include_amount_metadata: bool = True,
+    include_cap_metadata: bool = True,
     sensitive_values: dict[str, str] | None = None,
 ) -> str:
     smoke_url = "https://grantex-auth-smoke-example-uc.a.run.app"
@@ -50,11 +52,13 @@ def _fixture_env_content(
         'AGENTICORG_COMMERCE_FIXTURE_PRODUCT_ID="cprd_stg_fixture"',
         'AGENTICORG_COMMERCE_FIXTURE_VARIANT_ID="cvar_stg_fixture"',
         'AGENTICORG_COMMERCE_FIXTURE_CURRENCY="INR"',
-        f'AGENTICORG_COMMERCE_FIXTURE_AMOUNT_MINOR_UNITS="{amount}"',
-        f'AGENTICORG_COMMERCE_FIXTURE_PASSPORT_MAX_AMOUNT_MINOR_UNITS="{cap}"',
         f'GRANTEX_API_KEY="{runtime_values["GRANTEX_API_KEY"]}"',
         f'AGENTICORG_COMMERCE_CHECKOUT_PASSPORT_JWT="{runtime_values["AGENTICORG_COMMERCE_CHECKOUT_PASSPORT_JWT"]}"',
     ]
+    if include_amount_metadata:
+        lines.append(f'AGENTICORG_COMMERCE_FIXTURE_AMOUNT_MINOR_UNITS="{amount}"')
+    if include_cap_metadata:
+        lines.append(f'AGENTICORG_COMMERCE_FIXTURE_PASSPORT_MAX_AMOUNT_MINOR_UNITS="{cap}"')
     if include_browse_passport:
         lines.append(
             f'AGENTICORG_COMMERCE_BROWSE_PASSPORT_JWT="'
@@ -127,7 +131,9 @@ class _FakeRealStagingConnector:
             return {"error": "merchant_disabled", "message": "merchant disabled"}
         if params.get("agent_trust_status") == "untrusted":
             return {"error": "agent_untrusted", "message": "agent untrusted"}
-        if params.get("amount_minor_units", 0) > params.get("passport_max_amount_minor_units", 0):
+        if "passport_max_amount_minor_units" in params and (
+            params.get("amount_minor_units", 0) > params.get("passport_max_amount_minor_units", 0)
+        ):
             return {"error": "amount_cap_exceeded", "message": "amount cap exceeded"}
         return {"data": {"payment_intent_id": "pi_stg_fixture", "status": "requires_checkout"}}
 
@@ -154,6 +160,26 @@ async def _run_real_staging_with_fake(
         evidence_report=str(evidence_report) if evidence_report else None,
     )
     return result, _FakeRealStagingConnector.instances[0]
+
+
+_LOCAL_PAYMENT_GUARD_KEYS = (
+    "consent_status",
+    "passport_status",
+    "merchant_status",
+    "agent_trust_status",
+    "passport_max_amount_minor_units",
+)
+
+
+def _positive_payment_calls(connector: _FakeRealStagingConnector) -> list[dict[str, Any]]:
+    return [
+        params
+        for name, params in connector.calls
+        if name == "payment_create_intent"
+        and params.get("cart_id") == "cart_stg_fixture"
+        and params.get("passport_jwt")
+        and not any(key in params for key in _LOCAL_PAYMENT_GUARD_KEYS)
+    ]
 
 
 @pytest.mark.asyncio
@@ -367,6 +393,87 @@ async def test_real_staging_consent_request_uses_grantex_checkout_scope_bundle(
 
 
 @pytest.mark.asyncio
+async def test_real_staging_positive_payment_sends_only_grantex_supported_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _write_tmp_fixture(
+        "commerce-agent-real-staging-c2f-payment.env",
+        _fixture_env_content(amount=100, cap=200),
+    )
+    try:
+        result, connector = await _run_real_staging_with_fake(monkeypatch, fixture)
+    finally:
+        fixture.unlink(missing_ok=True)
+
+    positive_payment_calls = _positive_payment_calls(connector)
+    assert len(positive_payment_calls) == 1
+    payment_request = positive_payment_calls[0]
+    assert set(payment_request) <= set(commerce_sales_agent_demo.GRANTEX_PAYMENT_CREATE_INTENT_FIELDS)
+    assert set(payment_request) == {
+        "merchant_id",
+        "cart_id",
+        "passport_jwt",
+        "amount_minor_units",
+        "currency",
+        "provider_key",
+        "idempotency_key",
+    }
+    assert "passport_max_amount_minor_units" not in payment_request
+    assert "grantex_commerce:payment_create_intent" in result["audit_summary"]["tool_sequence"]
+
+
+@pytest.mark.asyncio
+async def test_real_staging_skips_positive_payment_when_fixture_cap_metadata_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _write_tmp_fixture(
+        "commerce-agent-real-staging-c2f-missing-cap.env",
+        _fixture_env_content(include_cap_metadata=False),
+    )
+    report = Path(".tmp/commerce-agent-real-staging-c2f-missing-cap.md")
+    try:
+        result, connector = await _run_real_staging_with_fake(monkeypatch, fixture, evidence_report=report)
+        report_text = report.read_text(encoding="utf-8")
+    finally:
+        fixture.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+
+    assert _positive_payment_calls(connector) == []
+    assert "grantex_commerce:payment_create_intent" not in result["audit_summary"]["tool_sequence"]
+    assert (
+        "| payment_create_intent | skipped |  |  |  |  | requires fixture amount and passport cap metadata |"
+        in report_text
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_staging_amount_cap_negative_uses_local_guardrail_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _write_tmp_fixture(
+        "commerce-agent-real-staging-c2f-negative-amount-cap.env",
+        _fixture_env_content(amount=100, cap=200),
+    )
+    report = Path(".tmp/commerce-agent-real-staging-c2f-negative-amount-cap.md")
+    try:
+        _result, connector = await _run_real_staging_with_fake(monkeypatch, fixture, evidence_report=report)
+        report_text = report.read_text(encoding="utf-8")
+    finally:
+        fixture.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+
+    assert not any(
+        name == "payment_create_intent" and params.get("passport_max_amount_minor_units") == 1
+        for name, params in connector.calls
+    )
+    assert not any(
+        name == "payment_create_intent" and params.get("cart_id") == "staging-cart-for-amount-cap"
+        for name, params in connector.calls
+    )
+    assert "| amount_cap_breach | pass |  |  |  | amount_cap_exceeded |  |" in report_text
+
+
+@pytest.mark.asyncio
 async def test_real_staging_skips_positive_payment_when_fixture_amount_exceeds_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -382,17 +489,11 @@ async def test_real_staging_skips_positive_payment_when_fixture_amount_exceeds_c
         fixture.unlink(missing_ok=True)
         report.unlink(missing_ok=True)
 
-    positive_payment_calls = [
-        params
+    assert _positive_payment_calls(connector) == []
+    assert not any(
+        name == "payment_create_intent" and params.get("passport_max_amount_minor_units") == 1
         for name, params in connector.calls
-        if name == "payment_create_intent"
-        and params.get("passport_jwt")
-        and params.get("passport_max_amount_minor_units") == 200
-        and not any(
-            key in params for key in ("consent_status", "passport_status", "merchant_status", "agent_trust_status")
-        )
-    ]
-    assert positive_payment_calls == []
+    )
     assert "grantex_commerce:payment_create_intent" not in result["audit_summary"]["tool_sequence"]
     assert "| payment_create_intent | skipped |  |  |  |  | fixture amount exceeds passport cap |" in report_text
     assert "| amount_cap_breach | pass |  |  |  | amount_cap_exceeded |  |" in report_text
