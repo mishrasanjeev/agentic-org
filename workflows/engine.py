@@ -13,6 +13,11 @@ import structlog
 from workflows.parser import WorkflowParser
 from workflows.retry import retry_with_backoff
 from workflows.state_store import WorkflowStateStore
+from workflows.step_results import (
+    ALLOWED_STEP_STATUSES,
+    UnknownStepStatusError,
+    failure_result,
+)
 from workflows.step_types import execute_step
 
 try:
@@ -177,12 +182,25 @@ class WorkflowEngine:
                 return {"status": "failed", "step_results": state["step_results"]}
 
             # ---- record result ----
-            state["step_results"][step_id] = {
-                "output": result.get("output", result),
-                "status": result.get("status", "completed"),
-                "confidence": result.get("confidence"),
-            }
+            result = self._normalize_step_result(step, result)
+            state["step_results"][step_id] = self._state_result_from_step_result(result)
             state["steps_completed"] = len(state["step_results"])
+
+            if result.get("status") == "failed" and not self._step_allows_failure(step):
+                state["status"] = "failed"
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "step_failed", "error": result.get("error")},
+                )
+                logger.error(
+                    "workflow_step_failed",
+                    run_id=run_id,
+                    step_id=step_id,
+                    error=result.get("error"),
+                )
+                return {"status": "failed", "step_results": state["step_results"]}
 
             # ---- handle condition branching ----
             if step.get("type") == "condition":
@@ -326,12 +344,19 @@ class WorkflowEngine:
                 )
                 return {"status": "failed", "step_id": step_id, "error": str(exc)}
 
-            state["step_results"][step_id] = {
-                "output": result.get("output", result),
-                "status": result.get("status", "completed"),
-                "confidence": result.get("confidence"),
-            }
+            result = self._normalize_step_result(step, result)
+            state["step_results"][step_id] = self._state_result_from_step_result(result)
             state["steps_completed"] = len(state["step_results"])
+
+            if result.get("status") == "failed" and not self._step_allows_failure(step):
+                state["status"] = "failed"
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "step_failed", "error": result.get("error")},
+                )
+                return {"status": "failed", "step_id": step_id, "error": result.get("error")}
 
             if step.get("type") == "condition":
                 branch_target = self._resolve_condition_branch(step, result, context)
@@ -348,6 +373,28 @@ class WorkflowEngine:
                     metadata={"event": "waiting_hitl"},
                 )
                 return {"status": "waiting_hitl", "step_id": step_id}
+
+            if result.get("status") == "waiting_delay":
+                state["status"] = "waiting_delay"
+                state["waiting_step_id"] = step_id
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "waiting_delay", "resume_at": result.get("resume_at")},
+                )
+                return {"status": "waiting_delay", "step_id": step_id}
+
+            if result.get("status") == "waiting_event":
+                state["status"] = "waiting_event"
+                state["waiting_step_id"] = step_id
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "waiting_event", "event_type": result.get("event_type")},
+                )
+                return {"status": "waiting_event", "step_id": step_id}
 
             await self.state_store.save(
                 state,
@@ -583,6 +630,59 @@ class WorkflowEngine:
     # ------------------------------------------------------------------
     # Dependency graph helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_step_result(step: dict, result: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return failure_result(
+                step_id=step["id"],
+                step_type=step.get("type", "agent"),
+                failure=UnknownStepStatusError(step_id=step["id"], status=None),
+                output=result,
+            )
+
+        status = result.get("status")
+        if status not in ALLOWED_STEP_STATUSES:
+            return failure_result(
+                step_id=step["id"],
+                step_type=step.get("type", "agent"),
+                failure=UnknownStepStatusError(
+                    step_id=step["id"],
+                    status=str(status) if status is not None else None,
+                ),
+                output=result,
+            )
+        return result
+
+    @staticmethod
+    def _state_result_from_step_result(result: dict[str, Any]) -> dict[str, Any]:
+        state_result = {
+            "output": result.get("output", result),
+            "status": result["status"],
+            "confidence": result.get("confidence"),
+        }
+        if result.get("error"):
+            state_result["error"] = result["error"]
+        if result.get("stubbed"):
+            state_result["stubbed"] = True
+            state_result["reason"] = result.get("reason")
+            state_result["code"] = result.get("code")
+            if result.get("connector"):
+                state_result["connector"] = result.get("connector")
+            if result.get("agent"):
+                state_result["agent"] = result.get("agent")
+            if result.get("action"):
+                state_result["action"] = result.get("action")
+        return state_result
+
+    @staticmethod
+    def _step_allows_failure(step: dict) -> bool:
+        on_failure = str(step.get("on_failure", "")).strip().lower()
+        return bool(
+            step.get("optional") is True
+            or step.get("allow_failure") is True
+            or on_failure in {"continue", "ignore", "optional"}
+        )
 
     @staticmethod
     def _build_step_index(steps: list[dict]) -> dict[str, dict]:

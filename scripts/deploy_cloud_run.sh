@@ -15,7 +15,8 @@
 #      (Dockerfile.ui) tagged with the deploy SHA + :latest.
 #   3. Optionally run alembic migrations as a Cloud Run job
 #      (--with-migrations, requires an `agenticorg-migrate` job
-#      to already exist; create it with --create-migrate-job).
+#      to already exist; create it with --create-migrate-job). Runtime
+#      app startup is verify-only; it must not perform schema DDL.
 #   4. `gcloud run services update agenticorg-api` with the new
 #      image + AGENTICORG_GIT_SHA env var so /health surfaces the
 #      deployed commit (Codex 2026-04-24 enterprise sign-off
@@ -174,7 +175,7 @@ if [[ $CREATE_MIGRATE_JOB -eq 1 ]]; then
       --image="$API_IMAGE" \
       --command="python" \
       --args="scripts/alembic_migrate.py" \
-      --set-env-vars="AGENTICORG_DDL_MANAGED_BY_ALEMBIC=true"
+      --set-env-vars="AGENTICORG_ENABLE_LEGACY_STARTUP_DDL=0"
   else
     run gcloud run jobs create "$MIGRATE_JOB" \
       --project="$GCP_PROJECT_ID" \
@@ -182,7 +183,7 @@ if [[ $CREATE_MIGRATE_JOB -eq 1 ]]; then
       --image="$API_IMAGE" \
       --command="python" \
       --args="scripts/alembic_migrate.py" \
-      --set-env-vars="AGENTICORG_DDL_MANAGED_BY_ALEMBIC=true"
+      --set-env-vars="AGENTICORG_ENABLE_LEGACY_STARTUP_DDL=0"
   fi
 fi
 

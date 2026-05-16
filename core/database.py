@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from pathlib import Path
 from uuid import UUID
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -16,7 +22,28 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass
 
-from core.config import settings
+from core.config import is_strict_runtime_env, settings
+
+logger = logging.getLogger(__name__)
+
+ALEMBIC_VERSION_TABLE = "alembic_version"
+ALEMBIC_CONFIG_PATH = Path(__file__).resolve().parents[1] / "alembic.ini"
+ALLOW_MULTIPLE_ALEMBIC_HEADS_ENV = "AGENTICORG_ALLOW_MULTIPLE_ALEMBIC_HEADS_FOR_MERGE_PR"
+ENABLE_LEGACY_STARTUP_DDL_ENV = "AGENTICORG_ENABLE_LEGACY_STARTUP_DDL"
+TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+
+
+class RuntimeSchemaError(RuntimeError):
+    """Raised when a runtime DB is not at the Alembic revision this app expects."""
+
+
+@dataclass(frozen=True)
+class RuntimeSchemaVerification:
+    """Result of an Alembic runtime schema verification."""
+
+    database_versions: frozenset[str]
+    expected_heads: frozenset[str]
+    multiple_heads_allowed: bool = False
 
 
 class Base(DeclarativeBase, MappedAsDataclass):
@@ -72,25 +99,119 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-async def init_db() -> None:
-    """Run on startup — verify connectivity and (legacy) apply schema additions.
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in TRUTHY_ENV_VALUES
 
-    When ``AGENTICORG_DDL_MANAGED_BY_ALEMBIC`` is truthy (preferred), this
-    only verifies DB connectivity; schema evolution must come from
-    ``alembic upgrade head`` in the deploy pipeline.
 
-    The legacy DDL blocks below are kept as a safety net during the
-    cutover for existing environments that have not yet been stamped.
-    """
-    alembic_managed = os.getenv("AGENTICORG_DDL_MANAGED_BY_ALEMBIC", "").lower() in (
-        "1",
-        "true",
-        "yes",
+def get_expected_alembic_heads() -> frozenset[str]:
+    """Return the migration script heads bundled with this application build."""
+    script = ScriptDirectory.from_config(Config(str(ALEMBIC_CONFIG_PATH)))
+    return frozenset(script.get_heads())
+
+
+def _multiple_alembic_heads_allowed() -> bool:
+    return _truthy_env(ALLOW_MULTIPLE_ALEMBIC_HEADS_ENV)
+
+
+def _schema_error(message: str) -> RuntimeSchemaError:
+    return RuntimeSchemaError(f"{message} Run `python scripts/alembic_migrate.py` before starting the app.")
+
+
+async def get_database_alembic_versions(conn: AsyncConnection) -> frozenset[str]:
+    """Read the DB's Alembic revisions from the authoritative version table."""
+    table_exists = await conn.scalar(text("SELECT to_regclass('public.alembic_version') IS NOT NULL"))
+    if not table_exists:
+        raise _schema_error("Database is not Alembic-managed: missing `alembic_version` table.")
+
+    result = await conn.execute(text("SELECT version_num FROM alembic_version"))
+    versions = frozenset(str(version) for version in result.scalars().all() if version)
+    if not versions:
+        raise _schema_error("Database is not Alembic-managed: `alembic_version` has no rows.")
+    return versions
+
+
+async def verify_runtime_schema_current(
+    conn: AsyncConnection,
+    *,
+    expected_heads: frozenset[str] | set[str] | None = None,
+) -> RuntimeSchemaVerification:
+    """Fail if the connected DB is missing, stale, or divergent from Alembic heads."""
+    expected = frozenset(expected_heads or get_expected_alembic_heads())
+    if not expected:
+        raise _schema_error("Application has no Alembic heads to verify against.")
+
+    multiple_heads_allowed = _multiple_alembic_heads_allowed()
+    if len(expected) > 1 and not multiple_heads_allowed:
+        heads = ", ".join(sorted(expected))
+        raise _schema_error(
+            "Application has multiple Alembic heads without an approved merge-head plan "
+            f"({heads}). Add an Alembic merge revision or explicitly set "
+            f"`{ALLOW_MULTIPLE_ALEMBIC_HEADS_ENV}=1` only for a merge-head PR."
+        )
+
+    versions = await get_database_alembic_versions(conn)
+    if len(versions) > 1 and versions != expected:
+        current = ", ".join(sorted(versions))
+        wanted = ", ".join(sorted(expected))
+        raise _schema_error(
+            f"Database has multiple Alembic versions ({current}) but this build expects ({wanted})."
+        )
+
+    if versions != expected:
+        current = ", ".join(sorted(versions))
+        wanted = ", ".join(sorted(expected))
+        raise _schema_error(
+            f"Database schema revision is stale or divergent: current=({current}), expected=({wanted})."
+        )
+
+    return RuntimeSchemaVerification(
+        database_versions=versions,
+        expected_heads=expected,
+        multiple_heads_allowed=multiple_heads_allowed,
     )
+
+
+async def init_db() -> None:
+    """Run on startup: verify connectivity and Alembic-managed schema state.
+
+    Strict runtimes fail closed when the database is not at the exact Alembic
+    head(s) bundled with this app build. Startup DDL is forbidden there.
+    """
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
-    if alembic_managed:
-        return
+        if is_strict_runtime_env(settings.env):
+            await verify_runtime_schema_current(conn)
+            return
+
+        if not _truthy_env(ENABLE_LEGACY_STARTUP_DDL_ENV):
+            try:
+                await verify_runtime_schema_current(conn)
+            except RuntimeSchemaError as exc:
+                logger.warning("Relaxed runtime schema verification did not pass: %s", exc)
+            await _seed_demo_ca_companies_if_enabled()
+            return
+
+    await _legacy_startup_schema_repair_for_local_only()
+
+
+async def _legacy_startup_schema_repair_for_local_only() -> None:
+    """Local-only emergency schema repair path retained for unstamped dev DBs."""
+    if is_strict_runtime_env(settings.env):
+        raise RuntimeSchemaError(
+            f"`{ENABLE_LEGACY_STARTUP_DDL_ENV}` is ignored in strict runtimes; "
+            "run `python scripts/alembic_migrate.py` instead."
+        )
+    if not _truthy_env(ENABLE_LEGACY_STARTUP_DDL_ENV):
+        raise RuntimeSchemaError(
+            f"Legacy startup DDL is disabled unless `{ENABLE_LEGACY_STARTUP_DDL_ENV}=1` is set "
+            "in a relaxed local/dev/test environment."
+        )
+    if os.getenv("AGENTICORG_DDL_MANAGED_BY_ALEMBIC"):
+        logger.warning(
+            "`AGENTICORG_DDL_MANAGED_BY_ALEMBIC` no longer controls startup DDL; "
+            "using `%s=1` because the runtime is relaxed.",
+            ENABLE_LEGACY_STARTUP_DDL_ENV,
+        )
 
     async with engine.begin() as conn:
         # Serialize startup DDL across concurrently-booting pods with a
@@ -845,18 +966,21 @@ async def init_db() -> None:
             FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation();
         """))
 
-    # Seed demo CA companies ONLY in demo/dev environments — never in production
-    if os.getenv("AGENTICORG_ENV", "production").lower() in ("demo", "development", "dev"):
-        try:
-            from core.seed_ca_demo import seed_ca_demo
+    await _seed_demo_ca_companies_if_enabled()
 
-            async with async_session_factory() as session:
-                await seed_ca_demo(session)
-                await session.commit()
-        except Exception as exc:
-            import logging as _logging
 
-            _logging.getLogger(__name__).debug("CA demo seed skipped: %s", exc)
+async def _seed_demo_ca_companies_if_enabled() -> None:
+    """Seed demo CA companies in relaxed demo/dev environments only."""
+    if os.getenv("AGENTICORG_ENV", "production").lower() not in ("demo", "development", "dev"):
+        return
+    try:
+        from core.seed_ca_demo import seed_ca_demo
+
+        async with async_session_factory() as session:
+            await seed_ca_demo(session)
+            await session.commit()
+    except Exception as exc:
+        logger.debug("CA demo seed skipped: %s", exc)
 
 
 async def close_db() -> None:

@@ -1774,7 +1774,8 @@ class TestParallelExecutor:
             return "b"
 
         results = await execute_parallel([task_a, task_b], wait_for="all")
-        assert sorted(results) == ["a", "b"]
+        assert [r["status"] for r in results] == ["completed", "completed"]
+        assert sorted(r["output"] for r in results) == ["a", "b"]
 
     @pytest.mark.asyncio
     async def test_execute_any(self):
@@ -1789,7 +1790,7 @@ class TestParallelExecutor:
 
         results = await execute_parallel([fast, slow], wait_for="any")
         assert len(results) >= 1
-        assert "fast" in results
+        assert any(r["output"] == "fast" and r["status"] == "completed" for r in results)
 
     @pytest.mark.asyncio
     async def test_execute_n(self):
@@ -1819,7 +1820,8 @@ class TestParallelExecutor:
             raise ValueError("boom")
 
         results = await execute_parallel([ok, fail], wait_for="all")
-        assert any(isinstance(r, ValueError) for r in results)
+        assert any(r["status"] == "failed" for r in results)
+        assert all(not isinstance(r, BaseException) for r in results)
 
 
 # =============================================================================
@@ -1911,7 +1913,8 @@ class TestStepTypes:
         from workflows.step_types import execute_step
 
         result = await execute_step({"id": "s1", "type": "transform"}, {})
-        assert result["status"] == "completed"
+        assert result["status"] == "stubbed"
+        assert result["stubbed"] is True
 
     @pytest.mark.asyncio
     async def test_execute_notify_step(self):
@@ -1921,7 +1924,8 @@ class TestStepTypes:
             {"id": "s1", "type": "notify", "connector": "slack"},
             {},
         )
-        assert result["status"] == "sent"
+        assert result["status"] == "stubbed"
+        assert result["stubbed"] is True
         assert result["connector"] == "slack"
 
     @pytest.mark.asyncio
@@ -1966,11 +1970,12 @@ class TestStepTypes:
         """
         from workflows.step_types import execute_step
 
-        with pytest.raises(TypeError, match="coroutines is forbidden"):
-            await execute_step(
-                {"id": "s1", "type": "parallel", "steps": ["a", "b"], "wait_for": "any"},
-                {},
-            )
+        result = await execute_step(
+            {"id": "s1", "type": "parallel", "steps": ["a", "b"], "wait_for": "any"},
+            {},
+        )
+        assert result["status"] == "completed"
+        assert result["results"][0]["status"] == "completed"
 
 
 # =============================================================================

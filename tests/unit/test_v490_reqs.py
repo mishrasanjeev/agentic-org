@@ -252,19 +252,21 @@ class TestREQ02AlembicDDL:
         content = Path(".github/workflows/deploy.yml").read_text()
         assert "scripts/alembic_migrate.py" in content
 
-    def test_init_db_respects_alembic_flag(self):
-        """init_db() must short-circuit when AGENTICORG_DDL_MANAGED_BY_ALEMBIC is truthy."""
+    def test_init_db_verifies_alembic_in_strict_runtime(self):
+        """init_db() must verify Alembic state instead of relying on startup DDL."""
         from pathlib import Path
         content = Path("core/database.py").read_text()
-        assert "AGENTICORG_DDL_MANAGED_BY_ALEMBIC" in content
+        assert "verify_runtime_schema_current" in content
+        assert "is_strict_runtime_env(settings.env)" in content
+        assert "AGENTICORG_ENABLE_LEGACY_STARTUP_DDL" in content
 
     @pytest.mark.skip(
         reason="Helm chart removed in Stage 4 of the Cloud Run cost-cut migration. "
-        "AGENTICORG_DDL_MANAGED_BY_ALEMBIC is now set in the Cloud Run service env "
-        "vars. Followup: rewrite to assert against Cloud Run config."
+        "Runtime schema safety is now enforced by strict init_db() verification "
+        "and the Cloud Run migration job."
     )
     def test_helm_sets_alembic_flag(self):
         """Helm production values must enable alembic-managed DDL."""
         from pathlib import Path
         content = Path("helm/values.yaml").read_text()
-        assert 'AGENTICORG_DDL_MANAGED_BY_ALEMBIC: "true"' in content
+        assert 'AGENTICORG_ENABLE_LEGACY_STARTUP_DDL: "0"' in content
