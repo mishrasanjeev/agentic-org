@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
-from api.deps import get_current_tenant
-from core.cdc.receiver import get_stored_events, handle_cdc_webhook
+from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from core.cdc.receiver import handle_cdc_webhook, list_stored_events, replay_cdc_event
 
 router = APIRouter()
 
@@ -17,7 +19,7 @@ async def cdc_webhook(
     tenant_id: str,
     connector: str,
     request: Request,
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Receive a CDC webhook for a specific tenant.
 
     The URL carries the tenant_id so cross-tenant routing is explicit
@@ -29,10 +31,34 @@ async def cdc_webhook(
     Producers must update their webhook URL to include the tenant.
     The legacy unscoped path returns 410 Gone below.
     """
-    payload: dict[str, Any] = await request.json()
+    raw_body = await request.body()
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "rejected", "reason": "invalid_json"},
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=422,
+            detail={"status": "rejected", "reason": "invalid_payload"},
+        )
+
     signature = request.headers.get("X-CDC-Signature", "")
-    result = await handle_cdc_webhook(tenant_id, connector, payload, signature)
-    return result
+    result = await handle_cdc_webhook(
+        tenant_id,
+        connector,
+        payload,
+        signature,
+        raw_body=raw_body,
+    )
+    http_status = int(result.pop("http_status", 202))
+    if result.get("status") == "rejected":
+        raise HTTPException(status_code=http_status, detail=result)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=http_status, detail=result)
+    return JSONResponse(status_code=http_status, content=result)
 
 
 @router.post("/webhooks/cdc/{connector}", status_code=410)
@@ -67,21 +93,14 @@ async def list_cdc_events(
     Enforces tenant isolation at the read layer so a global in-memory
     store never leaks cross-tenant events (CRITICAL-03 fix).
     """
-    events = get_stored_events(tenant_id=tenant_id)
-
-    # Apply optional filters
-    if connector:
-        events = [e for e in events if e.get("connector") == connector]
-    if event_type:
-        events = [e for e in events if e.get("event_type") == event_type]
-
-    total = len(events)
-
-    # Paginate (newest first)
-    events = list(reversed(events))
     start = (page - 1) * page_size
-    end = start + page_size
-    page_events = events[start:end]
+    page_events, total = await list_stored_events(
+        tenant_id=tenant_id,
+        connector=connector,
+        event_type=event_type,
+        limit=page_size,
+        offset=start,
+    )
 
     return {
         "items": page_events,
@@ -90,3 +109,21 @@ async def list_cdc_events(
         "page_size": page_size,
         "pages": (total + page_size - 1) // page_size if total > 0 else 0,
     }
+
+
+@router.post("/cdc/events/{event_id}/replay")
+async def replay_cdc_event_endpoint(
+    event_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+    user: dict[str, Any] = Depends(get_current_user),
+    _admin_check=require_tenant_admin,
+) -> JSONResponse:
+    """Replay one failed CDC event for the caller's tenant."""
+    actor = str(user.get("sub") or user.get("email") or "admin")
+    result = await replay_cdc_event(tenant_id=tenant_id, event_id=event_id, actor=actor)
+    http_status = int(result.pop("http_status", 202))
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=http_status, detail=result)
+    if result.get("status") == "failed":
+        raise HTTPException(status_code=http_status, detail=result)
+    return JSONResponse(status_code=http_status, content=result)
