@@ -32,10 +32,10 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 # Local socket registry only. PostgreSQL is authoritative for status.
-_active_bridges: dict[str, BridgeConnection] = {}
+_active_bridges: dict[str, BridgeConnection] = {}  # enterprise-gate: process-local-ok reason=local-socket-registry-only
 
 # Local waiter futures only. PostgreSQL is authoritative for request state.
-_pending_requests: dict[str, asyncio.Future] = {}
+_pending_requests: dict[str, asyncio.Future] = {}  # enterprise-gate: process-local-ok reason=durable-waiters
 
 
 class BridgeConnection:

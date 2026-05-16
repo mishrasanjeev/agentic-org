@@ -622,18 +622,30 @@ def _allowed_keys(baseline: dict[str, Any], category: str) -> set[str]:
 def filter_baselined(findings: list[Finding], baseline: dict[str, Any]) -> tuple[list[Finding], list[Finding]]:
     blocked: list[Finding] = []
     allowed: list[Finding] = []
-    route_allowed = set(baseline.get("routes_missing_metadata", []))
     for finding in findings:
-        if finding.category in {"route_missing_metadata", "public_mutating_route_missing_metadata"}:
-            route_key = f"{finding.code} {finding.path}:{finding.line}"
-            if route_key in route_allowed:
-                allowed.append(finding)
-                continue
         if finding.key in _allowed_keys(baseline, finding.category):
             allowed.append(finding)
         else:
             blocked.append(finding)
     return blocked, allowed
+
+
+def route_metadata_baseline_findings(
+    baseline: dict[str, Any],
+    baseline_path: Path = DEFAULT_BASELINE,
+) -> list[Finding]:
+    routes = baseline.get("routes_missing_metadata", [])
+    if not routes:
+        return []
+    return [
+        _finding(
+            "route_metadata_baseline",
+            _rel(baseline_path, REPO_ROOT),
+            1,
+            f"{len(routes)} route metadata baseline allowance(s)",
+            "Route metadata baseline allowances are no longer permitted; annotate every route instead.",
+        )
+    ]
 
 
 def collect_findings(paths: list[Path], root: Path = REPO_ROOT) -> tuple[list[Finding], list[str], list[RouteEntry]]:
@@ -650,17 +662,16 @@ def collect_findings(paths: list[Path], root: Path = REPO_ROOT) -> tuple[list[Fi
 
 def build_baseline(findings: list[Finding]) -> dict[str, Any]:
     allowed: dict[str, list[str]] = {}
-    routes: list[str] = []
     for finding in findings:
         if finding.category in {"route_missing_metadata", "public_mutating_route_missing_metadata"}:
-            routes.append(f"{finding.code} {finding.path}:{finding.line}")
+            continue
         else:
             allowed.setdefault(finding.category, []).append(finding.key)
     return {
         "version": 1,
         "description": "Baseline of existing enterprise stability gate debt. New unannotated findings fail CI.",
         "allowed_findings": {category: sorted(keys) for category, keys in sorted(allowed.items())},
-        "routes_missing_metadata": sorted(set(routes)),
+        "routes_missing_metadata": [],
     }
 
 
@@ -727,6 +738,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Updated route inventory: {_rel(args.route_inventory, REPO_ROOT)}")
 
     baseline = load_baseline(args.baseline)
+    findings.extend(route_metadata_baseline_findings(baseline, args.baseline))
     blocked, allowed = filter_baselined(findings, baseline)
 
     inventory_stale = False

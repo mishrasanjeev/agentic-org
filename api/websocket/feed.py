@@ -28,7 +28,8 @@ from core.models.api_key import APIKey
 router = APIRouter()
 logger = structlog.get_logger()
 
-_connections: dict[str, set[WebSocket]] = {}
+# Local socket registry only. PostgreSQL feed events and broker fanout are authoritative.
+_connections: dict[str, set[WebSocket]] = {}  # enterprise-gate: process-local-ok reason=local-socket-registry-only
 _subscriptions: dict[str, BrokerSubscription] = {}
 _connections_lock = asyncio.Lock()
 
