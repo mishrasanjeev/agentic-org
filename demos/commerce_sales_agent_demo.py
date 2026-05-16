@@ -21,7 +21,11 @@ from connectors.commerce.grantex_commerce import (  # noqa: E402
     TOOL_ALIAS_TO_GRANTEX,
     GrantexCommerceConnector,
 )
-from core.commerce.sales_guardrails import inventory_caution, validate_claims_against_tool_data  # noqa: E402
+from core.commerce.sales_guardrails import (  # noqa: E402
+    inventory_caution,
+    validate_claims_against_tool_data,
+    validate_payment_action,
+)
 from core.commerce.staging_evidence import StagingEvidence  # noqa: E402
 from core.commerce.staging_runtime import RealStagingConfigError, validate_real_staging_config  # noqa: E402
 
@@ -38,6 +42,16 @@ GRANTEX_CHECKOUT_CONSENT_SCOPES = [
     "commerce:payment.initiate",
     "commerce:payment.status.read",
 ]
+GRANTEX_PAYMENT_CREATE_INTENT_FIELDS = (
+    "merchant_id",
+    "cart_id",
+    "passport_jwt",
+    "amount_minor_units",
+    "currency",
+    "provider_key",
+    "metadata",
+    "idempotency_key",
+)
 
 DEMO_MCP_RESPONSES: dict[str, dict[str, Any]] = {
     "merchant_get_profile": {
@@ -209,6 +223,31 @@ def _amount_minor_units(item: dict[str, Any]) -> int:
 
 def _case_status(result: dict[str, Any]) -> str:
     return "fail" if result.get("error") else "pass"
+
+
+def _payment_create_intent_request(
+    *,
+    merchant_id: str,
+    cart_id: str,
+    passport_jwt: str,
+    amount_minor_units: int,
+    currency: str,
+    provider_key: str,
+    idempotency_key: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    request: dict[str, Any] = {
+        "merchant_id": merchant_id,
+        "cart_id": cart_id,
+        "passport_jwt": passport_jwt,
+        "amount_minor_units": amount_minor_units,
+        "currency": currency,
+        "provider_key": provider_key,
+        "idempotency_key": idempotency_key,
+    }
+    if metadata is not None:
+        request["metadata"] = metadata
+    return {field: request[field] for field in GRANTEX_PAYMENT_CREATE_INTENT_FIELDS if field in request}
 
 
 def _connector_config(config: Any) -> dict[str, Any]:
@@ -466,16 +505,16 @@ async def run_real_staging_demo(
                     blocker="fixture amount exceeds passport cap",
                 )
             else:
-                payment = await connector.payment_create_intent(
+                payment_request = _payment_create_intent_request(
                     merchant_id=merchant_id,
                     cart_id=cart_id,
                     passport_jwt=checkout_passport_jwt,
-                    passport_max_amount_minor_units=fixture.passport_max_amount_minor_units,
                     amount_minor_units=fixture.amount_minor_units,
                     currency=fixture.currency,
                     idempotency_key=f"agenticorg-real-staging-payment-{uuid.uuid4().hex}",
                     provider_key="mock",
                 )
+                payment = await connector.payment_create_intent(**payment_request)
                 alias = "grantex_commerce:payment_create_intent"
                 tool_sequence.append(alias)
                 evidence.add_case(
@@ -578,15 +617,15 @@ async def run_real_staging_demo(
             }
         )
         if checkout_passport_jwt:
-            amount_cap = await connector.payment_create_intent(
-                merchant_id=merchant_id,
-                cart_id=cart_id or "staging-cart-for-amount-cap",
-                passport_jwt=checkout_passport_jwt,
-                passport_max_amount_minor_units=1,
-                amount_minor_units=max(fixture.amount_minor_units, 2),
-                currency=fixture.currency,
-                idempotency_key=f"agenticorg-real-staging-amount-cap-{uuid.uuid4().hex}",
-                provider_key="mock",
+            amount_cap = validate_payment_action(
+                "payment_create_intent",
+                {
+                    "passport_jwt": checkout_passport_jwt,
+                    "passport_max_amount_minor_units": 1,
+                    "amount_minor_units": max(fixture.amount_minor_units, 2),
+                    "currency": fixture.currency,
+                    "provider_key": "mock",
+                },
             )
             evidence.add_case(
                 name="amount_cap_breach",
@@ -863,7 +902,7 @@ async def run_demo() -> dict[str, Any]:
             passport_jwt=passport_data["passport_jwt"],
             success_url="https://agenticorg.local/commerce/success",
             cancel_url="https://agenticorg.local/commerce/cancel",
-            idempotency_key="demo_checkout_001",
+            idempotency_key=f"agenticorg-mock-checkout-{uuid.uuid4().hex}",
         )
         steps.append(
             _step(
@@ -901,7 +940,7 @@ async def run_demo() -> dict[str, Any]:
             cart_id=checkout_input["cart_id"],
             amount_minor_units=checkout_input["amount_minor_units"],
             currency=checkout_input["currency"],
-            idempotency_key="demo_missing_consent",
+            idempotency_key=f"agenticorg-mock-missing-consent-{uuid.uuid4().hex}",
             provider_key="mock",
         )
         unsupported_emi = validate_claims_against_tool_data(
