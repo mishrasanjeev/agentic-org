@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.push.sender import (
     remove_subscription,
     save_subscription,
@@ -51,6 +52,15 @@ class PushTestResponse(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("/push/vapid-key", response_model=VapidKeyResponse)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:push.vapid_key.read",
+    rate_limit="push-public-config",
+    idempotency="read-only",
+    audit_event="none-public-push-key-read",
+    public_reason="public-browser-vapid-key-no-tenant-data",
+)
 async def get_vapid_public_key():
     """Return the VAPID public key for push subscription.
 
@@ -65,6 +75,14 @@ async def get_vapid_public_key():
 
 
 @router.post("/push/subscribe")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="push.subscription.sensitive.write",
+    rate_limit="push-subscription-write",
+    idempotency="idempotent-upsert-by-endpoint",
+    audit_event="push.subscribe",
+)
 async def subscribe(
     body: SubscribeRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -83,6 +101,14 @@ async def subscribe(
 
 
 @router.post("/push/unsubscribe")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="push.subscription.sensitive.write",
+    rate_limit="push-subscription-write",
+    idempotency="idempotent-delete-by-endpoint",
+    audit_event="push.unsubscribe",
+)
 async def unsubscribe(
     body: UnsubscribeRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -94,6 +120,14 @@ async def unsubscribe(
 
 
 @router.post("/push/test", response_model=PushTestResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="push.external_delivery.sensitive.write",
+    rate_limit="push-test-send",
+    idempotency="not_idempotent-delivers-test-notification",
+    audit_event="push.test_send",
+)
 async def send_test_notification(
     tenant_id: str = Depends(get_current_tenant),
 ):

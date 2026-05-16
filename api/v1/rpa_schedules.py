@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.rpa_schedule import RPASchedule
 
@@ -191,6 +192,14 @@ def _to_out(row: RPASchedule) -> RPAScheduleOut:
 
 
 @router.get("/registry")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.registry.sensitive.list",
+    rate_limit="security-admin-read",
+    idempotency="read-only",
+    audit_event="rpa_schedules.registry.list",
+)
 async def list_registry_scripts(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
@@ -224,6 +233,14 @@ async def list_registry_scripts(
 
 
 @router.get("", response_model=list[RPAScheduleOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.sensitive.list",
+    rate_limit="security-admin-read",
+    idempotency="read-only",
+    audit_event="rpa_schedules.list",
+)
 async def list_schedules(
     company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -251,6 +268,14 @@ async def list_schedules(
 
 
 @router.post("", response_model=RPAScheduleOut, status_code=status.HTTP_201_CREATED)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.write",
+    rate_limit="security-admin-write",
+    idempotency="not-idempotent-new-schedule-created",
+    audit_event="rpa_schedules.create",
+)
 async def create_schedule(
     body: RPAScheduleCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -294,6 +319,14 @@ async def create_schedule(
 
 
 @router.get("/{schedule_id}", response_model=RPAScheduleOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.sensitive.read",
+    rate_limit="security-admin-read",
+    idempotency="read-only",
+    audit_event="rpa_schedules.get",
+)
 async def get_schedule(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -318,6 +351,14 @@ async def get_schedule(
 
 
 @router.patch("/{schedule_id}", response_model=RPAScheduleOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-partial-update-by-schedule-id",
+    audit_event="rpa_schedules.update",
+)
 async def update_schedule(
     schedule_id: str,
     body: RPAScheduleUpdate,
@@ -366,6 +407,14 @@ async def update_schedule(
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-delete-by-schedule-id",
+    audit_event="rpa_schedules.delete",
+)
 async def delete_schedule(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -390,6 +439,14 @@ async def delete_schedule(
 
 
 @router.post("/{schedule_id}/run-now")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa_schedules.external_action.run",
+    rate_limit="manual-rpa-trigger",
+    idempotency="not-idempotent-enqueues-rpa-execution",
+    audit_event="rpa_schedules.run_now",
+)
 async def run_schedule_now(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.feature_flags import clear_cache, is_enabled
 from core.models.feature_flag import FeatureFlag
@@ -44,6 +45,14 @@ class FlagEvaluation(BaseModel):
 
 
 @router.post("", response_model=FlagOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="feature_flags.runtime_control.sensitive.write",
+    rate_limit="feature-flag-write",
+    idempotency="idempotent-upsert-by-flag-key",
+    audit_event="feature_flags.upsert",
+)
 async def upsert_flag(
     body: FlagIn,
     tenant_id: str = Depends(get_current_tenant),
@@ -90,6 +99,14 @@ async def upsert_flag(
 
 
 @router.get("", response_model=list[FlagOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="feature_flags.runtime_control.sensitive.list",
+    rate_limit="feature-flag-read",
+    idempotency="read-only",
+    audit_event="feature_flags.list",
+)
 async def list_flags(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[FlagOut]:
@@ -112,6 +129,14 @@ async def list_flags(
 
 
 @router.get("/{flag_key}/evaluate", response_model=FlagEvaluation)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="feature_flags.runtime_control.evaluate",
+    rate_limit="feature-flag-evaluate",
+    idempotency="read-only",
+    audit_event="feature_flags.evaluate",
+)
 async def evaluate_flag(
     flag_key: str,
     user_id: uuid.UUID | None = None,
@@ -124,6 +149,14 @@ async def evaluate_flag(
 
 
 @router.delete("/{flag_key}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="feature_flags.runtime_control.sensitive.write",
+    rate_limit="feature-flag-write",
+    idempotency="idempotent-delete-by-flag-key",
+    audit_event="feature_flags.delete",
+)
 async def delete_flag(
     flag_key: str,
     tenant_id: str = Depends(get_current_tenant),

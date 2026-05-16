@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from auth.aa_callback_signing import (
     NONCE_HEADER,
     SIGNATURE_HEADER,
@@ -46,6 +47,15 @@ def _get_redis():
 
 
 @router.post("/consent/callback")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:aa_callback.signed_external_input.sensitive.write",
+    rate_limit="aa-callback-signed",
+    idempotency="nonce-replay-protected",
+    audit_event="aa.consent.callback",
+    public_reason="provider-callback-hmac-timestamp-nonce-protected",
+)
 async def consent_callback(request: Request) -> dict[str, str]:
     """Webhook endpoint called by AA providers (Finvu / Setu) when
     consent status changes.
@@ -127,6 +137,14 @@ async def consent_callback(request: Request) -> dict[str, str]:
 
 
 @router.get("/consent/{consent_handle}/status")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="aa_consent.sensitive.read",
+    rate_limit="aa-consent-read",
+    idempotency="read-only",
+    audit_event="aa.consent.status",
+)
 async def consent_status(
     consent_handle: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -147,6 +165,14 @@ async def consent_status(
 
 
 @router.post("/consent/request")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="aa_consent.external_financial_data.sensitive.write",
+    rate_limit="aa-consent-request",
+    idempotency="not_idempotent-creates-provider-consent-request",
+    audit_event="aa.consent.request",
+)
 async def create_consent_request(
     params: dict[str, Any],
     tenant_id: str = Depends(get_current_tenant),

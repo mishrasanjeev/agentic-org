@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.a2a_task import A2ATask
 
@@ -36,6 +37,15 @@ _log = structlog.get_logger()
 
 @router.get("/.well-known/agent.json")
 @router.get("/agent-card")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:a2a.discovery",
+    rate_limit="a2a-discovery",
+    idempotency="read-only",
+    audit_event="none-public-discovery",
+    public_reason="public-a2a-agent-card-no-tenant-data",
+)
 async def agent_card():
     """Return the A2A Agent Card for AgenticOrg.
 
@@ -69,6 +79,15 @@ async def agent_card():
 
 
 @router.get("/agents")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:a2a.agent_discovery",
+    rate_limit="a2a-discovery",
+    idempotency="read-only",
+    audit_event="none-public-discovery",
+    public_reason="public-a2a-agent-list-no-tenant-data",
+)
 async def list_available_agents():
     """List all agents available for A2A task execution."""
     return {"agents": _build_agent_skills()}
@@ -86,6 +105,14 @@ class A2ATaskRequest(BaseModel):
 
 
 @router.post("/tasks")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="a2a.external.agent_execution.sensitive.write",
+    rate_limit="a2a-task-execute",
+    idempotency="not_idempotent-creates-new-task-id",
+    audit_event="a2a.task.create",
+)
 async def create_task(
     body: A2ATaskRequest,
     request: Request,
@@ -310,6 +337,14 @@ async def create_task(
 
 
 @router.get("/tasks/{task_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="a2a.task.sensitive.read",
+    rate_limit="a2a-task-read",
+    idempotency="read-only",
+    audit_event="a2a.task.read",
+)
 async def get_task(
     task_id: str,
     tenant_id: str = Depends(get_current_tenant),

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 
 from api.deps import require_tenant_admin
+from api.route_metadata import route_meta
 from auth.jwt import create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
@@ -89,6 +90,14 @@ class OnboardingUpdate(BaseModel):
 
 
 @router.get("/profile", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="org.profile.read.admin",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="org.profile.read",
+)
 async def get_profile(request: Request):
     """Return tenant info and settings for the current user's organization."""
     tenant_id = _get_tenant_id(request)
@@ -111,6 +120,14 @@ async def get_profile(request: Request):
 
 
 @router.get("/members", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="org.members.read.admin",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="org.members.list",
+)
 async def list_members(request: Request):
     """List all users in the current tenant."""
     tenant_id = _get_tenant_id(request)
@@ -137,6 +154,14 @@ async def list_members(request: Request):
 
 
 @router.post("/invite", status_code=201, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="org.members.invite.admin",
+    rate_limit="admin-mutating",
+    idempotency="tenant-email-pending-invite",
+    audit_event="org.members.invite",
+)
 async def invite_member(body: InviteRequest, request: Request):
     """Create a pending user and send an invite email with a JWT token."""
     allowed_invite_roles = {"admin", "domain_lead", "analyst", "auditor", "developer"}
@@ -210,6 +235,15 @@ async def invite_member(body: InviteRequest, request: Request):
 
 
 @router.get("/invite-info")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:org.invite.preview",
+    rate_limit="auth-invite",
+    idempotency="read-only-invite-code-peek",
+    audit_event="org.invite.preview",
+    public_reason="one-time-invite-code-preview",
+)
 async def get_invite_info(token: str | None = None, code: str | None = None):
     """Return invite metadata for the accept-invite screen.
 
@@ -248,6 +282,15 @@ async def get_invite_info(token: str | None = None, code: str | None = None):
 
 
 @router.post("/accept-invite")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:org.invite.accept",
+    rate_limit="auth-invite",
+    idempotency="one-time-invite-code-consumption",
+    audit_event="org.invite.accepted",
+    public_reason="one-time-invite-code-validated",
+)
 async def accept_invite(body: AcceptInviteRequest):
     """Validate invite (code or legacy JWT), set password, activate the user."""
     token_value = body.token
@@ -312,6 +355,14 @@ async def accept_invite(body: AcceptInviteRequest):
 
 
 @router.put("/onboarding", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="org.onboarding.update.admin",
+    rate_limit="admin-mutating",
+    idempotency="tenant-onboarding-settings-update",
+    audit_event="org.onboarding.update",
+)
 async def update_onboarding(body: OnboardingUpdate, request: Request):
     """Update onboarding step or completion flag in tenant settings."""
     tenant_id = _get_tenant_id(request)
@@ -341,6 +392,14 @@ async def update_onboarding(body: OnboardingUpdate, request: Request):
 
 
 @router.delete("/members/{user_id}", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="org.members.delete.admin",
+    rate_limit="admin-mutating",
+    idempotency="tenant-user-soft-deactivate",
+    audit_event="org.members.deactivate",
+)
 async def deactivate_member(user_id: str, request: Request):
     """Soft-deactivate a member by setting status to inactive."""
     tenant_id = _get_tenant_id(request)

@@ -448,14 +448,34 @@ class TestAAConsentTypes:
 class TestBridgeServerHandler:
     """Test the cloud-side bridge connection manager."""
 
-    def test_get_status_disconnected(self):
+    @pytest.mark.asyncio
+    async def test_get_status_disconnected(self):
         from bridge.server_handler import get_bridge_status
+        from bridge.state import (
+            InMemoryBridgeStateRepository,
+            configure_bridge_state_for_tests,
+            reset_bridge_state_for_tests,
+        )
 
-        status = get_bridge_status("nonexistent-bridge")
-        assert status["connected"] is False
+        configure_bridge_state_for_tests(repository=InMemoryBridgeStateRepository())
+        try:
+            status = await get_bridge_status("nonexistent-bridge")
+            assert status["connected"] is False
+        finally:
+            reset_bridge_state_for_tests()
 
-    def test_list_active_bridges_empty(self):
+    @pytest.mark.asyncio
+    async def test_list_active_bridges_empty(self):
         from bridge.server_handler import list_active_bridges
+        from bridge.state import (
+            InMemoryBridgeStateRepository,
+            configure_bridge_state_for_tests,
+            reset_bridge_state_for_tests,
+        )
 
-        bridges = list_active_bridges()
-        assert isinstance(bridges, list)
+        configure_bridge_state_for_tests(repository=InMemoryBridgeStateRepository())
+        try:
+            bridges = await list_active_bridges()
+            assert isinstance(bridges, list)
+        finally:
+            reset_bridge_state_for_tests()

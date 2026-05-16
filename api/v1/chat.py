@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS, _DOMAIN_DEFAULT_TOOLS
 from core.config import redis_socket_timeout_kwargs, redis_url_from_env
 from core.database import get_tenant_session
@@ -456,6 +457,14 @@ class ChatMessage(BaseModel):
 
 
 @router.post("/chat/query", response_model=ChatQueryResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="chat.agent_execution.external_tool_sensitive.write",
+    rate_limit="chat-query",
+    idempotency="not_idempotent-appends-chat-history-and-may-trigger-hitl",
+    audit_event="chat.query",
+)
 async def chat_query(
     body: ChatQueryRequest,
     request: Request,
@@ -754,6 +763,14 @@ async def chat_query(
 
 
 @router.get("/chat/history", response_model=list[ChatMessage])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="chat.history.sensitive.read",
+    rate_limit="chat-history-read",
+    idempotency="read-only",
+    audit_event="chat.history.read",
+)
 async def chat_history(
     company_id: str = "",
     agent_id: str = "",

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 
 logger = structlog.get_logger()
@@ -49,6 +50,14 @@ class AgentCostRow(BaseModel):
 
 
 @router.get("/summary", response_model=CostSummary)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="costs.commercial_sensitive.read",
+    rate_limit="cost-dashboard-read",
+    idempotency="read-only",
+    audit_event="costs.summary.read",
+)
 async def summary(
     period: str = Query("monthly", pattern="^(daily|weekly|monthly)$"),
     company_id: uuid.UUID | None = None,
@@ -119,6 +128,14 @@ async def summary(
 
 
 @router.get("/trend", response_model=list[CostPoint])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="costs.commercial_sensitive.read",
+    rate_limit="cost-dashboard-read",
+    idempotency="read-only",
+    audit_event="costs.trend.read",
+)
 async def trend(
     days: int = Query(30, ge=1, le=365),
     tenant_id: str = Depends(get_current_tenant),
@@ -148,6 +165,14 @@ async def trend(
 
 
 @router.get("/top-agents", response_model=list[AgentCostRow])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="costs.commercial_sensitive.read",
+    rate_limit="cost-dashboard-read",
+    idempotency="read-only",
+    audit_event="costs.top_agents.read",
+)
 async def top_agents(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(10, ge=1, le=100),

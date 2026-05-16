@@ -6,13 +6,6 @@ This guide defines the M11 hosted staging E2E plan for the AgenticOrg Commerce S
 
 AgenticOrg consumes Grantex staging data only. Commerce execution must stay on the Grantex Commerce API and `grantex_commerce:*` tool path.
 
-## C2B Real-Staging Evidence
-
-- C2B result: 2 passed, 2 failed-safe, 10 skipped.
-- Grantex-only path confirmed: the local real-staging run used only `grantex_commerce:*` aliases against the approved Grantex Option A smoke URL.
-- No provider credential handling: AgenticOrg did not call or handle Stripe, Plural, Pine, or provider credential paths for commerce.
-- Synthetic consent/passport fixture support is needed for C2C before AgenticOrg can run checkout, payment intent, payment status, disabled merchant, untrusted agent, and denied/revoked/expired passport real-staging cases.
-
 ## Required Staging Targets
 
 - AgenticOrg base: `https://staging.agenticorg.ai`
@@ -93,6 +86,17 @@ python demos/commerce_sales_agent_demo.py --mode=real-staging --grantex-base '<a
 python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q
 ```
 
+C2C fixture bridge support is local-only and optional. If Grantex exports `.tmp/commerce-agent-real-staging.env`, AgenticOrg may consume it with:
+
+Env option: `AGENTICORG_COMMERCE_FIXTURE_ENV=.tmp/commerce-agent-real-staging.env`.
+
+```powershell
+$env:AGENTICORG_COMMERCE_FIXTURE_ENV='.tmp/commerce-agent-real-staging.env'
+python demos/commerce_sales_agent_demo.py --mode=real-staging --fixture-env .tmp/commerce-agent-real-staging.env --evidence-report docs/reports/commerce-agent-real-staging-evidence.md
+```
+
+The fixture env file must be under `.tmp/`. It may contain the approved smoke URL, synthetic merchant/agent/product/variant IDs, exactly one Grantex auth source value, and optional synthetic passport fixture values. These values are runtime-sensitive even when synthetic. AgenticOrg records only variable names, synthetic IDs, redacted hashes, case status, HTTP status, latency, and error code. It never prints fixture values and never treats local fixture data as mocked hosted evidence.
+
 The local mock demo remains available with `python demos/commerce_sales_agent_demo.py --mode=mock`. Do not present mocked results as hosted staging evidence.
 
 Real-staging mode fails closed before connector creation, auth lookup, or network use when pointed at production URLs, credentialed URLs, arbitrary `run.app` URLs, or non-HTTPS URLs such as local development origins.
@@ -116,6 +120,8 @@ These cases remain skipped unless the approved synthetic Grantex consent/passpor
 - payment intent create
 - checkout create
 - payment status polling
+
+With a valid local `.tmp` fixture env, those cases become live-capable against the approved Grantex staging or exact smoke URL. Missing fixture values keep the corresponding case explicitly skipped.
 
 ## Negative Evals Against Real Staging Endpoints
 

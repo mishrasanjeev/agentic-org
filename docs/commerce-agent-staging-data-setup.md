@@ -6,13 +6,6 @@ Status: M10 planning and doc validation only. This pass does not deploy, create 
 
 AgenticOrg staging should consume the synthetic Grantex Commerce V1 staging data prepared for M10. The Commerce Sales Agent must use Grantex staging APIs and MCP tools only. AgenticOrg does not own merchant catalog seed data, payment state transitions, Commerce Passport issuance, provider webhooks, or audit timeline records.
 
-## C2B Real-Staging Finding
-
-- C2B result: 2 passed, 2 failed-safe, 10 skipped.
-- Grantex-only path confirmed: local AgenticOrg real-staging used the approved Grantex Option A smoke URL and `grantex_commerce:*` aliases only.
-- No provider credential handling was required or performed by the Commerce Sales Agent.
-- Synthetic consent/passport fixture support is needed for C2C so checkout, payment intent, payment status, and passport negative cases can run without exposing raw passports, tokens, idempotency keys, provider credentials, or payload bodies.
-
 ## Expected Grantex Staging IDs
 
 - Tenant: `cten_staging_commerce`
@@ -84,6 +77,14 @@ Expected real-staging run configuration:
 
 The real-staging demo/eval must redact auth headers, generated Commerce Passport material, generated payment references, and any generated request correlation material from logs and reports.
 
+## C2C Local Fixture Bridge
+
+For approved Option A smoke runs, Grantex may export a local fixture env file to `.tmp/commerce-agent-real-staging.env`. AgenticOrg can load it with `--fixture-env .tmp/commerce-agent-real-staging.env` or `AGENTICORG_COMMERCE_FIXTURE_ENV=.tmp/commerce-agent-real-staging.env`.
+
+The fixture env file is disabled by default and must stay under `.tmp/`. It may contain the approved smoke URL, synthetic merchant/agent/product/variant IDs, exactly one Grantex auth source value, and optional synthetic passport fixture values. Usable passports, bearer tokens, agent assertions, API keys, idempotency keys, webhook secrets, and consent exchange material are sensitive runtime material even when synthetic.
+
+AgenticOrg evidence may record variable names, synthetic IDs, redacted hashes, case status, HTTP status, latency, and error code only. It must not print or persist fixture values in docs, tests, git diffs, evidence reports, logs, PR bodies, or chat.
+
 ## Option A Smoke Coverage
 
 The Grantex Option A smoke manifest provides enough synthetic data for these C1 local-to-smoke cases:
@@ -109,6 +110,8 @@ These remain skipped unless the approved smoke run also provisions synthetic con
 - denied, revoked, or expired passport cases
 - disabled merchant and untrusted agent cases
 - invalid webhook signature and replay checks, which stay Grantex-side evidence
+
+With `.tmp` fixture bridge data present, AgenticOrg can attempt consent exchange, payment intent creation, checkout creation, payment status polling, amount-cap refusal, and passport negative guardrails against the approved Grantex target. Missing fixture fields keep the corresponding cases explicitly skipped.
 
 ## Expected Positive Cases
 

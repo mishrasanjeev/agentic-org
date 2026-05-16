@@ -25,6 +25,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 
 logger = structlog.get_logger()
 
@@ -124,6 +125,15 @@ class PortalRequest(BaseModel):
 
 
 @router.get("/plans")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:billing.plans.read",
+    rate_limit="public-read",
+    idempotency="read-only",
+    audit_event="billing.plans.read",
+    public_reason="public-pricing-no-tenant-data",
+)
 async def list_plans() -> list[dict[str, Any]]:
     """List available plans with pricing (USD + INR)."""
     from core.billing.limits import PLAN_PRICING
@@ -132,6 +142,14 @@ async def list_plans() -> list[dict[str, Any]]:
 
 
 @router.get("/subscription")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.subscription.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="billing.subscription.read",
+)
 async def get_subscription(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
@@ -170,6 +188,14 @@ async def get_subscription(
 
 
 @router.get("/usage")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.usage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="billing.usage.read",
+)
 async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     """Return current usage counters for the authenticated tenant.
 
@@ -193,6 +219,15 @@ async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> di
 # confirm credentials are wired before running a live checkout. Public
 # (no auth) so deploy smoke can call it.
 @router.get("/health")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:billing.health.read",
+    rate_limit="public-read",
+    idempotency="read-only",
+    audit_event="billing.health.read",
+    public_reason="gateway-config-readiness-no-tenant-data",
+)
 async def billing_health() -> dict[str, Any]:
     """Report which payment gateway(s) are configured on this deploy.
 
@@ -260,6 +295,14 @@ async def billing_health() -> dict[str, Any]:
 
 
 @router.post("/subscribe")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.subscribe.stripe",
+    rate_limit="billing-mutating",
+    idempotency="tenant-plan-checkout-session",
+    audit_event="billing.subscribe.stripe",
+)
 async def subscribe_stripe(
     body: SubscribeRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -352,6 +395,14 @@ async def subscribe_stripe(
 
 
 @router.post("/subscribe/india")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.subscribe.plural",
+    rate_limit="billing-mutating",
+    idempotency="tenant-plan-plural-order",
+    audit_event="billing.subscribe.plural",
+)
 async def subscribe_india(
     body: IndiaSubscribeRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -398,6 +449,15 @@ async def subscribe_india(
 
 
 @router.api_route("/callback", methods=["GET", "POST"])
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:billing.callback.plural",
+    rate_limit="gateway-callback",
+    idempotency="gateway-order-status-verification",
+    audit_event="billing.callback.plural",
+    public_reason="gateway-redirect-server-side-verification",
+)
 async def plural_callback(request: Request) -> RedirectResponse:
     """Handle Plural hosted checkout redirect back to the app.
 
@@ -501,6 +561,15 @@ async def plural_callback(request: Request) -> RedirectResponse:
 
 
 @router.get("/callback/stripe")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:billing.callback.stripe",
+    rate_limit="gateway-callback",
+    idempotency="stripe-session-id-verification",
+    audit_event="billing.callback.stripe",
+    public_reason="stripe-hosted-checkout-server-side-verification",
+)
 async def stripe_callback(
     session_id: str = "",
     tenant_id: str = "",
@@ -559,6 +628,14 @@ async def stripe_callback(
 
 
 @router.post("/portal")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.portal.create",
+    rate_limit="billing-mutating",
+    idempotency="tenant-portal-session-request",
+    audit_event="billing.portal.create",
+)
 async def create_portal(
     body: PortalRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -587,6 +664,14 @@ async def create_portal(
 
 
 @router.post("/order-status")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.order_status.read",
+    rate_limit="billing-status",
+    idempotency="read-only-provider-order-status",
+    audit_event="billing.order_status.read",
+)
 async def check_order_status(body: OrderStatusRequest) -> dict[str, Any]:
     """Check the status of a Plural payment order."""
     import asyncio
@@ -611,6 +696,14 @@ async def check_order_status(body: OrderStatusRequest) -> dict[str, Any]:
 
 
 @router.post("/cancel")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.subscription.cancel",
+    rate_limit="billing-mutating",
+    idempotency="tenant-subscription-terminal-cancel",
+    audit_event="billing.subscription.cancel",
+)
 async def cancel_subscription(
     body: CancelRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -669,6 +762,15 @@ async def cancel_subscription(
 
 
 @router.post("/webhook/stripe")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:billing.webhook.stripe",
+    rate_limit="gateway-webhook",
+    idempotency="stripe-event-id",
+    audit_event="billing.webhook.stripe",
+    public_reason="stripe-signature-required",
+)
 async def stripe_webhook(request: Request) -> dict[str, Any]:
     """Handle Stripe webhook callbacks."""
     import asyncio
@@ -691,6 +793,15 @@ async def stripe_webhook(request: Request) -> dict[str, Any]:
 
 
 @router.post("/webhook/plural")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:billing.webhook.plural",
+    rate_limit="gateway-webhook",
+    idempotency="plural-webhook-id",
+    audit_event="billing.webhook.plural",
+    public_reason="plural-hmac-signature-required",
+)
 async def plural_webhook(request: Request) -> dict[str, Any]:
     """Handle PineLabs Plural webhook callbacks.
 

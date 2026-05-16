@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.tenant import Tenant
 from core.schemas.api import FleetLimits
@@ -19,6 +20,14 @@ _FLEET_LIMITS_KEY = "fleet_limits"
 
 # ── GET /config/fleet_limits ─────────────────────────────────────────────────
 @router.get("/config/fleet_limits")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="config.fleet_limits.control_plane.sensitive.read",
+    rate_limit="config-read",
+    idempotency="read-only",
+    audit_event="config.fleet_limits.read",
+)
 async def get_fleet_limits(tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -37,6 +46,14 @@ async def get_fleet_limits(tenant_id: str = Depends(get_current_tenant)):
 
 # ── PUT /config/fleet_limits ─────────────────────────────────────────────────
 @router.put("/config/fleet_limits")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="config.fleet_limits.control_plane.sensitive.write",
+    rate_limit="config-write",
+    idempotency="idempotent-upsert-by-tenant",
+    audit_event="config.fleet_limits.update",
+)
 async def update_fleet_limits(
     body: FleetLimits,
     tenant_id: str = Depends(get_current_tenant),

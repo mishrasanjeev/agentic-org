@@ -175,7 +175,8 @@ class TestHRFunctional:
         assert len(parallel_output["results"]) == 5
         # Common slot found and invites sent
         assert step_results["find_common_slot"]["status"] == "completed"
-        assert step_results["send_invites"]["output"]["status"] == "sent"
+        assert step_results["send_invites"]["status"] == "stubbed"
+        assert step_results["send_invites"]["code"] == "notify_side_effect_not_configured"
 
     # -----------------------------------------------------------------------
     # FT-HR-004: Rescheduling automation
@@ -229,7 +230,8 @@ class TestHRFunctional:
         assert step_results["detect_cancellation"]["status"] == "completed"
         assert step_results["find_new_slot"]["status"] == "completed"
         assert step_results["update_calendar"]["status"] == "completed"
-        assert step_results["notify_all"]["output"]["status"] == "sent"
+        assert step_results["notify_all"]["status"] == "stubbed"
+        assert step_results["notify_all"]["code"] == "notify_side_effect_not_configured"
 
     # -----------------------------------------------------------------------
     # FT-HR-005: Offer letter generation (DocuSign to HR Head)
@@ -276,8 +278,8 @@ class TestHRFunctional:
         step_results = result["step_results"]
         assert step_results["generate_offer"]["status"] == "completed"
         assert step_results["send_docusign"]["status"] == "completed"
-        assert step_results["notify_hr_head"]["output"]["status"] == "sent"
-        assert step_results["notify_hr_head"]["output"]["connector"] == "email"
+        assert step_results["notify_hr_head"]["status"] == "stubbed"
+        assert step_results["notify_hr_head"]["connector"] == "email"
 
     # -----------------------------------------------------------------------
     # FT-HR-006: Day-0 provisioning completeness (all systems within 10 min)
@@ -335,7 +337,8 @@ class TestHRFunctional:
         # Verification passed
         assert step_results["verify_provision"]["status"] == "completed"
         # Welcome sent
-        assert step_results["welcome_notification"]["output"]["status"] == "sent"
+        assert step_results["welcome_notification"]["status"] == "stubbed"
+        assert step_results["welcome_notification"]["code"] == "notify_side_effect_not_configured"
 
     # -----------------------------------------------------------------------
     # FT-HR-007: Provisioning idempotency (trigger twice, no duplicates)
@@ -589,8 +592,8 @@ class TestHRFunctional:
         # Verification passed
         assert step_results["verify_revocation"]["status"] == "completed"
         # IT security notified
-        assert step_results["notify_it_security"]["output"]["status"] == "sent"
-        assert step_results["notify_it_security"]["output"]["connector"] == "slack"
+        assert step_results["notify_it_security"]["status"] == "stubbed"
+        assert step_results["notify_it_security"]["connector"] == "slack"
 
     # -----------------------------------------------------------------------
     # FT-HR-012: Attrition risk detection (3 signals, HRBP notified)
@@ -652,5 +655,5 @@ class TestHRFunctional:
         assert evaluate_condition("risk_signal_count >= 3", {"risk_signal_count": 3}) is True
         # HRBP notified via Slack
         assert "notify_hrbp" in step_results
-        assert step_results["notify_hrbp"]["output"]["status"] == "sent"
-        assert step_results["notify_hrbp"]["output"]["connector"] == "slack"
+        assert step_results["notify_hrbp"]["status"] == "stubbed"
+        assert step_results["notify_hrbp"]["connector"] == "slack"

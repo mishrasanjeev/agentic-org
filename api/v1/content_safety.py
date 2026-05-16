@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from api.route_metadata import route_meta
 from core.content_safety.checker import check_content_safety
 
 router = APIRouter()
@@ -39,6 +40,14 @@ class ContentSafetyResponse(BaseModel):
     "/content-safety/check",
     response_model=ContentSafetyResponse,
     summary="Check text for content safety issues",
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="content_safety.external_input.sensitive.write",
+    rate_limit="content-safety-check",
+    idempotency="deterministic-for-same-text-and-config",
+    audit_event="content_safety.check",
 )
 async def check_safety(req: ContentSafetyRequest) -> dict[str, Any]:
     """Run content safety checks (PII, toxicity, near-duplicate) on the given text.

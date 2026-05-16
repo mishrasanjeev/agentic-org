@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 
 from api.deps import require_scope
+from api.route_metadata import route_meta
 from core.database import async_session_factory
 from core.models.api_key import APIKey
 
@@ -79,6 +80,14 @@ class CreateKeyResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="api_keys.security.create",
+    rate_limit="security-admin-write",
+    idempotency="not-idempotent-secret-issued-once",
+    audit_event="api_keys.create",
+)
 async def create_api_key(body: CreateKeyRequest, request: Request):
     """Generate a new API key. The full key is only shown once."""
     tenant_id = _get_tenant_id(request)
@@ -153,6 +162,14 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
 # ---------------------------------------------------------------------------
 
 @router.get("")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="api_keys.security.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="api_keys.list",
+)
 async def list_api_keys(request: Request):
     """List all API keys for the current tenant (secrets are never returned)."""
     tenant_id = _get_tenant_id(request)
@@ -185,6 +202,14 @@ async def list_api_keys(request: Request):
 # ---------------------------------------------------------------------------
 
 @router.delete("/{key_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="api_keys.security.revoke",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-revoke-terminal-state",
+    audit_event="api_keys.revoke",
+)
 async def revoke_api_key(key_id: str, request: Request):
     """Revoke an API key. This is permanent."""
     tenant_id = _get_tenant_id(request)

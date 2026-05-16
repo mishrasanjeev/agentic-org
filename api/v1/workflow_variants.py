@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.workflow_variant import WorkflowVariant
 
@@ -52,6 +53,14 @@ def _to_out(v: WorkflowVariant) -> VariantOut:
 
 
 @router.get("", response_model=list[VariantOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflow_variants.definition.sensitive.read",
+    rate_limit="workflow-variant-read",
+    idempotency="read-only",
+    audit_event="workflow_variants.list",
+)
 async def list_variants(
     workflow_id: uuid.UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -68,6 +77,14 @@ async def list_variants(
 
 
 @router.post("", response_model=VariantOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflow_variants.behavior.high_risk.write",
+    rate_limit="workflow-variant-write",
+    idempotency="idempotent-upsert-by-workflow-and-variant-name",
+    audit_event="workflow_variants.upsert",
+)
 async def upsert_variant(
     workflow_id: uuid.UUID,
     body: VariantIn,
@@ -110,6 +127,14 @@ async def upsert_variant(
 
 
 @router.delete("/{variant_name}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflow_variants.behavior.high_risk.write",
+    rate_limit="workflow-variant-write",
+    idempotency="idempotent-delete-by-workflow-and-variant-name",
+    audit_event="workflow_variants.delete",
+)
 async def delete_variant(
     workflow_id: uuid.UUID,
     variant_name: str,

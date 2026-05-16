@@ -16,6 +16,8 @@ import os
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from api.route_metadata import route_meta
+
 router = APIRouter()
 
 
@@ -30,6 +32,14 @@ def _env_set(name: str) -> bool:
 
 
 @router.get("/integrations/status", response_model=IntegrationsStatus)
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="integrations.config_status.sensitive.read",
+    rate_limit="integration-status-read",
+    idempotency="read-only",
+    audit_event="integrations.status.read",
+)
 async def integrations_status() -> IntegrationsStatus:
     """Boolean config-state report for each third-party integration."""
     return IntegrationsStatus(

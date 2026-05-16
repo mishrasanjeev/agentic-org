@@ -1,0 +1,5151 @@
+[
+  {
+    "audit_event": "none-public-discovery",
+    "auth_required": false,
+    "function": "agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/a2a/.well-known/agent.json api/v1/a2a.py:agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a.py",
+    "path": "/api/v1/a2a/.well-known/agent.json",
+    "public_exempt_reason": "public-a2a-agent-card-no-tenant-data",
+    "rate_limit": "a2a-discovery",
+    "scope": "public:a2a.discovery",
+    "source_line": 49,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-discovery",
+    "auth_required": false,
+    "function": "agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/a2a/agent-card api/v1/a2a.py:agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a.py",
+    "path": "/api/v1/a2a/agent-card",
+    "public_exempt_reason": "public-a2a-agent-card-no-tenant-data",
+    "rate_limit": "a2a-discovery",
+    "scope": "public:a2a.discovery",
+    "source_line": 49,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-discovery",
+    "auth_required": false,
+    "function": "list_available_agents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/a2a/agents api/v1/a2a.py:list_available_agents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a.py",
+    "path": "/api/v1/a2a/agents",
+    "public_exempt_reason": "public-a2a-agent-list-no-tenant-data",
+    "rate_limit": "a2a-discovery",
+    "scope": "public:a2a.agent_discovery",
+    "source_line": 91,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "a2a.task.create",
+    "auth_required": true,
+    "function": "create_task",
+    "idempotency": "not_idempotent-creates-new-task-id",
+    "key": "POST /api/v1/a2a/tasks api/v1/a2a.py:create_task",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/a2a.py",
+    "path": "/api/v1/a2a/tasks",
+    "public_exempt_reason": null,
+    "rate_limit": "a2a-task-execute",
+    "scope": "a2a.external.agent_execution.sensitive.write",
+    "source_line": 116,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "a2a.task.read",
+    "auth_required": true,
+    "function": "get_task",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/a2a/tasks/{task_id} api/v1/a2a.py:get_task",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a.py",
+    "path": "/api/v1/a2a/tasks/{task_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "a2a-task-read",
+    "scope": "a2a.task.sensitive.read",
+    "source_line": 348,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "aa.consent.callback",
+    "auth_required": false,
+    "function": "consent_callback",
+    "idempotency": "nonce-replay-protected",
+    "key": "POST /api/v1/aa/consent/callback api/v1/aa_callback.py:consent_callback",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/aa_callback.py",
+    "path": "/api/v1/aa/consent/callback",
+    "public_exempt_reason": "provider-callback-hmac-timestamp-nonce-protected",
+    "rate_limit": "aa-callback-signed",
+    "scope": "public:aa_callback.signed_external_input.sensitive.write",
+    "source_line": 59,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "aa.consent.request",
+    "auth_required": true,
+    "function": "create_consent_request",
+    "idempotency": "not_idempotent-creates-provider-consent-request",
+    "key": "POST /api/v1/aa/consent/request api/v1/aa_callback.py:create_consent_request",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/aa_callback.py",
+    "path": "/api/v1/aa/consent/request",
+    "public_exempt_reason": null,
+    "rate_limit": "aa-consent-request",
+    "scope": "aa_consent.external_financial_data.sensitive.write",
+    "source_line": 176,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "aa.consent.status",
+    "auth_required": true,
+    "function": "consent_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/aa/consent/{consent_handle}/status api/v1/aa_callback.py:consent_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/aa_callback.py",
+    "path": "/api/v1/aa/consent/{consent_handle}/status",
+    "public_exempt_reason": null,
+    "rate_limit": "aa-consent-read",
+    "scope": "aa_consent.sensitive.read",
+    "source_line": 148,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.accounts.list",
+    "auth_required": true,
+    "function": "list_accounts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/abm/accounts api/v1/abm.py:list_accounts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/accounts",
+    "public_exempt_reason": null,
+    "rate_limit": "abm-read",
+    "scope": "abm.accounts.sensitive.list",
+    "source_line": 500,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.account.create",
+    "auth_required": true,
+    "function": "create_account",
+    "idempotency": "unique-domain-per-tenant",
+    "key": "POST /api/v1/abm/accounts api/v1/abm.py:create_account",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/accounts",
+    "public_exempt_reason": null,
+    "rate_limit": "abm-write",
+    "scope": "abm.accounts.sensitive.write",
+    "source_line": 556,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.accounts.upload",
+    "auth_required": true,
+    "function": "upload_accounts",
+    "idempotency": "dedupe-by-domain-within-tenant",
+    "key": "POST /api/v1/abm/accounts/upload api/v1/abm.py:upload_accounts",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/accounts/upload",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "abm.accounts.sensitive.bulk_import",
+    "source_line": 301,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.account.get",
+    "auth_required": true,
+    "function": "get_account",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/abm/accounts/{account_id} api/v1/abm.py:get_account",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/accounts/{account_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "abm-read",
+    "scope": "abm.accounts.sensitive.read",
+    "source_line": 607,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.campaign.launch",
+    "auth_required": true,
+    "function": "launch_campaign",
+    "idempotency": "not-idempotent-new-campaign-created",
+    "key": "POST /api/v1/abm/accounts/{account_id}/campaign api/v1/abm.py:launch_campaign",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/accounts/{account_id}/campaign",
+    "public_exempt_reason": null,
+    "rate_limit": "abm-campaign-launch",
+    "scope": "abm.campaigns.external_action.launch",
+    "source_line": 727,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.account.intent",
+    "auth_required": true,
+    "function": "get_account_intent",
+    "idempotency": "read-mostly-may-refresh-intent-cache",
+    "key": "GET /api/v1/abm/accounts/{account_id}/intent api/v1/abm.py:get_account_intent",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/accounts/{account_id}/intent",
+    "public_exempt_reason": null,
+    "rate_limit": "external-intent-aggregation",
+    "scope": "abm.accounts.external_intent.sensitive.read",
+    "source_line": 635,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "abm.dashboard.read",
+    "auth_required": true,
+    "function": "abm_dashboard",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/abm/dashboard api/v1/abm.py:abm_dashboard",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/abm.py",
+    "path": "/api/v1/abm/dashboard",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "abm.dashboard.sensitive.read",
+    "source_line": 787,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "branding.reset",
+    "auth_required": true,
+    "function": "reset_branding",
+    "idempotency": "idempotent-reset-by-tenant",
+    "key": "DELETE /api/v1/admin/branding api/v1/branding.py:reset_branding",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/branding.py",
+    "path": "/api/v1/admin/branding",
+    "public_exempt_reason": null,
+    "rate_limit": "branding-admin-write",
+    "scope": "branding.sensitive.write",
+    "source_line": 278,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "branding.read",
+    "auth_required": true,
+    "function": "get_tenant_branding",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/admin/branding api/v1/branding.py:get_tenant_branding",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/branding.py",
+    "path": "/api/v1/admin/branding",
+    "public_exempt_reason": null,
+    "rate_limit": "branding-admin-read",
+    "scope": "branding.sensitive.read",
+    "source_line": 218,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "branding.upsert",
+    "auth_required": true,
+    "function": "upsert_tenant_branding",
+    "idempotency": "idempotent-upsert-by-tenant",
+    "key": "PUT /api/v1/admin/branding api/v1/branding.py:upsert_tenant_branding",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/branding.py",
+    "path": "/api/v1/admin/branding",
+    "public_exempt_reason": null,
+    "rate_limit": "branding-admin-write",
+    "scope": "branding.sensitive.write",
+    "source_line": 241,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "demo.seed",
+    "auth_required": true,
+    "function": "seed_demo_data",
+    "idempotency": "idempotent-demo-seed",
+    "key": "POST /api/v1/admin/seed-demo api/v1/demo.py:seed_demo_data",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/demo.py",
+    "path": "/api/v1/admin/seed-demo",
+    "public_exempt_reason": null,
+    "rate_limit": "demo-seed",
+    "scope": "demo.seed.control_plane.write",
+    "source_line": 59,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agent_teams.list",
+    "auth_required": true,
+    "function": "list_teams",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-teams api/v1/agent_teams.py:list_teams",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_teams.py",
+    "path": "/api/v1/agent-teams",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-team-read",
+    "scope": "agent_teams.sensitive.read",
+    "source_line": 67,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agent_teams.create",
+    "auth_required": true,
+    "function": "create_team",
+    "idempotency": "not_idempotent-creates-team-and-members",
+    "key": "POST /api/v1/agent-teams api/v1/agent_teams.py:create_team",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_teams.py",
+    "path": "/api/v1/agent-teams",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-team-write",
+    "scope": "agent_teams.routing_control.sensitive.write",
+    "source_line": 142,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agent_teams.detail",
+    "auth_required": true,
+    "function": "get_team",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-teams/{team_id} api/v1/agent_teams.py:get_team",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_teams.py",
+    "path": "/api/v1/agent-teams/{team_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-team-read",
+    "scope": "agent_teams.sensitive.read",
+    "source_line": 110,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.list",
+    "auth_required": true,
+    "function": "list_agents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents api/v1/agents.py:list_agents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.list",
+    "source_line": 1205,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.create",
+    "auth_required": true,
+    "function": "create_agent",
+    "idempotency": "not-idempotent-agent-create",
+    "key": "POST /api/v1/agents api/v1/agents.py:create_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 968,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.default_tools.read",
+    "auth_required": true,
+    "function": "get_default_tools",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/default-tools/{agent_type} api/v1/agents.py:get_default_tools",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/default-tools/{agent_type}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.tools.sensitive.read",
+    "source_line": 922,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.generate",
+    "auth_required": true,
+    "function": "generate_agent",
+    "idempotency": "not-idempotent-ai-generation-may-deploy",
+    "key": "POST /api/v1/agents/generate api/v1/agents.py:generate_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "ai-generation",
+    "scope": "agents.generate",
+    "source_line": 1619,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.import_csv",
+    "auth_required": true,
+    "function": "import_agents_csv",
+    "idempotency": "not-idempotent-bulk-agent-import",
+    "key": "POST /api/v1/agents/import-csv api/v1/agents.py:import_agents_csv",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/import-csv",
+    "public_exempt_reason": null,
+    "rate_limit": "file-upload",
+    "scope": "agents.import",
+    "source_line": 1462,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.org_tree.read",
+    "auth_required": true,
+    "function": "get_org_tree",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/org-tree api/v1/agents.py:get_org_tree",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/org-tree",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.org_tree",
+    "source_line": 1325,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.delete",
+    "auth_required": true,
+    "function": "delete_agent",
+    "idempotency": "idempotent-delete-by-agent-id",
+    "key": "DELETE /api/v1/agents/{agent_id} api/v1/agents.py:delete_agent",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 3679,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.read",
+    "auth_required": true,
+    "function": "get_agent",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id} api/v1/agents.py:get_agent",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.read",
+    "source_line": 1741,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.update",
+    "auth_required": true,
+    "function": "update_agent",
+    "idempotency": "idempotent-partial-update",
+    "key": "PATCH /api/v1/agents/{agent_id} api/v1/agents.py:update_agent",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 1911,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.replace",
+    "auth_required": true,
+    "function": "replace_agent",
+    "idempotency": "idempotent-full-replace",
+    "key": "PUT /api/v1/agents/{agent_id} api/v1/agents.py:replace_agent",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 1771,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.amendments.list",
+    "auth_required": true,
+    "function": "list_agent_amendments",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/amendments api/v1/agents.py:list_agent_amendments",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/amendments",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.amendments.read",
+    "source_line": 3638,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.budget.read",
+    "auth_required": true,
+    "function": "get_agent_budget",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/budget api/v1/agents.py:get_agent_budget",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/budget",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.budget.read",
+    "source_line": 3352,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.clone",
+    "auth_required": true,
+    "function": "clone_agent",
+    "idempotency": "not-idempotent-agent-clone",
+    "key": "POST /api/v1/agents/{agent_id}/clone api/v1/agents.py:clone_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/clone",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 3197,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.delegate",
+    "auth_required": true,
+    "function": "delegate_to_agent",
+    "idempotency": "idempotent-delegation-grant-update",
+    "key": "POST /api/v1/agents/{agent_id}/delegate api/v1/agents.py:delegate_to_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/delegate",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.delegate",
+    "source_line": 1386,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.explanation.latest",
+    "auth_required": true,
+    "function": "get_latest_explanation",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/explanation/latest api/v1/agents.py:get_latest_explanation",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/explanation/latest",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.explanation.read",
+    "source_line": 3498,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.feedback.list",
+    "auth_required": true,
+    "function": "list_agent_feedback",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/feedback api/v1/agents.py:list_agent_feedback",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/feedback",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.feedback.list",
+    "source_line": 3470,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.feedback.submit",
+    "auth_required": true,
+    "function": "submit_agent_feedback",
+    "idempotency": "not-idempotent-feedback-submit",
+    "key": "POST /api/v1/agents/{agent_id}/feedback api/v1/agents.py:submit_agent_feedback",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/feedback",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-feedback",
+    "scope": "agents.feedback.write",
+    "source_line": 3424,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.feedback.analyze",
+    "auth_required": true,
+    "function": "analyze_agent_feedback",
+    "idempotency": "not-idempotent-analysis-job",
+    "key": "POST /api/v1/agents/{agent_id}/feedback/analyze api/v1/agents.py:analyze_agent_feedback",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/feedback/analyze",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.feedback.analyze",
+    "source_line": 3614,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.pause",
+    "auth_required": true,
+    "function": "pause_agent",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/agents/{agent_id}/pause api/v1/agents.py:pause_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/pause",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.lifecycle",
+    "source_line": 2707,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.promote",
+    "auth_required": true,
+    "function": "promote_agent",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/agents/{agent_id}/promote api/v1/agents.py:promote_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/promote",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.lifecycle",
+    "source_line": 2842,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.prompt_history.read",
+    "auth_required": true,
+    "function": "get_prompt_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/prompt-history api/v1/agents.py:get_prompt_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/prompt-history",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.sensitive.prompt_history",
+    "source_line": 3310,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.resume",
+    "auth_required": true,
+    "function": "resume_agent",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/agents/{agent_id}/resume api/v1/agents.py:resume_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/resume",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.lifecycle",
+    "source_line": 2755,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.retest",
+    "auth_required": true,
+    "function": "retest_agent",
+    "idempotency": "idempotent-shadow-retest-reset",
+    "key": "POST /api/v1/agents/{agent_id}/retest api/v1/agents.py:retest_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/retest",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.lifecycle",
+    "source_line": 3012,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.retire",
+    "auth_required": true,
+    "function": "retire_agent",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/agents/{agent_id}/retire api/v1/agents.py:retire_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/retire",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.lifecycle",
+    "source_line": 2961,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.rollback",
+    "auth_required": true,
+    "function": "rollback_agent",
+    "idempotency": "idempotent-rollback-to-previous-version",
+    "key": "POST /api/v1/agents/{agent_id}/rollback api/v1/agents.py:rollback_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/rollback",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.lifecycle",
+    "source_line": 3073,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.run",
+    "auth_required": true,
+    "function": "run_agent",
+    "idempotency": "not-idempotent-agent-execution",
+    "key": "POST /api/v1/agents/{agent_id}/run api/v1/agents.py:run_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-execution",
+    "scope": "agents.execute",
+    "source_line": 2072,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "approval_policies.list",
+    "auth_required": true,
+    "function": "list_policies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/approval-policies api/v1/approval_policies.py:list_policies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/approval_policies.py",
+    "path": "/api/v1/approval-policies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approval_policies.sensitive.list",
+    "source_line": 152,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "approval_policies.create",
+    "auth_required": true,
+    "function": "create_policy",
+    "idempotency": "unique-policy-name-per-tenant",
+    "key": "POST /api/v1/approval-policies api/v1/approval_policies.py:create_policy",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/approval_policies.py",
+    "path": "/api/v1/approval-policies",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "approval_policies.write",
+    "source_line": 84,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "approval_policies.delete",
+    "auth_required": true,
+    "function": "delete_policy",
+    "idempotency": "idempotent-delete-by-policy-id",
+    "key": "DELETE /api/v1/approval-policies/{policy_id} api/v1/approval_policies.py:delete_policy",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/approval_policies.py",
+    "path": "/api/v1/approval-policies/{policy_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "approval_policies.write",
+    "source_line": 182,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "approvals.list",
+    "auth_required": true,
+    "function": "list_approvals",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/approvals api/v1/approvals.py:list_approvals",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/approvals.py",
+    "path": "/api/v1/approvals",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.sensitive.list",
+    "source_line": 114,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "approvals.decide",
+    "auth_required": true,
+    "function": "decide",
+    "idempotency": "terminal-state-conflict-prevents-duplicate-decision",
+    "key": "POST /api/v1/approvals/{hitl_id}/decide api/v1/approvals.py:decide",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/approvals.py",
+    "path": "/api/v1/approvals/{hitl_id}/decide",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-decision",
+    "scope": "approvals.decide",
+    "source_line": 326,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "audit.query",
+    "auth_required": true,
+    "function": "query_audit",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/audit api/v1/audit.py:query_audit",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/audit.py",
+    "path": "/api/v1/audit",
+    "public_exempt_reason": null,
+    "rate_limit": "audit-read",
+    "scope": "audit.sensitive.read",
+    "source_line": 63,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "audit.enforcement.query",
+    "auth_required": true,
+    "function": "query_enforce_audit",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/audit/enforce api/v1/audit.py:query_enforce_audit",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/audit.py",
+    "path": "/api/v1/audit/enforce",
+    "public_exempt_reason": null,
+    "rate_limit": "audit-read",
+    "scope": "audit.enforcement.sensitive.read",
+    "source_line": 207,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.config.read",
+    "auth_required": false,
+    "function": "auth_config",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/auth/config api/v1/auth.py:auth_config",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/config",
+    "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
+    "rate_limit": "public-read",
+    "scope": "public:auth.config",
+    "source_line": 719,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "auth.password_reset.requested",
+    "auth_required": false,
+    "function": "forgot_password",
+    "idempotency": "email-reset-request-enumeration-safe",
+    "key": "POST /api/v1/auth/forgot-password api/v1/auth.py:forgot_password",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/forgot-password",
+    "public_exempt_reason": "password-reset-bootstrap-rate-limited",
+    "rate_limit": "auth-password-reset",
+    "scope": "public:auth.password_reset.request",
+    "source_line": 524,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "auth.google_login",
+    "auth_required": false,
+    "function": "google_login",
+    "idempotency": "google-id-token-email-upsert",
+    "key": "POST /api/v1/auth/google api/v1/auth.py:google_login",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/google",
+    "public_exempt_reason": "google-id-token-verification",
+    "rate_limit": "auth-login",
+    "scope": "public:auth.google",
+    "source_line": 407,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "auth.login",
+    "auth_required": false,
+    "function": "login",
+    "idempotency": "credential-check-creates-session",
+    "key": "POST /api/v1/auth/login api/v1/auth.py:login",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/login",
+    "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
+    "rate_limit": "auth-login",
+    "scope": "public:auth.login",
+    "source_line": 331,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "auth.logout",
+    "auth_required": true,
+    "function": "logout",
+    "idempotency": "token-blacklist-idempotent",
+    "key": "POST /api/v1/auth/logout api/v1/auth.py:logout",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/logout",
+    "public_exempt_reason": null,
+    "rate_limit": "auth-mutating",
+    "scope": "auth.session.logout",
+    "source_line": 625,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.me.read",
+    "auth_required": true,
+    "function": "get_current_user_profile",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/auth/me api/v1/auth.py:get_current_user_profile",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/me",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "auth.session.read",
+    "source_line": 650,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.password_reset.completed",
+    "auth_required": false,
+    "function": "reset_password",
+    "idempotency": "one-time-reset-code-consumption",
+    "key": "POST /api/v1/auth/reset-password api/v1/auth.py:reset_password",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/reset-password",
+    "public_exempt_reason": "one-time-reset-code-validated",
+    "rate_limit": "auth-password-reset",
+    "scope": "public:auth.password_reset.consume",
+    "source_line": 574,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "auth.signup",
+    "auth_required": false,
+    "function": "signup",
+    "idempotency": "unique-admin-email-and-generated-tenant",
+    "key": "POST /api/v1/auth/signup api/v1/auth.py:signup",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth.py",
+    "path": "/api/v1/auth/signup",
+    "public_exempt_reason": "auth-bootstrap-rate-limited-password-policy",
+    "rate_limit": "auth-signup",
+    "scope": "public:auth.signup",
+    "source_line": 138,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "sso.providers.lookup",
+    "auth_required": false,
+    "function": "list_providers",
+    "idempotency": "read-only-domain-discovery",
+    "key": "GET /api/v1/auth/sso/providers api/v1/sso.py:list_providers",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sso.py",
+    "path": "/api/v1/auth/sso/providers",
+    "public_exempt_reason": "public-auth-discovery-email-domain",
+    "rate_limit": "auth-discovery",
+    "scope": "sso.public.providers",
+    "source_line": 93,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "sso.login.callback",
+    "auth_required": false,
+    "function": "sso_callback",
+    "idempotency": "one-shot-state-token-consumed",
+    "key": "GET /api/v1/auth/sso/{provider_key}/callback api/v1/sso.py:sso_callback",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sso.py",
+    "path": "/api/v1/auth/sso/{provider_key}/callback",
+    "public_exempt_reason": "oidc-provider-callback-state-nonce-protected",
+    "rate_limit": "auth-sso-callback",
+    "scope": "sso.public.callback.external_input_sensitive",
+    "source_line": 177,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sso.login.started",
+    "auth_required": false,
+    "function": "sso_login",
+    "idempotency": "one-shot-oidc-state-created",
+    "key": "GET /api/v1/auth/sso/{provider_key}/login api/v1/sso.py:sso_login",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sso.py",
+    "path": "/api/v1/auth/sso/{provider_key}/login",
+    "public_exempt_reason": "public-auth-route-pkce-state-protected",
+    "rate_limit": "auth-sso-login-initiation",
+    "scope": "sso.public.login",
+    "source_line": 135,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.callback.plural",
+    "auth_required": false,
+    "function": "plural_callback",
+    "idempotency": "gateway-order-status-verification",
+    "key": "GET,POST /api/v1/billing/callback api/v1/billing.py:plural_callback",
+    "metadata_present": true,
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/callback",
+    "public_exempt_reason": "gateway-redirect-server-side-verification",
+    "rate_limit": "gateway-callback",
+    "scope": "public:billing.callback.plural",
+    "source_line": 461,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.callback.stripe",
+    "auth_required": false,
+    "function": "stripe_callback",
+    "idempotency": "stripe-session-id-verification",
+    "key": "GET /api/v1/billing/callback/stripe api/v1/billing.py:stripe_callback",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/callback/stripe",
+    "public_exempt_reason": "stripe-hosted-checkout-server-side-verification",
+    "rate_limit": "gateway-callback",
+    "scope": "public:billing.callback.stripe",
+    "source_line": 573,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.subscription.cancel",
+    "auth_required": true,
+    "function": "cancel_subscription",
+    "idempotency": "tenant-subscription-terminal-cancel",
+    "key": "POST /api/v1/billing/cancel api/v1/billing.py:cancel_subscription",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/cancel",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "billing.subscription.cancel",
+    "source_line": 707,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.health.read",
+    "auth_required": false,
+    "function": "billing_health",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/billing/health api/v1/billing.py:billing_health",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/health",
+    "public_exempt_reason": "gateway-config-readiness-no-tenant-data",
+    "rate_limit": "public-read",
+    "scope": "public:billing.health.read",
+    "source_line": 231,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "billing.invoices.list",
+    "auth_required": true,
+    "function": "list_invoices",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/billing/invoices api/v1/invoices.py:list_invoices",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/invoices.py",
+    "path": "/api/v1/billing/invoices",
+    "public_exempt_reason": null,
+    "rate_limit": "invoice-read",
+    "scope": "billing.invoices.sensitive.read",
+    "source_line": 55,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.invoices.generate",
+    "auth_required": true,
+    "function": "generate_now",
+    "idempotency": "generator-period-upsert-expected",
+    "key": "POST /api/v1/billing/invoices/generate api/v1/invoices.py:generate_now",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/invoices.py",
+    "path": "/api/v1/billing/invoices/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "invoice-generate",
+    "scope": "billing.invoices.sensitive.write",
+    "source_line": 106,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.invoices.detail",
+    "auth_required": true,
+    "function": "get_invoice",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/billing/invoices/{invoice_id} api/v1/invoices.py:get_invoice",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/invoices.py",
+    "path": "/api/v1/billing/invoices/{invoice_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "invoice-read",
+    "scope": "billing.invoices.sensitive.read",
+    "source_line": 80,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.order_status.read",
+    "auth_required": true,
+    "function": "check_order_status",
+    "idempotency": "read-only-provider-order-status",
+    "key": "POST /api/v1/billing/order-status api/v1/billing.py:check_order_status",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/order-status",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-status",
+    "scope": "billing.order_status.read",
+    "source_line": 675,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.plans.read",
+    "auth_required": false,
+    "function": "list_plans",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/billing/plans api/v1/billing.py:list_plans",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/plans",
+    "public_exempt_reason": "public-pricing-no-tenant-data",
+    "rate_limit": "public-read",
+    "scope": "public:billing.plans.read",
+    "source_line": 137,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "billing.portal.create",
+    "auth_required": true,
+    "function": "create_portal",
+    "idempotency": "tenant-portal-session-request",
+    "key": "POST /api/v1/billing/portal api/v1/billing.py:create_portal",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/portal",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "billing.portal.create",
+    "source_line": 639,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.subscribe.stripe",
+    "auth_required": true,
+    "function": "subscribe_stripe",
+    "idempotency": "tenant-plan-checkout-session",
+    "key": "POST /api/v1/billing/subscribe api/v1/billing.py:subscribe_stripe",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/subscribe",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "billing.subscribe.stripe",
+    "source_line": 306,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.subscribe.plural",
+    "auth_required": true,
+    "function": "subscribe_india",
+    "idempotency": "tenant-plan-plural-order",
+    "key": "POST /api/v1/billing/subscribe/india api/v1/billing.py:subscribe_india",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/subscribe/india",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "billing.subscribe.plural",
+    "source_line": 406,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.subscription.read",
+    "auth_required": true,
+    "function": "get_subscription",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/billing/subscription api/v1/billing.py:get_subscription",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/subscription",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "billing.subscription.read",
+    "source_line": 153,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.usage.read",
+    "auth_required": true,
+    "function": "get_usage_endpoint",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/billing/usage api/v1/billing.py:get_usage_endpoint",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/usage",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "billing.usage.read",
+    "source_line": 199,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.webhook.plural",
+    "auth_required": false,
+    "function": "plural_webhook",
+    "idempotency": "plural-webhook-id",
+    "key": "POST /api/v1/billing/webhook/plural api/v1/billing.py:plural_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/webhook/plural",
+    "public_exempt_reason": "plural-hmac-signature-required",
+    "rate_limit": "gateway-webhook",
+    "scope": "public:billing.webhook.plural",
+    "source_line": 805,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.webhook.stripe",
+    "auth_required": false,
+    "function": "stripe_webhook",
+    "idempotency": "stripe-event-id",
+    "key": "POST /api/v1/billing/webhook/stripe api/v1/billing.py:stripe_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/webhook/stripe",
+    "public_exempt_reason": "stripe-signature-required",
+    "rate_limit": "gateway-webhook",
+    "scope": "public:billing.webhook.stripe",
+    "source_line": 774,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-branding-lookup",
+    "auth_required": false,
+    "function": "get_public_branding",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/branding api/v1/branding.py:get_public_branding",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/branding.py",
+    "path": "/api/v1/branding",
+    "public_exempt_reason": "public-login-branding-sanitized-host-or-slug-lookup",
+    "rate_limit": "branding-public-lookup",
+    "scope": "public:branding.sanitized.read",
+    "source_line": 126,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "bridge.list",
+    "auth_required": true,
+    "function": "list_bridges",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/bridge/list api/v1/bridge.py:list_bridges",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/bridge.py",
+    "path": "/api/v1/bridge/list",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "bridge.read",
+    "source_line": 162,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "bridge.register",
+    "auth_required": true,
+    "function": "register_bridge",
+    "idempotency": "not-idempotent-credential-issuance",
+    "key": "POST /api/v1/bridge/register api/v1/bridge.py:register_bridge",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/bridge.py",
+    "path": "/api/v1/bridge/register",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "bridge.register",
+    "source_line": 64,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "bridge.route.requested",
+    "auth_required": true,
+    "function": "route_through_bridge",
+    "idempotency": "idempotency-key-or-request-id",
+    "key": "POST /api/v1/bridge/route/{connector_type} api/v1/bridge.py:route_through_bridge",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/bridge.py",
+    "path": "/api/v1/bridge/route/{connector_type}",
+    "public_exempt_reason": null,
+    "rate_limit": "bridge-routing",
+    "scope": "bridge.route",
+    "source_line": 241,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "bridge.deregister",
+    "auth_required": true,
+    "function": "deregister_bridge",
+    "idempotency": "bridge-id-terminal-delete",
+    "key": "DELETE /api/v1/bridge/{bridge_id} api/v1/bridge.py:deregister_bridge",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/bridge.py",
+    "path": "/api/v1/bridge/{bridge_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "bridge.delete",
+    "source_line": 210,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "bridge.status.read",
+    "auth_required": true,
+    "function": "bridge_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/bridge/{bridge_id}/status api/v1/bridge.py:bridge_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/bridge.py",
+    "path": "/api/v1/bridge/{bridge_id}/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "bridge.read",
+    "source_line": 116,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.ca_subscription.read",
+    "auth_required": true,
+    "function": "get_ca_subscription",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/ca-subscription api/v1/companies.py:get_ca_subscription",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/ca-subscription",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.subscription.sensitive.read",
+    "source_line": 1536,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.ca_subscription.activate",
+    "auth_required": true,
+    "function": "activate_ca_subscription",
+    "idempotency": "idempotent-subscription-activate",
+    "key": "POST /api/v1/ca-subscription/activate api/v1/companies.py:activate_ca_subscription",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/ca-subscription/activate",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.subscription.write",
+    "source_line": 1572,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "cdc.events.list",
+    "auth_required": true,
+    "function": "list_cdc_events",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/cdc/events api/v1/cdc_webhooks.py:list_cdc_events",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/cdc_webhooks.py",
+    "path": "/api/v1/cdc/events",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "cdc.events.read",
+    "source_line": 111,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "cdc.events.replay",
+    "auth_required": true,
+    "function": "replay_cdc_event_endpoint",
+    "idempotency": "tenant-event-replay-idempotent",
+    "key": "POST /api/v1/cdc/events/{event_id}/replay api/v1/cdc_webhooks.py:replay_cdc_event_endpoint",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/cdc_webhooks.py",
+    "path": "/api/v1/cdc/events/{event_id}/replay",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "cdc.events.replay.admin",
+    "source_line": 150,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "chat.history.read",
+    "auth_required": true,
+    "function": "chat_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/chat/history api/v1/chat.py:chat_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/chat.py",
+    "path": "/api/v1/chat/history",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-history-read",
+    "scope": "chat.history.sensitive.read",
+    "source_line": 774,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "chat.query",
+    "auth_required": true,
+    "function": "chat_query",
+    "idempotency": "not_idempotent-appends-chat-history-and-may-trigger-hitl",
+    "key": "POST /api/v1/chat/query api/v1/chat.py:chat_query",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/chat.py",
+    "path": "/api/v1/chat/query",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "chat.agent_execution.external_tool_sensitive.write",
+    "source_line": 468,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.list",
+    "auth_required": true,
+    "function": "list_companies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies api/v1/companies.py:list_companies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.list",
+    "source_line": 305,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.create",
+    "auth_required": true,
+    "function": "create_company",
+    "idempotency": "unique-tenant-gstin-or-company-name",
+    "key": "POST /api/v1/companies api/v1/companies.py:create_company",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.write",
+    "source_line": 371,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.approvals.bulk_approve",
+    "auth_required": true,
+    "function": "bulk_approve_filings",
+    "idempotency": "per-approval-terminal-state-conflict",
+    "key": "POST /api/v1/companies/bulk-approve api/v1/companies.py:bulk_approve_filings",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/bulk-approve",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-decision",
+    "scope": "companies.approvals.decide",
+    "source_line": 1933,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.onboard",
+    "auth_required": true,
+    "function": "onboard_company",
+    "idempotency": "unique-tenant-company-onboarding",
+    "key": "POST /api/v1/companies/onboard api/v1/companies.py:onboard_company",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/onboard",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.onboard",
+    "source_line": 726,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.tally.detect",
+    "auth_required": true,
+    "function": "tally_detect",
+    "idempotency": "read-only-external-probe",
+    "key": "POST /api/v1/companies/tally-detect api/v1/companies.py:tally_detect",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/tally-detect",
+    "public_exempt_reason": null,
+    "rate_limit": "external-bridge",
+    "scope": "companies.tally.detect",
+    "source_line": 2333,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.tally.test",
+    "auth_required": true,
+    "function": "test_tally",
+    "idempotency": "read-only-external-probe",
+    "key": "POST /api/v1/companies/test-tally api/v1/companies.py:test_tally",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/test-tally",
+    "public_exempt_reason": null,
+    "rate_limit": "external-bridge",
+    "scope": "companies.tally.test",
+    "source_line": 2456,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.delete",
+    "auth_required": true,
+    "function": "delete_company",
+    "idempotency": "idempotent-soft-delete",
+    "key": "DELETE /api/v1/companies/{company_id} api/v1/companies.py:delete_company",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.write",
+    "source_line": 576,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.read",
+    "auth_required": true,
+    "function": "get_company",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/{company_id} api/v1/companies.py:get_company",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.read",
+    "source_line": 458,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.update",
+    "auth_required": true,
+    "function": "update_company",
+    "idempotency": "idempotent-partial-update",
+    "key": "PATCH /api/v1/companies/{company_id} api/v1/companies.py:update_company",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.write",
+    "source_line": 498,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.approvals.list",
+    "auth_required": true,
+    "function": "list_filing_approvals",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/{company_id}/approvals api/v1/companies.py:list_filing_approvals",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/approvals",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.approvals.list",
+    "source_line": 1030,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.approvals.create",
+    "auth_required": true,
+    "function": "create_filing_approval",
+    "idempotency": "not-idempotent-filing-approval-create",
+    "key": "POST /api/v1/companies/{company_id}/approvals api/v1/companies.py:create_filing_approval",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/approvals",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-write",
+    "scope": "companies.approvals.write",
+    "source_line": 1095,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.approvals.approve",
+    "auth_required": true,
+    "function": "approve_filing",
+    "idempotency": "terminal-state-conflict-prevents-duplicate-decision",
+    "key": "POST /api/v1/companies/{company_id}/approvals/{approval_id}/approve api/v1/companies.py:approve_filing",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/approvals/{approval_id}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-decision",
+    "scope": "companies.approvals.decide",
+    "source_line": 1163,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.approvals.reject",
+    "auth_required": true,
+    "function": "reject_filing",
+    "idempotency": "terminal-state-conflict-prevents-duplicate-decision",
+    "key": "POST /api/v1/companies/{company_id}/approvals/{approval_id}/reject api/v1/companies.py:reject_filing",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/approvals/{approval_id}/reject",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-decision",
+    "scope": "companies.approvals.decide",
+    "source_line": 1254,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.bridge.generate",
+    "auth_required": true,
+    "function": "generate_company_bridge",
+    "idempotency": "not-idempotent-one-time-bridge-token",
+    "key": "POST /api/v1/companies/{company_id}/bridge/generate api/v1/companies.py:generate_company_bridge",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/bridge/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "companies.bridge.write",
+    "source_line": 2544,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.credentials.list",
+    "auth_required": true,
+    "function": "list_gstn_credentials",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/{company_id}/credentials api/v1/companies.py:list_gstn_credentials",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/credentials",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.credentials.sensitive.list",
+    "source_line": 1692,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.credentials.create",
+    "auth_required": true,
+    "function": "create_gstn_credential",
+    "idempotency": "not-idempotent-encrypted-credential-create",
+    "key": "POST /api/v1/companies/{company_id}/credentials api/v1/companies.py:create_gstn_credential",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/credentials",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "companies.credentials.write",
+    "source_line": 1747,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.credentials.deactivate",
+    "auth_required": true,
+    "function": "deactivate_gstn_credential",
+    "idempotency": "idempotent-credential-deactivate",
+    "key": "DELETE /api/v1/companies/{company_id}/credentials/{credential_id} api/v1/companies.py:deactivate_gstn_credential",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/credentials/{credential_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "companies.credentials.write",
+    "source_line": 1804,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.credentials.verify",
+    "auth_required": true,
+    "function": "verify_gstn_credential",
+    "idempotency": "read-only-external-verification",
+    "key": "POST /api/v1/companies/{company_id}/credentials/{credential_id}/verify api/v1/companies.py:verify_gstn_credential",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/credentials/{credential_id}/verify",
+    "public_exempt_reason": null,
+    "rate_limit": "external-credential-check",
+    "scope": "companies.credentials.verify",
+    "source_line": 1856,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.deadlines.list",
+    "auth_required": true,
+    "function": "list_compliance_deadlines",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/{company_id}/deadlines api/v1/companies.py:list_compliance_deadlines",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/deadlines",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.deadlines.list",
+    "source_line": 2070,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.deadlines.generate",
+    "auth_required": true,
+    "function": "generate_compliance_deadlines",
+    "idempotency": "idempotent-generate-window",
+    "key": "POST /api/v1/companies/{company_id}/deadlines/generate api/v1/companies.py:generate_compliance_deadlines",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/deadlines/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.deadlines.write",
+    "source_line": 2147,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.deadlines.mark_filed",
+    "auth_required": true,
+    "function": "mark_deadline_filed",
+    "idempotency": "idempotent-filed-status-update",
+    "key": "PATCH /api/v1/companies/{company_id}/deadlines/{deadline_id}/filed api/v1/companies.py:mark_deadline_filed",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/deadlines/{deadline_id}/filed",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.deadlines.write",
+    "source_line": 2239,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.gstn_uploads.list",
+    "auth_required": true,
+    "function": "list_gstn_uploads",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/{company_id}/gstn-uploads api/v1/companies.py:list_gstn_uploads",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/gstn-uploads",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.gstn_uploads.list",
+    "source_line": 1340,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.gstn_uploads.create",
+    "auth_required": true,
+    "function": "create_gstn_upload",
+    "idempotency": "not-idempotent-gstn-upload-create",
+    "key": "POST /api/v1/companies/{company_id}/gstn-uploads api/v1/companies.py:create_gstn_upload",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/gstn-uploads",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.gstn_uploads.write",
+    "source_line": 1400,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.gstn_uploads.update",
+    "auth_required": true,
+    "function": "update_gstn_upload",
+    "idempotency": "idempotent-status-update",
+    "key": "PATCH /api/v1/companies/{company_id}/gstn-uploads/{upload_id} api/v1/companies.py:update_gstn_upload",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/gstn-uploads/{upload_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.gstn_uploads.write",
+    "source_line": 1463,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.roles.read",
+    "auth_required": true,
+    "function": "get_company_roles",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/{company_id}/roles api/v1/companies.py:get_company_roles",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/roles",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.roles.read",
+    "source_line": 617,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.roles.update",
+    "auth_required": true,
+    "function": "update_company_roles",
+    "idempotency": "idempotent-role-upsert",
+    "key": "PUT /api/v1/companies/{company_id}/roles api/v1/companies.py:update_company_roles",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/{company_id}/roles",
+    "public_exempt_reason": null,
+    "rate_limit": "company-write",
+    "scope": "companies.roles.write",
+    "source_line": 665,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "compliance.evidence_package.read",
+    "auth_required": true,
+    "function": "evidence_package",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/compliance/evidence-package api/v1/compliance.py:evidence_package",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/compliance.py",
+    "path": "/api/v1/compliance/evidence-package",
+    "public_exempt_reason": null,
+    "rate_limit": "compliance-evidence-export",
+    "scope": "compliance.evidence.sensitive.export",
+    "source_line": 156,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "composio.apps.list",
+    "auth_required": true,
+    "function": "list_apps",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/composio/apps api/v1/composio.py:list_apps",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/composio.py",
+    "path": "/api/v1/composio/apps",
+    "public_exempt_reason": null,
+    "rate_limit": "composio-catalog-read",
+    "scope": "composio.marketplace.integration_catalog.read",
+    "source_line": 87,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "composio.apps.detail",
+    "auth_required": true,
+    "function": "get_app_detail",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/composio/apps/{app_key} api/v1/composio.py:get_app_detail",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/composio.py",
+    "path": "/api/v1/composio/apps/{app_key}",
+    "public_exempt_reason": null,
+    "rate_limit": "composio-catalog-read",
+    "scope": "composio.marketplace.integration_catalog.read",
+    "source_line": 135,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "composio.categories.list",
+    "auth_required": true,
+    "function": "list_categories",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/composio/categories api/v1/composio.py:list_categories",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/composio.py",
+    "path": "/api/v1/composio/categories",
+    "public_exempt_reason": null,
+    "rate_limit": "composio-catalog-read",
+    "scope": "composio.marketplace.integration_catalog.read",
+    "source_line": 186,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "config.fleet_limits.read",
+    "auth_required": true,
+    "function": "get_fleet_limits",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/config/fleet_limits api/v1/config.py:get_fleet_limits",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/config.py",
+    "path": "/api/v1/config/fleet_limits",
+    "public_exempt_reason": null,
+    "rate_limit": "config-read",
+    "scope": "config.fleet_limits.control_plane.sensitive.read",
+    "source_line": 31,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "config.fleet_limits.update",
+    "auth_required": true,
+    "function": "update_fleet_limits",
+    "idempotency": "idempotent-upsert-by-tenant",
+    "key": "PUT /api/v1/config/fleet_limits api/v1/config.py:update_fleet_limits",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/config.py",
+    "path": "/api/v1/config/fleet_limits",
+    "public_exempt_reason": null,
+    "rate_limit": "config-write",
+    "scope": "config.fleet_limits.control_plane.sensitive.write",
+    "source_line": 57,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.list",
+    "auth_required": true,
+    "function": "list_connectors",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors api/v1/connectors.py:list_connectors",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.read",
+    "source_line": 566,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.create",
+    "auth_required": true,
+    "function": "register_connector",
+    "idempotency": "tenant-connector-name-create-or-conflict",
+    "key": "POST /api/v1/connectors api/v1/connectors.py:register_connector",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.create",
+    "source_line": 635,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.oauth.initiate",
+    "auth_required": true,
+    "function": "initiate_connector_oauth",
+    "idempotency": "oauth-state-nonce",
+    "key": "POST /api/v1/connectors/oauth/initiate api/v1/oauth_connector.py:initiate_connector_oauth",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/oauth_connector.py",
+    "path": "/api/v1/connectors/oauth/initiate",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.oauth.initiate.admin",
+    "source_line": 640,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.oauth.providers.list",
+    "auth_required": true,
+    "function": "list_oauth_providers",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors/oauth/providers api/v1/oauth_connector.py:list_oauth_providers",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/oauth_connector.py",
+    "path": "/api/v1/connectors/oauth/providers",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.oauth.providers.read",
+    "source_line": 620,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "connectors.oauth.reconnect",
+    "auth_required": true,
+    "function": "revoke_and_retry",
+    "idempotency": "oauth-reconnect-state-nonce",
+    "key": "POST /api/v1/connectors/oauth/revoke-and-retry api/v1/oauth_connector.py:revoke_and_retry",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/oauth_connector.py",
+    "path": "/api/v1/connectors/oauth/revoke-and-retry",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.oauth.reconnect.admin",
+    "source_line": 715,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.registry.list",
+    "auth_required": true,
+    "function": "list_registry_connectors",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors/registry api/v1/connectors.py:list_registry_connectors",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.registry.read",
+    "source_line": 429,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "connectors.delete",
+    "auth_required": true,
+    "function": "delete_connector",
+    "idempotency": "connector-id-soft-delete",
+    "key": "DELETE /api/v1/connectors/{conn_id} api/v1/connectors.py:delete_connector",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/{conn_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.delete",
+    "source_line": 1044,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.read",
+    "auth_required": true,
+    "function": "get_connector",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors/{conn_id} api/v1/connectors.py:get_connector",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/{conn_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.read",
+    "source_line": 791,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.update",
+    "auth_required": true,
+    "function": "update_connector",
+    "idempotency": "connector-id-field-update",
+    "key": "PUT /api/v1/connectors/{conn_id} api/v1/connectors.py:update_connector",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/{conn_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.update",
+    "source_line": 830,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.health.read",
+    "auth_required": true,
+    "function": "connector_health",
+    "idempotency": "live-health-probe-status-refresh",
+    "key": "GET /api/v1/connectors/{conn_id}/health api/v1/connectors.py:connector_health",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/{conn_id}/health",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-test",
+    "scope": "connectors.health.read",
+    "source_line": 1077,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.test",
+    "auth_required": true,
+    "function": "test_connector",
+    "idempotency": "live-test-updates-health-status",
+    "key": "POST /api/v1/connectors/{conn_id}/test api/v1/connectors.py:test_connector",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/{conn_id}/test",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-test",
+    "scope": "connectors.test",
+    "source_line": 1132,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content_safety.check",
+    "auth_required": true,
+    "function": "check_safety",
+    "idempotency": "deterministic-for-same-text-and-config",
+    "key": "POST /api/v1/content-safety/check api/v1/content_safety.py:check_safety",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_safety.py",
+    "path": "/api/v1/content-safety/check",
+    "public_exempt_reason": null,
+    "rate_limit": "content-safety-check",
+    "scope": "content_safety.external_input.sensitive.write",
+    "source_line": 52,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "cost_centers.list",
+    "auth_required": true,
+    "function": "list_cost_centers",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/cost-centers api/v1/departments.py:list_cost_centers",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/departments.py",
+    "path": "/api/v1/cost-centers",
+    "public_exempt_reason": null,
+    "rate_limit": "org-admin-read",
+    "scope": "departments.cost_centers.sensitive.list",
+    "source_line": 231,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "cost_centers.create",
+    "auth_required": true,
+    "function": "create_cost_center",
+    "idempotency": "not-idempotent-new-cost-center-created",
+    "key": "POST /api/v1/cost-centers api/v1/departments.py:create_cost_center",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/departments.py",
+    "path": "/api/v1/cost-centers",
+    "public_exempt_reason": null,
+    "rate_limit": "org-admin-write",
+    "scope": "departments.cost_centers.sensitive.write",
+    "source_line": 188,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "costs.summary.read",
+    "auth_required": true,
+    "function": "summary",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/costs/summary api/v1/costs.py:summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/costs.py",
+    "path": "/api/v1/costs/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "cost-dashboard-read",
+    "scope": "costs.commercial_sensitive.read",
+    "source_line": 61,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "costs.top_agents.read",
+    "auth_required": true,
+    "function": "top_agents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/costs/top-agents api/v1/costs.py:top_agents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/costs.py",
+    "path": "/api/v1/costs/top-agents",
+    "public_exempt_reason": null,
+    "rate_limit": "cost-dashboard-read",
+    "scope": "costs.commercial_sensitive.read",
+    "source_line": 176,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "costs.trend.read",
+    "auth_required": true,
+    "function": "trend",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/costs/trend api/v1/costs.py:trend",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/costs.py",
+    "path": "/api/v1/costs/trend",
+    "public_exempt_reason": null,
+    "rate_limit": "cost-dashboard-read",
+    "scope": "costs.commercial_sensitive.read",
+    "source_line": 139,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "cron.compliance_alerts.trigger",
+    "auth_required": false,
+    "function": "trigger_compliance_alerts",
+    "idempotency": "not_idempotent-triggers-compliance-alert-job",
+    "key": "POST /api/v1/cron/compliance-alerts api/v1/cron.py:trigger_compliance_alerts",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/cron.py",
+    "path": "/api/v1/cron/compliance-alerts",
+    "public_exempt_reason": "cloud-scheduler-api-key-header-protected",
+    "rate_limit": "cron-api-key",
+    "scope": "cron.api_key_protected.compliance.write",
+    "source_line": 80,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "cron.schedules.read",
+    "auth_required": false,
+    "function": "list_cron_schedules",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/cron/schedules api/v1/cron.py:list_cron_schedules",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/cron.py",
+    "path": "/api/v1/cron/schedules",
+    "public_exempt_reason": "cloud-scheduler-api-key-header-protected",
+    "rate_limit": "cron-api-key",
+    "scope": "cron.api_key_protected.sensitive.read",
+    "source_line": 47,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "delegations.list",
+    "auth_required": true,
+    "function": "list_delegations",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/delegations api/v1/delegations.py:list_delegations",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/delegations.py",
+    "path": "/api/v1/delegations",
+    "public_exempt_reason": null,
+    "rate_limit": "delegation-read",
+    "scope": "delegations.approval_authority.sensitive.read",
+    "source_line": 94,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "delegations.create",
+    "auth_required": true,
+    "function": "create_delegation",
+    "idempotency": "not_idempotent-creates-delegation-window",
+    "key": "POST /api/v1/delegations api/v1/delegations.py:create_delegation",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/delegations.py",
+    "path": "/api/v1/delegations",
+    "public_exempt_reason": null,
+    "rate_limit": "delegation-write",
+    "scope": "delegations.approval_authority.sensitive.write",
+    "source_line": 55,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "delegations.revoke",
+    "auth_required": true,
+    "function": "revoke_delegation",
+    "idempotency": "idempotent-revoke-by-delegation-id",
+    "key": "DELETE /api/v1/delegations/{delegation_id} api/v1/delegations.py:revoke_delegation",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/delegations.py",
+    "path": "/api/v1/delegations/{delegation_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "delegation-write",
+    "scope": "delegations.approval_authority.sensitive.write",
+    "source_line": 127,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "demo.request",
+    "auth_required": false,
+    "function": "submit_demo_request",
+    "idempotency": "lead-deduped-by-email-best-effort",
+    "key": "POST /api/v1/demo-request api/v1/demo.py:submit_demo_request",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/demo.py",
+    "path": "/api/v1/demo-request",
+    "public_exempt_reason": "public-lead-capture-email-and-sales-agent-trigger",
+    "rate_limit": "demo-request-public",
+    "scope": "public:demo_request.external_input.write",
+    "source_line": 112,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "departments.list",
+    "auth_required": true,
+    "function": "list_departments",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/departments api/v1/departments.py:list_departments",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/departments.py",
+    "path": "/api/v1/departments",
+    "public_exempt_reason": null,
+    "rate_limit": "org-admin-read",
+    "scope": "departments.org_structure.sensitive.list",
+    "source_line": 123,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "departments.create",
+    "auth_required": true,
+    "function": "create_department",
+    "idempotency": "not-idempotent-new-department-created",
+    "key": "POST /api/v1/departments api/v1/departments.py:create_department",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/departments.py",
+    "path": "/api/v1/departments",
+    "public_exempt_reason": null,
+    "rate_limit": "org-admin-write",
+    "scope": "departments.org_structure.sensitive.write",
+    "source_line": 82,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "departments.delete",
+    "auth_required": true,
+    "function": "delete_department",
+    "idempotency": "idempotent-delete-by-department-id",
+    "key": "DELETE /api/v1/departments/{department_id} api/v1/departments.py:delete_department",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/departments.py",
+    "path": "/api/v1/departments/{department_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "org-admin-write",
+    "scope": "departments.org_structure.sensitive.write",
+    "source_line": 156,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "dsar.access.request",
+    "auth_required": true,
+    "function": "dsar_access",
+    "idempotency": "not_idempotent-new-dsar-request-id",
+    "key": "POST /api/v1/dsar/access api/v1/compliance.py:dsar_access",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/compliance.py",
+    "path": "/api/v1/dsar/access",
+    "public_exempt_reason": null,
+    "rate_limit": "compliance-dsar-request",
+    "scope": "compliance.dsar.sensitive.write",
+    "source_line": 57,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "dsar.erase.request",
+    "auth_required": true,
+    "function": "dsar_erase",
+    "idempotency": "not_idempotent-new-dsar-request-id",
+    "key": "POST /api/v1/dsar/erase api/v1/compliance.py:dsar_erase",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/compliance.py",
+    "path": "/api/v1/dsar/erase",
+    "public_exempt_reason": null,
+    "rate_limit": "compliance-dsar-request",
+    "scope": "compliance.dsar.high_risk.write",
+    "source_line": 85,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "dsar.export.request",
+    "auth_required": true,
+    "function": "dsar_export",
+    "idempotency": "not_idempotent-new-dsar-request-id",
+    "key": "POST /api/v1/dsar/export api/v1/compliance.py:dsar_export",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/compliance.py",
+    "path": "/api/v1/dsar/export",
+    "public_exempt_reason": null,
+    "rate_limit": "compliance-dsar-export",
+    "scope": "compliance.dsar.sensitive.export",
+    "source_line": 116,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-evals-read",
+    "auth_required": false,
+    "function": "get_evals",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/evals api/v1/evals.py:get_evals",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/evals.py",
+    "path": "/api/v1/evals",
+    "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
+    "rate_limit": "public-evals-read",
+    "scope": "public:evals.scorecard.read",
+    "source_line": 132,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-evals-read",
+    "auth_required": false,
+    "function": "get_agent_evals",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/evals/agent/{agent_type} api/v1/evals.py:get_agent_evals",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/evals.py",
+    "path": "/api/v1/evals/agent/{agent_type}",
+    "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
+    "rate_limit": "public-evals-read",
+    "scope": "public:evals.agent_scorecard.read",
+    "source_line": 155,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "feature_flags.list",
+    "auth_required": true,
+    "function": "list_flags",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/feature-flags api/v1/feature_flags.py:list_flags",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/feature_flags.py",
+    "path": "/api/v1/feature-flags",
+    "public_exempt_reason": null,
+    "rate_limit": "feature-flag-read",
+    "scope": "feature_flags.runtime_control.sensitive.list",
+    "source_line": 110,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "feature_flags.upsert",
+    "auth_required": true,
+    "function": "upsert_flag",
+    "idempotency": "idempotent-upsert-by-flag-key",
+    "key": "POST /api/v1/feature-flags api/v1/feature_flags.py:upsert_flag",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/feature_flags.py",
+    "path": "/api/v1/feature-flags",
+    "public_exempt_reason": null,
+    "rate_limit": "feature-flag-write",
+    "scope": "feature_flags.runtime_control.sensitive.write",
+    "source_line": 56,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "feature_flags.delete",
+    "auth_required": true,
+    "function": "delete_flag",
+    "idempotency": "idempotent-delete-by-flag-key",
+    "key": "DELETE /api/v1/feature-flags/{flag_key} api/v1/feature_flags.py:delete_flag",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/feature_flags.py",
+    "path": "/api/v1/feature-flags/{flag_key}",
+    "public_exempt_reason": null,
+    "rate_limit": "feature-flag-write",
+    "scope": "feature_flags.runtime_control.sensitive.write",
+    "source_line": 160,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "feature_flags.evaluate",
+    "auth_required": true,
+    "function": "evaluate_flag",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/feature-flags/{flag_key}/evaluate api/v1/feature_flags.py:evaluate_flag",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/feature_flags.py",
+    "path": "/api/v1/feature-flags/{flag_key}/evaluate",
+    "public_exempt_reason": null,
+    "rate_limit": "feature-flag-evaluate",
+    "scope": "feature_flags.runtime_control.evaluate",
+    "source_line": 140,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "feed.events.catchup",
+    "auth_required": true,
+    "function": "list_feed_events",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/feed/events api/websocket/feed.py:list_feed_events",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/websocket/feed.py",
+    "path": "/api/v1/feed/events",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "feed.events.read",
+    "source_line": 235,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.config.read",
+    "auth_required": true,
+    "function": "get_config",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/config api/v1/governance.py:get_config",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance.py",
+    "path": "/api/v1/governance/config",
+    "public_exempt_reason": null,
+    "rate_limit": "governance-read",
+    "scope": "governance.policy.sensitive.read",
+    "source_line": 65,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.config.update",
+    "auth_required": true,
+    "function": "put_config",
+    "idempotency": "idempotent-partial-update-by-tenant",
+    "key": "PUT /api/v1/governance/config api/v1/governance.py:put_config",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/governance.py",
+    "path": "/api/v1/governance/config",
+    "public_exempt_reason": null,
+    "rate_limit": "governance-write",
+    "scope": "governance.policy.enterprise_critical.write",
+    "source_line": 100,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-readiness-probe",
+    "auth_required": false,
+    "function": "health_readiness",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/health api/v1/health.py:health_readiness",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/health.py",
+    "path": "/api/v1/health",
+    "public_exempt_reason": "public-readiness-probe-limited-db-redis-status",
+    "rate_limit": "infra-health-probe",
+    "scope": "public:health.readiness.dependency_status",
+    "source_line": 77,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "health.checks.read",
+    "auth_required": true,
+    "function": "health_checks",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/health/checks api/v1/health.py:health_checks",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/health.py",
+    "path": "/api/v1/health/checks",
+    "public_exempt_reason": null,
+    "rate_limit": "health-sla-read",
+    "scope": "health.sla.sensitive.read",
+    "source_line": 192,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "health.diagnostics.read",
+    "auth_required": true,
+    "function": "diagnostics",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/health/diagnostics api/v1/health.py:diagnostics",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/health.py",
+    "path": "/api/v1/health/diagnostics",
+    "public_exempt_reason": null,
+    "rate_limit": "health-diagnostics-read",
+    "scope": "health.diagnostics.admin.sensitive.read",
+    "source_line": 307,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-liveness-probe",
+    "auth_required": false,
+    "function": "liveness",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/health/liveness api/v1/health.py:liveness",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/health.py",
+    "path": "/api/v1/health/liveness",
+    "public_exempt_reason": "public-liveness-probe-no-dependency-detail",
+    "rate_limit": "infra-health-probe",
+    "scope": "public:health.liveness",
+    "source_line": 120,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "health.uptime.read",
+    "auth_required": true,
+    "function": "health_uptime",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/health/uptime api/v1/health.py:health_uptime",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/health.py",
+    "path": "/api/v1/health/uptime",
+    "public_exempt_reason": null,
+    "rate_limit": "health-sla-read",
+    "scope": "health.sla.sensitive.read",
+    "source_line": 242,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "integrations.status.read",
+    "auth_required": true,
+    "function": "integrations_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/integrations/status api/v1/integrations_status.py:integrations_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/integrations_status.py",
+    "path": "/api/v1/integrations/status",
+    "public_exempt_reason": null,
+    "rate_limit": "integration-status-read",
+    "scope": "integrations.config_status.sensitive.read",
+    "source_line": 43,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "knowledge.documents.list",
+    "auth_required": true,
+    "function": "list_documents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/documents api/v1/knowledge.py:list_documents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/documents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.sensitive.documents.list",
+    "source_line": 769,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.documents.delete",
+    "auth_required": true,
+    "function": "delete_document",
+    "idempotency": "idempotent-delete-by-document-id",
+    "key": "DELETE /api/v1/knowledge/documents/{doc_id} api/v1/knowledge.py:delete_document",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/documents/{doc_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-write",
+    "scope": "knowledge.documents.delete",
+    "source_line": 863,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.health",
+    "auth_required": false,
+    "function": "knowledge_health",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/health api/v1/knowledge.py:knowledge_health",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/health",
+    "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
+    "rate_limit": "healthcheck",
+    "scope": "knowledge.health.public",
+    "source_line": 1104,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "knowledge.search",
+    "auth_required": true,
+    "function": "search_knowledge",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/knowledge/search api/v1/knowledge.py:search_knowledge",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/search",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1046,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.stats",
+    "auth_required": true,
+    "function": "knowledge_stats",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/stats api/v1/knowledge.py:knowledge_stats",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/stats",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.sensitive.stats",
+    "source_line": 1221,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.documents.upload",
+    "auth_required": true,
+    "function": "upload_document",
+    "idempotency": "filename-dedup-replace-or-allow-duplicate",
+    "key": "POST /api/v1/knowledge/upload api/v1/knowledge.py:upload_document",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/upload",
+    "public_exempt_reason": null,
+    "rate_limit": "file-upload",
+    "scope": "knowledge.upload",
+    "source_line": 465,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "kpis.cbo.read",
+    "auth_required": true,
+    "function": "get_cbo_kpis",
+    "idempotency": "read-through-cache",
+    "key": "GET /api/v1/kpis/cbo api/v1/kpis.py:get_cbo_kpis",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/kpis.py",
+    "path": "/api/v1/kpis/cbo",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.cbo",
+    "source_line": 591,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "kpis.ceo.read",
+    "auth_required": true,
+    "function": "get_ceo_kpis",
+    "idempotency": "read-through-cache",
+    "key": "GET /api/v1/kpis/ceo api/v1/kpis.py:get_ceo_kpis",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/kpis.py",
+    "path": "/api/v1/kpis/ceo",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.ceo",
+    "source_line": 471,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "kpis.cfo.read",
+    "auth_required": true,
+    "function": "get_cfo_kpis",
+    "idempotency": "read-through-cache",
+    "key": "GET /api/v1/kpis/cfo api/v1/kpis.py:get_cfo_kpis",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/kpis.py",
+    "path": "/api/v1/kpis/cfo",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.cfo",
+    "source_line": 500,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "kpis.chro.read",
+    "auth_required": true,
+    "function": "get_chro_kpis",
+    "idempotency": "read-through-cache",
+    "key": "GET /api/v1/kpis/chro api/v1/kpis.py:get_chro_kpis",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/kpis.py",
+    "path": "/api/v1/kpis/chro",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.chro",
+    "source_line": 534,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "kpis.cmo.read",
+    "auth_required": true,
+    "function": "get_cmo_kpis",
+    "idempotency": "read-through-cache",
+    "key": "GET /api/v1/kpis/cmo api/v1/kpis.py:get_cmo_kpis",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/kpis.py",
+    "path": "/api/v1/kpis/cmo",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.cmo",
+    "source_line": 553,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "kpis.coo.read",
+    "auth_required": true,
+    "function": "get_coo_kpis",
+    "idempotency": "read-through-cache",
+    "key": "GET /api/v1/kpis/coo api/v1/kpis.py:get_coo_kpis",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/kpis.py",
+    "path": "/api/v1/kpis/coo",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.coo",
+    "source_line": 572,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "mcp.call",
+    "auth_required": true,
+    "function": "call_tool",
+    "idempotency": "not_idempotent-executes-agent-tool",
+    "key": "POST /api/v1/mcp/call api/v1/mcp.py:call_tool",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/mcp.py",
+    "path": "/api/v1/mcp/call",
+    "public_exempt_reason": null,
+    "rate_limit": "mcp-tool-call",
+    "scope": "mcp.external_agent_execution.sensitive.write",
+    "source_line": 108,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-mcp-tool-discovery",
+    "auth_required": false,
+    "function": "list_tools",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/mcp/tools api/v1/mcp.py:list_tools",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/mcp.py",
+    "path": "/api/v1/mcp/tools",
+    "public_exempt_reason": "public-tool-discovery-no-tenant-data",
+    "rate_limit": "mcp-discovery",
+    "scope": "public:mcp.tool_discovery.read",
+    "source_line": 43,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "connectors.oauth.callback",
+    "auth_required": false,
+    "function": "oauth_connector_callback",
+    "idempotency": "oauth-state-and-provider-code",
+    "key": "GET /api/v1/oauth/callback api/v1/oauth_connector.py:oauth_connector_callback",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/oauth_connector.py",
+    "path": "/api/v1/oauth/callback",
+    "public_exempt_reason": "oauth-state-validated-authorization-code",
+    "rate_limit": "oauth-callback",
+    "scope": "public:connectors.oauth.callback",
+    "source_line": 801,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.invite.accepted",
+    "auth_required": false,
+    "function": "accept_invite",
+    "idempotency": "one-time-invite-code-consumption",
+    "key": "POST /api/v1/org/accept-invite api/v1/org.py:accept_invite",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/accept-invite",
+    "public_exempt_reason": "one-time-invite-code-validated",
+    "rate_limit": "auth-invite",
+    "scope": "public:org.invite.accept",
+    "source_line": 294,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "api_keys.list",
+    "auth_required": true,
+    "function": "list_api_keys",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/org/api-keys api/v1/api_keys.py:list_api_keys",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/api_keys.py",
+    "path": "/api/v1/org/api-keys",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "api_keys.security.sensitive.list",
+    "source_line": 173,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "api_keys.create",
+    "auth_required": true,
+    "function": "create_api_key",
+    "idempotency": "not-idempotent-secret-issued-once",
+    "key": "POST /api/v1/org/api-keys api/v1/api_keys.py:create_api_key",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/api_keys.py",
+    "path": "/api/v1/org/api-keys",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "api_keys.security.create",
+    "source_line": 91,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "api_keys.revoke",
+    "auth_required": true,
+    "function": "revoke_api_key",
+    "idempotency": "idempotent-revoke-terminal-state",
+    "key": "DELETE /api/v1/org/api-keys/{key_id} api/v1/api_keys.py:revoke_api_key",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/api_keys.py",
+    "path": "/api/v1/org/api-keys/{key_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "api_keys.security.revoke",
+    "source_line": 213,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.members.invite",
+    "auth_required": true,
+    "function": "invite_member",
+    "idempotency": "tenant-email-pending-invite",
+    "key": "POST /api/v1/org/invite api/v1/org.py:invite_member",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/invite",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "org.members.invite.admin",
+    "source_line": 165,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.invite.preview",
+    "auth_required": false,
+    "function": "get_invite_info",
+    "idempotency": "read-only-invite-code-peek",
+    "key": "GET /api/v1/org/invite-info api/v1/org.py:get_invite_info",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/invite-info",
+    "public_exempt_reason": "one-time-invite-code-preview",
+    "rate_limit": "auth-invite",
+    "scope": "public:org.invite.preview",
+    "source_line": 247,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "org.members.list",
+    "auth_required": true,
+    "function": "list_members",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/org/members api/v1/org.py:list_members",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/members",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "org.members.read.admin",
+    "source_line": 131,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.members.deactivate",
+    "auth_required": true,
+    "function": "deactivate_member",
+    "idempotency": "tenant-user-soft-deactivate",
+    "key": "DELETE /api/v1/org/members/{user_id} api/v1/org.py:deactivate_member",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/members/{user_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "org.members.delete.admin",
+    "source_line": 403,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.onboarding.update",
+    "auth_required": true,
+    "function": "update_onboarding",
+    "idempotency": "tenant-onboarding-settings-update",
+    "key": "PUT /api/v1/org/onboarding api/v1/org.py:update_onboarding",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/onboarding",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "org.onboarding.update.admin",
+    "source_line": 366,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.profile.read",
+    "auth_required": true,
+    "function": "get_profile",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/org/profile api/v1/org.py:get_profile",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/profile",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "org.profile.read.admin",
+    "source_line": 101,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "packs.catalog.list",
+    "auth_required": true,
+    "function": "list_available_packs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/packs api/v1/packs.py:list_available_packs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/packs.py",
+    "path": "/api/v1/packs",
+    "public_exempt_reason": null,
+    "rate_limit": "packs-read",
+    "scope": "packs.catalog.control_plane.read",
+    "source_line": 30,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "packs.installed.list",
+    "auth_required": true,
+    "function": "list_installed",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/packs/installed api/v1/packs.py:list_installed",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/packs.py",
+    "path": "/api/v1/packs/installed",
+    "public_exempt_reason": null,
+    "rate_limit": "packs-read",
+    "scope": "packs.installation.sensitive.read",
+    "source_line": 44,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "packs.uninstall",
+    "auth_required": true,
+    "function": "uninstall",
+    "idempotency": "idempotent-uninstall-by-pack-name",
+    "key": "DELETE /api/v1/packs/{name} api/v1/packs.py:uninstall",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/packs.py",
+    "path": "/api/v1/packs/{name}",
+    "public_exempt_reason": null,
+    "rate_limit": "packs-install",
+    "scope": "packs.installation.high_risk.write",
+    "source_line": 96,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "packs.catalog.detail",
+    "auth_required": true,
+    "function": "pack_detail",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/packs/{name} api/v1/packs.py:pack_detail",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/packs.py",
+    "path": "/api/v1/packs/{name}",
+    "public_exempt_reason": null,
+    "rate_limit": "packs-read",
+    "scope": "packs.catalog.control_plane.read",
+    "source_line": 59,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "packs.install",
+    "auth_required": true,
+    "function": "install",
+    "idempotency": "idempotent-install-by-pack-name",
+    "key": "POST /api/v1/packs/{name}/install api/v1/packs.py:install",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/packs.py",
+    "path": "/api/v1/packs/{name}/install",
+    "public_exempt_reason": null,
+    "rate_limit": "packs-install",
+    "scope": "packs.installation.high_risk.write",
+    "source_line": 76,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.partner_dashboard.read",
+    "auth_required": true,
+    "function": "get_partner_dashboard",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/partner-dashboard api/v1/companies.py:get_partner_dashboard",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/partner-dashboard",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.sensitive.partner_dashboard",
+    "source_line": 2701,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-product-facts",
+    "auth_required": false,
+    "function": "product_facts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/product-facts api/v1/product_facts.py:product_facts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/product_facts.py",
+    "path": "/api/v1/product-facts",
+    "public_exempt_reason": "public-marketing-product-counts-no-tenant-data",
+    "rate_limit": "public-product-facts",
+    "scope": "public:product_facts.read",
+    "source_line": 85,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "prompt_templates.list",
+    "auth_required": true,
+    "function": "list_prompt_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/prompt-templates api/v1/prompt_templates.py:list_prompt_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.list",
+    "source_line": 114,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.create",
+    "auth_required": true,
+    "function": "create_prompt_template",
+    "idempotency": "unique-active-name-agent-type-per-tenant",
+    "key": "POST /api/v1/prompt-templates api/v1/prompt_templates.py:create_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 195,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.delete",
+    "auth_required": true,
+    "function": "delete_prompt_template",
+    "idempotency": "idempotent-soft-delete-by-template-id",
+    "key": "DELETE /api/v1/prompt-templates/{template_id} api/v1/prompt_templates.py:delete_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/{template_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 592,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.get",
+    "auth_required": true,
+    "function": "get_prompt_template",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/prompt-templates/{template_id} api/v1/prompt_templates.py:get_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/{template_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.read",
+    "source_line": 153,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.update",
+    "auth_required": true,
+    "function": "update_prompt_template",
+    "idempotency": "idempotent-full-update-by-template-id",
+    "key": "PUT /api/v1/prompt-templates/{template_id} api/v1/prompt_templates.py:update_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/{template_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 297,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.history.list",
+    "auth_required": true,
+    "function": "get_prompt_template_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/prompt-templates/{template_id}/history api/v1/prompt_templates.py:get_prompt_template_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/{template_id}/history",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.history",
+    "source_line": 405,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.rollback",
+    "auth_required": true,
+    "function": "rollback_prompt_template",
+    "idempotency": "not-idempotent-creates-new-history-entry",
+    "key": "POST /api/v1/prompt-templates/{template_id}/rollback api/v1/prompt_templates.py:rollback_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/{template_id}/rollback",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.rollback",
+    "source_line": 482,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "push.subscribe",
+    "auth_required": true,
+    "function": "subscribe",
+    "idempotency": "idempotent-upsert-by-endpoint",
+    "key": "POST /api/v1/push/subscribe api/v1/push.py:subscribe",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/push.py",
+    "path": "/api/v1/push/subscribe",
+    "public_exempt_reason": null,
+    "rate_limit": "push-subscription-write",
+    "scope": "push.subscription.sensitive.write",
+    "source_line": 86,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "push.test_send",
+    "auth_required": true,
+    "function": "send_test_notification",
+    "idempotency": "not_idempotent-delivers-test-notification",
+    "key": "POST /api/v1/push/test api/v1/push.py:send_test_notification",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/push.py",
+    "path": "/api/v1/push/test",
+    "public_exempt_reason": null,
+    "rate_limit": "push-test-send",
+    "scope": "push.external_delivery.sensitive.write",
+    "source_line": 131,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "push.unsubscribe",
+    "auth_required": true,
+    "function": "unsubscribe",
+    "idempotency": "idempotent-delete-by-endpoint",
+    "key": "POST /api/v1/push/unsubscribe api/v1/push.py:unsubscribe",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/push.py",
+    "path": "/api/v1/push/unsubscribe",
+    "public_exempt_reason": null,
+    "rate_limit": "push-subscription-write",
+    "scope": "push.subscription.sensitive.write",
+    "source_line": 112,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-push-key-read",
+    "auth_required": false,
+    "function": "get_vapid_public_key",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/push/vapid-key api/v1/push.py:get_vapid_public_key",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/push.py",
+    "path": "/api/v1/push/vapid-key",
+    "public_exempt_reason": "public-browser-vapid-key-no-tenant-data",
+    "rate_limit": "push-public-config",
+    "scope": "public:push.vapid_key.read",
+    "source_line": 64,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "report_schedules.list",
+    "auth_required": true,
+    "function": "list_report_schedules",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/report-schedules api/v1/report_schedules.py:list_report_schedules",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/report_schedules.py",
+    "path": "/api/v1/report-schedules",
+    "public_exempt_reason": null,
+    "rate_limit": "report-schedule-read",
+    "scope": "report_schedules.sensitive.list",
+    "source_line": 387,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "report_schedules.create",
+    "auth_required": true,
+    "function": "create_report_schedule",
+    "idempotency": "not-idempotent-new-schedule-created",
+    "key": "POST /api/v1/report-schedules api/v1/report_schedules.py:create_report_schedule",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/report_schedules.py",
+    "path": "/api/v1/report-schedules",
+    "public_exempt_reason": null,
+    "rate_limit": "report-schedule-write",
+    "scope": "report_schedules.write",
+    "source_line": 493,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "report_schedules.delete",
+    "auth_required": true,
+    "function": "delete_report_schedule",
+    "idempotency": "idempotent-delete-by-schedule-id",
+    "key": "DELETE /api/v1/report-schedules/{schedule_id} api/v1/report_schedules.py:delete_report_schedule",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/report_schedules.py",
+    "path": "/api/v1/report-schedules/{schedule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "report-schedule-write",
+    "scope": "report_schedules.write",
+    "source_line": 674,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "report_schedules.update",
+    "auth_required": true,
+    "function": "update_report_schedule",
+    "idempotency": "idempotent-partial-update-by-schedule-id",
+    "key": "PATCH /api/v1/report-schedules/{schedule_id} api/v1/report_schedules.py:update_report_schedule",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/report_schedules.py",
+    "path": "/api/v1/report-schedules/{schedule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "report-schedule-write",
+    "scope": "report_schedules.write",
+    "source_line": 601,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "report_schedules.run_now",
+    "auth_required": true,
+    "function": "run_report_now",
+    "idempotency": "not-idempotent-enqueues-report-generation",
+    "key": "POST /api/v1/report-schedules/{schedule_id}/run-now api/v1/report_schedules.py:run_report_now",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/report_schedules.py",
+    "path": "/api/v1/report-schedules/{schedule_id}/run-now",
+    "public_exempt_reason": null,
+    "rate_limit": "manual-report-trigger",
+    "scope": "report_schedules.external_action.run",
+    "source_line": 704,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.list",
+    "auth_required": true,
+    "function": "list_schedules",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/rpa-schedules api/v1/rpa_schedules.py:list_schedules",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-read",
+    "scope": "rpa_schedules.sensitive.list",
+    "source_line": 244,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.create",
+    "auth_required": true,
+    "function": "create_schedule",
+    "idempotency": "not-idempotent-new-schedule-created",
+    "key": "POST /api/v1/rpa-schedules api/v1/rpa_schedules.py:create_schedule",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "rpa_schedules.write",
+    "source_line": 279,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.registry.list",
+    "auth_required": true,
+    "function": "list_registry_scripts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/rpa-schedules/registry api/v1/rpa_schedules.py:list_registry_scripts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-read",
+    "scope": "rpa_schedules.registry.sensitive.list",
+    "source_line": 203,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.delete",
+    "auth_required": true,
+    "function": "delete_schedule",
+    "idempotency": "idempotent-delete-by-schedule-id",
+    "key": "DELETE /api/v1/rpa-schedules/{schedule_id} api/v1/rpa_schedules.py:delete_schedule",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules/{schedule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "rpa_schedules.write",
+    "source_line": 418,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.get",
+    "auth_required": true,
+    "function": "get_schedule",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/rpa-schedules/{schedule_id} api/v1/rpa_schedules.py:get_schedule",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules/{schedule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-read",
+    "scope": "rpa_schedules.sensitive.read",
+    "source_line": 330,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.update",
+    "auth_required": true,
+    "function": "update_schedule",
+    "idempotency": "idempotent-partial-update-by-schedule-id",
+    "key": "PATCH /api/v1/rpa-schedules/{schedule_id} api/v1/rpa_schedules.py:update_schedule",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules/{schedule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "rpa_schedules.write",
+    "source_line": 362,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa_schedules.run_now",
+    "auth_required": true,
+    "function": "run_schedule_now",
+    "idempotency": "not-idempotent-enqueues-rpa-execution",
+    "key": "POST /api/v1/rpa-schedules/{schedule_id}/run-now api/v1/rpa_schedules.py:run_schedule_now",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/rpa_schedules.py",
+    "path": "/api/v1/rpa-schedules/{schedule_id}/run-now",
+    "public_exempt_reason": null,
+    "rate_limit": "manual-rpa-trigger",
+    "scope": "rpa_schedules.external_action.run",
+    "source_line": 450,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa.history.list",
+    "auth_required": true,
+    "function": "list_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/rpa/history api/v1/rpa.py:list_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/rpa.py",
+    "path": "/api/v1/rpa/history",
+    "public_exempt_reason": null,
+    "rate_limit": "rpa-read",
+    "scope": "rpa.execution.sensitive.history",
+    "source_line": 213,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa.scripts.list",
+    "auth_required": true,
+    "function": "list_scripts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/rpa/scripts api/v1/rpa.py:list_scripts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/rpa.py",
+    "path": "/api/v1/rpa/scripts",
+    "public_exempt_reason": null,
+    "rate_limit": "rpa-read",
+    "scope": "rpa.catalog.sensitive.list",
+    "source_line": 169,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "rpa.script.run",
+    "auth_required": true,
+    "function": "run_script",
+    "idempotency": "not-idempotent-executes-external-automation",
+    "key": "POST /api/v1/rpa/scripts/{script_id}/run api/v1/rpa.py:run_script",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/rpa.py",
+    "path": "/api/v1/rpa/scripts/{script_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "rpa-execution",
+    "scope": "rpa.execution.external_action.run",
+    "source_line": 240,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.leads.import_csv",
+    "auth_required": true,
+    "function": "import_leads_csv",
+    "idempotency": "dedupe-by-email-within-tenant",
+    "key": "POST /api/v1/sales/import-csv api/v1/sales.py:import_leads_csv",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/import-csv",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "sales.pipeline.sensitive.bulk_import",
+    "source_line": 569,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.metrics.read",
+    "auth_required": true,
+    "function": "get_sales_metrics",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/sales/metrics api/v1/sales.py:get_sales_metrics",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/metrics",
+    "public_exempt_reason": null,
+    "rate_limit": "business-metrics-read",
+    "scope": "sales.metrics.sensitive.read",
+    "source_line": 489,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.pipeline.list",
+    "auth_required": true,
+    "function": "get_pipeline",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/sales/pipeline api/v1/sales.py:get_pipeline",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/pipeline",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-read",
+    "scope": "sales.pipeline.sensitive.list",
+    "source_line": 142,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.followups.due",
+    "auth_required": true,
+    "function": "get_due_followups",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/sales/pipeline/due-followups api/v1/sales.py:get_due_followups",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/pipeline/due-followups",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-read",
+    "scope": "sales.pipeline.sensitive.followups",
+    "source_line": 181,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.lead.create",
+    "auth_required": true,
+    "function": "create_lead",
+    "idempotency": "not-idempotent-new-lead-created",
+    "key": "POST /api/v1/sales/pipeline/leads api/v1/sales.py:create_lead",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/pipeline/leads",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-write",
+    "scope": "sales.pipeline.sensitive.write",
+    "source_line": 109,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.lead.process",
+    "auth_required": true,
+    "function": "process_lead_with_agent",
+    "idempotency": "not-idempotent-agent-may-update-lead-and-send-email",
+    "key": "POST /api/v1/sales/pipeline/process-lead api/v1/sales.py:process_lead_with_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/pipeline/process-lead",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-agent-trigger",
+    "scope": "sales.pipeline.external_action.process",
+    "source_line": 205,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.lead.get",
+    "auth_required": true,
+    "function": "get_lead",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/sales/pipeline/{lead_id} api/v1/sales.py:get_lead",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/pipeline/{lead_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-read",
+    "scope": "sales.pipeline.sensitive.read",
+    "source_line": 244,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.lead.update",
+    "auth_required": true,
+    "function": "update_lead",
+    "idempotency": "idempotent-partial-update-by-lead-id",
+    "key": "PATCH /api/v1/sales/pipeline/{lead_id} api/v1/sales.py:update_lead",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/pipeline/{lead_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-write",
+    "scope": "sales.pipeline.sensitive.write",
+    "source_line": 288,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.inbox.process",
+    "auth_required": true,
+    "function": "process_inbox",
+    "idempotency": "not-idempotent-may-create-leads-and-send-replies",
+    "key": "POST /api/v1/sales/process-inbox api/v1/sales.py:process_inbox",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/process-inbox",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-inbox-sync",
+    "scope": "sales.pipeline.external_action.process_inbox",
+    "source_line": 917,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.followups.run",
+    "auth_required": true,
+    "function": "run_automated_followups",
+    "idempotency": "not-idempotent-may-send-followup-emails",
+    "key": "POST /api/v1/sales/run-followups api/v1/sales.py:run_automated_followups",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/run-followups",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-agent-trigger",
+    "scope": "sales.pipeline.external_action.run_followups",
+    "source_line": 726,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sales.prospects.seed",
+    "auth_required": true,
+    "function": "seed_target_prospects",
+    "idempotency": "dedupe-by-email-within-tenant",
+    "key": "POST /api/v1/sales/seed-prospects api/v1/sales.py:seed_target_prospects",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sales.py",
+    "path": "/api/v1/sales/seed-prospects",
+    "public_exempt_reason": null,
+    "rate_limit": "sales-write",
+    "scope": "sales.pipeline.sensitive.seed_demo",
+    "source_line": 840,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "schemas.list",
+    "auth_required": true,
+    "function": "list_schemas",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/schemas api/v1/schemas.py:list_schemas",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/schemas.py",
+    "path": "/api/v1/schemas",
+    "public_exempt_reason": null,
+    "rate_limit": "schemas-read",
+    "scope": "schemas.registry.sensitive.read",
+    "source_line": 42,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "schemas.create",
+    "auth_required": true,
+    "function": "create_schema",
+    "idempotency": "not_idempotent-creates-schema-version",
+    "key": "POST /api/v1/schemas api/v1/schemas.py:create_schema",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/schemas.py",
+    "path": "/api/v1/schemas",
+    "public_exempt_reason": null,
+    "rate_limit": "schemas-write",
+    "scope": "schemas.registry.sensitive.write",
+    "source_line": 125,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "schemas.detail",
+    "auth_required": true,
+    "function": "get_schema_by_name",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/schemas/{name} api/v1/schemas.py:get_schema_by_name",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/schemas.py",
+    "path": "/api/v1/schemas/{name}",
+    "public_exempt_reason": null,
+    "rate_limit": "schemas-read",
+    "scope": "schemas.registry.sensitive.read",
+    "source_line": 93,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "schemas.upsert",
+    "auth_required": true,
+    "function": "upsert_schema",
+    "idempotency": "idempotent-upsert-by-name-and-version",
+    "key": "PUT /api/v1/schemas/{name} api/v1/schemas.py:upsert_schema",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/schemas.py",
+    "path": "/api/v1/schemas/{name}",
+    "public_exempt_reason": null,
+    "rate_limit": "schemas-write",
+    "scope": "schemas.registry.sensitive.write",
+    "source_line": 155,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-read-only-placeholder",
+    "auth_required": true,
+    "function": "list_sops",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/sop api/v1/sop.py:list_sops",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sop.py",
+    "path": "/api/v1/sop",
+    "public_exempt_reason": null,
+    "rate_limit": "sop-read",
+    "scope": "sop.placeholder.read",
+    "source_line": 39,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "sop.deploy_agent",
+    "auth_required": true,
+    "function": "deploy_sop_agent",
+    "idempotency": "not_idempotent-creates-agent",
+    "key": "POST /api/v1/sop/deploy api/v1/sop.py:deploy_sop_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sop.py",
+    "path": "/api/v1/sop/deploy",
+    "public_exempt_reason": null,
+    "rate_limit": "sop-deploy",
+    "scope": "sop.agent_deployment.high_risk.write",
+    "source_line": 176,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sop.parse_text",
+    "auth_required": true,
+    "function": "parse_text_sop",
+    "idempotency": "not_idempotent-llm-parse-produces-draft",
+    "key": "POST /api/v1/sop/parse-text api/v1/sop.py:parse_text_sop",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sop.py",
+    "path": "/api/v1/sop/parse-text",
+    "public_exempt_reason": null,
+    "rate_limit": "sop-parse",
+    "scope": "sop.external_input.sensitive.write",
+    "source_line": 120,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sop.upload_parse",
+    "auth_required": true,
+    "function": "upload_and_parse_sop",
+    "idempotency": "not_idempotent-document-parse-produces-draft",
+    "key": "POST /api/v1/sop/upload api/v1/sop.py:upload_and_parse_sop",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sop.py",
+    "path": "/api/v1/sop/upload",
+    "public_exempt_reason": null,
+    "rate_limit": "sop-upload",
+    "scope": "sop.external_input.sensitive.write",
+    "source_line": 56,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sso.config.list",
+    "auth_required": true,
+    "function": "list_configs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/sso/configs api/v1/sso.py:list_configs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/sso.py",
+    "path": "/api/v1/sso/configs",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-read",
+    "scope": "sso.config.sensitive.list",
+    "source_line": 291,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sso.config.upsert",
+    "auth_required": true,
+    "function": "upsert_config",
+    "idempotency": "idempotent-upsert-by-provider-key",
+    "key": "POST /api/v1/sso/configs api/v1/sso.py:upsert_config",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/sso.py",
+    "path": "/api/v1/sso/configs",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "sso.config.write",
+    "source_line": 324,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "sso.config.delete",
+    "auth_required": true,
+    "function": "delete_config",
+    "idempotency": "idempotent-delete-by-provider-key",
+    "key": "DELETE /api/v1/sso/configs/{provider_key} api/v1/sso.py:delete_config",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/sso.py",
+    "path": "/api/v1/sso/configs/{provider_key}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "sso.config.write",
+    "source_line": 388,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-status-read",
+    "auth_required": false,
+    "function": "public_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/status api/v1/status.py:public_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/status.py",
+    "path": "/api/v1/status",
+    "public_exempt_reason": "public-status-page-sanitized-service-health",
+    "rate_limit": "public-status-read",
+    "scope": "public:status.sanitized_health.read",
+    "source_line": 115,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "tenant_ai_credentials.list",
+    "auth_required": true,
+    "function": "list_credentials",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tenant-ai-credentials api/v1/tenant_ai_credentials.py:list_credentials",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/tenant_ai_credentials.py",
+    "path": "/api/v1/tenant-ai-credentials",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tenant_ai_credentials.secrets.sensitive.list",
+    "source_line": 160,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_credentials.create",
+    "auth_required": true,
+    "function": "create_credential",
+    "idempotency": "unique-provider-kind-per-tenant",
+    "key": "POST /api/v1/tenant-ai-credentials api/v1/tenant_ai_credentials.py:create_credential",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/tenant_ai_credentials.py",
+    "path": "/api/v1/tenant-ai-credentials",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "tenant_ai_credentials.secrets.write",
+    "source_line": 187,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_credentials.delete",
+    "auth_required": true,
+    "function": "delete_credential",
+    "idempotency": "idempotent-delete-by-credential-id",
+    "key": "DELETE /api/v1/tenant-ai-credentials/{credential_id} api/v1/tenant_ai_credentials.py:delete_credential",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/tenant_ai_credentials.py",
+    "path": "/api/v1/tenant-ai-credentials/{credential_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "tenant_ai_credentials.secrets.write",
+    "source_line": 340,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_credentials.read",
+    "auth_required": true,
+    "function": "get_credential",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tenant-ai-credentials/{credential_id} api/v1/tenant_ai_credentials.py:get_credential",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/tenant_ai_credentials.py",
+    "path": "/api/v1/tenant-ai-credentials/{credential_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tenant_ai_credentials.secrets.sensitive.read",
+    "source_line": 241,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_credentials.update",
+    "auth_required": true,
+    "function": "update_credential",
+    "idempotency": "idempotent-metadata-update-token-rotate-on-api-key",
+    "key": "PATCH /api/v1/tenant-ai-credentials/{credential_id} api/v1/tenant_ai_credentials.py:update_credential",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/tenant_ai_credentials.py",
+    "path": "/api/v1/tenant-ai-credentials/{credential_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "tenant_ai_credentials.secrets.write",
+    "source_line": 273,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_credentials.test",
+    "auth_required": true,
+    "function": "test_credential",
+    "idempotency": "read-only-external-health-probe-updates-status",
+    "key": "POST /api/v1/tenant-ai-credentials/{credential_id}/test api/v1/tenant_ai_credentials.py:test_credential",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/tenant_ai_credentials.py",
+    "path": "/api/v1/tenant-ai-credentials/{credential_id}/test",
+    "public_exempt_reason": null,
+    "rate_limit": "external-provider-check",
+    "scope": "tenant_ai_credentials.secrets.test",
+    "source_line": 382,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_settings.read",
+    "auth_required": true,
+    "function": "get_setting",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tenant-ai-settings api/v1/tenant_ai_settings.py:get_setting",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/tenant_ai_settings.py",
+    "path": "/api/v1/tenant-ai-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tenant_ai_settings.sensitive.read",
+    "source_line": 192,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_settings.update",
+    "auth_required": true,
+    "function": "put_setting",
+    "idempotency": "idempotent-settings-upsert",
+    "key": "PUT /api/v1/tenant-ai-settings api/v1/tenant_ai_settings.py:put_setting",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/tenant_ai_settings.py",
+    "path": "/api/v1/tenant-ai-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "tenant_ai_settings.control_plane.write",
+    "source_line": 213,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tenant_ai_settings.registry.list",
+    "auth_required": true,
+    "function": "list_registry",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tenant-ai-settings/registry api/v1/tenant_ai_settings.py:list_registry",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/tenant_ai_settings.py",
+    "path": "/api/v1/tenant-ai-settings/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tenant_ai_settings.registry.read",
+    "source_line": 148,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "connectors.tools.list",
+    "auth_required": true,
+    "function": "list_tools",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tools api/v1/connectors.py:list_tools",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/tools",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.tools.read",
+    "source_line": 490,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "voice.config.read",
+    "auth_required": true,
+    "function": "get_voice_config",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/voice/config api/v1/voice.py:get_voice_config",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/voice.py",
+    "path": "/api/v1/voice/config",
+    "public_exempt_reason": null,
+    "rate_limit": "voice-config-read",
+    "scope": "voice.config.secret_control_plane.read",
+    "source_line": 517,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "voice.config.save",
+    "auth_required": true,
+    "function": "save_voice_config",
+    "idempotency": "idempotent-upsert-by-tenant",
+    "key": "POST /api/v1/voice/config api/v1/voice.py:save_voice_config",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/voice.py",
+    "path": "/api/v1/voice/config",
+    "public_exempt_reason": null,
+    "rate_limit": "voice-config-write",
+    "scope": "voice.config.secret_control_plane.write",
+    "source_line": 472,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "voice.test_connection",
+    "auth_required": true,
+    "function": "test_connection",
+    "idempotency": "not_idempotent-external-provider-probe",
+    "key": "POST /api/v1/voice/test-connection api/v1/voice.py:test_connection",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/voice.py",
+    "path": "/api/v1/voice/test-connection",
+    "public_exempt_reason": null,
+    "rate_limit": "voice-test-connection",
+    "scope": "voice.external_probe.sensitive.write",
+    "source_line": 221,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "webhooks.discovery.list",
+    "auth_required": true,
+    "function": "list_webhook_endpoints",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/webhooks api/v1/webhooks.py:list_webhook_endpoints",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "webhooks.discovery.read",
+    "source_line": 375,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "cdc.webhook.legacy_rejected",
+    "auth_required": false,
+    "function": "cdc_webhook_legacy",
+    "idempotency": "not-applicable-410",
+    "key": "POST /api/v1/webhooks/cdc/{connector} api/v1/cdc_webhooks.py:cdc_webhook_legacy",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/cdc_webhooks.py",
+    "path": "/api/v1/webhooks/cdc/{connector}",
+    "public_exempt_reason": "removed-endpoint-always-410",
+    "rate_limit": "provider-webhook",
+    "scope": "public:cdc.webhook.legacy-removed",
+    "source_line": 84,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "cdc.webhook.received",
+    "auth_required": false,
+    "function": "cdc_webhook",
+    "idempotency": "tenant-connector-provider-event-or-fingerprint",
+    "key": "POST /api/v1/webhooks/cdc/{tenant_id}/{connector} api/v1/cdc_webhooks.py:cdc_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/cdc_webhooks.py",
+    "path": "/api/v1/webhooks/cdc/{tenant_id}/{connector}",
+    "public_exempt_reason": "provider-hmac-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:cdc.webhook.ingest",
+    "source_line": 28,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "webhooks.email.mailchimp.received",
+    "auth_required": false,
+    "function": "mailchimp_webhook",
+    "idempotency": "provider-delivery-event-hash",
+    "key": "POST /api/v1/webhooks/email/mailchimp api/v1/webhooks.py:mailchimp_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks/email/mailchimp",
+    "public_exempt_reason": "provider-hmac-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.email.mailchimp",
+    "source_line": 472,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "webhooks.email.moengage.received",
+    "auth_required": false,
+    "function": "moengage_webhook",
+    "idempotency": "provider-delivery-event-hash",
+    "key": "POST /api/v1/webhooks/email/moengage api/v1/webhooks.py:moengage_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks/email/moengage",
+    "public_exempt_reason": "provider-hmac-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.email.moengage",
+    "source_line": 537,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "webhooks.email.sendgrid.received",
+    "auth_required": false,
+    "function": "sendgrid_webhook",
+    "idempotency": "provider-delivery-event-hash",
+    "key": "POST /api/v1/webhooks/email/sendgrid api/v1/webhooks.py:sendgrid_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks/email/sendgrid",
+    "public_exempt_reason": "provider-hmac-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.email.sendgrid",
+    "source_line": 396,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "workflows.list",
+    "auth_required": true,
+    "function": "list_workflows",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows api/v1/workflows.py:list_workflows",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.sensitive.list",
+    "source_line": 228,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.create",
+    "auth_required": true,
+    "function": "create_workflow",
+    "idempotency": "not-idempotent-definition-create",
+    "key": "POST /api/v1/workflows api/v1/workflows.py:create_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 314,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.generate",
+    "auth_required": true,
+    "function": "generate_workflow_endpoint",
+    "idempotency": "not-idempotent-ai-generation-may-deploy",
+    "key": "POST /api/v1/workflows/generate api/v1/workflows.py:generate_workflow_endpoint",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "ai-generation",
+    "scope": "workflows.generate",
+    "source_line": 121,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.read",
+    "auth_required": true,
+    "function": "get_workflow_run",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/runs/{run_id} api/v1/workflows.py:get_workflow_run",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.read",
+    "source_line": 691,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.cancel",
+    "auth_required": true,
+    "function": "cancel_workflow_run",
+    "idempotency": "idempotent-terminal-status",
+    "key": "POST /api/v1/workflows/runs/{run_id}/cancel api/v1/workflows.py:cancel_workflow_run",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}/cancel",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-control",
+    "scope": "workflows.runs.cancel",
+    "source_line": 780,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.replan_history",
+    "auth_required": true,
+    "function": "get_replan_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/runs/{run_id}/replan-history api/v1/workflows.py:get_replan_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}/replan-history",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.replan-history",
+    "source_line": 736,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.templates.list",
+    "auth_required": true,
+    "function": "list_workflow_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/templates api/v1/workflows.py:list_workflow_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/templates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.templates.read",
+    "source_line": 203,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "workflows.delete",
+    "auth_required": true,
+    "function": "delete_workflow",
+    "idempotency": "idempotent-soft-delete",
+    "key": "DELETE /api/v1/workflows/{wf_id} api/v1/workflows.py:delete_workflow",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 376,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.read",
+    "auth_required": true,
+    "function": "get_workflow",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{wf_id} api/v1/workflows.py:get_workflow",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.sensitive.read",
+    "source_line": 287,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.replan_config.update",
+    "auth_required": true,
+    "function": "update_replan_config",
+    "idempotency": "idempotent-replan-config-replace",
+    "key": "PUT /api/v1/workflows/{wf_id}/replan-config api/v1/workflows.py:update_replan_config",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/replan-config",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 881,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.run.create",
+    "auth_required": true,
+    "function": "run_workflow",
+    "idempotency": "not-idempotent-run-creation-requires-client-key",
+    "key": "POST /api/v1/workflows/{wf_id}/run api/v1/workflows.py:run_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-execution",
+    "scope": "workflows.run",
+    "source_line": 594,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflow_variants.list",
+    "auth_required": true,
+    "function": "list_variants",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{workflow_id}/variants api/v1/workflow_variants.py:list_variants",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflow_variants.py",
+    "path": "/api/v1/workflows/{workflow_id}/variants",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-variant-read",
+    "scope": "workflow_variants.definition.sensitive.read",
+    "source_line": 64,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflow_variants.upsert",
+    "auth_required": true,
+    "function": "upsert_variant",
+    "idempotency": "idempotent-upsert-by-workflow-and-variant-name",
+    "key": "POST /api/v1/workflows/{workflow_id}/variants api/v1/workflow_variants.py:upsert_variant",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflow_variants.py",
+    "path": "/api/v1/workflows/{workflow_id}/variants",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-variant-write",
+    "scope": "workflow_variants.behavior.high_risk.write",
+    "source_line": 88,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflow_variants.delete",
+    "auth_required": true,
+    "function": "delete_variant",
+    "idempotency": "idempotent-delete-by-workflow-and-variant-name",
+    "key": "DELETE /api/v1/workflows/{workflow_id}/variants/{variant_name} api/v1/workflow_variants.py:delete_variant",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/workflow_variants.py",
+    "path": "/api/v1/workflows/{workflow_id}/variants/{variant_name}",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-variant-write",
+    "scope": "workflow_variants.behavior.high_risk.write",
+    "source_line": 138,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "bridge.websocket.connect",
+    "auth_required": false,
+    "function": "bridge_ws",
+    "idempotency": "connection-session-upsert-by-bridge-id",
+    "key": "WEBSOCKET /api/v1/ws/bridge/{bridge_id} bridge/server_handler.py:bridge_ws",
+    "metadata_present": true,
+    "methods": [
+      "WEBSOCKET"
+    ],
+    "module": "bridge/server_handler.py",
+    "path": "/api/v1/ws/bridge/{bridge_id}",
+    "public_exempt_reason": "bridge-token-handshake-validates-registration",
+    "rate_limit": "bridge-websocket-connect",
+    "scope": "bridge.websocket.token_protected.sensitive.write",
+    "source_line": 129,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "feed.websocket.connect",
+    "auth_required": true,
+    "function": "live_feed",
+    "idempotency": "connection-session",
+    "key": "WEBSOCKET /api/v1/ws/feed/{tenant_id} api/websocket/feed.py:live_feed",
+    "metadata_present": true,
+    "methods": [
+      "WEBSOCKET"
+    ],
+    "module": "api/websocket/feed.py",
+    "path": "/api/v1/ws/feed/{tenant_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "websocket-connect",
+    "scope": "feed.websocket.connect",
+    "source_line": 261,
+    "tenant_required": true
+  }
+]

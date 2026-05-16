@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.company import Company
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
@@ -109,6 +110,14 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
 
 # ── POST /workflows/generate ─────────────────────────────────────────────────
 @router.post("/workflows/generate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.generate",
+    rate_limit="ai-generation",
+    idempotency="not-idempotent-ai-generation-may-deploy",
+    audit_event="workflows.generate",
+)
 async def generate_workflow_endpoint(
     body: WorkflowGenerateRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -183,6 +192,14 @@ async def generate_workflow_endpoint(
 
 # ── GET /workflows/templates ────────────────────────────────────────────────
 @router.get("/workflows/templates")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="workflows.templates.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.templates.list",
+)
 async def list_workflow_templates(domain: str | None = None):
     """Return the workflow-template catalog, optionally filtered by domain.
 
@@ -200,6 +217,14 @@ async def list_workflow_templates(domain: str | None = None):
 
 # ── GET /workflows ───────────────────────────────────────────────────────────
 @router.get("/workflows", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.list",
+)
 async def list_workflows(
     page: int = 1,
     per_page: int = 20,
@@ -251,6 +276,14 @@ async def list_workflows(
 
 # ── GET /workflows/{wf_id} ──────────────────────────────────────────────────
 @router.get("/workflows/{wf_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.read",
+)
 async def get_workflow(
     wf_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -270,6 +303,14 @@ async def get_workflow(
 
 # ── POST /workflows ─────────────────────────────────────────────────────────
 @router.post("/workflows", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.write",
+    rate_limit="workflow-write",
+    idempotency="not-idempotent-definition-create",
+    audit_event="workflows.create",
+)
 async def create_workflow(
     body: WorkflowCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -324,6 +365,14 @@ async def create_workflow(
 
 # ── DELETE /workflows/{wf_id} ────────────────────────────────────────────────
 @router.delete("/workflows/{wf_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.write",
+    rate_limit="workflow-write",
+    idempotency="idempotent-soft-delete",
+    audit_event="workflows.delete",
+)
 async def delete_workflow(
     wf_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -366,7 +415,12 @@ async def _execute_workflow_bg(
     engine = WorkflowEngine(state_store)
 
     try:
-        engine_run_id = await engine.start_run(definition, trigger_payload)
+        engine_run_id = await engine.start_run(
+            definition,
+            trigger_payload,
+            tenant_id=str(tenant_id),
+            workflow_run_id=str(run_id),
+        )
 
         # Persist engine_run_id so HITL resume can find it later
         async with get_tenant_session(tenant_id) as session:
@@ -529,6 +583,14 @@ async def _execute_workflow_bg(
 
 # ── POST /workflows/{wf_id}/run ─────────────────────────────────────────────
 @router.post("/workflows/{wf_id}/run")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.run",
+    rate_limit="workflow-execution",
+    idempotency="not-idempotent-run-creation-requires-client-key",
+    audit_event="workflows.run.create",
+)
 async def run_workflow(
     wf_id: UUID,
     background_tasks: BackgroundTasks,
@@ -618,6 +680,14 @@ async def run_workflow(
 
 # ── GET /workflows/runs/{run_id} ────────────────────────────────────────────
 @router.get("/workflows/runs/{run_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.runs.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.runs.read",
+)
 async def get_workflow_run(
     run_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -655,6 +725,14 @@ async def get_workflow_run(
 
 # ── GET /workflows/runs/{run_id}/replan-history ────────────────────────────
 @router.get("/workflows/runs/{run_id}/replan-history")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.runs.sensitive.replan-history",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.runs.replan_history",
+)
 async def get_replan_history(
     run_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -691,6 +769,14 @@ async def get_replan_history(
 
 
 @router.post("/workflows/runs/{run_id}/cancel")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.runs.cancel",
+    rate_limit="workflow-control",
+    idempotency="idempotent-terminal-status",
+    audit_event="workflows.runs.cancel",
+)
 async def cancel_workflow_run(
     run_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -784,6 +870,14 @@ class ReplanConfigUpdate(BaseModel):
 
 
 @router.put("/workflows/{wf_id}/replan-config")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.write",
+    rate_limit="workflow-write",
+    idempotency="idempotent-replan-config-replace",
+    audit_event="workflows.replan_config.update",
+)
 async def update_replan_config(
     wf_id: UUID,
     body: ReplanConfigUpdate,

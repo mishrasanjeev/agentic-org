@@ -17,6 +17,9 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 
+from api.route_metadata import route_meta
+from workflows.event_waits import WorkflowEventWaitStore
+
 logger = structlog.get_logger()
 
 router = APIRouter()
@@ -89,6 +92,60 @@ def _get_redis():
     return aioredis.from_url(url, decode_responses=True)
 
 
+def _workflow_event_wait_store() -> WorkflowEventWaitStore:
+    return WorkflowEventWaitStore()
+
+
+def _email_event_type_candidates(event_type: str) -> tuple[str, ...]:
+    aliases = {
+        "open": ("email.open", "email.opened"),
+        "opened": ("email.opened", "email.open"),
+        "click": ("email.click", "email.clicked"),
+        "clicked": ("email.clicked", "email.click"),
+        "bounce": ("email.bounce", "email.bounced"),
+        "bounced": ("email.bounced", "email.bounce"),
+    }
+    candidates = aliases.get(event_type.lower(), (f"email.{event_type}",))
+    return tuple(dict.fromkeys(candidates))
+
+
+def _extract_event_tenant_id(event_fields: dict[str, Any]) -> str | None:
+    for key in ("tenant_id", "agenticorg:tenant_id", "agenticorg_tenant_id"):
+        value = event_fields.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _event_delivery_id(event_fields: dict[str, Any]) -> str:
+    payload = json.dumps(event_fields, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _listener_match_criteria(listener_payload: dict[str, Any]) -> dict[str, Any]:
+    raw = listener_payload.get("match", listener_payload.get("match_criteria", {}))
+    return raw if isinstance(raw, dict) else {}
+
+
+def _sendgrid_category_metadata(categories: Any) -> tuple[str, dict[str, str]]:
+    category_list = categories if isinstance(categories, list) else [categories]
+    campaign_id = ""
+    extra: dict[str, str] = {}
+    for raw_category in category_list:
+        if not raw_category:
+            continue
+        category = str(raw_category)
+        if ":" in category:
+            key, value = category.split(":", 1)
+            normalized = key.strip().lower().replace("-", "_")
+            if normalized in {"tenant", "tenant_id", "agenticorg_tenant_id"}:
+                extra["tenant_id"] = value.strip()
+                continue
+        if not campaign_id:
+            campaign_id = category
+    return campaign_id, extra
+
+
 def _event_matches_criteria(
     event_fields: dict[str, Any],
     match_criteria: dict[str, Any],
@@ -107,6 +164,7 @@ def _event_matches_criteria(
     older workflows are declared without a match and should still resume
     on the first event of the right type).
     """
+    match_criteria = _listener_match_criteria({"match": match_criteria})
     if not match_criteria:
         return True
     for k, expected in match_criteria.items():
@@ -125,18 +183,61 @@ async def _store_email_event(
     timestamp: str | int,
     extra: dict[str, Any] | None = None,
 ) -> None:
-    """Store event in Redis and check for waiting workflows.
+    """Store the email event and check durable workflow event waits.
 
     Codex 2026-04-23 re-verification blocker B: resume now honours
     the ``match`` criteria the listener stored — a click event on
     campaign A must not resume a workflow that was waiting for a
     click on campaign B.
     """
-    import json as _json
+    event_fields: dict[str, Any] = {
+        "campaign_id": campaign_id,
+        "email": email,
+        "event_type": event_type,
+        "timestamp": timestamp,
+        **(extra or {}),
+    }
+    event_types = _email_event_type_candidates(event_type)
+    event_fields["workflow_event_types"] = list(event_types)
+    tenant_id = _extract_event_tenant_id(event_fields)
+    delivery_id = _event_delivery_id(event_fields)
 
-    r = _get_redis()
+    store = _workflow_event_wait_store()
+    await store.init()
     try:
-        # Store in hash: email_events:{campaign_id}:{email}
+        matched_waits = await store.claim_matching_waits(
+            event_types=event_types,
+            event_fields=event_fields,
+            tenant_id=tenant_id,
+            matched_event_id=delivery_id,
+        )
+    finally:
+        await store.close()
+
+    from core.tasks.workflow_tasks import _resume_workflow_wait_async, resume_workflow_wait
+
+    for wait in matched_waits:
+        logger.info(
+            "workflow_event_match",
+            event_type=event_type,
+            email=email,
+            run_id=wait.engine_run_id,
+            step_id=wait.step_id,
+        )
+        try:
+            resume_workflow_wait.delay(wait.engine_run_id, wait.step_id)
+        except Exception as exc:  # noqa: BLE001 - fall back to direct durable resume.
+            logger.warning(
+                "workflow_event_resume_enqueue_failed",
+                run_id=wait.engine_run_id,
+                step_id=wait.step_id,
+                error=str(exc),
+            )
+            await _resume_workflow_wait_async(wait.engine_run_id, wait.step_id)
+
+    r = None
+    try:
+        r = _get_redis()
         key = f"email_events:{campaign_id}:{email}"
         mapping: dict[str, str] = {
             event_type: "true",
@@ -146,76 +247,17 @@ async def _store_email_event(
             for k, v in extra.items():
                 mapping[k] = str(v)
         await r.hset(key, mapping=mapping)
-
-        event_fields: dict[str, Any] = {
-            "campaign_id": campaign_id,
-            "email": email,
-            "event_type": event_type,
-            "timestamp": timestamp,
-            **(extra or {}),
-        }
-
-        # Check for workflow event waits.
-        # Keys look like: wfwait_event:email.{event}:{run_id}:{step_id}
-        pattern = f"wfwait_event:email.{event_type}:*"
-        cursor = 0
-        while True:
-            cursor, keys = await r.scan(cursor=cursor, match=pattern, count=100)
-            for wait_key in keys:
-                parts = wait_key.split(":")
-                if len(parts) < 4:
-                    continue
-                run_id = parts[2]
-                step_id = parts[3]
-
-                # Load the listener payload and honour the stored
-                # match criteria before firing. The criteria were
-                # stored by workflows/step_types.py::_execute_wait_for_event.
-                match_criteria: dict[str, Any] = {}
-                try:
-                    raw_payload = await r.get(wait_key)
-                    if raw_payload:
-                        payload = _json.loads(raw_payload)
-                        match_criteria = payload.get("match", {}) or {}
-                except Exception as exc:
-                    logger.warning(
-                        "workflow_event_listener_payload_unreadable",
-                        wait_key=wait_key,
-                        error=str(exc),
-                    )
-                    # Unreadable payload: do NOT fire — refusing to
-                    # resume a workflow we can't prove matches is the
-                    # safer side of the fail-closed line.
-                    continue
-
-                if not _event_matches_criteria(event_fields, match_criteria):
-                    logger.debug(
-                        "workflow_event_criteria_mismatch",
-                        event_type=event_type,
-                        match=match_criteria,
-                        email=email,
-                        run_id=run_id,
-                        step_id=step_id,
-                    )
-                    continue
-
-                logger.info(
-                    "workflow_event_match",
-                    event_type=event_type,
-                    email=email,
-                    run_id=run_id,
-                    step_id=step_id,
-                )
-                # Trigger workflow resumption via Celery
-                from core.tasks.workflow_tasks import resume_workflow_wait
-
-                resume_workflow_wait.delay(run_id, step_id)
-                # Remove the wait key so it only fires once
-                await r.delete(wait_key)
-            if cursor == 0:
-                break
+    except Exception as exc:  # noqa: BLE001 - Redis event history is best-effort.
+        logger.warning(
+            "email_event_redis_store_failed",
+            campaign_id=campaign_id,
+            email=email,
+            event_type=event_type,
+            error=str(exc),
+        )
     finally:
-        await r.aclose()
+        if r is not None:
+            await r.aclose()
 
 
 def _verify_sendgrid_signature(
@@ -322,6 +364,14 @@ def _verify_moengage_signature(payload: bytes, signature: str) -> bool:
 
 
 @router.get("/webhooks")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="webhooks.discovery.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="webhooks.discovery.list",
+)
 async def list_webhook_endpoints():
     """List available webhook receiver endpoints."""
     return {
@@ -334,6 +384,15 @@ async def list_webhook_endpoints():
 
 
 @router.post("/webhooks/email/sendgrid")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:webhooks.email.sendgrid",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.sendgrid.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def sendgrid_webhook(request: Request) -> dict[str, Any]:
     """Parse SendGrid Event Webhook JSON array.
 
@@ -367,22 +426,29 @@ async def sendgrid_webhook(request: Request) -> dict[str, Any]:
         if not email or not event_type:
             continue
 
-        # Use sg_message_id as campaign_id proxy, or extract from categories
-        campaign_id = ""
+        # Use sg_message_id as campaign_id proxy, or extract from categories.
         categories = event.get("category", [])
-        if isinstance(categories, list) and categories:
-            campaign_id = categories[0]
-        elif isinstance(categories, str):
-            campaign_id = categories
+        campaign_id, category_extra = _sendgrid_category_metadata(categories)
         if not campaign_id:
             campaign_id = sg_message_id or "unknown"
+        extra: dict[str, Any] = dict(category_extra)
+        custom_args = event.get("custom_args")
+        if isinstance(custom_args, dict):
+            tenant_id = custom_args.get("tenant_id") or custom_args.get("agenticorg:tenant_id")
+            if tenant_id:
+                extra["tenant_id"] = tenant_id
+        explicit_tenant_id = event.get("tenant_id") or event.get("agenticorg:tenant_id")
+        if explicit_tenant_id:
+            extra["tenant_id"] = explicit_tenant_id
+        if url:
+            extra["url"] = url
 
         await _store_email_event(
             campaign_id=campaign_id,
             email=email,
             event_type=event_type,
             timestamp=ts,
-            extra={"url": url} if url else None,
+            extra=extra or None,
         )
         processed += 1
 
@@ -394,6 +460,15 @@ async def sendgrid_webhook(request: Request) -> dict[str, Any]:
 
 
 @router.post("/webhooks/email/mailchimp")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:webhooks.email.mailchimp",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.mailchimp.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def mailchimp_webhook(request: Request) -> dict[str, Any]:
     """Parse Mailchimp webhook POST form data.
 
@@ -426,11 +501,20 @@ async def mailchimp_webhook(request: Request) -> dict[str, Any]:
     campaign_id = str(form.get("data[id]", "") or form.get("data[list_id]", "unknown"))
 
     if data_email:
+        extra: dict[str, Any] = {}
+        tenant_id = (
+            form.get("tenant_id")
+            or form.get("agenticorg:tenant_id")
+            or form.get("data[tenant_id]")
+        )
+        if tenant_id:
+            extra["tenant_id"] = tenant_id
         await _store_email_event(
             campaign_id=campaign_id,
             email=str(data_email),
             event_type=event_type,
             timestamp=str(fired_at),
+            extra=extra or None,
         )
 
     logger.info("mailchimp_webhook_processed", type=webhook_type, email=data_email)
@@ -441,6 +525,15 @@ async def mailchimp_webhook(request: Request) -> dict[str, Any]:
 
 
 @router.post("/webhooks/email/moengage")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:webhooks.email.moengage",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.moengage.received",
+    public_reason="provider-hmac-signature-required",
+)
 async def moengage_webhook(request: Request) -> dict[str, Any]:
     """Parse MoEngage callback JSON.
 
@@ -480,13 +573,19 @@ async def moengage_webhook(request: Request) -> dict[str, Any]:
     normalized_event = moengage_event_map.get(event_type, event_type.lower())
 
     url = payload.get("url", payload.get("click_url", ""))
+    extra: dict[str, Any] = {}
+    tenant_id = payload.get("tenant_id") or payload.get("agenticorg:tenant_id")
+    if tenant_id:
+        extra["tenant_id"] = tenant_id
+    if url:
+        extra["url"] = url
 
     await _store_email_event(
         campaign_id=campaign_id,
         email=email,
         event_type=normalized_event,
         timestamp=timestamp,
-        extra={"url": url} if url else None,
+        extra=extra or None,
     )
 
     logger.info(

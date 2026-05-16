@@ -55,6 +55,10 @@ class StagingEvidence:
     run_mode: str
     grantex_host: str
     auth_source_env_name: str
+    fixture_env_path: str | None = None
+    fixture_env_var_names: tuple[str, ...] = ()
+    fixture_synthetic_ids: dict[str, str] = field(default_factory=dict)
+    fixture_value_hashes: tuple[dict[str, str], ...] = ()
     cases: list[EvidenceCase] = field(default_factory=list)
     tool_sequence: list[str] = field(default_factory=list)
     no_provider_call_confirmation: bool = True
@@ -85,6 +89,10 @@ class StagingEvidence:
             "run_mode": self.run_mode,
             "grantex_host": self.grantex_host,
             "auth_source_env_name": self.auth_source_env_name,
+            "fixture_env_path": self.fixture_env_path,
+            "fixture_env_var_names": list(self.fixture_env_var_names),
+            "fixture_synthetic_ids": self.fixture_synthetic_ids,
+            "fixture_value_hashes": list(self.fixture_value_hashes),
             "cases": [case.__dict__ for case in self.cases],
             "tool_sequence": self.tool_sequence,
             "no_provider_call_confirmation": self.no_provider_call_confirmation,
@@ -130,6 +138,10 @@ class StagingEvidence:
                     f"- Run mode: `{self.run_mode}`",
                     f"- Grantex host: `{self.grantex_host}`",
                     f"- Auth source env name: `{self.auth_source_env_name}`",
+                    f"- Fixture env path: `{self.fixture_env_path or ''}`",
+                    f"- Fixture env variable names recorded: {len(self.fixture_env_var_names)}",
+                    f"- Fixture synthetic IDs recorded: {bool(self.fixture_synthetic_ids)}",
+                    f"- Fixture sensitive value hashes recorded: {bool(self.fixture_value_hashes)}",
                     "- Secret values recorded: false",
                     "- Raw passports/JWTs recorded: false",
                     "- Request correlation values recorded: false",

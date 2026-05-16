@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.invoice import Invoice
 
@@ -43,6 +44,14 @@ class InvoiceOut(BaseModel):
 
 
 @router.get("", response_model=list[InvoiceOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.invoices.sensitive.read",
+    rate_limit="invoice-read",
+    idempotency="read-only",
+    audit_event="billing.invoices.list",
+)
 async def list_invoices(
     limit: int = 50,
     tenant_id: str = Depends(get_current_tenant),
@@ -60,6 +69,14 @@ async def list_invoices(
 
 
 @router.get("/{invoice_id}", response_model=InvoiceOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.invoices.sensitive.read",
+    rate_limit="invoice-read",
+    idempotency="read-only",
+    audit_event="billing.invoices.detail",
+)
 async def get_invoice(
     invoice_id: uuid.UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -78,6 +95,14 @@ async def get_invoice(
 
 
 @router.post("/generate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="billing.invoices.sensitive.write",
+    rate_limit="invoice-generate",
+    idempotency="generator-period-upsert-expected",
+    audit_event="billing.invoices.generate",
+)
 async def generate_now(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict:

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_, select
 
 from api.deps import get_current_tenant, get_user_domains, get_user_role
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.audit import AuditLog
@@ -51,6 +52,14 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
 
 # ── GET /audit ───────────────────────────────────────────────────────────────
 @router.get("/audit", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="audit.sensitive.read",
+    rate_limit="audit-read",
+    idempotency="read-only",
+    audit_event="audit.query",
+)
 async def query_audit(
     event_type: str | None = None,
     agent_id: str | None = None,
@@ -187,6 +196,14 @@ def _enforce_to_dict(entry: AuditLog, agent_name_by_id: dict[str, str]) -> dict:
 
 
 @router.get("/audit/enforce", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="audit.enforcement.sensitive.read",
+    rate_limit="audit-read",
+    idempotency="read-only",
+    audit_event="audit.enforcement.query",
+)
 async def query_enforce_audit(
     result: str | None = None,  # "allowed" | "denied"
     agent_id: str | None = None,

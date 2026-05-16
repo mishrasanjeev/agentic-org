@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 
@@ -19,6 +18,7 @@ async def test_commerce_sales_agent_real_staging_eval_path() -> None:
         grantex_base_url=os.getenv("GRANTEX_COMMERCE_BASE_URL"),
         allow_smoke_cloud_run_url=os.getenv("AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL"),
         evidence_report=os.getenv("AGENTICORG_COMMERCE_EVIDENCE_REPORT"),
+        fixture_env_path=os.getenv("AGENTICORG_COMMERCE_FIXTURE_ENV"),
     )
 
     assert result["scope"] == "real_staging_only"
@@ -33,18 +33,10 @@ async def test_commerce_sales_agent_real_staging_eval_path() -> None:
         "grantex_commerce:consent_request",
     }
 
-
-async def test_real_staging_docs_record_c2b_failed_safe_result() -> None:
-    evidence = Path("docs/reports/commerce-agent-real-staging-evidence.md").read_text(encoding="utf-8")
-    hosted = Path("docs/commerce-agent-hosted-staging-e2e.md").read_text(encoding="utf-8")
-    setup = Path("docs/commerce-agent-staging-data-setup.md").read_text(encoding="utf-8")
-
-    for doc in (evidence, hosted, setup):
-        lowered = doc.lower()
-        assert "C2B result: 2 passed, 2 failed-safe, 10 skipped" in doc
-        assert "Grantex-only path confirmed" in doc
-        assert "no provider credential handling" in lowered
-        assert "synthetic consent/passport fixture support" in lowered
-
-    assert "| catalog_search | failed-safe | grantex_commerce:catalog_search" in evidence
-    assert "| consent_request | failed-safe | grantex_commerce:consent_request" in evidence
+    if os.getenv("AGENTICORG_COMMERCE_FIXTURE_ENV"):
+        live_capable_cases = {
+            "grantex_commerce:catalog_get_item",
+            "grantex_commerce:inventory_check",
+            "grantex_commerce:cart_create",
+        }
+        assert live_capable_cases <= set(result["audit_summary"]["tool_sequence"])

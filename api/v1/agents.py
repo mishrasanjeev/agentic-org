@@ -21,6 +21,7 @@ from api.deps import (
     get_user_domains,
     require_tenant_admin,
 )
+from api.route_metadata import route_meta
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -910,6 +911,14 @@ async def _assert_connectors_ready_for_activation(
 
 
 @router.get("/agents/default-tools/{agent_type}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.tools.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.default_tools.read",
+)
 async def get_default_tools(
     agent_type: str,
     domain: str | None = None,
@@ -947,6 +956,14 @@ async def get_default_tools(
     "/agents",
     status_code=201,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="not-idempotent-agent-create",
+    audit_event="agents.create",
 )
 async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
@@ -1177,6 +1194,14 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
 
 # ── GET /agents ──────────────────────────────────────────────────────────────
 @router.get("/agents", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.list",
+)
 async def list_agents(
     domain: str | None = None,
     status: str | None = None,
@@ -1289,6 +1314,14 @@ async def list_agents(
 
 
 @router.get("/agents/org-tree")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.org_tree",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.org_tree.read",
+)
 async def get_org_tree(
     domain: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -1342,6 +1375,14 @@ async def get_org_tree(
 
 # ── POST /agents/{id}/delegate — Grantex delegation ────────────────────────
 @router.post("/agents/{agent_id}/delegate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.delegate",
+    rate_limit="agent-write",
+    idempotency="idempotent-delegation-grant-update",
+    audit_event="agents.delegate",
+)
 async def delegate_to_agent(
     agent_id: UUID,
     body: dict | None = None,
@@ -1409,6 +1450,14 @@ async def delegate_to_agent(
 @router.post(
     "/agents/import-csv",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.import",
+    rate_limit="file-upload",
+    idempotency="not-idempotent-bulk-agent-import",
+    audit_event="agents.import_csv",
 )
 async def import_agents_csv(
     file: UploadFile,
@@ -1559,6 +1608,14 @@ async def import_agents_csv(
 
 
 @router.post("/agents/generate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.generate",
+    rate_limit="ai-generation",
+    idempotency="not-idempotent-ai-generation-may-deploy",
+    audit_event="agents.generate",
+)
 async def generate_agent(
     body: dict,
     tenant_id: str = Depends(get_current_tenant),
@@ -1673,6 +1730,14 @@ async def generate_agent(
 
 # ── GET /agents/{id} ────────────────────────────────────────────────────────
 @router.get("/agents/{agent_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.read",
+)
 async def get_agent(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -1694,6 +1759,14 @@ async def get_agent(
 @router.put(
     "/agents/{agent_id}",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-full-replace",
+    audit_event="agents.replace",
 )
 async def replace_agent(
     agent_id: UUID,
@@ -1826,6 +1899,14 @@ async def replace_agent(
 @router.patch(
     "/agents/{agent_id}",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-partial-update",
+    audit_event="agents.update",
 )
 async def update_agent(
     agent_id: UUID,
@@ -1980,6 +2061,14 @@ async def update_agent(
 
 # ── POST /agents/{id}/run ────────────────────────────────────────────────────
 @router.post("/agents/{agent_id}/run")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.execute",
+    rate_limit="agent-execution",
+    idempotency="not-idempotent-agent-execution",
+    audit_event="agents.run",
+)
 async def run_agent(
     agent_id: UUID,
     payload: dict | None = None,
@@ -2607,6 +2696,14 @@ async def run_agent(
     "/agents/{agent_id}/pause",
     dependencies=[require_tenant_admin],
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.lifecycle",
+    rate_limit="agent-control",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="agents.pause",
+)
 async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -2646,6 +2743,14 @@ async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenan
 @router.post(
     "/agents/{agent_id}/resume",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.lifecycle",
+    rate_limit="agent-control",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="agents.resume",
 )
 async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
@@ -2725,6 +2830,14 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 @router.post(
     "/agents/{agent_id}/promote",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.lifecycle",
+    rate_limit="agent-control",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="agents.promote",
 )
 async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
@@ -2837,6 +2950,14 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
     "/agents/{agent_id}/retire",
     dependencies=[require_tenant_admin],
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.lifecycle",
+    rate_limit="agent-control",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="agents.retire",
+)
 async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     """Retire an agent — marks as retired, removes from active fleet."""
     tid = _uuid.UUID(tenant_id)
@@ -2880,6 +3001,14 @@ async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 
 # ── POST /agents/{id}/retest ─────────────────────────────────────────────────
 @router.post("/agents/{agent_id}/retest")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.lifecycle",
+    rate_limit="agent-control",
+    idempotency="idempotent-shadow-retest-reset",
+    audit_event="agents.retest",
+)
 async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     """TC_AGENT-008: Reset shadow counters so users can re-evaluate a shadow agent."""
     tid = _uuid.UUID(tenant_id)
@@ -2932,6 +3061,14 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 @router.post(
     "/agents/{agent_id}/rollback",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.lifecycle",
+    rate_limit="agent-control",
+    idempotency="idempotent-rollback-to-previous-version",
+    audit_event="agents.rollback",
 )
 async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
@@ -3049,6 +3186,14 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
     "/agents/{agent_id}/clone",
     dependencies=[require_tenant_admin],
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="not-idempotent-agent-clone",
+    audit_event="agents.clone",
+)
 async def clone_agent(
     agent_id: UUID,
     body: AgentCloneRequest,
@@ -3154,6 +3299,14 @@ async def clone_agent(
 
 # ── GET /agents/{id}/prompt-history ────────────────────────────────────────
 @router.get("/agents/{agent_id}/prompt-history")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.prompt_history",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.prompt_history.read",
+)
 async def get_prompt_history(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -3188,6 +3341,14 @@ async def get_prompt_history(
 
 # ── GET /agents/{id}/budget ────────────────────────────────────────────────
 @router.get("/agents/{agent_id}/budget")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.budget.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.budget.read",
+)
 async def get_agent_budget(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -3252,6 +3413,14 @@ async def get_agent_budget(
 
 # ── POST /agents/{id}/feedback ──────────────────────────────────────────────
 @router.post("/agents/{agent_id}/feedback")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.feedback.write",
+    rate_limit="agent-feedback",
+    idempotency="not-idempotent-feedback-submit",
+    audit_event="agents.feedback.submit",
+)
 async def submit_agent_feedback(
     agent_id: UUID,
     body: dict | None = None,
@@ -3290,6 +3459,14 @@ async def submit_agent_feedback(
 
 # ── GET /agents/{id}/feedback ───────────────────────────────────────────────
 @router.get("/agents/{agent_id}/feedback")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.feedback.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.feedback.list",
+)
 async def list_agent_feedback(
     agent_id: UUID,
     limit: int = 50,
@@ -3310,6 +3487,14 @@ async def list_agent_feedback(
 
 # ── GET /agents/{id}/explanation/latest ─────────────────────────────────────
 @router.get("/agents/{agent_id}/explanation/latest")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.explanation.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.explanation.latest",
+)
 async def get_latest_explanation(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -3418,6 +3603,14 @@ async def get_latest_explanation(
 
 # ── POST /agents/{id}/feedback/analyze ──────────────────────────────────────
 @router.post("/agents/{agent_id}/feedback/analyze")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.feedback.analyze",
+    rate_limit="agent-control",
+    idempotency="not-idempotent-analysis-job",
+    audit_event="agents.feedback.analyze",
+)
 async def analyze_agent_feedback(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -3434,6 +3627,14 @@ async def analyze_agent_feedback(
 
 # ── GET /agents/{id}/amendments ─────────────────────────────────────────────
 @router.get("/agents/{agent_id}/amendments")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.amendments.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.amendments.list",
+)
 async def list_agent_amendments(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -3466,6 +3667,14 @@ async def list_agent_amendments(
 @router.delete(
     "/agents/{agent_id}",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-delete-by-agent-id",
+    audit_event="agents.delete",
 )
 async def delete_agent(
     agent_id: UUID,

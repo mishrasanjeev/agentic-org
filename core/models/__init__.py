@@ -27,8 +27,12 @@ from core.models.base import TenantMixin as TenantMixin
 from core.models.base import TimestampMixin as TimestampMixin
 from core.models.branding import TenantBranding as TenantBranding
 from core.models.bridge import BridgeRegistration as BridgeRegistration
+from core.models.bridge import BridgeRequest as BridgeRequest
+from core.models.bridge import BridgeSession as BridgeSession
 from core.models.budget_alert import BudgetAlert as BudgetAlert
 from core.models.ca_subscription import CASubscription as CASubscription
+from core.models.cdc import CDCEvent as CDCEvent
+from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
@@ -36,6 +40,7 @@ from core.models.connector_config import ConnectorConfig as ConnectorConfig
 from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
 from core.models.feature_flag import FeatureFlag as FeatureFlag
+from core.models.feed import FeedEvent as FeedEvent
 from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.governance_config import GovernanceConfig as GovernanceConfig
 from core.models.gstn_credential import GSTNCredential as GSTNCredential
@@ -61,5 +66,8 @@ from core.models.tool_call import ToolCall as ToolCall
 from core.models.user import User as User
 from core.models.workflow import StepExecution as StepExecution
 from core.models.workflow import WorkflowDefinition as WorkflowDefinition
+from core.models.workflow import WorkflowEventWait as WorkflowEventWait
 from core.models.workflow import WorkflowRun as WorkflowRun
+from core.models.workflow import WorkflowRunState as WorkflowRunState
+from core.models.workflow import WorkflowStateTransition as WorkflowStateTransition
 from core.models.workflow_variant import WorkflowVariant as WorkflowVariant
