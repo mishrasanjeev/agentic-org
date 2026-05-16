@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/rpa", tags=["RPA"])
@@ -157,6 +158,14 @@ class RPAExecutionOut(BaseModel):
 
 
 @router.get("/scripts", response_model=list[RPAScriptOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa.catalog.sensitive.list",
+    rate_limit="rpa-read",
+    idempotency="read-only",
+    audit_event="rpa.scripts.list",
+)
 async def list_scripts(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[RPAScriptOut]:
@@ -193,6 +202,14 @@ async def list_scripts(
 
 
 @router.get("/history", response_model=list[RPAExecutionOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa.execution.sensitive.history",
+    rate_limit="rpa-read",
+    idempotency="read-only",
+    audit_event="rpa.history.list",
+)
 async def list_history(
     limit: int = 50,
     tenant_id: str = Depends(get_current_tenant),
@@ -212,6 +229,14 @@ async def list_history(
 
 
 @router.post("/scripts/{script_id}/run", response_model=RPAExecutionOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="rpa.execution.external_action.run",
+    rate_limit="rpa-execution",
+    idempotency="not-idempotent-executes-external-automation",
+    audit_event="rpa.script.run",
+)
 async def run_script(
     script_id: str,
     body: RPARunRequest,

@@ -17,6 +17,7 @@ from api.deps import (
     get_user_domains,
     require_tenant_admin,
 )
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.prompt_template import PromptTemplate, PromptTemplateEditHistory
 from core.schemas.api import PromptTemplateCreate, PromptTemplateUpdate
@@ -102,6 +103,14 @@ def _template_to_dict(t: PromptTemplate) -> dict:
 
 # ── GET /prompt-templates ──────────────────────────────────────────────────
 @router.get("/prompt-templates")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.list",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.list",
+)
 async def list_prompt_templates(
     agent_type: str | None = None,
     domain: str | None = None,
@@ -133,6 +142,14 @@ async def list_prompt_templates(
 
 # ── GET /prompt-templates/{id} ─────────────────────────────────────────────
 @router.get("/prompt-templates/{template_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.read",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.get",
+)
 async def get_prompt_template(
     template_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -166,6 +183,14 @@ async def get_prompt_template(
     "/prompt-templates",
     status_code=201,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-template-write",
+    idempotency="unique-active-name-agent-type-per-tenant",
+    audit_event="prompt_templates.create",
 )
 async def create_prompt_template(
     body: PromptTemplateCreate,
@@ -260,6 +285,14 @@ async def create_prompt_template(
 @router.put(
     "/prompt-templates/{template_id}",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-template-write",
+    idempotency="idempotent-full-update-by-template-id",
+    audit_event="prompt_templates.update",
 )
 async def update_prompt_template(
     template_id: UUID,
@@ -361,6 +394,14 @@ async def update_prompt_template(
 
 # ── GET /prompt-templates/{id}/history ─────────────────────────────────────
 @router.get("/prompt-templates/{template_id}/history")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.history",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.history.list",
+)
 async def get_prompt_template_history(
     template_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -429,6 +470,14 @@ async def get_prompt_template_history(
 @router.post(
     "/prompt-templates/{template_id}/rollback",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.rollback",
+    rate_limit="prompt-template-write",
+    idempotency="not-idempotent-creates-new-history-entry",
+    audit_event="prompt_templates.rollback",
 )
 async def rollback_prompt_template(
     template_id: UUID,
@@ -531,6 +580,14 @@ async def rollback_prompt_template(
 @router.delete(
     "/prompt-templates/{template_id}",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-template-write",
+    idempotency="idempotent-soft-delete-by-template-id",
+    audit_event="prompt_templates.delete",
 )
 async def delete_prompt_template(
     template_id: UUID,

@@ -1134,58 +1134,58 @@
     "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "sso.providers.lookup",
     "auth_required": false,
     "function": "list_providers",
-    "idempotency": null,
+    "idempotency": "read-only-domain-discovery",
     "key": "GET /api/v1/auth/sso/providers api/v1/sso.py:list_providers",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sso.py",
     "path": "/api/v1/auth/sso/providers",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 83,
-    "tenant_required": null
+    "public_exempt_reason": "public-auth-discovery-email-domain",
+    "rate_limit": "auth-discovery",
+    "scope": "sso.public.providers",
+    "source_line": 93,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "sso.login.callback",
     "auth_required": false,
     "function": "sso_callback",
-    "idempotency": null,
+    "idempotency": "one-shot-state-token-consumed",
     "key": "GET /api/v1/auth/sso/{provider_key}/callback api/v1/sso.py:sso_callback",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sso.py",
     "path": "/api/v1/auth/sso/{provider_key}/callback",
-    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 149,
-    "tenant_required": null
+    "public_exempt_reason": "oidc-provider-callback-state-nonce-protected",
+    "rate_limit": "auth-sso-callback",
+    "scope": "sso.public.callback.external_input_sensitive",
+    "source_line": 177,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sso.login.started",
     "auth_required": false,
     "function": "sso_login",
-    "idempotency": null,
+    "idempotency": "one-shot-oidc-state-created",
     "key": "GET /api/v1/auth/sso/{provider_key}/login api/v1/sso.py:sso_login",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sso.py",
     "path": "/api/v1/auth/sso/{provider_key}/login",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 116,
-    "tenant_required": null
+    "public_exempt_reason": "public-auth-route-pkce-state-protected",
+    "rate_limit": "auth-sso-login-initiation",
+    "scope": "sso.public.login",
+    "source_line": 135,
+    "tenant_required": true
   },
   {
     "audit_event": "billing.callback.plural",
@@ -3637,130 +3637,130 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.list",
     "auth_required": true,
     "function": "list_prompt_templates",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/prompt-templates api/v1/prompt_templates.py:list_prompt_templates",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 105,
-    "tenant_required": null
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.list",
+    "source_line": 114,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.create",
     "auth_required": true,
     "function": "create_prompt_template",
-    "idempotency": null,
+    "idempotency": "unique-active-name-agent-type-per-tenant",
     "key": "POST /api/v1/prompt-templates api/v1/prompt_templates.py:create_prompt_template",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 170,
-    "tenant_required": null
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 195,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.delete",
     "auth_required": true,
     "function": "delete_prompt_template",
-    "idempotency": null,
+    "idempotency": "idempotent-soft-delete-by-template-id",
     "key": "DELETE /api/v1/prompt-templates/{template_id} api/v1/prompt_templates.py:delete_prompt_template",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates/{template_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 535,
-    "tenant_required": null
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 592,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.get",
     "auth_required": true,
     "function": "get_prompt_template",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/prompt-templates/{template_id} api/v1/prompt_templates.py:get_prompt_template",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates/{template_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 136,
-    "tenant_required": null
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.read",
+    "source_line": 153,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.update",
     "auth_required": true,
     "function": "update_prompt_template",
-    "idempotency": null,
+    "idempotency": "idempotent-full-update-by-template-id",
     "key": "PUT /api/v1/prompt-templates/{template_id} api/v1/prompt_templates.py:update_prompt_template",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PUT"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates/{template_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 264,
-    "tenant_required": null
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 297,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.history.list",
     "auth_required": true,
     "function": "get_prompt_template_history",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/prompt-templates/{template_id}/history api/v1/prompt_templates.py:get_prompt_template_history",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates/{template_id}/history",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 364,
-    "tenant_required": null
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.history",
+    "source_line": 405,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "prompt_templates.rollback",
     "auth_required": true,
     "function": "rollback_prompt_template",
-    "idempotency": null,
+    "idempotency": "not-idempotent-creates-new-history-entry",
     "key": "POST /api/v1/prompt-templates/{template_id}/rollback api/v1/prompt_templates.py:rollback_prompt_template",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/prompt_templates.py",
     "path": "/api/v1/prompt-templates/{template_id}/rollback",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 433,
-    "tenant_required": null
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.rollback",
+    "source_line": 482,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -3835,274 +3835,274 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "report_schedules.list",
     "auth_required": true,
     "function": "list_report_schedules",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/report-schedules api/v1/report_schedules.py:list_report_schedules",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/report_schedules.py",
     "path": "/api/v1/report-schedules",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 378,
-    "tenant_required": null
+    "rate_limit": "report-schedule-read",
+    "scope": "report_schedules.sensitive.list",
+    "source_line": 387,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "report_schedules.create",
     "auth_required": true,
     "function": "create_report_schedule",
-    "idempotency": null,
+    "idempotency": "not-idempotent-new-schedule-created",
     "key": "POST /api/v1/report-schedules api/v1/report_schedules.py:create_report_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/report_schedules.py",
     "path": "/api/v1/report-schedules",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 476,
-    "tenant_required": null
+    "rate_limit": "report-schedule-write",
+    "scope": "report_schedules.write",
+    "source_line": 493,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "report_schedules.delete",
     "auth_required": true,
     "function": "delete_report_schedule",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-schedule-id",
     "key": "DELETE /api/v1/report-schedules/{schedule_id} api/v1/report_schedules.py:delete_report_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/report_schedules.py",
     "path": "/api/v1/report-schedules/{schedule_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 641,
-    "tenant_required": null
+    "rate_limit": "report-schedule-write",
+    "scope": "report_schedules.write",
+    "source_line": 674,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "report_schedules.update",
     "auth_required": true,
     "function": "update_report_schedule",
-    "idempotency": null,
+    "idempotency": "idempotent-partial-update-by-schedule-id",
     "key": "PATCH /api/v1/report-schedules/{schedule_id} api/v1/report_schedules.py:update_report_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PATCH"
     ],
     "module": "api/v1/report_schedules.py",
     "path": "/api/v1/report-schedules/{schedule_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 576,
-    "tenant_required": null
+    "rate_limit": "report-schedule-write",
+    "scope": "report_schedules.write",
+    "source_line": 601,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "report_schedules.run_now",
     "auth_required": true,
     "function": "run_report_now",
-    "idempotency": null,
+    "idempotency": "not-idempotent-enqueues-report-generation",
     "key": "POST /api/v1/report-schedules/{schedule_id}/run-now api/v1/report_schedules.py:run_report_now",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/report_schedules.py",
     "path": "/api/v1/report-schedules/{schedule_id}/run-now",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 663,
-    "tenant_required": null
+    "rate_limit": "manual-report-trigger",
+    "scope": "report_schedules.external_action.run",
+    "source_line": 704,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.list",
     "auth_required": true,
     "function": "list_schedules",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/rpa-schedules api/v1/rpa_schedules.py:list_schedules",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 227,
-    "tenant_required": null
+    "rate_limit": "security-admin-read",
+    "scope": "rpa_schedules.sensitive.list",
+    "source_line": 244,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.create",
     "auth_required": true,
     "function": "create_schedule",
-    "idempotency": null,
+    "idempotency": "not-idempotent-new-schedule-created",
     "key": "POST /api/v1/rpa-schedules api/v1/rpa_schedules.py:create_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 254,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "rpa_schedules.write",
+    "source_line": 279,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.registry.list",
     "auth_required": true,
     "function": "list_registry_scripts",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/rpa-schedules/registry api/v1/rpa_schedules.py:list_registry_scripts",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules/registry",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 194,
-    "tenant_required": null
+    "rate_limit": "security-admin-read",
+    "scope": "rpa_schedules.registry.sensitive.list",
+    "source_line": 203,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.delete",
     "auth_required": true,
     "function": "delete_schedule",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-schedule-id",
     "key": "DELETE /api/v1/rpa-schedules/{schedule_id} api/v1/rpa_schedules.py:delete_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules/{schedule_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 369,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "rpa_schedules.write",
+    "source_line": 418,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.get",
     "auth_required": true,
     "function": "get_schedule",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/rpa-schedules/{schedule_id} api/v1/rpa_schedules.py:get_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules/{schedule_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 297,
-    "tenant_required": null
+    "rate_limit": "security-admin-read",
+    "scope": "rpa_schedules.sensitive.read",
+    "source_line": 330,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.update",
     "auth_required": true,
     "function": "update_schedule",
-    "idempotency": null,
+    "idempotency": "idempotent-partial-update-by-schedule-id",
     "key": "PATCH /api/v1/rpa-schedules/{schedule_id} api/v1/rpa_schedules.py:update_schedule",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PATCH"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules/{schedule_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 321,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "rpa_schedules.write",
+    "source_line": 362,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa_schedules.run_now",
     "auth_required": true,
     "function": "run_schedule_now",
-    "idempotency": null,
+    "idempotency": "not-idempotent-enqueues-rpa-execution",
     "key": "POST /api/v1/rpa-schedules/{schedule_id}/run-now api/v1/rpa_schedules.py:run_schedule_now",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/rpa_schedules.py",
     "path": "/api/v1/rpa-schedules/{schedule_id}/run-now",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 393,
-    "tenant_required": null
+    "rate_limit": "manual-rpa-trigger",
+    "scope": "rpa_schedules.external_action.run",
+    "source_line": 450,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa.history.list",
     "auth_required": true,
     "function": "list_history",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/rpa/history api/v1/rpa.py:list_history",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/rpa.py",
     "path": "/api/v1/rpa/history",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 196,
-    "tenant_required": null
+    "rate_limit": "rpa-read",
+    "scope": "rpa.execution.sensitive.history",
+    "source_line": 213,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa.scripts.list",
     "auth_required": true,
     "function": "list_scripts",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/rpa/scripts api/v1/rpa.py:list_scripts",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/rpa.py",
     "path": "/api/v1/rpa/scripts",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 160,
-    "tenant_required": null
+    "rate_limit": "rpa-read",
+    "scope": "rpa.catalog.sensitive.list",
+    "source_line": 169,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "rpa.script.run",
     "auth_required": true,
     "function": "run_script",
-    "idempotency": null,
+    "idempotency": "not-idempotent-executes-external-automation",
     "key": "POST /api/v1/rpa/scripts/{script_id}/run api/v1/rpa.py:run_script",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/rpa.py",
     "path": "/api/v1/rpa/scripts/{script_id}/run",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 215,
-    "tenant_required": null
+    "rate_limit": "rpa-execution",
+    "scope": "rpa.execution.external_action.run",
+    "source_line": 240,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -4447,58 +4447,58 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "sso.config.list",
     "auth_required": true,
     "function": "list_configs",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/sso/configs api/v1/sso.py:list_configs",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sso.py",
     "path": "/api/v1/sso/configs",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 255,
-    "tenant_required": null
+    "rate_limit": "security-admin-read",
+    "scope": "sso.config.sensitive.list",
+    "source_line": 291,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sso.config.upsert",
     "auth_required": true,
     "function": "upsert_config",
-    "idempotency": null,
+    "idempotency": "idempotent-upsert-by-provider-key",
     "key": "POST /api/v1/sso/configs api/v1/sso.py:upsert_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sso.py",
     "path": "/api/v1/sso/configs",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 280,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "sso.config.write",
+    "source_line": 324,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sso.config.delete",
     "auth_required": true,
     "function": "delete_config",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-provider-key",
     "key": "DELETE /api/v1/sso/configs/{provider_key} api/v1/sso.py:delete_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/sso.py",
     "path": "/api/v1/sso/configs/{provider_key}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 336,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "sso.config.write",
+    "source_line": 388,
+    "tenant_required": true
   },
   {
     "audit_event": null,

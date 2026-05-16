@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from auth.jwt import create_access_token
 from auth.sso.oidc import OIDCProvider, new_nonce, new_pkce_pair, new_state
 from auth.sso.provisioning import jit_provision_user
@@ -80,6 +81,15 @@ async def _load_provider(provider_key: str, tenant_id: uuid.UUID | None = None) 
 
 
 @public_router.get("/providers")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="sso.public.providers",
+    rate_limit="auth-discovery",
+    idempotency="read-only-domain-discovery",
+    audit_event="sso.providers.lookup",
+    public_reason="public-auth-discovery-email-domain",
+)
 async def list_providers(email: str = Query(..., description="User email — used to infer tenant")) -> dict:
     """Return the SSO providers a user can use to log in, by looking up
     their tenant via email domain. This lets the login page show the
@@ -113,6 +123,15 @@ async def list_providers(email: str = Query(..., description="User email — use
 
 
 @public_router.get("/{provider_key}/login")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="sso.public.login",
+    rate_limit="auth-sso-login-initiation",
+    idempotency="one-shot-oidc-state-created",
+    audit_event="sso.login.started",
+    public_reason="public-auth-route-pkce-state-protected",
+)
 async def sso_login(
     provider_key: str,
     tenant_id: uuid.UUID,
@@ -146,6 +165,15 @@ async def sso_login(
 
 
 @public_router.get("/{provider_key}/callback")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="sso.public.callback.external_input_sensitive",
+    rate_limit="auth-sso-callback",
+    idempotency="one-shot-state-token-consumed",
+    audit_event="sso.login.callback",
+    public_reason="oidc-provider-callback-state-nonce-protected",
+)
 async def sso_callback(
     provider_key: str,
     code: str = Query(...),
@@ -252,6 +280,14 @@ class SSOConfigOut(BaseModel):
 
 
 @admin_router.get("/configs", response_model=list[SSOConfigOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sso.config.sensitive.list",
+    rate_limit="security-admin-read",
+    idempotency="read-only",
+    audit_event="sso.config.list",
+)
 async def list_configs(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[SSOConfigOut]:
@@ -277,6 +313,14 @@ async def list_configs(
 
 
 @admin_router.post("/configs", response_model=SSOConfigOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sso.config.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-upsert-by-provider-key",
+    audit_event="sso.config.upsert",
+)
 async def upsert_config(
     body: SSOConfigIn,
     tenant_id: str = Depends(get_current_tenant),
@@ -333,6 +377,14 @@ async def upsert_config(
 
 
 @admin_router.delete("/configs/{provider_key}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sso.config.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-delete-by-provider-key",
+    audit_event="sso.config.delete",
+)
 async def delete_config(
     provider_key: str,
     tenant_id: str = Depends(get_current_tenant),
