@@ -50,6 +50,9 @@ grantex==0.3.9
 # ─── HTTP Client & DNS ───────────────────────────────────────────────────────
 httpx==0.28.1
 dnspython==2.8.0
+# Billing checkout SDK. Required in the production API image whenever
+# STRIPE_SECRET_KEY and Stripe price IDs are configured.
+stripe==15.1.0
 
 # ─── LLM Providers ──────────────────────────────────────────────────────────
 google-genai==1.75.0
