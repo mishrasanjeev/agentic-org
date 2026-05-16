@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from api.route_metadata import route_meta
 from core.crypto import decrypt_for_tenant, encrypt_for_tenant
 from core.database import get_tenant_session
 from core.models.company import Company
@@ -293,6 +294,14 @@ async def _has_active_gstn_credential(session, tid: _uuid.UUID, cid: _uuid.UUID)
 
 
 @router.get("/companies", response_model=CompanyListOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.list",
+)
 async def list_companies(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
@@ -350,6 +359,14 @@ async def list_companies(
     response_model=CompanyOut,
     status_code=201,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.write",
+    rate_limit="company-write",
+    idempotency="unique-tenant-gstin-or-company-name",
+    audit_event="companies.create",
 )
 async def create_company(
     body: CompanyCreate,
@@ -430,6 +447,14 @@ async def create_company(
 
 
 @router.get("/companies/{company_id}", response_model=CompanyOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.read",
+)
 async def get_company(
     company_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -461,6 +486,14 @@ async def get_company(
     "/companies/{company_id}",
     response_model=CompanyOut,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.write",
+    rate_limit="company-write",
+    idempotency="idempotent-partial-update",
+    audit_event="companies.update",
 )
 async def update_company(
     company_id: str,
@@ -532,6 +565,14 @@ async def update_company(
     status_code=204,
     dependencies=[require_tenant_admin],
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.write",
+    rate_limit="company-write",
+    idempotency="idempotent-soft-delete",
+    audit_event="companies.delete",
+)
 async def delete_company(
     company_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -565,6 +606,14 @@ async def delete_company(
 
 
 @router.get("/companies/{company_id}/roles")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.roles.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.roles.read",
+)
 async def get_company_roles(
     company_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -604,6 +653,14 @@ async def get_company_roles(
 @router.put(
     "/companies/{company_id}/roles",
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.roles.write",
+    rate_limit="company-write",
+    idempotency="idempotent-role-upsert",
+    audit_event="companies.roles.update",
 )
 async def update_company_roles(
     company_id: str,
@@ -657,6 +714,14 @@ async def update_company_roles(
     response_model=CompanyOut,
     status_code=201,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.onboard",
+    rate_limit="company-write",
+    idempotency="unique-tenant-company-onboarding",
+    audit_event="companies.onboard",
 )
 async def onboard_company(
     body: CompanyOnboard,
@@ -954,6 +1019,14 @@ def _subscription_to_out(s: CASubscription) -> CASubscriptionOut:
     "/companies/{company_id}/approvals",
     response_model=FilingApprovalListOut,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.approvals.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.approvals.list",
+)
 async def list_filing_approvals(
     company_id: str,
     status: str | None = None,
@@ -1010,6 +1083,14 @@ async def list_filing_approvals(
     "/companies/{company_id}/approvals",
     response_model=FilingApprovalOut,
     status_code=201,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.approvals.write",
+    rate_limit="approval-write",
+    idempotency="not-idempotent-filing-approval-create",
+    audit_event="companies.approvals.create",
 )
 async def create_filing_approval(
     company_id: str,
@@ -1070,6 +1151,14 @@ async def create_filing_approval(
 @router.post(
     "/companies/{company_id}/approvals/{approval_id}/approve",
     response_model=FilingApprovalOut,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.approvals.decide",
+    rate_limit="approval-decision",
+    idempotency="terminal-state-conflict-prevents-duplicate-decision",
+    audit_event="companies.approvals.approve",
 )
 async def approve_filing(
     company_id: str,
@@ -1154,6 +1243,14 @@ async def approve_filing(
     "/companies/{company_id}/approvals/{approval_id}/reject",
     response_model=FilingApprovalOut,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.approvals.decide",
+    rate_limit="approval-decision",
+    idempotency="terminal-state-conflict-prevents-duplicate-decision",
+    audit_event="companies.approvals.reject",
+)
 async def reject_filing(
     company_id: str,
     approval_id: str,
@@ -1232,6 +1329,14 @@ async def reject_filing(
     "/companies/{company_id}/gstn-uploads",
     response_model=GSTNUploadListOut,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.gstn_uploads.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.gstn_uploads.list",
+)
 async def list_gstn_uploads(
     company_id: str,
     status: str | None = None,
@@ -1283,6 +1388,14 @@ async def list_gstn_uploads(
     "/companies/{company_id}/gstn-uploads",
     response_model=GSTNUploadOut,
     status_code=201,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.gstn_uploads.write",
+    rate_limit="company-write",
+    idempotency="not-idempotent-gstn-upload-create",
+    audit_event="companies.gstn_uploads.create",
 )
 async def create_gstn_upload(
     company_id: str,
@@ -1338,6 +1451,14 @@ async def create_gstn_upload(
 @router.patch(
     "/companies/{company_id}/gstn-uploads/{upload_id}",
     response_model=GSTNUploadOut,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.gstn_uploads.write",
+    rate_limit="company-write",
+    idempotency="idempotent-status-update",
+    audit_event="companies.gstn_uploads.update",
 )
 async def update_gstn_upload(
     company_id: str,
@@ -1404,6 +1525,14 @@ from datetime import timedelta  # noqa: E402
 
 
 @router.get("/ca-subscription", response_model=CASubscriptionOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.subscription.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.ca_subscription.read",
+)
 async def get_ca_subscription(
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -1431,6 +1560,14 @@ async def get_ca_subscription(
     "/ca-subscription/activate",
     response_model=CASubscriptionOut,
     status_code=201,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.subscription.write",
+    rate_limit="company-write",
+    idempotency="idempotent-subscription-activate",
+    audit_event="companies.ca_subscription.activate",
 )
 async def activate_ca_subscription(
     body: CASubscriptionActivate | None = None,
@@ -1544,6 +1681,14 @@ def _credential_to_out(c: GSTNCredential) -> GSTNCredentialOut:
     "/companies/{company_id}/credentials",
     response_model=GSTNCredentialListOut,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.credentials.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.credentials.list",
+)
 async def list_gstn_credentials(
     company_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -1590,6 +1735,14 @@ async def list_gstn_credentials(
     "/companies/{company_id}/credentials",
     response_model=GSTNCredentialOut,
     status_code=201,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.credentials.write",
+    rate_limit="credential-write",
+    idempotency="not-idempotent-encrypted-credential-create",
+    audit_event="companies.credentials.create",
 )
 async def create_gstn_credential(
     company_id: str,
@@ -1640,6 +1793,14 @@ async def create_gstn_credential(
     "/companies/{company_id}/credentials/{credential_id}",
     status_code=204,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.credentials.write",
+    rate_limit="credential-write",
+    idempotency="idempotent-credential-deactivate",
+    audit_event="companies.credentials.deactivate",
+)
 async def deactivate_gstn_credential(
     company_id: str,
     credential_id: str,
@@ -1683,6 +1844,14 @@ async def deactivate_gstn_credential(
 
 @router.post(
     "/companies/{company_id}/credentials/{credential_id}/verify",
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.credentials.verify",
+    rate_limit="external-credential-check",
+    idempotency="read-only-external-verification",
+    audit_event="companies.credentials.verify",
 )
 async def verify_gstn_credential(
     company_id: str,
@@ -1752,6 +1921,14 @@ class BulkApproveResponse(BaseModel):
 @router.post(
     "/companies/bulk-approve",
     response_model=BulkApproveResponse,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.approvals.decide",
+    rate_limit="approval-decision",
+    idempotency="per-approval-terminal-state-conflict",
+    audit_event="companies.approvals.bulk_approve",
 )
 async def bulk_approve_filings(
     body: BulkApproveRequest,
@@ -1882,6 +2059,14 @@ def _deadline_to_out(d: ComplianceDeadline) -> ComplianceDeadlineOut:
     "/companies/{company_id}/deadlines",
     response_model=ComplianceDeadlineListOut,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.deadlines.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.deadlines.list",
+)
 async def list_compliance_deadlines(
     company_id: str,
     filed: bool | None = None,
@@ -1950,6 +2135,14 @@ _DEADLINE_CALENDAR: dict[str, int] = {
     "/companies/{company_id}/deadlines/generate",
     response_model=ComplianceDeadlineListOut,
     status_code=201,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.deadlines.write",
+    rate_limit="company-write",
+    idempotency="idempotent-generate-window",
+    audit_event="companies.deadlines.generate",
 )
 async def generate_compliance_deadlines(
     company_id: str,
@@ -2034,6 +2227,14 @@ async def generate_compliance_deadlines(
 @router.patch(
     "/companies/{company_id}/deadlines/{deadline_id}/filed",
     response_model=ComplianceDeadlineOut,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.deadlines.write",
+    rate_limit="company-write",
+    idempotency="idempotent-filed-status-update",
+    audit_event="companies.deadlines.mark_filed",
 )
 async def mark_deadline_filed(
     company_id: str,
@@ -2120,6 +2321,14 @@ class TallyDetectResponse(BaseModel):
 @router.post(
     "/companies/tally-detect",
     response_model=TallyDetectResponse,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.tally.detect",
+    rate_limit="external-bridge",
+    idempotency="read-only-external-probe",
+    audit_event="companies.tally.detect",
 )
 async def tally_detect(
     body: TallyDetectRequest,
@@ -2236,6 +2445,14 @@ class TallyTestResponse(BaseModel):
     "/companies/test-tally",
     response_model=TallyTestResponse,
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.tally.test",
+    rate_limit="external-bridge",
+    idempotency="read-only-external-probe",
+    audit_event="companies.tally.test",
+)
 async def test_tally(
     body: TallyTestRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -2315,6 +2532,14 @@ class BridgeGenerateResponse(BaseModel):
     "/companies/{company_id}/bridge/generate",
     response_model=BridgeGenerateResponse,
     status_code=201,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.bridge.write",
+    rate_limit="credential-write",
+    idempotency="not-idempotent-one-time-bridge-token",
+    audit_event="companies.bridge.generate",
 )
 async def generate_company_bridge(
     company_id: str,
@@ -2464,6 +2689,14 @@ def _effective_client_health(
 @router.get(
     "/partner-dashboard",
     response_model=PartnerDashboardOut,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.sensitive.partner_dashboard",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.partner_dashboard.read",
 )
 async def get_partner_dashboard(
     tenant_id: str = Depends(get_current_tenant),

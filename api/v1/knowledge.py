@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 
 logger = structlog.get_logger()
 
@@ -453,6 +454,14 @@ async def _db_list_docs(tenant_id: str) -> list[dict[str, Any]]:
 # Endpoints
 # ---------------------------------------------------------------------------
 @router.post("/knowledge/upload", response_model=DocumentOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.upload",
+    rate_limit="file-upload",
+    idempotency="filename-dedup-replace-or-allow-duplicate",
+    audit_event="knowledge.documents.upload",
+)
 async def upload_document(
     file: UploadFile,
     tenant_id: str = Depends(get_current_tenant),
@@ -749,6 +758,14 @@ async def upload_document(
 
 
 @router.get("/knowledge/documents", response_model=DocumentListResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.documents.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="knowledge.documents.list",
+)
 async def list_documents(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -835,6 +852,14 @@ async def list_documents(
 
 
 @router.delete("/knowledge/documents/{doc_id}", status_code=200)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.documents.delete",
+    rate_limit="knowledge-write",
+    idempotency="idempotent-delete-by-document-id",
+    audit_event="knowledge.documents.delete",
+)
 async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant)):
     """Delete a document from the knowledge base."""
     if _ragflow_available():
@@ -1010,6 +1035,14 @@ async def _native_semantic_search(
 
 
 @router.post("/knowledge/search", response_model=SearchResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.search",
+)
 async def search_knowledge(
     req: SearchRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -1059,6 +1092,15 @@ async def search_knowledge(
 # ops can confirm retrieval readiness without waiting on a user report.
 # Public (no auth) so deployment smoke tests can call it without a token.
 @router.get("/knowledge/health")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="knowledge.health.public",
+    rate_limit="healthcheck",
+    idempotency="read-only",
+    audit_event="knowledge.health",
+    public_reason="deployment-smoke-test-no-tenant-data",
+)
 async def knowledge_health():
     """Report the knowledge-base runtime mode and key dependencies.
 
@@ -1168,6 +1210,14 @@ async def knowledge_health():
 
 
 @router.get("/knowledge/stats", response_model=StatsResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.stats",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="knowledge.stats",
+)
 async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
     """Return aggregate stats about the knowledge base.
 
