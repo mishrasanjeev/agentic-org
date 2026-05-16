@@ -124,7 +124,8 @@ class TestOpsFunctional:
         assert step_results["sanctions_check"]["status"] == "completed"
         assert "create_erp_record" in step_results
         assert step_results["create_erp_record"]["status"] == "completed"
-        assert step_results["notify_procurement"]["output"]["status"] == "sent"
+        assert step_results["notify_procurement"]["status"] == "stubbed"
+        assert step_results["notify_procurement"]["code"] == "notify_side_effect_not_configured"
 
     # -----------------------------------------------------------------------
     # FT-OPS-002: Vendor onboarding — sanctions hit (blocked, no ERP record)
@@ -178,9 +179,10 @@ class TestOpsFunctional:
         step_results = result["step_results"]
         # Sanctions condition evaluated to true
         assert step_results["check_sanctions"]["output"]["result"] is True
-        # Block notification sent
+        # Block notification is explicit test stub, not a production send.
         assert "block_vendor" in step_results
-        assert step_results["block_vendor"]["output"]["status"] == "sent"
+        assert step_results["block_vendor"]["status"] == "stubbed"
+        assert step_results["block_vendor"]["code"] == "notify_side_effect_not_configured"
         # No ERP record step exists in workflow for sanctioned vendor
         assert "create_erp_record" not in step_results
 
@@ -371,7 +373,8 @@ class TestOpsFunctional:
         assert result["status"] == "completed"
         step_results = result["step_results"]
         assert step_results["compute_penalty"]["status"] == "completed"
-        assert step_results["notify_vendor"]["output"]["status"] == "sent"
+        assert step_results["notify_vendor"]["status"] == "stubbed"
+        assert step_results["notify_vendor"]["code"] == "notify_side_effect_not_configured"
         # Validate penalty arithmetic
         payload = base_state["trigger_payload"]
         penalty = (
@@ -718,8 +721,8 @@ class TestMarketingFunctional:
         assert step_results["score_lead"]["status"] == "completed"
         # High score (85 >= 70) -> assigned to sales
         assert "assign_to_sales" in step_results
-        assert step_results["assign_to_sales"]["output"]["status"] == "sent"
-        assert step_results["assign_to_sales"]["output"]["connector"] == "slack"
+        assert step_results["assign_to_sales"]["status"] == "stubbed"
+        assert step_results["assign_to_sales"]["connector"] == "slack"
 
     # -----------------------------------------------------------------------
     # FT-MKT-002: Campaign budget reallocation (>₹50K → HITL)

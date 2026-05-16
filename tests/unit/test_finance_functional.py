@@ -159,7 +159,8 @@ class TestFinanceFunctional:
         assert "post_gl" in step_results
         assert step_results["post_gl"]["status"] == "completed"
         assert "send_remittance" in step_results
-        assert step_results["send_remittance"]["output"]["status"] == "sent"
+        assert step_results["send_remittance"]["status"] == "stubbed"
+        assert step_results["send_remittance"]["code"] == "notify_side_effect_not_configured"
 
     # -----------------------------------------------------------------------
     # FT-FIN-003: 3-way match — mismatch triggers HITL
@@ -259,7 +260,8 @@ class TestFinanceFunctional:
         state = {"context": {"gstin_valid": False}, "step_results": {}}
         result = await execute_step(step, state)
 
-        assert result["status"] == "sent"
+        assert result["status"] == "stubbed"
+        assert result["stubbed"] is True
         assert result["connector"] == "slack"
         assert result["type"] == "notify"
 
@@ -367,6 +369,12 @@ class TestFinanceFunctional:
         step = {
             "id": "currency_convert",
             "type": "transform",
+            "operation": "currency_convert",
+            "config": {
+                "amount_field": "invoice_amount_usd",
+                "rate_field": "exchange_rate",
+                "output_field": "invoice_amount_inr",
+            },
         }
         state = {
             "context": {
@@ -382,6 +390,7 @@ class TestFinanceFunctional:
 
         assert result["status"] == "completed"
         assert result["type"] == "transform"
+        assert result["output"]["invoice_amount_inr"] == pytest.approx(99900.0, rel=1e-2)
 
         # Validate the conversion arithmetic in context
         ctx = state["context"]
@@ -499,7 +508,8 @@ class TestFinanceFunctional:
         assert result["status"] == "completed"
         step_results = result["step_results"]
         assert "flag_breaks" in step_results
-        assert step_results["flag_breaks"]["output"]["status"] == "sent"
+        assert step_results["flag_breaks"]["status"] == "stubbed"
+        assert step_results["flag_breaks"]["code"] == "notify_side_effect_not_configured"
 
     # -----------------------------------------------------------------------
     # FT-FIN-012: Break threshold escalation (₹75K > ₹50K)
@@ -684,7 +694,11 @@ class TestFinanceFunctional:
                 assert step_results[step_id]["status"] == "completed"
             assert step_results["validate_close"]["output"]["result"] is True
             assert "notify_stakeholders" in step_results
-            assert step_results["notify_stakeholders"]["output"]["status"] == "sent"
+            assert step_results["notify_stakeholders"]["status"] == "stubbed"
+            assert (
+                step_results["notify_stakeholders"]["code"]
+                == "notify_side_effect_not_configured"
+            )
 
     # -----------------------------------------------------------------------
     # FT-FIN-015: TDS computation accuracy

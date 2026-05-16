@@ -6,30 +6,63 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from workflows.step_results import normalize_child_result
+
 
 async def execute_parallel(
     tasks: list[Callable[[], Coroutine]],
     wait_for: str = "all",
     n: int = 1,
-) -> list[Any]:
+) -> list[dict[str, Any]]:
+    async def _run_one(index: int, task_factory: Callable[[], Coroutine]) -> dict[str, Any]:
+        try:
+            value = await task_factory()
+        except Exception as exc:
+            return normalize_child_result(exc, child_id=str(index))
+        return normalize_child_result(value, child_id=str(index))
+
     if wait_for == "all":
-        return await asyncio.gather(*[t() for t in tasks], return_exceptions=True)
-    elif wait_for == "any":
-        done, pending = await asyncio.wait(
-            [asyncio.create_task(t()) for t in tasks],
-            return_when=asyncio.FIRST_COMPLETED,
+        return await asyncio.gather(
+            *[_run_one(index, task) for index, task in enumerate(tasks)],
+            return_exceptions=False,
         )
-        for p in pending:
-            p.cancel()
-        return [d.result() for d in done]
+    elif wait_for == "any":
+        running = [
+            asyncio.create_task(_run_one(index, task))
+            for index, task in enumerate(tasks)
+        ]
+        results: list[dict[str, Any]] = []
+        pending = set(running)
+        while pending:
+            done, pending = await asyncio.wait(
+                pending,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in done:
+                result = task.result()
+                results.append(result)
+                if result.get("status") == "completed":
+                    for p in pending:
+                        p.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+                    return results
+        return results
     else:
         count = int(wait_for) if wait_for.isdigit() else n
-        results = []
-        coros = [asyncio.create_task(t()) for t in tasks]
+        results: list[dict[str, Any]] = []
+        coros = [
+            asyncio.create_task(_run_one(index, task))
+            for index, task in enumerate(tasks)
+        ]
+        successes = 0
         for coro in asyncio.as_completed(coros):
-            results.append(await coro)
-            if len(results) >= count:
+            result = await coro
+            results.append(result)
+            if result.get("status") == "completed":
+                successes += 1
+            if successes >= count:
                 for c in coros:
                     c.cancel()
+                await asyncio.gather(*coros, return_exceptions=True)
                 break
         return results

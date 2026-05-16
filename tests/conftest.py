@@ -24,6 +24,7 @@ os.environ.setdefault("AGENTICORG_TEST_FAKE_MAIL", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_STORAGE", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_CONNECTORS", "1")
 os.environ.setdefault("AGENTICORG_TEST_FAKE_CELERY", "1")
+os.environ.setdefault("AGENTICORG_WORKFLOW_ALLOW_STUB_STEPS", "1")
 
 # SEC-2026-05-P1-007 (docs/BRUTAL_SECURITY_SCAN_2026-05-01.md): the
 # webhook unsigned-bypass guard refuses to start in any non-local
