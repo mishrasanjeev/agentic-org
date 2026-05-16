@@ -41,10 +41,12 @@ class TestTallyExceptionHierarchy:
             "Tally rejected it",
             detail="LINEERROR: Company not open",
             request_id="req-123",
+            error_category="tally_business_error",
         )
         assert str(exc) == "Tally rejected it"
         assert exc.detail == "LINEERROR: Company not open"
         assert exc.request_id == "req-123"
+        assert exc.error_category == "tally_business_error"
 
 
 class TestExtractTallyError:
@@ -127,6 +129,49 @@ class TestTallyHealthCheckBridge:
         ):
             result = await connector.health_check()
         assert result["status"] == "bridge_error"
+
+    @pytest.mark.asyncio
+    async def test_bridge_http_error_surfaces_durable_request_metadata(self) -> None:
+        connector = TallyConnector({
+            "bridge_url": "http://bridge.test/api",
+            "bridge_id": "bid-1",
+            "bridge_token": "tok-1",
+        })
+
+        class FakeResponse:
+            status_code = 504
+            text = "gateway timeout"
+
+            def json(self) -> dict:
+                return {
+                    "detail": {
+                        "message": "Bridge request timed out after 30s",
+                        "request_id": "durable-req-1",
+                        "error_category": "request_timed_out",
+                        "bridge_id": "bid-1",
+                    }
+                }
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+            async def __aenter__(self) -> FakeAsyncClient:
+                return self
+
+            async def __aexit__(self, *args) -> None:
+                return None
+
+            async def post(self, *args, **kwargs) -> FakeResponse:
+                return FakeResponse()
+
+        with patch("httpx.AsyncClient", FakeAsyncClient):
+            with pytest.raises(TallyBridgeError) as exc_info:
+                await connector._send_via_bridge("<ENVELOPE/>")
+
+        assert exc_info.value.request_id == "durable-req-1"
+        assert exc_info.value.error_category == "request_timed_out"
+        assert exc_info.value.detail == "Bridge request timed out after 30s"
 
     @pytest.mark.asyncio
     async def test_health_check_never_raises(self) -> None:

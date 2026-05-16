@@ -41,9 +41,14 @@ class BridgeStatus(BaseModel):
     bridge_id: str
     connector_type: str
     registered_at: str
+    status: str = "disconnected"
     connected: bool
+    local_connected: bool = False
     tally_healthy: bool
     last_heartbeat: str | None
+    disconnected_at: str | None = None
+    connection_owner: str | None = None
+    reconnect_count: int = 0
 
 
 @router.post("/register", response_model=BridgeRegisterResponse)
@@ -111,15 +116,20 @@ async def bridge_status(
     if not reg:
         raise HTTPException(status_code=404, detail="Bridge not found")
 
-    live = get_bridge_status(bridge_id)
+    live = await get_bridge_status(bridge_id, tenant_id=tenant_id)
 
     return BridgeStatus(
         bridge_id=bridge_id,
         connector_type=reg.bridge_type,
         registered_at=reg.created_at.isoformat(),
+        status=live.get("status", "disconnected"),
         connected=live.get("connected", False),
+        local_connected=live.get("local_connected", False),
         tally_healthy=live.get("tally_healthy", False),
         last_heartbeat=live.get("last_heartbeat"),
+        disconnected_at=live.get("disconnected_at"),
+        connection_owner=live.get("connection_owner"),
+        reconnect_count=int(live.get("reconnect_count") or 0),
     )
 
 
@@ -143,7 +153,7 @@ async def list_bridges(
     bridges = []
     for reg in rows:
         meta = reg.metadata_ or {}
-        live = get_bridge_status(reg.bridge_id)
+        live = await get_bridge_status(reg.bridge_id, tenant_id=tenant_id)
         bridges.append({
             "bridge_id": reg.bridge_id,
             "tenant_id": str(reg.tenant_id),
@@ -151,9 +161,14 @@ async def list_bridges(
             "tally_port": meta.get("tally_port", 9000),
             "label": meta.get("label", ""),
             "registered_at": reg.created_at.isoformat(),
+            "status": live.get("status", "disconnected"),
             "connected": live.get("connected", False),
+            "local_connected": live.get("local_connected", False),
             "tally_healthy": live.get("tally_healthy", False),
             "last_heartbeat": live.get("last_heartbeat"),
+            "disconnected_at": live.get("disconnected_at"),
+            "connection_owner": live.get("connection_owner"),
+            "reconnect_count": int(live.get("reconnect_count") or 0),
         })
     return bridges
 
@@ -193,6 +208,7 @@ async def route_through_bridge(
     WebSocket tunnel to the CA's local Tally instance.
     """
     from bridge.server_handler import route_to_bridge
+    from bridge.state import BridgeRouteError
 
     bridge_id = payload.get("bridge_id", "")
     if not bridge_id:
@@ -216,7 +232,24 @@ async def route_through_bridge(
             bridge_id=bridge_id,
             xml_body=payload.get("xml_body", ""),
             timeout=30.0,
+            tenant_id=tenant_id,
+            connector_type=connector_type,
+            request_id=payload.get("request_id"),
+            idempotency_key=payload.get("idempotency_key") or payload.get("request_id"),
         )
         return result
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except BridgeRouteError as exc:
+        status_by_code = {
+            "bridge_not_registered": 404,
+            "tenant_mismatch": 403,
+            "bridge_disconnected": 503,
+            "bridge_broker_unavailable": 503,
+            "bridge_publish_failed": 503,
+            "request_timed_out": 504,
+            "malformed_response": 502,
+            "bridge_error": 502,
+        }
+        raise HTTPException(
+            status_code=status_by_code.get(exc.code, 502),
+            detail=exc.to_detail(),
+        ) from exc
