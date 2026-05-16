@@ -10,6 +10,7 @@ COMMERCE_CODE = [
     ROOT / "core" / "commerce" / "staging_evidence.py",
     ROOT / "core" / "commerce" / "staging_runtime.py",
     ROOT / "core" / "langgraph" / "agents" / "commerce_sales_agent.py",
+    ROOT / "demos" / "commerce_sales_agent_demo.py",
 ]
 
 BANNED_IMPORT_FRAGMENTS = {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from core.commerce.staging_evidence import redact_value
@@ -13,6 +15,13 @@ def _env(**overrides: str) -> dict[str, str]:
     }
     base.update(overrides)
     return base
+
+
+def _write_tmp_fixture(name: str, content: str) -> Path:
+    path = Path(".tmp") / name
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 @pytest.mark.asyncio
@@ -75,6 +84,74 @@ def test_real_staging_allows_exact_smoke_url_only_with_allowlist() -> None:
     assert config.auth_env_name == "GRANTEX_AGENT_ASSERTION"
 
 
+def test_real_staging_loads_fixture_env_from_tmp_only() -> None:
+    smoke_url = "https://grantex-auth-smoke-example-uc.a.run.app"
+    fixture = _write_tmp_fixture(
+        "commerce-agent-real-staging-test.env",
+        "\n".join(
+            [
+                f'GRANTEX_COMMERCE_BASE_URL="{smoke_url}"',
+                f'GRANTEX_BASE_URL="{smoke_url}"',
+                f'AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL="{smoke_url}"',
+                'AGENTICORG_COMMERCE_REAL_STAGING="1"',
+                'AGENTICORG_COMMERCE_FIXTURE_PROVIDER="mock"',
+                'AGENTICORG_COMMERCE_FIXTURE_MERCHANT_ID="mch_staging_electronics_pilot"',
+                'AGENTICORG_COMMERCE_FIXTURE_AGENT_ID="cag_staging_agenticorg_sales"',
+                'AGENTICORG_COMMERCE_FIXTURE_PRODUCT_ID="cprd_stg_fixture"',
+                'AGENTICORG_COMMERCE_FIXTURE_VARIANT_ID="cvar_stg_fixture"',
+                'GRANTEX_API_KEY="fixture-value-for-test"',
+                'AGENTICORG_COMMERCE_CHECKOUT_PASSPORT_JWT="fixture-value-for-test"',
+                "",
+            ]
+        ),
+    )
+    try:
+        config = validate_real_staging_config(fixture_env_path=str(fixture), environ=_env())
+    finally:
+        fixture.unlink(missing_ok=True)
+
+    assert config.grantex_base_url == smoke_url
+    assert config.auth_env_name == "GRANTEX_API_KEY"
+    assert config.auth_config_key == "api_key"
+    assert config.fixture.env_path == ".tmp/commerce-agent-real-staging-test.env"
+    assert config.fixture.product_id == "cprd_stg_fixture"
+    assert config.fixture.variant_id == "cvar_stg_fixture"
+    assert config.fixture.sensitive_value_hashes
+
+
+def test_real_staging_refuses_fixture_env_outside_tmp() -> None:
+    with pytest.raises(RealStagingConfigError) as excinfo:
+        validate_real_staging_config(
+            fixture_env_path="docs/commerce-agent-real-staging.env",
+            environ=_env(),
+        )
+
+    assert excinfo.value.code == "fixture_env_outside_tmp"
+
+
+def test_real_staging_fixture_preserves_exactly_one_auth_source_rule() -> None:
+    smoke_url = "https://grantex-auth-smoke-example-uc.a.run.app"
+    fixture = _write_tmp_fixture(
+        "commerce-agent-real-staging-ambiguous.env",
+        "\n".join(
+            [
+                f'GRANTEX_COMMERCE_BASE_URL="{smoke_url}"',
+                f'AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL="{smoke_url}"',
+                'GRANTEX_API_KEY="fixture-value-for-test"',
+                'GRANTEX_AGENT_ASSERTION="fixture-value-for-test"',
+                "",
+            ]
+        ),
+    )
+    try:
+        with pytest.raises(RealStagingConfigError) as excinfo:
+            validate_real_staging_config(fixture_env_path=str(fixture), environ=_env())
+    finally:
+        fixture.unlink(missing_ok=True)
+
+    assert excinfo.value.code == "ambiguous_staging_auth"
+
+
 def test_real_staging_requires_exactly_one_auth_env_name() -> None:
     with pytest.raises(RealStagingConfigError) as missing:
         validate_real_staging_config(
@@ -102,13 +179,14 @@ def test_real_staging_refuses_fake_connector_transport() -> None:
 
 
 def test_redaction_removes_auth_passport_idempotency_and_raw_payload_material() -> None:
+    auth_header = "Bearer " + "fixture-redaction-token"
     redacted = redact_value(
         {
-            "authorization": "Bearer secret-token",
-            "passport_jwt": "secret-passport",
-            "idempotency_key": "secret-idempotency",
+            "authorization": auth_header,
+            "passport_jwt": "fixture-redaction-passport",
+            "idempotency_key": "fixture-redaction-idempotency",
             "request_payload": {"nested": "raw"},
-            "provider": {"credential": "secret-provider-material"},
+            "provider": {"credential": "fixture-redaction-provider-material"},
             "safe": {"status": "pass"},
         }
     )
