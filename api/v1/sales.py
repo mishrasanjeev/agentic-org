@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -97,6 +98,14 @@ def _lead_to_dict(lead: LeadPipeline) -> dict:
 # ── POST /sales/pipeline/leads — Create a new lead ──
 
 @router.post("/sales/pipeline/leads", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.write",
+    rate_limit="sales-write",
+    idempotency="not-idempotent-new-lead-created",
+    audit_event="sales.lead.create",
+)
 async def create_lead(body: LeadCreate, tenant_id: str = Depends(get_current_tenant)):
     """Create a new lead in the sales pipeline."""
     tid = _uuid.UUID(tenant_id)
@@ -122,6 +131,14 @@ async def create_lead(body: LeadCreate, tenant_id: str = Depends(get_current_ten
 # ── GET /sales/pipeline — Pipeline overview with funnel metrics ──
 
 @router.get("/sales/pipeline")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.list",
+    rate_limit="sales-read",
+    idempotency="read-only",
+    audit_event="sales.pipeline.list",
+)
 async def get_pipeline(
     stage: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -153,6 +170,14 @@ async def get_pipeline(
 # ── Static /sales/pipeline/* routes BEFORE {lead_id} to avoid FastAPI conflict ──
 
 @router.get("/sales/pipeline/due-followups")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.followups",
+    rate_limit="sales-read",
+    idempotency="read-only",
+    audit_event="sales.followups.due",
+)
 async def get_due_followups(tenant_id: str = Depends(get_current_tenant)):
     """Leads needing follow-up (next_followup_at <= now)."""
     tid = _uuid.UUID(tenant_id)
@@ -169,6 +194,14 @@ async def get_due_followups(tenant_id: str = Depends(get_current_tenant)):
 
 
 @router.post("/sales/pipeline/process-lead")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.external_action.process",
+    rate_limit="sales-agent-trigger",
+    idempotency="not-idempotent-agent-may-update-lead-and-send-email",
+    audit_event="sales.lead.process",
+)
 async def process_lead_with_agent(
     payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -200,6 +233,14 @@ async def process_lead_with_agent(
 # ── GET /sales/pipeline/{id} ──
 
 @router.get("/sales/pipeline/{lead_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.read",
+    rate_limit="sales-read",
+    idempotency="read-only",
+    audit_event="sales.lead.get",
+)
 async def get_lead(lead_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -236,6 +277,14 @@ async def get_lead(lead_id: UUID, tenant_id: str = Depends(get_current_tenant)):
 # ── PATCH /sales/pipeline/{id} ──
 
 @router.patch("/sales/pipeline/{lead_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.write",
+    rate_limit="sales-write",
+    idempotency="idempotent-partial-update-by-lead-id",
+    audit_event="sales.lead.update",
+)
 async def update_lead(
     lead_id: UUID,
     body: LeadUpdate,
@@ -429,6 +478,14 @@ async def _run_sales_agent_on_lead(
 # ── GET /sales/metrics — Weekly digest data ──
 
 @router.get("/sales/metrics")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.metrics.sensitive.read",
+    rate_limit="business-metrics-read",
+    idempotency="read-only",
+    audit_event="sales.metrics.read",
+)
 async def get_sales_metrics(tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     now = datetime.now(UTC)
@@ -501,6 +558,14 @@ async def get_sales_metrics(tenant_id: str = Depends(get_current_tenant)):
 
 
 @router.post("/sales/import-csv")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.bulk_import",
+    rate_limit="bulk-import",
+    idempotency="dedupe-by-email-within-tenant",
+    audit_event="sales.leads.import_csv",
+)
 async def import_leads_csv(
     file: UploadFile,
     auto_process: bool = True,
@@ -650,6 +715,14 @@ FOLLOWUP_SCHEDULE = {
 
 
 @router.post("/sales/run-followups")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.external_action.run_followups",
+    rate_limit="sales-agent-trigger",
+    idempotency="not-idempotent-may-send-followup-emails",
+    audit_event="sales.followups.run",
+)
 async def run_automated_followups(
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -756,6 +829,14 @@ TARGET_PROSPECTS = [
 
 
 @router.post("/sales/seed-prospects")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.sensitive.seed_demo",
+    rate_limit="sales-write",
+    idempotency="dedupe-by-email-within-tenant",
+    audit_event="sales.prospects.seed",
+)
 async def seed_target_prospects(
     auto_process: bool = False,
     tenant_id: str = Depends(get_current_tenant),
@@ -825,6 +906,14 @@ DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001"
 
 
 @router.post("/sales/process-inbox")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sales.pipeline.external_action.process_inbox",
+    rate_limit="sales-inbox-sync",
+    idempotency="not-idempotent-may-create-leads-and-send-replies",
+    audit_event="sales.inbox.process",
+)
 async def process_inbox(
     tenant_id: str = Depends(get_current_tenant),
 ):

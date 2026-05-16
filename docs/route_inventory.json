@@ -144,130 +144,130 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.accounts.list",
     "auth_required": true,
     "function": "list_accounts",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/abm/accounts api/v1/abm.py:list_accounts",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/accounts",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 483,
-    "tenant_required": null
+    "rate_limit": "abm-read",
+    "scope": "abm.accounts.sensitive.list",
+    "source_line": 500,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.account.create",
     "auth_required": true,
     "function": "create_account",
-    "idempotency": null,
+    "idempotency": "unique-domain-per-tenant",
     "key": "POST /api/v1/abm/accounts api/v1/abm.py:create_account",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/accounts",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 531,
-    "tenant_required": null
+    "rate_limit": "abm-write",
+    "scope": "abm.accounts.sensitive.write",
+    "source_line": 556,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.accounts.upload",
     "auth_required": true,
     "function": "upload_accounts",
-    "idempotency": null,
+    "idempotency": "dedupe-by-domain-within-tenant",
     "key": "POST /api/v1/abm/accounts/upload api/v1/abm.py:upload_accounts",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/accounts/upload",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 292,
-    "tenant_required": null
+    "rate_limit": "bulk-import",
+    "scope": "abm.accounts.sensitive.bulk_import",
+    "source_line": 301,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.account.get",
     "auth_required": true,
     "function": "get_account",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/abm/accounts/{account_id} api/v1/abm.py:get_account",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/accounts/{account_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 574,
-    "tenant_required": null
+    "rate_limit": "abm-read",
+    "scope": "abm.accounts.sensitive.read",
+    "source_line": 607,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.campaign.launch",
     "auth_required": true,
     "function": "launch_campaign",
-    "idempotency": null,
+    "idempotency": "not-idempotent-new-campaign-created",
     "key": "POST /api/v1/abm/accounts/{account_id}/campaign api/v1/abm.py:launch_campaign",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/accounts/{account_id}/campaign",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 678,
-    "tenant_required": null
+    "rate_limit": "abm-campaign-launch",
+    "scope": "abm.campaigns.external_action.launch",
+    "source_line": 727,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.account.intent",
     "auth_required": true,
     "function": "get_account_intent",
-    "idempotency": null,
+    "idempotency": "read-mostly-may-refresh-intent-cache",
     "key": "GET /api/v1/abm/accounts/{account_id}/intent api/v1/abm.py:get_account_intent",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/accounts/{account_id}/intent",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 594,
-    "tenant_required": null
+    "rate_limit": "external-intent-aggregation",
+    "scope": "abm.accounts.external_intent.sensitive.read",
+    "source_line": 635,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "abm.dashboard.read",
     "auth_required": true,
     "function": "abm_dashboard",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/abm/dashboard api/v1/abm.py:abm_dashboard",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/abm.py",
     "path": "/api/v1/abm/dashboard",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 730,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "abm.dashboard.sensitive.read",
+    "source_line": 787,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -2485,40 +2485,40 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "cost_centers.list",
     "auth_required": true,
     "function": "list_cost_centers",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/cost-centers api/v1/departments.py:list_cost_centers",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/departments.py",
     "path": "/api/v1/cost-centers",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 190,
-    "tenant_required": null
+    "rate_limit": "org-admin-read",
+    "scope": "departments.cost_centers.sensitive.list",
+    "source_line": 231,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "cost_centers.create",
     "auth_required": true,
     "function": "create_cost_center",
-    "idempotency": null,
+    "idempotency": "not-idempotent-new-cost-center-created",
     "key": "POST /api/v1/cost-centers api/v1/departments.py:create_cost_center",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/departments.py",
     "path": "/api/v1/cost-centers",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 155,
-    "tenant_required": null
+    "rate_limit": "org-admin-write",
+    "scope": "departments.cost_centers.sensitive.write",
+    "source_line": 188,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -2683,58 +2683,58 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "departments.list",
     "auth_required": true,
     "function": "list_departments",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/departments api/v1/departments.py:list_departments",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/departments.py",
     "path": "/api/v1/departments",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 106,
-    "tenant_required": null
+    "rate_limit": "org-admin-read",
+    "scope": "departments.org_structure.sensitive.list",
+    "source_line": 123,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "departments.create",
     "auth_required": true,
     "function": "create_department",
-    "idempotency": null,
+    "idempotency": "not-idempotent-new-department-created",
     "key": "POST /api/v1/departments api/v1/departments.py:create_department",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/departments.py",
     "path": "/api/v1/departments",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 73,
-    "tenant_required": null
+    "rate_limit": "org-admin-write",
+    "scope": "departments.org_structure.sensitive.write",
+    "source_line": 82,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "departments.delete",
     "auth_required": true,
     "function": "delete_department",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-department-id",
     "key": "DELETE /api/v1/departments/{department_id} api/v1/departments.py:delete_department",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/departments.py",
     "path": "/api/v1/departments/{department_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 131,
-    "tenant_required": null
+    "rate_limit": "org-admin-write",
+    "scope": "departments.org_structure.sensitive.write",
+    "source_line": 156,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -2827,76 +2827,76 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "feature_flags.list",
     "auth_required": true,
     "function": "list_flags",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/feature-flags api/v1/feature_flags.py:list_flags",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/feature_flags.py",
     "path": "/api/v1/feature-flags",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 93,
-    "tenant_required": null
+    "rate_limit": "feature-flag-read",
+    "scope": "feature_flags.runtime_control.sensitive.list",
+    "source_line": 110,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "feature_flags.upsert",
     "auth_required": true,
     "function": "upsert_flag",
-    "idempotency": null,
+    "idempotency": "idempotent-upsert-by-flag-key",
     "key": "POST /api/v1/feature-flags api/v1/feature_flags.py:upsert_flag",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/feature_flags.py",
     "path": "/api/v1/feature-flags",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 47,
-    "tenant_required": null
+    "rate_limit": "feature-flag-write",
+    "scope": "feature_flags.runtime_control.sensitive.write",
+    "source_line": 56,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "feature_flags.delete",
     "auth_required": true,
     "function": "delete_flag",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-flag-key",
     "key": "DELETE /api/v1/feature-flags/{flag_key} api/v1/feature_flags.py:delete_flag",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/feature_flags.py",
     "path": "/api/v1/feature-flags/{flag_key}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 127,
-    "tenant_required": null
+    "rate_limit": "feature-flag-write",
+    "scope": "feature_flags.runtime_control.sensitive.write",
+    "source_line": 160,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "feature_flags.evaluate",
     "auth_required": true,
     "function": "evaluate_flag",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/feature-flags/{flag_key}/evaluate api/v1/feature_flags.py:evaluate_flag",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/feature_flags.py",
     "path": "/api/v1/feature-flags/{flag_key}/evaluate",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 115,
-    "tenant_required": null
+    "rate_limit": "feature-flag-evaluate",
+    "scope": "feature_flags.runtime_control.evaluate",
+    "source_line": 140,
+    "tenant_required": true
   },
   {
     "audit_event": "feed.events.catchup",
@@ -3169,112 +3169,112 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "kpis.cbo.read",
     "auth_required": true,
     "function": "get_cbo_kpis",
-    "idempotency": null,
+    "idempotency": "read-through-cache",
     "key": "GET /api/v1/kpis/cbo api/v1/kpis.py:get_cbo_kpis",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/kpis.py",
     "path": "/api/v1/kpis/cbo",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 542,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.cbo",
+    "source_line": 591,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "kpis.ceo.read",
     "auth_required": true,
     "function": "get_ceo_kpis",
-    "idempotency": null,
+    "idempotency": "read-through-cache",
     "key": "GET /api/v1/kpis/ceo api/v1/kpis.py:get_ceo_kpis",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/kpis.py",
     "path": "/api/v1/kpis/ceo",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 462,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.ceo",
+    "source_line": 471,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "kpis.cfo.read",
     "auth_required": true,
     "function": "get_cfo_kpis",
-    "idempotency": null,
+    "idempotency": "read-through-cache",
     "key": "GET /api/v1/kpis/cfo api/v1/kpis.py:get_cfo_kpis",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/kpis.py",
     "path": "/api/v1/kpis/cfo",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 483,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.cfo",
+    "source_line": 500,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "kpis.chro.read",
     "auth_required": true,
     "function": "get_chro_kpis",
-    "idempotency": null,
+    "idempotency": "read-through-cache",
     "key": "GET /api/v1/kpis/chro api/v1/kpis.py:get_chro_kpis",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/kpis.py",
     "path": "/api/v1/kpis/chro",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 509,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.chro",
+    "source_line": 534,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "kpis.cmo.read",
     "auth_required": true,
     "function": "get_cmo_kpis",
-    "idempotency": null,
+    "idempotency": "read-through-cache",
     "key": "GET /api/v1/kpis/cmo api/v1/kpis.py:get_cmo_kpis",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/kpis.py",
     "path": "/api/v1/kpis/cmo",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 520,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.cmo",
+    "source_line": 553,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "kpis.coo.read",
     "auth_required": true,
     "function": "get_coo_kpis",
-    "idempotency": null,
+    "idempotency": "read-through-cache",
     "key": "GET /api/v1/kpis/coo api/v1/kpis.py:get_coo_kpis",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/kpis.py",
     "path": "/api/v1/kpis/coo",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 531,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "kpis.executive.sensitive.coo",
+    "source_line": 572,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -4105,202 +4105,202 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.leads.import_csv",
     "auth_required": true,
     "function": "import_leads_csv",
-    "idempotency": null,
+    "idempotency": "dedupe-by-email-within-tenant",
     "key": "POST /api/v1/sales/import-csv api/v1/sales.py:import_leads_csv",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/import-csv",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 504,
-    "tenant_required": null
+    "rate_limit": "bulk-import",
+    "scope": "sales.pipeline.sensitive.bulk_import",
+    "source_line": 569,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.metrics.read",
     "auth_required": true,
     "function": "get_sales_metrics",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/sales/metrics api/v1/sales.py:get_sales_metrics",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/metrics",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 432,
-    "tenant_required": null
+    "rate_limit": "business-metrics-read",
+    "scope": "sales.metrics.sensitive.read",
+    "source_line": 489,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.pipeline.list",
     "auth_required": true,
     "function": "get_pipeline",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/sales/pipeline api/v1/sales.py:get_pipeline",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/pipeline",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 125,
-    "tenant_required": null
+    "rate_limit": "sales-read",
+    "scope": "sales.pipeline.sensitive.list",
+    "source_line": 142,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.followups.due",
     "auth_required": true,
     "function": "get_due_followups",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/sales/pipeline/due-followups api/v1/sales.py:get_due_followups",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/pipeline/due-followups",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 156,
-    "tenant_required": null
+    "rate_limit": "sales-read",
+    "scope": "sales.pipeline.sensitive.followups",
+    "source_line": 181,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.lead.create",
     "auth_required": true,
     "function": "create_lead",
-    "idempotency": null,
+    "idempotency": "not-idempotent-new-lead-created",
     "key": "POST /api/v1/sales/pipeline/leads api/v1/sales.py:create_lead",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/pipeline/leads",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 100,
-    "tenant_required": null
+    "rate_limit": "sales-write",
+    "scope": "sales.pipeline.sensitive.write",
+    "source_line": 109,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.lead.process",
     "auth_required": true,
     "function": "process_lead_with_agent",
-    "idempotency": null,
+    "idempotency": "not-idempotent-agent-may-update-lead-and-send-email",
     "key": "POST /api/v1/sales/pipeline/process-lead api/v1/sales.py:process_lead_with_agent",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/pipeline/process-lead",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 172,
-    "tenant_required": null
+    "rate_limit": "sales-agent-trigger",
+    "scope": "sales.pipeline.external_action.process",
+    "source_line": 205,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.lead.get",
     "auth_required": true,
     "function": "get_lead",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/sales/pipeline/{lead_id} api/v1/sales.py:get_lead",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/pipeline/{lead_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 203,
-    "tenant_required": null
+    "rate_limit": "sales-read",
+    "scope": "sales.pipeline.sensitive.read",
+    "source_line": 244,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.lead.update",
     "auth_required": true,
     "function": "update_lead",
-    "idempotency": null,
+    "idempotency": "idempotent-partial-update-by-lead-id",
     "key": "PATCH /api/v1/sales/pipeline/{lead_id} api/v1/sales.py:update_lead",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PATCH"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/pipeline/{lead_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 239,
-    "tenant_required": null
+    "rate_limit": "sales-write",
+    "scope": "sales.pipeline.sensitive.write",
+    "source_line": 288,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.inbox.process",
     "auth_required": true,
     "function": "process_inbox",
-    "idempotency": null,
+    "idempotency": "not-idempotent-may-create-leads-and-send-replies",
     "key": "POST /api/v1/sales/process-inbox api/v1/sales.py:process_inbox",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/process-inbox",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 828,
-    "tenant_required": null
+    "rate_limit": "sales-inbox-sync",
+    "scope": "sales.pipeline.external_action.process_inbox",
+    "source_line": 917,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.followups.run",
     "auth_required": true,
     "function": "run_automated_followups",
-    "idempotency": null,
+    "idempotency": "not-idempotent-may-send-followup-emails",
     "key": "POST /api/v1/sales/run-followups api/v1/sales.py:run_automated_followups",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/run-followups",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 653,
-    "tenant_required": null
+    "rate_limit": "sales-agent-trigger",
+    "scope": "sales.pipeline.external_action.run_followups",
+    "source_line": 726,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "sales.prospects.seed",
     "auth_required": true,
     "function": "seed_target_prospects",
-    "idempotency": null,
+    "idempotency": "dedupe-by-email-within-tenant",
     "key": "POST /api/v1/sales/seed-prospects api/v1/sales.py:seed_target_prospects",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/sales.py",
     "path": "/api/v1/sales/seed-prospects",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 759,
-    "tenant_required": null
+    "rate_limit": "sales-write",
+    "scope": "sales.pipeline.sensitive.seed_demo",
+    "source_line": 840,
+    "tenant_required": true
   },
   {
     "audit_event": null,

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.organization import CostCenter, Department
 
@@ -70,6 +71,14 @@ class CostCenterOut(BaseModel):
 
 
 @router.post("/departments", response_model=DepartmentOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="departments.org_structure.sensitive.write",
+    rate_limit="org-admin-write",
+    idempotency="not-idempotent-new-department-created",
+    audit_event="departments.create",
+)
 async def create_department(
     body: DepartmentCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -103,6 +112,14 @@ async def create_department(
 
 
 @router.get("/departments", response_model=list[DepartmentOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="departments.org_structure.sensitive.list",
+    rate_limit="org-admin-read",
+    idempotency="read-only",
+    audit_event="departments.list",
+)
 async def list_departments(
     company_id: uuid.UUID | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -128,6 +145,14 @@ async def list_departments(
 
 
 @router.delete("/departments/{department_id}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="departments.org_structure.sensitive.write",
+    rate_limit="org-admin-write",
+    idempotency="idempotent-delete-by-department-id",
+    audit_event="departments.delete",
+)
 async def delete_department(
     department_id: uuid.UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -152,6 +177,14 @@ async def delete_department(
 
 
 @router.post("/cost-centers", response_model=CostCenterOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="departments.cost_centers.sensitive.write",
+    rate_limit="org-admin-write",
+    idempotency="not-idempotent-new-cost-center-created",
+    audit_event="cost_centers.create",
+)
 async def create_cost_center(
     body: CostCenterCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -187,6 +220,14 @@ async def create_cost_center(
 
 
 @router.get("/cost-centers", response_model=list[CostCenterOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="departments.cost_centers.sensitive.list",
+    rate_limit="org-admin-read",
+    idempotency="read-only",
+    audit_event="cost_centers.list",
+)
 async def list_cost_centers(
     company_id: uuid.UUID | None = None,
     department_id: uuid.UUID | None = None,
