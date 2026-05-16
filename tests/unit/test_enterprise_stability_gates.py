@@ -56,6 +56,24 @@ def test_gate_detects_process_local_mutable_store(tmp_path: Path) -> None:
     assert "_event_store" in findings[0].code
 
 
+def test_process_local_allowance_requires_non_empty_reason(tmp_path: Path) -> None:
+    missing_reason = _write(
+        tmp_path,
+        "core/cache_example.py",
+        "_registry: dict[str, object] = {}  # enterprise-gate: process-local-ok\n",
+    )
+    allowed = _write(
+        tmp_path,
+        "core/allowed_cache.py",
+        "_cache: dict[str, object] = {}  # enterprise-gate: process-local-ok reason=bounded-local-cache\n",
+    )
+
+    findings = gates.scan_process_local_state([missing_reason, allowed], tmp_path)
+
+    assert [finding.category for finding in findings] == ["process_local_state"]
+    assert findings[0].path == "core/cache_example.py"
+
+
 def test_gate_detects_stub_success_status(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
@@ -244,13 +262,29 @@ def test_fixed_process_local_state_entries_are_no_longer_baselined() -> None:
     process_local_entries = baseline.get("allowed_findings", {}).get("process_local_state", [])
 
     fixed_paths = {
+        "api/v1/branding.py",
+        "api/v1/composio.py",
         "api/websocket/feed.py",
+        "auth/jwt.py",
         "bridge/server_handler.py",
+        "core/ai_providers/resolver.py",
+        "core/ai_providers/settings.py",
+        "core/billing/pinelabs_client.py",
+        "core/connectors/provider_registry.py",
+        "core/feature_flags.py",
+        "core/langgraph/tool_adapter.py",
     }
     assert not any(
         any(f"process_local_state:{path}:" in entry for path in fixed_paths)
         for entry in process_local_entries
     )
+
+
+def test_process_local_state_baseline_is_zero_after_burndown() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    process_local_entries = baseline.get("allowed_findings", {}).get("process_local_state", [])
+
+    assert process_local_entries == []
 
 
 def test_docs_tests_and_migrations_are_ignored(tmp_path: Path) -> None:

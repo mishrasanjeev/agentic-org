@@ -129,6 +129,7 @@ def lookup_order_details(merchant_ref: str) -> dict[str, str]:
 
 # ── Token cache ─────────────────────────────────────────────────────
 
+# enterprise-gate: process-local-ok reason=single-oauth-access-token-cache-reobtainable-from-provider
 _token_cache: dict[str, Any] = {"access_token": "", "expires_at": 0.0}
 
 

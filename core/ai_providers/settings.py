@@ -16,8 +16,10 @@ from sqlalchemy import select
 
 logger = structlog.get_logger(__name__)
 
+# enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-ai-setting-cache
 _CACHE: dict[str, tuple[EffectiveAISetting, float]] = {}
 _CACHE_TTL_S = 60.0
+_CACHE_MAX_SIZE = 1_024
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,22 @@ _PLATFORM_DEFAULTS = EffectiveAISetting(
     ai_fallback_policy="allow",
     source="platform_default",
 )
+
+
+def _store_cache(key: str, effective: EffectiveAISetting) -> None:
+    now = time.time()
+    if key not in _CACHE and len(_CACHE) >= _CACHE_MAX_SIZE:
+        expired = [
+            cache_key
+            for cache_key, (_, cached_at) in _CACHE.items()
+            if now - cached_at >= _CACHE_TTL_S
+        ]
+        for cache_key in expired:
+            _CACHE.pop(cache_key, None)
+        while len(_CACHE) >= _CACHE_MAX_SIZE:
+            oldest_key = min(_CACHE, key=lambda item: _CACHE[item][1])
+            _CACHE.pop(oldest_key, None)
+    _CACHE[key] = (effective, now)
 
 
 async def get_effective_ai_setting(
@@ -142,7 +160,7 @@ async def get_effective_ai_setting(
             source="tenant",
         )
 
-    _CACHE[key] = (effective, time.time())
+    _store_cache(key, effective)
     return effective
 
 

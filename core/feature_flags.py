@@ -45,6 +45,8 @@ logger = structlog.get_logger()
 # Simple TTL cache.  Entries are (value, expires_at).
 # Key: (tenant_id_str, flag_key)
 _CACHE_TTL_SECONDS = 30
+_CACHE_MAX_SIZE = 2_048
+# enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-feature-flag-cache
 _cache: dict[tuple[str, str], tuple[dict[str, Any] | None, float]] = {}
 
 
@@ -52,6 +54,26 @@ def _bucket(flag_key: str, subject_id: str) -> int:
     """Return 0-99 deterministic bucket for a (flag, subject) pair."""
     h = hashlib.sha256(f"{flag_key}:{subject_id}".encode()).digest()
     return int.from_bytes(h[:4], "big") % 100
+
+
+def _store_cache(
+    cache_key: tuple[str, str],
+    row: dict[str, Any] | None,
+    expires_at: float,
+) -> None:
+    now = time.monotonic()
+    if cache_key not in _cache and len(_cache) >= _CACHE_MAX_SIZE:
+        expired = [
+            key
+            for key, (_, cached_expires_at) in _cache.items()
+            if cached_expires_at <= now
+        ]
+        for key in expired:
+            _cache.pop(key, None)
+        while len(_cache) >= _CACHE_MAX_SIZE:
+            oldest_key = min(_cache, key=lambda item: _cache[item][1])
+            _cache.pop(oldest_key, None)
+    _cache[cache_key] = (row, expires_at)
 
 
 async def _load_flag(
@@ -103,7 +125,7 @@ async def _load_flag(
         logger.debug("feature_flag_lookup_failed", flag_key=flag_key)
         row = None
 
-    _cache[cache_key] = (row, now + _CACHE_TTL_SECONDS)
+    _store_cache(cache_key, row, now + _CACHE_TTL_SECONDS)
     return row
 
 

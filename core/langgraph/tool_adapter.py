@@ -32,6 +32,8 @@ logger = structlog.get_logger()
 # ``Illegal header value`` / ``Server disconnected without sending a
 # response``. The fix below evicts on transport errors and retries
 # once with a fresh instance.
+_CONNECTOR_CACHE_MAX_SIZE = 128
+# enterprise-gate: process-local-ok reason=bounded-local-connector-client-cache
 _connector_cache: dict[str, BaseConnector] = {}
 
 # Transport-level errors that indicate the cached client is no longer
@@ -93,6 +95,13 @@ def _actual_tool_name(tool_ref: str) -> str:
     return raw
 
 
+def _store_connector_cache(cache_key: str, instance: BaseConnector) -> None:
+    if cache_key not in _connector_cache and len(_connector_cache) >= _CONNECTOR_CACHE_MAX_SIZE:
+        oldest_key = next(iter(_connector_cache))
+        _connector_cache.pop(oldest_key, None)
+    _connector_cache[cache_key] = instance
+
+
 def _flatten_structured_tool_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Unwrap LangChain's ``**kwargs`` schema artifact for var-kw tools.
 
@@ -151,7 +160,7 @@ async def _execute_connector_tool(
         instance = await _build_connector(connector_cls, config, connector_name)
         if instance is None:
             return {"error": f"Failed to connect to {connector_name}"}
-        _connector_cache[cache_key] = instance
+        _store_connector_cache(cache_key, instance)
 
     instance = _connector_cache[cache_key]
     start = time.monotonic()
@@ -190,7 +199,7 @@ async def _execute_connector_tool(
                 ),
                 "error_class": "transport_reconnect_failed",
             }
-        _connector_cache[cache_key] = fresh
+        _store_connector_cache(cache_key, fresh)
 
         try:
             result = await fresh.execute_tool(tool_name, params)
