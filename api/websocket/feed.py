@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, update
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from auth.grantex_middleware import _is_grantex_token
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
 from core.database import async_session_factory
@@ -223,6 +224,14 @@ async def broadcast_to_tenant(tenant_id: str, data: dict) -> int:
 
 
 @router.get("/feed/events")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="feed.events.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="feed.events.catchup",
+)
 async def list_feed_events(
     after: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
@@ -241,6 +250,14 @@ async def list_feed_events(
 
 
 @router.websocket("/ws/feed/{tenant_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="feed.websocket.connect",
+    rate_limit="websocket-connect",
+    idempotency="connection-session",
+    audit_event="feed.websocket.connect",
+)
 async def live_feed(websocket: WebSocket, tenant_id: str) -> None:
     try:
         await authenticate_websocket(websocket, tenant_id)
