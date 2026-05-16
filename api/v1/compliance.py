@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.audit import AuditLog
 from core.schemas.api import DSARRequest
@@ -45,6 +46,14 @@ async def _create_dsar_audit_entry(
 
 # ── POST /dsar/access ────────────────────────────────────────────────────────
 @router.post("/dsar/access")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="compliance.dsar.sensitive.write",
+    rate_limit="compliance-dsar-request",
+    idempotency="not_idempotent-new-dsar-request-id",
+    audit_event="dsar.access.request",
+)
 async def dsar_access(
     body: DSARRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -65,6 +74,14 @@ async def dsar_access(
 
 # ── POST /dsar/erase ────────────────────────────────────────────────────────
 @router.post("/dsar/erase")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="compliance.dsar.high_risk.write",
+    rate_limit="compliance-dsar-request",
+    idempotency="not_idempotent-new-dsar-request-id",
+    audit_event="dsar.erase.request",
+)
 async def dsar_erase(
     body: DSARRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -88,6 +105,14 @@ async def dsar_erase(
 
 # ── POST /dsar/export ───────────────────────────────────────────────────────
 @router.post("/dsar/export")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="compliance.dsar.sensitive.export",
+    rate_limit="compliance-dsar-export",
+    idempotency="not_idempotent-new-dsar-request-id",
+    audit_event="dsar.export.request",
+)
 async def dsar_export(
     body: DSARRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -120,6 +145,14 @@ async def dsar_export(
 
 # ── GET /compliance/evidence-package ─────────────────────────────────────────
 @router.get("/compliance/evidence-package")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="compliance.evidence.sensitive.export",
+    rate_limit="compliance-evidence-export",
+    idempotency="read-only",
+    audit_event="compliance.evidence_package.read",
+)
 async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     now = datetime.now(UTC)

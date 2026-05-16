@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 
 router = APIRouter()
@@ -27,6 +28,14 @@ class SOPParseRequest(BaseModel):
 
 # ── GET /sop — List uploaded SOPs ─────────────────────────────────────────
 @router.get("/sop")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="sop.placeholder.read",
+    rate_limit="sop-read",
+    idempotency="read-only",
+    audit_event="none-read-only-placeholder",
+)
 async def list_sops():
     """List uploaded SOP documents. Returns an empty list if none exist."""
     # SOPs are stored as agent prompt amendments after parsing. The list
@@ -36,6 +45,14 @@ async def list_sops():
 
 # ── POST /sop/upload — Upload a document and parse it ──────────────────────
 @router.post("/sop/upload")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sop.external_input.sensitive.write",
+    rate_limit="sop-upload",
+    idempotency="not_idempotent-document-parse-produces-draft",
+    audit_event="sop.upload_parse",
+)
 async def upload_and_parse_sop(
     file: UploadFile,
     domain_hint: str = "",
@@ -92,6 +109,14 @@ async def upload_and_parse_sop(
 
 # ── POST /sop/parse-text — Parse plain text SOP ────────────────────────────
 @router.post("/sop/parse-text")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sop.external_input.sensitive.write",
+    rate_limit="sop-parse",
+    idempotency="not_idempotent-llm-parse-produces-draft",
+    audit_event="sop.parse_text",
+)
 async def parse_text_sop(
     body: SOPParseRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -140,6 +165,14 @@ async def parse_text_sop(
 
 # ── POST /sop/deploy — Deploy a reviewed SOP config as an agent ────────────
 @router.post("/sop/deploy", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="sop.agent_deployment.high_risk.write",
+    rate_limit="sop-deploy",
+    idempotency="not_idempotent-creates-agent",
+    audit_event="sop.deploy_agent",
+)
 async def deploy_sop_agent(
     body: dict,
     tenant_id: str = Depends(get_current_tenant),

@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import async_session_factory, get_tenant_session
 from core.models.branding import TenantBranding
 
@@ -113,6 +114,15 @@ def _public_view(branding: BrandingOut) -> BrandingOut:
 
 
 @public_router.get("", response_model=BrandingOut)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:branding.sanitized.read",
+    rate_limit="branding-public-lookup",
+    idempotency="read-only",
+    audit_event="none-public-branding-lookup",
+    public_reason="public-login-branding-sanitized-host-or-slug-lookup",
+)
 async def get_public_branding(
     request: Request,
     tenant_slug: str | None = Query(None, description="Tenant slug fallback"),
@@ -197,6 +207,14 @@ def _clear_branding_cache() -> None:
 
 
 @admin_router.get("", response_model=BrandingOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="branding.sensitive.read",
+    rate_limit="branding-admin-read",
+    idempotency="read-only",
+    audit_event="branding.read",
+)
 async def get_tenant_branding(
     tenant_id: str = Depends(get_current_tenant),
 ) -> BrandingOut:
@@ -212,6 +230,14 @@ async def get_tenant_branding(
 
 
 @admin_router.put("", response_model=BrandingOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="branding.sensitive.write",
+    rate_limit="branding-admin-write",
+    idempotency="idempotent-upsert-by-tenant",
+    audit_event="branding.upsert",
+)
 async def upsert_tenant_branding(
     body: BrandingIn,
     tenant_id: str = Depends(get_current_tenant),
@@ -241,6 +267,14 @@ async def upsert_tenant_branding(
 
 
 @admin_router.delete("", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="branding.sensitive.write",
+    rate_limit="branding-admin-write",
+    idempotency="idempotent-reset-by-tenant",
+    audit_event="branding.reset",
+)
 async def reset_branding(
     tenant_id: str = Depends(get_current_tenant),
 ) -> None:

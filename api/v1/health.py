@@ -12,6 +12,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from api.deps import require_scope
+from api.route_metadata import route_meta
 from connectors.registry import ConnectorRegistry
 from core.config import settings
 from core.database import async_session_factory
@@ -64,6 +65,15 @@ async def _check_connector(connector_name: str) -> dict:
 
 
 @router.get("/health")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:health.readiness.dependency_status",
+    rate_limit="infra-health-probe",
+    idempotency="read-only",
+    audit_event="none-readiness-probe",
+    public_reason="public-readiness-probe-limited-db-redis-status",
+)
 async def health_readiness():
     """Readiness probe — checks local critical dependencies (DB + Redis).
 
@@ -98,6 +108,15 @@ async def health_readiness():
 
 
 @router.get("/health/liveness")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:health.liveness",
+    rate_limit="infra-health-probe",
+    idempotency="read-only",
+    audit_event="none-liveness-probe",
+    public_reason="public-liveness-probe-no-dependency-detail",
+)
 async def liveness():
     """Lightweight liveness probe — just confirms the process is running."""
     return {"status": "alive"}
@@ -162,6 +181,14 @@ async def _fetch_history(hours: int) -> list[dict]:
 
 
 @router.get("/health/checks")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="health.sla.sensitive.read",
+    rate_limit="health-sla-read",
+    idempotency="read-only",
+    audit_event="health.checks.read",
+)
 async def health_checks(hours: int = _DEFAULT_HISTORY_HOURS):
     """Recent health-check history (last ``hours`` of recorded snapshots).
 
@@ -204,6 +231,14 @@ async def health_checks(hours: int = _DEFAULT_HISTORY_HOURS):
 
 
 @router.get("/health/uptime")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="health.sla.sensitive.read",
+    rate_limit="health-sla-read",
+    idempotency="read-only",
+    audit_event="health.uptime.read",
+)
 async def health_uptime(hours: int = _DEFAULT_HISTORY_HOURS):
     """Uptime aggregate over the last ``hours``.
 
@@ -260,6 +295,14 @@ async def health_uptime(hours: int = _DEFAULT_HISTORY_HOURS):
 @router.get(
     "/health/diagnostics",
     dependencies=[require_scope("agenticorg:admin")],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="health.diagnostics.admin.sensitive.read",
+    rate_limit="health-diagnostics-read",
+    idempotency="read-only",
+    audit_event="health.diagnostics.read",
 )
 async def diagnostics():
     """Full diagnostics — requires admin auth. Includes connector details + env.
