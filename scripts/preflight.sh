@@ -159,7 +159,15 @@ verify_false_scan() {
 }
 
 # ---------------------------------------------------------------------------
-# 6. Pytest — regression suite + targeted unit tests. Fast: ~30s.
+# 6. Enterprise stability release gates: broad exceptions, process-local
+#    state, stub-success paths, route metadata, and Alembic heads.
+# ---------------------------------------------------------------------------
+enterprise_stability_gate() {
+  python scripts/check_enterprise_stability_gates.py
+}
+
+# ---------------------------------------------------------------------------
+# 7. Pytest — regression suite + targeted unit tests. Fast: ~30s.
 # ---------------------------------------------------------------------------
 pytest_check() {
   if [[ "$SKIP_PYTEST" == "1" ]]; then
@@ -243,6 +251,7 @@ run_step "mypy (whole tree)"      mypy_check
 run_step "bandit (api/auth/core)" bandit_check
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
+run_step "enterprise stability"   enterprise_stability_gate
 run_step "pytest regression+unit" pytest_check
 run_step "ui tsc"                 ui_check
 run_step "ui build"               ui_build
