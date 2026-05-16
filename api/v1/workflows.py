@@ -366,7 +366,12 @@ async def _execute_workflow_bg(
     engine = WorkflowEngine(state_store)
 
     try:
-        engine_run_id = await engine.start_run(definition, trigger_payload)
+        engine_run_id = await engine.start_run(
+            definition,
+            trigger_payload,
+            tenant_id=str(tenant_id),
+            workflow_run_id=str(run_id),
+        )
 
         # Persist engine_run_id so HITL resume can find it later
         async with get_tenant_session(tenant_id) as session:

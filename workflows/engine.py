@@ -45,7 +45,14 @@ class WorkflowEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    async def start_run(self, definition: dict, trigger_payload: dict | None = None) -> str:
+    async def start_run(
+        self,
+        definition: dict,
+        trigger_payload: dict | None = None,
+        *,
+        tenant_id: str | None = None,
+        workflow_run_id: str | None = None,
+    ) -> str:
         """Parse a workflow definition, persist initial state, and return the run_id."""
         run_id = f"wfr_{uuid.uuid4().hex[:12]}"
         parsed = self.parser.parse(definition)
@@ -61,7 +68,15 @@ class WorkflowEngine:
             "replan_count": 0,
             "replan_history": [],
         }
-        await self.state_store.save(state)
+        if tenant_id:
+            state["tenant_id"] = tenant_id
+        if workflow_run_id:
+            state["workflow_run_id"] = workflow_run_id
+        await self.state_store.save(
+            state,
+            actor="workflow_engine",
+            metadata={"event": "run_started"},
+        )
         logger.info("workflow_run_started", run_id=run_id)
         return run_id
 
@@ -94,7 +109,12 @@ class WorkflowEngine:
                     self._check_timeout(state, timeout_hours)
                 except WorkflowTimeoutError:
                     state["status"] = "timed_out"
-                    await self.state_store.save(state)
+                    await self.state_store.save(
+                        state,
+                        actor="workflow_engine",
+                        step_id=step_id,
+                        metadata={"event": "workflow_timed_out"},
+                    )
                     logger.warning("workflow_timed_out", run_id=run_id, step_id=step_id)
                     return {"status": "timed_out", "step_results": state["step_results"]}
 
@@ -110,7 +130,12 @@ class WorkflowEngine:
                     "reason": dep_failure,
                 }
                 state["steps_completed"] = len(state["step_results"])
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "step_skipped", "reason": dep_failure},
+                )
                 continue
 
             # ---- build context from prior step outputs for condition resolution ----
@@ -142,7 +167,12 @@ class WorkflowEngine:
                 }
                 state["status"] = "failed"
                 state["steps_completed"] = len(state["step_results"])
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "step_failed", "error": str(exc)},
+                )
                 logger.error("workflow_step_failed", run_id=run_id, step_id=step_id, error=str(exc))
                 return {"status": "failed", "step_results": state["step_results"]}
 
@@ -167,7 +197,12 @@ class WorkflowEngine:
             if step.get("type") == "human_in_loop" or result.get("status") == "waiting_hitl":
                 state["status"] = "waiting_hitl"
                 state["waiting_step_id"] = step_id
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "waiting_hitl"},
+                )
                 logger.info("workflow_waiting_hitl", run_id=run_id, step_id=step_id)
                 return {"status": "waiting_hitl", "step_results": state["step_results"]}
 
@@ -175,7 +210,12 @@ class WorkflowEngine:
             if result.get("status") == "waiting_delay":
                 state["status"] = "waiting_delay"
                 state["waiting_step_id"] = step_id
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "waiting_delay", "resume_at": result.get("resume_at")},
+                )
                 logger.info("workflow_waiting_delay", run_id=run_id, step_id=step_id, resume_at=result.get("resume_at"))
                 return {"status": "waiting_delay", "step_results": state["step_results"]}
 
@@ -183,19 +223,33 @@ class WorkflowEngine:
             if result.get("status") == "waiting_event":
                 state["status"] = "waiting_event"
                 state["waiting_step_id"] = step_id
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "waiting_event", "event_type": result.get("event_type")},
+                )
                 evt = result.get("event_type")
                 logger.info("workflow_waiting_event", run_id=run_id, step_id=step_id, event_type=evt)
                 return {"status": "waiting_event", "step_results": state["step_results"]}
 
             # ---- checkpoint ----
-            await self.state_store.save(state)
+            await self.state_store.save(
+                state,
+                actor="workflow_engine",
+                step_id=step_id,
+                metadata={"event": "step_checkpointed"},
+            )
             logger.debug("step_checkpointed", run_id=run_id, step_id=step_id)
 
         # All steps done.
         state["status"] = "completed"
         state["completed_at"] = datetime.now(UTC).isoformat()
-        await self.state_store.save(state)
+        await self.state_store.save(
+            state,
+            actor="workflow_engine",
+            metadata={"event": "workflow_completed"},
+        )
         logger.info("workflow_completed", run_id=run_id)
         return {"status": "completed", "step_results": state["step_results"]}
 
@@ -225,7 +279,12 @@ class WorkflowEngine:
                     self._check_timeout(state, timeout_hours)
                 except WorkflowTimeoutError:
                     state["status"] = "timed_out"
-                    await self.state_store.save(state)
+                    await self.state_store.save(
+                        state,
+                        actor="workflow_engine",
+                        step_id=step_id,
+                        metadata={"event": "workflow_timed_out"},
+                    )
                     return {"status": "timed_out"}
 
             step = step_index[step_id]
@@ -238,7 +297,12 @@ class WorkflowEngine:
                     "reason": dep_failure,
                 }
                 state["steps_completed"] = len(state["step_results"])
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "step_skipped", "reason": dep_failure},
+                )
                 continue
 
             context = self._build_context(state)
@@ -254,7 +318,12 @@ class WorkflowEngine:
                 }
                 state["status"] = "failed"
                 state["steps_completed"] = len(state["step_results"])
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "step_failed", "error": str(exc)},
+                )
                 return {"status": "failed", "step_id": step_id, "error": str(exc)}
 
             state["step_results"][step_id] = {
@@ -272,16 +341,30 @@ class WorkflowEngine:
             if step.get("type") == "human_in_loop" or result.get("status") == "waiting_hitl":
                 state["status"] = "waiting_hitl"
                 state["waiting_step_id"] = step_id
-                await self.state_store.save(state)
+                await self.state_store.save(
+                    state,
+                    actor="workflow_engine",
+                    step_id=step_id,
+                    metadata={"event": "waiting_hitl"},
+                )
                 return {"status": "waiting_hitl", "step_id": step_id}
 
-            await self.state_store.save(state)
+            await self.state_store.save(
+                state,
+                actor="workflow_engine",
+                step_id=step_id,
+                metadata={"event": "step_checkpointed"},
+            )
             return result
 
         # All steps executed.
         state["status"] = "completed"
         state["completed_at"] = datetime.now(UTC).isoformat()
-        await self.state_store.save(state)
+        await self.state_store.save(
+            state,
+            actor="workflow_engine",
+            metadata={"event": "workflow_completed"},
+        )
         return {"status": "completed", "step_results": state["step_results"]}
 
     async def resume_from_hitl(self, run_id: str, decision: dict[str, Any]) -> dict[str, Any]:
@@ -308,7 +391,12 @@ class WorkflowEngine:
         state["steps_completed"] = len(state["step_results"])
         state["status"] = "running"
         state.pop("waiting_step_id", None)
-        await self.state_store.save(state)
+        await self.state_store.save(
+            state,
+            actor="workflow_engine.hitl_resume",
+            step_id=waiting_step_id,
+            metadata={"event": "hitl_resumed"},
+        )
 
         logger.info("workflow_hitl_resumed", run_id=run_id, step_id=waiting_step_id)
 
@@ -334,7 +422,12 @@ class WorkflowEngine:
         state["steps_completed"] = len(state["step_results"])
         state["status"] = "running"
         state.pop("waiting_step_id", None)
-        await self.state_store.save(state)
+        await self.state_store.save(
+            state,
+            actor="workflow_engine.wait_resume",
+            step_id=waiting_step_id,
+            metadata={"event": "wait_resumed"},
+        )
 
         logger.info("workflow_wait_resumed", run_id=run_id, step_id=waiting_step_id)
         return await self.execute(run_id)
@@ -355,7 +448,12 @@ class WorkflowEngine:
         state["steps_completed"] = len(state["step_results"])
         state["status"] = "running"
         state.pop("waiting_step_id", None)
-        await self.state_store.save(state)
+        await self.state_store.save(
+            state,
+            actor="workflow_engine.event_timeout",
+            step_id=step_id,
+            metadata={"event": "event_wait_timed_out"},
+        )
 
         logger.info("workflow_event_timed_out", run_id=run_id, step_id=step_id)
         return await self.execute(run_id)
@@ -366,7 +464,11 @@ class WorkflowEngine:
         if state:
             state["status"] = "cancelled"
             state["cancelled_at"] = datetime.now(UTC).isoformat()
-            await self.state_store.save(state)
+            await self.state_store.save(
+                state,
+                actor="workflow_engine.cancel",
+                metadata={"event": "workflow_cancelled"},
+            )
             logger.info("workflow_cancelled", run_id=run_id)
 
     # ------------------------------------------------------------------
@@ -461,7 +563,12 @@ class WorkflowEngine:
         state["definition"]["steps"] = completed_step_defs + new_steps
         state["steps_total"] = len(state["definition"]["steps"])
 
-        await self.state_store.save(state)
+        await self.state_store.save(
+            state,
+            actor="workflow_engine.replan",
+            step_id=failed_step_id,
+            metadata={"event": "workflow_replanned", "error": error_msg},
+        )
 
         logger.info(
             "workflow_replanned_successfully",
@@ -593,7 +700,7 @@ class WorkflowEngine:
         max_retries = self._parse_retry_count(on_failure)
 
         # Inject the built context into state so step handlers can use it.
-        state_with_context = {**state, "context": context}
+        state_with_context = {**state, "context": context, "_state_store": self.state_store}
 
         if max_retries > 0:
             return await retry_with_backoff(

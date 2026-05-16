@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from workflows.condition_evaluator import evaluate_condition
+from workflows.event_waits import WorkflowEventWaitStore
 
 
 async def execute_step(step: dict, state: dict) -> dict[str, Any]:
@@ -325,30 +326,40 @@ async def _execute_wait_for_event(step, state):
     match_criteria = step.get("match", {})
     run_id = state.get("id", "")
     timeout_at = datetime.now(UTC) + timedelta(hours=timeout_hours)
+    trigger_payload = state.get("trigger_payload")
+    if not isinstance(trigger_payload, dict):
+        trigger_payload = {}
+    tenant_id = (
+        state.get("tenant_id")
+        or trigger_payload.get("tenant_id")
+        or trigger_payload.get("agenticorg:tenant_id")
+    )
+    workflow_run_id = (
+        state.get("workflow_run_id")
+        or state.get("db_workflow_run_id")
+        or state.get("database_workflow_run_id")
+    )
 
-    # Register event listener in Redis (if available)
+    event_wait_store = state.get("_event_wait_store")
+    created_store = event_wait_store is None
+    if event_wait_store is None:
+        event_wait_store = WorkflowEventWaitStore()
+        await event_wait_store.init()
     try:
-        import json as _json
-
-        import redis.asyncio as aioredis
-
-        from core.config import settings
-
-        r = aioredis.from_url(settings.redis_url, decode_responses=True)
-        listener_key = f"wfwait_event:{event_type}:{run_id}:{step['id']}"
-        await r.set(
-            listener_key,
-            _json.dumps({
-                "run_id": run_id,
-                "step_id": step["id"],
-                "match": match_criteria,
-                "timeout_at": timeout_at.isoformat(),
-            }),
-            ex=int(timeout_hours * 3600) + 60,
+        await event_wait_store.register(
+            engine_run_id=run_id,
+            step_id=step["id"],
+            event_type=event_type,
+            match_criteria=match_criteria,
+            timeout_at=timeout_at,
+            tenant_id=tenant_id,
+            workflow_run_id=workflow_run_id,
+            connector=step.get("connector"),
+            provider=step.get("provider"),
         )
-        await r.aclose()
-    except Exception:  # noqa: S110
-        pass  # Redis unavailable — event will time out
+    finally:
+        if created_store:
+            await event_wait_store.close()
 
     # Schedule timeout
     try:
