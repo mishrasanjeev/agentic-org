@@ -315,3 +315,85 @@ def test_mutating_billing_oauth_connector_routes_include_audit_and_idempotency()
     assert mutating_routes
     assert all(route.audit_event for route in mutating_routes)
     assert all(route.idempotency for route in mutating_routes)
+
+
+def test_core_execution_target_routes_have_metadata() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/workflows.py",
+        gates.REPO_ROOT / "api/v1/approvals.py",
+        gates.REPO_ROOT / "api/v1/agents.py",
+        gates.REPO_ROOT / "api/v1/companies.py",
+        gates.REPO_ROOT / "api/v1/knowledge.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert len(routes) == 74
+    assert findings == []
+    assert all(route.metadata_present for route in routes)
+    assert all(route.scope for route in routes)
+    assert all(route.rate_limit for route in routes)
+    assert all(route.idempotency for route in routes)
+    assert all(route.audit_event for route in routes)
+
+
+def test_core_execution_mutating_routes_include_audit_and_idempotency() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/workflows.py",
+        gates.REPO_ROOT / "api/v1/approvals.py",
+        gates.REPO_ROOT / "api/v1/agents.py",
+        gates.REPO_ROOT / "api/v1/companies.py",
+        gates.REPO_ROOT / "api/v1/knowledge.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    mutating_routes = [
+        route
+        for route in routes
+        if any(method in gates.MUTATING_METHODS for method in route.methods)
+    ]
+
+    assert len(mutating_routes) >= 45
+    assert all(route.audit_event for route in mutating_routes)
+    assert all(route.idempotency for route in mutating_routes)
+
+
+def test_core_execution_sensitive_routes_are_marked_in_scope() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/workflows.py",
+        gates.REPO_ROOT / "api/v1/approvals.py",
+        gates.REPO_ROOT / "api/v1/agents.py",
+        gates.REPO_ROOT / "api/v1/companies.py",
+        gates.REPO_ROOT / "api/v1/knowledge.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    by_method_path = {
+        (route.methods[0], route.path): route
+        for route in routes
+        if len(route.methods) == 1
+    }
+
+    sensitive_routes = {
+        ("GET", "/api/v1/approvals"),
+        ("GET", "/api/v1/agents/{agent_id}/budget"),
+        ("GET", "/api/v1/companies/{company_id}/credentials"),
+        ("POST", "/api/v1/knowledge/search"),
+        ("GET", "/api/v1/workflows/runs/{run_id}"),
+    }
+    assert sensitive_routes <= set(by_method_path)
+    assert all(
+        "sensitive" in by_method_path[route_key].scope
+        for route_key in sensitive_routes
+    )
+
+
+def test_route_metadata_debt_reduced_by_core_execution_slice() -> None:
+    routes = gates.scan_routes(gates.production_python_files(gates.REPO_ROOT), gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+    missing_count = sum(
+        finding.category == "route_missing_metadata" for finding in findings
+    )
+
+    assert missing_count <= 156

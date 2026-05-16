@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user, get_user_domains, get_user_role
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.audit import AuditLog
@@ -102,6 +103,14 @@ def _hitl_to_dict(item: HITLQueue) -> dict:
 
 # ── GET /approvals ───────────────────────────────────────────────────────────
 @router.get("/approvals", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="approvals.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="approvals.list",
+)
 async def list_approvals(
     domain: str | None = None,
     priority: str | None = None,
@@ -306,6 +315,14 @@ async def _resume_workflow_bg(
 
 # ── POST /approvals/{id}/decide ─────────────────────────────────────────────
 @router.post("/approvals/{hitl_id}/decide")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="approvals.decide",
+    rate_limit="approval-decision",
+    idempotency="terminal-state-conflict-prevents-duplicate-decision",
+    audit_event="approvals.decide",
+)
 async def decide(
     hitl_id: UUID,
     body: HITLDecision,
