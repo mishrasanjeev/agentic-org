@@ -56,10 +56,12 @@ class TallyError(RuntimeError):
         *,
         detail: str | None = None,
         request_id: str | None = None,
+        error_category: str | None = None,
     ) -> None:
         super().__init__(message)
         self.detail = detail
         self.request_id = request_id
+        self.error_category = error_category
 
 
 class TallyConnectionError(TallyError):
@@ -188,6 +190,45 @@ def _extract_tally_error(parsed: dict[str, Any]) -> str | None:
     return None
 
 
+def _bridge_error_payload(resp: Any, fallback_request_id: str) -> dict[str, str]:
+    """Extract durable bridge error metadata from an HTTP response."""
+    try:
+        data = resp.json()
+    except ValueError:
+        return {
+            "message": resp.text[:500],
+            "detail": resp.text[:500],
+            "request_id": fallback_request_id,
+            "error_category": "bridge_http_error",
+        }
+
+    if not isinstance(data, dict):
+        return {
+            "message": resp.text[:500],
+            "detail": resp.text[:500],
+            "request_id": fallback_request_id,
+            "error_category": "bridge_http_error",
+        }
+
+    detail = data.get("detail")
+    if isinstance(detail, dict):
+        message = str(detail.get("message") or data.get("error") or resp.text[:500])
+        return {
+            "message": message,
+            "detail": message,
+            "request_id": str(detail.get("request_id") or fallback_request_id),
+            "error_category": str(detail.get("error_category") or "bridge_http_error"),
+        }
+
+    message = str(detail or data.get("error") or resp.text[:500])
+    return {
+        "message": message,
+        "detail": message,
+        "request_id": str(data.get("request_id") or fallback_request_id),
+        "error_category": str(data.get("error_category") or "bridge_http_error"),
+    }
+
+
 class TallyConnector(BaseConnector):
     """Tally connector with optional bridge routing for remote instances.
 
@@ -255,18 +296,24 @@ class TallyConnector(BaseConnector):
                 "status": "unreachable",
                 "error": str(exc),
                 "detail": exc.detail,
+                "request_id": exc.request_id,
+                "error_category": exc.error_category,
             }
         except TallyBridgeError as exc:
             return {
                 "status": "bridge_error",
                 "error": str(exc),
                 "detail": exc.detail,
+                "request_id": exc.request_id,
+                "error_category": exc.error_category,
             }
         except TallyError as exc:
             return {
                 "status": "unhealthy",
                 "error": str(exc),
                 "detail": exc.detail,
+                "request_id": exc.request_id,
+                "error_category": exc.error_category,
             }
         except Exception as exc:  # defensive — connector health must never raise
             return {"status": "unhealthy", "error": str(exc)}
@@ -322,35 +369,43 @@ class TallyConnector(BaseConnector):
                 "tunnel is live.",
                 detail=str(exc),
                 request_id=request_id,
+                error_category="bridge_unreachable",
             ) from exc
         except httpx.HTTPError as exc:
             raise TallyBridgeError(
                 f"Tally bridge HTTP error: {exc}",
                 detail=str(exc),
                 request_id=request_id,
+                error_category="bridge_http_error",
             ) from exc
 
         if resp.status_code == 401 or resp.status_code == 403:
+            err = _bridge_error_payload(resp, request_id)
             raise TallyBridgeError(
                 "Tally bridge rejected our token. Regenerate bridge "
                 "credentials in Settings → Tally Connection.",
-                detail=f"HTTP {resp.status_code}",
-                request_id=request_id,
+                detail=err["detail"] or f"HTTP {resp.status_code}",
+                request_id=err["request_id"],
+                error_category=err["error_category"],
             )
         if resp.status_code >= 500:
+            err = _bridge_error_payload(resp, request_id)
             raise TallyBridgeError(
                 f"Tally bridge returned HTTP {resp.status_code} — "
                 "the bridge itself may be in a bad state; try restarting "
                 "the agenticorg-bridge process.",
-                detail=resp.text[:500],
-                request_id=request_id,
+                detail=err["detail"],
+                request_id=err["request_id"],
+                error_category=err["error_category"],
             )
         if resp.status_code >= 400:
+            err = _bridge_error_payload(resp, request_id)
             raise TallyBridgeError(
                 f"Tally bridge rejected the request (HTTP "
                 f"{resp.status_code}).",
-                detail=resp.text[:500],
-                request_id=request_id,
+                detail=err["detail"],
+                request_id=err["request_id"],
+                error_category=err["error_category"],
             )
 
         try:
@@ -361,21 +416,25 @@ class TallyConnector(BaseConnector):
                 "an HTML error page from an upstream proxy.",
                 detail=resp.text[:500],
                 request_id=request_id,
+                error_category="bridge_non_json_response",
             ) from exc
 
         if result.get("status") == "error":
             raise TallyBridgeError(
                 f"Tally bridge error: {result.get('error', 'unknown')}",
                 detail=result.get("error"),
-                request_id=request_id,
+                request_id=result.get("request_id") or request_id,
+                error_category=result.get("error_category") or "bridge_error",
             )
 
         xml_response = result.get("xml_response", "")
+        durable_request_id = result.get("request_id") or request_id
         if not xml_response:
             raise TallyResponseError(
                 "Tally returned an empty response — usually means no "
                 "company is open on the client's Tally instance.",
-                request_id=request_id,
+                request_id=durable_request_id,
+                error_category="empty_tally_response",
             )
 
         try:
@@ -386,7 +445,8 @@ class TallyConnector(BaseConnector):
                 "instance is actually Tally Prime / ERP 9 and not "
                 "another service listening on the port.",
                 detail=str(exc),
-                request_id=request_id,
+                request_id=durable_request_id,
+                error_category="malformed_tally_xml",
             ) from exc
 
         parsed = _xml_to_dict(elem)
@@ -399,7 +459,8 @@ class TallyConnector(BaseConnector):
             raise TallyResponseError(
                 f"Tally rejected the request: {err_msg}",
                 detail=err_msg,
-                request_id=request_id,
+                request_id=durable_request_id,
+                error_category="tally_business_error",
             )
 
         return parsed

@@ -27,6 +27,8 @@ from core.models.base import TenantMixin as TenantMixin
 from core.models.base import TimestampMixin as TimestampMixin
 from core.models.branding import TenantBranding as TenantBranding
 from core.models.bridge import BridgeRegistration as BridgeRegistration
+from core.models.bridge import BridgeRequest as BridgeRequest
+from core.models.bridge import BridgeSession as BridgeSession
 from core.models.budget_alert import BudgetAlert as BudgetAlert
 from core.models.ca_subscription import CASubscription as CASubscription
 from core.models.cdc import CDCEvent as CDCEvent
