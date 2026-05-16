@@ -698,3 +698,136 @@ def test_route_metadata_debt_reduced_by_business_control_slice() -> None:
     )
 
     assert missing_count <= 78
+
+
+def test_platform_target_routes_have_metadata() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/packs.py",
+        gates.REPO_ROOT / "api/v1/a2a.py",
+        gates.REPO_ROOT / "api/v1/health.py",
+        gates.REPO_ROOT / "api/v1/branding.py",
+        gates.REPO_ROOT / "api/v1/compliance.py",
+        gates.REPO_ROOT / "api/v1/sop.py",
+        gates.REPO_ROOT / "api/v1/push.py",
+        gates.REPO_ROOT / "api/v1/schemas.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert len(routes) == 35
+    assert findings == []
+    assert all(route.metadata_present for route in routes)
+    assert all(route.scope for route in routes)
+    assert all(route.rate_limit for route in routes)
+    assert all(route.idempotency for route in routes)
+    assert all(route.audit_event for route in routes)
+
+
+def test_platform_public_routes_include_public_reason() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/a2a.py",
+        gates.REPO_ROOT / "api/v1/health.py",
+        gates.REPO_ROOT / "api/v1/branding.py",
+        gates.REPO_ROOT / "api/v1/push.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    public_routes = [route for route in routes if route.auth_required is False]
+
+    assert {(route.methods[0], route.path) for route in public_routes} == {
+        ("GET", "/api/v1/a2a/.well-known/agent.json"),
+        ("GET", "/api/v1/a2a/agent-card"),
+        ("GET", "/api/v1/a2a/agents"),
+        ("GET", "/api/v1/branding"),
+        ("GET", "/api/v1/health"),
+        ("GET", "/api/v1/health/liveness"),
+        ("GET", "/api/v1/push/vapid-key"),
+    }
+    assert all(route.public_exempt_reason for route in public_routes)
+
+
+def test_platform_mutating_routes_include_audit_and_idempotency() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/packs.py",
+        gates.REPO_ROOT / "api/v1/a2a.py",
+        gates.REPO_ROOT / "api/v1/branding.py",
+        gates.REPO_ROOT / "api/v1/compliance.py",
+        gates.REPO_ROOT / "api/v1/sop.py",
+        gates.REPO_ROOT / "api/v1/push.py",
+        gates.REPO_ROOT / "api/v1/schemas.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    mutating_routes = [
+        route
+        for route in routes
+        if any(method in gates.MUTATING_METHODS for method in route.methods)
+    ]
+
+    assert len(mutating_routes) == 16
+    assert all(route.audit_event for route in mutating_routes)
+    assert all(route.idempotency for route in mutating_routes)
+
+
+def test_platform_sensitive_and_external_routes_are_marked() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/packs.py",
+        gates.REPO_ROOT / "api/v1/a2a.py",
+        gates.REPO_ROOT / "api/v1/health.py",
+        gates.REPO_ROOT / "api/v1/compliance.py",
+        gates.REPO_ROOT / "api/v1/sop.py",
+        gates.REPO_ROOT / "api/v1/push.py",
+        gates.REPO_ROOT / "api/v1/schemas.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    by_method_path = {
+        (route.methods[0], route.path): route
+        for route in routes
+        if len(route.methods) == 1
+    }
+
+    sensitive_routes = {
+        ("GET", "/api/v1/compliance/evidence-package"),
+        ("GET", "/api/v1/health/diagnostics"),
+        ("GET", "/api/v1/schemas"),
+        ("GET", "/api/v1/schemas/{name}"),
+    }
+    external_action_routes = {
+        ("POST", "/api/v1/a2a/tasks"),
+        ("POST", "/api/v1/push/test"),
+        ("POST", "/api/v1/sop/upload"),
+        ("POST", "/api/v1/sop/parse-text"),
+    }
+    high_risk_routes = {
+        ("POST", "/api/v1/packs/{name}/install"),
+        ("DELETE", "/api/v1/packs/{name}"),
+        ("POST", "/api/v1/sop/deploy"),
+    }
+
+    assert sensitive_routes <= set(by_method_path)
+    assert external_action_routes <= set(by_method_path)
+    assert high_risk_routes <= set(by_method_path)
+    assert all(
+        "sensitive" in by_method_path[route_key].scope
+        for route_key in sensitive_routes
+    )
+    assert all(
+        "external" in by_method_path[route_key].scope
+        for route_key in external_action_routes
+    )
+    assert all(
+        "high_risk" in by_method_path[route_key].scope
+        for route_key in high_risk_routes
+    )
+
+
+def test_route_metadata_debt_reduced_by_platform_slice() -> None:
+    routes = gates.scan_routes(gates.production_python_files(gates.REPO_ROOT), gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+    missing_count = sum(
+        finding.category == "route_missing_metadata" for finding in findings
+    )
+
+    assert missing_count <= 43

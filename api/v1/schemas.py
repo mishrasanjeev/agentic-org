@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.schema_registry import SchemaRegistry
 from core.schemas.api import PaginatedResponse, SchemaCreate
@@ -30,6 +31,14 @@ def _schema_to_dict(s: SchemaRegistry) -> dict:
 
 # ── GET /schemas ─────────────────────────────────────────────────────────────
 @router.get("/schemas", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="schemas.registry.sensitive.read",
+    rate_limit="schemas-read",
+    idempotency="read-only",
+    audit_event="schemas.list",
+)
 async def list_schemas(
     page: int = 1,
     per_page: int = 20,
@@ -73,6 +82,14 @@ async def list_schemas(
 # POST/PUT never appeared in the editor. This route lets the UI
 # resolve the latest version for a given schema name in one call.
 @router.get("/schemas/{name}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="schemas.registry.sensitive.read",
+    rate_limit="schemas-read",
+    idempotency="read-only",
+    audit_event="schemas.detail",
+)
 async def get_schema_by_name(
     name: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -97,6 +114,14 @@ async def get_schema_by_name(
 
 # ── POST /schemas ────────────────────────────────────────────────────────────
 @router.post("/schemas", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="schemas.registry.sensitive.write",
+    rate_limit="schemas-write",
+    idempotency="not_idempotent-creates-schema-version",
+    audit_event="schemas.create",
+)
 async def create_schema(
     body: SchemaCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -119,6 +144,14 @@ async def create_schema(
 
 # ── PUT /schemas/{name} ─────────────────────────────────────────────────────
 @router.put("/schemas/{name}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="schemas.registry.sensitive.write",
+    rate_limit="schemas-write",
+    idempotency="idempotent-upsert-by-name-and-version",
+    audit_event="schemas.upsert",
+)
 async def upsert_schema(
     name: str,
     body: SchemaCreate,
