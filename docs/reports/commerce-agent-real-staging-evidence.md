@@ -1,9 +1,7 @@
 # Commerce Sales Agent Real-Staging Evidence
 
-Status: C2E approved real-staging evidence captured locally against the temporary Grantex Option A smoke service. This report is scrubbed and contains no bearer token values, passports/JWTs, idempotency key values, provider credentials, raw payloads, DB/Redis URLs, private keys, or secret values.
-
 - Run mode: `real-staging`
-- Grantex host: `grantex-auth-smoke-876335597959.us-central1.run.app`
+- Grantex host: `grantex-auth-smoke-dd4mtrt2gq-uc.a.run.app`
 - Auth source env name: `GRANTEX_API_KEY`
 - Fixture env path: `.tmp/commerce-agent-real-staging.env`
 - Fixture env variable names recorded: 21
@@ -14,16 +12,32 @@ Status: C2E approved real-staging evidence captured locally against the temporar
 - Request correlation values recorded: false
 - Provider material recorded: false
 - Raw request/response bodies recorded: false
-- No direct provider calls: true
-- No provider credential handling: true
 
 ## Summary
 
-- Passed: 10
-- Failed: 2
-- Skipped: 3
-- Provider: mock
-- Grantex-only path confirmed: true
+- Passed: 13
+- Failed: 1
+- Skipped: 1
+
+## C2F Payment-Intent Check
+
+- Positive `payment_create_intent` passed against the temporary Grantex Option A smoke service.
+- The C2F contract fix kept `passport_max_amount_minor_units` as local preflight metadata only.
+- The payment intent request used the Grantex-supported MCP field allowlist.
+- The amount-cap breach negative case remained a local fail-safe refusal.
+- No direct provider calls or provider credential handling were recorded.
+
+## Cleanup And Production Safety
+
+- Cleanup completed after evidence capture.
+- Deleted temporary Cloud Run service: `grantex-auth-smoke`.
+- Deleted temporary Cloud SQL instance: `grantex-commerce-smoke-pg`.
+- Deleted temporary Redis instance: `grantex-commerce-smoke-redis`.
+- Deleted temporary smoke secrets: `grantex-smoke-*` only.
+- Deleted temporary smoke image tag: `auth-service-smoke:81003bae4ce32b98e847c7f1ab536945079eb96a`.
+- Verified temporary smoke Cloud Run, Cloud SQL, Redis, and smoke secrets absent after cleanup.
+- Verified production resources still present: `grantex-auth`, `grantex-pg16`, `grantex-redis`.
+- Production Commerce V1, live payment, and live Plural flags were not changed by this run.
 
 ## Case Results
 
@@ -37,36 +51,13 @@ Status: C2E approved real-staging evidence captured locally against the temporar
 | cart_create | pass | grantex_commerce:cart_create |  |  |  |  |
 | consent_request | pass | grantex_commerce:consent_request |  |  |  |  |
 | consent_exchange | fail | grantex_commerce:consent_exchange |  |  | consent_not_granted |  |
-| payment_create_intent | fail | grantex_commerce:payment_create_intent |  |  | validation_failed |  |
-| checkout_create | skipped |  |  |  |  | requires checkout passport fixture and payment intent |
-| payment_get_status | skipped |  |  |  |  | requires checkout passport fixture and payment intent |
+| payment_create_intent | pass | grantex_commerce:payment_create_intent |  |  |  |  |
+| checkout_create | pass | grantex_commerce:checkout_create |  |  |  |  |
+| payment_get_status | pass | grantex_commerce:payment_get_status |  |  |  |  |
 | amount_cap_breach | pass |  |  |  | amount_cap_exceeded |  |
 | denied_revoked_expired_passport | pass |  |  |  | consent_denied |  |
 | disabled_merchant_untrusted_agent | pass |  |  |  | merchant_disabled |  |
 | hosted_agenticorg_discovery | skipped |  |  |  |  | requires hosted AgenticOrg service |
-
-## Synthetic IDs
-
-- Merchant: `mch_staging_electronics_pilot`
-- Agent: `cag_staging_agenticorg_sales`
-- Product: `cprd_01KRRN1K5HSQV7MGEDP8PD54Z2`
-- Variant: `cvar_01KRRN1K5TB1MQ10GJJB91H2YT`
-
-## C2E Expectations
-
-- Inventory used the browse passport fixture when present and passed.
-- Consent request used Grantex-supported checkout scopes.
-- Positive payment amount was within the passport cap, but Grantex returned `validation_failed` for AgenticOrg payment intent creation.
-- Amount-cap breach remained a fail-safe negative case with `amount_cap_exceeded`.
-- Commerce execution stayed on the Grantex connector path; no provider credentials or direct provider calls were used.
-
-## Cleanup Status
-
-Temporary smoke resources were cleaned up after evidence capture. Production Grantex resources were verified present after cleanup, and production Commerce V1 config, live payment flags, and live Plural flags were not changed.
-
-## Redaction
-
-The evidence records only host, variable names, synthetic IDs, case status, error code, cleanup status, and provider-safety confirmations. It does not record raw response payloads, usable passports/JWTs, auth material, idempotency key values, provider credentials, DB/Redis URLs, private keys, or secret values.
 
 ## Redacted Summary
 
@@ -148,30 +139,30 @@ The evidence records only host, variable names, synthetic IDs, case status, erro
     },
     {
       "blocker": null,
-      "error_code": "validation_failed",
+      "error_code": null,
       "http_status": null,
       "latency_ms": null,
       "name": "payment_create_intent",
-      "status": "fail",
+      "status": "pass",
       "tool_alias": "grantex_commerce:payment_create_intent"
     },
     {
-      "blocker": "requires checkout passport fixture and payment intent",
+      "blocker": null,
       "error_code": null,
       "http_status": null,
       "latency_ms": null,
       "name": "checkout_create",
-      "status": "skipped",
-      "tool_alias": null
+      "status": "pass",
+      "tool_alias": "grantex_commerce:checkout_create"
     },
     {
-      "blocker": "requires checkout passport fixture and payment intent",
+      "blocker": null,
       "error_code": null,
       "http_status": null,
       "latency_ms": null,
       "name": "payment_get_status",
-      "status": "skipped",
-      "tool_alias": null
+      "status": "pass",
+      "tool_alias": "grantex_commerce:payment_get_status"
     },
     {
       "blocker": null,
@@ -237,36 +228,36 @@ The evidence records only host, variable names, synthetic IDs, case status, erro
   "fixture_synthetic_ids": {
     "AGENTICORG_COMMERCE_FIXTURE_AGENT_ID": "cag_staging_agenticorg_sales",
     "AGENTICORG_COMMERCE_FIXTURE_MERCHANT_ID": "mch_staging_electronics_pilot",
-    "AGENTICORG_COMMERCE_FIXTURE_PRODUCT_ID": "cprd_01KRRN1K5HSQV7MGEDP8PD54Z2",
-    "AGENTICORG_COMMERCE_FIXTURE_VARIANT_ID": "cvar_01KRRN1K5TB1MQ10GJJB91H2YT"
+    "AGENTICORG_COMMERCE_FIXTURE_PRODUCT_ID": "cprd_01KRRW5GHPGK90F3CD7TH1X5C6",
+    "AGENTICORG_COMMERCE_FIXTURE_VARIANT_ID": "cvar_01KRRW5GHY3M38WKMDXKD1MHKR"
   },
   "fixture_value_hashes": [
     {
       "name": "AGENTICORG_COMMERCE_BROWSE_PASSPORT_JWT",
-      "sha256_12": "a7ba849a221c"
+      "sha256_12": "341767110f12"
     },
     {
       "name": "AGENTICORG_COMMERCE_CHECKOUT_PASSPORT_JWT",
-      "sha256_12": "3b7c61c9fbf3"
+      "sha256_12": "72df306a6570"
     },
     {
       "name": "AGENTICORG_COMMERCE_DENIED_CONSENT_REF",
-      "sha256_12": "198f071592a6"
+      "sha256_12": "03deec08c04c"
     },
     {
       "name": "AGENTICORG_COMMERCE_EXPIRED_PASSPORT_JWT",
-      "sha256_12": "866ab9c5589c"
+      "sha256_12": "c09982ea0b33"
     },
     {
       "name": "AGENTICORG_COMMERCE_REVOKED_PASSPORT_JWT",
-      "sha256_12": "1fe9fcebc894"
+      "sha256_12": "9c26c71f69f6"
     },
     {
       "name": "GRANTEX_API_KEY",
-      "sha256_12": "9450cfa462a1"
+      "sha256_12": "b98d47d6f189"
     }
   ],
-  "grantex_host": "grantex-auth-smoke-876335597959.us-central1.run.app",
+  "grantex_host": "grantex-auth-smoke-dd4mtrt2gq-uc.a.run.app",
   "no_provider_call_confirmation": true,
   "redaction": {
     "auth_values_recorded": false,
@@ -284,7 +275,9 @@ The evidence records only host, variable names, synthetic IDs, case status, erro
     "grantex_commerce:cart_create",
     "grantex_commerce:consent_request",
     "grantex_commerce:consent_exchange",
-    "grantex_commerce:payment_create_intent"
+    "grantex_commerce:payment_create_intent",
+    "grantex_commerce:checkout_create",
+    "grantex_commerce:payment_get_status"
   ]
 }
 ```
