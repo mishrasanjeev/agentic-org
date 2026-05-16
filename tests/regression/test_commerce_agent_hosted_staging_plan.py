@@ -137,6 +137,8 @@ def test_commerce_agent_hosted_staging_e2e_has_real_staging_command_plan() -> No
 
     for required in [
         "python demos/commerce_sales_agent_demo.py --mode=real-staging",
+        "--fixture-env .tmp/commerce-agent-real-staging.env",
+        "AGENTICORG_COMMERCE_FIXTURE_ENV=.tmp/commerce-agent-real-staging.env",
         "python -m pytest tests/evals/test_commerce_sales_agent_real_staging.py -q",
         "AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL",
         "AGENTICORG_COMMERCE_REAL_STAGING=1",
@@ -145,6 +147,7 @@ def test_commerce_agent_hosted_staging_e2e_has_real_staging_command_plan() -> No
         "fails closed before connector creation, auth lookup, or network use",
         "python demos/commerce_sales_agent_demo.py --mode=mock",
         "Do not present mocked results as hosted staging evidence.",
+        "records only variable names, synthetic IDs, redacted hashes",
     ]:
         assert required in content
 
@@ -221,12 +224,16 @@ def test_commerce_agent_staging_data_setup_documents_option_a_smoke_case_boundar
         "GRANTEX_COMMERCE_BASE_URL=<approved smoke URL>",
         "GRANTEX_BASE_URL=<approved smoke URL>",
         "AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL=<approved smoke URL>",
+        "C2C Local Fixture Bridge",
+        "--fixture-env .tmp/commerce-agent-real-staging.env",
+        "AGENTICORG_COMMERCE_FIXTURE_ENV=.tmp/commerce-agent-real-staging.env",
         "Option A Smoke Coverage",
         "local guardrail refusal for missing consent",
         "payment intent create",
         "checkout create",
         "remain skipped unless the approved smoke run also provisions synthetic consent/passport fixtures",
         "no direct provider call regression",
+        "Missing fixture fields keep the corresponding cases explicitly skipped",
     ]:
         assert required in content
 
