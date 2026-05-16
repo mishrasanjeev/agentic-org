@@ -43,6 +43,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from api.v1.connectors import _assert_public_base_url, _connector_to_dict
 from core.async_redis import get_async_redis
 from core.config import settings
@@ -608,6 +609,14 @@ async def _upsert_oauth_connector(
     "/connectors/oauth/providers",
     response_model=list[OAuthProviderSchema],
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="connectors.oauth.providers.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.oauth.providers.list",
+)
 async def list_oauth_providers() -> list[OAuthProviderSchema]:
     """Return the catalog the UI uses to render provider-specific forms."""
     return [
@@ -619,6 +628,14 @@ async def list_oauth_providers() -> list[OAuthProviderSchema]:
     "/connectors/oauth/initiate",
     response_model=OAuthInitiateResponse,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.oauth.initiate.admin",
+    rate_limit="admin-mutating",
+    idempotency="oauth-state-nonce",
+    audit_event="connectors.oauth.initiate",
 )
 async def initiate_connector_oauth(
     body: OAuthInitiateRequest,
@@ -686,6 +703,14 @@ async def initiate_connector_oauth(
     "/connectors/oauth/revoke-and-retry",
     response_model=OAuthInitiateResponse,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.oauth.reconnect.admin",
+    rate_limit="admin-mutating",
+    idempotency="oauth-reconnect-state-nonce",
+    audit_event="connectors.oauth.reconnect",
 )
 async def revoke_and_retry(
     body: OAuthRevokeRetryRequest,
@@ -764,6 +789,15 @@ async def revoke_and_retry(
 
 
 @router.get("/oauth/callback", name="oauth_connector_callback")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:connectors.oauth.callback",
+    rate_limit="oauth-callback",
+    idempotency="oauth-state-and-provider-code",
+    audit_event="connectors.oauth.callback",
+    public_reason="oauth-state-validated-authorization-code",
+)
 async def oauth_connector_callback(
     code: str | None = None,
     state: str | None = None,
