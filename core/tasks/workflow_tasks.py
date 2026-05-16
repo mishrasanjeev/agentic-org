@@ -1,8 +1,9 @@
 """Celery tasks for workflow wait step and event-based resumption.
 
 Workflow run state is durable in PostgreSQL via ``WorkflowStateStore``.
-Redis is still used for event-listener discovery and cleanup, but these tasks
-must not mutate ``wfstate:{run_id}`` directly.
+Redis is still used for best-effort event-listener cache cleanup, but these
+tasks must not mutate ``wfstate:{run_id}`` directly or treat Redis listener
+keys as authoritative.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Any
 import structlog
 
 from core.tasks.celery_app import app
+from workflows.event_waits import WorkflowEventWaitStore
 from workflows.state_store import WorkflowStateStore
 
 logger = structlog.get_logger()
@@ -20,6 +22,10 @@ logger = structlog.get_logger()
 
 def _state_store() -> WorkflowStateStore:
     return WorkflowStateStore()
+
+
+def _event_wait_store() -> WorkflowEventWaitStore:
+    return WorkflowEventWaitStore()
 
 
 def _get_redis():
@@ -137,10 +143,25 @@ def resume_workflow_wait(run_id: str, step_id: str) -> dict:
 
 async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
     log = logger.bind(run_id=run_id, step_id=step_id)
-    store = _state_store()
-    await store.init()
+    event_wait_store = _event_wait_store()
+    await event_wait_store.init()
+    event_wait_record = None
     try:
-        state = await store.load(run_id)
+        event_wait_record = await event_wait_store.mark_timed_out(
+            engine_run_id=run_id,
+            step_id=step_id,
+        )
+    finally:
+        await event_wait_store.close()
+
+    if event_wait_record and event_wait_record.status in {"matched", "cancelled", "expired"}:
+        log.info("event_wait_no_longer_waiting", listener_status=event_wait_record.status)
+        return {"status": "noop", "reason": f"listener is {event_wait_record.status}"}
+
+    state_store = _state_store()
+    await state_store.init()
+    try:
+        state = await state_store.load(run_id)
         if not state:
             log.warning("workflow_state_not_found")
             return {"status": "error", "reason": "workflow_state_not_found"}
@@ -164,7 +185,7 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
         state["status"] = "running"
         state.pop("waiting_step_id", None)
 
-        await store.save(
+        await state_store.save(
             state,
             actor="celery.timeout_workflow_event",
             step_id=step_id,
@@ -179,7 +200,7 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
             "step_id": step_id,
         }
     finally:
-        await store.close()
+        await state_store.close()
 
 
 @app.task(name="timeout_workflow_event")

@@ -91,26 +91,34 @@ class TestWaitForEvent:
 
     @pytest.fixture(autouse=True)
     def _patch_deps(self):
-        mock_redis_cls = MagicMock()
         mock_redis_inst = AsyncMock()
         mock_redis_inst.set = AsyncMock()
         mock_redis_inst.aclose = AsyncMock()
-        mock_redis_cls.from_url.return_value = mock_redis_inst
         self._mock_redis = mock_redis_inst
+        from workflows.event_waits import (
+            InMemoryWorkflowEventWaitRepository,
+            WorkflowEventWaitStore,
+        )
 
-        with patch("workflows.step_types.aioredis", mock_redis_cls, create=True):
-            with patch(
-                "core.tasks.workflow_tasks.timeout_workflow_event",
-                new=MagicMock(apply_async=MagicMock()),
-            ):
-                with patch("core.config.settings", new=MagicMock(redis_url="redis://mock:6379/0")):
-                    yield
+        self._event_wait_repo = InMemoryWorkflowEventWaitRepository()
+        self._event_wait_store = WorkflowEventWaitStore(
+            repository=self._event_wait_repo,
+            redis=mock_redis_inst,
+        )
+
+        with patch(
+            "core.tasks.workflow_tasks.timeout_workflow_event",
+            new=MagicMock(apply_async=MagicMock()),
+        ):
+            yield
 
     def _run(self, step: dict, state: dict | None = None) -> dict:
         from workflows.step_types import execute_step
 
+        state = state or {"id": "run-42"}
+        state["_event_wait_store"] = self._event_wait_store
         return asyncio.run(
-            execute_step(step, state or {"id": "run-42"})
+            execute_step(step, state)
         )
 
     def test_returns_waiting_event_with_correct_type(self):
@@ -341,7 +349,19 @@ class TestWebhookParsing:
         mock_redis.hset = AsyncMock()
         mock_redis.scan = AsyncMock(return_value=(0, []))
         mock_redis.aclose = AsyncMock()
-        with patch("api.v1.webhooks._get_redis", return_value=mock_redis):
+        from workflows.event_waits import (
+            InMemoryWorkflowEventWaitRepository,
+            WorkflowEventWaitStore,
+        )
+
+        event_wait_store = WorkflowEventWaitStore(
+            repository=InMemoryWorkflowEventWaitRepository(),
+            redis=mock_redis,
+        )
+        with patch("api.v1.webhooks._get_redis", return_value=mock_redis), patch(
+            "api.v1.webhooks._workflow_event_wait_store",
+            return_value=event_wait_store,
+        ):
             self._redis = mock_redis
             yield
 
