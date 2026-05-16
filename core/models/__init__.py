@@ -29,6 +29,8 @@ from core.models.branding import TenantBranding as TenantBranding
 from core.models.bridge import BridgeRegistration as BridgeRegistration
 from core.models.budget_alert import BudgetAlert as BudgetAlert
 from core.models.ca_subscription import CASubscription as CASubscription
+from core.models.cdc import CDCEvent as CDCEvent
+from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
