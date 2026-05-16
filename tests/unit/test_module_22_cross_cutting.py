@@ -136,12 +136,23 @@ def test_tc_cc_005_per_agent_advisory_lock_pattern_pinned() -> None:
     assert "lock_key = abs(hash(str(agent_id))) % (2**31)" in src
 
 
-def test_tc_cc_005_init_db_advisory_lock_for_startup_ddl() -> None:
-    """Rolling deploys can race on ALTER TABLE ENABLE ROW LEVEL
-    SECURITY (the April 16 outage). The startup DDL block must
-    use a transaction-scoped advisory lock to serialize."""
+def test_tc_cc_005_init_db_strict_path_is_verify_only() -> None:
+    """Strict startup must verify Alembic state and never enter DDL."""
     src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
-    assert "pg_advisory_xact_lock(4815162342)" in src
+    init_db_block = src.split("async def init_db", 1)[1].split(
+        "async def _legacy_startup_schema_repair_for_local_only", 1
+    )[0]
+    assert "verify_runtime_schema_current" in init_db_block
+    for ddl in ("CREATE TABLE", "ALTER TABLE", "CREATE POLICY", "ENABLE ROW LEVEL SECURITY"):
+        assert ddl not in init_db_block
+
+
+def test_tc_cc_005_legacy_startup_ddl_still_serializes_when_opted_in() -> None:
+    """The local-only legacy repair helper still serializes DDL if explicitly enabled."""
+    src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
+    legacy_block = src.split("async def _legacy_startup_schema_repair_for_local_only", 1)[1]
+    assert "ENABLE_LEGACY_STARTUP_DDL_ENV" in legacy_block
+    assert "pg_advisory_xact_lock(4815162342)" in legacy_block
 
 
 # ─────────────────────────────────────────────────────────────────

@@ -244,12 +244,11 @@ export AGENTICORG_PII_MASKING="true"
 #
 # This mirrors what tests/integration/test_alembic_e2e.py does to stage
 # a legacy-shaped DB before the alembic chain takes over. Without this,
-# the API's init_db() would try ALTER TABLE on `agents` before the
-# table exists (since the compose postgres is fresh and we skipped the
-# legacy initdb.d SQL). We tell init_db to no-op via
-# AGENTICORG_DDL_MANAGED_BY_ALEMBIC=1 and let alembic own the schema.
+# app startup verifies Alembic state and does not run schema DDL unless
+# the local-only repair flag is explicitly enabled. Keep that flag unset
+# here so Alembic owns the schema.
 # ---------------------------------------------------------------------------
-export AGENTICORG_DDL_MANAGED_BY_ALEMBIC=1
+unset AGENTICORG_ENABLE_LEGACY_STARTUP_DDL
 
 log "Bootstrapping schema (ORM metadata.create_all + alembic stamp + upgrade)"
 "$PYTHON_BIN" -c "
@@ -268,9 +267,8 @@ print('ORM create_all complete')
 ok "schema bootstrap complete"
 
 # Seed the CA demo tenant + demo user (ceo@agenticorg.local). In the
-# normal API startup path this runs inside init_db(), but we disabled
-# that path with AGENTICORG_DDL_MANAGED_BY_ALEMBIC=1 so the schema owner
-# is alembic, not init_db. Call the seeder directly here.
+# normal API startup path can skip demo seed when schema verification is
+# the only startup action, so call the seeder directly here.
 log "Seeding CA demo tenant + users"
 "$PYTHON_BIN" -c "
 import asyncio
