@@ -31,6 +31,13 @@ REST_PATH_TO_ALIAS = {value: key for key, value in REST_CONSENT_ENDPOINTS.items(
 PROVIDER_MARKERS = ("stri" + "pe", "plu" + "ral", "pine", "provider_" + "credentials", "credential_" + "payload")
 STAGING_MERCHANT_ID = "mch_staging_electronics_pilot"
 STAGING_AGENT_ID = "cag_staging_agenticorg_sales"
+GRANTEX_CHECKOUT_CONSENT_SCOPES = [
+    "commerce:catalog.read",
+    "commerce:inventory.read",
+    "commerce:checkout.create",
+    "commerce:payment.initiate",
+    "commerce:payment.status.read",
+]
 
 DEMO_MCP_RESPONSES: dict[str, dict[str, Any]] = {
     "merchant_get_profile": {
@@ -332,25 +339,36 @@ async def run_real_staging_demo(
             evidence.add_case(name="catalog_get_item", status="skipped", blocker="catalog search returned no product")
 
         if variant_id:
-            inventory = await connector.inventory_check(merchant_id=merchant_id, variant_ids=[variant_id])
-            alias = "grantex_commerce:inventory_check"
-            tool_sequence.append(alias)
-            evidence.add_case(
-                name="inventory_check",
-                status=_case_status(inventory),
-                tool_alias=alias,
-                result=inventory,
-            )
-            caution = inventory_caution(inventory.get("data", inventory))
-            steps.append(
-                _step(
-                    "Inventory check",
-                    "Check staging inventory for the first variant.",
-                    alias,
-                    {"variant_id": variant_id, "caution_required": caution["caution_required"]},
-                    "Inventory was checked through Grantex staging.",
+            if fixture.browse_passport_jwt:
+                inventory = await connector.inventory_check(
+                    merchant_id=merchant_id,
+                    variant_ids=[variant_id],
+                    passport_jwt=fixture.browse_passport_jwt,
                 )
-            )
+                alias = "grantex_commerce:inventory_check"
+                tool_sequence.append(alias)
+                evidence.add_case(
+                    name="inventory_check",
+                    status=_case_status(inventory),
+                    tool_alias=alias,
+                    result=inventory,
+                )
+                caution = inventory_caution(inventory.get("data", inventory))
+                steps.append(
+                    _step(
+                        "Inventory check",
+                        "Check staging inventory for the first variant.",
+                        alias,
+                        {"variant_id": variant_id, "caution_required": caution["caution_required"]},
+                        "Inventory was checked through Grantex staging.",
+                    )
+                )
+            else:
+                evidence.add_case(
+                    name="inventory_check",
+                    status="skipped",
+                    blocker="requires browse passport fixture",
+                )
 
             cart = await connector.cart_create(
                 merchant_id=merchant_id,
@@ -384,8 +402,8 @@ async def run_real_staging_demo(
         consent = await connector.consent_request(
             merchant_id=merchant_id,
             passport_type="checkout",
-            requested_scopes=["checkout:create", "payment:create"],
-            max_amount=250000,
+            requested_scopes=GRANTEX_CHECKOUT_CONSENT_SCOPES,
+            max_amount=fixture.passport_max_amount_minor_units_if_present or 250000,
             currency=fixture.currency,
         )
         alias = "grantex_commerce:consent_request"
@@ -420,7 +438,7 @@ async def run_real_staging_demo(
                     alias,
                     {
                         "passport": "received_redacted" if checkout_passport_jwt else None,
-                        "max_amount_minor_units": fixture.passport_max_amount_minor_units,
+                        "amount_cap_relation": fixture.positive_payment_amount_cap_relation,
                     },
                     "Passport exchange ran through Grantex without exposing passport material.",
                 )
@@ -434,37 +452,52 @@ async def run_real_staging_demo(
 
         payment_intent_id: str | None = None
         if checkout_passport_jwt and cart_id:
-            payment = await connector.payment_create_intent(
-                merchant_id=merchant_id,
-                cart_id=cart_id,
-                passport_jwt=checkout_passport_jwt,
-                passport_max_amount_minor_units=fixture.passport_max_amount_minor_units,
-                amount_minor_units=fixture.amount_minor_units,
-                currency=fixture.currency,
-                idempotency_key=f"agenticorg-real-staging-payment-{uuid.uuid4().hex}",
-                provider_key="mock",
-            )
-            alias = "grantex_commerce:payment_create_intent"
-            tool_sequence.append(alias)
-            evidence.add_case(
-                name="payment_create_intent",
-                status=_case_status(payment),
-                tool_alias=alias,
-                result=payment,
-            )
-            payment_intent_id = _data(payment).get("payment_intent_id")
-            steps.append(
-                _step(
-                    "Payment intent",
-                    "Create a mock-provider staging payment intent.",
-                    alias,
-                    {
-                        "payment_intent_id": payment_intent_id,
-                        "status": _data(payment).get("status"),
-                    },
-                    "Payment intent ran through Grantex staging only.",
+            amount_cap_relation = fixture.positive_payment_amount_cap_relation
+            if amount_cap_relation == "missing_metadata":
+                evidence.add_case(
+                    name="payment_create_intent",
+                    status="skipped",
+                    blocker="requires fixture amount and passport cap metadata",
                 )
-            )
+            elif amount_cap_relation == "amount_exceeds_cap":
+                evidence.add_case(
+                    name="payment_create_intent",
+                    status="skipped",
+                    blocker="fixture amount exceeds passport cap",
+                )
+            else:
+                payment = await connector.payment_create_intent(
+                    merchant_id=merchant_id,
+                    cart_id=cart_id,
+                    passport_jwt=checkout_passport_jwt,
+                    passport_max_amount_minor_units=fixture.passport_max_amount_minor_units,
+                    amount_minor_units=fixture.amount_minor_units,
+                    currency=fixture.currency,
+                    idempotency_key=f"agenticorg-real-staging-payment-{uuid.uuid4().hex}",
+                    provider_key="mock",
+                )
+                alias = "grantex_commerce:payment_create_intent"
+                tool_sequence.append(alias)
+                evidence.add_case(
+                    name="payment_create_intent",
+                    status=_case_status(payment),
+                    tool_alias=alias,
+                    result=payment,
+                )
+                payment_intent_id = _data(payment).get("payment_intent_id")
+                steps.append(
+                    _step(
+                        "Payment intent",
+                        "Create a mock-provider staging payment intent.",
+                        alias,
+                        {
+                            "payment_intent_id": payment_intent_id,
+                            "status": _data(payment).get("status"),
+                            "amount_cap_relation": amount_cap_relation,
+                        },
+                        "Payment intent ran through Grantex staging only.",
+                    )
+                )
         else:
             evidence.add_case(
                 name="payment_create_intent",

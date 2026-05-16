@@ -102,8 +102,24 @@ class CommerceFixtureConfig:
         return _int_value(self.values.get("AGENTICORG_COMMERCE_FIXTURE_AMOUNT_MINOR_UNITS"), 0)
 
     @property
+    def amount_minor_units_if_present(self) -> int | None:
+        return _optional_int_value(self.values.get("AGENTICORG_COMMERCE_FIXTURE_AMOUNT_MINOR_UNITS"))
+
+    @property
     def passport_max_amount_minor_units(self) -> int:
         return _int_value(self.values.get("AGENTICORG_COMMERCE_FIXTURE_PASSPORT_MAX_AMOUNT_MINOR_UNITS"), 250000)
+
+    @property
+    def passport_max_amount_minor_units_if_present(self) -> int | None:
+        return _optional_int_value(self.values.get("AGENTICORG_COMMERCE_FIXTURE_PASSPORT_MAX_AMOUNT_MINOR_UNITS"))
+
+    @property
+    def positive_payment_amount_cap_relation(self) -> str:
+        amount = self.amount_minor_units_if_present
+        cap = self.passport_max_amount_minor_units_if_present
+        if amount is None or cap is None:
+            return "missing_metadata"
+        return "within_cap" if amount <= cap else "amount_exceeds_cap"
 
     @property
     def browse_passport_jwt(self) -> str | None:
@@ -179,6 +195,16 @@ def _int_value(value: str | None, fallback: int) -> int:
     except ValueError:
         return fallback
     return parsed if parsed >= 0 else fallback
+
+
+def _optional_int_value(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(str(value).strip())
+    except ValueError:
+        return None
+    return parsed if parsed >= 0 else None
 
 
 def _is_true(value: str | None) -> bool:
