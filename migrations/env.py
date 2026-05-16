@@ -1,8 +1,9 @@
 """Alembic environment for AgenticOrg.
 
 Schema authority: migration files under ``migrations/versions/``.
-Runtime startup DDL in ``core.database.init_db()`` is legacy compat only,
-and is skipped when ``AGENTICORG_DDL_MANAGED_BY_ALEMBIC=true``.
+Strict runtime startup in ``core.database.init_db()`` verifies the
+``alembic_version`` table and never issues DDL. Legacy startup repair is
+local-only and requires ``AGENTICORG_ENABLE_LEGACY_STARTUP_DDL=1``.
 
 Cutover steps for an existing environment:
 

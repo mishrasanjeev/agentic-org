@@ -55,22 +55,29 @@ def test_tc_001_report_schedule_surfaces_exception_class() -> None:
     assert "Could not load report schedules ({exc_class}:" in src
 
 
-def test_tc_001_report_schedules_table_self_heal_in_init_db() -> None:
-    """init_db must create report_schedules + index + RLS.
+def test_tc_001_report_schedules_table_is_alembic_managed_not_startup_ddl() -> None:
+    """report_schedules must be created by Alembic, not strict startup DDL.
 
     Pinned because the 27-Apr re-reopen of TC_001 had a hidden second
     layer: instrumentation surfaced the exception class but the
     underlying error was ``UndefinedTableError: relation
-    "report_schedules" does not exist``. The v4.4.0 alembic migration
-    was the canonical creator, but envs stamped past that revision
-    (e.g. prod 2026-04-22 cutover) ended up with no table. Without
-    this safety net, every fresh prod env regresses TC_001.
+    "report_schedules" does not exist``. The fix is now an Alembic
+    migration plus strict startup verification, not production self-heal
+    DDL in ``init_db``.
     """
+    migration = (REPO / "migrations" / "versions" / "v4_9_6_report_schedules_recreate.py").read_text(
+        encoding="utf-8"
+    )
+    assert "CREATE TABLE IF NOT EXISTS report_schedules" in migration
+    assert "ix_report_schedules_tenant_company" in migration
+    assert "CREATE POLICY report_schedules_tenant_isolation" in migration
+
     src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
-    assert "CREATE TABLE IF NOT EXISTS report_schedules" in src
-    assert "ix_report_schedules_tenant_company" in src
-    # Must be in the RLS list so cross-tenant reads are blocked.
-    assert '"report_schedules",' in src
+    init_db_block = src.split("async def init_db", 1)[1].split(
+        "async def _legacy_startup_schema_repair_for_local_only", 1
+    )[0]
+    assert "CREATE TABLE IF NOT EXISTS report_schedules" not in init_db_block
+    assert "verify_runtime_schema_current" in init_db_block
 
 
 # ──────────────────────────────────────────────────────────────────
