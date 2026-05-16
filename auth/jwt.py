@@ -15,7 +15,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_jwks_cache: dict[str, Any] = {}
+_jwks_cache: dict[str, Any] = {}  # enterprise-gate: process-local-ok reason=ttl-cache-of-remote-public-jwks
 _jwks_cache_time: float = 0
 JWKS_CACHE_TTL = 3600
 

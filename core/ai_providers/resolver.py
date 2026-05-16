@@ -84,8 +84,10 @@ class ResolvedCredential:
 
 # Simple in-process cache. Key = (tenant_id_str, provider, kind).
 # Value = (ResolvedCredential, cached_at, rotated_at_iso).
+# enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-ai-credential-cache
 _CACHE: dict[tuple[str, str, str], tuple[ResolvedCredential, float, str]] = {}
 _CACHE_TTL_S = 120.0
+_CACHE_MAX_SIZE = 2_048
 
 
 def _cache_key(
@@ -93,6 +95,26 @@ def _cache_key(
 ) -> tuple[str, str, str]:
     tid = str(tenant_id) if tenant_id else "__platform__"
     return (tid, provider, kind)
+
+
+def _store_cache(
+    cache_key: tuple[str, str, str],
+    resolved: ResolvedCredential,
+    rotated_at: str,
+) -> None:
+    now = time.time()
+    if cache_key not in _CACHE and len(_CACHE) >= _CACHE_MAX_SIZE:
+        expired = [
+            key
+            for key, (_, cached_at, _) in _CACHE.items()
+            if now - cached_at >= _CACHE_TTL_S
+        ]
+        for key in expired:
+            _CACHE.pop(key, None)
+        while len(_CACHE) >= _CACHE_MAX_SIZE:
+            oldest_key = min(_CACHE, key=lambda item: _CACHE[item][1])
+            _CACHE.pop(oldest_key, None)
+    _CACHE[cache_key] = (resolved, now, rotated_at)
 
 
 def _env_fallback(provider: str, kind: str) -> str | None:
@@ -311,7 +333,7 @@ async def get_provider_credential(
             source="tenant",
             provider_config=provider_config or None,
         )
-        _CACHE[ck] = (resolved, time.time(), rotated_at)
+        _store_cache(ck, resolved, rotated_at)
         # Fire-and-forget bookkeeping
         await _stamp_last_used(tid_obj, provider, kind)
         return resolved

@@ -76,14 +76,56 @@ _DEFAULT_BRANDING = BrandingOut(
 # 429s for legitimate users sharing the IP.
 
 _BRANDING_RPM = 30
+_BRANDING_MAX_RATE_WINDOWS = 10_000
+_BRANDING_MAX_CACHE_ENTRIES = 1_024
+# enterprise-gate: process-local-ok reason=bounded-local-public-branding-rate-window
 _branding_window: dict[str, deque[float]] = {}
+# enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-public-branding-cache
 _branding_cache: dict[str, tuple[BrandingOut, float]] = {}
 _BRANDING_CACHE_TTL = 60.0
+
+
+def _evict_branding_window_if_needed(ip: str, now: float) -> None:
+    if ip in _branding_window or len(_branding_window) < _BRANDING_MAX_RATE_WINDOWS:
+        return
+    empty_keys: list[str] = []
+    oldest_ip = ""
+    oldest_seen = now
+    for key, window in _branding_window.items():
+        while window and now - window[0] > 60:
+            window.popleft()
+        if not window:
+            empty_keys.append(key)
+            continue
+        if window[0] <= oldest_seen:
+            oldest_ip = key
+            oldest_seen = window[0]
+    for key in empty_keys:
+        _branding_window.pop(key, None)
+    if len(_branding_window) >= _BRANDING_MAX_RATE_WINDOWS and oldest_ip:
+        _branding_window.pop(oldest_ip, None)
+
+
+def _store_branding_cache(cache_key: str, public: BrandingOut, expires_at: float) -> None:
+    now = time.time()
+    if cache_key not in _branding_cache and len(_branding_cache) >= _BRANDING_MAX_CACHE_ENTRIES:
+        expired = [
+            key
+            for key, (_, cached_expires_at) in _branding_cache.items()
+            if cached_expires_at <= now
+        ]
+        for key in expired:
+            _branding_cache.pop(key, None)
+        while len(_branding_cache) >= _BRANDING_MAX_CACHE_ENTRIES:
+            oldest_key = min(_branding_cache, key=lambda item: _branding_cache[item][1])
+            _branding_cache.pop(oldest_key, None)
+    _branding_cache[cache_key] = (public, expires_at)
 
 
 def _check_branding_rate(ip: str) -> bool:
     """Token-bucket: 30 req per rolling 60s per IP."""
     now = time.time()
+    _evict_branding_window_if_needed(ip, now)
     window = _branding_window.setdefault(ip, deque())
     while window and now - window[0] > 60:
         window.popleft()
@@ -196,7 +238,7 @@ async def get_public_branding(
                 if branding is not None:
                     public = _public_view(_to_out(branding))
 
-    _branding_cache[cache_key] = (public, now + _BRANDING_CACHE_TTL)
+    _store_branding_cache(cache_key, public, now + _BRANDING_CACHE_TTL)
     return public
 
 

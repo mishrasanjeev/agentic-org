@@ -32,9 +32,11 @@ _API_KEY = os.getenv("COMPOSIO_API_KEY", "")
 
 # ── In-memory cache ─────────────────────────────────────────────────
 
+# enterprise-gate: process-local-ok reason=bounded-ttl-readonly-composio-catalog-cache
 _apps_cache: list[dict[str, Any]] = []
 _apps_cache_ts: float = 0.0
 _CACHE_TTL = 600  # 10 minutes
+_CACHE_MAX_APPS = 5_000
 
 
 def _get_toolset():
@@ -56,6 +58,8 @@ def _refresh_apps_cache() -> list[dict[str, Any]]:
 
     apps: list[dict[str, Any]] = []
     for a in raw_apps:
+        if len(apps) >= _CACHE_MAX_APPS:
+            break
         apps.append({
             "key": getattr(a, "key", ""),
             "name": getattr(a, "name", ""),

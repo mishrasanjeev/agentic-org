@@ -284,7 +284,7 @@
     "public_exempt_reason": null,
     "rate_limit": "branding-admin-write",
     "scope": "branding.sensitive.write",
-    "source_line": 278,
+    "source_line": 320,
     "tenant_required": true
   },
   {
@@ -302,7 +302,7 @@
     "public_exempt_reason": null,
     "rate_limit": "branding-admin-read",
     "scope": "branding.sensitive.read",
-    "source_line": 218,
+    "source_line": 260,
     "tenant_required": true
   },
   {
@@ -320,7 +320,7 @@
     "public_exempt_reason": null,
     "rate_limit": "branding-admin-write",
     "scope": "branding.sensitive.write",
-    "source_line": 241,
+    "source_line": 283,
     "tenant_required": true
   },
   {
@@ -1491,7 +1491,7 @@
     "public_exempt_reason": "public-login-branding-sanitized-host-or-slug-lookup",
     "rate_limit": "branding-public-lookup",
     "scope": "public:branding.sanitized.read",
-    "source_line": 126,
+    "source_line": 168,
     "tenant_required": false
   },
   {
@@ -2193,7 +2193,7 @@
     "public_exempt_reason": null,
     "rate_limit": "composio-catalog-read",
     "scope": "composio.marketplace.integration_catalog.read",
-    "source_line": 87,
+    "source_line": 91,
     "tenant_required": false
   },
   {
@@ -2211,7 +2211,7 @@
     "public_exempt_reason": null,
     "rate_limit": "composio-catalog-read",
     "scope": "composio.marketplace.integration_catalog.read",
-    "source_line": 135,
+    "source_line": 139,
     "tenant_required": false
   },
   {
@@ -2229,7 +2229,7 @@
     "public_exempt_reason": null,
     "rate_limit": "composio-catalog-read",
     "scope": "composio.marketplace.integration_catalog.read",
-    "source_line": 186,
+    "source_line": 190,
     "tenant_required": false
   },
   {

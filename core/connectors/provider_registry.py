@@ -252,6 +252,7 @@ class ProviderSpec:
 
 # ── Registry storage ──────────────────────────────────────────────────────────
 
+# enterprise-gate: process-local-ok reason=static-built-in-provider-spec-registry
 _REGISTRY: dict[str, ProviderSpec] = {}
 
 
