@@ -6,6 +6,13 @@ Status: M10 planning and doc validation only. This pass does not deploy, create 
 
 AgenticOrg staging should consume the synthetic Grantex Commerce V1 staging data prepared for M10. The Commerce Sales Agent must use Grantex staging APIs and MCP tools only. AgenticOrg does not own merchant catalog seed data, payment state transitions, Commerce Passport issuance, provider webhooks, or audit timeline records.
 
+## C2B Real-Staging Finding
+
+- C2B result: 2 passed, 2 failed-safe, 10 skipped.
+- Grantex-only path confirmed: local AgenticOrg real-staging used the approved Grantex Option A smoke URL and `grantex_commerce:*` aliases only.
+- No provider credential handling was required or performed by the Commerce Sales Agent.
+- Synthetic consent/passport fixture support is needed for C2C so checkout, payment intent, payment status, and passport negative cases can run without exposing raw passports, tokens, idempotency keys, provider credentials, or payload bodies.
+
 ## Expected Grantex Staging IDs
 
 - Tenant: `cten_staging_commerce`

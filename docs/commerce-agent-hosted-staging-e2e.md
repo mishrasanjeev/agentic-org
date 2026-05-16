@@ -6,6 +6,13 @@ This guide defines the M11 hosted staging E2E plan for the AgenticOrg Commerce S
 
 AgenticOrg consumes Grantex staging data only. Commerce execution must stay on the Grantex Commerce API and `grantex_commerce:*` tool path.
 
+## C2B Real-Staging Evidence
+
+- C2B result: 2 passed, 2 failed-safe, 10 skipped.
+- Grantex-only path confirmed: the local real-staging run used only `grantex_commerce:*` aliases against the approved Grantex Option A smoke URL.
+- No provider credential handling: AgenticOrg did not call or handle Stripe, Plural, Pine, or provider credential paths for commerce.
+- Synthetic consent/passport fixture support is needed for C2C before AgenticOrg can run checkout, payment intent, payment status, disabled merchant, untrusted agent, and denied/revoked/expired passport real-staging cases.
+
 ## Required Staging Targets
 
 - AgenticOrg base: `https://staging.agenticorg.ai`
