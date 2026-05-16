@@ -397,3 +397,83 @@ def test_route_metadata_debt_reduced_by_core_execution_slice() -> None:
     )
 
     assert missing_count <= 156
+
+
+def test_security_admin_target_routes_have_metadata() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/api_keys.py",
+        gates.REPO_ROOT / "api/v1/audit.py",
+        gates.REPO_ROOT / "api/v1/approval_policies.py",
+        gates.REPO_ROOT / "api/v1/tenant_ai_credentials.py",
+        gates.REPO_ROOT / "api/v1/tenant_ai_settings.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert len(routes) == 17
+    assert findings == []
+    assert all(route.metadata_present for route in routes)
+    assert all(route.auth_required is True for route in routes)
+    assert all(route.scope for route in routes)
+    assert all(route.rate_limit for route in routes)
+    assert all(route.idempotency for route in routes)
+    assert all(route.audit_event for route in routes)
+
+
+def test_security_admin_mutating_routes_include_audit_and_idempotency() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/api_keys.py",
+        gates.REPO_ROOT / "api/v1/approval_policies.py",
+        gates.REPO_ROOT / "api/v1/tenant_ai_credentials.py",
+        gates.REPO_ROOT / "api/v1/tenant_ai_settings.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    mutating_routes = [
+        route
+        for route in routes
+        if any(method in gates.MUTATING_METHODS for method in route.methods)
+    ]
+
+    assert len(mutating_routes) == 9
+    assert all(route.audit_event for route in mutating_routes)
+    assert all(route.idempotency for route in mutating_routes)
+
+
+def test_security_admin_sensitive_routes_are_marked_in_scope() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/api_keys.py",
+        gates.REPO_ROOT / "api/v1/audit.py",
+        gates.REPO_ROOT / "api/v1/tenant_ai_credentials.py",
+        gates.REPO_ROOT / "api/v1/tenant_ai_settings.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    by_method_path = {
+        (route.methods[0], route.path): route
+        for route in routes
+        if len(route.methods) == 1
+    }
+
+    sensitive_routes = {
+        ("GET", "/api/v1/audit"),
+        ("GET", "/api/v1/org/api-keys"),
+        ("GET", "/api/v1/tenant-ai-credentials"),
+        ("GET", "/api/v1/tenant-ai-settings"),
+    }
+    assert sensitive_routes <= set(by_method_path)
+    assert all(
+        "sensitive" in by_method_path[route_key].scope
+        for route_key in sensitive_routes
+    )
+
+
+def test_route_metadata_debt_reduced_by_security_admin_slice() -> None:
+    routes = gates.scan_routes(gates.production_python_files(gates.REPO_ROOT), gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+    missing_count = sum(
+        finding.category == "route_missing_metadata" for finding in findings
+    )
+
+    assert missing_count <= 139

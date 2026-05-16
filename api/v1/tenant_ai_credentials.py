@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.ai_providers.resolver import (
     ProviderNotConfigured,
     invalidate_cache,
@@ -148,6 +149,14 @@ def _to_out(row: TenantAICredential) -> TenantAICredentialOut:
 
 
 @router.get("", response_model=list[TenantAICredentialOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_credentials.secrets.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="tenant_ai_credentials.list",
+)
 async def list_credentials(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[TenantAICredentialOut]:
@@ -166,6 +175,14 @@ async def list_credentials(
     "",
     response_model=TenantAICredentialOut,
     status_code=status.HTTP_201_CREATED,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_credentials.secrets.write",
+    rate_limit="credential-write",
+    idempotency="unique-provider-kind-per-tenant",
+    audit_event="tenant_ai_credentials.create",
 )
 async def create_credential(
     body: TenantAICredentialCreate,
@@ -213,6 +230,14 @@ async def create_credential(
 
 
 @router.get("/{credential_id}", response_model=TenantAICredentialOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_credentials.secrets.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="tenant_ai_credentials.read",
+)
 async def get_credential(
     credential_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -237,6 +262,14 @@ async def get_credential(
 
 
 @router.patch("/{credential_id}", response_model=TenantAICredentialOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_credentials.secrets.write",
+    rate_limit="credential-write",
+    idempotency="idempotent-metadata-update-token-rotate-on-api-key",
+    audit_event="tenant_ai_credentials.update",
+)
 async def update_credential(
     credential_id: str,
     body: TenantAICredentialUpdate,
@@ -296,6 +329,14 @@ async def update_credential(
 @router.delete(
     "/{credential_id}", status_code=status.HTTP_204_NO_CONTENT
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_credentials.secrets.write",
+    rate_limit="credential-write",
+    idempotency="idempotent-delete-by-credential-id",
+    audit_event="tenant_ai_credentials.delete",
+)
 async def delete_credential(
     credential_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -330,6 +371,14 @@ async def delete_credential(
 
 
 @router.post("/{credential_id}/test")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_credentials.secrets.test",
+    rate_limit="external-provider-check",
+    idempotency="read-only-external-health-probe-updates-status",
+    audit_event="tenant_ai_credentials.test",
+)
 async def test_credential(
     credential_id: str,
     tenant_id: str = Depends(get_current_tenant),

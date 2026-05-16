@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.ai_providers.catalog import (
     EMBEDDING_CATALOG,
     LLM_CATALOG,
@@ -136,6 +137,14 @@ def _to_out(row: TenantAISetting | None, tenant_id: str) -> TenantAISettingOut:
 
 
 @router.get("/registry", response_model=RegistryOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="tenant_ai_settings.registry.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="tenant_ai_settings.registry.list",
+)
 async def list_registry() -> RegistryOut:
     """Expose the catalog so the UI can render valid provider/model
     pickers without having to ship the allowlist to the client.
@@ -172,6 +181,14 @@ async def list_registry() -> RegistryOut:
 
 
 @router.get("", response_model=TenantAISettingOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_settings.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="tenant_ai_settings.read",
+)
 async def get_setting(
     tenant_id: str = Depends(get_current_tenant),
 ) -> TenantAISettingOut:
@@ -185,6 +202,14 @@ async def get_setting(
 
 
 @router.put("", response_model=TenantAISettingOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="tenant_ai_settings.control_plane.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-settings-upsert",
+    audit_event="tenant_ai_settings.update",
+)
 async def put_setting(
     body: TenantAISettingUpdate,
     tenant_id: str = Depends(get_current_tenant),
