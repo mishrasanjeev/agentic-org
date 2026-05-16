@@ -13,6 +13,8 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 
+from api.route_metadata import route_meta
+
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/composio", tags=["Composio Marketplace"])
@@ -74,6 +76,14 @@ def _refresh_apps_cache() -> list[dict[str, Any]]:
 
 
 @router.get("/apps")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="composio.marketplace.integration_catalog.read",
+    rate_limit="composio-catalog-read",
+    idempotency="read-only",
+    audit_event="composio.apps.list",
+)
 async def list_apps(
     search: str = "",
     category: str = "",
@@ -114,6 +124,14 @@ async def list_apps(
 
 
 @router.get("/apps/{app_key}")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="composio.marketplace.integration_catalog.read",
+    rate_limit="composio-catalog-read",
+    idempotency="read-only",
+    audit_event="composio.apps.detail",
+)
 async def get_app_detail(app_key: str) -> dict[str, Any]:
     """Get details and available actions for a specific Composio app."""
     ts = _get_toolset()
@@ -157,6 +175,14 @@ async def get_app_detail(app_key: str) -> dict[str, Any]:
 
 
 @router.get("/categories")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="composio.marketplace.integration_catalog.read",
+    rate_limit="composio-catalog-read",
+    idempotency="read-only",
+    audit_event="composio.categories.list",
+)
 async def list_categories() -> list[str]:
     """List all unique categories across Composio apps."""
     apps = _refresh_apps_cache()

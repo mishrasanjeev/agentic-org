@@ -90,58 +90,58 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
-    "auth_required": true,
+    "audit_event": "aa.consent.callback",
+    "auth_required": false,
     "function": "consent_callback",
-    "idempotency": null,
+    "idempotency": "nonce-replay-protected",
     "key": "POST /api/v1/aa/consent/callback api/v1/aa_callback.py:consent_callback",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/aa_callback.py",
     "path": "/api/v1/aa/consent/callback",
-    "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 49,
-    "tenant_required": null
+    "public_exempt_reason": "provider-callback-hmac-timestamp-nonce-protected",
+    "rate_limit": "aa-callback-signed",
+    "scope": "public:aa_callback.signed_external_input.sensitive.write",
+    "source_line": 59,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "aa.consent.request",
     "auth_required": true,
     "function": "create_consent_request",
-    "idempotency": null,
+    "idempotency": "not_idempotent-creates-provider-consent-request",
     "key": "POST /api/v1/aa/consent/request api/v1/aa_callback.py:create_consent_request",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/aa_callback.py",
     "path": "/api/v1/aa/consent/request",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 150,
-    "tenant_required": null
+    "rate_limit": "aa-consent-request",
+    "scope": "aa_consent.external_financial_data.sensitive.write",
+    "source_line": 176,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "aa.consent.status",
     "auth_required": true,
     "function": "consent_status",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/aa/consent/{consent_handle}/status api/v1/aa_callback.py:consent_status",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/aa_callback.py",
     "path": "/api/v1/aa/consent/{consent_handle}/status",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 130,
-    "tenant_required": null
+    "rate_limit": "aa-consent-read",
+    "scope": "aa_consent.sensitive.read",
+    "source_line": 148,
+    "tenant_required": true
   },
   {
     "audit_event": "abm.accounts.list",
@@ -324,76 +324,76 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "demo.seed",
     "auth_required": true,
     "function": "seed_demo_data",
-    "idempotency": null,
+    "idempotency": "idempotent-demo-seed",
     "key": "POST /api/v1/admin/seed-demo api/v1/demo.py:seed_demo_data",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/demo.py",
     "path": "/api/v1/admin/seed-demo",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 50,
-    "tenant_required": null
+    "rate_limit": "demo-seed",
+    "scope": "demo.seed.control_plane.write",
+    "source_line": 59,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "agent_teams.list",
     "auth_required": true,
     "function": "list_teams",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/agent-teams api/v1/agent_teams.py:list_teams",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/agent_teams.py",
     "path": "/api/v1/agent-teams",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 58,
-    "tenant_required": null
+    "rate_limit": "agent-team-read",
+    "scope": "agent_teams.sensitive.read",
+    "source_line": 67,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "agent_teams.create",
     "auth_required": true,
     "function": "create_team",
-    "idempotency": null,
+    "idempotency": "not_idempotent-creates-team-and-members",
     "key": "POST /api/v1/agent-teams api/v1/agent_teams.py:create_team",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/agent_teams.py",
     "path": "/api/v1/agent-teams",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 117,
-    "tenant_required": null
+    "rate_limit": "agent-team-write",
+    "scope": "agent_teams.routing_control.sensitive.write",
+    "source_line": 142,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "agent_teams.detail",
     "auth_required": true,
     "function": "get_team",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/agent-teams/{team_id} api/v1/agent_teams.py:get_team",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/agent_teams.py",
     "path": "/api/v1/agent-teams/{team_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 93,
-    "tenant_required": null
+    "rate_limit": "agent-team-read",
+    "scope": "agent_teams.sensitive.read",
+    "source_line": 110,
+    "tenant_required": true
   },
   {
     "audit_event": "agents.list",
@@ -1261,58 +1261,58 @@
     "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.invoices.list",
     "auth_required": true,
     "function": "list_invoices",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/billing/invoices api/v1/invoices.py:list_invoices",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/invoices.py",
     "path": "/api/v1/billing/invoices",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 46,
-    "tenant_required": null
+    "rate_limit": "invoice-read",
+    "scope": "billing.invoices.sensitive.read",
+    "source_line": 55,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.invoices.generate",
     "auth_required": true,
     "function": "generate_now",
-    "idempotency": null,
+    "idempotency": "generator-period-upsert-expected",
     "key": "POST /api/v1/billing/invoices/generate api/v1/invoices.py:generate_now",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/invoices.py",
     "path": "/api/v1/billing/invoices/generate",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 81,
-    "tenant_required": null
+    "rate_limit": "invoice-generate",
+    "scope": "billing.invoices.sensitive.write",
+    "source_line": 106,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.invoices.detail",
     "auth_required": true,
     "function": "get_invoice",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/billing/invoices/{invoice_id} api/v1/invoices.py:get_invoice",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/invoices.py",
     "path": "/api/v1/billing/invoices/{invoice_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 63,
-    "tenant_required": null
+    "rate_limit": "invoice-read",
+    "scope": "billing.invoices.sensitive.read",
+    "source_line": 80,
+    "tenant_required": true
   },
   {
     "audit_event": "billing.order_status.read",
@@ -1657,40 +1657,40 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "chat.history.read",
     "auth_required": true,
     "function": "chat_history",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/chat/history api/v1/chat.py:chat_history",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/chat.py",
     "path": "/api/v1/chat/history",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 757,
-    "tenant_required": null
+    "rate_limit": "chat-history-read",
+    "scope": "chat.history.sensitive.read",
+    "source_line": 774,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "chat.query",
     "auth_required": true,
     "function": "chat_query",
-    "idempotency": null,
+    "idempotency": "not_idempotent-appends-chat-history-and-may-trigger-hitl",
     "key": "POST /api/v1/chat/query api/v1/chat.py:chat_query",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/chat.py",
     "path": "/api/v1/chat/query",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 459,
-    "tenant_required": null
+    "rate_limit": "chat-query",
+    "scope": "chat.agent_execution.external_tool_sensitive.write",
+    "source_line": 468,
+    "tenant_required": true
   },
   {
     "audit_event": "companies.list",
@@ -2179,94 +2179,94 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "composio.apps.list",
     "auth_required": true,
     "function": "list_apps",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/composio/apps api/v1/composio.py:list_apps",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/composio.py",
     "path": "/api/v1/composio/apps",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 77,
-    "tenant_required": null
+    "rate_limit": "composio-catalog-read",
+    "scope": "composio.marketplace.integration_catalog.read",
+    "source_line": 87,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "composio.apps.detail",
     "auth_required": true,
     "function": "get_app_detail",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/composio/apps/{app_key} api/v1/composio.py:get_app_detail",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/composio.py",
     "path": "/api/v1/composio/apps/{app_key}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 117,
-    "tenant_required": null
+    "rate_limit": "composio-catalog-read",
+    "scope": "composio.marketplace.integration_catalog.read",
+    "source_line": 135,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "composio.categories.list",
     "auth_required": true,
     "function": "list_categories",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/composio/categories api/v1/composio.py:list_categories",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/composio.py",
     "path": "/api/v1/composio/categories",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 160,
-    "tenant_required": null
+    "rate_limit": "composio-catalog-read",
+    "scope": "composio.marketplace.integration_catalog.read",
+    "source_line": 186,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "config.fleet_limits.read",
     "auth_required": true,
     "function": "get_fleet_limits",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/config/fleet_limits api/v1/config.py:get_fleet_limits",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/config.py",
     "path": "/api/v1/config/fleet_limits",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 22,
-    "tenant_required": null
+    "rate_limit": "config-read",
+    "scope": "config.fleet_limits.control_plane.sensitive.read",
+    "source_line": 31,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "config.fleet_limits.update",
     "auth_required": true,
     "function": "update_fleet_limits",
-    "idempotency": null,
+    "idempotency": "idempotent-upsert-by-tenant",
     "key": "PUT /api/v1/config/fleet_limits api/v1/config.py:update_fleet_limits",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PUT"
     ],
     "module": "api/v1/config.py",
     "path": "/api/v1/config/fleet_limits",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 40,
-    "tenant_required": null
+    "rate_limit": "config-write",
+    "scope": "config.fleet_limits.control_plane.sensitive.write",
+    "source_line": 57,
+    "tenant_required": true
   },
   {
     "audit_event": "connectors.list",
@@ -2467,22 +2467,22 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "content_safety.check",
     "auth_required": true,
     "function": "check_safety",
-    "idempotency": null,
+    "idempotency": "deterministic-for-same-text-and-config",
     "key": "POST /api/v1/content-safety/check api/v1/content_safety.py:check_safety",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/content_safety.py",
     "path": "/api/v1/content-safety/check",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 43,
-    "tenant_required": null
+    "rate_limit": "content-safety-check",
+    "scope": "content_safety.external_input.sensitive.write",
+    "source_line": 52,
+    "tenant_required": false
   },
   {
     "audit_event": "cost_centers.list",
@@ -2521,166 +2521,166 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "costs.summary.read",
     "auth_required": true,
     "function": "summary",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/costs/summary api/v1/costs.py:summary",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/costs.py",
     "path": "/api/v1/costs/summary",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 52,
-    "tenant_required": null
+    "rate_limit": "cost-dashboard-read",
+    "scope": "costs.commercial_sensitive.read",
+    "source_line": 61,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "costs.top_agents.read",
     "auth_required": true,
     "function": "top_agents",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/costs/top-agents api/v1/costs.py:top_agents",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/costs.py",
     "path": "/api/v1/costs/top-agents",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 151,
-    "tenant_required": null
+    "rate_limit": "cost-dashboard-read",
+    "scope": "costs.commercial_sensitive.read",
+    "source_line": 176,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "costs.trend.read",
     "auth_required": true,
     "function": "trend",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/costs/trend api/v1/costs.py:trend",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/costs.py",
     "path": "/api/v1/costs/trend",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 122,
-    "tenant_required": null
+    "rate_limit": "cost-dashboard-read",
+    "scope": "costs.commercial_sensitive.read",
+    "source_line": 139,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
-    "auth_required": true,
+    "audit_event": "cron.compliance_alerts.trigger",
+    "auth_required": false,
     "function": "trigger_compliance_alerts",
-    "idempotency": null,
+    "idempotency": "not_idempotent-triggers-compliance-alert-job",
     "key": "POST /api/v1/cron/compliance-alerts api/v1/cron.py:trigger_compliance_alerts",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/cron.py",
     "path": "/api/v1/cron/compliance-alerts",
-    "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 61,
-    "tenant_required": null
+    "public_exempt_reason": "cloud-scheduler-api-key-header-protected",
+    "rate_limit": "cron-api-key",
+    "scope": "cron.api_key_protected.compliance.write",
+    "source_line": 80,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
-    "auth_required": true,
+    "audit_event": "cron.schedules.read",
+    "auth_required": false,
     "function": "list_cron_schedules",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/cron/schedules api/v1/cron.py:list_cron_schedules",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/cron.py",
     "path": "/api/v1/cron/schedules",
-    "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 37,
-    "tenant_required": null
+    "public_exempt_reason": "cloud-scheduler-api-key-header-protected",
+    "rate_limit": "cron-api-key",
+    "scope": "cron.api_key_protected.sensitive.read",
+    "source_line": 47,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "delegations.list",
     "auth_required": true,
     "function": "list_delegations",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/delegations api/v1/delegations.py:list_delegations",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/delegations.py",
     "path": "/api/v1/delegations",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 77,
-    "tenant_required": null
+    "rate_limit": "delegation-read",
+    "scope": "delegations.approval_authority.sensitive.read",
+    "source_line": 94,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "delegations.create",
     "auth_required": true,
     "function": "create_delegation",
-    "idempotency": null,
+    "idempotency": "not_idempotent-creates-delegation-window",
     "key": "POST /api/v1/delegations api/v1/delegations.py:create_delegation",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/delegations.py",
     "path": "/api/v1/delegations",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 46,
-    "tenant_required": null
+    "rate_limit": "delegation-write",
+    "scope": "delegations.approval_authority.sensitive.write",
+    "source_line": 55,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "delegations.revoke",
     "auth_required": true,
     "function": "revoke_delegation",
-    "idempotency": null,
+    "idempotency": "idempotent-revoke-by-delegation-id",
     "key": "DELETE /api/v1/delegations/{delegation_id} api/v1/delegations.py:revoke_delegation",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/delegations.py",
     "path": "/api/v1/delegations/{delegation_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 102,
-    "tenant_required": null
+    "rate_limit": "delegation-write",
+    "scope": "delegations.approval_authority.sensitive.write",
+    "source_line": 127,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "demo.request",
     "auth_required": false,
     "function": "submit_demo_request",
-    "idempotency": null,
+    "idempotency": "lead-deduped-by-email-best-effort",
     "key": "POST /api/v1/demo-request api/v1/demo.py:submit_demo_request",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/demo.py",
     "path": "/api/v1/demo-request",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 94,
-    "tenant_required": null
+    "public_exempt_reason": "public-lead-capture-email-and-sales-agent-trigger",
+    "rate_limit": "demo-request-public",
+    "scope": "public:demo_request.external_input.write",
+    "source_line": 112,
+    "tenant_required": false
   },
   {
     "audit_event": "departments.list",
@@ -2791,40 +2791,40 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "none-public-evals-read",
     "auth_required": false,
     "function": "get_evals",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/evals api/v1/evals.py:get_evals",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/evals.py",
     "path": "/api/v1/evals",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 121,
-    "tenant_required": null
+    "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
+    "rate_limit": "public-evals-read",
+    "scope": "public:evals.scorecard.read",
+    "source_line": 132,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "none-public-evals-read",
     "auth_required": false,
     "function": "get_agent_evals",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/evals/agent/{agent_type} api/v1/evals.py:get_agent_evals",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/evals.py",
     "path": "/api/v1/evals/agent/{agent_type}",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 135,
-    "tenant_required": null
+    "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
+    "rate_limit": "public-evals-read",
+    "scope": "public:evals.agent_scorecard.read",
+    "source_line": 155,
+    "tenant_required": false
   },
   {
     "audit_event": "feature_flags.list",
@@ -2917,40 +2917,40 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "governance.config.read",
     "auth_required": true,
     "function": "get_config",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/governance/config api/v1/governance.py:get_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/governance.py",
     "path": "/api/v1/governance/config",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 56,
-    "tenant_required": null
+    "rate_limit": "governance-read",
+    "scope": "governance.policy.sensitive.read",
+    "source_line": 65,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "governance.config.update",
     "auth_required": true,
     "function": "put_config",
-    "idempotency": null,
+    "idempotency": "idempotent-partial-update-by-tenant",
     "key": "PUT /api/v1/governance/config api/v1/governance.py:put_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PUT"
     ],
     "module": "api/v1/governance.py",
     "path": "/api/v1/governance/config",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 83,
-    "tenant_required": null
+    "rate_limit": "governance-write",
+    "scope": "governance.policy.enterprise_critical.write",
+    "source_line": 100,
+    "tenant_required": true
   },
   {
     "audit_event": "none-readiness-probe",
@@ -3043,22 +3043,22 @@
     "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "integrations.status.read",
     "auth_required": true,
     "function": "integrations_status",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/integrations/status api/v1/integrations_status.py:integrations_status",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/integrations_status.py",
     "path": "/api/v1/integrations/status",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 33,
-    "tenant_required": null
+    "rate_limit": "integration-status-read",
+    "scope": "integrations.config_status.sensitive.read",
+    "source_line": 43,
+    "tenant_required": false
   },
   {
     "audit_event": "knowledge.documents.list",
@@ -3277,40 +3277,40 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "mcp.call",
     "auth_required": true,
     "function": "call_tool",
-    "idempotency": null,
+    "idempotency": "not_idempotent-executes-agent-tool",
     "key": "POST /api/v1/mcp/call api/v1/mcp.py:call_tool",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/mcp.py",
     "path": "/api/v1/mcp/call",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 90,
-    "tenant_required": null
+    "rate_limit": "mcp-tool-call",
+    "scope": "mcp.external_agent_execution.sensitive.write",
+    "source_line": 108,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
-    "auth_required": true,
+    "audit_event": "none-public-mcp-tool-discovery",
+    "auth_required": false,
     "function": "list_tools",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/mcp/tools api/v1/mcp.py:list_tools",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/mcp.py",
     "path": "/api/v1/mcp/tools",
-    "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 33,
-    "tenant_required": null
+    "public_exempt_reason": "public-tool-discovery-no-tenant-data",
+    "rate_limit": "mcp-discovery",
+    "scope": "public:mcp.tool_discovery.read",
+    "source_line": 43,
+    "tenant_required": false
   },
   {
     "audit_event": "connectors.oauth.callback",
@@ -3619,22 +3619,22 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "none-public-product-facts",
     "auth_required": false,
     "function": "product_facts",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/product-facts api/v1/product_facts.py:product_facts",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/product_facts.py",
     "path": "/api/v1/product-facts",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 75,
-    "tenant_required": null
+    "public_exempt_reason": "public-marketing-product-counts-no-tenant-data",
+    "rate_limit": "public-product-facts",
+    "scope": "public:product_facts.read",
+    "source_line": 85,
+    "tenant_required": false
   },
   {
     "audit_event": "prompt_templates.list",
@@ -4501,22 +4501,22 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "none-public-status-read",
     "auth_required": false,
     "function": "public_status",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/status api/v1/status.py:public_status",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/status.py",
     "path": "/api/v1/status",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 104,
-    "tenant_required": null
+    "public_exempt_reason": "public-status-page-sanitized-service-health",
+    "rate_limit": "public-status-read",
+    "scope": "public:status.sanitized_health.read",
+    "source_line": 115,
+    "tenant_required": false
   },
   {
     "audit_event": "tenant_ai_credentials.list",
@@ -4699,58 +4699,58 @@
     "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "voice.config.read",
     "auth_required": true,
     "function": "get_voice_config",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/voice/config api/v1/voice.py:get_voice_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/voice.py",
     "path": "/api/v1/voice/config",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 492,
-    "tenant_required": null
+    "rate_limit": "voice-config-read",
+    "scope": "voice.config.secret_control_plane.read",
+    "source_line": 517,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "voice.config.save",
     "auth_required": true,
     "function": "save_voice_config",
-    "idempotency": null,
+    "idempotency": "idempotent-upsert-by-tenant",
     "key": "POST /api/v1/voice/config api/v1/voice.py:save_voice_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/voice.py",
     "path": "/api/v1/voice/config",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 455,
-    "tenant_required": null
+    "rate_limit": "voice-config-write",
+    "scope": "voice.config.secret_control_plane.write",
+    "source_line": 472,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "voice.test_connection",
     "auth_required": true,
     "function": "test_connection",
-    "idempotency": null,
+    "idempotency": "not_idempotent-external-provider-probe",
     "key": "POST /api/v1/voice/test-connection api/v1/voice.py:test_connection",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/voice.py",
     "path": "/api/v1/voice/test-connection",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 212,
-    "tenant_required": null
+    "rate_limit": "voice-test-connection",
+    "scope": "voice.external_probe.sensitive.write",
+    "source_line": 221,
+    "tenant_required": true
   },
   {
     "audit_event": "webhooks.discovery.list",
@@ -5059,76 +5059,76 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "workflow_variants.list",
     "auth_required": true,
     "function": "list_variants",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/workflows/{workflow_id}/variants api/v1/workflow_variants.py:list_variants",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/workflow_variants.py",
     "path": "/api/v1/workflows/{workflow_id}/variants",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 55,
-    "tenant_required": null
+    "rate_limit": "workflow-variant-read",
+    "scope": "workflow_variants.definition.sensitive.read",
+    "source_line": 64,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "workflow_variants.upsert",
     "auth_required": true,
     "function": "upsert_variant",
-    "idempotency": null,
+    "idempotency": "idempotent-upsert-by-workflow-and-variant-name",
     "key": "POST /api/v1/workflows/{workflow_id}/variants api/v1/workflow_variants.py:upsert_variant",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/workflow_variants.py",
     "path": "/api/v1/workflows/{workflow_id}/variants",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 71,
-    "tenant_required": null
+    "rate_limit": "workflow-variant-write",
+    "scope": "workflow_variants.behavior.high_risk.write",
+    "source_line": 88,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "workflow_variants.delete",
     "auth_required": true,
     "function": "delete_variant",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-workflow-and-variant-name",
     "key": "DELETE /api/v1/workflows/{workflow_id}/variants/{variant_name} api/v1/workflow_variants.py:delete_variant",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/workflow_variants.py",
     "path": "/api/v1/workflows/{workflow_id}/variants/{variant_name}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 113,
-    "tenant_required": null
+    "rate_limit": "workflow-variant-write",
+    "scope": "workflow_variants.behavior.high_risk.write",
+    "source_line": 138,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
-    "auth_required": null,
+    "audit_event": "bridge.websocket.connect",
+    "auth_required": false,
     "function": "bridge_ws",
-    "idempotency": null,
+    "idempotency": "connection-session-upsert-by-bridge-id",
     "key": "WEBSOCKET /api/v1/ws/bridge/{bridge_id} bridge/server_handler.py:bridge_ws",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "WEBSOCKET"
     ],
     "module": "bridge/server_handler.py",
     "path": "/api/v1/ws/bridge/{bridge_id}",
-    "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 119,
-    "tenant_required": null
+    "public_exempt_reason": "bridge-token-handshake-validates-registration",
+    "rate_limit": "bridge-websocket-connect",
+    "scope": "bridge.websocket.token_protected.sensitive.write",
+    "source_line": 129,
+    "tenant_required": true
   },
   {
     "audit_event": "feed.websocket.connect",

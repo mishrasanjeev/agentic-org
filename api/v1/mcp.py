@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])
 _log = structlog.get_logger()
@@ -30,6 +31,15 @@ _log = structlog.get_logger()
 # ── Tool List — Discovery ──────────────────────────────────────────────────
 
 @router.get("/tools")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:mcp.tool_discovery.read",
+    rate_limit="mcp-discovery",
+    idempotency="read-only",
+    audit_event="none-public-mcp-tool-discovery",
+    public_reason="public-tool-discovery-no-tenant-data",
+)
 async def list_tools():
     """List all available MCP tools (one per agent type).
 
@@ -87,6 +97,14 @@ class MCPCallRequest(BaseModel):
 
 
 @router.post("/call")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="mcp.external_agent_execution.sensitive.write",
+    rate_limit="mcp-tool-call",
+    idempotency="not_idempotent-executes-agent-tool",
+    audit_event="mcp.call",
+)
 async def call_tool(
     body: MCPCallRequest,
     request: Request,

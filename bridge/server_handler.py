@@ -14,6 +14,7 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
+from api.route_metadata import route_meta
 from bridge.state import (
     BridgeRouteError,
     BridgeSessionRecord,
@@ -116,6 +117,15 @@ async def _register_local_connection(
 
 
 @router.websocket("/ws/bridge/{bridge_id}")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="bridge.websocket.token_protected.sensitive.write",
+    rate_limit="bridge-websocket-connect",
+    idempotency="connection-session-upsert-by-bridge-id",
+    audit_event="bridge.websocket.connect",
+    public_reason="bridge-token-handshake-validates-registration",
+)
 async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
     """WebSocket endpoint for bridge agent connections."""
     await websocket.accept()

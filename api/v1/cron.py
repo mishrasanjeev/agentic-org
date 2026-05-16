@@ -11,6 +11,7 @@ import os
 
 from fastapi import APIRouter, Header, HTTPException
 
+from api.route_metadata import route_meta
 from core.config import settings
 
 router = APIRouter()
@@ -34,6 +35,15 @@ def _verify_cron_key(x_cron_key: str = Header(default="")) -> None:
 
 
 @router.get("/cron/schedules")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="cron.api_key_protected.sensitive.read",
+    rate_limit="cron-api-key",
+    idempotency="read-only",
+    audit_event="cron.schedules.read",
+    public_reason="cloud-scheduler-api-key-header-protected",
+)
 async def list_cron_schedules(
     x_cron_key: str = Header(default=""),
 ):
@@ -58,6 +68,15 @@ async def list_cron_schedules(
 
 
 @router.post("/cron/compliance-alerts")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="cron.api_key_protected.compliance.write",
+    rate_limit="cron-api-key",
+    idempotency="not_idempotent-triggers-compliance-alert-job",
+    audit_event="cron.compliance_alerts.trigger",
+    public_reason="cloud-scheduler-api-key-header-protected",
+)
 async def trigger_compliance_alerts(
     x_cron_key: str = Header(default=""),
 ):

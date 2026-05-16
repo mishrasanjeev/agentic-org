@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 
 router = APIRouter()
 
@@ -208,6 +209,14 @@ def _validate_voice_config(cfg: VoiceConfig) -> None:
     "/voice/test-connection",
     response_model=VoiceTestResponse,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="voice.external_probe.sensitive.write",
+    rate_limit="voice-test-connection",
+    idempotency="not_idempotent-external-provider-probe",
+    audit_event="voice.test_connection",
 )
 async def test_connection(
     body: VoiceTestRequest,
@@ -452,6 +461,14 @@ async def _voice_key_display(tenant_uuid, provider: str, kind: str) -> str | Non
     response_model=VoiceConfig,
     dependencies=[require_tenant_admin],
 )
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="voice.config.secret_control_plane.write",
+    rate_limit="voice-config-write",
+    idempotency="idempotent-upsert-by-tenant",
+    audit_event="voice.config.save",
+)
 async def save_voice_config(
     body: VoiceConfig,
     tenant_id: str = Depends(get_current_tenant),
@@ -488,6 +505,14 @@ async def save_voice_config(
     "/voice/config",
     response_model=VoiceConfig | None,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="voice.config.secret_control_plane.read",
+    rate_limit="voice-config-read",
+    idempotency="read-only",
+    audit_event="voice.config.read",
 )
 async def get_voice_config(tenant_id: str = Depends(get_current_tenant)):
     """Return the saved tenant voice config with credentials masked.
