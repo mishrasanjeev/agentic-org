@@ -16,6 +16,7 @@ from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from api.route_metadata import route_meta
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
@@ -125,6 +126,15 @@ def _make_slug(name: str) -> str:
 
 
 @router.post("/signup", response_model=LoginResponse, status_code=201)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:auth.signup",
+    rate_limit="auth-signup",
+    idempotency="unique-admin-email-and-generated-tenant",
+    audit_event="auth.signup",
+    public_reason="auth-bootstrap-rate-limited-password-policy",
+)
 async def signup(body: SignupRequest, request: Request, response: Response):
     """Register a new organization and admin user."""
     # Rate-limit signups per IP (Redis-backed)
@@ -309,6 +319,15 @@ async def _check_rate_limit(client_ip: str) -> bool:
 
 
 @router.post("/login", response_model=LoginResponse)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:auth.login",
+    rate_limit="auth-login",
+    idempotency="credential-check-creates-session",
+    audit_event="auth.login",
+    public_reason="auth-bootstrap-rate-limited-credentials",
+)
 async def login(body: LoginRequest, request: Request, response: Response):
     # Rate-limit login attempts per IP (Redis-backed, in-memory fallback)
     client_ip = request.client.host if request.client else "unknown"
@@ -376,6 +395,15 @@ class GoogleLoginRequest(BaseModel):
 
 
 @router.post("/google", response_model=LoginResponse)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:auth.google",
+    rate_limit="auth-login",
+    idempotency="google-id-token-email-upsert",
+    audit_event="auth.google_login",
+    public_reason="google-id-token-verification",
+)
 async def google_login(body: GoogleLoginRequest, response: Response):
     """Verify Google ID token, find-or-create user, return JWT."""
     client_id = settings.google_oauth_client_id
@@ -484,6 +512,15 @@ _RESET_WINDOW = 3600  # 1 hour
 
 
 @router.post("/forgot-password")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:auth.password_reset.request",
+    rate_limit="auth-password-reset",
+    idempotency="email-reset-request-enumeration-safe",
+    audit_event="auth.password_reset.requested",
+    public_reason="password-reset-bootstrap-rate-limited",
+)
 async def forgot_password(body: ForgotPasswordRequest, request: Request):
     """Send a password reset link if the email is registered."""
     email = body.email.strip().lower()
@@ -525,6 +562,15 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
 
 
 @router.post("/reset-password")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:auth.password_reset.consume",
+    rate_limit="auth-password-reset",
+    idempotency="one-time-reset-code-consumption",
+    audit_event="auth.password_reset.completed",
+    public_reason="one-time-reset-code-validated",
+)
 async def reset_password(body: ResetPasswordRequest):
     """Validate reset (code or legacy JWT) and set a new password."""
     token_value = body.token
@@ -568,6 +614,14 @@ async def reset_password(body: ResetPasswordRequest):
 
 
 @router.post("/logout")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="auth.session.logout",
+    rate_limit="auth-mutating",
+    idempotency="token-blacklist-idempotent",
+    audit_event="auth.logout",
+)
 async def logout(request: Request, response: Response):
     """Blacklist the current token and clear the session cookie."""
     # Accept either cookie or Authorization header for logout
@@ -585,6 +639,14 @@ async def logout(request: Request, response: Response):
 
 
 @router.get("/me")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="auth.session.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="auth.me.read",
+)
 async def get_current_user_profile(request: Request):
     """Return the current authenticated user's profile from the JWT.
 
@@ -645,6 +707,15 @@ async def get_current_user_profile(request: Request):
 
 
 @router.get("/config")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:auth.config",
+    rate_limit="public-read",
+    idempotency="read-only",
+    audit_event="auth.config.read",
+    public_reason="auth-bootstrap-config-no-tenant-data",
+)
 async def auth_config():
     """Return public auth configuration (Google Client ID, etc.)."""
     return {

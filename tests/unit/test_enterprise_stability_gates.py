@@ -251,3 +251,67 @@ def test_bridge_mutating_routes_include_idempotency_and_audit_metadata() -> None
     }
     assert all(route.idempotency for route in mutating_routes)
     assert all(route.audit_event for route in mutating_routes)
+
+
+def test_auth_billing_connector_target_routes_have_metadata() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/auth.py",
+        gates.REPO_ROOT / "api/v1/org.py",
+        gates.REPO_ROOT / "api/v1/billing.py",
+        gates.REPO_ROOT / "api/v1/oauth_connector.py",
+        gates.REPO_ROOT / "api/v1/connectors.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert len(routes) == 41
+    assert findings == []
+    assert all(route.metadata_present for route in routes)
+    assert all(route.scope for route in routes)
+    assert all(route.rate_limit for route in routes)
+    assert all(route.idempotency for route in routes)
+    assert all(route.audit_event for route in routes)
+
+
+def test_public_auth_billing_oauth_routes_include_public_reason() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/auth.py",
+        gates.REPO_ROOT / "api/v1/org.py",
+        gates.REPO_ROOT / "api/v1/billing.py",
+        gates.REPO_ROOT / "api/v1/oauth_connector.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    public_routes = [route for route in routes if route.auth_required is False]
+
+    assert {route.path for route in public_routes} >= {
+        "/api/v1/auth/login",
+        "/api/v1/auth/signup",
+        "/api/v1/auth/forgot-password",
+        "/api/v1/auth/reset-password",
+        "/api/v1/billing/callback",
+        "/api/v1/billing/callback/stripe",
+        "/api/v1/oauth/callback",
+        "/api/v1/org/accept-invite",
+    }
+    assert all(route.public_exempt_reason for route in public_routes)
+
+
+def test_mutating_billing_oauth_connector_routes_include_audit_and_idempotency() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/billing.py",
+        gates.REPO_ROOT / "api/v1/oauth_connector.py",
+        gates.REPO_ROOT / "api/v1/connectors.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    mutating_routes = [
+        route
+        for route in routes
+        if any(method in gates.MUTATING_METHODS for method in route.methods)
+    ]
+
+    assert mutating_routes
+    assert all(route.audit_event for route in mutating_routes)
+    assert all(route.idempotency for route in mutating_routes)

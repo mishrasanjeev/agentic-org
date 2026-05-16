@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.connector import Connector
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
@@ -417,6 +418,14 @@ def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None =
 
 # ── GET /connectors/registry ────────────────────────────────────────────────
 @router.get("/connectors/registry")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="connectors.registry.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.registry.list",
+)
 async def list_registry_connectors(category: str | None = None):
     """Return the native connector catalog from the runtime registry.
 
@@ -470,6 +479,14 @@ async def list_registry_connectors(category: str | None = None):
 
 # ── GET /tools — Function-level tool names ─────────────────────────────────
 @router.get("/tools")
+@route_meta(
+    auth_required=True,
+    tenant_required=False,
+    scope="connectors.tools.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.tools.list",
+)
 async def list_tools(
     category: str | None = None,
     connectors: str | None = None,
@@ -538,6 +555,14 @@ async def list_tools(
 
 # ── GET /connectors ─────────────────────────────────────────────────────────
 @router.get("/connectors")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.list",
+)
 async def list_connectors(
     category: str | None = None,
     page: int = 1,
@@ -599,6 +624,14 @@ async def list_connectors(
 
 # ── POST /connectors ────────────────────────────────────────────────────────
 @router.post("/connectors", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.create",
+    rate_limit="admin-mutating",
+    idempotency="tenant-connector-name-create-or-conflict",
+    audit_event="connectors.create",
+)
 async def register_connector(
     body: ConnectorCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -747,6 +780,14 @@ async def register_connector(
 
 # ── GET /connectors/{conn_id} ────────────────────────────────────────────────
 @router.get("/connectors/{conn_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.read",
+)
 async def get_connector(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -778,6 +819,14 @@ async def get_connector(
 
 # ── PUT /connectors/{conn_id} ──────────────────────────────────────────────
 @router.put("/connectors/{conn_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.update",
+    rate_limit="admin-mutating",
+    idempotency="connector-id-field-update",
+    audit_event="connectors.update",
+)
 async def update_connector(
     conn_id: UUID,
     body: ConnectorUpdate,
@@ -984,6 +1033,14 @@ async def update_connector(
 # deleted connector can be restored via PUT /connectors/{id}
 # (status=active).
 @router.delete("/connectors/{conn_id}", status_code=200)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.delete",
+    rate_limit="admin-mutating",
+    idempotency="connector-id-soft-delete",
+    audit_event="connectors.delete",
+)
 async def delete_connector(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -1009,6 +1066,14 @@ async def delete_connector(
 
 # ── GET /connectors/{conn_id}/health ─────────────────────────────────────────
 @router.get("/connectors/{conn_id}/health")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.health.read",
+    rate_limit="connector-test",
+    idempotency="live-health-probe-status-refresh",
+    audit_event="connectors.health.read",
+)
 async def connector_health(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -1056,6 +1121,14 @@ async def connector_health(
 
 
 @router.post("/connectors/{conn_id}/test")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.test",
+    rate_limit="connector-test",
+    idempotency="live-test-updates-health-status",
+    audit_event="connectors.test",
+)
 async def test_connector(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),

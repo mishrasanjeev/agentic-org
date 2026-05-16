@@ -990,148 +990,148 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.config.read",
     "auth_required": false,
     "function": "auth_config",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/auth/config api/v1/auth.py:auth_config",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/config",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 648,
-    "tenant_required": null
+    "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
+    "rate_limit": "public-read",
+    "scope": "public:auth.config",
+    "source_line": 719,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.password_reset.requested",
     "auth_required": false,
     "function": "forgot_password",
-    "idempotency": null,
+    "idempotency": "email-reset-request-enumeration-safe",
     "key": "POST /api/v1/auth/forgot-password api/v1/auth.py:forgot_password",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/forgot-password",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 487,
-    "tenant_required": null
+    "public_exempt_reason": "password-reset-bootstrap-rate-limited",
+    "rate_limit": "auth-password-reset",
+    "scope": "public:auth.password_reset.request",
+    "source_line": 524,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.google_login",
     "auth_required": false,
     "function": "google_login",
-    "idempotency": null,
+    "idempotency": "google-id-token-email-upsert",
     "key": "POST /api/v1/auth/google api/v1/auth.py:google_login",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/google",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 379,
-    "tenant_required": null
+    "public_exempt_reason": "google-id-token-verification",
+    "rate_limit": "auth-login",
+    "scope": "public:auth.google",
+    "source_line": 407,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.login",
     "auth_required": false,
     "function": "login",
-    "idempotency": null,
+    "idempotency": "credential-check-creates-session",
     "key": "POST /api/v1/auth/login api/v1/auth.py:login",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/login",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 312,
-    "tenant_required": null
+    "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
+    "rate_limit": "auth-login",
+    "scope": "public:auth.login",
+    "source_line": 331,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.logout",
     "auth_required": true,
     "function": "logout",
-    "idempotency": null,
+    "idempotency": "token-blacklist-idempotent",
     "key": "POST /api/v1/auth/logout api/v1/auth.py:logout",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/logout",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 571,
-    "tenant_required": null
+    "rate_limit": "auth-mutating",
+    "scope": "auth.session.logout",
+    "source_line": 625,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.me.read",
     "auth_required": true,
     "function": "get_current_user_profile",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/auth/me api/v1/auth.py:get_current_user_profile",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/me",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 588,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "auth.session.read",
+    "source_line": 650,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.password_reset.completed",
     "auth_required": false,
     "function": "reset_password",
-    "idempotency": null,
+    "idempotency": "one-time-reset-code-consumption",
     "key": "POST /api/v1/auth/reset-password api/v1/auth.py:reset_password",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/reset-password",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 528,
-    "tenant_required": null
+    "public_exempt_reason": "one-time-reset-code-validated",
+    "rate_limit": "auth-password-reset",
+    "scope": "public:auth.password_reset.consume",
+    "source_line": 574,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "auth.signup",
     "auth_required": false,
     "function": "signup",
-    "idempotency": null,
+    "idempotency": "unique-admin-email-and-generated-tenant",
     "key": "POST /api/v1/auth/signup api/v1/auth.py:signup",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/auth.py",
     "path": "/api/v1/auth/signup",
-    "public_exempt_reason": "auth-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 128,
-    "tenant_required": null
+    "public_exempt_reason": "auth-bootstrap-rate-limited-password-policy",
+    "rate_limit": "auth-signup",
+    "scope": "public:auth.signup",
+    "source_line": 138,
+    "tenant_required": false
   },
   {
     "audit_event": null,
@@ -1188,77 +1188,77 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.callback.plural",
     "auth_required": false,
     "function": "plural_callback",
-    "idempotency": null,
+    "idempotency": "gateway-order-status-verification",
     "key": "GET,POST /api/v1/billing/callback api/v1/billing.py:plural_callback",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET",
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/callback",
-    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 401,
-    "tenant_required": null
+    "public_exempt_reason": "gateway-redirect-server-side-verification",
+    "rate_limit": "gateway-callback",
+    "scope": "public:billing.callback.plural",
+    "source_line": 461,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.callback.stripe",
     "auth_required": false,
     "function": "stripe_callback",
-    "idempotency": null,
+    "idempotency": "stripe-session-id-verification",
     "key": "GET /api/v1/billing/callback/stripe api/v1/billing.py:stripe_callback",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/callback/stripe",
-    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 504,
-    "tenant_required": null
+    "public_exempt_reason": "stripe-hosted-checkout-server-side-verification",
+    "rate_limit": "gateway-callback",
+    "scope": "public:billing.callback.stripe",
+    "source_line": 573,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.subscription.cancel",
     "auth_required": true,
     "function": "cancel_subscription",
-    "idempotency": null,
+    "idempotency": "tenant-subscription-terminal-cancel",
     "key": "POST /api/v1/billing/cancel api/v1/billing.py:cancel_subscription",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/cancel",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 614,
-    "tenant_required": null
+    "rate_limit": "billing-mutating",
+    "scope": "billing.subscription.cancel",
+    "source_line": 707,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.health.read",
     "auth_required": false,
     "function": "billing_health",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/billing/health api/v1/billing.py:billing_health",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/health",
-    "public_exempt_reason": "health-liveness-safe",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 196,
-    "tenant_required": null
+    "public_exempt_reason": "gateway-config-readiness-no-tenant-data",
+    "rate_limit": "public-read",
+    "scope": "public:billing.health.read",
+    "source_line": 231,
+    "tenant_required": false
   },
   {
     "audit_event": null,
@@ -1315,166 +1315,166 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.order_status.read",
     "auth_required": true,
     "function": "check_order_status",
-    "idempotency": null,
+    "idempotency": "read-only-provider-order-status",
     "key": "POST /api/v1/billing/order-status api/v1/billing.py:check_order_status",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/order-status",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 590,
-    "tenant_required": null
+    "rate_limit": "billing-status",
+    "scope": "billing.order_status.read",
+    "source_line": 675,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.plans.read",
     "auth_required": false,
     "function": "list_plans",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/billing/plans api/v1/billing.py:list_plans",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/plans",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 127,
-    "tenant_required": null
+    "public_exempt_reason": "public-pricing-no-tenant-data",
+    "rate_limit": "public-read",
+    "scope": "public:billing.plans.read",
+    "source_line": 137,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.portal.create",
     "auth_required": true,
     "function": "create_portal",
-    "idempotency": null,
+    "idempotency": "tenant-portal-session-request",
     "key": "POST /api/v1/billing/portal api/v1/billing.py:create_portal",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/portal",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 562,
-    "tenant_required": null
+    "rate_limit": "billing-mutating",
+    "scope": "billing.portal.create",
+    "source_line": 639,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.subscribe.stripe",
     "auth_required": true,
     "function": "subscribe_stripe",
-    "idempotency": null,
+    "idempotency": "tenant-plan-checkout-session",
     "key": "POST /api/v1/billing/subscribe api/v1/billing.py:subscribe_stripe",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/subscribe",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 263,
-    "tenant_required": null
+    "rate_limit": "billing-mutating",
+    "scope": "billing.subscribe.stripe",
+    "source_line": 306,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.subscribe.plural",
     "auth_required": true,
     "function": "subscribe_india",
-    "idempotency": null,
+    "idempotency": "tenant-plan-plural-order",
     "key": "POST /api/v1/billing/subscribe/india api/v1/billing.py:subscribe_india",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/subscribe/india",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 355,
-    "tenant_required": null
+    "rate_limit": "billing-mutating",
+    "scope": "billing.subscribe.plural",
+    "source_line": 406,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.subscription.read",
     "auth_required": true,
     "function": "get_subscription",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/billing/subscription api/v1/billing.py:get_subscription",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/subscription",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 135,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "billing.subscription.read",
+    "source_line": 153,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.usage.read",
     "auth_required": true,
     "function": "get_usage_endpoint",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/billing/usage api/v1/billing.py:get_usage_endpoint",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/usage",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 173,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "billing.usage.read",
+    "source_line": 199,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.webhook.plural",
     "auth_required": false,
     "function": "plural_webhook",
-    "idempotency": null,
+    "idempotency": "plural-webhook-id",
     "key": "POST /api/v1/billing/webhook/plural api/v1/billing.py:plural_webhook",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/webhook/plural",
-    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 694,
-    "tenant_required": null
+    "public_exempt_reason": "plural-hmac-signature-required",
+    "rate_limit": "gateway-webhook",
+    "scope": "public:billing.webhook.plural",
+    "source_line": 805,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "billing.webhook.stripe",
     "auth_required": false,
     "function": "stripe_webhook",
-    "idempotency": null,
+    "idempotency": "stripe-event-id",
     "key": "POST /api/v1/billing/webhook/stripe api/v1/billing.py:stripe_webhook",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
     "path": "/api/v1/billing/webhook/stripe",
-    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 672,
-    "tenant_required": null
+    "public_exempt_reason": "stripe-signature-required",
+    "rate_limit": "gateway-webhook",
+    "scope": "public:billing.webhook.stripe",
+    "source_line": 774,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -2269,202 +2269,202 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.list",
     "auth_required": true,
     "function": "list_connectors",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/connectors api/v1/connectors.py:list_connectors",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 541,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "connectors.read",
+    "source_line": 566,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.create",
     "auth_required": true,
     "function": "register_connector",
-    "idempotency": null,
+    "idempotency": "tenant-connector-name-create-or-conflict",
     "key": "POST /api/v1/connectors api/v1/connectors.py:register_connector",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 602,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.create",
+    "source_line": 635,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.oauth.initiate",
     "auth_required": true,
     "function": "initiate_connector_oauth",
-    "idempotency": null,
+    "idempotency": "oauth-state-nonce",
     "key": "POST /api/v1/connectors/oauth/initiate api/v1/oauth_connector.py:initiate_connector_oauth",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/oauth_connector.py",
     "path": "/api/v1/connectors/oauth/initiate",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 623,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.oauth.initiate.admin",
+    "source_line": 640,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.oauth.providers.list",
     "auth_required": true,
     "function": "list_oauth_providers",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/connectors/oauth/providers api/v1/oauth_connector.py:list_oauth_providers",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/oauth_connector.py",
     "path": "/api/v1/connectors/oauth/providers",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 611,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "connectors.oauth.providers.read",
+    "source_line": 620,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.oauth.reconnect",
     "auth_required": true,
     "function": "revoke_and_retry",
-    "idempotency": null,
+    "idempotency": "oauth-reconnect-state-nonce",
     "key": "POST /api/v1/connectors/oauth/revoke-and-retry api/v1/oauth_connector.py:revoke_and_retry",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/oauth_connector.py",
     "path": "/api/v1/connectors/oauth/revoke-and-retry",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 690,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.oauth.reconnect.admin",
+    "source_line": 715,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.registry.list",
     "auth_required": true,
     "function": "list_registry_connectors",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/connectors/registry api/v1/connectors.py:list_registry_connectors",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors/registry",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 420,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "connectors.registry.read",
+    "source_line": 429,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.delete",
     "auth_required": true,
     "function": "delete_connector",
-    "idempotency": null,
+    "idempotency": "connector-id-soft-delete",
     "key": "DELETE /api/v1/connectors/{conn_id} api/v1/connectors.py:delete_connector",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors/{conn_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 987,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.delete",
+    "source_line": 1044,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.read",
     "auth_required": true,
     "function": "get_connector",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/connectors/{conn_id} api/v1/connectors.py:get_connector",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors/{conn_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 750,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "connectors.read",
+    "source_line": 791,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.update",
     "auth_required": true,
     "function": "update_connector",
-    "idempotency": null,
+    "idempotency": "connector-id-field-update",
     "key": "PUT /api/v1/connectors/{conn_id} api/v1/connectors.py:update_connector",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PUT"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors/{conn_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 781,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.update",
+    "source_line": 830,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.health.read",
     "auth_required": true,
     "function": "connector_health",
-    "idempotency": null,
+    "idempotency": "live-health-probe-status-refresh",
     "key": "GET /api/v1/connectors/{conn_id}/health api/v1/connectors.py:connector_health",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors/{conn_id}/health",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 1012,
-    "tenant_required": null
+    "rate_limit": "connector-test",
+    "scope": "connectors.health.read",
+    "source_line": 1077,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.test",
     "auth_required": true,
     "function": "test_connector",
-    "idempotency": null,
+    "idempotency": "live-test-updates-health-status",
     "key": "POST /api/v1/connectors/{conn_id}/test api/v1/connectors.py:test_connector",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/connectors/{conn_id}/test",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 1059,
-    "tenant_required": null
+    "rate_limit": "connector-test",
+    "scope": "connectors.test",
+    "source_line": 1132,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -3313,40 +3313,40 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.oauth.callback",
     "auth_required": false,
     "function": "oauth_connector_callback",
-    "idempotency": null,
+    "idempotency": "oauth-state-and-provider-code",
     "key": "GET /api/v1/oauth/callback api/v1/oauth_connector.py:oauth_connector_callback",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/oauth_connector.py",
     "path": "/api/v1/oauth/callback",
-    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 767,
-    "tenant_required": null
+    "public_exempt_reason": "oauth-state-validated-authorization-code",
+    "rate_limit": "oauth-callback",
+    "scope": "public:connectors.oauth.callback",
+    "source_line": 801,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "org.invite.accepted",
     "auth_required": false,
     "function": "accept_invite",
-    "idempotency": null,
+    "idempotency": "one-time-invite-code-consumption",
     "key": "POST /api/v1/org/accept-invite api/v1/org.py:accept_invite",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/accept-invite",
-    "public_exempt_reason": "public-read-or-doc-route",
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 251,
-    "tenant_required": null
+    "public_exempt_reason": "one-time-invite-code-validated",
+    "rate_limit": "auth-invite",
+    "scope": "public:org.invite.accept",
+    "source_line": 294,
+    "tenant_required": false
   },
   {
     "audit_event": null,
@@ -3403,112 +3403,112 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "org.members.invite",
     "auth_required": true,
     "function": "invite_member",
-    "idempotency": null,
+    "idempotency": "tenant-email-pending-invite",
     "key": "POST /api/v1/org/invite api/v1/org.py:invite_member",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/invite",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 140,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "org.members.invite.admin",
+    "source_line": 165,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
-    "auth_required": true,
+    "audit_event": "org.invite.preview",
+    "auth_required": false,
     "function": "get_invite_info",
-    "idempotency": null,
+    "idempotency": "read-only-invite-code-peek",
     "key": "GET /api/v1/org/invite-info api/v1/org.py:get_invite_info",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/invite-info",
-    "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 213,
-    "tenant_required": null
+    "public_exempt_reason": "one-time-invite-code-preview",
+    "rate_limit": "auth-invite",
+    "scope": "public:org.invite.preview",
+    "source_line": 247,
+    "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "org.members.list",
     "auth_required": true,
     "function": "list_members",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/org/members api/v1/org.py:list_members",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/members",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 114,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "org.members.read.admin",
+    "source_line": 131,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "org.members.deactivate",
     "auth_required": true,
     "function": "deactivate_member",
-    "idempotency": null,
+    "idempotency": "tenant-user-soft-deactivate",
     "key": "DELETE /api/v1/org/members/{user_id} api/v1/org.py:deactivate_member",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/members/{user_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 344,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "org.members.delete.admin",
+    "source_line": 403,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "org.onboarding.update",
     "auth_required": true,
     "function": "update_onboarding",
-    "idempotency": null,
+    "idempotency": "tenant-onboarding-settings-update",
     "key": "PUT /api/v1/org/onboarding api/v1/org.py:update_onboarding",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PUT"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/onboarding",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 315,
-    "tenant_required": null
+    "rate_limit": "admin-mutating",
+    "scope": "org.onboarding.update.admin",
+    "source_line": 366,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "org.profile.read",
     "auth_required": true,
     "function": "get_profile",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/org/profile api/v1/org.py:get_profile",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/org.py",
     "path": "/api/v1/org/profile",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 92,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "org.profile.read.admin",
+    "source_line": 101,
+    "tenant_required": true
   },
   {
     "audit_event": null,
@@ -4681,22 +4681,22 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "connectors.tools.list",
     "auth_required": true,
     "function": "list_tools",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/tools api/v1/connectors.py:list_tools",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/connectors.py",
     "path": "/api/v1/tools",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 473,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "connectors.tools.read",
+    "source_line": 490,
+    "tenant_required": false
   },
   {
     "audit_event": null,
