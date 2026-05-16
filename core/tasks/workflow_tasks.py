@@ -1,35 +1,29 @@
 """Celery tasks for workflow wait step and event-based resumption.
 
-Codex 2026-04-23 re-verification blocker A: these tasks were reading
-``state["steps"]`` / writing ``state["current_step"]``, but the
-async engine (``workflows/engine.py``) writes
-``state["step_results"]`` / ``state["waiting_step_id"]`` /
-``state["status"]`` to the same Redis key. Scheduled timeouts and
-external-event resumes silently did nothing because the keys didn't
-match — the workflow sat in ``waiting_*`` forever.
-
-The fix aligns this module to the engine's canonical schema. We
-re-implement the engine's ``resume_from_wait`` / ``timeout_event_wait``
-semantics in sync Redis so scheduled Celery workers can drive the
-same state transitions the async engine uses. The delegate functions
-keep the behaviour in lockstep: any subsequent engine schema change
-must update both this file and ``workflows/engine.py`` together.
+Workflow run state is durable in PostgreSQL via ``WorkflowStateStore``.
+Redis is still used for event-listener discovery and cleanup, but these tasks
+must not mutate ``wfstate:{run_id}`` directly.
 """
 
 from __future__ import annotations
 
-import json
+import asyncio
 from typing import Any
 
 import structlog
 
 from core.tasks.celery_app import app
+from workflows.state_store import WorkflowStateStore
 
 logger = structlog.get_logger()
 
 
+def _state_store() -> WorkflowStateStore:
+    return WorkflowStateStore()
+
+
 def _get_redis():
-    """Return a synchronous Redis client for workflow state."""
+    """Return a synchronous Redis client for event-listener cleanup."""
     import os
 
     import redis
@@ -50,45 +44,37 @@ def _clean_event_wait_keys(r: Any, run_id: str, step_id: str) -> None:
             break
 
 
-@app.task(name="resume_workflow_wait")
-def resume_workflow_wait(run_id: str, step_id: str) -> dict:
-    """Resume a workflow paused at a wait_delay or wait_for_event step.
-
-    Called when:
-    - A scheduled wait duration expires (via Celery ETA / countdown).
-    - An external event matches a ``wait_for_event`` step (triggered
-      by webhook).
-
-    Writes to the same ``wfstate:{run_id}`` key the async engine uses
-    and with the same schema the engine's ``resume_from_wait`` writes:
-
-      - ``state["step_results"][step_id] = {output, status="completed"}``
-      - ``state["status"]`` transitions ``waiting_* → running``
-      - ``state["waiting_step_id"]`` is cleared
-      - ``state["steps_completed"]`` is recomputed
-
-    This lets the web process (async engine) and the Celery worker
-    both drive the same state machine without diverging.
-    """
-    log = logger.bind(run_id=run_id, step_id=step_id)
+def _best_effort_clean_event_wait_keys(run_id: str, step_id: str) -> None:
     try:
         r = _get_redis()
-        state_key = f"wfstate:{run_id}"
-        raw = r.get(state_key)
-        if not raw:
+        try:
+            _clean_event_wait_keys(r, run_id, step_id)
+        finally:
+            close = getattr(r, "close", None)
+            if close is not None:
+                close()
+    except Exception as exc:  # noqa: BLE001 - cleanup cache must not block state progress.
+        logger.warning(
+            "workflow_event_wait_cleanup_failed",
+            run_id=run_id,
+            step_id=step_id,
+            error=str(exc),
+        )
+
+
+async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
+    log = logger.bind(run_id=run_id, step_id=step_id)
+    store = _state_store()
+    await store.init()
+    try:
+        state = await store.load(run_id)
+        if not state:
             log.warning("workflow_state_not_found")
             return {"status": "error", "reason": "workflow_state_not_found"}
 
-        state = json.loads(raw)
         current_status = state.get("status")
-
         if current_status not in ("waiting_delay", "waiting_event"):
-            log.info(
-                "workflow_not_waiting",
-                status=current_status,
-            )
-            # Idempotent: the state already advanced (maybe by the
-            # async resume path or the other worker). Don't overwrite.
+            log.info("workflow_not_waiting", status=current_status)
             return {"status": "noop", "reason": f"current status is {current_status}"}
 
         waiting_step_id = state.get("waiting_step_id")
@@ -103,7 +89,6 @@ def resume_workflow_wait(run_id: str, step_id: str) -> dict:
                 "reason": "waiting_step_id does not match",
             }
 
-        # Record completion — same schema the engine uses.
         step_results = state.setdefault("step_results", {})
         step_results[step_id] = {
             "output": {},
@@ -114,8 +99,13 @@ def resume_workflow_wait(run_id: str, step_id: str) -> dict:
         state["status"] = "running"
         state.pop("waiting_step_id", None)
 
-        r.set(state_key, json.dumps(state), ex=172800)
-        _clean_event_wait_keys(r, run_id, step_id)
+        await store.save(
+            state,
+            actor="celery.resume_workflow_wait",
+            step_id=step_id,
+            idempotency_key=f"resume_workflow_wait:{run_id}:{step_id}",
+            metadata={"task": "resume_workflow_wait"},
+        )
 
         log.info("workflow_wait_resumed")
         return {
@@ -123,44 +113,47 @@ def resume_workflow_wait(run_id: str, step_id: str) -> dict:
             "run_id": run_id,
             "step_id": step_id,
         }
+    finally:
+        await store.close()
 
-    except Exception as exc:
-        log.error("resume_workflow_wait_failed", error=str(exc))
+
+@app.task(name="resume_workflow_wait")
+def resume_workflow_wait(run_id: str, step_id: str) -> dict:
+    """Resume a workflow paused at a wait_delay or wait_for_event step."""
+    try:
+        result = asyncio.run(_resume_workflow_wait_async(run_id, step_id))
+        if result.get("status") in {"resumed", "noop"}:
+            _best_effort_clean_event_wait_keys(run_id, step_id)
+        return result
+    except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
+        logger.error(
+            "resume_workflow_wait_failed",
+            run_id=run_id,
+            step_id=step_id,
+            error=str(exc),
+        )
         return {"status": "error", "reason": str(exc)}
 
 
-@app.task(name="timeout_workflow_event")
-def timeout_workflow_event(run_id: str, step_id: str) -> dict:
-    """Mark an event wait as timed_out and resume to the fallback path.
-
-    Scheduled with a countdown equal to the step's ``timeout_hours``.
-    Idempotent: if the event already arrived (step already in
-    ``step_results``), this is a no-op.
-    """
+async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
     log = logger.bind(run_id=run_id, step_id=step_id)
+    store = _state_store()
+    await store.init()
     try:
-        r = _get_redis()
-        state_key = f"wfstate:{run_id}"
-        raw = r.get(state_key)
-        if not raw:
+        state = await store.load(run_id)
+        if not state:
             log.warning("workflow_state_not_found")
             return {"status": "error", "reason": "workflow_state_not_found"}
 
-        state = json.loads(raw)
-
-        # Idempotency: step already completed (event arrived first).
         step_results = state.get("step_results", {})
         if step_id in step_results:
             log.info("event_already_received_before_timeout")
             return {"status": "already_completed"}
 
-        # Not waiting for this step any more (manual cancel / concurrent
-        # resume). Don't touch.
         if state.get("waiting_step_id") != step_id:
             log.info("step_no_longer_waiting")
             return {"status": "noop"}
 
-        # Mark as timed out — same schema as engine.timeout_event_wait.
         step_results[step_id] = {
             "status": "timed_out",
             "output": {},
@@ -171,8 +164,13 @@ def timeout_workflow_event(run_id: str, step_id: str) -> dict:
         state["status"] = "running"
         state.pop("waiting_step_id", None)
 
-        r.set(state_key, json.dumps(state), ex=172800)
-        _clean_event_wait_keys(r, run_id, step_id)
+        await store.save(
+            state,
+            actor="celery.timeout_workflow_event",
+            step_id=step_id,
+            idempotency_key=f"timeout_workflow_event:{run_id}:{step_id}",
+            metadata={"task": "timeout_workflow_event"},
+        )
 
         log.info("workflow_event_timed_out")
         return {
@@ -180,7 +178,23 @@ def timeout_workflow_event(run_id: str, step_id: str) -> dict:
             "run_id": run_id,
             "step_id": step_id,
         }
+    finally:
+        await store.close()
 
-    except Exception as exc:
-        log.error("timeout_workflow_event_failed", error=str(exc))
+
+@app.task(name="timeout_workflow_event")
+def timeout_workflow_event(run_id: str, step_id: str) -> dict:
+    """Mark an event wait as timed_out and let the engine continue later."""
+    try:
+        result = asyncio.run(_timeout_workflow_event_async(run_id, step_id))
+        if result.get("status") in {"timed_out", "already_completed", "noop"}:
+            _best_effort_clean_event_wait_keys(run_id, step_id)
+        return result
+    except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
+        logger.error(
+            "timeout_workflow_event_failed",
+            run_id=run_id,
+            step_id=step_id,
+            error=str(exc),
+        )
         return {"status": "error", "reason": str(exc)}

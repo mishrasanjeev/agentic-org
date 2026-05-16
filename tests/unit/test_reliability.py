@@ -32,7 +32,7 @@ def _in_memory_state_store() -> WorkflowStateStore:
     store = WorkflowStateStore()
     _data: dict[str, dict] = {}
 
-    async def _save(state):
+    async def _save(state, **_kwargs):
         _data[state["id"]] = copy.deepcopy(state)
 
     async def _load(run_id):

@@ -62,4 +62,6 @@ from core.models.user import User as User
 from core.models.workflow import StepExecution as StepExecution
 from core.models.workflow import WorkflowDefinition as WorkflowDefinition
 from core.models.workflow import WorkflowRun as WorkflowRun
+from core.models.workflow import WorkflowRunState as WorkflowRunState
+from core.models.workflow import WorkflowStateTransition as WorkflowStateTransition
 from core.models.workflow_variant import WorkflowVariant as WorkflowVariant
