@@ -477,3 +477,118 @@ def test_route_metadata_debt_reduced_by_security_admin_slice() -> None:
     )
 
     assert missing_count <= 139
+
+
+def test_sso_rpa_target_routes_have_metadata() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/sso.py",
+        gates.REPO_ROOT / "api/v1/report_schedules.py",
+        gates.REPO_ROOT / "api/v1/rpa.py",
+        gates.REPO_ROOT / "api/v1/rpa_schedules.py",
+        gates.REPO_ROOT / "api/v1/prompt_templates.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert len(routes) == 28
+    assert findings == []
+    assert all(route.metadata_present for route in routes)
+    assert all(route.scope for route in routes)
+    assert all(route.rate_limit for route in routes)
+    assert all(route.idempotency for route in routes)
+    assert all(route.audit_event for route in routes)
+
+
+def test_public_sso_routes_include_public_reason() -> None:
+    routes = gates.scan_routes([gates.REPO_ROOT / "api/v1/sso.py"], gates.REPO_ROOT)
+    public_routes = [route for route in routes if route.auth_required is False]
+
+    assert {route.path for route in public_routes} == {
+        "/api/v1/auth/sso/providers",
+        "/api/v1/auth/sso/{provider_key}/callback",
+        "/api/v1/auth/sso/{provider_key}/login",
+    }
+    assert all(route.public_exempt_reason for route in public_routes)
+
+
+def test_sso_rpa_mutating_routes_include_audit_and_idempotency() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/sso.py",
+        gates.REPO_ROOT / "api/v1/report_schedules.py",
+        gates.REPO_ROOT / "api/v1/rpa.py",
+        gates.REPO_ROOT / "api/v1/rpa_schedules.py",
+        gates.REPO_ROOT / "api/v1/prompt_templates.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    mutating_routes = [
+        route
+        for route in routes
+        if any(method in gates.MUTATING_METHODS for method in route.methods)
+    ]
+
+    assert len(mutating_routes) == 15
+    assert all(route.audit_event for route in mutating_routes)
+    assert all(route.idempotency for route in mutating_routes)
+
+
+def test_sso_rpa_sensitive_and_external_action_routes_are_marked() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/sso.py",
+        gates.REPO_ROOT / "api/v1/report_schedules.py",
+        gates.REPO_ROOT / "api/v1/rpa.py",
+        gates.REPO_ROOT / "api/v1/rpa_schedules.py",
+        gates.REPO_ROOT / "api/v1/prompt_templates.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    by_method_path = {
+        (route.methods[0], route.path): route
+        for route in routes
+        if len(route.methods) == 1
+    }
+
+    sensitive_routes = {
+        ("GET", "/api/v1/sso/configs"),
+        ("GET", "/api/v1/rpa/history"),
+        ("GET", "/api/v1/rpa-schedules/{schedule_id}"),
+        ("GET", "/api/v1/prompt-templates/{template_id}/history"),
+    }
+    external_action_routes = {
+        ("GET", "/api/v1/auth/sso/{provider_key}/callback"),
+        ("POST", "/api/v1/report-schedules/{schedule_id}/run-now"),
+        ("POST", "/api/v1/rpa/scripts/{script_id}/run"),
+        ("POST", "/api/v1/rpa-schedules/{schedule_id}/run-now"),
+    }
+    behavior_routes = {
+        ("POST", "/api/v1/prompt-templates"),
+        ("PUT", "/api/v1/prompt-templates/{template_id}"),
+        ("POST", "/api/v1/prompt-templates/{template_id}/rollback"),
+    }
+
+    assert sensitive_routes <= set(by_method_path)
+    assert external_action_routes <= set(by_method_path)
+    assert behavior_routes <= set(by_method_path)
+    assert all(
+        "sensitive" in by_method_path[route_key].scope
+        for route_key in sensitive_routes
+    )
+    assert all(
+        "external" in by_method_path[route_key].scope
+        for route_key in external_action_routes
+    )
+    assert all(
+        "behavior" in by_method_path[route_key].scope
+        for route_key in behavior_routes
+    )
+
+
+def test_route_metadata_debt_reduced_by_sso_rpa_slice() -> None:
+    routes = gates.scan_routes(gates.production_python_files(gates.REPO_ROOT), gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+    missing_count = sum(
+        finding.category == "route_missing_metadata" for finding in findings
+    )
+
+    assert missing_count <= 111

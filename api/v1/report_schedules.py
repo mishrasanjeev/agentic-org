@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.report_schedule import ReportSchedule
 
@@ -375,6 +376,14 @@ def _parse_schedule_id(schedule_id: str) -> _uuid.UUID:
 # ---------------------------------------------------------------------------
 
 @router.get("/report-schedules", response_model=list[ReportScheduleResponse])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="report_schedules.sensitive.list",
+    rate_limit="report-schedule-read",
+    idempotency="read-only",
+    audit_event="report_schedules.list",
+)
 async def list_report_schedules(
     company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -472,6 +481,14 @@ async def list_report_schedules(
     "/report-schedules",
     response_model=ReportScheduleResponse,
     status_code=status.HTTP_201_CREATED,
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="report_schedules.write",
+    rate_limit="report-schedule-write",
+    idempotency="not-idempotent-new-schedule-created",
+    audit_event="report_schedules.create",
 )
 async def create_report_schedule(
     body: ReportScheduleCreate,
@@ -573,6 +590,14 @@ async def create_report_schedule(
 
 
 @router.patch("/report-schedules/{schedule_id}", response_model=ReportScheduleResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="report_schedules.write",
+    rate_limit="report-schedule-write",
+    idempotency="idempotent-partial-update-by-schedule-id",
+    audit_event="report_schedules.update",
+)
 async def update_report_schedule(
     schedule_id: str,
     body: ReportScheduleUpdate,
@@ -638,6 +663,14 @@ async def update_report_schedule(
 
 
 @router.delete("/report-schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="report_schedules.write",
+    rate_limit="report-schedule-write",
+    idempotency="idempotent-delete-by-schedule-id",
+    audit_event="report_schedules.delete",
+)
 async def delete_report_schedule(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -660,6 +693,14 @@ async def delete_report_schedule(
 
 
 @router.post("/report-schedules/{schedule_id}/run-now")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="report_schedules.external_action.run",
+    rate_limit="manual-report-trigger",
+    idempotency="not-idempotent-enqueues-report-generation",
+    audit_event="report_schedules.run_now",
+)
 async def run_report_now(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
