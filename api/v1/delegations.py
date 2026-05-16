@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.delegation import UserDelegation
 
@@ -43,6 +44,14 @@ class DelegationOut(BaseModel):
 
 
 @router.post("/delegations", response_model=DelegationOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="delegations.approval_authority.sensitive.write",
+    rate_limit="delegation-write",
+    idempotency="not_idempotent-creates-delegation-window",
+    audit_event="delegations.create",
+)
 async def create_delegation(
     body: DelegationCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -74,6 +83,14 @@ async def create_delegation(
 
 
 @router.get("/delegations", response_model=list[DelegationOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="delegations.approval_authority.sensitive.read",
+    rate_limit="delegation-read",
+    idempotency="read-only",
+    audit_event="delegations.list",
+)
 async def list_delegations(
     active_only: bool = True,
     tenant_id: str = Depends(get_current_tenant),
@@ -99,6 +116,14 @@ async def list_delegations(
 
 
 @router.delete("/delegations/{delegation_id}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="delegations.approval_authority.sensitive.write",
+    rate_limit="delegation-write",
+    idempotency="idempotent-revoke-by-delegation-id",
+    audit_event="delegations.revoke",
+)
 async def revoke_delegation(
     delegation_id: uuid.UUID,
     tenant_id: str = Depends(get_current_tenant),

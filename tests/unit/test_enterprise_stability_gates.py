@@ -831,3 +831,167 @@ def test_route_metadata_debt_reduced_by_platform_slice() -> None:
     )
 
     assert missing_count <= 43
+
+
+def test_final_control_target_routes_have_metadata() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/agent_teams.py",
+        gates.REPO_ROOT / "api/v1/delegations.py",
+        gates.REPO_ROOT / "api/v1/workflow_variants.py",
+        gates.REPO_ROOT / "api/v1/aa_callback.py",
+        gates.REPO_ROOT / "api/v1/invoices.py",
+        gates.REPO_ROOT / "api/v1/costs.py",
+        gates.REPO_ROOT / "api/v1/config.py",
+        gates.REPO_ROOT / "api/v1/governance.py",
+        gates.REPO_ROOT / "api/v1/chat.py",
+        gates.REPO_ROOT / "api/v1/composio.py",
+        gates.REPO_ROOT / "api/v1/cron.py",
+        gates.REPO_ROOT / "api/v1/evals.py",
+        gates.REPO_ROOT / "api/v1/integrations_status.py",
+        gates.REPO_ROOT / "api/v1/mcp.py",
+        gates.REPO_ROOT / "api/v1/product_facts.py",
+        gates.REPO_ROOT / "api/v1/status.py",
+        gates.REPO_ROOT / "api/v1/voice.py",
+        gates.REPO_ROOT / "api/v1/demo.py",
+        gates.REPO_ROOT / "api/v1/content_safety.py",
+        gates.REPO_ROOT / "bridge/server_handler.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert len(routes) == 43
+    assert findings == []
+    assert all(route.metadata_present for route in routes)
+    assert all(route.scope for route in routes)
+    assert all(route.rate_limit for route in routes)
+    assert all(route.idempotency for route in routes)
+    assert all(route.audit_event for route in routes)
+
+
+def test_final_control_public_routes_include_public_reason() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/aa_callback.py",
+        gates.REPO_ROOT / "api/v1/cron.py",
+        gates.REPO_ROOT / "api/v1/evals.py",
+        gates.REPO_ROOT / "api/v1/mcp.py",
+        gates.REPO_ROOT / "api/v1/product_facts.py",
+        gates.REPO_ROOT / "api/v1/status.py",
+        gates.REPO_ROOT / "api/v1/demo.py",
+        gates.REPO_ROOT / "bridge/server_handler.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    public_routes = [route for route in routes if route.auth_required is False]
+
+    assert {(route.methods[0], route.path) for route in public_routes} == {
+        ("POST", "/api/v1/aa/consent/callback"),
+        ("GET", "/api/v1/cron/schedules"),
+        ("POST", "/api/v1/cron/compliance-alerts"),
+        ("GET", "/api/v1/evals"),
+        ("GET", "/api/v1/evals/agent/{agent_type}"),
+        ("GET", "/api/v1/mcp/tools"),
+        ("GET", "/api/v1/product-facts"),
+        ("GET", "/api/v1/status"),
+        ("POST", "/api/v1/demo-request"),
+        ("WEBSOCKET", "/api/v1/ws/bridge/{bridge_id}"),
+    }
+    assert all(route.public_exempt_reason for route in public_routes)
+
+
+def test_final_control_mutating_routes_include_audit_and_idempotency() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/agent_teams.py",
+        gates.REPO_ROOT / "api/v1/delegations.py",
+        gates.REPO_ROOT / "api/v1/workflow_variants.py",
+        gates.REPO_ROOT / "api/v1/aa_callback.py",
+        gates.REPO_ROOT / "api/v1/invoices.py",
+        gates.REPO_ROOT / "api/v1/config.py",
+        gates.REPO_ROOT / "api/v1/governance.py",
+        gates.REPO_ROOT / "api/v1/chat.py",
+        gates.REPO_ROOT / "api/v1/cron.py",
+        gates.REPO_ROOT / "api/v1/mcp.py",
+        gates.REPO_ROOT / "api/v1/voice.py",
+        gates.REPO_ROOT / "api/v1/demo.py",
+        gates.REPO_ROOT / "api/v1/content_safety.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    mutating_routes = [
+        route
+        for route in routes
+        if any(method in gates.MUTATING_METHODS for method in route.methods)
+    ]
+
+    assert len(mutating_routes) == 18
+    assert all(route.audit_event for route in mutating_routes)
+    assert all(route.idempotency for route in mutating_routes)
+
+
+def test_final_control_sensitive_and_external_routes_are_marked() -> None:
+    target_paths = [
+        gates.REPO_ROOT / "api/v1/agent_teams.py",
+        gates.REPO_ROOT / "api/v1/delegations.py",
+        gates.REPO_ROOT / "api/v1/workflow_variants.py",
+        gates.REPO_ROOT / "api/v1/aa_callback.py",
+        gates.REPO_ROOT / "api/v1/invoices.py",
+        gates.REPO_ROOT / "api/v1/costs.py",
+        gates.REPO_ROOT / "api/v1/config.py",
+        gates.REPO_ROOT / "api/v1/governance.py",
+        gates.REPO_ROOT / "api/v1/chat.py",
+        gates.REPO_ROOT / "api/v1/mcp.py",
+        gates.REPO_ROOT / "api/v1/voice.py",
+        gates.REPO_ROOT / "bridge/server_handler.py",
+    ]
+
+    routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
+    by_method_path = {
+        (route.methods[0], route.path): route
+        for route in routes
+        if len(route.methods) == 1
+    }
+
+    sensitive_routes = {
+        ("GET", "/api/v1/agent-teams"),
+        ("GET", "/api/v1/billing/invoices"),
+        ("GET", "/api/v1/costs/summary"),
+        ("GET", "/api/v1/governance/config"),
+        ("GET", "/api/v1/chat/history"),
+    }
+    external_action_routes = {
+        ("POST", "/api/v1/aa/consent/callback"),
+        ("POST", "/api/v1/chat/query"),
+        ("POST", "/api/v1/mcp/call"),
+        ("POST", "/api/v1/voice/test-connection"),
+    }
+    high_risk_routes = {
+        ("POST", "/api/v1/workflows/{workflow_id}/variants"),
+        ("DELETE", "/api/v1/workflows/{workflow_id}/variants/{variant_name}"),
+        ("PUT", "/api/v1/governance/config"),
+        ("WEBSOCKET", "/api/v1/ws/bridge/{bridge_id}"),
+    }
+
+    assert sensitive_routes <= set(by_method_path)
+    assert external_action_routes <= set(by_method_path)
+    assert high_risk_routes <= set(by_method_path)
+    assert all(
+        "sensitive" in by_method_path[route_key].scope
+        for route_key in sensitive_routes
+    )
+    assert all(
+        "external" in by_method_path[route_key].scope
+        for route_key in external_action_routes
+    )
+    assert all(
+        "high_risk" in by_method_path[route_key].scope
+        or "token_protected" in by_method_path[route_key].scope
+        or "enterprise_critical" in by_method_path[route_key].scope
+        for route_key in high_risk_routes
+    )
+
+
+def test_route_metadata_debt_eliminated_by_final_control_slice() -> None:
+    routes = gates.scan_routes(gates.production_python_files(gates.REPO_ROOT), gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+
+    assert findings == []

@@ -12,6 +12,7 @@ from pydantic import Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentTeam, AgentTeamMember
 
@@ -55,6 +56,14 @@ def _team_to_dict(team: AgentTeam, members: list[AgentTeamMember] | None = None)
 
 # ── GET /agent-teams ────────────────────────────────────────────────────────
 @router.get("/agent-teams")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agent_teams.sensitive.read",
+    rate_limit="agent-team-read",
+    idempotency="read-only",
+    audit_event="agent_teams.list",
+)
 async def list_teams(
     domain: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
@@ -90,6 +99,14 @@ async def list_teams(
 
 # ── GET /agent-teams/{team_id} ─────────────────────────────────────────────
 @router.get("/agent-teams/{team_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agent_teams.sensitive.read",
+    rate_limit="agent-team-read",
+    idempotency="read-only",
+    audit_event="agent_teams.detail",
+)
 async def get_team(
     team_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
@@ -114,6 +131,14 @@ async def get_team(
 
 # ── POST /agent-teams ───────────────────────────────────────────────────────
 @router.post("/agent-teams", status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agent_teams.routing_control.sensitive.write",
+    rate_limit="agent-team-write",
+    idempotency="not_idempotent-creates-team-and-members",
+    audit_event="agent_teams.create",
+)
 async def create_team(
     body: TeamCreateRequest,
     tenant_id: str = Depends(get_current_tenant),

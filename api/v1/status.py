@@ -15,6 +15,8 @@ import structlog
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from api.route_metadata import route_meta
+
 logger = structlog.get_logger()
 
 public_router = APIRouter(prefix="/status", tags=["Status"])
@@ -101,6 +103,15 @@ def _load_incidents(namespace: str) -> list[Incident]:
 
 
 @public_router.get("", response_model=StatusResponse)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:status.sanitized_health.read",
+    rate_limit="public-status-read",
+    idempotency="read-only",
+    audit_event="none-public-status-read",
+    public_reason="public-status-page-sanitized-service-health",
+)
 async def public_status() -> StatusResponse:
     """Public, unauthenticated status page payload."""
     # In-process health checks — no loopback HTTP. We re-use the same

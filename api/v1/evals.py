@@ -16,6 +16,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response
 
+from api.route_metadata import route_meta
+
 router = APIRouter()
 
 _SCORECARD_PATH = Path(__file__).resolve().parent.parent.parent / "evals" / "scorecard.json"
@@ -118,6 +120,15 @@ def _require_scorecard() -> dict:
 
 
 @router.get("/evals")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:evals.scorecard.read",
+    rate_limit="public-evals-read",
+    idempotency="read-only",
+    audit_event="none-public-evals-read",
+    public_reason="public-product-scorecard-data-quality-labeled",
+)
 async def get_evals(response: Response):
     """Return the full evaluation scorecard.
 
@@ -132,6 +143,15 @@ async def get_evals(response: Response):
 
 
 @router.get("/evals/agent/{agent_type}")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:evals.agent_scorecard.read",
+    rate_limit="public-evals-read",
+    idempotency="read-only",
+    audit_event="none-public-evals-read",
+    public_reason="public-product-scorecard-data-quality-labeled",
+)
 async def get_agent_evals(agent_type: str, response: Response):
     """Return scores for a single agent type."""
     # Use the strict loader so callers asking for a specific agent

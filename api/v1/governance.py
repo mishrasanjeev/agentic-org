@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.audit import AuditLog
 from core.models.governance_config import GovernanceConfig
@@ -53,6 +54,14 @@ class GovernanceConfigUpdate(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 @router.get("/config", response_model=GovernanceConfigOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.policy.sensitive.read",
+    rate_limit="governance-read",
+    idempotency="read-only",
+    audit_event="governance.config.read",
+)
 async def get_config(tenant_id: str = Depends(get_current_tenant)) -> GovernanceConfigOut:
     """Return this tenant's governance config. Creates a defaulted row on
     first read so every tenant has a stable persisted baseline."""
@@ -79,6 +88,14 @@ async def get_config(tenant_id: str = Depends(get_current_tenant)) -> Governance
     "/config",
     response_model=GovernanceConfigOut,
     dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.policy.enterprise_critical.write",
+    rate_limit="governance-write",
+    idempotency="idempotent-partial-update-by-tenant",
+    audit_event="governance.config.update",
 )
 async def put_config(
     body: GovernanceConfigUpdate,

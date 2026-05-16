@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from api.route_metadata import route_meta
 from connectors.registry import ConnectorRegistry
 from core.agents.registry import AgentRegistry
 
@@ -72,6 +73,15 @@ def _tool_count() -> int:
 
 
 @router.get("/product-facts", response_model=ProductFacts)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:product_facts.read",
+    rate_limit="public-product-facts",
+    idempotency="read-only",
+    audit_event="none-public-product-facts",
+    public_reason="public-marketing-product-counts-no-tenant-data",
+)
 async def product_facts() -> ProductFacts:
     """Canonical counts + version for every externally visible surface."""
     cr = ConnectorRegistry()

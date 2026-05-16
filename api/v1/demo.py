@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import async_session_factory
 from core.email import send_email
 
@@ -47,6 +48,14 @@ class DemoRequest(BaseModel):
 
 
 @router.post("/admin/seed-demo", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="demo.seed.control_plane.write",
+    rate_limit="demo-seed",
+    idempotency="idempotent-demo-seed",
+    audit_event="demo.seed",
+)
 async def seed_demo_data(tenant_id: str = Depends(get_current_tenant)):
     """Populate the tenant with realistic demo data across all modules.
 
@@ -91,6 +100,15 @@ def _send_trial_confirmation(body: DemoRequest) -> bool:
 
 
 @router.post("/demo-request", status_code=201)
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:demo_request.external_input.write",
+    rate_limit="demo-request-public",
+    idempotency="lead-deduped-by-email-best-effort",
+    audit_event="demo.request",
+    public_reason="public-lead-capture-email-and-sales-agent-trigger",
+)
 async def submit_demo_request(body: DemoRequest):
     """Accept a demo request, persist it, create lead in pipeline, and trigger sales agent."""
 
