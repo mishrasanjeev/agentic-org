@@ -1,6 +1,7 @@
 """Role-Based Access Control — central policy for domain segregation."""
 from __future__ import annotations
 
+# enterprise-gate: process-local-ok reason=static-role-domain-policy-map
 ROLE_DOMAIN_MAP: dict[str, list[str] | None] = {
     "cfo": ["finance"],
     "chro": ["hr"],

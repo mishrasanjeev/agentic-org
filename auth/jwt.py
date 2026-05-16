@@ -11,7 +11,7 @@ import httpx
 import redis.asyncio as aioredis
 from jose import JWTError, jwt
 
-from core.config import settings
+from core.config import is_strict_runtime_env, settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,16 @@ JWKS_CACHE_TTL = 3600
 # can see degraded state.
 # ---------------------------------------------------------------------------
 
+# enterprise-gate: process-local-ok reason=relaxed-env-only-token-blacklist-fallback
 _blacklisted_tokens: dict[str, float] = {}  # token -> expiry timestamp
 _BLACKLIST_MAX_SIZE = 10_000  # prevent unbounded growth
 _redis_client: aioredis.Redis | None = None
 _BLACKLIST_TTL = 3700  # slightly longer than token expiry (60 min)
+
+
+def _runtime_env() -> str:
+    env = getattr(settings, "env", "development")
+    return env if isinstance(env, str) else "development"
 
 
 def _auth_state_strict() -> bool:
@@ -47,7 +53,21 @@ def _auth_state_strict() -> bool:
     unreachable rather than degrading to per-process memory.
     Enterprise deploys must set AGENTICORG_AUTH_STATE_STRICT=1.
     """
-    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    env_override = os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    return env_override or is_strict_runtime_env(_runtime_env())
+
+
+def _remember_blacklisted_token(token: str) -> None:
+    """Store a token in the bounded local blacklist fallback."""
+    if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
+        now = time.time()
+        expired = [k for k, exp in _blacklisted_tokens.items() if now > exp]
+        for k in expired:
+            _blacklisted_tokens.pop(k, None)
+        if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
+            oldest = min(_blacklisted_tokens, key=_blacklisted_tokens.get)
+            _blacklisted_tokens.pop(oldest, None)
+    _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
 
 
 def _get_redis() -> aioredis.Redis | None:
@@ -104,14 +124,6 @@ def blacklist_token(token: str) -> None:
     """
     strict = _auth_state_strict()
 
-    # Prune expired entries if cache is full
-    if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
-        now = time.time()
-        expired = [k for k, exp in _blacklisted_tokens.items() if now > exp]
-        for k in expired:
-            _blacklisted_tokens.pop(k, None)
-    _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
-
     r = _get_redis()
     if r is None:
         if strict:
@@ -119,6 +131,7 @@ def blacklist_token(token: str) -> None:
                 "Token blacklist requires Redis in strict mode "
                 "(AGENTICORG_AUTH_STATE_STRICT=1) — write refused"
             )
+        _remember_blacklisted_token(token)
         return
 
     try:
@@ -133,7 +146,11 @@ def blacklist_token(token: str) -> None:
             running.create_task(r.setex(key, _BLACKLIST_TTL, "1"))
         else:
             asyncio.run(r.setex(key, _BLACKLIST_TTL, "1"))
+        if not strict:
+            _remember_blacklisted_token(token)
     except Exception as exc:
+        if not strict:
+            _remember_blacklisted_token(token)
         if strict:
             raise RuntimeError(
                 f"Token blacklist Redis write failed in strict mode: {exc}"
@@ -150,7 +167,7 @@ async def _is_blacklisted(token: str) -> bool:
     """
     strict = _auth_state_strict()
 
-    if token in _blacklisted_tokens:
+    if not strict and token in _blacklisted_tokens:
         if time.time() <= _blacklisted_tokens[token]:
             return True
         _blacklisted_tokens.pop(token, None)  # expired
@@ -175,7 +192,8 @@ async def _is_blacklisted(token: str) -> bool:
         return False
 
     if val:
-        _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
+        if not strict:
+            _remember_blacklisted_token(token)
         return True
     return False
 
@@ -201,7 +219,11 @@ def create_access_token(data: dict, expires_minutes: int = 60) -> str:
 
 def validate_local_token(token: str) -> dict:
     """Decode and validate an HS256-signed local JWT."""
-    if token in _blacklisted_tokens and time.time() <= _blacklisted_tokens[token]:
+    if (
+        not _auth_state_strict()
+        and token in _blacklisted_tokens
+        and time.time() <= _blacklisted_tokens[token]
+    ):
         raise ValueError("Token has been revoked")
     try:
         expected_issuer = "agenticorg.ai" if settings.env == "production" else "agenticorg-local"

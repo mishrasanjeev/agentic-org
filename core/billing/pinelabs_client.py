@@ -25,6 +25,7 @@ from typing import Any
 
 import structlog
 
+from core.config import is_strict_runtime_env, settings
 from core.http_retry import retry_http
 
 try:
@@ -73,9 +74,17 @@ PLAN_AMOUNT_INR: dict[str, int] = {
 
 # ── Order mapping (merchant_ref → order details) ───────────────────
 # Stored in Redis so it survives restarts and works across multiple pods.
-# Falls back to in-memory dict if Redis is unavailable.
+# Relaxed local/dev/test runtimes may use the in-memory fallback; strict
+# runtimes fail closed if Redis is unavailable.
+# enterprise-gate: process-local-ok reason=relaxed-env-only-plural-order-map-fallback
 _order_map: dict[str, Any] = {}
 _MAPPING_TTL = 86400  # 24 hours
+
+
+def _strict_order_mapping() -> bool:
+    env = getattr(settings, "env", "development")
+    runtime_env = env if isinstance(env, str) else "development"
+    return is_strict_runtime_env(runtime_env)
 
 
 def _redis_client():
@@ -93,14 +102,23 @@ def store_order_mapping(
     import json as _json
 
     entry = {"order_id": order_id, "tenant_id": tenant_id, "plan": plan}
-    _order_map[merchant_ref] = entry  # always store in-memory as fallback
 
     redis = _redis_client()
-    if redis is not None:
-        try:
-            redis.setex(f"plural:order:{merchant_ref}", _MAPPING_TTL, _json.dumps(entry))
-        except Exception:
-            logger.debug("plural_order_mapping_redis_failed")
+    if redis is None:
+        if _strict_order_mapping():
+            raise RuntimeError("Plural order mapping requires Redis in strict runtime")
+        _order_map[merchant_ref] = entry
+        return
+
+    try:
+        redis.setex(f"plural:order:{merchant_ref}", _MAPPING_TTL, _json.dumps(entry))
+        if not _strict_order_mapping():
+            _order_map[merchant_ref] = entry
+    except Exception as exc:
+        if _strict_order_mapping():
+            raise RuntimeError("Plural order mapping Redis write failed in strict runtime") from exc
+        logger.debug("plural_order_mapping_redis_failed")
+        _order_map[merchant_ref] = entry
 
 
 def lookup_order_id(merchant_ref: str) -> str:
@@ -113,16 +131,25 @@ def lookup_order_details(merchant_ref: str) -> dict[str, str]:
     import json as _json
 
     redis = _redis_client()
-    if redis is not None:
-        try:
-            raw = redis.get(f"plural:order:{merchant_ref}")
-            if raw:
-                if isinstance(raw, bytes):
-                    raw = raw.decode()
-                return _json.loads(raw)
-        except Exception:
-            logger.debug("plural_order_lookup_redis_failed")
+    if redis is None:
+        if _strict_order_mapping():
+            raise RuntimeError("Plural order mapping lookup requires Redis in strict runtime")
+        entry = _order_map.get(merchant_ref, {})
+        return entry if isinstance(entry, dict) else {}
 
+    try:
+        raw = redis.get(f"plural:order:{merchant_ref}")
+        if raw:
+            if isinstance(raw, bytes):
+                raw = raw.decode()
+            return _json.loads(raw)
+    except Exception as exc:
+        if _strict_order_mapping():
+            raise RuntimeError("Plural order mapping Redis read failed in strict runtime") from exc
+        logger.debug("plural_order_lookup_redis_failed")
+
+    if _strict_order_mapping():
+        return {}
     entry = _order_map.get(merchant_ref, {})
     return entry if isinstance(entry, dict) else {}
 

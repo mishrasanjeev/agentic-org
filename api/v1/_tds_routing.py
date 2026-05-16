@@ -106,6 +106,7 @@ _TDS_AMOUNT_RES: tuple[re.Pattern[str], ...] = (
 
 # Period: month + year, quarter, or financial year.
 _PERIOD_TOKEN_RE = re.compile(r"[A-Za-z0-9-]+")
+# enterprise-gate: process-local-ok reason=static-immutable-month-token-set
 _MONTH_TOKENS = {
     "january",
     "february",

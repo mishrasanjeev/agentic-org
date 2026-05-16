@@ -16,7 +16,7 @@ from sqlalchemy import select
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS, _DOMAIN_DEFAULT_TOOLS
-from core.config import redis_socket_timeout_kwargs, redis_url_from_env
+from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
@@ -145,10 +145,17 @@ async def _find_agent_for_domain(
 # Session history — Redis-backed with in-memory fallback
 # ---------------------------------------------------------------------------
 
+# enterprise-gate: process-local-ok reason=relaxed-env-only-chat-session-fallback
 _sessions: dict[str, list[dict]] = {}
 _SESSION_TTL_SECONDS = 86400  # 24 hours
 
 _redis_client: Any = None
+
+
+def _chat_sessions_strict() -> bool:
+    env = getattr(settings, "env", "development")
+    runtime_env = env if isinstance(env, str) else "development"
+    return is_strict_runtime_env(runtime_env)
 
 try:
     import redis.asyncio as _aioredis
@@ -160,7 +167,10 @@ try:
         **redis_socket_timeout_kwargs(),
     )
 except Exception:
-    _log.info("chat_redis_unavailable_using_memory_fallback")
+    if _chat_sessions_strict():
+        _log.error("chat_redis_unavailable_strict_runtime")
+    else:
+        _log.info("chat_redis_unavailable_using_memory_fallback")
 
 
 def _session_key(tenant_id: str, company_id: str, agent_id: str = "") -> str:
@@ -185,8 +195,12 @@ async def _load_session(key: str) -> list[dict]:
             if raw:
                 return _json.loads(raw)
             return []
-        except Exception:
+        except Exception as exc:
+            if _chat_sessions_strict():
+                raise RuntimeError("Chat session Redis read failed in strict runtime") from exc
             _log.debug("chat_redis_load_fallback", key=key)
+    if _chat_sessions_strict():
+        raise RuntimeError("Chat sessions require Redis in strict runtime")
     return _sessions.get(key, [])
 
 
@@ -200,8 +214,12 @@ async def _save_session(key: str, entries: list[dict]) -> None:
                 ex=_SESSION_TTL_SECONDS,
             )
             return
-        except Exception:
+        except Exception as exc:
+            if _chat_sessions_strict():
+                raise RuntimeError("Chat session Redis write failed in strict runtime") from exc
             _log.debug("chat_redis_save_fallback", key=key)
+    if _chat_sessions_strict():
+        raise RuntimeError("Chat sessions require Redis in strict runtime")
     _sessions[key] = entries
 
 # ---------------------------------------------------------------------------

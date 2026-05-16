@@ -33,6 +33,7 @@ _STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
 # Price IDs created in Stripe Dashboard (Products → Pricing)
+# enterprise-gate: process-local-ok reason=static-plan-price-environment-map
 PLAN_PRICE_MAP: dict[str, str] = {
     "free": "",
     "pro": os.getenv("STRIPE_PRICE_PRO", ""),

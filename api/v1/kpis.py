@@ -24,6 +24,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # ── Role-to-domain mapping for agent_task_results queries ──────────────
+# enterprise-gate: process-local-ok reason=static-rbac-domain-query-map
 ROLE_DOMAIN_MAP: dict[str, list[str]] = {
     "ceo": ["finance", "hr", "marketing", "operations", "legal", "strategy"],
     "cfo": ["finance", "treasury", "tax", "compliance"],
