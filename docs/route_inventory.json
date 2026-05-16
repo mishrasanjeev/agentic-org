@@ -864,58 +864,58 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "approval_policies.list",
     "auth_required": true,
     "function": "list_policies",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/approval-policies api/v1/approval_policies.py:list_policies",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/approval_policies.py",
     "path": "/api/v1/approval-policies",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 135,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "approval_policies.sensitive.list",
+    "source_line": 152,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "approval_policies.create",
     "auth_required": true,
     "function": "create_policy",
-    "idempotency": null,
+    "idempotency": "unique-policy-name-per-tenant",
     "key": "POST /api/v1/approval-policies api/v1/approval_policies.py:create_policy",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/approval_policies.py",
     "path": "/api/v1/approval-policies",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 75,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "approval_policies.write",
+    "source_line": 84,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "approval_policies.delete",
     "auth_required": true,
     "function": "delete_policy",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-policy-id",
     "key": "DELETE /api/v1/approval-policies/{policy_id} api/v1/approval_policies.py:delete_policy",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/approval_policies.py",
     "path": "/api/v1/approval-policies/{policy_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 157,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "approval_policies.write",
+    "source_line": 182,
+    "tenant_required": true
   },
   {
     "audit_event": "approvals.list",
@@ -954,40 +954,40 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "audit.query",
     "auth_required": true,
     "function": "query_audit",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/audit api/v1/audit.py:query_audit",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/audit.py",
     "path": "/api/v1/audit",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 54,
-    "tenant_required": null
+    "rate_limit": "audit-read",
+    "scope": "audit.sensitive.read",
+    "source_line": 63,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "audit.enforcement.query",
     "auth_required": true,
     "function": "query_enforce_audit",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/audit/enforce api/v1/audit.py:query_enforce_audit",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/audit.py",
     "path": "/api/v1/audit/enforce",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 190,
-    "tenant_required": null
+    "rate_limit": "audit-read",
+    "scope": "audit.enforcement.sensitive.read",
+    "source_line": 207,
+    "tenant_required": true
   },
   {
     "audit_event": "auth.config.read",
@@ -3349,58 +3349,58 @@
     "tenant_required": false
   },
   {
-    "audit_event": null,
+    "audit_event": "api_keys.list",
     "auth_required": true,
     "function": "list_api_keys",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/org/api-keys api/v1/api_keys.py:list_api_keys",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/api_keys.py",
     "path": "/api/v1/org/api-keys",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 156,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "api_keys.security.sensitive.list",
+    "source_line": 173,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "api_keys.create",
     "auth_required": true,
     "function": "create_api_key",
-    "idempotency": null,
+    "idempotency": "not-idempotent-secret-issued-once",
     "key": "POST /api/v1/org/api-keys api/v1/api_keys.py:create_api_key",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/api_keys.py",
     "path": "/api/v1/org/api-keys",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 82,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "api_keys.security.create",
+    "source_line": 91,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "api_keys.revoke",
     "auth_required": true,
     "function": "revoke_api_key",
-    "idempotency": null,
+    "idempotency": "idempotent-revoke-terminal-state",
     "key": "DELETE /api/v1/org/api-keys/{key_id} api/v1/api_keys.py:revoke_api_key",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/api_keys.py",
     "path": "/api/v1/org/api-keys/{key_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 188,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "api_keys.security.revoke",
+    "source_line": 213,
+    "tenant_required": true
   },
   {
     "audit_event": "org.members.invite",
@@ -4519,166 +4519,166 @@
     "tenant_required": null
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_credentials.list",
     "auth_required": true,
     "function": "list_credentials",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/tenant-ai-credentials api/v1/tenant_ai_credentials.py:list_credentials",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/tenant_ai_credentials.py",
     "path": "/api/v1/tenant-ai-credentials",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 151,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "tenant_ai_credentials.secrets.sensitive.list",
+    "source_line": 160,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_credentials.create",
     "auth_required": true,
     "function": "create_credential",
-    "idempotency": null,
+    "idempotency": "unique-provider-kind-per-tenant",
     "key": "POST /api/v1/tenant-ai-credentials api/v1/tenant_ai_credentials.py:create_credential",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/tenant_ai_credentials.py",
     "path": "/api/v1/tenant-ai-credentials",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 170,
-    "tenant_required": null
+    "rate_limit": "credential-write",
+    "scope": "tenant_ai_credentials.secrets.write",
+    "source_line": 187,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_credentials.delete",
     "auth_required": true,
     "function": "delete_credential",
-    "idempotency": null,
+    "idempotency": "idempotent-delete-by-credential-id",
     "key": "DELETE /api/v1/tenant-ai-credentials/{credential_id} api/v1/tenant_ai_credentials.py:delete_credential",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "DELETE"
     ],
     "module": "api/v1/tenant_ai_credentials.py",
     "path": "/api/v1/tenant-ai-credentials/{credential_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 299,
-    "tenant_required": null
+    "rate_limit": "credential-write",
+    "scope": "tenant_ai_credentials.secrets.write",
+    "source_line": 340,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_credentials.read",
     "auth_required": true,
     "function": "get_credential",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/tenant-ai-credentials/{credential_id} api/v1/tenant_ai_credentials.py:get_credential",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/tenant_ai_credentials.py",
     "path": "/api/v1/tenant-ai-credentials/{credential_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 216,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "tenant_ai_credentials.secrets.sensitive.read",
+    "source_line": 241,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_credentials.update",
     "auth_required": true,
     "function": "update_credential",
-    "idempotency": null,
+    "idempotency": "idempotent-metadata-update-token-rotate-on-api-key",
     "key": "PATCH /api/v1/tenant-ai-credentials/{credential_id} api/v1/tenant_ai_credentials.py:update_credential",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PATCH"
     ],
     "module": "api/v1/tenant_ai_credentials.py",
     "path": "/api/v1/tenant-ai-credentials/{credential_id}",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 240,
-    "tenant_required": null
+    "rate_limit": "credential-write",
+    "scope": "tenant_ai_credentials.secrets.write",
+    "source_line": 273,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_credentials.test",
     "auth_required": true,
     "function": "test_credential",
-    "idempotency": null,
+    "idempotency": "read-only-external-health-probe-updates-status",
     "key": "POST /api/v1/tenant-ai-credentials/{credential_id}/test api/v1/tenant_ai_credentials.py:test_credential",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/tenant_ai_credentials.py",
     "path": "/api/v1/tenant-ai-credentials/{credential_id}/test",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 333,
-    "tenant_required": null
+    "rate_limit": "external-provider-check",
+    "scope": "tenant_ai_credentials.secrets.test",
+    "source_line": 382,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_settings.read",
     "auth_required": true,
     "function": "get_setting",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/tenant-ai-settings api/v1/tenant_ai_settings.py:get_setting",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/tenant_ai_settings.py",
     "path": "/api/v1/tenant-ai-settings",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 175,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "tenant_ai_settings.sensitive.read",
+    "source_line": 192,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_settings.update",
     "auth_required": true,
     "function": "put_setting",
-    "idempotency": null,
+    "idempotency": "idempotent-settings-upsert",
     "key": "PUT /api/v1/tenant-ai-settings api/v1/tenant_ai_settings.py:put_setting",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "PUT"
     ],
     "module": "api/v1/tenant_ai_settings.py",
     "path": "/api/v1/tenant-ai-settings",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 188,
-    "tenant_required": null
+    "rate_limit": "security-admin-write",
+    "scope": "tenant_ai_settings.control_plane.write",
+    "source_line": 213,
+    "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "tenant_ai_settings.registry.list",
     "auth_required": true,
     "function": "list_registry",
-    "idempotency": null,
+    "idempotency": "read-only",
     "key": "GET /api/v1/tenant-ai-settings/registry api/v1/tenant_ai_settings.py:list_registry",
-    "metadata_present": false,
+    "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/tenant_ai_settings.py",
     "path": "/api/v1/tenant-ai-settings/registry",
     "public_exempt_reason": null,
-    "rate_limit": null,
-    "scope": null,
-    "source_line": 139,
-    "tenant_required": null
+    "rate_limit": "standard",
+    "scope": "tenant_ai_settings.registry.read",
+    "source_line": 148,
+    "tenant_required": false
   },
   {
     "audit_event": "connectors.tools.list",

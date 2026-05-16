@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.approval_policy import ApprovalPolicy, ApprovalStep
 
@@ -72,6 +73,14 @@ def _validate_steps(steps: list[StepIn]) -> None:
 
 
 @router.post("", response_model=PolicyOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="approval_policies.write",
+    rate_limit="security-admin-write",
+    idempotency="unique-policy-name-per-tenant",
+    audit_event="approval_policies.create",
+)
 async def create_policy(
     body: PolicyIn,
     tenant_id: str = Depends(get_current_tenant),
@@ -132,6 +141,14 @@ async def create_policy(
 
 
 @router.get("", response_model=list[PolicyOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="approval_policies.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="approval_policies.list",
+)
 async def list_policies(
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[PolicyOut]:
@@ -154,6 +171,14 @@ async def list_policies(
 
 
 @router.delete("/{policy_id}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="approval_policies.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-delete-by-policy-id",
+    audit_event="approval_policies.delete",
+)
 async def delete_policy(
     policy_id: uuid.UUID,
     tenant_id: str = Depends(get_current_tenant),
