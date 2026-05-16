@@ -193,6 +193,66 @@ def test_new_public_route_without_annotation_fails_gate(tmp_path: Path) -> None:
     }
 
 
+def test_route_metadata_findings_cannot_be_baselined(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "api/v1/example.py",
+        "from fastapi import APIRouter\n"
+        "router = APIRouter(prefix='/example')\n"
+        "@router.get('/items')\n"
+        "def list_items():\n"
+        "    return []\n",
+    )
+
+    routes = gates.scan_routes([path], tmp_path)
+    findings = gates.route_metadata_findings(routes)
+    blocked, allowed = gates.filter_baselined(
+        findings,
+        {
+            "allowed_findings": {},
+            "routes_missing_metadata": [
+                f"{findings[0].code} {findings[0].path}:{findings[0].line}"
+            ],
+        },
+    )
+
+    assert len(findings) == 1
+    assert allowed == []
+    assert blocked == findings
+
+
+def test_route_metadata_baseline_allowance_fails_gate() -> None:
+    findings = gates.route_metadata_baseline_findings(
+        {"routes_missing_metadata": ["GET /api/v1/example api/v1/example.py:10"]}
+    )
+
+    assert [finding.category for finding in findings] == ["route_metadata_baseline"]
+    assert "no longer permitted" in findings[0].message
+
+
+def test_route_metadata_debt_is_hard_zero() -> None:
+    routes = gates.scan_routes(gates.production_python_files(gates.REPO_ROOT), gates.REPO_ROOT)
+    findings = gates.route_metadata_findings(routes)
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+
+    assert findings == []
+    assert baseline.get("routes_missing_metadata") == []
+
+
+def test_fixed_process_local_state_entries_are_no_longer_baselined() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    process_local_entries = baseline.get("allowed_findings", {}).get("process_local_state", [])
+
+    fixed_paths = {
+        "api/websocket/feed.py",
+        "bridge/server_handler.py",
+    }
+    assert not any(
+        any(f"process_local_state:{path}:" in entry for path in fixed_paths)
+        for entry in process_local_entries
+    )
+
+
 def test_docs_tests_and_migrations_are_ignored(tmp_path: Path) -> None:
     paths = [
         _write(tmp_path, "tests/test_example.py", "try:\n    risky()\nexcept Exception:\n    pass\n"),
