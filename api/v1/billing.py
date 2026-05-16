@@ -14,6 +14,7 @@ Plural flow:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from typing import Any
 from urllib.parse import urlparse
@@ -28,6 +29,10 @@ from api.deps import get_current_tenant
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
+
+
+def _is_module_installed(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
 
 
 def _allowed_redirect_hosts() -> set[str]:
@@ -191,14 +196,20 @@ async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> di
 async def billing_health() -> dict[str, Any]:
     """Report which payment gateway(s) are configured on this deploy.
 
-    Does NOT validate creds — just reports whether env vars are
-    populated, which is the necessary (not sufficient) precondition
-    for a working checkout. A true validation needs a test charge,
-    which must be run manually by ops.
+    Does NOT validate creds or create a charge. It reports local runtime
+    prerequisites: env vars plus the gateway SDKs needed by request-path
+    code. A true validation still needs a manual gateway test transaction.
     """
     import os as _os
 
-    stripe_configured = bool(_os.getenv("STRIPE_SECRET_KEY"))
+    stripe_secret_configured = bool(_os.getenv("STRIPE_SECRET_KEY"))
+    stripe_prices_configured = bool(
+        _os.getenv("STRIPE_PRICE_PRO") and _os.getenv("STRIPE_PRICE_ENTERPRISE")
+    )
+    stripe_sdk_installed = _is_module_installed("stripe")
+    stripe_configured = (
+        stripe_secret_configured and stripe_prices_configured and stripe_sdk_installed
+    )
     pinelabs_configured = bool(
         _os.getenv("PINELABS_API_KEY") or _os.getenv("PLURAL_API_KEY")
     )
@@ -207,6 +218,17 @@ async def billing_health() -> dict[str, Any]:
         recommended = "both — Stripe for USD, Pine Labs for INR"
     elif stripe_configured:
         recommended = "Stripe — INR callers need Pine Labs config"
+    elif stripe_secret_configured and not stripe_sdk_installed:
+        recommended = (
+            "Stripe is configured but the server image is missing the "
+            "stripe Python package. Add stripe to production dependencies "
+            "and redeploy before enabling checkout."
+        )
+    elif stripe_secret_configured and not stripe_prices_configured:
+        recommended = (
+            "Stripe secret is configured but STRIPE_PRICE_PRO and/or "
+            "STRIPE_PRICE_ENTERPRISE are missing."
+        )
     elif pinelabs_configured:
         recommended = "Pine Labs — USD callers need Stripe config"
     else:
@@ -219,6 +241,9 @@ async def billing_health() -> dict[str, Any]:
 
     return {
         "stripe_configured": stripe_configured,
+        "stripe_secret_configured": stripe_secret_configured,
+        "stripe_prices_configured": stripe_prices_configured,
+        "stripe_sdk_installed": stripe_sdk_installed,
         "pinelabs_configured": pinelabs_configured,
         "recommended_checkout_flow": recommended,
         "ready_for_release": stripe_configured or pinelabs_configured,
@@ -262,6 +287,22 @@ async def subscribe_stripe(
                 "(/billing/subscribe/india) if you're in INR."
             ),
         )
+    if not _is_module_installed("stripe"):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Stripe SDK is not installed in this server image. Add "
+                "the stripe Python package to production dependencies and "
+                "redeploy before enabling checkout."
+            ),
+        )
+    if body.plan in {"pro", "enterprise"}:
+        price_env = "STRIPE_PRICE_PRO" if body.plan == "pro" else "STRIPE_PRICE_ENTERPRISE"
+        if not _os.getenv(price_env):
+            raise HTTPException(
+                status_code=503,
+                detail=f"{price_env} is not configured in this environment.",
+            )
     # Codex 2026-04-23 blocker F: Stripe SDK is synchronous. Run in
     # threadpool so the event loop is not parked for the whole round-trip.
     import asyncio
