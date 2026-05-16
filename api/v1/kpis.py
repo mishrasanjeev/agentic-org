@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.kpi_cache import KPICache
 
@@ -459,6 +460,14 @@ async def _build_kpi_response(
 # ── CEO KPIs ───────────────────────────────────────────────────────────
 
 @router.get("/kpis/ceo")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="kpis.executive.sensitive.ceo",
+    rate_limit="business-metrics-read",
+    idempotency="read-through-cache",
+    audit_event="kpis.ceo.read",
+)
 async def get_ceo_kpis(
     tenant_id: str = Depends(get_current_tenant),
     company_id: str = Query("default", description="Multi-company selector"),
@@ -480,6 +489,14 @@ async def get_ceo_kpis(
 # ── CFO KPIs ───────────────────────────────────────────────────────────
 
 @router.get("/kpis/cfo")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="kpis.executive.sensitive.cfo",
+    rate_limit="business-metrics-read",
+    idempotency="read-through-cache",
+    audit_event="kpis.cfo.read",
+)
 async def get_cfo_kpis(
     tenant_id: str = Depends(get_current_tenant),
     company_id: str = Query("default", description="Multi-company selector"),
@@ -506,6 +523,14 @@ async def get_cfo_kpis(
 # ── CHRO KPIs ──────────────────────────────────────────────────────────
 
 @router.get("/kpis/chro")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="kpis.executive.sensitive.chro",
+    rate_limit="business-metrics-read",
+    idempotency="read-through-cache",
+    audit_event="kpis.chro.read",
+)
 async def get_chro_kpis(
     tenant_id: str = Depends(get_current_tenant),
     company_id: str = Query("default", description="Multi-company selector"),
@@ -517,6 +542,14 @@ async def get_chro_kpis(
 # ── CMO KPIs ───────────────────────────────────────────────────────────
 
 @router.get("/kpis/cmo")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="kpis.executive.sensitive.cmo",
+    rate_limit="business-metrics-read",
+    idempotency="read-through-cache",
+    audit_event="kpis.cmo.read",
+)
 async def get_cmo_kpis(
     tenant_id: str = Depends(get_current_tenant),
     company_id: str = Query("default", description="Multi-company selector"),
@@ -528,6 +561,14 @@ async def get_cmo_kpis(
 # ── COO KPIs ───────────────────────────────────────────────────────────
 
 @router.get("/kpis/coo")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="kpis.executive.sensitive.coo",
+    rate_limit="business-metrics-read",
+    idempotency="read-through-cache",
+    audit_event="kpis.coo.read",
+)
 async def get_coo_kpis(
     tenant_id: str = Depends(get_current_tenant),
     company_id: str = Query("default", description="Multi-company selector"),
@@ -539,6 +580,14 @@ async def get_coo_kpis(
 # ── CBO KPIs ───────────────────────────────────────────────────────────
 
 @router.get("/kpis/cbo")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="kpis.executive.sensitive.cbo",
+    rate_limit="business-metrics-read",
+    idempotency="read-through-cache",
+    audit_event="kpis.cbo.read",
+)
 async def get_cbo_kpis(
     tenant_id: str = Depends(get_current_tenant),
     company_id: str = Query("default", description="Multi-company selector"),

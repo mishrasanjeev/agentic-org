@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant
+from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.marketing.intent_aggregator import IntentAggregator
@@ -289,6 +290,14 @@ def _parse_account_id(account_id: str) -> _uuid.UUID:
 # ── Endpoints ──────────────────────────────────────────────────────────
 
 @router.post("/accounts/upload")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.accounts.sensitive.bulk_import",
+    rate_limit="bulk-import",
+    idempotency="dedupe-by-domain-within-tenant",
+    audit_event="abm.accounts.upload",
+)
 async def upload_accounts(
     file: UploadFile,
     tenant_id: str = Depends(get_current_tenant),
@@ -480,6 +489,14 @@ async def upload_accounts(
 
 
 @router.get("/accounts")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.accounts.sensitive.list",
+    rate_limit="abm-read",
+    idempotency="read-only",
+    audit_event="abm.accounts.list",
+)
 async def list_accounts(
     tier: str | None = None,
     industry: str | None = None,
@@ -528,6 +545,14 @@ async def list_accounts(
 
 
 @router.post("/accounts")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.accounts.sensitive.write",
+    rate_limit="abm-write",
+    idempotency="unique-domain-per-tenant",
+    audit_event="abm.account.create",
+)
 async def create_account(
     body: AccountCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -571,6 +596,14 @@ async def create_account(
 
 
 @router.get("/accounts/{account_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.accounts.sensitive.read",
+    rate_limit="abm-read",
+    idempotency="read-only",
+    audit_event="abm.account.get",
+)
 async def get_account(
     account_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -591,6 +624,14 @@ async def get_account(
 
 
 @router.get("/accounts/{account_id}/intent")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.accounts.external_intent.sensitive.read",
+    rate_limit="external-intent-aggregation",
+    idempotency="read-mostly-may-refresh-intent-cache",
+    audit_event="abm.account.intent",
+)
 async def get_account_intent(
     account_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -675,6 +716,14 @@ async def get_account_intent(
 
 
 @router.post("/accounts/{account_id}/campaign")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.campaigns.external_action.launch",
+    rate_limit="abm-campaign-launch",
+    idempotency="not-idempotent-new-campaign-created",
+    audit_event="abm.campaign.launch",
+)
 async def launch_campaign(
     account_id: str,
     body: CampaignCreate,
@@ -727,6 +776,14 @@ async def launch_campaign(
 
 
 @router.get("/dashboard")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="abm.dashboard.sensitive.read",
+    rate_limit="business-metrics-read",
+    idempotency="read-only",
+    audit_event="abm.dashboard.read",
+)
 async def abm_dashboard(
     tier: str | None = None,
     industry: str | None = None,
