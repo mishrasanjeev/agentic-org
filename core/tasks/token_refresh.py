@@ -61,6 +61,7 @@ async def _refresh_all() -> dict:
 
                 try:
                     creds = json.loads(decrypt_for_tenant(creds["_encrypted"]))
+                # enterprise-gate: broad-except-ok reason=token-refresh-skips-undecryptable-credential
                 except Exception:
                     skipped += 1
                     continue
@@ -141,6 +142,7 @@ async def _refresh_all() -> dict:
                 tenant_id=str(cc.tenant_id),
                 new_expires_at=new_expires_at,
             )
+        # enterprise-gate: broad-except-ok reason=token-refresh-marks-connector-unhealthy-on-failure
         except Exception as exc:
             failed += 1
             try:
@@ -155,6 +157,7 @@ async def _refresh_all() -> dict:
                         fresh.health_status = "unhealthy"
                         fresh.sync_error = type(exc).__name__
                         await write_session.commit()
+            # enterprise-gate: broad-except-ok reason=token-refresh-health-update-failure-is-logged
             except Exception:
                 logger.warning(
                     "token_refresh_health_status_update_failed",

@@ -52,6 +52,7 @@ def _redis():
         from core.billing.usage_tracker import _get_redis
 
         return _get_redis()
+    # enterprise-gate: broad-except-ok reason=public-status-redis-client-unavailable-degrades-status
     except Exception:
         return None
 
@@ -66,6 +67,7 @@ async def _check_db() -> bool:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         return True
+    # enterprise-gate: broad-except-ok reason=public-status-db-probe-degrades-status
     except Exception:
         logger.debug("status_db_check_failed")
         return False
@@ -79,6 +81,7 @@ async def _check_redis() -> bool:
     try:
         r.ping()
         return True
+    # enterprise-gate: broad-except-ok reason=public-status-redis-probe-degrades-status
     except Exception:
         logger.debug("status_redis_check_failed")
         return False
@@ -97,6 +100,7 @@ def _load_incidents(namespace: str) -> list[Incident]:
             data = json.loads(item)
             out.append(Incident(**data))
         return out
+    # enterprise-gate: broad-except-ok reason=public-status-incident-load-best-effort
     except Exception:
         logger.debug("status_incidents_load_failed", namespace=namespace)
         return []
@@ -183,6 +187,7 @@ async def public_status() -> StatusResponse:
                 if isinstance(val, bytes):
                     val = val.decode()
                 uptime = float(val)
+    # enterprise-gate: broad-except-ok reason=public-status-uptime-load-best-effort
     except Exception:
         logger.debug("status_uptime_load_failed")
 

@@ -92,6 +92,7 @@ async def trigger_compliance_alerts(
         result = await run_compliance_alert_cron()
         logger.info("Compliance cron triggered: %s", result)
         return {"status": "ok", **result}
+    # enterprise-gate: broad-except-ok reason=cron-trigger-returns-server-error-on-job-failure
     except Exception as exc:
         logger.exception("Compliance cron failed: %s", exc)
         raise HTTPException(500, f"Cron failed: {exc}") from exc

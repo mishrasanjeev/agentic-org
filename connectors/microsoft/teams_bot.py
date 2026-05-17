@@ -9,12 +9,19 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import structlog
 
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
 
 logger = structlog.get_logger()
+
+_TEAMS_BACKEND_UNAVAILABLE = "No Teams execution backend available"
+_COMPOSIO_TOOL_NOT_EXECUTED = (
+    "Composio Teams tool was discovered, but this connector has no configured "
+    "Composio execution adapter for the action"
+)
 
 # Guard import — botbuilder-core is optional
 _HAS_BOT_SDK = False
@@ -38,6 +45,38 @@ def _get_composio_teams_action(action_name: str) -> Any | None:
     except ImportError:
         pass
     return None
+
+
+def _teams_backend_error(
+    *,
+    operation: str,
+    composio_action: Any | None,
+    **context: Any,
+) -> dict[str, Any]:
+    """Return an explicit failure for unavailable Teams execution backends."""
+    if composio_action:
+        tool_name = composio_action.get("tool_name", "")
+        logger.warning(
+            "teams_composio_action_not_executed",
+            operation=operation,
+            composio_tool=tool_name,
+            **context,
+        )
+        return {
+            "status": "error",
+            "error": _COMPOSIO_TOOL_NOT_EXECUTED,
+            "error_code": "teams_composio_action_not_executed",
+            "retryable": False,
+            "composio_tool": tool_name,
+            **context,
+        }
+    return {
+        "status": "error",
+        "error": _TEAMS_BACKEND_UNAVAILABLE,
+        "error_code": "teams_backend_unavailable",
+        "retryable": False,
+        **context,
+    }
 
 
 class TeamsConnector(BaseConnector):
@@ -96,21 +135,17 @@ class TeamsConnector(BaseConnector):
                     data=payload,
                 )
                 return {"status": "sent", "activity_id": result.get("id", ""), "channel_id": channel_id}
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
                 logger.warning("teams_send_sdk_failed_trying_composio", error=str(exc))
 
         # Composio fallback
         composio_action = _get_composio_teams_action("send_message")
-        if composio_action:
-            logger.info("teams_send_via_composio", channel_id=channel_id)
-            return {
-                "status": "sent_via_composio",
-                "channel_id": channel_id,
-                "message_length": len(message),
-                "composio_tool": composio_action.get("tool_name", ""),
-            }
-
-        return {"status": "error", "error": "No Teams backend available (SDK or Composio)"}
+        return _teams_backend_error(
+            operation="send_message",
+            composio_action=composio_action,
+            channel_id=channel_id,
+            message_length=len(message),
+        )
 
     # ── List Channels ─────────────────────────────────────────────────
 
@@ -127,19 +162,16 @@ class TeamsConnector(BaseConnector):
                 result = await self._get(f"/v3/teams/{team_id}/conversations")
                 channels = result.get("conversations", [])
                 return {"status": "ok", "team_id": team_id, "channels": channels}
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
                 logger.warning("teams_list_channels_sdk_failed", error=str(exc))
 
         # Composio fallback
         composio_action = _get_composio_teams_action("list_channels")
-        if composio_action:
-            return {
-                "status": "ok_via_composio",
-                "team_id": team_id,
-                "composio_tool": composio_action.get("tool_name", ""),
-            }
-
-        return {"status": "error", "error": "No Teams backend available"}
+        return _teams_backend_error(
+            operation="list_channels",
+            composio_action=composio_action,
+            team_id=team_id,
+        )
 
     # ── Respond to Mention ────────────────────────────────────────────
 
@@ -171,19 +203,16 @@ class TeamsConnector(BaseConnector):
                     "activity_id": result.get("id", ""),
                     "in_reply_to": activity_id,
                 }
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
                 logger.warning("teams_respond_sdk_failed", error=str(exc))
 
         # Composio fallback
         composio_action = _get_composio_teams_action("respond_to_mention")
-        if composio_action:
-            return {
-                "status": "replied_via_composio",
-                "in_reply_to": activity_id,
-                "composio_tool": composio_action.get("tool_name", ""),
-            }
-
-        return {"status": "error", "error": "No Teams backend available"}
+        return _teams_backend_error(
+            operation="respond_to_mention",
+            composio_action=composio_action,
+            in_reply_to=activity_id,
+        )
 
 
 # Auto-register on import

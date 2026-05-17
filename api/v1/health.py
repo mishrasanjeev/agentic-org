@@ -60,6 +60,7 @@ async def _check_connector(connector_name: str) -> dict:
         return result
     except TimeoutError:
         return {"status": "unhealthy", "error": "timeout"}
+    # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
     except Exception as e:
         return {"status": "unhealthy", "error": f"{type(e).__name__}: {e}"}
 
@@ -87,6 +88,7 @@ async def health_readiness():
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
         checks["db"] = "healthy"
+    # enterprise-gate: broad-except-ok reason=readiness-db-probe-fails-closed-unhealthy
     except Exception as e:
         checks["db"] = f"unhealthy: {type(e).__name__}"
 
@@ -95,6 +97,7 @@ async def health_readiness():
         await r.ping()
         await r.close()
         checks["redis"] = "healthy"
+    # enterprise-gate: broad-except-ok reason=readiness-redis-probe-fails-closed-unhealthy
     except Exception as e:
         checks["redis"] = f"unhealthy: {type(e).__name__}"
 
@@ -164,6 +167,7 @@ async def _fetch_history(hours: int) -> list[dict]:
                 {"cutoff": datetime.now(UTC) - timedelta(hours=hours)},
             )
             rows = result.all()
+    # enterprise-gate: broad-except-ok reason=health-history-query-degrades-to-live-snapshot
     except Exception as exc:  # noqa: BLE001 — table absent / db blip → live fallback
         logger.warning("health_history_query_failed", error=str(exc))
         return []
@@ -315,6 +319,7 @@ async def diagnostics():
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
         checks["db"] = "healthy"
+    # enterprise-gate: broad-except-ok reason=diagnostics-db-probe-fails-closed-unhealthy
     except Exception as e:
         checks["db"] = f"unhealthy: {type(e).__name__}"
 
@@ -323,6 +328,7 @@ async def diagnostics():
         await r.ping()
         await r.close()
         checks["redis"] = "healthy"
+    # enterprise-gate: broad-except-ok reason=diagnostics-redis-probe-fails-closed-unhealthy
     except Exception as e:
         checks["redis"] = f"unhealthy: {type(e).__name__}"
 

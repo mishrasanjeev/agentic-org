@@ -122,6 +122,7 @@ async def _execute_schedule(tenant_id: str, schedule_id: str) -> dict[str, Any]:
                 params=dict(schedule.params or {}),
                 timeout_s=timeout_s,
             )
+    # enterprise-gate: broad-except-ok reason=rpa-script-failure-records-schedule-failure
     except Exception as exc:
         logger.exception("rpa_script_execution_failed schedule_id=%s", schedule_id)
         await _record_failure(tid, sid, f"script_error: {type(exc).__name__}", 0, 0, None)
@@ -199,6 +200,7 @@ async def _record_success(
         if row.enabled:
             try:
                 row.next_run_at = _compute_next_run(row.cron_expression)
+            # enterprise-gate: broad-except-ok reason=rpa-next-run-compute-failure-does-not-mark-run-success
             except Exception as exc:
                 logger.info(
                     "rpa_schedule_next_run_compute_failed schedule_id=%s err=%s",
@@ -267,6 +269,7 @@ async def _embed_and_store(
                 continue
             try:
                 vector = embed_one(content)
+            # enterprise-gate: broad-except-ok reason=rpa-embedding-failure-skips-chunk-not-run-success
             except Exception as exc:
                 logger.info("rpa_embed_failed err=%s", exc)
                 continue
@@ -321,6 +324,7 @@ def run_rpa_schedule(self, tenant_id: str, schedule_id: str) -> dict[str, Any]:
     """Execute a single RPA schedule end-to-end."""
     try:
         return _run_async(_execute_schedule(tenant_id, schedule_id))
+    # enterprise-gate: broad-except-ok reason=rpa-schedule-task-retries-failed-run
     except Exception as exc:
         logger.exception("run_rpa_schedule_failed tenant=%s schedule=%s", tenant_id, schedule_id)
         try:
@@ -350,6 +354,7 @@ def dispatch_due_rpa_schedules() -> dict[str, Any]:
     """Beat-driven sweeper that enqueues overdue schedules."""
     try:
         return _run_async(_dispatch_async())
+    # enterprise-gate: broad-except-ok reason=rpa-dispatch-task-returns-error-status
     except Exception as exc:
         logger.exception("dispatch_due_rpa_schedules_failed")
         return {"error": str(exc)[:200]}

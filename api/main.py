@@ -99,6 +99,7 @@ async def lifespan(app: FastAPI):
             if batch:
                 await r.delete(*batch)
         await r.aclose()
+    # enterprise-gate: broad-except-ok reason=startup-token-blacklist-cleanup-best-effort
     except Exception as exc:
         import logging
 
@@ -111,6 +112,7 @@ async def lifespan(app: FastAPI):
         grantex = get_grantex_client()
         # Dummy enforce() — will fail on token validation but triggers JWKS fetch (~300ms)
         grantex.enforce(grant_token="warmup", connector="salesforce", tool="get_contact")
+    # enterprise-gate: broad-except-ok reason=grantex-warmup-expected-to-fail-validation
     except Exception:  # noqa: S110
         pass  # Expected to fail — we only care about the JWKS fetch side effect
 

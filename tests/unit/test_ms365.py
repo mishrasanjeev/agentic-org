@@ -32,11 +32,11 @@ class TestSendMessageToolExists:
         assert "respond_to_mention" in connector._tool_registry
 
 
-class TestComposioFallbackWhenSdkMissing:
-    """When botbuilder-core is not installed, the connector should fall back to Composio."""
+class TestComposioDiscoveryWhenSdkMissing:
+    """Composio discovery must not be reported as message delivery."""
 
     @pytest.mark.asyncio
-    async def test_composio_fallback_when_sdk_missing(self):
+    async def test_composio_discovery_is_explicit_error_when_sdk_missing(self):
         import connectors.microsoft.teams_bot as teams_mod
         from connectors.microsoft.teams_bot import TeamsConnector
 
@@ -61,8 +61,66 @@ class TestComposioFallbackWhenSdkMissing:
                     message="Hello from test",
                 )
 
-            assert result["status"] == "sent_via_composio"
+            assert result["status"] == "error"
+            assert result["error_code"] == "teams_composio_action_not_executed"
             assert result["channel_id"] == "test-channel"
+            assert result["composio_tool"] == "MICROSOFT_TEAMS_SEND_MESSAGE"
+        finally:
+            teams_mod._HAS_BOT_SDK = original_has_sdk
+
+    @pytest.mark.asyncio
+    async def test_composio_discovery_is_not_list_channels_success(self):
+        import connectors.microsoft.teams_bot as teams_mod
+        from connectors.microsoft.teams_bot import TeamsConnector
+
+        original_has_sdk = teams_mod._HAS_BOT_SDK
+        teams_mod._HAS_BOT_SDK = False
+
+        try:
+            connector = TeamsConnector()
+            mock_composio_tool = {
+                "app": "microsoft_teams",
+                "tool_name": "MICROSOFT_TEAMS_LIST_CHANNELS",
+            }
+            with patch(
+                "connectors.microsoft.teams_bot._get_composio_teams_action",
+                return_value=mock_composio_tool,
+            ):
+                result = await connector.list_channels(team_id="team-1")
+
+            assert result["status"] == "error"
+            assert result["error_code"] == "teams_composio_action_not_executed"
+            assert result["team_id"] == "team-1"
+        finally:
+            teams_mod._HAS_BOT_SDK = original_has_sdk
+
+    @pytest.mark.asyncio
+    async def test_composio_discovery_is_not_reply_success(self):
+        import connectors.microsoft.teams_bot as teams_mod
+        from connectors.microsoft.teams_bot import TeamsConnector
+
+        original_has_sdk = teams_mod._HAS_BOT_SDK
+        teams_mod._HAS_BOT_SDK = False
+
+        try:
+            connector = TeamsConnector()
+            mock_composio_tool = {
+                "app": "microsoft_teams",
+                "tool_name": "MICROSOFT_TEAMS_RESPOND_TO_MENTION",
+            }
+            with patch(
+                "connectors.microsoft.teams_bot._get_composio_teams_action",
+                return_value=mock_composio_tool,
+            ):
+                result = await connector.respond_to_mention(
+                    activity_id="activity-1",
+                    conversation_id="conversation-1",
+                    response_text="ack",
+                )
+
+            assert result["status"] == "error"
+            assert result["error_code"] == "teams_composio_action_not_executed"
+            assert result["in_reply_to"] == "activity-1"
         finally:
             teams_mod._HAS_BOT_SDK = original_has_sdk
 
