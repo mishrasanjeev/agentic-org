@@ -207,11 +207,11 @@ jobs:
         run: |
           docker build \
             --build-arg VITE_GA4_ID=${{ vars.VITE_GA4_ID }} \
-            -t ${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }} \
-            -t ${{ env.GAR_REGISTRY }}/agenticorg-ui:latest \
-            -f Dockerfile.ui .
-          docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui:${{ github.sha }}
-          docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui:latest
+            -t ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:${{ github.sha }} \
+            -t ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:latest \
+            -f Dockerfile.ui.cloudrun .
+          docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:${{ github.sha }}
+          docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:latest
 
   deploy-staging:
     needs: build
