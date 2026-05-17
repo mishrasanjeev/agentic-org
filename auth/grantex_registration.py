@@ -27,6 +27,7 @@ def _get_grantex_client():
         if not api_key:
             return None
         return Grantex(api_key=api_key, base_url=base_url)
+    # enterprise-gate: broad-except-ok reason=optional-grantex-sdk-init-falls-back-to-unconfigured
     except Exception:
         logger.warning("grantex_client_init_failed")
         return None
@@ -69,6 +70,7 @@ def register_agent(
             scopes_count=len(scopes),
         )
         return result
+    # enterprise-gate: broad-except-ok reason=optional-grantex-registration-failure-does-not-create-fake-success
     except Exception:
         logger.exception("grantex_registration_failed", agent_type=agent_type)
         return None
@@ -102,6 +104,7 @@ def setup_delegation(
             scopes_count=len(child_scopes),
         )
         return result
+    # enterprise-gate: broad-except-ok reason=optional-grantex-delegation-failure-does-not-create-fake-success
     except Exception:
         logger.exception("grantex_delegation_failed")
         return None
@@ -139,6 +142,7 @@ def _tools_to_scopes(
             else {}
         )
         global_index = _build_tool_index()
+    # enterprise-gate: broad-except-ok reason=tool-index-failure-falls-back-to-agenticorg-scopes
     except Exception:
         # Fallback: use tool names directly as scopes
         return scopes + [f"tool:agenticorg:execute:{t}" for t in tools]

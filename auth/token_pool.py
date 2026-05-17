@@ -134,6 +134,7 @@ class TokenPool:
             # Re-raise so asyncio can clean up properly.
             raise
 
+        # enterprise-gate: broad-except-ok reason=token-refresh-boundary-removes-stale-token-on-failure
         except Exception:
             logger.exception(
                 "token_refresh_failed",
@@ -144,6 +145,7 @@ class TokenPool:
             try:
                 if self.redis:
                     await self.redis.delete(f"agent:{agent_id}:token")
+            # enterprise-gate: broad-except-ok reason=best-effort-token-cleanup-failure-is-logged
             except Exception:
                 logger.exception(
                     "token_cleanup_after_refresh_failure_failed",

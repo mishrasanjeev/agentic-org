@@ -38,6 +38,7 @@ def _is_grantex_token(token: str) -> bool:
             header_b64 += "=" * padding
         header = json.loads(base64.urlsafe_b64decode(header_b64))
         return header.get("alg") == "RS256"
+    # enterprise-gate: broad-except-ok reason=malformed-grantex-header-falls-through-to-fail-closed-jwt-validation
     except Exception:
         return False
 
@@ -183,6 +184,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             await clear_auth_failures(client_ip)
             return await call_next(request)
 
+        # enterprise-gate: broad-except-ok reason=api-key-validation-boundary-records-failure-and-returns-401
         except Exception:
             logger.exception("API key validation error")
             await record_auth_failure(client_ip)
@@ -223,6 +225,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             await clear_auth_failures(client_ip)
             return await call_next(request)
 
+        # enterprise-gate: broad-except-ok reason=grantex-token-validation-boundary-records-failure-and-returns-401
         except Exception:
             await record_auth_failure(client_ip)
             return JSONResponse(

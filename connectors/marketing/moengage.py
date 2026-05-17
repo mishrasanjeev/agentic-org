@@ -52,6 +52,7 @@ class MoEngageConnector(BaseConnector):
             # use campaign list with limit=1 as a lightweight check
             await self._get("/campaigns", {"limit": 1})
             return {"status": "healthy"}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

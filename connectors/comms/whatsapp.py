@@ -37,6 +37,7 @@ class WhatsappConnector(BaseConnector):
         try:
             result = await self._get(f"/{self._phone_number_id}")
             return {"status": "healthy", "phone": result.get("display_phone_number", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

@@ -64,6 +64,7 @@ class BomboraConnector(BaseConnector):
         try:
             data = await self._get("/surge/topics", params={"limit": 1})
             return {"status": "healthy", "sample_topics": len(data.get("topics", []))}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as exc:
             return {"status": "unhealthy", "error": str(exc)}
 

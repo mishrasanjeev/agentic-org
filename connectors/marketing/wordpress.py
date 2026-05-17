@@ -111,6 +111,7 @@ class WordpressConnector(BaseConnector):
             data = await self._get("/posts", params={"per_page": 1})
             total = len(data) if isinstance(data, list) else 0
             return {"status": "healthy", "posts_returned": total}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

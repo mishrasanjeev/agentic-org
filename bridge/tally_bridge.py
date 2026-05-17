@@ -167,6 +167,7 @@ class TallyBridge:
                 "status": "ok",
                 "xml_response": xml_response,
             }
+        # enterprise-gate: broad-except-ok reason=tally-forward-failure-returns-error-response-to-durable-request
         except Exception as exc:
             logger.error("bridge_tally_error", request_id=request_id, error=str(exc))
             response = {
@@ -225,6 +226,7 @@ class TallyBridge:
                 else:
                     logger.warning("tally_health_bad_status", status=resp.status_code)
                 return healthy
+        # enterprise-gate: broad-except-ok reason=tally-health-boundary-reports-unhealthy
         except Exception as exc:
             logger.warning("tally_health_unreachable", error=str(exc))
             return False

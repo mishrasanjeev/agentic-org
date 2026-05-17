@@ -42,6 +42,7 @@ class DocuSignConnector(BaseConnector):
         try:
             result = await self._get(f"/accounts/{self._account_id}")
             return {"status": "healthy", "account": result.get("accountName", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

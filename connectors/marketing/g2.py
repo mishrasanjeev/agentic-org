@@ -65,6 +65,7 @@ class G2Connector(BaseConnector):
         try:
             data = await self._get("/categories", params={"limit": 1})
             return {"status": "healthy", "sample_categories": len(data.get("categories", []))}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as exc:
             return {"status": "unhealthy", "error": str(exc)}
 

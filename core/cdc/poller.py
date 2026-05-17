@@ -60,6 +60,7 @@ async def poll_connector(
             events=len(events),
         )
         return events
+    # enterprise-gate: broad-except-ok reason=cdc-poller-boundary-logs-failure-and-returns-no-events
     except Exception:
         logger.exception("cdc_poll_failed", connector=connector_name)
         return []
@@ -120,6 +121,7 @@ async def _hubspot_poll(since: datetime) -> list[dict[str, Any]]:
                         "updated_at": props.get("lastmodifieddate", ""),
                     })
 
+        # enterprise-gate: broad-except-ok reason=hubspot-object-poll-failure-logs-and-continues-other-objects
         except Exception:
             logger.exception("hubspot_cdc_poll_error", object_type=obj_type)
 

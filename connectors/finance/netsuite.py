@@ -100,6 +100,7 @@ class NetsuiteConnector(BaseConnector):
                 "status": "healthy",
                 "total_results": data.get("totalResults", 0),
             }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

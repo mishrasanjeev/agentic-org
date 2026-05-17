@@ -68,6 +68,7 @@ class ComposioConnectorAdapter(BaseConnector):
 
         try:
             self._composio_toolset = _ComposioToolSet(api_key=api_key)
+        # enterprise-gate: broad-except-ok reason=composio-adapter-init-failure-registers-no-tools
         except Exception as exc:
             logger.warning("composio_init_failed", error=str(exc))
             return
@@ -125,6 +126,7 @@ class ComposioConnectorAdapter(BaseConnector):
                     params=params,
                 )
                 return {"success": True, "data": result}
+            # enterprise-gate: broad-except-ok reason=composio-action-failure-returns-explicit-error
             except Exception as exc:
                 logger.error(
                     "composio_execute_failed",

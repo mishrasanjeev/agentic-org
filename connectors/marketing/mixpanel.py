@@ -46,6 +46,7 @@ class MixpanelConnector(BaseConnector):
                 {"event": '["$mp_web_page_view"]', "type": "general", "unit": "day", "interval": 1},
             )
             return {"status": "healthy"}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

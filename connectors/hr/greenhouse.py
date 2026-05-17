@@ -39,6 +39,7 @@ class GreenhouseConnector(BaseConnector):
         try:
             await self._get("/jobs", {"per_page": "1"})
             return {"status": "healthy"}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

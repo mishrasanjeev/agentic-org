@@ -50,6 +50,7 @@ class S3Connector(BaseConnector):
             bucket = self._default_bucket
             result = await self._get(f"/storage/v1/b/{bucket}")
             return {"status": "healthy", "bucket": result.get("name", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

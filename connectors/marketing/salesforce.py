@@ -86,6 +86,7 @@ class SalesforceConnector(BaseConnector):
         try:
             result = await self._get("/limits")
             return {"status": "healthy", "limits": len(result) if isinstance(result, dict) else 0}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

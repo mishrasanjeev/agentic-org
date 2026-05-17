@@ -41,6 +41,7 @@ class TwilioConnector(BaseConnector):
         try:
             result = await self._get(f"/Accounts/{self._account_sid}.json")
             return {"status": "healthy", "account": result.get("friendly_name", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

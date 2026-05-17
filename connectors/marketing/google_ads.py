@@ -78,6 +78,7 @@ class GoogleAdsConnector(BaseConnector):
             customer_id = self._customer_id.replace("-", "")
             result = await self._get(f"/customers/{customer_id}")
             return {"status": "healthy", "customer": result.get("resourceName", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
