@@ -43,11 +43,11 @@ class TestLLMFactory:
 
         assert _resolve_model("gemini-2.5-pro") == "gemini-2.5-pro"
 
-    def test_resolve_model_claude_no_key_falls_back(self):
+    def test_resolve_model_claude_no_key_preserves_explicit_selection(self):
         from core.langgraph.llm_factory import _resolve_model
 
         with patch.dict("os.environ", {}, clear=True):
-            assert _resolve_model("claude-3-5-sonnet") == "gemini-2.5-flash"
+            assert _resolve_model("claude-3-5-sonnet") == "claude-3-5-sonnet"
 
     def test_resolve_model_claude_with_key(self):
         from core.langgraph.llm_factory import _resolve_model
@@ -55,11 +55,11 @@ class TestLLMFactory:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"}):
             assert _resolve_model("claude-3-5-sonnet") == "claude-3-5-sonnet"
 
-    def test_resolve_model_gpt_no_key_falls_back(self):
+    def test_resolve_model_gpt_no_key_preserves_explicit_selection(self):
         from core.langgraph.llm_factory import _resolve_model
 
         with patch.dict("os.environ", {}, clear=True):
-            assert _resolve_model("gpt-4o") == "gemini-2.5-flash"
+            assert _resolve_model("gpt-4o") == "gpt-4o"
 
     def test_resolve_model_unknown_passes_through(self):
         from core.langgraph.llm_factory import _resolve_model

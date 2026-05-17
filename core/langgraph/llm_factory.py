@@ -17,7 +17,7 @@ import socket
 import structlog
 from langchain_core.language_models import BaseChatModel
 
-from core.llm.router import smart_router
+from core.llm.router import LLMProviderConfigurationError, smart_router
 
 logger = structlog.get_logger()
 
@@ -215,50 +215,66 @@ def _build_model(
 
     # Cloud: Gemini
     if "gemini" in resolved:
+        api_key = _resolve_cloud_api_key("gemini", tenant_id)
+        if not api_key:
+            raise LLMProviderConfigurationError("Gemini provider is not configured")
+
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         return ChatGoogleGenerativeAI(
             model=resolved,
             temperature=temperature,
             max_output_tokens=max_tokens,
-            google_api_key=_resolve_cloud_api_key("gemini", tenant_id),
+            google_api_key=api_key,
         )
 
     # Cloud: Claude
     if "claude" in resolved:
+        api_key = _resolve_cloud_api_key("anthropic", tenant_id)
+        if not api_key:
+            raise LLMProviderConfigurationError("Anthropic provider is not configured")
+
         from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(  # type: ignore[call-arg]
             model_name=resolved,
             temperature=temperature,
             max_tokens=max_tokens,
-            anthropic_api_key=_resolve_cloud_api_key("anthropic", tenant_id),
+            anthropic_api_key=api_key,
         )
 
     # Cloud: GPT
     if "gpt" in resolved:
+        api_key = _resolve_cloud_api_key("openai", tenant_id)
+        if not api_key:
+            raise LLMProviderConfigurationError("OpenAI provider is not configured")
+
         from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(
             model=resolved,
             temperature=temperature,
             max_tokens=max_tokens,
-            openai_api_key=_resolve_cloud_api_key("openai", tenant_id),
+            openai_api_key=api_key,
         )
 
     # Default fallback — Gemini Flash (free)
+    api_key = _resolve_cloud_api_key("gemini", tenant_id)
+    if not api_key:
+        raise LLMProviderConfigurationError("Gemini provider is not configured")
+
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     return ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         temperature=temperature,
         max_output_tokens=max_tokens,
-        google_api_key=_resolve_cloud_api_key("gemini", tenant_id),
+        google_api_key=api_key,
     )
 
 
 def _resolve_model(model: str) -> str:
-    """Resolve model to a usable one, falling back to Gemini if API key missing."""
+    """Resolve the model name without constructing optional provider clients."""
     if not model:
         return os.getenv("AGENTICORG_LLM_PRIMARY", "gemini-2.5-flash")
 
@@ -271,21 +287,14 @@ def _resolve_model(model: str) -> str:
     if "gemini" in m:
         return model
 
-    # S0-08: capability gate — before PR-2 this read the provider env
-    # var directly. Route through the resolver so a tenant BYO token
-    # counts as "available" too. No tenant context here (we're running
-    # inside _resolve_model which is called before the request-level
-    # tenant propagates down), so the resolver falls back to platform
-    # env. Keeps the old behaviour verbatim when no BYO is set.
+    # Explicit cloud-provider selections are honored here. Missing
+    # credentials are reported by _build_model as provider configuration
+    # errors instead of silently falling back to another provider.
     if "claude" in m:
-        if _resolve_cloud_api_key("anthropic"):
-            return model
-        return "gemini-2.5-flash"
+        return model
 
     if "gpt" in m:
-        if _resolve_cloud_api_key("openai"):
-            return model
-        return "gemini-2.5-flash"
+        return model
 
     return "gemini-2.5-flash"
 

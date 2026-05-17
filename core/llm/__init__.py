@@ -7,6 +7,7 @@ Exports:
 """
 
 from core.llm.router import (
+    LLMProviderConfigurationError,
     LLMResponse,
     LLMRouter,
     SmartLLMRouter,
@@ -16,6 +17,7 @@ from core.llm.router import (
 
 __all__ = [
     "LLMResponse",
+    "LLMProviderConfigurationError",
     "LLMRouter",
     "SmartLLMRouter",
     "llm_router",

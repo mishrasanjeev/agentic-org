@@ -5,7 +5,14 @@ All tests use mocks so RouteLLM need not be installed in CI.
 
 from __future__ import annotations
 
+import builtins
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers — import under mock so we never hit real config / RouteLLM
@@ -300,6 +307,29 @@ class TestFallbackWhenRouteLLMUnavailable:
         # Heuristic short-query path -> tier1 -> flash-lite.
         assert model == "gemini-2.5-flash-lite"
 
+    def test_routellm_openai_config_error_falls_back_to_heuristic(self, monkeypatch):
+        """RouteLLM import-time OpenAI credential errors must not block routing."""
+        from openai import OpenAIError
+
+        import core.llm.router as router_mod
+
+        real_import = builtins.__import__
+
+        def fake_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
+            if name == "routellm.controller":
+                raise OpenAIError("Missing credentials")
+            return real_import(name, global_vars, local_vars, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        monkeypatch.setattr(router_mod, "_ROUTELLM_AVAILABLE", None)
+        monkeypatch.setattr(router_mod, "RouteLLMController", None)
+
+        router = router_mod.SmartLLMRouter()
+        model = router.route(query="x" * 600, config={})
+
+        assert model == "gemini-2.5-pro"
+        assert router_mod._ROUTELLM_AVAILABLE is False
+
 
 # ===================================================================
 # Integration: llm_factory uses router
@@ -364,6 +394,70 @@ class TestLLMFactoryIntegration:
             query="Test query",
         )
         assert result is not None
+
+    def test_api_import_succeeds_without_openai_credentials(self):
+        env = os.environ.copy()
+        env.pop("OPENAI_API_KEY", None)
+        env.pop("OPENAI_ADMIN_KEY", None)
+
+        result = subprocess.run(
+            [sys.executable, "-c", "import api.main; print('import ok')"],
+            cwd=Path(__file__).resolve().parents[2],
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "import ok" in result.stdout
+
+    @patch("core.langgraph.llm_factory._resolve_cloud_api_key")
+    @patch("langchain_google_genai.ChatGoogleGenerativeAI")
+    def test_gemini_factory_does_not_require_openai_credentials(
+        self,
+        mock_gemini_cls,
+        mock_resolve_key,
+        monkeypatch,
+    ):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_ADMIN_KEY", raising=False)
+        mock_resolve_key.return_value = "gemini-key"
+        mock_gemini_cls.return_value = MagicMock()
+
+        from core.langgraph.llm_factory import create_chat_model
+
+        result = create_chat_model(
+            model="gemini-2.5-flash",
+            routing_config={"routing": "disabled"},
+        )
+
+        assert result is not None
+        mock_gemini_cls.assert_called_once()
+        assert mock_gemini_cls.call_args.kwargs["google_api_key"] == "gemini-key"
+
+    @patch("core.langgraph.llm_factory._resolve_cloud_api_key")
+    def test_explicit_openai_without_credentials_fails_configuration(
+        self,
+        mock_resolve_key,
+        monkeypatch,
+    ):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_ADMIN_KEY", raising=False)
+        mock_resolve_key.return_value = ""
+
+        from core.langgraph.llm_factory import create_chat_model
+        from core.llm.router import LLMProviderConfigurationError
+
+        with pytest.raises(
+            LLMProviderConfigurationError,
+            match="OpenAI provider is not configured",
+        ):
+            create_chat_model(
+                model="gpt-4o",
+                routing_config={"routing": "disabled"},
+            )
 
 
 # ===================================================================
