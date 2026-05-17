@@ -23,6 +23,29 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Some legacy Alembic-cutover environments were stamped past v4.4.0
+    # without receiving the bridge registry table. The durable session/request
+    # tables below depend on it, so recreate the canonical v4.4.0 table shape
+    # when it is missing before adding the new foreign keys.
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS bridge_registry (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            bridge_id VARCHAR(100) NOT NULL UNIQUE,
+            bridge_type VARCHAR(50) NOT NULL,
+            url VARCHAR(500) NOT NULL,
+            status VARCHAR(20) DEFAULT 'active',
+            last_heartbeat TIMESTAMPTZ,
+            metadata_ JSONB DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ
+        )
+    """)
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_bridge_registry_tenant "
+        "ON bridge_registry (tenant_id)"
+    )
+
     op.execute("""
         CREATE TABLE IF NOT EXISTS bridge_sessions (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
