@@ -7,7 +7,13 @@ from typing import Any
 
 import structlog
 
+from core.config import is_strict_runtime_env, settings
 from core.push.vapid import get_vapid_keys
+
+try:  # Redis is optional for local tests, mandatory for strict runtimes.
+    from redis.exceptions import RedisError
+except ImportError:  # pragma: no cover - exercised only when redis is absent
+    RedisError = ConnectionError  # type: ignore[assignment,misc]
 
 _log = structlog.get_logger()
 
@@ -19,15 +25,35 @@ _memory_store: dict[str, set[str]] = {}
 _VAPID_CONTACT = "mailto:push@agenticorg.com"
 
 
+class PushSubscriptionStoreUnavailableError(RuntimeError):
+    """Raised when strict runtimes cannot reach the push subscription store."""
+
+
+def _memory_fallback_allowed() -> bool:
+    return not is_strict_runtime_env(settings.env)
+
+
+def _ensure_memory_fallback_allowed(operation: str, tenant_id: str) -> None:
+    if _memory_fallback_allowed():
+        return
+    raise PushSubscriptionStoreUnavailableError(
+        f"Push subscription {operation} requires Redis in strict runtime "
+        f"for tenant {tenant_id}."
+    )
+
+
 def _get_redis():
     """Return an async Redis client, or None if unavailable."""
     try:
         import redis.asyncio as aioredis
 
-        from core.config import settings
-
         return aioredis.from_url(settings.redis_url, decode_responses=True)
-    except Exception:
+    except (ImportError, ValueError) as exc:
+        if not _memory_fallback_allowed():
+            raise PushSubscriptionStoreUnavailableError(
+                "Push subscriptions require Redis in strict runtime."
+            ) from exc
+        _log.warning("push_redis_client_unavailable_dev_fallback", error=str(exc))
         return None
 
 
@@ -50,14 +76,16 @@ async def save_subscription(tenant_id: str, subscription_json: dict) -> None:
             await redis.aclose()
             _log.info("push_subscription_saved", tenant_id=tenant_id)
             return
-        except Exception as exc:
+        except RedisError as exc:
             _log.warning("redis_save_failed_falling_back", error=str(exc))
             try:
                 await redis.aclose()
-            except Exception:  # noqa: S110
+            except RedisError:  # noqa: S110
                 pass
+            _ensure_memory_fallback_allowed("save", tenant_id)
 
     # Fallback: in-memory
+    _ensure_memory_fallback_allowed("save", tenant_id)
     _memory_store.setdefault(tenant_id, set()).add(serialized)
     _log.info("push_subscription_saved_memory", tenant_id=tenant_id)
 
@@ -80,14 +108,16 @@ async def remove_subscription(tenant_id: str, endpoint: str) -> None:
                     break
             await redis.aclose()
             return
-        except Exception as exc:
+        except RedisError as exc:
             _log.warning("redis_remove_failed_falling_back", error=str(exc))
             try:
                 await redis.aclose()
-            except Exception:  # noqa: S110
+            except RedisError:  # noqa: S110
                 pass
+            _ensure_memory_fallback_allowed("remove", tenant_id)
 
     # Fallback: in-memory
+    _ensure_memory_fallback_allowed("remove", tenant_id)
     store = _memory_store.get(tenant_id, set())
     to_remove = None
     for member in store:
@@ -108,14 +138,16 @@ async def _get_subscriptions(tenant_id: str) -> list[dict]:
             members = await redis.smembers(_redis_key(tenant_id))
             await redis.aclose()
             return [json.loads(m) for m in members]
-        except Exception as exc:
+        except RedisError as exc:
             _log.warning("redis_get_failed_falling_back", error=str(exc))
             try:
                 await redis.aclose()
-            except Exception:  # noqa: S110
+            except RedisError:  # noqa: S110
                 pass
+            _ensure_memory_fallback_allowed("read", tenant_id)
 
     # Fallback: in-memory
+    _ensure_memory_fallback_allowed("read", tenant_id)
     store = _memory_store.get(tenant_id, set())
     return [json.loads(m) for m in store]
 
@@ -180,6 +212,7 @@ async def send_push_notification(
                     error=str(exc),
                 )
                 failed += 1
+        # enterprise-gate: broad-except-ok reason=push-delivery-failure-records-failed-count
         except Exception as exc:
             _log.warning(
                 "push_send_error",

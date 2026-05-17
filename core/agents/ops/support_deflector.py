@@ -232,6 +232,7 @@ class SupportDeflectorAgent(BaseAgent):
             score = float(top.get("score", top.get("confidence", 0.5)))
             return answer, score
 
+        # enterprise-gate: broad-except-ok reason=kb-search-failure-degrades-to-escalation-path
         except Exception as exc:
             trace.append(f"KB search exception: {exc}")
             return None, 0.0

@@ -324,6 +324,7 @@ class ContentFactoryAgent(BaseAgent):
                 task, msg_id, "completed", output, confidence, trace, tool_calls, start=start,
             )
 
+        # enterprise-gate: broad-except-ok reason=agent-execution-boundary-returns-failed-result
         except Exception as e:
             logger.error("content_factory_error", agent=self.agent_id, error=str(e))
             trace.append(f"Error: {e}")
@@ -382,6 +383,7 @@ class ContentFactoryAgent(BaseAgent):
                 tool_name=f"{connector}.{tool}", status=status, latency_ms=latency,
             ))
             return result
+        # enterprise-gate: broad-except-ok reason=agent-tool-call-failure-returns-explicit-error-result
         except Exception as exc:
             latency = int((time.monotonic() - call_start) * 1000)
             trace.append(f"[tool] {connector}.{tool} -> exception: {exc} ({latency}ms)")
