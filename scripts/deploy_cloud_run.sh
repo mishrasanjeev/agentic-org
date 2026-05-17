@@ -11,8 +11,8 @@
 # What it does (in order):
 #   1. Sanity-check that the working tree is clean and on the
 #      requested commit (default: origin/main).
-#   2. Build + push the API image (Dockerfile) and UI image
-#      (Dockerfile.ui) tagged with the deploy SHA + :latest.
+#   2. Build + push the API image (Dockerfile) and Cloud Run UI image
+#      (Dockerfile.ui.cloudrun) tagged with the deploy SHA + :latest.
 #   3. Optionally run alembic migrations as a Cloud Run job
 #      (--with-migrations, requires an `agenticorg-migrate` job
 #      to already exist; create it with --create-migrate-job). Runtime
@@ -144,7 +144,7 @@ for svc in "$API_SERVICE" "$UI_SERVICE"; do
 done
 
 API_IMAGE="${GAR_REGISTRY}/agenticorg:${DEPLOY_SHA}"
-UI_IMAGE="${GAR_REGISTRY}/agenticorg-ui:${DEPLOY_SHA}"
+UI_IMAGE="${GAR_REGISTRY}/agenticorg-ui-cloudrun:${DEPLOY_SHA}"
 
 # ── 3. Build + push images ───────────────────────────────────────────
 if [[ $SKIP_BUILD -eq 0 ]]; then
@@ -159,10 +159,10 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
 
   run docker build \
     -t "$UI_IMAGE" \
-    -t "${GAR_REGISTRY}/agenticorg-ui:latest" \
-    -f Dockerfile.ui .
+    -t "${GAR_REGISTRY}/agenticorg-ui-cloudrun:latest" \
+    -f Dockerfile.ui.cloudrun .
   run docker push "$UI_IMAGE"
-  run docker push "${GAR_REGISTRY}/agenticorg-ui:latest"
+  run docker push "${GAR_REGISTRY}/agenticorg-ui-cloudrun:latest"
 fi
 
 # ── 4. Create migrate job (optional, idempotent-ish) ────────────────
