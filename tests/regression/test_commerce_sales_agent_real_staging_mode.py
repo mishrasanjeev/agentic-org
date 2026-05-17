@@ -393,6 +393,33 @@ async def test_real_staging_consent_request_uses_grantex_checkout_scope_bundle(
 
 
 @pytest.mark.asyncio
+async def test_real_staging_skips_pending_consent_exchange_with_preexported_passport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _write_tmp_fixture(
+        "commerce-agent-real-staging-c2g-consent-exchange.env",
+        _fixture_env_content(amount=100, cap=200),
+    )
+    report = Path(".tmp/commerce-agent-real-staging-c2g-consent-exchange.md")
+    try:
+        result, connector = await _run_real_staging_with_fake(monkeypatch, fixture, evidence_report=report)
+        report_text = report.read_text(encoding="utf-8")
+    finally:
+        fixture.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+
+    assert not any(name == "consent_exchange" for name, _params in connector.calls)
+    assert "grantex_commerce:consent_exchange" not in result["audit_summary"]["tool_sequence"]
+    assert "grantex_commerce:payment_create_intent" in result["audit_summary"]["tool_sequence"]
+    assert "grantex_commerce:checkout_create" in result["audit_summary"]["tool_sequence"]
+    assert "grantex_commerce:payment_get_status" in result["audit_summary"]["tool_sequence"]
+    assert (
+        "| consent_exchange | skipped |  |  |  |  | "
+        f"{commerce_sales_agent_demo.PREEXPORTED_CHECKOUT_PASSPORT_BLOCKER} |"
+    ) in report_text
+
+
+@pytest.mark.asyncio
 async def test_real_staging_positive_payment_sends_only_grantex_supported_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
