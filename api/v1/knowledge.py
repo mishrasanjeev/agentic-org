@@ -15,6 +15,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -30,6 +31,16 @@ try:
     import httpx as _httpx
 except ImportError:  # pragma: no cover
     _httpx = None  # type: ignore[assignment]
+
+_RAGFLOW_ERRORS = ((_httpx.HTTPError,) if _httpx else ()) + (
+    ConnectionError,
+    KeyError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
+_DB_READ_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
+_DB_WRITE_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
 
 
 def _now_iso() -> str:
@@ -74,8 +85,7 @@ async def _ragflow_ensure_dataset(dataset_id: str) -> None:
                 json={"name": dataset_id, "id": dataset_id},
                 headers=_ragflow_headers(),
             )
-        # enterprise-gate: broad-except-ok reason=ragflow-dataset-bootstrap-is-probed-by-downstream-call
-        except Exception:  # noqa: S110
+        except _RAGFLOW_ERRORS:  # noqa: S110
             # Dataset may already exist, or RAGFlow may reject the id
             # format. In either case the downstream call will report.
             pass
@@ -129,6 +139,8 @@ class DocumentOut(BaseModel):
     content_type: str | None = None
     size_bytes: int
     status: str
+    ingestion_status: str = "not_attempted"
+    ingestion_error: str | None = None
     created_at: str
     # TC_010: frontend expected `uploaded_at` but the API only returned
     # `created_at`, so the Uploaded column rendered "-" for every row.
@@ -249,8 +261,7 @@ async def _ragflow_dataset_stats(tenant_id: str) -> dict[str, int] | None:
             if resp.status_code >= 400:
                 return None
             payload = resp.json()
-    # enterprise-gate: broad-except-ok reason=ragflow-stats-read-falls-back-to-postgres-estimate
-    except Exception as exc:
+    except _RAGFLOW_ERRORS as exc:
         logger.debug("ragflow_dataset_stats_failed", error=str(exc))
         return None
 
@@ -351,8 +362,7 @@ async def _db_chunk_count(tenant_id: str) -> int:
             for (size_bytes,) in doc_rows:
                 est = min(max(int(size_bytes) // 2048, 1), 1500)
                 total += est
-    # enterprise-gate: broad-except-ok reason=knowledge-stats-chunk-count-read-falls-back-to-zero
-    except Exception as exc:
+    except _DB_READ_ERRORS as exc:
         logger.debug("db_chunk_count_failed", error=str(exc))
         return 0
     return total
@@ -538,8 +548,7 @@ async def upload_document(
     if not allow_duplicate and not replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)
-        # enterprise-gate: broad-except-ok reason=knowledge-dedup-lookup-fails-closed-503
-        except Exception as exc:
+        except _DB_READ_ERRORS as exc:
             logger.error("dedup_lookup_failed", filename=filename, error=str(exc))
             raise HTTPException(
                 status_code=503,
@@ -577,16 +586,24 @@ async def upload_document(
     if replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)
-        except Exception as exc:
-            logger.debug("replace_lookup_failed_soft", error=str(exc))
-            existing = None
+        except _DB_READ_ERRORS as exc:
+            logger.error("replace_lookup_failed", filename=filename, error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "replace_lookup_unavailable",
+                    "message": (
+                        "Could not verify the document being replaced. Refusing "
+                        "the upload rather than risk creating a duplicate."
+                    ),
+                },
+            ) from exc
         if existing is not None:
             old_doc_id = existing["document_id"]
             if _ragflow_available():
                 try:
                     await _ragflow_delete(tenant_id, old_doc_id)
-                # enterprise-gate: broad-except-ok reason=replace-ragflow-cleanup-falls-through-to-db-soft-delete
-                except Exception as exc:
+                except _RAGFLOW_ERRORS as exc:
                     logger.warning(
                         "replace_ragflow_delete_failed",
                         doc_id=old_doc_id,
@@ -610,12 +627,23 @@ async def upload_document(
                         )
                         .values(status="deleted")
                     )
-            except Exception as exc:
-                logger.warning(
+            except _DB_WRITE_ERRORS as exc:
+                logger.error(
                     "replace_db_soft_delete_failed",
                     doc_id=old_doc_id,
                     error=str(exc),
                 )
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "replace_soft_delete_failed",
+                        "message": (
+                            "Could not safely mark the existing document as deleted. "
+                            "Refusing the replacement rather than returning a false success."
+                        ),
+                        "document_id": old_doc_id,
+                    },
+                ) from exc
 
     # SEC-2026-05-P1-005 (PR-D): stream the upload to a tempfile in
     # 64 KiB chunks rather than ``await file.read()`` which loads the
@@ -690,8 +718,7 @@ async def upload_document(
             doc["document_id"] = rf_doc_id
             doc["status"] = DOC_STATUS_INDEXED
             logger.info("knowledge_upload_ragflow", doc_id=rf_doc_id, filename=doc["filename"])
-        # enterprise-gate: broad-except-ok reason=ragflow-upload-falls-back-to-postgres-document-mirror
-        except Exception as exc:
+        except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
             doc["status"] = DOC_STATUS_INDEXED
     else:
@@ -704,14 +731,27 @@ async def upload_document(
     # DB listing (first mirror was only created on RAGFlow upload failure).
     try:
         await _db_store_doc(tenant_id, doc)
-    except Exception as exc:
-        logger.warning("db_store_doc_failed", error=str(exc))
+    except _DB_WRITE_ERRORS as exc:
+        logger.error("db_store_doc_failed", doc_id=doc["document_id"], error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "document_metadata_persist_failed",
+                "message": (
+                    "The document upload could not be durably recorded. Retry before "
+                    "treating this document as available in the knowledge base."
+                ),
+                "document_id": doc["document_id"],
+            },
+        ) from exc
 
     # S0-06 (PR-3 2026-04-24): also run the multimodal ingestion service
     # so native pgvector search covers user-uploaded PDFs / DOCX / XLSX
     # / CSV even when RAGFlow is down. Extraction errors surface as 415;
     # embed/persist errors are logged and NOT fatal because the upload
     # row already landed in `documents`.
+    ingestion_status = "not_attempted"
+    ingestion_error: str | None = None
     try:
         from core.rag import UnsupportedMimeType, ingest_document
 
@@ -731,6 +771,7 @@ async def upload_document(
             chunks_indexed=ingest_result.chunks_indexed,
             embedding_model=ingest_result.embedding_model,
         )
+        ingestion_status = "indexed"
     except UnsupportedMimeType as exc:
         # The body was accepted (row is in `documents`) but we can't
         # populate knowledge_documents for it. 415 would be wrong now —
@@ -743,15 +784,21 @@ async def upload_document(
             mime=file.content_type,
             error=str(exc),
         )
+        ingestion_status = "unsupported"
+        ingestion_error = "unsupported_mime_type"
+    # enterprise-gate: broad-except-ok reason=multimodal-ingest-failure-is-exposed-in-upload-response
     except Exception as exc:
         # Any other failure (embedding model down, DB hiccup) — log,
-        # don't fail the upload. The RAGFlow/keyword fallback still
-        # works for this doc.
+        # don't fail the upload after the durable document row landed.
+        # The response explicitly marks the partial index failure so
+        # clients cannot mistake this for full vector-ingestion success.
         logger.warning(
             "kb_ingest_multimodal_failed",
             doc_id=doc["document_id"],
             error=str(exc),
         )
+        ingestion_status = "failed"
+        ingestion_error = type(exc).__name__
 
     return DocumentOut(
         document_id=doc["document_id"],
@@ -759,6 +806,8 @@ async def upload_document(
         content_type=doc["content_type"],
         size_bytes=doc["size_bytes"],
         status=_normalize_status(doc["status"]),
+        ingestion_status=ingestion_status,
+        ingestion_error=ingestion_error,
         created_at=doc["created_at"],
         uploaded_at=doc["created_at"],
     )
@@ -789,13 +838,12 @@ async def list_documents(
     if _ragflow_available():
         try:
             rf_docs = await _ragflow_list(tenant_id)
-        # enterprise-gate: broad-except-ok reason=knowledge-list-ragflow-read-falls-back-to-postgres
-        except Exception as exc:
+        except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_list_failed_fallback_db_only", error=str(exc))
 
     try:
         db_docs = await _db_list_docs(tenant_id)
-    except Exception as exc:
+    except _DB_READ_ERRORS as exc:
         logger.debug("knowledge_db_list_failed", error=str(exc))
 
     # Merge on document_id — prefer the RAGFlow record when both have it,
@@ -837,8 +885,7 @@ async def list_documents(
                     "status": "ready",
                     "created_at": row[5].isoformat() if row[5] else "",
                 })
-    # enterprise-gate: broad-except-ok reason=legacy-knowledge-documents-read-model-is-auxiliary
-    except Exception:
+    except _DB_READ_ERRORS:
         logger.debug("knowledge_documents_query_skipped")
 
     total = len(docs)
@@ -876,8 +923,7 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
             deleted = await _ragflow_delete(tenant_id, doc_id)
             if deleted:
                 return {"ok": True, "document_id": doc_id, "status": "deleted"}
-        # enterprise-gate: broad-except-ok reason=knowledge-delete-ragflow-failure-falls-through-to-db-delete
-        except Exception as exc:
+        except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_delete_failed", error=str(exc))
 
     # Fallback: mark as deleted in DB
@@ -885,20 +931,42 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
         from uuid import UUID as _UUID
 
         from sqlalchemy import update
+        from sqlalchemy.exc import SQLAlchemyError
 
         from core.database import get_tenant_session
         from core.models.document import Document
 
         tid = _UUID(tenant_id)
+        document_uuid = _UUID(doc_id)
         async with get_tenant_session(tid) as session:
-            await session.execute(
+            result = await session.execute(
                 update(Document)
-                .where(Document.id == _UUID(doc_id), Document.tenant_id == tid)
+                .where(Document.id == document_uuid, Document.tenant_id == tid)
                 .values(status="deleted")
             )
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"error": "document_not_found", "document_id": doc_id},
+                )
         return {"ok": True, "document_id": doc_id, "status": "deleted"}
-    except Exception:
-        return {"ok": False, "detail": "Document not found"}
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "document_not_found", "document_id": doc_id},
+        ) from exc
+    except SQLAlchemyError as exc:
+        logger.error("knowledge_db_delete_failed", doc_id=doc_id, error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "document_delete_failed",
+                "message": "Could not durably delete the document. Please retry.",
+                "document_id": doc_id,
+            },
+        ) from exc
 
 
 async def _native_semantic_search(
@@ -947,7 +1015,7 @@ async def _native_semantic_search(
                 )
                 for r in rows
             ]
-    except Exception as exc:
+    except (ImportError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
         logger.debug("native_semantic_search_skipped", error=str(exc))
 
     # Keyword fallback — surfaces something useful when embeddings are
@@ -973,7 +1041,7 @@ async def _native_semantic_search(
         ]
         if results:
             return results
-    except Exception as exc:
+    except _DB_READ_ERRORS as exc:
         logger.debug("keyword_fallback_failed", error=str(exc))
 
     # Codex 2026-04-22 release-signoff residual: the `documents` upload
@@ -1005,7 +1073,7 @@ async def _native_semantic_search(
         ]
         if results:
             return results
-    except Exception as exc:
+    except _DB_READ_ERRORS as exc:
         logger.debug("documents_content_text_fallback_failed", error=str(exc))
 
     # TC_009 last-resort: match against uploaded document filenames in
@@ -1039,9 +1107,9 @@ async def _native_semantic_search(
                 )
                 for d in match_rows
             ]
-    except Exception as exc:
+    except _DB_READ_ERRORS as exc:
         logger.debug("filename_fallback_failed", error=str(exc))
-        return []
+        raise RuntimeError("knowledge filename fallback failed") from exc
 
 
 @router.post("/knowledge/search", response_model=SearchResponse)
@@ -1071,8 +1139,7 @@ async def search_knowledge(
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
             return SearchResponse(results=[SearchResult(**c) for c in chunks])
-        # enterprise-gate: broad-except-ok reason=knowledge-search-ragflow-read-falls-back-to-native-search
-        except Exception as exc:
+        except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
@@ -1080,7 +1147,7 @@ async def search_knowledge(
         return SearchResponse(results=results)
     except HTTPException:
         raise
-    except Exception as exc:
+    except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
         logger.error(
             "knowledge_search_failed",
             tenant_id=tenant_id,
@@ -1118,7 +1185,7 @@ async def knowledge_health():
     Returns a structured view of the retrieval stack:
       - ``ragflow_configured``: env vars present.
       - ``ragflow_reachable``: can we GET the RAGFlow root within 2s?
-      - ``effective_mode``: "ragflow" | "pgvector" | "keyword" | "stub"
+      - ``effective_mode``: "ragflow" | "pgvector" | "keyword"
       - ``notes``: actionable strings for ops.
 
     Never raises — diagnostic endpoint, always 200 with the state.
@@ -1139,8 +1206,7 @@ async def knowledge_health():
                 ragflow_reachable = resp.status_code < 500
                 if not ragflow_reachable:
                     notes.append(f"RAGFlow responded HTTP {resp.status_code}.")
-        # enterprise-gate: broad-except-ok reason=public-knowledge-health-reports-ragflow-probe-failure
-        except Exception as exc:
+        except _RAGFLOW_ERRORS as exc:
             notes.append(f"RAGFlow unreachable: {exc}")
 
     # Check pgvector + BGE embeddings availability without a tenant scope.
@@ -1149,8 +1215,7 @@ async def knowledge_health():
         from core.embeddings import embed_one  # noqa: F401
 
         pgvector_ready = True
-    # enterprise-gate: broad-except-ok reason=public-knowledge-health-reports-pgvector-probe-failure
-    except Exception as exc:
+    except (ImportError, RuntimeError, ValueError) as exc:
         notes.append(f"pgvector/BGE fallback unavailable: {exc}")
 
     if ragflow_configured and ragflow_reachable:
@@ -1248,15 +1313,13 @@ async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
     if _ragflow_available():
         try:
             docs = await _ragflow_list(tenant_id)
-        # enterprise-gate: broad-except-ok reason=knowledge-stats-ragflow-doc-list-falls-back-to-postgres
-        except Exception as exc:
+        except _RAGFLOW_ERRORS as exc:
             logger.debug("ragflow_stats_failed", error=str(exc))
 
     if not docs:
         try:
             docs = await _db_list_docs(tenant_id)
-        # enterprise-gate: broad-except-ok reason=knowledge-stats-db-list-failure-degrades-read-only-card
-        except Exception as exc:
+        except _DB_READ_ERRORS as exc:
             logger.debug("db_stats_failed", error=str(exc))
 
     chunk_count = 0
