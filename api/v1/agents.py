@@ -14,6 +14,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import (
     get_current_tenant,
@@ -651,14 +652,14 @@ async def _resolve_agent_connector_ids_for_type(
             if row is None:
                 return []
             return list(getattr(row, "connector_ids", None) or [])
-    except Exception as exc:  # noqa: BLE001
+    except (RuntimeError, SQLAlchemyError) as exc:
         logger.warning(
             "resolve_agent_connector_ids_failed",
             tenant_id=str(tenant_id),
             agent_type=agent_type,
             error=str(exc),
         )
-        return []
+        raise RuntimeError("Failed to resolve agent connector bindings") from exc
 
 
 async def _resolve_connector_configs(
@@ -701,6 +702,7 @@ async def _resolve_connector_configs(
 
     merged: dict[str, Any] = {}
     resolved_names: list[str] = []
+    failed_connectors: list[str] = []
     async with get_tenant_session(tid) as session:
         for raw_id in connector_ids:
             if not isinstance(raw_id, str) or not raw_id.strip():
@@ -776,15 +778,20 @@ async def _resolve_connector_configs(
                 # caller can use it as the BUG-08 fail-closed allow-list.
                 if cc.connector_name and cc.connector_name not in resolved_names:
                     resolved_names.append(cc.connector_name)
-            except Exception as exc:  # noqa: BLE001
+            except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
                 logger.warning(
                     "connector_config_load_failed",
                     tenant_id=str(tid),
                     connector=connector_name,
                     error=str(exc),
                 )
-                # Don't propagate — partial connector availability is
-                # better than refusing the whole agent run.
+                failed_connectors.append(connector_name)
+
+    if failed_connectors:
+        raise RuntimeError(
+            "Failed to load connector configuration for "
+            + ", ".join(sorted(set(failed_connectors)))
+        )
 
     if agent_level_config:
         merged.update(agent_level_config)
@@ -890,7 +897,7 @@ async def _assert_connectors_ready_for_activation(
             continue
         try:
             decrypted = _json.loads(decrypt_for_tenant(encrypted))
-        except Exception:
+        except (RuntimeError, TypeError, ValueError):
             not_ready.append({"connector": connector_name, "reason": "credentials_not_decryptable"})
             continue
         if (
@@ -1009,8 +1016,22 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
                 )
         except HTTPException:
             raise
-        except Exception:
-            logger.warning("tool_validation_skipped", agent_type=body.agent_type)
+        except (RuntimeError, TypeError, ValueError) as exc:
+            logger.error(
+                "tool_validation_failed",
+                agent_type=body.agent_type,
+                error=str(exc),
+            )
+            raise HTTPException(
+                503,
+                detail={
+                    "error": "tool_registry_unavailable",
+                    "message": (
+                        "Could not verify the requested authorized tools. "
+                        "Retry rather than creating an agent with unverified execution permissions."
+                    ),
+                },
+            ) from exc
 
     async with get_tenant_session(tid) as session:
         if company_uuid is not None:
@@ -1064,7 +1085,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
                     )
             except HTTPException:
                 raise
-            except Exception as exc:
+            except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
                 logger.error(
                     "shadow_limit_check_failed",
                     tenant_id=str(tid),
@@ -1179,8 +1200,12 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
                     .where(Agent.id == agent.id)
                     .values(config={**agent.config, "grantex": grantex_info})
                 )
-    except Exception:
-        logger.warning("grantex_auto_registration_skipped", agent_id=str(agent.id))
+    except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+        logger.warning(
+            "grantex_auto_registration_skipped",
+            agent_id=str(agent.id),
+            error=str(exc),
+        )
 
     return {
         "agent_id": str(agent.id),
@@ -1443,7 +1468,7 @@ async def delegate_to_agent(
             "child_did": child_grantex.get("grantex_did", ""),
             "scopes_delegated": len(child_scopes),
         }
-    except Exception:
+    except (KeyError, RuntimeError, TypeError, ValueError):
         logger.exception("delegation_failed")
         return {"status": "failed", "reason": "Grantex delegation failed"}
 
@@ -2004,7 +2029,7 @@ async def update_agent(
                 grx["grantex_scopes"] = refreshed_scopes
                 cfg["grantex"] = grx
                 agent.config = cfg
-            except Exception:
+            except (RuntimeError, SQLAlchemyError, TypeError, ValueError):
                 logger.warning(
                     "grantex_scopes_refresh_skipped",
                     agent_id=str(agent_id),
@@ -2118,8 +2143,22 @@ async def run_agent(
     if authorized_tools:
         try:
             missing_tools = _validate_authorized_tools(authorized_tools)
-        except Exception:  # noqa: BLE001 - validation is best-effort
-            missing_tools = []
+        except (RuntimeError, TypeError, ValueError) as exc:
+            logger.error(
+                "agent_run_tool_validation_failed",
+                agent_id=str(agent_id),
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "tool_registry_unavailable",
+                    "message": (
+                        "Could not verify the agent's authorized tools. "
+                        "Retry instead of running with an unvalidated tool set."
+                    ),
+                },
+            ) from exc
         if missing_tools:
             resolvable = [t for t in authorized_tools if t not in set(missing_tools)]
             logger.warning(
@@ -2171,7 +2210,7 @@ async def run_agent(
                     for k, v in (agent_config.get("prompt_variables") or {}).items():
                         raw = raw.replace("{{" + k + "}}", v)
                     system_prompt = raw
-                except Exception as exc:
+                except (OSError, RuntimeError, TypeError, UnicodeError, ValueError) as exc:
                     logger.error(
                         "agent_prompt_file_unreadable",
                         agent_id=str(agent_id),
@@ -2215,7 +2254,7 @@ async def run_agent(
                 f"{agent_config.get('domain', 'ops')} domain. Process the task "
                 "and return JSON with status, confidence, and processing_trace."
             )
-        except Exception as exc:
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             logger.error(
                 "agent_prompt_module_load_failed",
                 agent_id=str(agent_id),
@@ -2405,10 +2444,11 @@ async def run_agent(
                     agent_type=agent_config.get("agent_type"),
                     query=str(fixture["prompt"]),
                 )
-            except Exception:  # noqa: BLE001
+            except (ImportError, KeyError, RuntimeError, TypeError, ValueError) as exc:
                 logger.warning(
                     "agent_run_shadow_tds_route_helper_raised",
                     agent_id=str(agent_id),
+                    error=str(exc),
                     exc_info=True,
                 )
                 det = None
@@ -2484,7 +2524,7 @@ async def run_agent(
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
             )
-    except Exception as exc:
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
         # Surface enough information for the caller to act on without
         # leaking secrets from the exception message. The full traceback
         # stays server-side, correlated by trace_id.
@@ -2503,7 +2543,7 @@ async def run_agent(
             if tb:
                 last = tb[-1]
                 tb_frame = f"{last.filename.rsplit('/', 1)[-1]}:{last.lineno}"
-        except Exception:  # noqa: BLE001, S110  # diagnostic extraction is best-effort
+        except (AttributeError, RuntimeError, TypeError, ValueError):  # noqa: S110
             pass
         exc_msg = str(exc)[:200].replace("\n", " ")
         logger.exception(
@@ -2653,7 +2693,7 @@ async def run_agent(
                         task_count=1,
                         period_date=today,
                     ))
-        except Exception as exc:
+        except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
             logger.error(
                 "cost_ledger_write_failed",
                 agent_id=str(agent_id),

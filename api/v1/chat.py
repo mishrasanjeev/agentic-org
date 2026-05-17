@@ -9,9 +9,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -413,20 +414,22 @@ async def _record_chat_hitl(
     hitl_trigger: str | None,
     confidence: float,
     hitl_context: dict[str, Any] | None = None,
-) -> None:
+) -> bool:
     """Persist chat-triggered HITL so the approval queue is not bypassed.
 
     The /agents/{id}/run endpoint creates HITLQueue rows after LangGraph
     execution. Chat previously only surfaced text, so deterministic policy
     gates such as high-value TDS calculations had no approval artifact.
     """
-    if not hitl_trigger or not agent_id:
-        return
+    if not hitl_trigger:
+        return True
+    if not agent_id:
+        return False
     try:
         tid = _uuid.UUID(tenant_id)
         aid = _uuid.UUID(agent_id)
     except (TypeError, ValueError):
-        return
+        return False
 
     context = {
         "source": "chat",
@@ -459,8 +462,26 @@ async def _record_chat_hitl(
                     expires_at=datetime.now(UTC) + timedelta(hours=4),
                 )
             )
+        return True
+    # enterprise-gate: broad-except-ok reason=chat-hitl-queue-failure-returns-retryable-503
     except Exception:  # noqa: BLE001
         _log.warning("chat_hitl_queue_create_failed", agent_id=agent_id, exc_info=True)
+        return False
+
+
+def _raise_chat_hitl_persist_failed(agent_id: str | None, trigger: str | None) -> None:
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "error": "chat_hitl_queue_unavailable",
+            "message": (
+                "The agent requires human approval, but the approval queue could "
+                "not be persisted. Retry instead of treating this chat response as approved."
+            ),
+            "agent_id": agent_id,
+            "hitl_trigger": trigger,
+        },
+    )
 
 
 class ChatMessage(BaseModel):
@@ -521,7 +542,7 @@ async def chat_query(
                 else:
                     domain = _classify_domain(body.query)
                     agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(domain, tenant_id)
-        except (ValueError, Exception):
+        except ValueError:
             domain = _classify_domain(body.query)
             agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(domain, tenant_id)
     else:
@@ -564,15 +585,15 @@ async def chat_query(
             agent_type=resolved_agent_type,
             query=body.query,
         )
-    except Exception:  # noqa: BLE001
+    except (ImportError, KeyError, TypeError, ValueError, RuntimeError) as exc:
         # Detection failure must never block the chat path. Fall through
         # to the LLM and let the user get an answer somehow.
-        _log.warning("chat_tds_route_helper_raised", exc_info=True)
+        _log.warning("chat_tds_route_helper_raised", error=str(exc), exc_info=True)
         det = None
     if det is not None:
         hitl_trigger = det.get("hitl_trigger") or None
         det_confidence = float(det["confidence"])
-        await _record_chat_hitl(
+        hitl_recorded = await _record_chat_hitl(
             tenant_id=tenant_id,
             agent_id=agent_id,
             agent_type=resolved_agent_type,
@@ -583,6 +604,8 @@ async def chat_query(
             confidence=det_confidence,
             hitl_context=det.get("hitl_context") or None,
         )
+        if hitl_trigger and not hitl_recorded:
+            _raise_chat_hitl_persist_failed(agent_id, hitl_trigger)
         return ChatQueryResponse(
             answer=det["answer"],
             agent=agent_name,
@@ -629,11 +652,24 @@ async def chat_query(
                     agent_id=agent_id,
                     connector_ids=connector_ids,
                 )
-    except Exception:  # noqa: BLE001
-        # Resolver failures must not block chat — empty config falls
-        # through to the legacy behaviour and the agent still runs
-        # with whatever LLM-only reasoning it can produce.
-        _log.warning("chat_connector_resolve_failed", domain=domain)
+    except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as exc:
+        _log.error(
+            "chat_connector_resolve_failed",
+            domain=domain,
+            agent_id=agent_id,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "chat_connector_resolution_failed",
+                "message": (
+                    "Could not resolve the agent's connector configuration. "
+                    "Retry instead of running the agent with missing tools."
+                ),
+                "agent_id": agent_id,
+            },
+        ) from exc
 
     # Resolve authorized_tools: prefer agent's tools from DB lookup (BUG #2)
     resolved_tools = agent_tools or _AGENT_TYPE_DEFAULT_TOOLS.get(
@@ -689,7 +725,7 @@ async def chat_query(
                     if isinstance(confidence, (int, float))
                     else float(lg_result.get("confidence") or 0.0)
                 )
-                await _record_chat_hitl(
+                hitl_recorded = await _record_chat_hitl(
                     tenant_id=tenant_id,
                     agent_id=agent_id,
                     agent_type=resolved_agent_type,
@@ -703,11 +739,29 @@ async def chat_query(
                         "tool_calls": lg_result.get("tool_calls") or lg_result.get("tool_calls_log") or [],
                     },
                 )
+                if not hitl_recorded:
+                    _raise_chat_hitl_persist_failed(agent_id, hitl_trigger)
                 if not answer:
                     answer = f"HITL triggered: {hitl_trigger}. The agent stopped and queued this for human review."
                     confidence = confidence_for_hitl
-        except Exception:
-            _log.warning("chat_langgraph_fallback", domain=domain, agent_id=agent_id)
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+            _log.error(
+                "chat_langgraph_failed",
+                domain=domain,
+                agent_id=agent_id,
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "chat_agent_execution_failed",
+                    "message": (
+                        "The agent runtime failed before producing a durable answer. "
+                        "Retry instead of treating a fallback response as successful execution."
+                    ),
+                    "agent_id": agent_id,
+                },
+            ) from exc
 
     # Confidence adjustment (TC_003 reopen fix, Aishwarya 2026-04-22):
     # the old block did ``min(confidence, 0.6)`` whenever tools weren't
