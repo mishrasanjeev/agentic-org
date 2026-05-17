@@ -201,6 +201,7 @@ async def _stamp_last_used(
             row = result.scalar_one_or_none()
             if row is not None:
                 row.last_used_at = datetime.now(UTC)
+    # enterprise-gate: broad-except-ok reason=last-used-bookkeeping-failure-does-not-block-provider-call
     except Exception as exc:
         # last_used_at is cosmetic — never fail a real request because
         # the bookkeeping write broke.
@@ -227,6 +228,7 @@ async def _tenant_fallback_allowed(tenant_id: _uuid.UUID) -> bool:
             return True
         policy = str(row_settings.get("ai_fallback_policy", "allow")).lower()
         return policy != "deny"
+    # enterprise-gate: broad-except-ok reason=tenant-ai-policy-read-fails-closed-no-platform-fallback
     except Exception as exc:
         # If we can't read the tenant's policy, err on the side of
         # NOT falling back — that's the safer enterprise default.
@@ -309,6 +311,7 @@ async def get_provider_credential(
     # 2. Tenant BYO
     try:
         result = await _fetch_tenant_credential(tid_obj, provider, kind)
+    # enterprise-gate: broad-except-ok reason=tenant-ai-decrypt-failure-fails-closed-no-platform-fallback
     except Exception as exc:
         logger.error(
             "tenant_ai_credential_decrypt_failed",

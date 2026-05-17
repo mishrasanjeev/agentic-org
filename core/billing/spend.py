@@ -209,6 +209,7 @@ async def _reconcile_with_gcp(since: datetime, local_total_usd: float) -> str:
     )
     try:
         result = client.query(query, job_config=job_config).result()
+    # enterprise-gate: broad-except-ok reason=gcp-reconciliation-failure-returns-explicit-error-report
     except Exception as exc:  # noqa: BLE001
         return f"reconcile-gcp: BigQuery query failed: {exc}\n"
     gcp_total = next(iter(result), None)

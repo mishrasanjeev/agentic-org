@@ -493,6 +493,7 @@ class ReportGenerator:
             )
             if resp.status_code == 200:
                 return resp.json()
+        # enterprise-gate: broad-except-ok reason=report-kpi-fetch-failure-returns-explicit-fallback-source
         except Exception:  # noqa: S110
             pass  # API unavailable — return empty fallback below
         # Return empty structure if API unavailable
@@ -521,6 +522,7 @@ class ReportGenerator:
             )
             if resp.status_code == 200:
                 return resp.json()
+        # enterprise-gate: broad-except-ok reason=report-kpi-fetch-failure-returns-explicit-fallback-source
         except Exception:  # noqa: S110
             pass  # API unavailable — return empty fallback below
         return {

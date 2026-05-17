@@ -393,6 +393,7 @@ def cancel_subscription(subscription_id: str) -> bool:
         s.Subscription.delete(subscription_id)
         logger.info("stripe_subscription_cancelled", subscription_id=subscription_id)
         return True
+    # enterprise-gate: broad-except-ok reason=stripe-cancel-failure-returns-false-no-success
     except Exception:
         logger.exception("stripe_cancel_failed", subscription_id=subscription_id)
         return False

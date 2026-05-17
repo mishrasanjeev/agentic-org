@@ -95,6 +95,7 @@ async def deliver_email(
         log.info("delivery_email_sent", recipient=recipient_email, status=resp.status_code)
         return {"status": "sent", "channel": "email", "recipient": recipient_email}
 
+    # enterprise-gate: broad-except-ok reason=report-email-delivery-boundary-reraises-failure
     except Exception as exc:
         log.error("delivery_email_failed", recipient=recipient_email, error=str(exc))
         raise
@@ -173,6 +174,7 @@ async def deliver_slack(
         log.info("delivery_slack_sent", channel=channel_id, file_id=file_id)
         return {"status": "sent", "channel": "slack", "target": channel_id, "file_id": file_id}
 
+    # enterprise-gate: broad-except-ok reason=report-slack-delivery-boundary-reraises-failure
     except Exception as exc:
         log.error("delivery_slack_failed", channel=channel_id, error=str(exc))
         raise
@@ -254,6 +256,7 @@ async def deliver_whatsapp(
         log.info("delivery_whatsapp_sent", phone=phone_number, media_id=media_id)
         return {"status": "sent", "channel": "whatsapp", "target": phone_number, "media_id": media_id}
 
+    # enterprise-gate: broad-except-ok reason=report-whatsapp-delivery-boundary-reraises-failure
     except Exception as exc:
         log.error("delivery_whatsapp_failed", phone=phone_number, error=str(exc))
         raise
@@ -317,6 +320,7 @@ async def deliver(report_path: str, channels: list[dict[str, Any]]) -> list[dict
 
             results.append(result)
 
+        # enterprise-gate: broad-except-ok reason=report-delivery-dispatch-records-failed-channel
         except Exception as exc:
             log.error("delivery_channel_error", channel_type=ch_type, target=target, error=str(exc))
             results.append({"status": "failed", "channel": ch_type, "target": target, "error": str(exc)})

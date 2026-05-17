@@ -80,6 +80,7 @@ async def append(
             # after retention_days of no activity.
             await redis.expire(key, retention * 24 * 3600)
             return True
+        # enterprise-gate: broad-except-ok reason=rpa-history-append-failure-returns-degraded-false
         except Exception as exc:  # noqa: BLE001 — best effort; log and fall through
             logger.warning(
                 "rpa_history_redis_append_failed",
@@ -136,6 +137,7 @@ async def list_history(
                         extra={"tenant_id": tenant_id, "raw": raw[:200]},
                     )
             return entries
+        # enterprise-gate: broad-except-ok reason=rpa-history-read-failure-returns-degraded-fallback
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "rpa_history_redis_read_failed",
@@ -155,6 +157,7 @@ async def _get_redis():
         from core.async_redis import get_async_redis  # noqa: PLC0415
 
         return await get_async_redis()
+    # enterprise-gate: broad-except-ok reason=rpa-history-redis-import-failure-returns-degraded-none
     except Exception as exc:  # noqa: BLE001
         logger.warning("rpa_history_redis_import_failed", extra={"error": str(exc)})
         return None

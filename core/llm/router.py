@@ -52,7 +52,7 @@ try:
     from routellm.controller import Controller as RouteLLMController  # type: ignore[import-untyped,import-not-found]
 
     _ROUTELLM_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except ImportError:
     RouteLLMController = None  # type: ignore[assignment,misc]
 
 # ---------------------------------------------------------------------------
@@ -152,15 +152,14 @@ def _gemini_daily_cap_usd() -> float:
 async def _todays_gemini_spend_usd() -> float:
     """Sum today's (UTC) ``cost_usd`` from ``agent_task_results``.
 
-    Read-only, single SELECT. Falls back to 0.0 on any DB error so
-    a transient DB blip doesn't block every request — the tradeoff
-    is that the cap can lag during the blip, but loud refusal would
-    be worse than a brief overshoot.
+    Read-only, single SELECT. Database lookup failure fails closed so
+    the Gemini cap cannot be bypassed by treating unknown spend as zero.
     """
     try:
         from datetime import UTC, datetime
 
         from sqlalchemy import text as _text
+        from sqlalchemy.exc import SQLAlchemyError
 
         from core.database import async_session_factory
 
@@ -174,9 +173,12 @@ async def _todays_gemini_spend_usd() -> float:
                 {"since": utc_today},
             )).scalar_one()
         return float(row or 0.0)
-    except Exception as exc:  # noqa: BLE001
+    except SQLAlchemyError as exc:
         logger.warning("gemini_daily_spend_lookup_failed", error=str(exc))
-        return 0.0
+        raise DailyBudgetExceeded(
+            "Gemini daily spend lookup unavailable; refusing request to "
+            "avoid bypassing AGENTICORG_GEMINI_DAILY_USD_CAP."
+        ) from exc
 
 
 async def assert_under_gemini_cap(estimated_cost_usd: float = 0.0) -> None:
@@ -308,6 +310,7 @@ class SmartLLMRouter:
         if _ROUTELLM_AVAILABLE:
             try:
                 return self._classify_with_routellm(query)
+            # enterprise-gate: broad-except-ok reason=routellm-classification-failure-falls-back-to-heuristic
             except Exception as exc:  # noqa: BLE001
                 logger.warning("routellm_classify_failed", error=str(exc))
                 # Fall through to heuristic
@@ -324,6 +327,7 @@ class SmartLLMRouter:
                     strong_model=CLOUD_TIERS["tier3"],
                     weak_model=CLOUD_TIERS["tier1"],
                 )
+            # enterprise-gate: broad-except-ok reason=routellm-init-failure-falls-back-to-heuristic
             except Exception as exc:  # noqa: BLE001
                 logger.warning("routellm_init_failed", error=str(exc))
                 self._routellm_controller = None
@@ -414,6 +418,7 @@ class LLMRouter:
 
         try:
             return await self._call_model(model, messages, temp, max_tokens)
+        # enterprise-gate: broad-except-ok reason=llm-primary-failure-falls-back-or-reraises
         except Exception as e:
             logger.warning("llm_primary_failed", model=model, error=str(e))
             if model != self.fallback_model:

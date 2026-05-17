@@ -114,6 +114,7 @@ def _get_tenant_tier(tenant_id: str) -> str:
         tier = r.get(f"tenant_tier:{tenant_id}")
         if tier and tier in TIERS:
             return tier
+    # enterprise-gate: broad-except-ok reason=tier-lookup-failure-defaults-to-free-fail-closed
     except Exception:
         logger.debug("tier_lookup_failed", tenant_id=tenant_id)
     return "free"

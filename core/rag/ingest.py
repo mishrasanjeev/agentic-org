@@ -127,6 +127,7 @@ async def _resolve_embedding_profile(
 
     try:
         effective = await get_effective_ai_setting(tenant_id)
+    # enterprise-gate: broad-except-ok reason=embedding-profile-read-failure-returns-explicit-default-profile
     except Exception as exc:  # pragma: no cover — defensive
         logger.warning("rag_embedding_profile_fallback", error=str(exc))
         return ("local", "BAAI/bge-small-en-v1.5", 384)
@@ -254,6 +255,7 @@ async def ingest_document(
     provider, model, dimensions = await _resolve_embedding_profile(tenant_id)
     try:
         vectors = _embed_chunks([c[0] for c in chunks], model=model)
+    # enterprise-gate: broad-except-ok reason=rag-embedding-failure-returns-ingest-result-with-errors
     except Exception as exc:
         logger.exception("rag_embed_failed")
         return IngestResult(
