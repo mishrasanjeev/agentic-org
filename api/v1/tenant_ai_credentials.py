@@ -16,6 +16,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
@@ -210,13 +211,19 @@ async def create_credential(
         session.add(row)
         try:
             await session.flush()
-        except Exception as exc:
+        except IntegrityError as exc:
             logger.warning("tenant_ai_credential_create_failed", error=str(exc))
             raise HTTPException(
                 409,
                 f"Credential for provider={body.provider!r} "
                 f"kind={body.credential_kind!r} already exists for this tenant. "
                 "Use PATCH to rotate.",
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.warning("tenant_ai_credential_create_failed", error=str(exc))
+            raise HTTPException(
+                503,
+                "Could not persist credential. Try again later.",
             ) from exc
 
     invalidate_cache(tid, body.provider, body.credential_kind)
@@ -417,6 +424,7 @@ async def test_credential(
         logger.warning("tenant_ai_credential_provider_not_configured")
         status_value = "failing"
         err = type(exc).__name__
+    # enterprise-gate: broad-except-ok reason=tenant-ai-probe-failure-records-failing-status
     except Exception as exc:
         logger.exception("tenant_ai_credential_probe_failed")
         status_value = "failing"
@@ -481,5 +489,5 @@ def _audit(
             target_id=str(target_id),
             **details,
         )
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         logger.debug("audit_emit_failed", error=str(exc))

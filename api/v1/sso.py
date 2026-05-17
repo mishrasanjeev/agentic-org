@@ -156,6 +156,7 @@ async def sso_login(
         raise HTTPException(503, "SSO state store unavailable (Redis required)")
     try:
         await r.setex(_state_key(provider_key, state), 600, json.dumps(payload))
+    # enterprise-gate: broad-except-ok reason=sso-state-write-failure-returns-retryable-503
     except Exception as exc:
         logger.exception("sso_state_store_failed")
         raise HTTPException(503, "Failed to persist SSO state") from exc
@@ -204,6 +205,7 @@ async def sso_callback(
     except httpx.HTTPStatusError as exc:
         logger.warning("sso_token_exchange_failed", status=exc.response.status_code)
         raise HTTPException(400, "SSO token exchange failed") from exc
+    # enterprise-gate: broad-except-ok reason=sso-verification-failure-fails-closed-400
     except Exception:
         logger.exception("sso_verification_failed")
         raise HTTPException(400, "SSO verification failed") from None

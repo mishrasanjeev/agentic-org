@@ -308,6 +308,7 @@ async def run_script(
         execution.error = result.get("error")
         execution.completed_at = datetime.now(UTC).isoformat()
 
+    # enterprise-gate: broad-except-ok reason=rpa-execution-failure-records-failed-result
     except Exception as exc:
         execution.status = "failed"
         execution.success = False

@@ -223,6 +223,7 @@ async def invite_member(body: InviteRequest, request: Request):
 
     try:
         send_invite_email(body.email, tenant.name, inviter_email, body.role, invite_link)
+    # enterprise-gate: broad-except-ok reason=invite-email-sidecar-failure-keeps-user-created
     except Exception:
         logger.exception("Invite email failed but user was created")
 

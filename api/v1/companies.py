@@ -10,9 +10,11 @@ import logging
 import uuid as _uuid
 from datetime import datetime
 
+from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from api.route_metadata import route_meta
@@ -847,9 +849,9 @@ async def onboard_company(
                     session.add(dl)
             try:
                 await session.flush()
-            except Exception:
+            except SQLAlchemyError:
                 logger.debug("Duplicate deadline skipped during onboard auto-generate")
-    except Exception:
+    except (ImportError, SQLAlchemyError, TypeError, ValueError):
         logger.warning("Failed to auto-generate compliance deadlines for %s", body.name)
 
     logger.info("Onboarded company %s (%s) for tenant %s", body.name, body.gstin, tenant_id)
@@ -1887,7 +1889,7 @@ async def verify_gstn_credential(
         try:
             decrypt_for_tenant(credential.password_encrypted)
             success = True
-        except Exception:
+        except (InvalidToken, RuntimeError, TypeError, ValueError):
             success = False
 
         # Update last_verified_at on success
@@ -2476,7 +2478,7 @@ async def test_tally(
                 bridge_version = None
                 try:
                     bridge_version = resp.json().get("version")
-                except Exception:  # noqa: S110
+                except (AttributeError, TypeError, ValueError):  # noqa: S110
                     pass
                 return TallyTestResponse(
                     success=True,
@@ -2500,7 +2502,7 @@ async def test_tally(
             success=False,
             message=f"Bridge responded with HTTP {exc.response.status_code}",
         )
-    except Exception as exc:  # noqa: BLE001 — return user-friendly text
+    except (httpx.RequestError, TimeoutError, ValueError) as exc:
         return TallyTestResponse(
             success=False,
             message=f"Bridge connection failed: {type(exc).__name__}",
@@ -2616,7 +2618,7 @@ async def generate_company_bridge(
             company.tally_config = tally_config
     except HTTPException:
         raise
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         logger.exception(
             "generate_company_bridge_failed tenant=%s company=%s",
             tenant_id,

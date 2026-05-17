@@ -64,6 +64,94 @@ PROCESS_LOCAL_SLUG = "process-local-ok"
 STUB_SLUG = "stub-ok"
 ROUTE_SLUG = "enterprise-route:"
 
+BROAD_EXCEPT_GENERIC_REASON_PHRASES = {
+    "safe",
+    "fallback",
+    "best effort",
+    "best effort cleanup",
+    "legacy",
+    "handled",
+    "cleanup",
+}
+BROAD_EXCEPT_GENERIC_REASON_WORDS = {
+    "allowed",
+    "best",
+    "catch",
+    "cleanup",
+    "effort",
+    "fallback",
+    "handled",
+    "legacy",
+    "ok",
+    "safe",
+}
+BROAD_EXCEPT_SAFETY_PROPERTIES = (
+    "after callback verification",
+    "after durable",
+    "after run terminal",
+    "authoritative",
+    "before reconsent",
+    "before tool failure",
+    "cache",
+    "cleanup only",
+    "continues to next",
+    "degrade",
+    "degrades",
+    "defaults safe false",
+    "does not",
+    "durable",
+    "empty list",
+    "ends in",
+    "error count",
+    "explicit",
+    "expected cancellation",
+    "fail",
+    "failed",
+    "failure",
+    "fails",
+    "false flag",
+    "falls back to",
+    "falls through",
+    "fallbacks to",
+    "fresh flow",
+    "isolates",
+    "keeps",
+    "logged",
+    "logs",
+    "marked",
+    "marks",
+    "metadata",
+    "no success",
+    "noncritical",
+    "nonfatal",
+    "optional",
+    "partial error count",
+    "primary operation",
+    "public status",
+    "query params",
+    "read model",
+    "read only",
+    "records",
+    "reports",
+    "requires",
+    "reraises",
+    "raises",
+    "refuses",
+    "revoke only",
+    "retry",
+    "retryable",
+    "returns",
+    "schema api",
+    "sidecar",
+    "skips",
+    "stale cache",
+    "static names",
+    "token blacklist",
+    "unavailable",
+    "unhealthy",
+    "unprocessed",
+)
+
 SUSPICIOUS_STATE_NAMES = {
     "_active_bridges",
     "_connections",
@@ -189,6 +277,22 @@ def _source_lines(path: Path) -> list[str]:
     return path.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
+def _normalize_reason(reason: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", reason.lower()).strip()
+
+
+def _is_valid_broad_exception_reason(reason: str) -> bool:
+    normalized = _normalize_reason(reason)
+    if not normalized:
+        return False
+    if normalized in BROAD_EXCEPT_GENERIC_REASON_PHRASES:
+        return False
+    tokens = set(normalized.split())
+    if tokens and tokens <= BROAD_EXCEPT_GENERIC_REASON_WORDS:
+        return False
+    return any(term in normalized for term in BROAD_EXCEPT_SAFETY_PROPERTIES)
+
+
 def _annotation_reason(lines: list[str], line_number: int, slug: str) -> str | None:
     for idx in (line_number, line_number - 1):
         if idx < 1 or idx > len(lines):
@@ -198,8 +302,14 @@ def _annotation_reason(lines: list[str], line_number: int, slug: str) -> str | N
         if marker not in line:
             continue
         match = re.search(r"\breason=(?P<reason>.+?)(?:\s*$)", line)
-        if match and match.group("reason").strip():
-            return match.group("reason").strip()
+        if not match:
+            continue
+        reason = match.group("reason").strip()
+        if not reason:
+            continue
+        if slug == BROAD_EXCEPT_SLUG and not _is_valid_broad_exception_reason(reason):
+            continue
+        return reason
     return None
 
 
