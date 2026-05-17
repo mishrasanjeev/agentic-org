@@ -52,6 +52,7 @@ GRANTEX_PAYMENT_CREATE_INTENT_FIELDS = (
     "metadata",
     "idempotency_key",
 )
+PREEXPORTED_CHECKOUT_PASSPORT_BLOCKER = "preexported_checkout_passport_without_granted_consent_fixture"
 
 DEMO_MCP_RESPONSES: dict[str, dict[str, Any]] = {
     "merchant_get_profile": {
@@ -463,7 +464,13 @@ async def run_real_staging_demo(
 
         consent_request_id = _data(consent).get("consent_request_id")
         checkout_passport_jwt = fixture.checkout_passport_jwt
-        if consent_request_id:
+        if checkout_passport_jwt:
+            evidence.add_case(
+                name="consent_exchange",
+                status="skipped",
+                blocker=PREEXPORTED_CHECKOUT_PASSPORT_BLOCKER,
+            )
+        elif consent_request_id:
             exchange = await connector.consent_exchange(consent_request_id=consent_request_id)
             alias = "grantex_commerce:consent_exchange"
             tool_sequence.append(alias)
