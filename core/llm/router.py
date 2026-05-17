@@ -45,15 +45,54 @@ from core.config import external_keys, settings
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# Try to import RouteLLM; fall back to heuristic if unavailable
+# RouteLLM is optional. Do not import it at module import time: installed
+# routellm imports OpenAI and can construct an OpenAI client during import.
+# Production Gemini-only deployments must be able to start without OpenAI
+# credentials.
 # ---------------------------------------------------------------------------
-_ROUTELLM_AVAILABLE = False
-try:
-    from routellm.controller import Controller as RouteLLMController  # type: ignore[import-untyped,import-not-found]
+_ROUTELLM_AVAILABLE: bool | None = None
+RouteLLMController: type[Any] | None = None
 
+
+class LLMProviderConfigurationError(RuntimeError):
+    """Raised when an explicitly selected LLM provider is not configured."""
+
+
+def _load_routellm_controller_cls() -> type[Any] | None:
+    """Lazily import RouteLLM and return its controller when usable."""
+    global RouteLLMController, _ROUTELLM_AVAILABLE
+
+    if _ROUTELLM_AVAILABLE is not None:
+        return RouteLLMController
+
+    try:
+        from openai import OpenAIError
+    except ImportError:
+        openai_error_types: tuple[type[BaseException], ...] = ()
+    else:
+        openai_error_types = (OpenAIError,)
+
+    try:
+        from routellm.controller import (
+            Controller as RouteLLMControllerClass,  # type: ignore[import-untyped,import-not-found]
+        )
+    except ImportError as exc:
+        logger.info("routellm_unavailable", error=str(exc))
+        _ROUTELLM_AVAILABLE = False
+        RouteLLMController = None
+        return None
+    except openai_error_types as exc:
+        logger.warning(
+            "routellm_unavailable_missing_optional_openai_config",
+            error=str(exc),
+        )
+        _ROUTELLM_AVAILABLE = False
+        RouteLLMController = None
+        return None
+
+    RouteLLMController = RouteLLMControllerClass
     _ROUTELLM_AVAILABLE = True
-except ImportError:
-    RouteLLMController = None  # type: ignore[assignment,misc]
+    return RouteLLMControllerClass
 
 # ---------------------------------------------------------------------------
 # Tier model definitions
@@ -307,7 +346,7 @@ class SmartLLMRouter:
         Uses RouteLLM's similarity-weighted router when available,
         otherwise falls back to a simple length-based heuristic.
         """
-        if _ROUTELLM_AVAILABLE:
+        if _ROUTELLM_AVAILABLE is not False:
             try:
                 return self._classify_with_routellm(query)
             # enterprise-gate: broad-except-ok reason=routellm-classification-failure-falls-back-to-heuristic
@@ -319,10 +358,14 @@ class SmartLLMRouter:
 
     def _classify_with_routellm(self, query: str) -> str:
         """Use RouteLLM's similarity-weighted (SW) router to score complexity."""
+        controller_cls = _load_routellm_controller_cls()
+        if controller_cls is None:
+            return self._classify_heuristic(query)
+
         if not self._routellm_init_attempted:
             self._routellm_init_attempted = True
             try:
-                self._routellm_controller = RouteLLMController(
+                self._routellm_controller = controller_cls(
                     routers=["sw_ranking"],
                     strong_model=CLOUD_TIERS["tier3"],
                     weak_model=CLOUD_TIERS["tier1"],
@@ -477,6 +520,9 @@ class LLMRouter:
         # Hard daily cap — fail-closed BEFORE we mint a new charge.
         await assert_under_gemini_cap()
 
+        if not external_keys.google_gemini_api_key:
+            raise LLMProviderConfigurationError("Gemini provider is not configured")
+
         client = genai.Client(api_key=external_keys.google_gemini_api_key)
 
         # Separate system instruction from conversation
@@ -529,6 +575,9 @@ class LLMRouter:
         """Call Anthropic Claude API."""
         import anthropic
 
+        if not external_keys.anthropic_api_key:
+            raise LLMProviderConfigurationError("Anthropic provider is not configured")
+
         client = anthropic.AsyncAnthropic(api_key=external_keys.anthropic_api_key)
 
         system_msg = ""
@@ -561,6 +610,9 @@ class LLMRouter:
     async def _call_openai(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
         """Call OpenAI API."""
         import openai
+
+        if not external_keys.openai_api_key:
+            raise LLMProviderConfigurationError("OpenAI provider is not configured")
 
         client = openai.AsyncOpenAI(api_key=external_keys.openai_api_key)
         response = await client.chat.completions.create(
