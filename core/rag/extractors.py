@@ -153,6 +153,7 @@ def _extract_pdf(stream: bytes, mime_type: str) -> ExtractedContent:
     for idx, page in enumerate(reader.pages, start=1):
         try:
             text = page.extract_text() or ""
+        # enterprise-gate: broad-except-ok reason=pdf-page-extract-failure-skips-page-not-full-document
         except Exception:
             text = ""
         text = text.strip()

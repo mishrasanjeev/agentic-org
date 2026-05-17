@@ -223,6 +223,7 @@ async def run(
             texts = [row[1] for row in batch]
             try:
                 vectors = embed_with(TARGET_MODEL, texts)
+            # enterprise-gate: broad-except-ok reason=embedding-backfill-failure-returns-nonzero-exit
             except Exception as exc:
                 logger.exception("backfill_embed_failed", error=str(exc))
                 # Surfacing the first failure is more useful than

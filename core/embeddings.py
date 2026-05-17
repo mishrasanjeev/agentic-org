@@ -266,6 +266,7 @@ def _embed_via_tei(texts: list[str]) -> list[list[float]]:
         auth_req = google.auth.transport.requests.Request()
         token = id_token.fetch_id_token(auth_req, base)
         headers["Authorization"] = f"Bearer {token}"
+    # enterprise-gate: broad-except-ok reason=tei-token-fetch-failure-falls-back-to-anonymous-dev-request
     except Exception as exc:  # noqa: BLE001
         logger.debug("tei_id_token_fetch_skipped", error=str(exc))
 

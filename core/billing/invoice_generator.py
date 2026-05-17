@@ -228,6 +228,7 @@ async def _upload_pdf(tenant_id: uuid.UUID, invoice_number: str, data: bytes) ->
         blob = bucket.blob(key)
         blob.upload_from_string(data, content_type="application/pdf")
         return f"gs://{bucket_name}/{key}"
+    # enterprise-gate: broad-except-ok reason=invoice-upload-failure-leaves-empty-pdf-url-not-success-url
     except Exception:
         logger.debug("invoice_gcs_upload_skipped")
         return ""
@@ -323,6 +324,7 @@ async def generate_invoices_for_period(
                 invoice_number=invoice_number,
                 total=str(total),
             )
+        # enterprise-gate: broad-except-ok reason=invoice-generation-failure-isolated-to-current-tenant
         except Exception:
             logger.exception(
                 "invoice_generation_failed", tenant_id=str(tenant.id)

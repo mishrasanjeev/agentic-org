@@ -120,6 +120,7 @@ async def execute_rpa_script(
                 import base64
 
                 screenshots.append(base64.b64encode(screenshot_bytes).decode("ascii"))
+            # enterprise-gate: broad-except-ok reason=rpa-navigation-screenshot-failure-is-cleanup-only
             except Exception:  # noqa: S110
                 pass  # navigation screenshot is best-effort
 
@@ -140,6 +141,7 @@ async def execute_rpa_script(
 
                 final_ss = await page.screenshot(type="png")
                 screenshots.append(base64.b64encode(final_ss).decode("ascii"))
+            # enterprise-gate: broad-except-ok reason=rpa-final-screenshot-failure-is-cleanup-only
             except Exception:  # noqa: S110
                 pass
 
@@ -160,6 +162,7 @@ async def execute_rpa_script(
                 "error": "",
             }
 
+        # enterprise-gate: broad-except-ok reason=rpa-script-failure-returns-success-false
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             await browser.close()
@@ -194,6 +197,7 @@ def _schedule_screenshot(
 
             ss = await page.screenshot(type="png")
             screenshots.append(base64.b64encode(ss).decode("ascii"))
+        # enterprise-gate: broad-except-ok reason=rpa-async-screenshot-failure-is-cleanup-only
         except Exception:  # noqa: S110
             pass
 

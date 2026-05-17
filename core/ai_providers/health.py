@@ -199,6 +199,7 @@ async def probe_provider(
         }
     except TimeoutError:
         return {"ok": False, "error": f"Probe timed out after {_PROBE_TIMEOUT_S}s."}
+    # enterprise-gate: broad-except-ok reason=provider-health-probe-failure-returns-unhealthy-error
     except Exception as exc:
         logger.warning(
             "provider_probe_failed",

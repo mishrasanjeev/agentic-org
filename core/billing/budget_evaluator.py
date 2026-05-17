@@ -134,6 +134,7 @@ async def _send_notification(
                                 "percent": percent,
                             },
                         )
+        # enterprise-gate: broad-except-ok reason=budget-notification-failure-logged-and-alert-evaluation-continues
         except Exception:
             logger.exception("budget_alert_notify_failed", channel=channel)
 
@@ -195,6 +196,7 @@ async def evaluate_budget_alerts() -> dict:
                 percent=percent,
                 spend_usd=float(spend),
             )
+        # enterprise-gate: broad-except-ok reason=budget-alert-failure-isolated-to-current-alert
         except Exception:
             logger.exception("budget_alert_eval_failed", alert_id=str(alert.id))
 

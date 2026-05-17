@@ -117,6 +117,7 @@ async def get_effective_ai_setting(
                 )
             )
             row = result.scalar_one_or_none()
+    # enterprise-gate: broad-except-ok reason=tenant-ai-settings-read-failure-returns-explicit-platform-defaults
     except Exception as exc:
         # Table may not exist yet during CI migration rehearsal. Honest
         # fallback: use platform defaults and log once.
