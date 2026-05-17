@@ -109,6 +109,14 @@ CA_PACK: dict[str, Any] = {
             ),
             "prompt_file": "prompts/gst_filing.prompt.txt",
             "shadow_fixture": _CA_SHADOW_FIXTURES["gst_filing_agent"],
+            # Activation contract (Uday CA-Firms 17-May reopen): only the
+            # connectors listed here gate promotion to active. The gstn /
+            # tally tools below are optional capability — a tenant that
+            # connected only Zoho Books (the documented minimum, see the
+            # module header) must still be able to promote this agent.
+            # Runtime calls to unconfigured connectors stay fail-closed at
+            # tool-dispatch time (BUG-08), so this is not a security relax.
+            "required_connectors": ["zoho_books"],
             "tools": [
                 "gstn:fetch_gstr2a",
                 "gstn:push_gstr1_data",
@@ -142,6 +150,10 @@ CA_PACK: dict[str, Any] = {
             ),
             "prompt_file": "prompts/tds_compliance.prompt.txt",
             "shadow_fixture": _CA_SHADOW_FIXTURES["tds_compliance_agent"],
+            # Only Zoho Books gates activation. income_tax_india tools are
+            # filing-stage capability (HITL-gated, optional connector); the
+            # shadow-validated capability is calculate_tds (pure math).
+            "required_connectors": ["zoho_books"],
             "tools": [
                 "zoho_books:calculate_tds",
                 "zoho_books:get_ledger_balance",
@@ -199,6 +211,9 @@ CA_PACK: dict[str, Any] = {
             ),
             "prompt_file": "prompts/bank_reconciliation.prompt.txt",
             "shadow_fixture": _CA_SHADOW_FIXTURES["bank_reconciliation_agent"],
+            # banking_aa / tally are optional; Zoho Books is the documented
+            # minimum and the shadow fixture connector.
+            "required_connectors": ["zoho_books"],
             "tools": [
                 "zoho_books:fetch_bank_statement",
                 "zoho_books:check_account_balance",
@@ -231,6 +246,9 @@ CA_PACK: dict[str, Any] = {
             ),
             "prompt_file": "prompts/fpa_analyst.prompt.txt",
             "shadow_fixture": _CA_SHADOW_FIXTURES["fp_a_analyst_agent"],
+            # tally is optional; Zoho Books is the documented minimum and
+            # the shadow fixture connector (get_profit_loss).
+            "required_connectors": ["zoho_books"],
             "tools": [
                 "zoho_books:get_trial_balance",
                 "zoho_books:get_ledger_balance",
@@ -257,6 +275,9 @@ CA_PACK: dict[str, Any] = {
             ),
             "prompt_file": "prompts/ar_collections.prompt.txt",
             "shadow_fixture": _CA_SHADOW_FIXTURES["ar_collections_agent"],
+            # sendgrid / tally are optional; Zoho Books is the documented
+            # minimum and the shadow fixture connector (list_overdue_invoices).
+            "required_connectors": ["zoho_books"],
             "tools": [
                 "zoho_books:get_ledger_balance",
                 "zoho_books:list_overdue_invoices",

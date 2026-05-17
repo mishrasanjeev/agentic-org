@@ -819,6 +819,76 @@ async def _load_connector_configs_for_agent(
     return merged
 
 
+def _required_connector_ids_for_agent(agent: Any) -> list[str]:
+    """Connectors that must be healthy before this agent can go active.
+
+    Uday CA-Firms 17-May reopen root cause: the activation gate received
+    the agent's *full* ``connector_ids`` — every connector any authorized
+    tool references. CA pack agents reference income_tax_india / tally /
+    gstn / sendgrid in addition to zoho_books, so promotion failed with
+    ``missing_connector_config`` on a Zoho-Books-only tenant, which is the
+    exact configuration the CA pack is documented to support.
+
+    Resolution order (fail-closed at every step):
+
+    1. Pack agents — re-derive the declared required subset live from the
+       static pack definition. This heals already-provisioned agents at
+       gate time, with no data backfill or resync required.
+    2. Persisted ``config["required_connector_ids"]`` written by a
+       post-fix pack sync.
+    3. Fall back to the full ``connector_ids``. Every hand-built agent and
+       every pack that declares nothing keeps the original behaviour:
+       activation gates on the complete linked connector set.
+
+    Narrowing the *activation* gate does not widen the runtime trust
+    boundary — runtime calls to unconfigured connectors stay fail-closed
+    at tool-dispatch time (see tests/regression/test_bug_08_tool_gateway_
+    fail_closed.py).
+    """
+    cfg = agent.config if isinstance(getattr(agent, "config", None), dict) else {}
+    full = [str(cid) for cid in (getattr(agent, "connector_ids", None) or []) if cid]
+    full_set = set(full)
+
+    pack_install = cfg.get("pack_install")
+    pack_name = (
+        pack_install.get("pack_name") if isinstance(pack_install, dict) else None
+    )
+    if pack_name:
+        try:
+            from core.agents.packs.installer import (
+                required_connectors_for_pack_agent,
+            )
+
+            declared = required_connectors_for_pack_agent(
+                str(pack_name),
+                str(getattr(agent, "agent_type", "") or ""),
+            )
+        # enterprise-gate: broad-except-ok reason=pack-resolve-failure-falls-closed-to-full-connector-set
+        except Exception:
+            logger.warning(
+                "required_connector_resolve_failed",
+                agent_id=str(getattr(agent, "id", "")),
+                pack_name=str(pack_name),
+            )
+            declared = None
+        if declared:
+            scoped = (
+                [cid for cid in declared if cid in full_set]
+                if full_set
+                else list(declared)
+            )
+            if scoped:
+                return scoped
+
+    persisted = cfg.get("required_connector_ids")
+    if isinstance(persisted, list):
+        scoped = [str(cid) for cid in persisted if cid]
+        if scoped:
+            return scoped
+
+    return full
+
+
 # ── GET /agents/default-tools/{agent_type} ───────────────────────────────────
 async def _assert_connectors_ready_for_activation(
     session: Any,
@@ -2850,7 +2920,7 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
             await _assert_connectors_ready_for_activation(
                 session,
                 tid,
-                list(agent.connector_ids or []),
+                _required_connector_ids_for_agent(agent),
             )
         agent.status = resume_to
 
@@ -2922,7 +2992,7 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         await _assert_connectors_ready_for_activation(
             session,
             tid,
-            list(agent.connector_ids or []),
+            _required_connector_ids_for_agent(agent),
         )
         old_status = agent.status
         old_version = agent.version or "1.0.0"

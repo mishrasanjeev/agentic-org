@@ -75,13 +75,28 @@ def test_ca_pack_has_connector_policy_for_every_authorized_tool() -> None:
 
 
 def test_pack_installer_repairs_existing_company_agents() -> None:
-    """BUG-13: company sync cannot be create-only after pack upgrades."""
+    """BUG-13: company sync cannot be create-only after pack upgrades.
+
+    Updated for the Uday CA-Firms 17-May promotion reopen: the idempotent
+    repair branch must still re-sync ``required_connector_ids`` (BUG-13
+    intent preserved), but it now writes the *declared required* subset
+    rather than the full linked connector set, so a Zoho-Books-only tenant
+    can promote a CA pack agent. See
+    tests/regression/test_uday_17may_promotion_connector_gate.py.
+    """
     src = (ROOT / "core" / "agents" / "packs" / "installer.py").read_text(
         encoding="utf-8"
     )
     assert "agent.connector_ids = connector_ids" in src
     assert 'cfg["tool_connectors"] = tool_connectors' in src
-    assert 'cfg["required_connector_ids"] = connector_ids' in src
+    # Repair branch still re-syncs the field (not create-only)...
+    assert 'cfg["required_connector_ids"] = required_connector_ids' in src
+    # ...and the value is the scoped required subset, not the full set.
+    assert "_declared_required_connector_ids(" in src
+    assert (
+        "required_connector_ids = _declared_required_connector_ids("
+        in src
+    )
 
 
 def test_company_agent_list_self_heals_after_pack_install() -> None:
