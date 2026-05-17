@@ -21,6 +21,28 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Some legacy Alembic-cutover environments were stamped past v4.0.0
+    # without receiving the original CDC event table. The durability columns
+    # below extend that table, so recreate the canonical v4.0.0 table shape
+    # when it is missing before applying the durable ingestion schema.
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS cdc_events (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES tenants(id),
+            connector VARCHAR(100) NOT NULL,
+            event_type VARCHAR(50) NOT NULL,
+            resource_type VARCHAR(100) NOT NULL,
+            resource_id VARCHAR(200) NOT NULL,
+            payload JSONB NOT NULL,
+            processed BOOLEAN NOT NULL DEFAULT FALSE,
+            event_hash VARCHAR(64) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_cdc_events_tenant_id ON cdc_events (tenant_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_cdc_events_connector ON cdc_events (connector)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_cdc_events_event_hash ON cdc_events (event_hash)")
+
     op.execute("ALTER TABLE cdc_events ADD COLUMN IF NOT EXISTS provider_event_id VARCHAR(255)")
     op.execute("ALTER TABLE cdc_events ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64)")
     op.execute(
