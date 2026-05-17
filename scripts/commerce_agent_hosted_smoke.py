@@ -72,13 +72,13 @@ PRODUCTION_RESOURCE_NAMES = frozenset(
         "grantex-commerce-bearer-token",
     }
 )
-DEFAULT_SECRET_NAMES = (
+DEFAULT_SMOKE_BINDING_NAMES = (
     "agenticorg-commerce-smoke-secret-key",
     "agenticorg-commerce-smoke-db-url",
     "agenticorg-commerce-smoke-redis-url",
     "agenticorg-commerce-smoke-grantex-api-key",
 )
-DEFAULT_NON_SECRET_ENV_NAMES = (
+DEFAULT_PUBLIC_ENV_NAMES = (
     "AGENTICORG_ENV",
     "AGENTICORG_BASE_URL",
     "AGENTICORG_PUBLIC_API_BASE_URL",
@@ -107,7 +107,7 @@ class HostedSmokeConfigError(ValueError):
 @dataclass(frozen=True)
 class FixtureSummary:
     env_path: str | None = None
-    secret_name: str | None = None
+    fixture_binding_name: str | None = None
     variable_names: tuple[str, ...] = ()
     synthetic_ids: dict[str, str] = field(default_factory=dict)
     sensitive_value_hashes: tuple[dict[str, str], ...] = ()
@@ -125,8 +125,8 @@ class HostedSmokeConfig:
     migrate_job_name: str = "agenticorg-commerce-smoke-migrate"
     database_resource_name: str = "agenticorg-commerce-smoke-pg"
     redis_resource_name: str = "agenticorg-commerce-smoke-redis"
-    secret_names: tuple[str, ...] = DEFAULT_SECRET_NAMES
-    non_secret_env_names: tuple[str, ...] = DEFAULT_NON_SECRET_ENV_NAMES
+    smoke_binding_names: tuple[str, ...] = DEFAULT_SMOKE_BINDING_NAMES
+    public_env_names: tuple[str, ...] = DEFAULT_PUBLIC_ENV_NAMES
     commit_sha: str | None = None
     image_tag: str | None = None
     cleanup_by: str | None = None
@@ -305,7 +305,7 @@ def validate_config(args: argparse.Namespace, *, environ: dict[str, str] | None 
     if auth_source_env_name not in AUTH_SOURCE_ENV_NAMES:
         raise HostedSmokeConfigError("auth_source_env_name_invalid", "Use exactly one supported Grantex auth source name.")
 
-    if args.fixture_env and args.fixture_secret_name:
+    if args.fixture_env and args.fixture_binding_name:
         raise HostedSmokeConfigError(
             "fixture_source_ambiguous",
             "Use either a local .tmp fixture env or a smoke-only fixture secret name, not both.",
@@ -314,10 +314,14 @@ def validate_config(args: argparse.Namespace, *, environ: dict[str, str] | None 
     fixture = FixtureSummary()
     if args.fixture_env:
         fixture = _summarize_fixture_env(args.fixture_env, auth_source_env_name=auth_source_env_name)
-    elif args.fixture_secret_name:
-        fixture = FixtureSummary(secret_name=_validate_smoke_name(args.fixture_secret_name, field_name="fixture secret"))
+    elif args.fixture_binding_name:
+        fixture = FixtureSummary(
+            fixture_binding_name=_validate_smoke_name(args.fixture_binding_name, field_name="fixture binding")
+        )
 
-    secret_names = tuple(_validate_smoke_name(name, field_name="secret name") for name in args.secret_name)
+    smoke_binding_names = tuple(
+        _validate_smoke_name(name, field_name="protected binding") for name in args.smoke_binding_name
+    )
     return HostedSmokeConfig(
         agenticorg_base_url=agenticorg_origin,
         grantex_base_url=grantex_origin,
@@ -329,7 +333,7 @@ def validate_config(args: argparse.Namespace, *, environ: dict[str, str] | None 
         migrate_job_name=_validate_smoke_name(args.migrate_job, field_name="migrate job"),
         database_resource_name=_validate_smoke_name(args.database_resource, field_name="database resource"),
         redis_resource_name=_validate_smoke_name(args.redis_resource, field_name="redis resource"),
-        secret_names=secret_names,
+        smoke_binding_names=smoke_binding_names,
         commit_sha=args.commit_sha,
         image_tag=args.image_tag,
         cleanup_by=args.cleanup_by,
@@ -496,8 +500,8 @@ def evidence_as_dict(config: HostedSmokeConfig, cases: list[SmokeCase], *, dry_r
     fixture_source = None
     if config.fixture.env_path:
         fixture_source = "local_tmp_fixture_env"
-    elif config.fixture.secret_name:
-        fixture_source = "smoke_secret"
+    elif config.fixture.fixture_binding_name:
+        fixture_source = "smoke_binding"
     return {
         "report_type": "agenticorg-c3-hosted-commerce-smoke",
         "run_mode": "dry-run" if dry_run else "run",
@@ -513,12 +517,12 @@ def evidence_as_dict(config: HostedSmokeConfig, cases: list[SmokeCase], *, dry_r
             "database_resource_name": config.database_resource_name,
             "redis_resource_name": config.redis_resource_name,
         },
-        "env_var_names": list(config.non_secret_env_names),
+        "public_env_var_names": list(config.public_env_names),
         "auth_source_env_name": config.auth_source_env_name,
-        "secret_names": list(config.secret_names),
+        "smoke_binding_names": list(config.smoke_binding_names),
         "fixture": {
             "source": fixture_source,
-            "secret_name": config.fixture.secret_name,
+            "fixture_binding_name": config.fixture.fixture_binding_name,
             "env_var_names": list(config.fixture.variable_names),
             "synthetic_ids": config.fixture.synthetic_ids,
             "sensitive_value_hashes": list(config.fixture.sensitive_value_hashes),
@@ -571,7 +575,7 @@ def write_evidence_report(config: HostedSmokeConfig, cases: list[SmokeCase], *, 
                 f"- Grantex host: `{data['grantex_host']}`",
                 f"- Auth source env name: `{config.auth_source_env_name}`",
                 f"- Fixture source: `{data['fixture']['source'] or ''}`",
-                f"- Fixture secret name: `{config.fixture.secret_name or ''}`",
+                f"- Fixture binding name: `{config.fixture.fixture_binding_name or ''}`",
                 "- Secret values recorded: false",
                 "- Raw passports/JWTs recorded: false",
                 "- Idempotency values recorded: false",
@@ -608,9 +612,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--migrate-job", default="agenticorg-commerce-smoke-migrate")
     parser.add_argument("--database-resource", default="agenticorg-commerce-smoke-pg")
     parser.add_argument("--redis-resource", default="agenticorg-commerce-smoke-redis")
-    parser.add_argument("--secret-name", action="append", default=list(DEFAULT_SECRET_NAMES))
+    parser.add_argument(
+        "--secret-name",
+        dest="smoke_binding_name",
+        action="append",
+        default=list(DEFAULT_SMOKE_BINDING_NAMES),
+    )
     parser.add_argument("--fixture-env", default=None)
-    parser.add_argument("--fixture-secret-name", default=None)
+    parser.add_argument("--fixture-secret-name", dest="fixture_binding_name", default=None)
     parser.add_argument("--real-staging-evidence-report", default=None)
     parser.add_argument("--evidence-report", default=None)
     parser.add_argument("--commit-sha", default=None)

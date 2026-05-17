@@ -6,6 +6,8 @@ Status: C3-prep only. This runbook does not deploy, create cloud resources, chan
 
 C3 covers the currently skipped hosted gap after C2G: AgenticOrg MCP/A2A discovery and hosted real-staging runtime behavior against a temporary Grantex Option A smoke service.
 
+Run C3 hosted smoke after C2G smoke evidence is complete and merged, unless an explicit approval says otherwise.
+
 The cheapest sufficient topology is an API-only temporary AgenticOrg Cloud Run smoke service. UI, worker, and beat are deferred because they do not add coverage for MCP discovery, A2A discovery, or the Commerce Sales Agent Grantex-only runtime path.
 
 ## Recommended Topology
