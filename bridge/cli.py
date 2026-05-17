@@ -139,6 +139,7 @@ def _handle_status(args: argparse.Namespace) -> None:
             print(f"  Tally: UNEXPECTED STATUS ({resp.status_code})")
     except httpx.ConnectError:
         print("  Tally: UNREACHABLE — is Tally running?")
+    # enterprise-gate: broad-except-ok reason=cli-health-check-reports-error-no-production-state
     except Exception as exc:
         print(f"  Tally: ERROR — {exc}")
 

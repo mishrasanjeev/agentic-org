@@ -88,6 +88,7 @@ async def submit_feedback(
                     },
                 )
                 stored_in_db = True
+    # enterprise-gate: broad-except-ok reason=feedback-db-write-failure-records-memory-storage-in-response
     except Exception as exc:
         logger.debug("feedback_db_unavailable_using_memory", error=str(exc))
 
@@ -161,6 +162,7 @@ async def list_feedback(
                     }
                     for r in rows
                 ]
+    # enterprise-gate: broad-except-ok reason=feedback-db-read-failure-degrades-to-memory-store
     except Exception:
         logger.debug("feedback_list_db_unavailable_using_memory")
 

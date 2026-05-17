@@ -104,6 +104,7 @@ async def analyze_feedback(
                     "reason": reason,
                     "confidence": round(confidence, 2),
                 }
+    # enterprise-gate: broad-except-ok reason=feedback-llm-analysis-failure-degrades-to-explicit-heuristic
     except Exception as exc:
         logger.warning("feedback_analysis_llm_failed", error=str(exc))
 

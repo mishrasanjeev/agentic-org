@@ -453,6 +453,7 @@ class CostLedger:
                 # Clear buffer ONLY after successful commit (BUG #11)
                 self._buffer.clear()
                 logger.info("cost_flush_complete", count=len(records))
+        # enterprise-gate: broad-except-ok reason=cost-flush-failure-keeps-buffer-for-retry
         except Exception as exc:
             logger.error("cost_flush_failed", error=str(exc), count=len(records))
             # Records remain in self._buffer for retry since we didn't clear
@@ -486,6 +487,7 @@ class CostLedger:
                     "recommendation": "pause",
                 },
             )
+        # enterprise-gate: broad-except-ok reason=budget-exceeded-event-sidecar-failure-does-not-change-budget-decision
         except Exception as exc:
             logger.error("budget_event_emit_failed", error=str(exc))
 

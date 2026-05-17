@@ -76,6 +76,7 @@ def retry_http(
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
+                # enterprise-gate: broad-except-ok reason=sync-retry-boundary-reraises-final-failure
                 except Exception as exc:
                     last_exc = exc
                     if not _is_retryable_exception(exc) or attempt == max_attempts - 1:
@@ -115,6 +116,7 @@ def retry_http_async(
             for attempt in range(max_attempts):
                 try:
                     return await func(*args, **kwargs)
+                # enterprise-gate: broad-except-ok reason=async-retry-boundary-reraises-final-failure
                 except Exception as exc:
                     last_exc = exc
                     if not _is_retryable_exception(exc) or attempt == max_attempts - 1:
