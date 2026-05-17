@@ -71,7 +71,38 @@ SUSPICIOUS_STATE_NAMES = {
     "_pending_requests",
     "_seen_ids",
 }
-MUTABLE_CALLS = {"dict", "list", "set", "defaultdict", "deque"}
+SUSPICIOUS_STATE_SUFFIXES = (
+    "_cache",
+    "_registry",
+    "_map",
+    "_maps",
+    "_tokens",
+    "_token",
+    "_window",
+    "_windows",
+    "_bucket",
+    "_buckets",
+    "_buffer",
+    "_buffers",
+    "_queue",
+    "_queues",
+    "_pending",
+    "_listeners",
+    "_sessions",
+    "_locks",
+    "_states",
+)
+MUTABLE_CALLS = {
+    "deque",
+    "defaultdict",
+    "dict",
+    "LifoQueue",
+    "list",
+    "PriorityQueue",
+    "Queue",
+    "set",
+    "SimpleQueue",
+}
 ROUTE_METHODS = {
     "get": ("GET",),
     "post": ("POST",),
@@ -300,7 +331,7 @@ def _mutable_value(value: ast.AST | None) -> bool:
 
 def _suspicious_state_name(name: str) -> bool:
     lowered = name.lower()
-    return lowered in SUSPICIOUS_STATE_NAMES or lowered.endswith("_cache") or lowered.endswith("_registry")
+    return lowered in SUSPICIOUS_STATE_NAMES or lowered.endswith(SUSPICIOUS_STATE_SUFFIXES)
 
 
 def scan_process_local_state(paths: list[Path], root: Path = REPO_ROOT) -> list[Finding]:

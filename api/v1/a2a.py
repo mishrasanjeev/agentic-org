@@ -372,6 +372,7 @@ async def get_task(
 
 # -- Helpers -----------------------------------------------------------------
 
+# enterprise-gate: process-local-ok reason=static-agent-domain-routing-map
 _DOMAIN_MAP = {
     "commerce_sales_agent": "commerce",
     "ap_processor": "finance", "ar_collections": "finance", "recon_agent": "finance",

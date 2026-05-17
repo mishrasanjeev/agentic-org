@@ -264,6 +264,7 @@ _LIFECYCLE_FSM: dict[str, list[str]] = {
 }
 
 # Promotion path: shadow -> active -> (already top-level; no further promotion)
+# enterprise-gate: process-local-ok reason=static-agent-status-transition-map
 _PROMOTE_MAP: dict[str, str] = {
     "shadow": "active",
 }

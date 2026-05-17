@@ -104,6 +104,7 @@ class SearchResponse(BaseModel):
 DOC_STATUS_PROCESSING = "processing"
 DOC_STATUS_INDEXED = "indexed"
 DOC_STATUS_FAILED = "failed"
+# enterprise-gate: process-local-ok reason=static-legacy-status-normalization-map
 _LEGACY_STATUS_MAP: dict[str, str] = {
     # map everything the upload path or RAGFlow might set onto the three
     # canonical values the frontend badge component knows about.

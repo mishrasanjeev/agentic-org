@@ -23,7 +23,7 @@ from collections import defaultdict
 
 import redis.asyncio as aioredis
 
-from core.config import redis_socket_timeout_kwargs, redis_url_from_env
+from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,10 @@ _redis: aioredis.Redis | None = None
 
 def _strict() -> bool:
     """Is strict multi-replica auth-state enforcement enabled?"""
-    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    env_override = os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    env = getattr(settings, "env", "development")
+    runtime_env = env if isinstance(env, str) else "development"
+    return env_override or is_strict_runtime_env(runtime_env)
 
 
 async def _get_redis() -> aioredis.Redis | None:

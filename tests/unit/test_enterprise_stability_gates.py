@@ -56,6 +56,63 @@ def test_gate_detects_process_local_mutable_store(tmp_path: Path) -> None:
     assert "_event_store" in findings[0].code
 
 
+def test_gate_detects_process_local_suspicious_suffixes(tmp_path: Path) -> None:
+    cases = {
+        "_payment_map",
+        "_payment_maps",
+        "_revoked_tokens",
+        "_refresh_token",
+        "_rate_window",
+        "_rate_windows",
+        "_tenant_bucket",
+        "_tenant_buckets",
+        "_event_buffer",
+        "_event_buffers",
+        "_job_queue",
+        "_job_queues",
+        "_resume_pending",
+        "_event_listeners",
+        "_active_sessions",
+        "_tenant_locks",
+        "_workflow_states",
+    }
+    content = "\n".join(f"{name}: dict[str, object] = {{}}" for name in sorted(cases))
+    path = _write(tmp_path, "core/stateful.py", f"{content}\n")
+
+    findings = gates.scan_process_local_state([path], tmp_path)
+
+    assert len(findings) == len(cases)
+    detected = {finding.code for finding in findings}
+    assert detected == cases
+
+
+def test_gate_detects_queue_like_module_state(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "core/queue_state.py",
+        "from queue import Queue\n"
+        "_event_queue = Queue()\n",
+    )
+
+    findings = gates.scan_process_local_state([path], tmp_path)
+
+    assert [finding.category for finding in findings] == ["process_local_state"]
+    assert findings[0].code == "_event_queue"
+
+
+def test_gate_ignores_immutable_constants_and_local_variables(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "core/constants.py",
+        "ORDER_MAP: tuple[tuple[str, str], ...] = (('a', 'b'),)\n"
+        "def build_local():\n"
+        "    local_map: dict[str, object] = {}\n"
+        "    return local_map\n",
+    )
+
+    assert gates.scan_process_local_state([path], tmp_path) == []
+
+
 def test_process_local_allowance_requires_non_empty_reason(tmp_path: Path) -> None:
     missing_reason = _write(
         tmp_path,
