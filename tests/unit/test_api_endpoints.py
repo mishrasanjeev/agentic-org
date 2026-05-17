@@ -792,20 +792,59 @@ class TestApprovalsEndpoints:
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await decide(
-                hitl_id=item.id,
-                body=body,
-                background_tasks=BackgroundTasks(),
-                tenant_id=tenant_id,
-                user_claims=user_claims,
-                user_role="ceo",  # CEO can decide on manager-level item
-                user_domains=None,
-            )
+            with patch("core.approvals.resolve_policy", new=AsyncMock(return_value=None)):
+                resp = await decide(
+                    hitl_id=item.id,
+                    body=body,
+                    background_tasks=BackgroundTasks(),
+                    tenant_id=tenant_id,
+                    user_claims=user_claims,
+                    user_role="ceo",  # CEO can decide on manager-level item
+                    user_domains=None,
+                )
         finally:
             ctx.stop()
 
         assert resp["decision"] == "approve"
         assert resp["status"] == "decided"
+
+    @pytest.mark.asyncio
+    async def test_decide_policy_resolution_failure_fails_closed(self, tenant_id, mock_session):
+        from api.v1.approvals import decide
+        from core.schemas.api import HITLDecision
+
+        item = _make_hitl(status="pending")
+        agent_domain_result = MagicMock()
+        agent_domain_result.scalar_one_or_none.return_value = "finance"
+        mock_session.execute = AsyncMock(side_effect=[
+            _make_result(scalar_one=item),
+            agent_domain_result,
+        ])
+
+        body = HITLDecision(decision="approve")
+        user_claims = {"sub": str(uuid.uuid4()), "name": "Test User"}
+
+        ctx = _patch_tenant_session("approvals", mock_session)
+        try:
+            with patch(
+                "core.approvals.resolve_policy",
+                new=AsyncMock(side_effect=RuntimeError("policy store unavailable")),
+            ):
+                with pytest.raises(RuntimeError, match="policy store unavailable"):
+                    await decide(
+                        hitl_id=item.id,
+                        body=body,
+                        background_tasks=BackgroundTasks(),
+                        tenant_id=tenant_id,
+                        user_claims=user_claims,
+                        user_role="ceo",
+                        user_domains=None,
+                    )
+        finally:
+            ctx.stop()
+
+        assert item.status == "pending"
+        assert item.decision is None
 
     @pytest.mark.asyncio
     async def test_decide_not_found(self, tenant_id, mock_session):

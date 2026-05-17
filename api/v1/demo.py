@@ -174,6 +174,7 @@ async def submit_demo_request(body: DemoRequest):
                 await session.commit()
                 lead_id = str(new_id)
                 logger.info("Lead created in pipeline: %s (%s)", lead_id, body.email)
+    # enterprise-gate: broad-except-ok reason=demo-lead-sidecar-failure-keeps-request-saved
     except Exception:
         logger.exception("Failed to create lead in pipeline (non-blocking)")
 
@@ -182,10 +183,12 @@ async def submit_demo_request(body: DemoRequest):
     requester_confirmation_sent = False
     try:
         internal_notification_sent = _send_email_notification(body)
+    # enterprise-gate: broad-except-ok reason=demo-internal-email-sidecar-records-false-flag
     except Exception:
         logger.exception("Email send failed but request was saved")
     try:
         requester_confirmation_sent = _send_trial_confirmation(body)
+    # enterprise-gate: broad-except-ok reason=demo-confirmation-email-sidecar-records-false-flag
     except Exception:
         logger.exception("Requester confirmation email failed but request was saved")
 
@@ -197,6 +200,7 @@ async def submit_demo_request(body: DemoRequest):
             agent_result = await _run_sales_agent_on_lead(default_tenant_id, lead_id)
             agent_status = agent_result.get("status")
             logger.info("sales_agent_triggered: %s status=%s", lead_id, agent_status)
+        # enterprise-gate: broad-except-ok reason=demo-sales-agent-sidecar-not-reported-as-triggered
         except Exception:
             logger.exception("Sales agent trigger failed (non-blocking)")
 

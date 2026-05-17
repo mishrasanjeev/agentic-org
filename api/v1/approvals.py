@@ -295,6 +295,7 @@ async def _resume_workflow_bg(
             if state.get("status") == "completed":
                 db_run.result = state.get("step_results")
 
+    # enterprise-gate: broad-except-ok reason=approval-resume-background-marks-workflow-failed
     except Exception as exc:
         _log.error("workflow_resume_failed", run_id=str(workflow_run_id), error=str(exc))
         try:
@@ -307,6 +308,7 @@ async def _resume_workflow_bg(
                 db_run.status = "failed"
                 db_run.error = {"message": f"Resume failed: {exc}"}
                 db_run.completed_at = datetime.now(UTC)
+        # enterprise-gate: broad-except-ok reason=approval-resume-error-handler-failure-is-logged
         except Exception as inner:
             _log.error("workflow_resume_error_handler_failed", error=str(inner))
     finally:
@@ -407,6 +409,7 @@ async def decide(
                             delegated_from = str(delegation.delegator_id)
                             reason = f"acting on behalf of {delegated_from} (role={delegator_role})"
                             break
+            # enterprise-gate: broad-except-ok reason=delegation-lookup-failure-keeps-decision-denied
             except Exception:
                 _log.debug("delegation_check_failed", hitl_id=str(hitl_id))
 
@@ -454,15 +457,11 @@ async def decide(
         policy_state = dict(ctx.get("policy_state") or {})
         policy_action = "advance"  # default — the legacy single-step path
 
-        try:
-            policy = await resolve_policy(
-                tenant_id=tid,
-                workflow_id=item.workflow_run_id,
-                agent_id=item.agent_id,
-            )
-        except Exception:
-            _log.debug("approval_policy_resolve_failed", hitl_id=str(hitl_id))
-            policy = None
+        policy = await resolve_policy(
+            tenant_id=tid,
+            workflow_id=item.workflow_run_id,
+            agent_id=item.agent_id,
+        )
 
         if policy is not None:
             # Hydrate the engine's view of the current step

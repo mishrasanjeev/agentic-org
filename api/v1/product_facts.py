@@ -62,6 +62,7 @@ def _tool_count() -> int:
         from core.langgraph.tool_adapter import _build_tool_index
 
         return len(_build_tool_index())
+    # enterprise-gate: broad-except-ok reason=public-product-facts-fallback-count-is-read-only
     except Exception:
         # Fallback path: same source /connectors/tools falls back to.
         from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS

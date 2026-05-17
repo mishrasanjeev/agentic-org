@@ -950,7 +950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "approvals.decide",
-    "source_line": 326,
+    "source_line": 328,
     "tenant_required": true
   },
   {
@@ -2211,7 +2211,7 @@
     "public_exempt_reason": null,
     "rate_limit": "composio-catalog-read",
     "scope": "composio.marketplace.integration_catalog.read",
-    "source_line": 139,
+    "source_line": 140,
     "tenant_required": false
   },
   {
@@ -2229,7 +2229,7 @@
     "public_exempt_reason": null,
     "rate_limit": "composio-catalog-read",
     "scope": "composio.marketplace.integration_catalog.read",
-    "source_line": 190,
+    "source_line": 193,
     "tenant_required": false
   },
   {
@@ -2967,7 +2967,7 @@
     "public_exempt_reason": "public-readiness-probe-limited-db-redis-status",
     "rate_limit": "infra-health-probe",
     "scope": "public:health.readiness.dependency_status",
-    "source_line": 77,
+    "source_line": 78,
     "tenant_required": false
   },
   {
@@ -2985,7 +2985,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-sla-read",
     "scope": "health.sla.sensitive.read",
-    "source_line": 192,
+    "source_line": 196,
     "tenant_required": false
   },
   {
@@ -3003,7 +3003,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-diagnostics-read",
     "scope": "health.diagnostics.admin.sensitive.read",
-    "source_line": 307,
+    "source_line": 311,
     "tenant_required": false
   },
   {
@@ -3021,7 +3021,7 @@
     "public_exempt_reason": "public-liveness-probe-no-dependency-detail",
     "rate_limit": "infra-health-probe",
     "scope": "public:health.liveness",
-    "source_line": 120,
+    "source_line": 123,
     "tenant_required": false
   },
   {
@@ -3039,7 +3039,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-sla-read",
     "scope": "health.sla.sensitive.read",
-    "source_line": 242,
+    "source_line": 246,
     "tenant_required": false
   },
   {
@@ -3633,7 +3633,7 @@
     "public_exempt_reason": "public-marketing-product-counts-no-tenant-data",
     "rate_limit": "public-product-facts",
     "scope": "public:product_facts.read",
-    "source_line": 85,
+    "source_line": 86,
     "tenant_required": false
   },
   {
@@ -4515,7 +4515,7 @@
     "public_exempt_reason": "public-status-page-sanitized-service-health",
     "rate_limit": "public-status-read",
     "scope": "public:status.sanitized_health.read",
-    "source_line": 115,
+    "source_line": 119,
     "tenant_required": false
   },
   {

@@ -97,6 +97,7 @@ async def list_apps(
     """List all available Composio apps with search and category filtering."""
     try:
         apps = _refresh_apps_cache()
+    # enterprise-gate: broad-except-ok reason=composio-catalog-fetch-returns-502
     except Exception as exc:
         logger.exception("composio_apps_fetch_failed")
         raise HTTPException(502, f"Failed to fetch Composio apps: {exc}") from exc
@@ -158,6 +159,7 @@ async def get_app_detail(app_key: str) -> dict[str, Any]:
                 "name": getattr(act, "name", str(act)),
                 "description": getattr(act, "description", "") or "",
             })
+    # enterprise-gate: broad-except-ok reason=composio-action-search-falls-back-to-schema-api
     except Exception:
         # find_actions_by_use_case may not work for all apps — fall back
         try:
@@ -169,6 +171,7 @@ async def get_app_detail(app_key: str) -> dict[str, Any]:
                 }
                 for s in schemas[:50]
             ]
+        # enterprise-gate: broad-except-ok reason=composio-action-schema-load-best-effort-empty-list
         except Exception:
             action_list = []
 

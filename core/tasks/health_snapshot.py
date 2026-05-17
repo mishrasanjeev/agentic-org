@@ -49,6 +49,7 @@ async def _probe_db() -> str:
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
         return "healthy"
+    # enterprise-gate: broad-except-ok reason=health-snapshot-db-probe-records-unhealthy
     except Exception as e:  # noqa: BLE001 — capture the failure shape, not crash the snapshot
         return f"unhealthy: {type(e).__name__}"
 
@@ -61,6 +62,7 @@ async def _probe_redis() -> str:
         finally:
             await r.close()
         return "healthy"
+    # enterprise-gate: broad-except-ok reason=health-snapshot-redis-probe-records-unhealthy
     except Exception as e:  # noqa: BLE001
         return f"unhealthy: {type(e).__name__}"
 
@@ -79,6 +81,7 @@ async def _record_snapshot_async() -> dict:
     try:
         from api.v1.health import APP_VERSION  # noqa: PLC0415
         version = APP_VERSION
+    # enterprise-gate: broad-except-ok reason=health-snapshot-version-metadata-best-effort
     except Exception:  # noqa: BLE001 — version is best-effort metadata
         version = None
 
@@ -135,6 +138,7 @@ def record_health_snapshot() -> dict:
             checks=result["checks"],
         )
         return result
+    # enterprise-gate: broad-except-ok reason=health-snapshot-task-returns-failed-status
     except Exception as exc:  # noqa: BLE001
         # Don't propagate — a failed snapshot is observable through
         # the resulting gap in the chart, not by killing the worker.

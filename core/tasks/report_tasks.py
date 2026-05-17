@@ -94,6 +94,7 @@ def _advance_next_run(schedule: dict[str, Any]) -> None:
         base = now
         cron_iter = croniter(cron, base)
         schedule["next_run_at"] = cron_iter.get_next(datetime).isoformat()
+    # enterprise-gate: broad-except-ok reason=optional-cron-parser-fallbacks-to-daily
     except Exception:
         # Fall back to daily if cron expression is unrecognised.
         schedule["next_run_at"] = (now + timedelta(days=1)).isoformat()
@@ -135,6 +136,7 @@ def generate_scheduled_reports(self: Any) -> dict[str, Any]:
                 schedule_id=schedule_id,
                 report_type=schedule["report_type"],
             )
+        # enterprise-gate: broad-except-ok reason=report-schedule-poller-isolates-per-schedule-failures
         except Exception as exc:
             errors.append(f"{schedule_id}: {exc!s}")
             log.error("report_schedule_error", schedule_id=schedule_id, error=str(exc))
@@ -227,6 +229,7 @@ def generate_report(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
             "status": "completed",
         }
 
+    # enterprise-gate: broad-except-ok reason=report-generation-task-retries-failed-pipeline
     except Exception as exc:
         log.error(
             "report_generation_failed",
@@ -295,6 +298,7 @@ def deliver_report(
         )
         return {"status": "delivered", "channel": channel, "recipient": recipient}
 
+    # enterprise-gate: broad-except-ok reason=report-delivery-task-retries-failed-delivery
     except Exception as exc:
         log.error(
             "report_delivery_failed",
@@ -322,6 +326,7 @@ def cleanup_old_reports(self: Any, days: int = 30) -> dict[str, Any]:
             if mtime < cutoff:
                 path.unlink()
                 deleted += 1
+        # enterprise-gate: broad-except-ok reason=report-cleanup-isolates-per-file-errors
         except Exception as exc:
             errors.append(f"{path}: {exc!s}")
 
