@@ -157,6 +157,7 @@ class BaseAgent:
                 start=start,
             )
 
+        # enterprise-gate: broad-except-ok reason=agent-execution-boundary-returns-failed-result
         except Exception as e:
             logger.error("agent_execute_error", agent=self.agent_id, error=str(e))
             trace.append(f"Error: {e}")
@@ -351,6 +352,7 @@ class BaseAgent:
                     "tool": tool,
                     "result": result,
                 })
+            # enterprise-gate: broad-except-ok reason=agent-tool-call-failure-returns-explicit-error-result
             except Exception as e:
                 latency = int((time.monotonic() - call_start) * 1000)
                 trace.append(f"[tool] {connector}.{tool} → error: {e}")

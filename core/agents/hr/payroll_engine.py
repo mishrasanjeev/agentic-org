@@ -190,6 +190,7 @@ class PayrollEngineAgent(BaseAgent):
                     total_pt += pt_deduction
                     total_tds += tds_monthly
 
+                # enterprise-gate: broad-except-ok reason=payroll-employee-calc-failure-records-partial-error-count
                 except Exception as calc_err:
                     errors.append({"employee": emp.get("name", ""), "error": str(calc_err)})
                     trace.append(f"Payroll calc error for {emp.get('name', '')}: {calc_err}")
@@ -293,6 +294,7 @@ class PayrollEngineAgent(BaseAgent):
                 task, msg_id, "completed", output, confidence, trace, tool_calls, start=start,
             )
 
+        # enterprise-gate: broad-except-ok reason=agent-execution-boundary-returns-failed-result
         except Exception as e:
             logger.error("payroll_engine_error", agent=self.agent_id, error=str(e))
             trace.append(f"Error: {e}")
@@ -349,6 +351,7 @@ class PayrollEngineAgent(BaseAgent):
                 tool_name=f"{connector}.{tool}", status=status, latency_ms=latency,
             ))
             return result
+        # enterprise-gate: broad-except-ok reason=agent-tool-call-failure-returns-explicit-error-result
         except Exception as exc:
             latency = int((time.monotonic() - call_start) * 1000)
             trace.append(f"[tool] {connector}.{tool} -> exception: {exc} ({latency}ms)")
