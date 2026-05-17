@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
@@ -436,7 +437,7 @@ async def list_report_schedules(
             for row in rows:
                 try:
                     out.append(_to_response(row))
-                except Exception as row_exc:  # noqa: BLE001 — defensive boundary
+                except (AttributeError, KeyError, TypeError, ValueError) as row_exc:
                     import structlog
 
                     structlog.get_logger().warning(
@@ -448,7 +449,7 @@ async def list_report_schedules(
             return out
     except HTTPException:
         raise
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         # TC_001 sibling: same instrumentation as create — surface the
         # exception class so testers don't have to grep through Cloud
         # Run logs to figure out which DB column / row blew up.
@@ -553,7 +554,7 @@ async def create_report_schedule(
             return _to_response(row)
     except HTTPException:
         raise
-    except Exception as exc:
+    except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as exc:
         # TC_001 reopen 2026-04-27 (Aishwarya): the prior wrap returned a
         # generic "could not create" detail and the structlog jsonPayload
         # event wasn't surfacing in Cloud Run's log reader, so neither

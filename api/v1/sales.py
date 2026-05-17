@@ -435,6 +435,7 @@ async def _run_sales_agent_on_lead(
                     )
                     email_record.status = "sent"
                     email_record.sent_at = datetime.now(UTC)
+                # enterprise-gate: broad-except-ok reason=sales-email-sidecar-failure-leaves-email-pending
                 except Exception as e:
                     logger.warning("sales_email_failed", lead_id=lead_id, error=str(e))
 
@@ -463,6 +464,7 @@ async def _run_sales_agent_on_lead(
                     headers={"Authorization": f"Bearer {external_keys.slack_bot_token}"},
                     json={"channel": slack_msg.get("channel", "C0AMMN62FBR"), "text": slack_msg.get("text", "")},
                 )
+        # enterprise-gate: broad-except-ok reason=sales-slack-sidecar-failure-does-not-change-lead-processing-status
         except Exception as e:
             logger.warning("sales_slack_failed", error=str(e))
 

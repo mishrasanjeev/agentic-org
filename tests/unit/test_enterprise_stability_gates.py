@@ -32,14 +32,14 @@ def test_gate_detects_unannotated_broad_exception(tmp_path: Path) -> None:
     assert findings[0].path == "api/v1/example.py"
 
 
-def test_gate_allows_broad_exception_with_non_empty_reason(tmp_path: Path) -> None:
+def test_gate_allows_broad_exception_with_specific_safety_reason(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
         "api/v1/example.py",
         "def route():\n"
         "    try:\n"
         "        risky()\n"
-        "    # enterprise-gate: broad-except-ok reason=best-effort cleanup\n"
+        "    # enterprise-gate: broad-except-ok reason=cleanup-only-primary-operation-complete\n"
         "    except Exception:\n"
         "        pass\n",
     )
@@ -64,7 +64,7 @@ def test_broad_exception_allowance_requires_non_empty_reason(tmp_path: Path) -> 
         "def route():\n"
         "    try:\n"
         "        cleanup()\n"
-        "    # enterprise-gate: broad-except-ok reason=best-effort cleanup\n"
+        "    # enterprise-gate: broad-except-ok reason=cleanup-only-primary-operation-complete\n"
         "    except Exception:\n"
         "        pass\n",
     )
@@ -73,6 +73,23 @@ def test_broad_exception_allowance_requires_non_empty_reason(tmp_path: Path) -> 
 
     assert [finding.category for finding in findings] == ["broad_exception"]
     assert findings[0].path == "api/v1/example.py"
+
+
+def test_broad_exception_reason_rejects_generic_words(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "api/v1/example.py",
+        "def route():\n"
+        "    try:\n"
+        "        risky()\n"
+        "    # enterprise-gate: broad-except-ok reason=best-effort cleanup\n"
+        "    except Exception:\n"
+        "        pass\n",
+    )
+
+    findings = gates.scan_broad_exceptions([path], tmp_path)
+
+    assert [finding.category for finding in findings] == ["broad_exception"]
 
 
 def test_gate_detects_process_local_mutable_store(tmp_path: Path) -> None:
@@ -418,6 +435,14 @@ def test_broad_exception_baseline_reduced_by_false_success_exception_slice() -> 
 
     assert len(broad_entries) < 194
     assert len(broad_entries) <= 164
+
+
+def test_broad_exception_baseline_reduced_by_admin_business_slice() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    broad_entries = baseline.get("allowed_findings", {}).get("broad_exception", [])
+
+    assert len(broad_entries) < 163
+    assert len(broad_entries) <= 133
 
 
 def test_docs_tests_and_migrations_are_ignored(tmp_path: Path) -> None:

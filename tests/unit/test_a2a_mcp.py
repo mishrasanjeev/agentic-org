@@ -110,6 +110,32 @@ class TestMCPTools:
         assert exc.value.detail.get("error") == "unknown_tool"
         assert exc.value.detail.get("name") == "some_other_tool"
 
+    @pytest.mark.asyncio
+    async def test_call_connector_resolution_failure_returns_error(self, monkeypatch):
+        import api.v1.mcp as mcp
+        from api.v1 import agents
+        from api.v1.mcp import MCPCallRequest, call_tool
+
+        agent_type = next(iter(agents._AGENT_TYPE_DEFAULT_TOOLS))
+
+        async def _fail_resolve(*args, **kwargs):  # noqa: ARG001
+            raise RuntimeError("connector store unavailable")
+
+        monkeypatch.setattr(mcp, "_load_agent_prompt", lambda _agent_type: "prompt")
+        monkeypatch.setattr(agents, "_resolve_agent_connector_ids_for_type", _fail_resolve)
+
+        request = type("R", (), {"state": type("S", (), {"grant_token": ""})()})()
+
+        result = await call_tool(
+            MCPCallRequest(name=f"agenticorg_{agent_type}", arguments={"inputs": {}}),
+            request,
+            "00000000-0000-0000-0000-000000000001",
+        )
+
+        assert result["isError"] is True
+        assert result["error"] == "RuntimeError"
+        assert "Connector configuration unavailable" in result["content"][0]["text"]
+
 
 class TestA2AHelpers:
     def test_domain_map_covers_all_agents(self):

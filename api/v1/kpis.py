@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -183,7 +184,7 @@ async def _compute_basic_metrics(
                     {"domain": d, **s} for d, s in domain_stats.items()
                 ],
             }
-    except Exception:
+    except SQLAlchemyError:
         logging.getLogger(__name__).debug("compute_basic_metrics_failed: %s %s", tenant_id, role)
         return {
             "agent_count": 0,
@@ -276,7 +277,7 @@ async def _query_agent_results(
                 }
                 for r in rows
             ]
-    except Exception:
+    except SQLAlchemyError:
         logger.debug("agent_task_results query failed", exc_info=True)
         return []
 
@@ -304,7 +305,7 @@ async def _count_pending_approvals(
         async with get_tenant_session(tenant_id) as session:
             row = (await session.execute(text(sql), params)).first()
             return row.cnt if row else 0
-    except Exception:
+    except SQLAlchemyError:
         logger.debug("filing_approvals count failed", exc_info=True)
         return 0
 
@@ -345,7 +346,7 @@ async def _get_tax_calendar(
                 }
                 for r in rows
             ]
-    except Exception:
+    except SQLAlchemyError:
         logger.debug("compliance_deadlines query failed", exc_info=True)
         return []
 
@@ -400,7 +401,7 @@ async def _get_recent_escalations(
                 }
                 for r in rows
             ]
-    except Exception:
+    except SQLAlchemyError:
         logger.debug("hitl_queue query failed", exc_info=True)
         return []
 

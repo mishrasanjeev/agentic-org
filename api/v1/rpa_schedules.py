@@ -27,6 +27,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
@@ -290,7 +291,7 @@ async def create_schedule(
 
     try:
         next_run = _compute_next_run(body.cron_expression) if body.enabled else None
-    except Exception:
+    except (TypeError, ValueError):
         next_run = None
 
     row = RPASchedule(
@@ -309,11 +310,17 @@ async def create_schedule(
         session.add(row)
         try:
             await session.flush()
-        except Exception as exc:
+        except IntegrityError as exc:
             logger.warning("rpa_schedule_create_failed", error=str(exc))
             raise HTTPException(
                 409,
                 f"Schedule with name {row.name!r} already exists for this tenant",
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.warning("rpa_schedule_create_failed", error=str(exc))
+            raise HTTPException(
+                503,
+                "Could not persist RPA schedule. Try again later.",
             ) from exc
     return _to_out(row)
 
@@ -479,6 +486,7 @@ async def run_schedule_now(
 
         async_result = run_rpa_schedule.delay(str(row.tenant_id), str(row.id))
         task_id = getattr(async_result, "id", None)
+    # enterprise-gate: broad-except-ok reason=rpa-schedule-enqueue-failure-returns-retryable-503
     except Exception as exc:
         logger.warning("rpa_schedule_enqueue_failed", error=str(exc))
         raise HTTPException(

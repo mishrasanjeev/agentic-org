@@ -315,6 +315,7 @@ async def create_task(
             "result": {"output": safe_output_payload, "confidence": safe_confidence},
         }
 
+    # enterprise-gate: broad-except-ok reason=a2a-task-boundary-marks-durable-task-failed
     except Exception as exc:
         _log.error("a2a_task_failed", task_id=task_id, error=str(exc))
 

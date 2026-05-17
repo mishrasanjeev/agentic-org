@@ -173,8 +173,18 @@ async def call_tool(
             connector_config = await _load_connector_configs_for_agent(
                 tenant_id=tenant_id, connector_ids=connector_ids,
             )
-        except Exception:  # noqa: BLE001
+        except (RuntimeError, TypeError, ValueError) as exc:
             _log.warning("mcp_connector_resolve_failed", agent_type=agent_type)
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Connector configuration unavailable. Review agent configuration and retry.",
+                    }
+                ],
+                "isError": True,
+                "error": type(exc).__name__,
+            }
 
     # Execute via LangGraph
     from core.langgraph.runner import run_agent as langgraph_run
@@ -195,7 +205,7 @@ async def call_tool(
             grant_token=grant_token,
             connector_config=connector_config,
         )
-    except Exception as exc:
+    except (KeyError, RuntimeError, TypeError, ValueError) as exc:
         _log.error("mcp_call_failed", tool=body.name, error=str(exc))
         return {
             "content": [{"type": "text", "text": "Agent execution failed. Check logs for details."}],

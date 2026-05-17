@@ -678,7 +678,7 @@ async def get_account_intent(
                 g2_config={},
                 trustradius_config={},
             )
-        except Exception as exc:
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             logger.error("abm_intent_error", account_id=account_id, error=str(exc))
             raise HTTPException(502, f"Intent aggregation failed: {exc}") from exc
 

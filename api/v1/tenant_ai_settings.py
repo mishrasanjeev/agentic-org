@@ -353,5 +353,5 @@ def _audit(
             tenant_id=str(tenant_id),
             diff=diff,
         )
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         logger.debug("audit_emit_failed", error=str(exc))
