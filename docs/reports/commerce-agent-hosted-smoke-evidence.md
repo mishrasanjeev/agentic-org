@@ -32,6 +32,23 @@
 | a2a_commerce_tools_grantex_only | pass |  |  |  |  |
 | consent_exchange_expected_skip_evidence | pass |  |  |  |  |
 
+## Validation, Refusals, And Cleanup
+
+- Hosted C3 result: 14 passed, 0 failed.
+- Production AgenticOrg URL refusal: passed.
+- Production Grantex URL refusal: passed.
+- Arbitrary run.app refusal without exact allowlist: passed.
+- HTTP localhost/non-HTTPS refusal: passed.
+- Cleanup completed: temporary AgenticOrg smoke Cloud Run service, smoke migration job, Cloud SQL, Redis, Secret Manager secrets, and smoke image tag were deleted.
+- Production untouched: no production AgenticOrg or Grantex services, config, secrets, DB/Redis resources, Commerce V1 flags, live payments, or live Plural settings were changed.
+- Provider path: no direct Stripe, Plural, Pinecone, or provider credential handling was used or added.
+
+## Migration Coverage Caveat
+
+- Full AgenticOrg migration coverage remains blocked by the low-cost smoke DB baseline/pgvector issue.
+- API-only hosted discovery passed after a temporary Alembic-head stamp in the smoke DB.
+- This evidence is sufficient for hosted discovery readiness only; it is not full runtime or migration certification.
+
 ## Redacted Summary
 
 ```json
