@@ -398,9 +398,10 @@ def _get_domain_for_type(agent_type: str) -> str:
 def _build_agent_skills() -> list[dict[str, Any]]:
     """Build the skills list for the Agent Card."""
     from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
+    from core.commerce.discovery_gate import iter_public_discovery_agent_tools
 
     skills = []
-    for agent_type, tools in _AGENT_TYPE_DEFAULT_TOOLS.items():
+    for agent_type, tools in iter_public_discovery_agent_tools(_AGENT_TYPE_DEFAULT_TOOLS):
         domain = _get_domain_for_type(agent_type)
         skills.append({
             "id": agent_type,

@@ -3291,7 +3291,7 @@
     "public_exempt_reason": null,
     "rate_limit": "mcp-tool-call",
     "scope": "mcp.external_agent_execution.sensitive.write",
-    "source_line": 108,
+    "source_line": 109,
     "tenant_required": true
   },
   {

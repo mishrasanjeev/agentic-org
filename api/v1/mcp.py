@@ -47,9 +47,10 @@ async def list_tools():
     (ChatGPT, Claude) use to understand what they can call.
     """
     from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
+    from core.commerce.discovery_gate import iter_public_discovery_agent_tools
 
     tools = []
-    for agent_type, default_tools in _AGENT_TYPE_DEFAULT_TOOLS.items():
+    for agent_type, default_tools in iter_public_discovery_agent_tools(_AGENT_TYPE_DEFAULT_TOOLS):
         domain = _get_domain(agent_type)
         tools.append({
             "name": f"agenticorg_{agent_type}",

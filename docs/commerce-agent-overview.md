@@ -17,7 +17,7 @@ approve production discovery.
 | Real-staging eval | Explicitly gated; valid only against approved Grantex staging or exact temporary smoke URLs. |
 | C2G local handoff evidence | 13 passed, 0 failed, 2 skipped, with `consent_exchange` skipped using the stable fixture blocker. |
 | C3 hosted API-only smoke | 14 passed, 0 failed for liveness, health, MCP tools, A2A agent card, and A2A agents discovery. |
-| Production discovery | Commerce metadata may be publicly visible, but it is not final production readiness. |
+| Production discovery | Commerce metadata is gated by default behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`; it is not final production readiness. |
 | Direct provider calls | Blocked for commerce. AgenticOrg commerce uses Grantex only. |
 | Live checkout/payments/Plural | Blocked. |
 
@@ -98,12 +98,14 @@ another code, the fixture-backed C2G behavior is not passing.
 
 ## Production Discovery Caveat
 
-`docs/reports/commerce-agent-production-discovery-readiness.md` records that
-AgenticOrg production MCP/A2A discovery currently exposes commerce metadata.
-That does not mean production commerce is ready. Grantex production Commerce V1
-discovery remains disabled/fail-closed, and AgenticOrg commerce metadata should
-remain gated, hidden, or explicitly reviewed until Grantex read-only production
-discovery is approved.
+`docs/reports/commerce-agent-production-discovery-readiness.md` records the C4
+finding that AgenticOrg production MCP/A2A discovery exposed commerce metadata
+while Grantex production Commerce V1 discovery remained disabled/fail-closed.
+C5A adds the fail-closed `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED` public
+discovery gate. Unless that non-secret setting is explicitly set to a safe true
+value in an approved environment, public MCP/A2A discovery hides
+`commerce_sales_agent` and `grantex_commerce:*` metadata. Do not enable that
+gate for production until Grantex read-only production discovery is approved.
 
 ## Evidence Links
 
