@@ -190,6 +190,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
         # Seed built-in agents and prompt templates for the new org
         try:
             await seed_tenant_defaults(session, tenant.id)
+        # enterprise-gate: broad-except-ok reason=tenant-default-seeding-is-noncritical-signup-sidecar
         except Exception:
             logger.exception("Failed to seed defaults for tenant %s — signup continues", tenant.id)
 
@@ -214,6 +215,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
     # Send welcome email (non-blocking)
     try:
         send_welcome_email(body.admin_email, body.org_name, body.admin_name)
+    # enterprise-gate: broad-except-ok reason=welcome-email-sidecar-failure-does-not-affect-auth-token
     except Exception:
         logger.exception("Welcome email failed but signup succeeded")
 
@@ -267,6 +269,7 @@ async def _get_throttle_redis():
         )
         await _throttle_redis.ping()
         return _throttle_redis
+    # enterprise-gate: broad-except-ok reason=login-throttle-strict-runtime-reraises-redis-unavailable
     except Exception as exc:
         if _auth_state_strict():
             logger.error(
@@ -296,6 +299,7 @@ async def _check_rate_limit(client_ip: str) -> bool:
             if count == 1:
                 await redis.expire(key, _LOGIN_WINDOW)
             return count > _LOGIN_MAX
+        # enterprise-gate: broad-except-ok reason=login-throttle-strict-runtime-reraises-redis-errors
         except Exception as exc:
             if strict:
                 raise RuntimeError(
@@ -360,6 +364,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
                     await seed_tenant_defaults(session, user.tenant_id)
                     await session.commit()
                     logger.info("Auto-seeded defaults for pre-existing tenant %s on login", user.tenant_id)
+                # enterprise-gate: broad-except-ok reason=login-default-seeding-sidecar-does-not-grant-access
                 except Exception:
                     logger.exception("Auto-seed on login failed for tenant %s", user.tenant_id)
 
@@ -462,6 +467,7 @@ async def google_login(body: GoogleLoginRequest, response: Response):
             # Seed built-in agents and templates for the new org
             try:
                 await seed_tenant_defaults(session, tenant.id)
+            # enterprise-gate: broad-except-ok reason=tenant-default-seeding-is-noncritical-google-signup-sidecar
             except Exception:
                 logger.exception("Failed to seed defaults for Google signup tenant %s", tenant.id)
 
@@ -555,6 +561,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         reset_link = f"{app_url}/reset-password?code={code}"
         try:
             send_password_reset_email(user.email, reset_link)
+        # enterprise-gate: broad-except-ok reason=password-reset-email-failure-keeps-enumeration-safe-response
         except Exception:
             logger.exception("Password reset email failed for user")
 
@@ -665,6 +672,7 @@ async def get_current_user_profile(request: Request):
         raise HTTPException(401, "Missing session cookie or Authorization header")
     try:
         claims = validate_local_token(token)
+    # enterprise-gate: broad-except-ok reason=session-token-validation-fails-closed-401
     except Exception as exc:
         raise HTTPException(401, "Invalid or expired token") from exc
 
@@ -691,6 +699,7 @@ async def get_current_user_profile(request: Request):
             tenant = tenant_result.scalar_one_or_none()
             if tenant:
                 onboarding_complete = tenant.settings.get("onboarding_complete", False)
+    # enterprise-gate: broad-except-ok reason=onboarding-flag-read-fallback-defaults-safe-false
     except Exception:
         logger.debug("Tenant lookup for onboarding_complete failed, defaulting to False")
 

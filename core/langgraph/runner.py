@@ -107,6 +107,7 @@ async def run_agent(
                         raw = _json_mod.loads(raw)
                     if isinstance(raw, list):
                         prompt_amendments = [str(a) for a in raw]
+    # enterprise-gate: broad-except-ok reason=prompt-amendments-read-model-is-optional
     except Exception:
         logger.debug("prompt_amendments_load_skipped", agent_id=agent_id)
 
@@ -257,6 +258,7 @@ async def run_agent(
                 restored = pii_redactor.deanonymize(raw, pii_token_map)
                 try:
                     output = _json.loads(restored)
+                # enterprise-gate: broad-except-ok reason=pii-deanonymized-output-json-falls-back-to-raw-string-wrapper
                 except Exception:
                     output = {"raw": restored}
                 result["output"] = output
@@ -296,6 +298,7 @@ async def run_agent(
                         issues=len(content_safety_result.get("issues", [])),
                         scores=content_safety_result.get("scores", {}),
                     )
+            # enterprise-gate: broad-except-ok reason=content-safety-sidecar-failure-does-not-mark-agent-success
             except Exception as _cs_exc:
                 logger.debug("content_safety_check_skipped", error=str(_cs_exc))
 
@@ -311,6 +314,7 @@ async def run_agent(
                     if isinstance(tc, dict) and tc.get("tool")
                 ]
                 explanation = await generate_explanation(trace, out, tools)
+            # enterprise-gate: broad-except-ok reason=explanation-sidecar-failure-does-not-change-run-status
             except Exception as exc:
                 logger.warning("explanation_generation_failed", error=str(exc))
 
@@ -355,6 +359,7 @@ async def run_agent(
         try:
             snapshot = compiled.get_state(config)
             state_values = snapshot.values if snapshot else {}
+        # enterprise-gate: broad-except-ok reason=hitl-interrupt-state-read-falls-back-to-interrupt-payload
         except Exception:
             state_values = {}
 
@@ -410,6 +415,7 @@ async def run_agent(
             },
         }
 
+    # enterprise-gate: broad-except-ok reason=langgraph-agent-boundary-returns-explicit-failed-status
     except Exception as e:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.error("langgraph_agent_failed", agent_id=agent_id, error=str(e))
@@ -419,6 +425,7 @@ async def run_agent(
         fail_explanation: dict[str, Any] = {}
         try:
             fail_explanation = await generate_explanation(fail_trace, {}, [])
+        # enterprise-gate: broad-except-ok reason=failed-run-explanation-sidecar-remains-failed
         except Exception:
             logger.debug("fail_explanation_skipped", agent_id=agent_id)
 
@@ -483,6 +490,7 @@ async def resume_agent(
             "confidence": result.get("confidence", 0.0),
             "reasoning_trace": result.get("reasoning_trace", []),
         }
+    # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
         return {"status": "failed", "error": str(e)}

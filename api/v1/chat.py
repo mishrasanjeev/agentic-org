@@ -124,6 +124,7 @@ async def _find_agent_for_domain(
                         _DOMAIN_DEFAULT_TOOLS.get(db_domain, []),
                     )
                 return display, str(agent.id), agent.agent_type, tools
+    # enterprise-gate: broad-except-ok reason=chat-agent-display-read-model-falls-back-to-static-names
     except Exception:
         _log.warning("chat_agent_lookup_failed", domain=domain)
 
@@ -166,6 +167,7 @@ try:
         decode_responses=True,
         **redis_socket_timeout_kwargs(),
     )
+# enterprise-gate: broad-except-ok reason=chat-session-strict-runtime-refuses-memory-fallback-on-use
 except Exception:
     if _chat_sessions_strict():
         _log.error("chat_redis_unavailable_strict_runtime")
@@ -195,6 +197,7 @@ async def _load_session(key: str) -> list[dict]:
             if raw:
                 return _json.loads(raw)
             return []
+        # enterprise-gate: broad-except-ok reason=chat-session-strict-runtime-reraises-redis-read-failure
         except Exception as exc:
             if _chat_sessions_strict():
                 raise RuntimeError("Chat session Redis read failed in strict runtime") from exc
@@ -214,6 +217,7 @@ async def _save_session(key: str, entries: list[dict]) -> None:
                 ex=_SESSION_TTL_SECONDS,
             )
             return
+        # enterprise-gate: broad-except-ok reason=chat-session-strict-runtime-reraises-redis-write-failure
         except Exception as exc:
             if _chat_sessions_strict():
                 raise RuntimeError("Chat session Redis write failed in strict runtime") from exc

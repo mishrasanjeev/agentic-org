@@ -74,6 +74,7 @@ async def _ragflow_ensure_dataset(dataset_id: str) -> None:
                 json={"name": dataset_id, "id": dataset_id},
                 headers=_ragflow_headers(),
             )
+        # enterprise-gate: broad-except-ok reason=ragflow-dataset-bootstrap-is-probed-by-downstream-call
         except Exception:  # noqa: S110
             # Dataset may already exist, or RAGFlow may reject the id
             # format. In either case the downstream call will report.
@@ -248,6 +249,7 @@ async def _ragflow_dataset_stats(tenant_id: str) -> dict[str, int] | None:
             if resp.status_code >= 400:
                 return None
             payload = resp.json()
+    # enterprise-gate: broad-except-ok reason=ragflow-stats-read-falls-back-to-postgres-estimate
     except Exception as exc:
         logger.debug("ragflow_dataset_stats_failed", error=str(exc))
         return None
@@ -349,6 +351,7 @@ async def _db_chunk_count(tenant_id: str) -> int:
             for (size_bytes,) in doc_rows:
                 est = min(max(int(size_bytes) // 2048, 1), 1500)
                 total += est
+    # enterprise-gate: broad-except-ok reason=knowledge-stats-chunk-count-read-falls-back-to-zero
     except Exception as exc:
         logger.debug("db_chunk_count_failed", error=str(exc))
         return 0
@@ -535,6 +538,7 @@ async def upload_document(
     if not allow_duplicate and not replace:
         try:
             existing = await _db_find_existing_by_filename(tenant_id, filename)
+        # enterprise-gate: broad-except-ok reason=knowledge-dedup-lookup-fails-closed-503
         except Exception as exc:
             logger.error("dedup_lookup_failed", filename=filename, error=str(exc))
             raise HTTPException(
@@ -581,6 +585,7 @@ async def upload_document(
             if _ragflow_available():
                 try:
                     await _ragflow_delete(tenant_id, old_doc_id)
+                # enterprise-gate: broad-except-ok reason=replace-ragflow-cleanup-falls-through-to-db-soft-delete
                 except Exception as exc:
                     logger.warning(
                         "replace_ragflow_delete_failed",
@@ -685,6 +690,7 @@ async def upload_document(
             doc["document_id"] = rf_doc_id
             doc["status"] = DOC_STATUS_INDEXED
             logger.info("knowledge_upload_ragflow", doc_id=rf_doc_id, filename=doc["filename"])
+        # enterprise-gate: broad-except-ok reason=ragflow-upload-falls-back-to-postgres-document-mirror
         except Exception as exc:
             logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
             doc["status"] = DOC_STATUS_INDEXED
@@ -783,6 +789,7 @@ async def list_documents(
     if _ragflow_available():
         try:
             rf_docs = await _ragflow_list(tenant_id)
+        # enterprise-gate: broad-except-ok reason=knowledge-list-ragflow-read-falls-back-to-postgres
         except Exception as exc:
             logger.warning("ragflow_list_failed_fallback_db_only", error=str(exc))
 
@@ -830,6 +837,7 @@ async def list_documents(
                     "status": "ready",
                     "created_at": row[5].isoformat() if row[5] else "",
                 })
+    # enterprise-gate: broad-except-ok reason=legacy-knowledge-documents-read-model-is-auxiliary
     except Exception:
         logger.debug("knowledge_documents_query_skipped")
 
@@ -868,6 +876,7 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
             deleted = await _ragflow_delete(tenant_id, doc_id)
             if deleted:
                 return {"ok": True, "document_id": doc_id, "status": "deleted"}
+        # enterprise-gate: broad-except-ok reason=knowledge-delete-ragflow-failure-falls-through-to-db-delete
         except Exception as exc:
             logger.warning("ragflow_delete_failed", error=str(exc))
 
@@ -1062,6 +1071,7 @@ async def search_knowledge(
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
             return SearchResponse(results=[SearchResult(**c) for c in chunks])
+        # enterprise-gate: broad-except-ok reason=knowledge-search-ragflow-read-falls-back-to-native-search
         except Exception as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
@@ -1129,6 +1139,7 @@ async def knowledge_health():
                 ragflow_reachable = resp.status_code < 500
                 if not ragflow_reachable:
                     notes.append(f"RAGFlow responded HTTP {resp.status_code}.")
+        # enterprise-gate: broad-except-ok reason=public-knowledge-health-reports-ragflow-probe-failure
         except Exception as exc:
             notes.append(f"RAGFlow unreachable: {exc}")
 
@@ -1138,6 +1149,7 @@ async def knowledge_health():
         from core.embeddings import embed_one  # noqa: F401
 
         pgvector_ready = True
+    # enterprise-gate: broad-except-ok reason=public-knowledge-health-reports-pgvector-probe-failure
     except Exception as exc:
         notes.append(f"pgvector/BGE fallback unavailable: {exc}")
 
@@ -1236,12 +1248,14 @@ async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
     if _ragflow_available():
         try:
             docs = await _ragflow_list(tenant_id)
+        # enterprise-gate: broad-except-ok reason=knowledge-stats-ragflow-doc-list-falls-back-to-postgres
         except Exception as exc:
             logger.debug("ragflow_stats_failed", error=str(exc))
 
     if not docs:
         try:
             docs = await _db_list_docs(tenant_id)
+        # enterprise-gate: broad-except-ok reason=knowledge-stats-db-list-failure-degrades-read-only-card
         except Exception as exc:
             logger.debug("db_stats_failed", error=str(exc))
 
