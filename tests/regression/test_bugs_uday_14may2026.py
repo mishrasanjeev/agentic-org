@@ -156,7 +156,10 @@ def test_zoho_authorize_url_routes_to_india_region_when_user_picks_in() -> None:
 
     url_in = _build_authorization_url(
         spec,
-        client_id="1000.KN7KOTFZOEO6AEXNB12OT8CNGV3A9Z",
+        # Synthetic, non-live client id. The assertions below only check
+        # host/scope/params, never the client_id value, so a placeholder
+        # is sufficient and no real Zoho app id is committed.
+        client_id="1000.TESTCLIENTIDDONOTUSE0000000000",
         redirect_uri=(
             "https://agenticorg-api-490751771290.asia-southeast1.run.app"
             "/api/v1/oauth/callback"

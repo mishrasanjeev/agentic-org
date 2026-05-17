@@ -43,26 +43,27 @@
  *                       playwright.config.ts but Uday's report uses
  *                       ``https://agenticorg.ai`` so we override it
  *                       inside the spec.
- *   UDAY_EMAIL        — uday.chauhan@edumatica.io (per report)
- *   UDAY_PASSWORD     — Muneshvari12345@ (per report; also accept the
- *                       lowercase variant the report flagged).
- *   ZOHO_CLIENT_ID    — 1000.KN7KOTFZOEO6AEXNB12OT8CNGV3A9Z (defaults
- *                       to that value so the spec runs out of the box).
- *   ZOHO_CLIENT_SECRET — 163edae798054438557b9756d43d843e89f2cb1f0a
- *   ZOHO_ORG_ID       — 60069102279
+ *   UDAY_EMAIL        — tester email (per the May-14 bug report)
+ *   UDAY_PASSWORD     — tester password (env-only; never hardcoded).
+ *                       The lowercase variant is also tried at runtime.
+ *   ZOHO_CLIENT_ID    — Zoho OAuth client id (env-only).
+ *   ZOHO_CLIENT_SECRET — Zoho OAuth client secret (env-only).
+ *   ZOHO_ORG_ID       — Zoho Books organization id (env-only).
+ *
+ * SECURITY: no live credential is hardcoded here. All of the above are
+ * required env vars; the spec throws a directed error if any is unset.
  */
 
 import { expect, test } from "@playwright/test";
 
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
+// Credentials are env-only. No live value is ever committed; see the
+// beforeAll guard which fails fast with a directed message if unset.
 const UDAY_EMAIL = process.env.UDAY_EMAIL || "uday.chauhan@edumatica.io";
-const UDAY_PASSWORD = process.env.UDAY_PASSWORD || "Muneshvari12345@";
-const ZOHO_CLIENT_ID =
-  process.env.ZOHO_CLIENT_ID || "1000.KN7KOTFZOEO6AEXNB12OT8CNGV3A9Z";
-const ZOHO_CLIENT_SECRET =
-  process.env.ZOHO_CLIENT_SECRET ||
-  "163edae798054438557b9756d43d843e89f2cb1f0a";
-const ZOHO_ORG_ID = process.env.ZOHO_ORG_ID || "60069102279";
+const UDAY_PASSWORD = process.env.UDAY_PASSWORD || "";
+const ZOHO_CLIENT_ID = process.env.ZOHO_CLIENT_ID || "";
+const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || "";
+const ZOHO_ORG_ID = process.env.ZOHO_ORG_ID || "";
 
 // We hit the same backend the UI calls — agenticorg.ai routes
 // /api/v1/* to the Cloud Run API. Tester report confirmed the path.
@@ -75,8 +76,8 @@ const API_BASE = APP;
 async function loginAsUday(
   request: import("@playwright/test").APIRequestContext,
 ): Promise<boolean> {
-  // Try the documented password first, then the lowercase variant the
-  // report flagged as an alternate ("Muneshvari12345@ or muneshvari12345@").
+  // Try the supplied password first, then its lowercase variant (the
+  // May-14 report flagged a case-variant alternate).
   for (const password of [UDAY_PASSWORD, UDAY_PASSWORD.toLowerCase()]) {
     const resp = await request.post(`${API_BASE}/api/v1/auth/login`, {
       data: { email: UDAY_EMAIL, password },
@@ -91,10 +92,19 @@ test.describe("Uday CA Firms 2026-05-14 — Zoho Books OAuth onboarding", () => 
   test.beforeAll(() => {
     // Surface the absent env vars loudly so a misconfigured CI run
     // fails with the right diagnostic instead of a redirect-uri timeout.
-    if (!UDAY_PASSWORD) {
+    const missing = [
+      ["UDAY_PASSWORD", UDAY_PASSWORD],
+      ["ZOHO_CLIENT_ID", ZOHO_CLIENT_ID],
+      ["ZOHO_CLIENT_SECRET", ZOHO_CLIENT_SECRET],
+      ["ZOHO_ORG_ID", ZOHO_ORG_ID],
+    ]
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
+    if (missing.length > 0) {
       throw new Error(
-        "UDAY_PASSWORD env var is required — set it to the password from " +
-          "the May-14 bug report before running this spec.",
+        `Required env var(s) unset: ${missing.join(", ")}. These are ` +
+          "credentials and are intentionally NOT committed — supply them " +
+          "via the environment before running this spec.",
       );
     }
   });
