@@ -11,6 +11,7 @@ COMMERCE_CODE = [
     ROOT / "core" / "commerce" / "staging_runtime.py",
     ROOT / "core" / "langgraph" / "agents" / "commerce_sales_agent.py",
     ROOT / "demos" / "commerce_sales_agent_demo.py",
+    ROOT / "scripts" / "commerce_agent_hosted_smoke.py",
 ]
 
 BANNED_IMPORT_FRAGMENTS = {
@@ -75,4 +76,3 @@ def test_payment_status_polling_goes_through_grantex_only() -> None:
     assert "grantex_commerce:payment_get_status" in tools
     assert "payment_get_status" not in tools
     assert not any("check_order_status" == tool for tool in tools)
-
