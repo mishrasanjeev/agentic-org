@@ -45,6 +45,22 @@ class TestPIIDetection:
         assert result["scores"]["pii"] > 0
         assert any(i["type"] == "pii" for i in result["issues"])
 
+    @pytest.mark.asyncio
+    async def test_pii_checker_failure_fails_closed(self) -> None:
+        """A PII subsystem failure should not mark content as clean."""
+        mock_redactor = MagicMock()
+        mock_redactor.redact.side_effect = RuntimeError("pii unavailable")
+
+        with patch("core.pii.redactor.PIIRedactor", return_value=mock_redactor):
+            result = await check_content_safety(
+                "A customer message that needs a PII scan",
+                {"check_pii": True, "check_toxicity": False, "check_duplicates": False},
+            )
+
+        assert result["safe"] is False
+        assert result["scores"]["pii"] == 1.0
+        assert any(i["type"] == "pii_check_unavailable" for i in result["issues"])
+
 
 # ── 2. Toxicity keyword check — catches toxic keywords ──────────────────
 class TestToxicityDetection:

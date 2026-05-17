@@ -223,6 +223,7 @@ async def stream_to_tempfile(
         except OSError:
             pass
         raise
+    # enterprise-gate: broad-except-ok reason=upload-stream-failure-cleans-partial-file-and-reraises
     except Exception:
         # Same cleanup for unexpected errors — never leak disk.
         try:

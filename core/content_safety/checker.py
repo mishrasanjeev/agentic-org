@@ -86,6 +86,7 @@ def _get_toxicity_classifier() -> Any:
             truncation=True,
         )
         return _toxicity_classifier
+    # enterprise-gate: broad-except-ok reason=toxicity-model-load-failure-degrades-to-keyword-check
     except Exception as exc:
         logger.warning("toxicity_classifier_load_failed", error=str(exc))
         return None
@@ -115,9 +116,16 @@ def _check_pii(text: str) -> tuple[float, list[dict[str, str]]]:
             for token in token_map
         ]
         return score, issues
+    # enterprise-gate: broad-except-ok reason=content-safety-pii-check-failure-fails-closed
     except Exception as exc:
-        logger.debug("pii_check_skipped", error=str(exc))
-        return 0.0, []
+        logger.warning("pii_check_failed_closed", error=str(exc))
+        return 1.0, [
+            {
+                "type": "pii_check_unavailable",
+                "detail": "PII checker unavailable; content requires review",
+                "severity": "high",
+            }
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +156,7 @@ def _check_toxicity(text: str, threshold: float = 0.7) -> tuple[float, list[dict
                         }
                     ]
                 return score if "toxic" in label else 0.0, []
+        # enterprise-gate: broad-except-ok reason=toxicity-classifier-failure-degrades-to-keyword-check
         except Exception as exc:
             logger.debug("toxicity_classifier_failed", error=str(exc))
             # Fall through to keyword check

@@ -121,6 +121,7 @@ async def _load_flag(
                         "enabled": flag.enabled,
                         "rollout_percentage": flag.rollout_percentage,
                     }
+    # enterprise-gate: broad-except-ok reason=feature-flag-lookup-failure-uses-callsite-default
     except Exception:
         logger.debug("feature_flag_lookup_failed", flag_key=flag_key)
         row = None

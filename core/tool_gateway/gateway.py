@@ -178,6 +178,7 @@ class ToolGateway:
 
             return result
 
+        # enterprise-gate: broad-except-ok reason=tool-execution-boundary-returns-explicit-error-result
         except Exception as e:
             latency_ms = int((time.monotonic() - start_time) * 1000)
             if self.audit:
@@ -252,6 +253,7 @@ class ToolGateway:
                         config = {**(cc.config or {}), **(creds or {})}
                     # No fallback to plaintext Connector.auth_config — all
                     # secrets must be in encrypted ConnectorConfig after backfill.
+            # enterprise-gate: broad-except-ok reason=connector-config-load-failure-returns-unavailable
             except Exception as e:
                 logger.warning("connector_config_load_failed", connector=connector_name, error=str(e))
 
@@ -261,6 +263,7 @@ class ToolGateway:
                 # P1.3: Only cache on successful connect — prevent caching broken connectors
                 self._connectors[cache_key] = connector
                 return connector
+            # enterprise-gate: broad-except-ok reason=connector-connect-failure-returns-unavailable-not-broken-connector
             except Exception as e:
                 # Critical Analysis #6: Do NOT return a broken connector.
                 # Returning it would cause silent downstream failures.

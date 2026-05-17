@@ -287,6 +287,7 @@ class _RedisFeedSubscription:
                 await self._handler(payload)
         except asyncio.CancelledError:
             raise
+        # enterprise-gate: broad-except-ok reason=live-feed-broker-subscription-failure-is-current-subscriber-only
         except Exception as exc:  # noqa: BLE001 - subscription failure should not crash the app.
             logger.warning(
                 "live_feed_broker_subscription_failed",

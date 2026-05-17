@@ -106,6 +106,7 @@ async def _claims_from_grantex_token(token: str) -> dict[str, Any]:
             token,
             VerifyGrantTokenOptions(jwks_uri=f"{grantex_url}/.well-known/jwks.json"),
         )
+    # enterprise-gate: broad-except-ok reason=websocket-grantex-auth-failure-fails-closed-policy-violation
     except Exception as exc:  # noqa: BLE001 - auth failure maps to policy violation.
         raise WebSocketAuthError("invalid_grant_token", "Invalid or expired grant token") from exc
 
@@ -158,6 +159,7 @@ async def _fanout_local(message: dict[str, Any]) -> int:
         try:
             await socket.send_json(message)
             sent += 1
+        # enterprise-gate: broad-except-ok reason=live-feed-stale-socket-send-failure-removes-local-socket
         except Exception as exc:  # noqa: BLE001 - stale sockets are removed below.
             logger.debug("live_feed_socket_send_failed", tenant_id=tenant_id, error=str(exc))
             failed.append(socket)
@@ -216,6 +218,7 @@ async def broadcast_to_tenant(tenant_id: str, data: dict) -> int:
     message = event.to_message()
     try:
         await get_feed_event_broker().publish(event)
+    # enterprise-gate: broad-except-ok reason=feed-event-persisted-before-broker-failure-remains-replayable
     except Exception as exc:  # noqa: BLE001 - persisted feed event remains replayable.
         logger.warning("live_feed_broker_publish_failed", tenant_id=tenant_id, error=str(exc))
         await _fanout_local(message)
@@ -298,6 +301,7 @@ async def live_feed(websocket: WebSocket, tenant_id: str) -> None:
                 await websocket.send_json({"type": "pong", "tenant_id": tenant_id, "sequence": None})
     except WebSocketDisconnect:
         pass
+    # enterprise-gate: broad-except-ok reason=websocket-connection-failure-closes-current-socket-only
     except Exception as exc:  # noqa: BLE001 - connection-level failure should not crash the app.
         logger.warning("live_feed_connection_failed", tenant_id=tenant_id, error=str(exc))
         with suppress(RuntimeError):

@@ -41,6 +41,7 @@ async def _get_redis():
         client = from_url(settings.redis_url, decode_responses=True)
         await client.ping()
         return client
+    # enterprise-gate: broad-except-ok reason=kpi-redis-unavailable-degrades-to-postgres-cache
     except Exception:
         logger.debug("Redis unavailable, falling back to PostgreSQL")
         return None
@@ -62,6 +63,7 @@ class KPICache:
                 raw = await redis.get(_redis_key(tenant_id, role, metric_name))
                 if raw:
                     return json.loads(raw)
+            # enterprise-gate: broad-except-ok reason=kpi-redis-get-failure-degrades-to-postgres-cache
             except Exception:
                 logger.debug("Redis GET failed, falling back to PG")
             finally:
@@ -107,6 +109,7 @@ class KPICache:
                     json.dumps(envelope),
                     ex=ttl,
                 )
+            # enterprise-gate: broad-except-ok reason=kpi-redis-set-failure-keeps-postgres-write-authoritative
             except Exception:
                 logger.debug("Redis SET failed")
             finally:
@@ -141,6 +144,7 @@ class KPICache:
                             result[metric_name] = json.loads(raw)
                     if result:
                         return result
+            # enterprise-gate: broad-except-ok reason=kpi-redis-scan-failure-degrades-to-postgres-cache
             except Exception:
                 logger.debug("Redis SCAN failed, falling back to PG")
             finally:
@@ -171,6 +175,7 @@ class KPICache:
                         keys.append(key)
                     if keys:
                         await redis.delete(*keys)
+            # enterprise-gate: broad-except-ok reason=kpi-redis-invalidate-failure-still-marks-postgres-stale
             except Exception:
                 logger.debug("Redis invalidate failed")
             finally:
@@ -194,6 +199,7 @@ class KPICache:
                 if ttl_remaining == -2:
                     # Key does not exist
                     return True
+            # enterprise-gate: broad-except-ok reason=kpi-redis-ttl-failure-degrades-to-postgres-staleness-check
             except Exception:
                 logger.debug("Redis TTL check failed")
             finally:

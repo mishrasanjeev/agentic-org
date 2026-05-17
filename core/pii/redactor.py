@@ -16,6 +16,7 @@ Configuration via ``AGENTICORG_PII_REDACTION_MODE`` env var:
 from __future__ import annotations
 
 import os
+import re
 import threading
 from typing import Any
 
@@ -49,6 +50,15 @@ PII_MODE_DISABLED = "disabled"
 
 _VALID_MODES = {PII_MODE_BEFORE_LLM, PII_MODE_LOGS_ONLY, PII_MODE_DISABLED}
 
+_REGEX_FALLBACK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("AADHAAR", re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b")),
+    ("GSTIN", re.compile(r"\b\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b")),
+    ("PAN", re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b")),
+    ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
+    ("UPI", re.compile(r"\b[A-Za-z0-9._-]{2,}@[A-Za-z][A-Za-z0-9._-]{2,}\b")),
+    ("PHONE", re.compile(r"(?:\+91[\s-]?)?[6-9]\d{9}\b")),
+)
+
 
 def _get_pii_mode() -> str:
     mode = os.environ.get("AGENTICORG_PII_REDACTION_MODE", PII_MODE_BEFORE_LLM).lower().strip()
@@ -56,6 +66,37 @@ def _get_pii_mode() -> str:
         logger.warning("pii_invalid_mode", mode=mode, fallback=PII_MODE_BEFORE_LLM)
         return PII_MODE_BEFORE_LLM
     return mode
+
+
+def _regex_fallback_redact(text: str) -> tuple[str, dict[str, str]]:
+    """Redact common PII patterns when Presidio is unavailable."""
+    matches: list[tuple[int, int, str]] = []
+    for entity_type, pattern in _REGEX_FALLBACK_PATTERNS:
+        for match in pattern.finditer(text):
+            matches.append((match.start(), match.end(), entity_type))
+
+    matches.sort(key=lambda item: (item[0], -(item[1] - item[0])))
+    kept: list[tuple[int, int, str]] = []
+    for start, end, entity_type in matches:
+        if any(start < kept_end and end > kept_start for kept_start, kept_end, _ in kept):
+            continue
+        kept.append((start, end, entity_type))
+
+    if not kept:
+        return text, {}
+
+    counters: dict[str, int] = {}
+    assignments: list[tuple[int, int, str, str]] = []
+    for start, end, entity_type in kept:
+        counters[entity_type] = counters.get(entity_type, 0) + 1
+        token = f"<{entity_type}_{counters[entity_type]}>"
+        assignments.append((start, end, entity_type, token))
+
+    token_map: dict[str, str] = {}
+    for start, end, _entity_type, token in sorted(assignments, reverse=True):
+        token_map[token] = text[start:end]
+        text = text[:start] + token + text[end:]
+    return text, token_map
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +224,7 @@ class PIIRedactor:
             return text, {}
 
         if self._analyzer is None:
-            return text, {}
+            return _regex_fallback_redact(text)
 
         # Analyze
         results = self._analyzer.analyze(text=text, language="en")

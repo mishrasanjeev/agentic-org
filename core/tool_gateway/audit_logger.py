@@ -93,5 +93,6 @@ class AuditLogger:
                     )
                     session.add(log_entry)
                     await session.commit()
+            # enterprise-gate: broad-except-ok reason=audit-db-sidecar-failure-does-not-hide-structured-log
             except Exception as e:
                 logger.error("audit_log_db_error", error=str(e))

@@ -20,6 +20,7 @@ def _has_mx_record(domain: str) -> bool:
     try:
         answers = dns.resolver.resolve(domain, "MX")
         return len(answers) > 0
+    # enterprise-gate: broad-except-ok reason=mx-lookup-failure-fails-closed-domain-invalid
     except Exception:
         return False
 
@@ -90,6 +91,7 @@ def send_email(to: str, subject: str, html: str) -> bool:
             smtp.send_message(msg)
         logger.info("Email sent to %s from %s (via %s)", to, display_sender, smtp_login)
         return True
+    # enterprise-gate: broad-except-ok reason=smtp-send-failure-returns-false-no-delivery-success
     except Exception:
         logger.exception("Failed to send email")
         return False

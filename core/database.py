@@ -83,6 +83,7 @@ async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, No
         try:
             yield session
             await session.commit()
+        # enterprise-gate: broad-except-ok reason=tenant-session-failure-rolls-back-and-reraises
         except Exception:
             await session.rollback()
             raise
@@ -94,6 +95,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
+        # enterprise-gate: broad-except-ok reason=raw-session-failure-rolls-back-and-reraises
         except Exception:
             await session.rollback()
             raise
@@ -979,6 +981,7 @@ async def _seed_demo_ca_companies_if_enabled() -> None:
         async with async_session_factory() as session:
             await seed_ca_demo(session)
             await session.commit()
+    # enterprise-gate: broad-except-ok reason=demo-seed-failure-is-relaxed-env-sidecar-only
     except Exception as exc:
         logger.debug("CA demo seed skipped: %s", exc)
 
