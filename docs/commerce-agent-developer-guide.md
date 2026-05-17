@@ -120,6 +120,21 @@ and it does not approve production discovery or live payments.
 See `docs/commerce-agent-c3-hosted-smoke-runbook.md` and
 `docs/reports/commerce-agent-hosted-smoke-evidence.md`.
 
+## Public Discovery Gate
+
+Public MCP/A2A commerce discovery is fail-closed behind the non-secret setting
+`AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`.
+
+| Value | Result |
+| --- | --- |
+| absent, empty, invalid, or any non-true value | `/api/v1/mcp/tools`, `/api/v1/a2a/.well-known/agent.json`, and `/api/v1/a2a/agents` hide `commerce_sales_agent` and `grantex_commerce:*` metadata. |
+| `true`, `1`, `yes`, `on`, or `enabled` | Local/test or explicitly approved environments may expose existing Grantex-only commerce metadata. |
+
+This gate does not remove Commerce Sales Agent code, demos, evals, or Grantex
+connector behavior. It only prevents public discovery from implying production
+commerce readiness before Grantex read-only production Commerce V1 discovery is
+approved.
+
 ## Extending The Agent
 
 When adding commerce behavior:

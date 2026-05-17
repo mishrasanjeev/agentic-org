@@ -43,6 +43,7 @@ AGENTICORG_CORS_ALLOWED_ORIGINS=<agenticorg-smoke-cloud-run-origin>
 AGENTICORG_GIT_SHA=<agenticorg-main-sha>
 AGENTICORG_ENABLE_LEGACY_STARTUP_DDL=0
 AGENTICORG_COMMERCE_REAL_STAGING=1
+AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true
 GRANTEX_COMMERCE_BASE_URL=<grantex-smoke-cloud-run-origin>
 GRANTEX_BASE_URL=<grantex-smoke-cloud-run-origin>
 AGENTICORG_COMMERCE_ALLOWED_SMOKE_URL=<grantex-smoke-cloud-run-origin>
@@ -50,6 +51,11 @@ COMMERCE_LIVE_MODE_ENABLED=0
 PLURAL_LIVE_ENABLED=0
 PLURAL_ENV=sandbox
 ```
+
+`AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true` is for the explicitly
+approved temporary C3 smoke service only. Production remains fail-closed unless
+Grantex read-only production Commerce V1 discovery is approved and a separate
+production change is reviewed.
 
 ## Required Secrets By Name Only
 
@@ -148,6 +154,11 @@ The runner checks:
 - `GET /api/v1/mcp/tools` includes `agenticorg_commerce_sales_agent`
 - `GET /api/v1/a2a/.well-known/agent.json` uses the AgenticOrg smoke origin and Grantex smoke issuer/JWKS
 - `GET /api/v1/a2a/agents` includes `commerce_sales_agent` with `grantex_commerce:*` tools
+
+These commerce discovery checks require the temporary smoke service to set
+`AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true`. Without that explicit
+smoke-only setting, C5A hides commerce metadata from public MCP/A2A discovery by
+default.
 
 If a real-staging evidence report is supplied, `consent_exchange` is expected only when it is skipped with this exact blocker code:
 

@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 COMMERCE_CODE = [
     ROOT / "connectors" / "commerce" / "grantex_commerce.py",
+    ROOT / "core" / "commerce" / "discovery_gate.py",
     ROOT / "core" / "commerce" / "sales_guardrails.py",
     ROOT / "core" / "commerce" / "staging_evidence.py",
     ROOT / "core" / "commerce" / "staging_runtime.py",

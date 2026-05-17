@@ -2,26 +2,42 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi import HTTPException
+
+from core.commerce.discovery_gate import COMMERCE_PUBLIC_DISCOVERY_ENV
+
+
+def _payload_contains(value: Any, needle: str) -> bool:
+    if isinstance(value, dict):
+        return any(_payload_contains(item, needle) for item in value.values())
+    if isinstance(value, list | tuple | set):
+        return any(_payload_contains(item, needle) for item in value)
+    return isinstance(value, str) and needle in value
 
 
 class TestA2AAgentCard:
     @pytest.mark.asyncio
-    async def test_agent_card_returns_skills(self):
+    async def test_agent_card_returns_skills(self, monkeypatch):
         from api.v1.a2a import agent_card
 
+        monkeypatch.delenv(COMMERCE_PUBLIC_DISCOVERY_ENV, raising=False)
         card = await agent_card()
         assert card["name"] == "AgenticOrg Agent Platform"
         assert card["protocol"] == "a2a/1.0"
         assert card["capabilities"]["tasks"] is True
         assert card["authentication"]["scheme"] == "grantex"
-        assert len(card["skills"]) == 37  # 28 original + 8 new + commerce = 37
+        assert len(card["skills"]) == 36  # Commerce discovery is disabled by default.
+        assert "commerce_sales_agent" not in {skill["id"] for skill in card["skills"]}
+        assert not _payload_contains(card["skills"], "grantex_commerce:")
 
     @pytest.mark.asyncio
-    async def test_agent_card_skills_have_required_fields(self):
+    async def test_agent_card_skills_have_required_fields(self, monkeypatch):
         from api.v1.a2a import agent_card
 
+        monkeypatch.delenv(COMMERCE_PUBLIC_DISCOVERY_ENV, raising=False)
         card = await agent_card()
         for skill in card["skills"]:
             assert "id" in skill
@@ -31,11 +47,36 @@ class TestA2AAgentCard:
             assert "inputSchema" in skill
 
     @pytest.mark.asyncio
-    async def test_list_available_agents(self):
+    async def test_list_available_agents(self, monkeypatch):
         from api.v1.a2a import list_available_agents
 
+        monkeypatch.delenv(COMMERCE_PUBLIC_DISCOVERY_ENV, raising=False)
         result = await list_available_agents()
-        assert len(result["agents"]) == 37
+        assert len(result["agents"]) == 36
+        assert "commerce_sales_agent" not in {agent["id"] for agent in result["agents"]}
+        assert not _payload_contains(result["agents"], "grantex_commerce:")
+
+    @pytest.mark.asyncio
+    async def test_agent_card_exposes_commerce_when_public_discovery_enabled(self, monkeypatch):
+        from api.v1.a2a import agent_card, list_available_agents
+
+        monkeypatch.setenv(COMMERCE_PUBLIC_DISCOVERY_ENV, "true")
+        card = await agent_card()
+        agents = await list_available_agents()
+
+        assert "commerce_sales_agent" in {skill["id"] for skill in card["skills"]}
+        assert "commerce_sales_agent" in {agent["id"] for agent in agents["agents"]}
+        assert _payload_contains(card["skills"], "grantex_commerce:")
+        assert _payload_contains(agents["agents"], "grantex_commerce:")
+
+    @pytest.mark.asyncio
+    async def test_invalid_public_discovery_value_hides_commerce(self, monkeypatch):
+        from api.v1.a2a import list_available_agents
+
+        monkeypatch.setenv(COMMERCE_PUBLIC_DISCOVERY_ENV, "maybe")
+        result = await list_available_agents()
+        assert "commerce_sales_agent" not in {agent["id"] for agent in result["agents"]}
+        assert not _payload_contains(result["agents"], "grantex_commerce:")
 
 
 class TestA2ATask:
@@ -59,21 +100,34 @@ class TestA2ATask:
 
 class TestMCPTools:
     @pytest.mark.asyncio
-    async def test_list_tools_returns_registered_agents(self):
+    async def test_list_tools_returns_registered_agents(self, monkeypatch):
         from api.v1.mcp import list_tools
 
+        monkeypatch.delenv(COMMERCE_PUBLIC_DISCOVERY_ENV, raising=False)
         result = await list_tools()
-        assert len(result["tools"]) == 37  # 28 original + 8 new + commerce
+        assert len(result["tools"]) == 36  # Commerce discovery is disabled by default.
+        assert "agenticorg_commerce_sales_agent" not in {tool["name"] for tool in result["tools"]}
+        assert not _payload_contains(result["tools"], "grantex_commerce:")
 
     @pytest.mark.asyncio
-    async def test_tool_names_prefixed(self):
+    async def test_tool_names_prefixed(self, monkeypatch):
         from api.v1.mcp import list_tools
 
+        monkeypatch.delenv(COMMERCE_PUBLIC_DISCOVERY_ENV, raising=False)
         result = await list_tools()
         for tool in result["tools"]:
             assert tool["name"].startswith("agenticorg_")
             assert "inputSchema" in tool
             assert "description" in tool
+
+    @pytest.mark.asyncio
+    async def test_list_tools_exposes_commerce_when_public_discovery_enabled(self, monkeypatch):
+        from api.v1.mcp import list_tools
+
+        monkeypatch.setenv(COMMERCE_PUBLIC_DISCOVERY_ENV, "enabled")
+        result = await list_tools()
+        names = {tool["name"] for tool in result["tools"]}
+        assert "agenticorg_commerce_sales_agent" in names
 
     @pytest.mark.asyncio
     async def test_call_unknown_tool_returns_404(self):
