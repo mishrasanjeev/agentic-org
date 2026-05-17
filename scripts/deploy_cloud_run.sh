@@ -22,7 +22,8 @@
 #      deployed commit (Codex 2026-04-24 enterprise sign-off
 #      blocker, originally fixed for the GKE path).
 #   5. `gcloud run services update agenticorg-ui` with the UI
-#      image.
+#      image + GIT_SHA env var so Cloud Run metadata matches the
+#      deployed UI image tag/digest.
 #   6. Poll https://app.agenticorg.ai/api/v1/health until it
 #      reports the new commit. Fails loudly if the deploy didn't
 #      take.
@@ -216,7 +217,8 @@ run gcloud run services update "$API_SERVICE" \
 run gcloud run services update "$UI_SERVICE" \
   --project="$GCP_PROJECT_ID" \
   --region="$GCP_REGION" \
-  --image="$UI_IMAGE"
+  --image="$UI_IMAGE" \
+  --update-env-vars="GIT_SHA=${DEPLOY_SHA}"
 
 # ── 7. Health check — confirm the new commit is live ────────────────
 if [[ $DRY_RUN -eq 1 ]]; then
