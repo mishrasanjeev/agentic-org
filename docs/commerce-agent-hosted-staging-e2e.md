@@ -6,6 +6,9 @@ This guide defines the M11 hosted staging E2E plan for the AgenticOrg Commerce S
 
 AgenticOrg consumes Grantex staging data only. Commerce execution must stay on the Grantex Commerce API and `grantex_commerce:*` tool path.
 
+For the D1 developer-facing overview and safe local run instructions, start with
+`docs/commerce-agent-overview.md` and `docs/commerce-agent-developer-guide.md`.
+
 ## Required Staging Targets
 
 - AgenticOrg base: `https://staging.agenticorg.ai`
