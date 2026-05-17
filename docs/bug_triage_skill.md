@@ -154,6 +154,10 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 - [ ] Summary xlsx uses honest verdicts with explicit residuals.
 - [ ] Migrations (if any) guard existence and are idempotent.
 - [ ] Reopens are verified against the production URL — not "reads correctly in main".
+- [ ] Derived contracts fixed at the producer, not patched at the consumer (Rule 12).
+- [ ] Any list fed to a fail-closed gate has an explicit required/optional split defaulting to all-required; narrowing a gate names the second control that still enforces what was removed (Rule 12).
+- [ ] Coupled client error-path swept — a structured error body does not crash the UI (Rule 12).
+- [ ] Baseline / route-inventory re-keys proven debt-neutral (counts unchanged, only line churn); new broad excepts annotated, not rebaselined (Rule 12).
 
 ---
 
@@ -228,6 +232,75 @@ store, connector health checks, and agent activation.
 Reference: `tests/regression/test_uday_15may_connector_registration.py`,
 `ui/e2e/qa-uday-15may2026.spec.ts`, `api/v1/connectors.py`,
 `api/v1/agents.py`, `core/tasks/token_refresh.py`.
+
+---
+
+## Rule 12 — Derived requirements must separate "required" from "optional", and a fail-closed gate is only as correct as the set it is fed
+
+Added 2026-05-17 after the CA-Firms promotion reopen on Uday's sweep
+(bug 1). A CA pack agent could never be promoted on a Zoho-Books-only
+tenant — the exact configuration the pack's own module header documents
+as supported — because activation reported `income_tax_india` and
+`tally` as `missing_connector_config`.
+
+This was **not** a fail-closed gate misbehaving. The gate
+(`_assert_connectors_ready_for_activation`) was correct; it was **fed an
+over-broad input**. `installer._connector_ids_for_tools` derived
+`agent.connector_ids` from *every* connector prefix in the tool manifest
+and the activation path treated all of them as hard requirements. There
+was no "required vs optional" distinction even though the pack
+explicitly declared optional connectors in prose.
+
+The shallow fixes that would have reopened a fifth time:
+
+- Hardcode-skip `income_tax_india` / `tally` in the gate (breaks tenants
+  that *do* configure them and want fail-closed).
+- Downgrade `missing_connector_config` to a warning (re-opens the
+  Rule 11.3 fail-closed hole wholesale).
+- "Only check the first connector" (arbitrary, silent).
+
+The discipline this rule codifies:
+
+1. **When a contract is *derived* (connector_ids from tools, scopes from
+   tools, perms from roles), trace it to the producer and fix it there.**
+   The bug is in the derivation, not the consumer that trips over it.
+2. **Any list fed to a fail-closed gate needs an explicit
+   required-vs-optional split.** Default the split to *all-required*
+   (fail closed) so every undeclared/hand-built case keeps the strict
+   behaviour; narrow only where the product owner explicitly declares
+   optionality (here: `required_connectors` in the pack agent spec).
+3. **Before narrowing an activation/authorization gate, prove the
+   capability you removed from it is still enforced somewhere else.**
+   Here: runtime tool dispatch already fails closed on unconfigured
+   connectors (Rule "BUG-08", `tests/regression/test_bug_08_tool_gateway_
+   fail_closed.py`), so narrowing *activation* did not widen the runtime
+   trust boundary. If you cannot point to that second enforcement, you
+   are not narrowing — you are removing a control.
+4. **Self-heal already-provisioned rows at read time, not via a one-off
+   backfill.** The tester's agents already existed with the bad derived
+   value; the gate re-derives the correct subset live from the static
+   pack so no migration/backfill is needed and no row is left stale.
+5. **A structured error body is a UI contract.** The same flow returned
+   `detail` as an object `{error,message,connectors:[...]}`; the UI
+   stored it into string state and rendered an object as a React child,
+   blanking the page so the tester saw *no* recoverable message. A
+   backend bug fix is incomplete if the coupled client crashes on the
+   error path. Sweep every sink that consumes that body (Rule 3).
+6. **Editing a file with line-keyed baselines (enterprise stability
+   baseline, route inventory) forces a mechanical re-key. Prove it is
+   debt-neutral — never blind-accept `--update-baseline`.** Required
+   proof: identical category counts before/after, per-file counts
+   unchanged, and the diff is only line/digest churn for the file you
+   edited (no route added/removed, no new unannotated handler). A new
+   broad `except` must carry `# enterprise-gate: broad-except-ok
+   reason=<why fail-closed-on-any-error is correct here>`, not ride in
+   on a rebaseline.
+
+Reference: `tests/regression/test_uday_17may_promotion_connector_gate.py`,
+`ui/src/__tests__/AgentDetail.errorDetail.uday17may.test.ts`,
+`ui/e2e/qa-uday-17may2026.spec.ts`, `core/agents/packs/ca/__init__.py`,
+`core/agents/packs/installer.py`, `api/v1/agents.py`,
+`ui/src/pages/AgentDetail.tsx`.
 
 ---
 

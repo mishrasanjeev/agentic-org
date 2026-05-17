@@ -106,6 +106,76 @@ def _connector_ids_for_tools(tools: list[str]) -> list[str]:
     return [f"registry-{connector}" for connector in connectors]
 
 
+def _declared_required_connector_ids(
+    agent_cfg: dict[str, Any],
+    raw_tools: list[str],
+) -> list[str]:
+    """Resolve which linked connectors actually gate activation.
+
+    Uday CA-Firms 17-May reopen: ``_connector_ids_for_tools`` returns
+    *every* connector referenced anywhere in the tool manifest, and the
+    activation gate treated all of them as hard requirements. A CA pack
+    agent references zoho_books + income_tax_india + tally + gstn +
+    sendgrid, but the pack is explicitly designed to run on a
+    Zoho-Books-only tenant (see ``core/agents/packs/ca/__init__.py``
+    module header). The agent could never be promoted in the very
+    configuration it was built for.
+
+    When the pack agent declares ``required_connectors`` we gate only on
+    that subset (scoped to connectors the agent actually links, so a typo
+    can never *remove* a real requirement). When it declares nothing we
+    fall back to the full linked set — every non-CA pack and every
+    hand-built agent keeps the original fail-closed behaviour. Runtime
+    calls to unconfigured connectors remain fail-closed at tool-dispatch
+    time (BUG-08), so narrowing the *activation* gate does not widen the
+    runtime trust boundary.
+    """
+    linked = _connector_ids_for_tools(raw_tools)
+    declared = agent_cfg.get("required_connectors")
+    if not isinstance(declared, list) or not declared:
+        return list(linked)
+    linked_set = set(linked)
+    required = [
+        f"registry-{_canonical_connector_name(str(name))}"
+        for name in declared
+        if str(name).strip()
+    ]
+    scoped = [cid for cid in dict.fromkeys(required) if cid in linked_set]
+    # A declaration that resolves to nothing real is treated as
+    # "undeclared" → fail closed on the full linked set rather than
+    # accidentally promoting an agent with zero connector gating.
+    return scoped or list(linked)
+
+
+def required_connectors_for_pack_agent(
+    pack_name: str | None,
+    agent_type: str | None,
+) -> list[str] | None:
+    """Authoritative activation-required connector ids for a pack agent.
+
+    Returns ``None`` when the agent is not a recognised pack agent or the
+    pack declares no explicit ``required_connectors`` — callers must then
+    fail closed on the agent's full ``connector_ids``. Computed live from
+    the static pack definition so already-provisioned agents are healed
+    at gate time without a data backfill.
+    """
+    if not pack_name or not agent_type:
+        return None
+    detail = get_pack_detail(pack_name)
+    if not detail:
+        return None
+    for index, raw_cfg in enumerate(detail.get("agents", [])):
+        cfg = raw_cfg if isinstance(raw_cfg, dict) else {"type": str(raw_cfg)}
+        if _agent_type(cfg, index) != agent_type:
+            continue
+        declared = cfg.get("required_connectors")
+        if not isinstance(declared, list) or not declared:
+            return None
+        raw_tools = [str(tool) for tool in cfg.get("tools", []) if tool]
+        return _declared_required_connector_ids(cfg, raw_tools)
+    return None
+
+
 def _pack_agent_sort_key(agent: Agent) -> tuple[int, int, datetime]:
     status_rank = 0 if agent.status == "active" else 1
     sample_rank = -(agent.shadow_sample_count or 0)
@@ -521,6 +591,7 @@ async def _get_or_create_pack_agents(
         normalized_tools = _normalize_tool_names(raw_tools)
         tool_connectors = _tool_connector_map(raw_tools)
         connector_ids = _connector_ids_for_tools(raw_tools)
+        required_connector_ids = _declared_required_connector_ids(agent_cfg, raw_tools)
         llm_model = str(agent_cfg.get("llm_model") or _DEFAULT_LLM_MODEL)
         llm_config = {
             "model": llm_model,
@@ -581,7 +652,7 @@ async def _get_or_create_pack_agents(
                         **({"company_name": company_name} if company_name else {}),
                     },
                     "tool_connectors": tool_connectors,
-                    "required_connector_ids": connector_ids,
+                    "required_connector_ids": required_connector_ids,
                     # Issue #447: persist the per-agent shadow_fixture
                     # so api/v1/agents.py:run_agent can substitute a
                     # structured task on shadow_sample dispatches
@@ -648,7 +719,7 @@ async def _get_or_create_pack_agents(
             )
             cfg["pack_install"] = pack_cfg
             cfg["tool_connectors"] = tool_connectors
-            cfg["required_connector_ids"] = connector_ids
+            cfg["required_connector_ids"] = required_connector_ids
             # Issue #447 repair branch: refresh the persisted
             # shadow_fixture so existing agents on tenants that
             # backfilled before #447 pick up the new behavior on

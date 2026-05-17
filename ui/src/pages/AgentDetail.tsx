@@ -13,6 +13,59 @@ import {
 
 const ChatPanel = lazy(() => import("@/components/ChatPanel"));
 
+/**
+ * Normalise an Axios error's `detail` payload into a human-readable string.
+ *
+ * Uday CA-Firms 17-May (bug 1): the agent activation gate returns a
+ * *structured* 409 — `detail` is an object
+ * `{ error, message, connectors: [{ connector, reason }] }`. The lifecycle
+ * handlers stored that object straight into the `actionError` string state,
+ * and `{actionError}` then rendered an object as a React child, which throws
+ * "Objects are not valid as a React child" and blanks the whole agent page.
+ * The tester saw no recoverable message at all. This collapses every shape
+ * (string, FastAPI validation array, structured connector error) into one
+ * readable sentence so the UI always shows a user-friendly message.
+ */
+export function errorDetailToMessage(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })
+    ?.response?.data?.detail;
+  if (detail == null) return fallback;
+  if (typeof detail === "string") return detail.trim() || fallback;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((d) =>
+        typeof d === "string"
+          ? d
+          : (d as { msg?: string; message?: string })?.msg ||
+            (d as { message?: string })?.message,
+      )
+      .filter(Boolean);
+    return parts.length ? parts.join("; ") : fallback;
+  }
+  if (typeof detail === "object") {
+    const d = detail as {
+      error?: string;
+      message?: string;
+      connectors?: Array<{ connector?: string; reason?: string }>;
+    };
+    if (Array.isArray(d.connectors) && d.connectors.length > 0) {
+      const list = d.connectors
+        .map(
+          (c) =>
+            `${c.connector ?? "connector"} (${(c.reason ?? "not ready").replace(
+              /_/g,
+              " ",
+            )})`,
+        )
+        .join(", ");
+      const base = d.message || "Some linked connectors are not ready.";
+      return `${base} Affected: ${list}.`;
+    }
+    return d.message || d.error || fallback;
+  }
+  return fallback;
+}
+
 function isMeaningfulRunTask(value: string): boolean {
   const task = value.trim();
   return task.length >= 3 && /\p{L}/u.test(task);
@@ -75,7 +128,7 @@ export default function AgentDetail() {
       await api.post(`/agents/${id}/promote`);
       void fetchAgent(true);
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || "Promote failed");
+      setActionError(errorDetailToMessage(err, "Promote failed"));
     } finally {
       setActionLoading(null);
     }
@@ -88,8 +141,9 @@ export default function AgentDetail() {
       await api.post(`/agents/${id}/rollback`);
       void fetchAgent(true);
     } catch (err: any) {
-      const detail = err.response?.data?.detail || "Rollback failed";
-      if (detail.toLowerCase().includes("no previous") || detail.toLowerCase().includes("version")) {
+      const detail = errorDetailToMessage(err, "Rollback failed");
+      const lower = detail.toLowerCase();
+      if (lower.includes("no previous") || lower.includes("version")) {
         setActionError("No previous version checkpoint is available for this agent.");
       } else {
         setActionError(detail);
@@ -106,7 +160,7 @@ export default function AgentDetail() {
       await agentsApi.resume(id || "");
       void fetchAgent(true);
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || "Resume failed");
+      setActionError(errorDetailToMessage(err, "Resume failed"));
     } finally {
       setActionLoading(null);
     }
@@ -120,7 +174,7 @@ export default function AgentDetail() {
       await api.delete(`/agents/${id}`);
       navigate("/dashboard/agents");
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || "Delete failed");
+      setActionError(errorDetailToMessage(err, "Delete failed"));
       setActionLoading(null);
     }
   }
@@ -154,7 +208,7 @@ export default function AgentDetail() {
       setActionNotice(`Agent run ${data?.status || "completed"}.`);
       void fetchAgent(true);
     } catch (err: any) {
-      setActionError(err.response?.data?.detail || "Run failed");
+      setActionError(errorDetailToMessage(err, "Run failed"));
     } finally {
       setActionLoading(null);
     }
@@ -1068,7 +1122,7 @@ function PromptTab({ agent }: { agent: Agent }) {
       // Refresh history
       agentsApi.promptHistory(agent.id).then(({ data }) => setHistory(data || [])).catch(() => {});
     } catch (err: any) {
-      setSaveError(err.response?.data?.detail || "Failed to save prompt");
+      setSaveError(errorDetailToMessage(err, "Failed to save prompt"));
     } finally {
       setSaving(false);
     }
@@ -1288,7 +1342,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
           "Updated count and accuracy.",
       });
     } catch (err: any) {
-      setGenResult({ type: "error", msg: err.response?.data?.detail || "Failed to generate sample. The agent may need to be configured first." });
+      setGenResult({ type: "error", msg: errorDetailToMessage(err, "Failed to generate sample. The agent may need to be configured first.") });
     } finally {
       setGenerating(false);
       stopRequestedRef.current = false;
