@@ -52,6 +52,8 @@ from typing import Final, Literal
 
 import structlog
 
+from core.config import is_strict_runtime_env, settings
+
 logger = structlog.get_logger()
 
 TIMESTAMP_HEADER: Final[str] = "X-AA-Timestamp"
@@ -131,8 +133,15 @@ VerifyResult = Literal[
     "bad_signature",
     "stale_timestamp",
     "replay",
+    "replay_store_unavailable",
     "bad_nonce",
 ]
+
+
+def _strict_replay_store_required() -> bool:
+    env = getattr(settings, "env", "development")
+    runtime_env = env if isinstance(env, str) else "development"
+    return is_strict_runtime_env(runtime_env)
 
 
 async def verify_aa_callback(
@@ -153,14 +162,13 @@ async def verify_aa_callback(
     - ``"bad_signature"``: HMAC mismatch → 403.
     - ``"stale_timestamp"``: outside the freshness window → 403.
     - ``"replay"``: nonce already in Redis → 409.
+    - ``"replay_store_unavailable"``: strict runtime cannot persist nonce → 403.
     - ``"bad_nonce"``: nonce shape invalid (empty, too long, not ASCII) → 403.
 
-    All paths are best-effort tolerant of Redis outages: if Redis is
-    unreachable, replay defense degrades to timestamp-freshness only
-    (the message must still be within the 5-minute window). This is
-    the right tradeoff — refusing all callbacks during a Redis blip
-    would lose live consent updates with no security benefit (a
-    replayer would still need a fresh timestamp + valid HMAC).
+    Strict runtimes fail closed if Redis is unreachable because accepting
+    callbacks without recording the nonce weakens replay protection.
+    Relaxed local/dev/test runtimes retain the timestamp-freshness fallback
+    so local callback testing is not blocked by missing Redis.
     """
     secret = _get_secret()
     if not secret:
@@ -209,11 +217,19 @@ async def verify_aa_callback(
         was_set = await redis_client.set(nonce_key, "1", nx=True, ex=NONCE_TTL_SECONDS)
         if was_set is None:
             return "replay"
-    except Exception as exc:  # noqa: BLE001 — Redis blip ≠ refuse all callbacks
+    # enterprise-gate: broad-except-ok reason=aa-callback-replay-store-fails-closed-in-strict-runtime
+    except Exception as exc:  # noqa: BLE001
+        if _strict_replay_store_required():
+            logger.error(
+                "aa_callback_replay_store_unavailable_strict",
+                error_type=type(exc).__name__,
+                note="Failing closed because nonce persistence is unavailable",
+            )
+            return "replay_store_unavailable"
         logger.warning(
             "aa_callback_replay_store_unavailable",
-            error=str(exc),
-            note="Falling through to timestamp-freshness-only defense",
+            error_type=type(exc).__name__,
+            note="Relaxed runtime falling through to timestamp-freshness-only defense",
         )
 
     return "ok"

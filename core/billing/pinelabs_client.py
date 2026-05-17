@@ -36,6 +36,10 @@ except ImportError:  # pragma: no cover
 
 logger = structlog.get_logger()
 
+
+class PluralWebhookProcessingError(RuntimeError):
+    """Raised when a verified Plural webhook cannot safely apply side effects."""
+
 # ── Configuration ───────────────────────────────────────────────────
 
 _CLIENT_ID = os.getenv("PLURAL_CLIENT_ID", "")
@@ -472,15 +476,31 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
 
     is_success = status in ("PROCESSED", "AUTHORIZED", "CAPTURED")
 
-    # Activate subscription on successful payment
-    if is_success and tenant_id and plan:
+    # Activate subscription on successful payment. A verified payment must
+    # not report processed unless the local side effect is also durable.
+    if is_success:
+        if not tenant_id or not plan:
+            logger.error(
+                "plural_success_webhook_missing_order_mapping",
+                order_id=order_id,
+                merchant_ref=merchant_ref,
+                webhook_id=webhook_id,
+                status=status,
+            )
+            raise PluralWebhookProcessingError(
+                "Plural order mapping missing for successful payment"
+            )
         try:
             _activate_subscription(tenant_id, plan, order_id)
-        except Exception:
+        # enterprise-gate: broad-except-ok reason=plural-webhook-side-effect-failure-raises-not-success
+        except Exception as exc:
             logger.exception(
                 "plural_subscription_activation_failed",
                 tenant_id=tenant_id, plan=plan, order_id=order_id,
             )
+            raise PluralWebhookProcessingError(
+                "Plural subscription activation failed"
+            ) from exc
 
     result = {
         "order_id": order_id,

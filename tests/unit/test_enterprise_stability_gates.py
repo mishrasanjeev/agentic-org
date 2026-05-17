@@ -380,6 +380,14 @@ def test_broad_exception_baseline_reduced_by_runtime_slice() -> None:
     assert len(broad_entries) <= 399
 
 
+def test_broad_exception_baseline_reduced_by_payment_callback_connector_slice() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    broad_entries = baseline.get("allowed_findings", {}).get("broad_exception", [])
+
+    assert len(broad_entries) < 387
+    assert len(broad_entries) <= 352
+
+
 def test_docs_tests_and_migrations_are_ignored(tmp_path: Path) -> None:
     paths = [
         _write(tmp_path, "tests/test_example.py", "try:\n    risky()\nexcept Exception:\n    pass\n"),

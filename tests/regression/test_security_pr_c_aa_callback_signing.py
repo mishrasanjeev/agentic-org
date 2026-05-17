@@ -317,12 +317,10 @@ async def test_replayed_nonce_returns_replay(redis_client: _FakeRedis) -> None:
 
 
 @pytest.mark.asyncio
-async def test_redis_outage_falls_back_to_timestamp_only(
+async def test_redis_outage_falls_back_to_timestamp_only_in_relaxed_runtime(
     redis_client: _FakeRedis,
 ) -> None:
-    """Redis unreachable → degrade to timestamp-freshness defense, do
-    NOT refuse all callbacks. Pins the explicit best-effort design
-    note in verify_aa_callback's docstring."""
+    """Relaxed runtime Redis outage degrades to timestamp-freshness defense."""
     redis_client.fail_next = True
     ts, nonce, sig, body = _signed_request()
     verdict = await verify_aa_callback(
@@ -335,6 +333,28 @@ async def test_redis_outage_falls_back_to_timestamp_only(
     # Replay defense degraded but the timestamp + signature checks
     # still passed — caller proceeds.
     assert verdict == "ok"
+
+
+@pytest.mark.asyncio
+async def test_redis_outage_fails_closed_in_strict_runtime(
+    redis_client: _FakeRedis,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production/staging must reject callbacks if replay persistence is unavailable."""
+    from auth import aa_callback_signing as signing
+
+    monkeypatch.setattr(signing.settings, "env", "production")
+    redis_client.fail_next = True
+    ts, nonce, sig, body = _signed_request()
+    verdict = await verify_aa_callback(
+        timestamp_header=ts,
+        nonce_header=nonce,
+        signature_header=sig,
+        body=body,
+        redis_client=redis_client,
+    )
+
+    assert verdict == "replay_store_unavailable"
 
 
 # ─────────────────────────────────────────────────────────────────

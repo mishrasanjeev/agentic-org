@@ -182,6 +182,7 @@ class ZohoBooksConnector(BaseConnector):
                 data = resp.json()
                 logger.info("zoho_books_token_refreshed", expires_in=data.get("expires_in"))
                 return data["access_token"]
+        # enterprise-gate: broad-except-ok reason=connector-oauth-refresh-falls-back-to-existing-token-or-fails-health
         except Exception as exc:
             logger.warning("zoho_books_token_refresh_failed", error_type=type(exc).__name__)
             return None
@@ -219,7 +220,8 @@ class ZohoBooksConnector(BaseConnector):
                     org_id=self._org_id,
                     org_name=orgs[0].get("name", ""),
                 )
-        except Exception as exc:  # noqa: BLE001 — best-effort fallback
+        # enterprise-gate: broad-except-ok reason=connector-org-discovery-fallback-requires-org-before-tool-success
+        except Exception as exc:  # noqa: BLE001
             logger.warning("zoho_books_org_id_auto_fetch_failed", error_type=type(exc).__name__)
 
     async def _ensure_org_id(self) -> None:
@@ -283,6 +285,7 @@ class ZohoBooksConnector(BaseConnector):
             data = await self._get("/organizations")
             orgs = data.get("organizations", [])
             return {"status": "healthy", "organizations": len(orgs)}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": type(e).__name__}
 

@@ -49,6 +49,7 @@ class JiraConnector(BaseConnector):
         try:
             data = await self._get("/rest/api/3/myself")
             return {"status": "healthy", "user": data.get("displayName")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

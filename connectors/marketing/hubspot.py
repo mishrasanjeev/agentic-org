@@ -81,6 +81,7 @@ class HubspotConnector(BaseConnector):
                 data = resp.json()
                 logger.info("hubspot_token_refreshed", expires_in=data.get("expires_in"))
                 return data["access_token"]
+        # enterprise-gate: broad-except-ok reason=connector-oauth-refresh-falls-back-to-existing-token-or-fails-health
         except Exception as exc:
             logger.warning("hubspot_token_refresh_failed", error=str(exc))
             return None
@@ -109,6 +110,7 @@ class HubspotConnector(BaseConnector):
         try:
             data = await self._get("/crm/v3/objects/contacts", params={"limit": 1})
             return {"status": "healthy", "total_contacts": data.get("total", 0)}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

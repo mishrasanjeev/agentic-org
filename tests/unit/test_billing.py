@@ -488,7 +488,9 @@ class TestPluralWebhookHandler:
             "webhook-signature": f"v1,{sig}",
         }
 
-        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret):
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate:
             result = handle_webhook(body, headers)
 
         assert result["order_id"] == "v1-order-42"
@@ -496,6 +498,73 @@ class TestPluralWebhookHandler:
         assert result["tenant_id"] == "tenant1"
         assert result["plan"] == "pro"
         assert result["processed"] is True
+        activate.assert_called_once_with("tenant1", "pro", "v1-order-42")
+
+    def test_handle_webhook_success_without_order_mapping_fails_closed(self):
+        from core.billing.pinelabs_client import (
+            PluralWebhookProcessingError,
+            handle_webhook,
+        )
+
+        secret = base64.b64encode(b"webhook_key_missing_map").decode()
+        webhook_id = "evt_missing_map"
+        webhook_ts = str(int(time.time()))
+        payload = {
+            "order_id": "v1-order-no-map",
+            "status": "PROCESSED",
+            "merchant_order_reference": "missing-map-ref",
+        }
+        body = json.dumps(payload).encode()
+
+        signed_content = f"{webhook_id}.{webhook_ts}.".encode() + body
+        sig = base64.b64encode(
+            hmac.new(base64.b64decode(secret), signed_content, hashlib.sha256).digest()
+        ).decode()
+        headers = {
+            "webhook-id": webhook_id,
+            "webhook-timestamp": webhook_ts,
+            "webhook-signature": f"v1,{sig}",
+        }
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret):
+            with pytest.raises(PluralWebhookProcessingError, match="order mapping"):
+                handle_webhook(body, headers)
+
+    def test_handle_webhook_activation_failure_fails_closed(self):
+        from core.billing.pinelabs_client import (
+            PluralWebhookProcessingError,
+            handle_webhook,
+            store_order_mapping,
+        )
+
+        store_order_mapping("activation-fails-ref", "v1-order-fail", "tenant-fail", "pro")
+
+        secret = base64.b64encode(b"webhook_key_activation_fail").decode()
+        webhook_id = "evt_activation_fail"
+        webhook_ts = str(int(time.time()))
+        payload = {
+            "order_id": "v1-order-fail",
+            "status": "PROCESSED",
+            "merchant_order_reference": "activation-fails-ref",
+        }
+        body = json.dumps(payload).encode()
+
+        signed_content = f"{webhook_id}.{webhook_ts}.".encode() + body
+        sig = base64.b64encode(
+            hmac.new(base64.b64decode(secret), signed_content, hashlib.sha256).digest()
+        ).decode()
+        headers = {
+            "webhook-id": webhook_id,
+            "webhook-timestamp": webhook_ts,
+            "webhook-signature": f"v1,{sig}",
+        }
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription",
+            side_effect=RuntimeError("redis unavailable"),
+        ):
+            with pytest.raises(PluralWebhookProcessingError, match="activation failed"):
+                handle_webhook(body, headers)
 
     def test_handle_webhook_rejects_old_timestamp(self):
         from core.billing.pinelabs_client import handle_webhook
@@ -605,7 +674,9 @@ class TestPluralE2ERedirectFlow:
             hmac.new(base64.b64decode(secret), signed, hashlib.sha256).digest()
         ).decode()
 
-        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret):
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate:
             webhook_result = handle_webhook(
                 webhook_body,
                 {
@@ -619,6 +690,7 @@ class TestPluralE2ERedirectFlow:
         assert webhook_result["tenant_id"] == "e2e"
         assert webhook_result["plan"] == "pro"
         assert webhook_result["order_id"] == "v1-e2e-order-001"
+        activate.assert_called_once_with("e2e", "pro", "v1-e2e-order-001")
 
 
 # ── Stripe SDK Tests ────────────────────────────────────────────────
