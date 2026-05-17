@@ -51,6 +51,7 @@ class GoogleCalendarConnector(BaseConnector):
         try:
             result = await self._get("/calendars/primary")
             return {"status": "healthy", "calendar": result.get("summary", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

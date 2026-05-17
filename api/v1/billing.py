@@ -386,6 +386,7 @@ async def subscribe_stripe(
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # enterprise-gate: broad-except-ok reason=stripe-provider-error-mapped-to-502-no-success
     except Exception as exc:
         logger.exception("stripe_checkout_error", tenant_id=tenant_id)
         raise HTTPException(status_code=502, detail="Payment gateway error") from exc
@@ -440,6 +441,7 @@ async def subscribe_india(
         return order
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # enterprise-gate: broad-except-ok reason=plural-provider-error-mapped-to-502-no-success
     except Exception as exc:
         logger.exception("plural_order_error", tenant_id=tenant_id)
         raise HTTPException(status_code=502, detail="Payment gateway error") from exc
@@ -482,6 +484,7 @@ async def plural_callback(request: Request) -> RedirectResponse:
             for k, v in form.items():
                 if k not in params and isinstance(v, str):
                     params[k] = v
+        # enterprise-gate: broad-except-ok reason=plural-callback-form-parse-falls-back-to-query-params
         except Exception:
             logger.debug("plural_callback_form_parse_failed")
 
@@ -528,6 +531,7 @@ async def plural_callback(request: Request) -> RedirectResponse:
                 plural_status=actual_status,
                 verified_status=verified_status,
             )
+        # enterprise-gate: broad-except-ok reason=plural-callback-verification-failure-redirects-pending
         except Exception:
             logger.exception(
                 "plural_callback_verify_failed", order_id=effective_order_id
@@ -605,6 +609,7 @@ async def stripe_callback(
                 session_id=session_id,
                 verified_status=verified_status,
             )
+        # enterprise-gate: broad-except-ok reason=stripe-callback-verification-failure-redirects-pending
         except Exception:
             logger.exception("stripe_callback_verify_failed", session_id=session_id)
             verified_status = "pending"
@@ -655,6 +660,7 @@ async def create_portal(
         return {"portal_url": url}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # enterprise-gate: broad-except-ok reason=stripe-portal-provider-error-mapped-to-502-no-success
     except Exception as exc:
         logger.exception("stripe_portal_error", tenant_id=tenant_id)
         raise HTTPException(status_code=502, detail="Portal creation failed") from exc
@@ -680,6 +686,7 @@ async def check_order_status(body: OrderStatusRequest) -> dict[str, Any]:
 
     try:
         return await asyncio.to_thread(get_order_status, body.order_id)
+    # enterprise-gate: broad-except-ok reason=plural-status-provider-error-mapped-to-502-no-success
     except Exception as exc:
         logger.exception("plural_status_error", order_id=body.order_id)
         raise HTTPException(status_code=502, detail="Failed to check order status") from exc
@@ -787,9 +794,10 @@ async def stripe_webhook(request: Request) -> dict[str, Any]:
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # enterprise-gate: broad-except-ok reason=stripe-webhook-processing-fails-http-error-no-success
     except Exception as exc:
         logger.exception("stripe_webhook_error")
-        raise HTTPException(status_code=400, detail="Webhook processing failed") from exc
+        raise HTTPException(status_code=503, detail="Webhook processing failed") from exc
 
 
 @router.post("/webhook/plural")
@@ -812,7 +820,7 @@ async def plural_webhook(request: Request) -> dict[str, Any]:
     """
     import asyncio
 
-    from core.billing.pinelabs_client import handle_webhook
+    from core.billing.pinelabs_client import PluralWebhookProcessingError, handle_webhook
 
     raw_body = await request.body()
     headers = {
@@ -832,6 +840,10 @@ async def plural_webhook(request: Request) -> dict[str, Any]:
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PluralWebhookProcessingError as exc:
+        logger.exception("plural_webhook_processing_failed")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    # enterprise-gate: broad-except-ok reason=plural-webhook-processing-fails-http-error-no-success
     except Exception as exc:
         logger.exception("plural_webhook_error")
-        raise HTTPException(status_code=400, detail="Webhook processing failed") from exc
+        raise HTTPException(status_code=503, detail="Webhook processing failed") from exc

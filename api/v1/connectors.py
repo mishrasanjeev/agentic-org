@@ -14,7 +14,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
@@ -312,6 +312,7 @@ def _connector_tool_functions(conn: Connector) -> list[str]:
             instance._tool_registry = {}
             instance._register_tools()
             return sorted(instance._tool_registry.keys())
+    # enterprise-gate: broad-except-ok reason=connector-tool-discovery-read-only-fallback
     except Exception:
         _log.debug("connector_tool_discovery_failed", exc_info=True)
     return []
@@ -538,6 +539,7 @@ async def list_tools(
             "details": tool_details,
             "total": len(tools),
         }
+    # enterprise-gate: broad-except-ok reason=connector-tool-list-read-only-static-fallback
     except Exception:
         # Fallback: extract from _AGENT_TYPE_DEFAULT_TOOLS
         from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
@@ -706,8 +708,16 @@ async def register_connector(
                 # safely read .status.
                 if hasattr(candidate, "status") and isinstance(candidate.status, str | type(None)):
                     existing = candidate
-            except Exception:
+            except (AttributeError, TypeError):
                 existing = None
+            except SQLAlchemyError as exc:
+                _log.exception(
+                    "connector_reactivation_lookup_failed conn_name=%s",
+                    body.name,
+                )
+                raise HTTPException(
+                    500, "Connector reactivation lookup failed"
+                ) from exc
 
             if existing is not None and (existing.status or "").lower() == "deleted":
                 existing.status = "active"
@@ -912,6 +922,7 @@ async def update_connector(
                             raise ValueError(
                                 "decrypted credentials are not a JSON object"
                             )
+                    # enterprise-gate: broad-except-ok reason=connector-update-decrypt-fails-closed-no-credential-wipe
                     except Exception as exc:
                         _log.exception(
                             "connector_update_decrypt_failed_refusing_wipe conn_id=%s",
@@ -1191,6 +1202,7 @@ async def test_connector(
 
                     creds = _cjson.loads(decrypt_for_tenant(creds["_encrypted"]))
                 config = {**(cc.config or {}), **(creds or {})}
+    # enterprise-gate: broad-except-ok reason=connector-test-encrypted-credential-load-falls-through-unhealthy
     except Exception:
         _log.debug("connector_test_encrypted_creds_load_failed conn_id=%s", conn_id)
     # TC_006 (Aishwarya 2026-04-23): CA-firms store GSTN credentials
@@ -1226,6 +1238,7 @@ async def test_connector(
                     "password": decrypted_pw,
                     "portal_type": gstn_cred.portal_type or "gstn",
                 }
+        # enterprise-gate: broad-except-ok reason=connector-test-gstn-vault-fallback-falls-through-unhealthy
         except Exception:
             _log.debug("connector_test_gstn_vault_bridge_failed conn_id=%s", conn_id)
 
@@ -1343,6 +1356,7 @@ async def test_connector(
                 "blocking outbound traffic."
             ),
         }
+    # enterprise-gate: broad-except-ok reason=connector-live-test-records-unhealthy-no-success
     except Exception as exc:
         from datetime import UTC, datetime
 

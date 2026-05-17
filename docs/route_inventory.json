@@ -1203,7 +1203,7 @@
     "public_exempt_reason": "gateway-redirect-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.plural",
-    "source_line": 461,
+    "source_line": 463,
     "tenant_required": true
   },
   {
@@ -1221,7 +1221,7 @@
     "public_exempt_reason": "stripe-hosted-checkout-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.stripe",
-    "source_line": 573,
+    "source_line": 577,
     "tenant_required": true
   },
   {
@@ -1239,7 +1239,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscription.cancel",
-    "source_line": 707,
+    "source_line": 714,
     "tenant_required": true
   },
   {
@@ -1329,7 +1329,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-status",
     "scope": "billing.order_status.read",
-    "source_line": 675,
+    "source_line": 681,
     "tenant_required": true
   },
   {
@@ -1365,7 +1365,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.portal.create",
-    "source_line": 639,
+    "source_line": 644,
     "tenant_required": true
   },
   {
@@ -1401,7 +1401,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscribe.plural",
-    "source_line": 406,
+    "source_line": 407,
     "tenant_required": true
   },
   {
@@ -1455,7 +1455,7 @@
     "public_exempt_reason": "plural-hmac-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.plural",
-    "source_line": 805,
+    "source_line": 813,
     "tenant_required": true
   },
   {
@@ -1473,7 +1473,7 @@
     "public_exempt_reason": "stripe-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.stripe",
-    "source_line": 774,
+    "source_line": 781,
     "tenant_required": true
   },
   {
@@ -2283,7 +2283,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 566,
+    "source_line": 568,
     "tenant_required": true
   },
   {
@@ -2301,7 +2301,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.create",
-    "source_line": 635,
+    "source_line": 637,
     "tenant_required": true
   },
   {
@@ -2319,7 +2319,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.oauth.initiate.admin",
-    "source_line": 640,
+    "source_line": 644,
     "tenant_required": true
   },
   {
@@ -2337,7 +2337,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.oauth.providers.read",
-    "source_line": 620,
+    "source_line": 624,
     "tenant_required": false
   },
   {
@@ -2355,7 +2355,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.oauth.reconnect.admin",
-    "source_line": 715,
+    "source_line": 719,
     "tenant_required": true
   },
   {
@@ -2373,7 +2373,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.registry.read",
-    "source_line": 429,
+    "source_line": 430,
     "tenant_required": false
   },
   {
@@ -2391,7 +2391,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1044,
+    "source_line": 1055,
     "tenant_required": true
   },
   {
@@ -2409,7 +2409,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 791,
+    "source_line": 801,
     "tenant_required": true
   },
   {
@@ -2427,7 +2427,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 830,
+    "source_line": 840,
     "tenant_required": true
   },
   {
@@ -2445,7 +2445,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1077,
+    "source_line": 1088,
     "tenant_required": true
   },
   {
@@ -2463,7 +2463,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1132,
+    "source_line": 1143,
     "tenant_required": true
   },
   {
@@ -3327,7 +3327,7 @@
     "public_exempt_reason": "oauth-state-validated-authorization-code",
     "rate_limit": "oauth-callback",
     "scope": "public:connectors.oauth.callback",
-    "source_line": 801,
+    "source_line": 806,
     "tenant_required": true
   },
   {
@@ -4695,7 +4695,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.tools.read",
-    "source_line": 490,
+    "source_line": 491,
     "tenant_required": false
   },
   {

@@ -295,6 +295,7 @@ async def _pop_oauth_state(state: str) -> dict[str, Any]:
     try:
         envelope = json.loads(raw)
         return json.loads(decrypt_for_tenant(envelope["payload"]))
+    # enterprise-gate: broad-except-ok reason=oauth-state-decode-fails-closed-invalid-state
     except Exception as exc:
         logger.exception("oauth_connector_state_decrypt_failed")
         raise HTTPException(
@@ -337,6 +338,7 @@ async def _pop_reconnect_payload(
     try:
         envelope = json.loads(raw)
         return json.loads(decrypt_for_tenant(envelope["payload"]))
+    # enterprise-gate: broad-except-ok reason=oauth-reconnect-decode-falls-through-to-fresh-flow
     except Exception:  # noqa: BLE001
         logger.exception("oauth_reconnect_decrypt_failed")
         return None
@@ -433,6 +435,7 @@ async def _revoke_existing_grant(
                 data={"token": token_or_secret},
                 headers={"Accept": "application/json"},
             )
+    # enterprise-gate: broad-except-ok reason=oauth-provider-revoke-is-best-effort-before-reconsent
     except Exception:  # noqa: BLE001
         logger.info(
             "oauth_revoke_best_effort_failed",
@@ -468,6 +471,7 @@ def _connector_defaults(connector_name: str) -> dict[str, Any]:
         try:
             instance = connector_cls({})
             tools = sorted(instance._tool_registry.keys())  # noqa: SLF001
+        # enterprise-gate: broad-except-ok reason=oauth-tool-default-discovery-falls-back-to-empty-list
         except Exception:
             tools = []
     return {
@@ -752,6 +756,7 @@ async def revoke_and_retry(
                 try:
                     creds = json.loads(decrypt_for_tenant(blob))
                     existing_refresh = creds.get("refresh_token")
+                # enterprise-gate: broad-except-ok reason=oauth-reconnect-existing-token-decrypt-skip-revoke-only
                 except Exception:  # noqa: BLE001
                     logger.info(
                         "oauth_reconnect_decrypt_skipped", exc_info=True

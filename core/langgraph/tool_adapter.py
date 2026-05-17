@@ -128,7 +128,8 @@ async def _build_connector(
     instance = connector_cls(config or {})
     try:
         await instance.connect()
-    except Exception as exc:  # noqa: BLE001 — connect failures already logged
+    # enterprise-gate: broad-except-ok reason=connector-connect-boundary-returns-explicit-error
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "connector_connect_failed", connector=connector_name, error=str(exc)
         )
@@ -212,7 +213,8 @@ async def _execute_connector_tool(
                 status="success",
             )
             return result
-        except Exception as retry_exc:  # noqa: BLE001 — retry surface kept generic
+        # enterprise-gate: broad-except-ok reason=connector-retry-boundary-returns-explicit-error
+        except Exception as retry_exc:  # noqa: BLE001
             logger.error(
                 "tool_execution_failed_after_reconnect",
                 connector=connector_name,
@@ -224,6 +226,7 @@ async def _execute_connector_tool(
                 "error": f"Tool execution failed after reconnect: {type(retry_exc).__name__}",
                 "error_class": "retry_failed",
             }
+    # enterprise-gate: broad-except-ok reason=connector-tool-boundary-returns-explicit-error
     except Exception as e:
         latency = int((time.monotonic() - start) * 1000)
         logger.error(
@@ -370,6 +373,7 @@ def _build_tool_index(
         instance._tool_registry = {}
         try:
             instance._register_tools()
+        # enterprise-gate: broad-except-ok reason=connector-tool-index-skips-broken-registration
         except Exception:  # noqa: S112
             continue  # Skip connectors that fail to register tools
 

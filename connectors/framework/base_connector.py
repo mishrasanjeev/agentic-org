@@ -169,6 +169,7 @@ class BaseConnector(abc.ABC):
                     reason = f"Upstream returned HTTP {sc}, which is not a success response."
                 return {"status": "unhealthy", "http_status": sc, "reason": reason}
             return {"status": "not_connected"}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 
@@ -252,6 +253,7 @@ class BaseConnector(abc.ABC):
 
             # Return raw payload (single-value secret)
             return payload
+        # enterprise-gate: broad-except-ok reason=secret-manager-resolution-fails-closed-empty-secret
         except Exception as exc:
             logger.error(
                 "secret_manager_fetch_failed",
