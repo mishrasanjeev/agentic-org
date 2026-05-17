@@ -1004,7 +1004,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 719,
+    "source_line": 728,
     "tenant_required": false
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 524,
+    "source_line": 530,
     "tenant_required": false
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 407,
+    "source_line": 412,
     "tenant_required": false
   },
   {
@@ -1058,7 +1058,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
     "rate_limit": "auth-login",
     "scope": "public:auth.login",
-    "source_line": 331,
+    "source_line": 335,
     "tenant_required": false
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 625,
+    "source_line": 632,
     "tenant_required": true
   },
   {
@@ -1094,7 +1094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 650,
+    "source_line": 657,
     "tenant_required": true
   },
   {
@@ -1112,7 +1112,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 574,
+    "source_line": 581,
     "tenant_required": false
   },
   {
@@ -1671,7 +1671,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 792,
+    "source_line": 796,
     "tenant_required": true
   },
   {
@@ -1689,7 +1689,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 486,
+    "source_line": 490,
     "tenant_required": true
   },
   {
@@ -3075,7 +3075,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 770,
+    "source_line": 776,
     "tenant_required": true
   },
   {
@@ -3093,7 +3093,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 864,
+    "source_line": 872,
     "tenant_required": true
   },
   {
@@ -3111,7 +3111,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1105,
+    "source_line": 1115,
     "tenant_required": false
   },
   {
@@ -3129,7 +3129,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1047,
+    "source_line": 1056,
     "tenant_required": true
   },
   {
@@ -3147,7 +3147,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1222,
+    "source_line": 1234,
     "tenant_required": true
   },
   {
@@ -3165,7 +3165,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 466,
+    "source_line": 469,
     "tenant_required": true
   },
   {
@@ -4119,7 +4119,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "sales.pipeline.sensitive.bulk_import",
-    "source_line": 569,
+    "source_line": 570,
     "tenant_required": true
   },
   {
@@ -4137,7 +4137,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "sales.metrics.sensitive.read",
-    "source_line": 489,
+    "source_line": 490,
     "tenant_required": true
   },
   {
@@ -4263,7 +4263,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-inbox-sync",
     "scope": "sales.pipeline.external_action.process_inbox",
-    "source_line": 917,
+    "source_line": 922,
     "tenant_required": true
   },
   {
@@ -4281,7 +4281,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-agent-trigger",
     "scope": "sales.pipeline.external_action.run_followups",
-    "source_line": 726,
+    "source_line": 728,
     "tenant_required": true
   },
   {
@@ -4299,7 +4299,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.seed_demo",
-    "source_line": 840,
+    "source_line": 844,
     "tenant_required": true
   },
   {

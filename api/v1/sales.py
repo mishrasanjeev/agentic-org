@@ -390,6 +390,7 @@ async def _run_sales_agent_on_lead(
 
     try:
         task_result = await agent_instance.execute(task_assignment)
+    # enterprise-gate: broad-except-ok reason=sales-agent-execution-failure-returns-explicit-error-body
     except Exception as exc:
         logger.error("sales_agent_error", lead_id=lead_id, error=str(exc))
         return {"error": str(exc)}
@@ -688,6 +689,7 @@ async def import_leads_csv(
                     tenant_id=tenant_id,
                 )
                 processed += 1
+            # enterprise-gate: broad-except-ok reason=csv-import-agent-processing-failure-is-counted-as-unprocessed
             except Exception as e:
                 logger.warning("csv_import_process_failed", lead_id=lead_info["id"], error=str(e))
 
@@ -789,10 +791,12 @@ async def run_automated_followups(
                     "step": current_step,
                     "status": resp.get("status"),
                 })
+            # enterprise-gate: broad-except-ok reason=followup-step-failure-increments-partial-error-count
             except Exception as e:
                 results["errors"] += 1
                 logger.warning("followup_failed", lead=lead.name, error=str(e))
 
+        # enterprise-gate: broad-except-ok reason=followup-lead-boundary-increments-partial-error-count
         except Exception as e:
             results["errors"] += 1
             logger.warning("followup_error", lead_id=str(lead.id), error=str(e))
@@ -887,6 +891,7 @@ async def seed_target_prospects(
                     tenant_id=tenant_id,
                 )
                 processed += 1
+            # enterprise-gate: broad-except-ok reason=sample-sales-agent-processing-failure-is-not-counted-processed
             except Exception as e:
                 logger.warning("seed_process_failed", lead=lead_info["name"], error=str(e))
 
@@ -933,6 +938,7 @@ async def process_inbox(
     # Get recent replies (last 6 hours)
     try:
         replies = get_recent_replies(since_hours=6)
+    # enterprise-gate: broad-except-ok reason=inbox-fetch-failure-returns-explicit-error-body
     except Exception:
         logger.exception("inbox_fetch_failed")
         return {"error": "Failed to fetch inbox"}
@@ -1042,6 +1048,7 @@ async def process_inbox(
                         "action": "responded",
                         "gmail_id": sent_id,
                     })
+                # enterprise-gate: broad-except-ok reason=inbox-reply-send-failure-increments-error-count
                 except Exception as e:
                     logger.warning("reply_send_failed", error=str(e))
                     results["errors"] += 1
@@ -1053,6 +1060,7 @@ async def process_inbox(
                     "agent_status": agent_result.get("status"),
                 })
 
+        # enterprise-gate: broad-except-ok reason=inbox-reply-boundary-increments-error-count
         except Exception as e:
             results["errors"] += 1
             logger.warning("inbox_process_error", email=reply.get("from_email"), error=str(e))
