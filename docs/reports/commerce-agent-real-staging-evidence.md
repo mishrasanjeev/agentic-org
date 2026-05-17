@@ -16,16 +16,16 @@
 ## Summary
 
 - Passed: 13
-- Failed: 1
-- Skipped: 1
+- Failed: 0
+- Skipped: 2
 
-## C2F Payment-Intent Check
+## C2G Consent Exchange Check
 
-- Positive `payment_create_intent` passed against the temporary Grantex Option A smoke service.
-- The C2F contract fix kept `passport_max_amount_minor_units` as local preflight metadata only.
-- The payment intent request used the Grantex-supported MCP field allowlist.
-- The amount-cap breach negative case remained a local fail-safe refusal.
-- No direct provider calls or provider credential handling were recorded.
+- `consent_request` remained a live positive case.
+- `consent_exchange` was skipped because a pre-exported checkout passport fixture was present and no granted consent request fixture was provided.
+- Stable blocker code recorded: `preexported_checkout_passport_without_granted_consent_fixture`.
+- `payment_create_intent`, `checkout_create`, and `payment_get_status` proceeded through the Grantex-only mock-provider path.
+- No passport values, consent runtime material, provider credentials, raw payloads, or secret values were recorded.
 
 ## Cleanup And Production Safety
 
@@ -34,8 +34,8 @@
 - Deleted temporary Cloud SQL instance: `grantex-commerce-smoke-pg`.
 - Deleted temporary Redis instance: `grantex-commerce-smoke-redis`.
 - Deleted temporary smoke secrets: `grantex-smoke-*` only.
-- Deleted temporary smoke image tag: `auth-service-smoke:81003bae4ce32b98e847c7f1ab536945079eb96a`.
-- Verified temporary smoke Cloud Run, Cloud SQL, Redis, and smoke secrets absent after cleanup.
+- Deleted temporary smoke image tag: `auth-service-smoke:a664af2d4cae7c50cf6567205c4986ddb54805a1`.
+- Verified temporary smoke Cloud Run, Cloud SQL, Redis, smoke secrets, and smoke image tag absent after cleanup.
 - Verified production resources still present: `grantex-auth`, `grantex-pg16`, `grantex-redis`.
 - Production Commerce V1, live payment, and live Plural flags were not changed by this run.
 
@@ -50,7 +50,7 @@
 | inventory_check | pass | grantex_commerce:inventory_check |  |  |  |  |
 | cart_create | pass | grantex_commerce:cart_create |  |  |  |  |
 | consent_request | pass | grantex_commerce:consent_request |  |  |  |  |
-| consent_exchange | fail | grantex_commerce:consent_exchange |  |  | consent_not_granted |  |
+| consent_exchange | skipped |  |  |  |  | preexported_checkout_passport_without_granted_consent_fixture |
 | payment_create_intent | pass | grantex_commerce:payment_create_intent |  |  |  |  |
 | checkout_create | pass | grantex_commerce:checkout_create |  |  |  |  |
 | payment_get_status | pass | grantex_commerce:payment_get_status |  |  |  |  |
@@ -129,13 +129,13 @@
       "tool_alias": "grantex_commerce:consent_request"
     },
     {
-      "blocker": null,
-      "error_code": "consent_not_granted",
+      "blocker": "preexported_checkout_passport_without_granted_consent_fixture",
+      "error_code": null,
       "http_status": null,
       "latency_ms": null,
       "name": "consent_exchange",
-      "status": "fail",
-      "tool_alias": "grantex_commerce:consent_exchange"
+      "status": "skipped",
+      "tool_alias": null
     },
     {
       "blocker": null,
@@ -228,33 +228,33 @@
   "fixture_synthetic_ids": {
     "AGENTICORG_COMMERCE_FIXTURE_AGENT_ID": "cag_staging_agenticorg_sales",
     "AGENTICORG_COMMERCE_FIXTURE_MERCHANT_ID": "mch_staging_electronics_pilot",
-    "AGENTICORG_COMMERCE_FIXTURE_PRODUCT_ID": "cprd_01KRRW5GHPGK90F3CD7TH1X5C6",
-    "AGENTICORG_COMMERCE_FIXTURE_VARIANT_ID": "cvar_01KRRW5GHY3M38WKMDXKD1MHKR"
+    "AGENTICORG_COMMERCE_FIXTURE_PRODUCT_ID": "cprd_01KRT7Y4ZFHB6FE2Z4PDHP3H3K",
+    "AGENTICORG_COMMERCE_FIXTURE_VARIANT_ID": "cvar_01KRT7Y4ZJNS9KQ3NT1HA0AX6D"
   },
   "fixture_value_hashes": [
     {
       "name": "AGENTICORG_COMMERCE_BROWSE_PASSPORT_JWT",
-      "sha256_12": "341767110f12"
+      "sha256_12": "4f442828e984"
     },
     {
       "name": "AGENTICORG_COMMERCE_CHECKOUT_PASSPORT_JWT",
-      "sha256_12": "72df306a6570"
+      "sha256_12": "ba4d1bea43ef"
     },
     {
       "name": "AGENTICORG_COMMERCE_DENIED_CONSENT_REF",
-      "sha256_12": "03deec08c04c"
+      "sha256_12": "814d4d266f60"
     },
     {
       "name": "AGENTICORG_COMMERCE_EXPIRED_PASSPORT_JWT",
-      "sha256_12": "c09982ea0b33"
+      "sha256_12": "2302192d135c"
     },
     {
       "name": "AGENTICORG_COMMERCE_REVOKED_PASSPORT_JWT",
-      "sha256_12": "9c26c71f69f6"
+      "sha256_12": "4d1db2bc9ee1"
     },
     {
       "name": "GRANTEX_API_KEY",
-      "sha256_12": "b98d47d6f189"
+      "sha256_12": "6e09ee09ccc4"
     }
   ],
   "grantex_host": "grantex-auth-smoke-dd4mtrt2gq-uc.a.run.app",
@@ -274,7 +274,6 @@
     "grantex_commerce:inventory_check",
     "grantex_commerce:cart_create",
     "grantex_commerce:consent_request",
-    "grantex_commerce:consent_exchange",
     "grantex_commerce:payment_create_intent",
     "grantex_commerce:checkout_create",
     "grantex_commerce:payment_get_status"
