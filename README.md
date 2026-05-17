@@ -17,6 +17,37 @@
 
 ---
 
+## Commerce Sales Agent
+
+AgenticOrg includes a Commerce Sales Agent that talks to Grantex Commerce V1 through Grantex-only tools. It is designed for consent-first product discovery, cart drafting, Commerce Passport handling, provider-neutral payment intent handoff, checkout handoff, and payment status polling without calling payment providers directly.
+
+> Commerce production readiness is not final. AgenticOrg production MCP/A2A commerce metadata may be visible, but Grantex production Commerce V1 discovery remains disabled/fail-closed and live checkout, live payments, and live Plural are not enabled.
+
+```mermaid
+flowchart LR
+  user[User question] --> agent[Commerce Sales Agent]
+  agent --> tools[grantex_commerce:* tools]
+  tools --> grantex[Grantex Commerce REST/MCP]
+  grantex --> catalog[Catalog and inventory]
+  grantex --> consent[Consent and Commerce Passport]
+  grantex --> payment[Provider-neutral payment control]
+  payment --> mock[Mock provider smoke evidence]
+  payment -. blocked .-> live[Live provider / Plural gate]
+```
+
+| Area | Current posture |
+| --- | --- |
+| Default runtime mode | Mock mode remains the default for local demo use. |
+| Real-staging mode | Explicitly gated and only valid against approved Grantex staging or exact temporary smoke URLs. |
+| Hosted discovery smoke | API-only C3 smoke verified liveness, health, MCP tools, and A2A discovery. |
+| Provider boundary | No direct Stripe, Plural, Pine, or provider credential commerce path. |
+| Production discovery caveat | AgenticOrg commerce metadata should stay gated or explicitly reviewed until Grantex read-only discovery is approved. |
+| Live checkout/payments | Blocked; do not imply production payment readiness. |
+
+Read more in `docs/commerce-agent-overview.md`, `docs/commerce-agent-developer-guide.md`, `docs/commerce-agent-hosted-staging-e2e.md`, `docs/reports/commerce-agent-real-staging-evidence.md`, `docs/reports/commerce-agent-hosted-smoke-evidence.md`, and `docs/reports/commerce-agent-production-discovery-readiness.md`.
+
+Key tool aliases: `grantex_commerce:merchant_get_profile`, `grantex_commerce:catalog_search`, `grantex_commerce:catalog_get_item`, `grantex_commerce:inventory_check`, `grantex_commerce:cart_create`, `grantex_commerce:consent_request`, `grantex_commerce:consent_exchange`, `grantex_commerce:payment_create_intent`, `grantex_commerce:checkout_create`, and `grantex_commerce:payment_get_status`.
+
 ## What Is AgenticOrg?
 
 AgenticOrg deploys **AI virtual employees** that automate enterprise back-office work. Each agent has a name, designation, specialization, and tailored instructions — like a real team member. They process invoices, run payroll, triage support tickets, launch campaigns, and reconcile bank statements — with human approval on every critical decision.

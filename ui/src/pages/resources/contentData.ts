@@ -34,6 +34,29 @@ export const CLUSTERS = [
 ];
 
 export const CONTENT_PAGES: ContentPage[] = [
+  {
+    slug: "commerce-sales-agent-grantex",
+    cluster: "platform",
+    title: "Commerce Sales Agent with Grantex Controls",
+    metaTitle: "Commerce Sales Agent with Grantex Controls | AgenticOrg",
+    metaDescription: "How AgenticOrg's Commerce Sales Agent uses Grantex-only commerce tools for grounded product data, consent, Commerce Passports, and provider-neutral checkout handoff.",
+    keywords: ["commerce sales agent", "Grantex commerce", "agentic commerce", "commerce passport", "AI shopping agent safety"],
+    heroStat: { value: "0", label: "Direct provider calls in the commerce path" },
+    sections: [
+      { heading: "A Commerce Agent With A Control Layer", body: "AgenticOrg's Commerce Sales Agent is designed to help users ask product questions, compare grounded catalog results, draft carts, request consent, and follow checkout status without taking direct payment-provider control.\n\nThe commerce boundary is Grantex. AgenticOrg uses Grantex commerce tools for catalog, inventory, cart, consent, Commerce Passport handling, payment intent creation, checkout handoff, and payment status polling." },
+      { heading: "How The Flow Works", body: "The flow is intentionally staged: user question -> grounded product data -> inventory check -> cart draft -> consent request -> Commerce Passport -> Grantex payment intent -> checkout handoff -> Grantex status polling.\n\nAgenticOrg does not mint Commerce Passports locally. It does not call Stripe, Plural, Pine, or provider credential paths for commerce. Provider abstraction, policy enforcement, amount caps, audit, and webhook reconciliation belong to Grantex." },
+      { heading: "Current Readiness Posture", body: "The commerce path has internal sandbox and temporary smoke evidence. The local real-staging eval has exercised Grantex-only commerce tools, and the API-only hosted smoke has verified liveness, health, MCP tools, and A2A discovery against temporary Grantex smoke resources.\n\nThis does not mean production checkout or live payments are enabled. Grantex production Commerce V1 discovery remains disabled/fail-closed, live payments are blocked, live Plural is blocked, and external pilot or live-provider readiness requires additional human gates." },
+      { heading: "What Users Should Expect", body: "The agent can help explain products and prepare a cart, but payment-affecting steps require Grantex consent and policy checks. Amount caps, merchant status, trusted agent checks, and passport state determine whether a checkout path may continue.\n\nIf a required consent or fixture is missing, the evaluated path records a skipped or blocked case instead of pretending that hosted evidence passed." },
+      { heading: "What Operators Should Watch", body: "Operators should review the evidence reports, confirm no provider credential handling exists in commerce code, keep production discovery gated until Grantex read-only discovery is approved, and treat live payment or live Plural enablement as blocked until legal, compliance, security, operations, product, and provider gates are complete." },
+    ],
+    faqs: [
+      { q: "Does AgenticOrg call payment providers directly for commerce?", a: "No. The Commerce Sales Agent uses Grantex-only commerce tools. Direct Stripe, Plural, Pine, or provider credential paths are not part of the commerce flow." },
+      { q: "Is production checkout live?", a: "No. Production checkout, live payments, and live Plural are blocked. Current evidence covers internal sandbox and temporary smoke paths only." },
+      { q: "Why can production discovery metadata appear before production readiness?", a: "Production MCP/A2A commerce metadata may be visible, but Grantex production Commerce V1 discovery remains disabled/fail-closed. The metadata should be gated or explicitly reviewed before any production discovery readiness decision." },
+    ],
+    relatedSlugs: ["enterprise-ai-automation-platform", "human-in-the-loop-ai", "ai-agent-governance"],
+    cta: { text: "Open the safe playground", link: "/playground" },
+  },
   // ═══════════════════════════════════════════════════════════════
   // CLUSTER 1: Enterprise AI Agents
   // ═══════════════════════════════════════════════════════════════
