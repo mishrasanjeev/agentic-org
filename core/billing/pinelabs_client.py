@@ -15,6 +15,7 @@ Reference: https://developer.pinelabsonline.com/
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -91,6 +92,7 @@ def _redis_client():
     try:
         from core.billing.usage_tracker import _get_redis
         return _get_redis()
+    # enterprise-gate: broad-except-ok reason=order-mapping-callers-fail-closed-in-strict-runtime
     except Exception:
         return None
 
@@ -114,6 +116,7 @@ def store_order_mapping(
         redis.setex(f"plural:order:{merchant_ref}", _MAPPING_TTL, _json.dumps(entry))
         if not _strict_order_mapping():
             _order_map[merchant_ref] = entry
+    # enterprise-gate: broad-except-ok reason=payment-order-mapping-write-fails-closed-in-strict-runtime
     except Exception as exc:
         if _strict_order_mapping():
             raise RuntimeError("Plural order mapping Redis write failed in strict runtime") from exc
@@ -143,6 +146,7 @@ def lookup_order_details(merchant_ref: str) -> dict[str, str]:
             if isinstance(raw, bytes):
                 raw = raw.decode()
             return _json.loads(raw)
+    # enterprise-gate: broad-except-ok reason=payment-order-mapping-read-fails-closed-in-strict-runtime
     except Exception as exc:
         if _strict_order_mapping():
             raise RuntimeError("Plural order mapping Redis read failed in strict runtime") from exc
@@ -396,7 +400,7 @@ def verify_webhook_signature(
     # Decode the base64 secret
     try:
         secret_bytes = base64.b64decode(_WEBHOOK_SECRET)
-    except Exception:
+    except (ValueError, binascii.Error):
         logger.exception("plural_webhook_secret_decode_failed")
         return False
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -25,6 +26,7 @@ from workflows.step_results import (
 )
 
 TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+logger = logging.getLogger(__name__)
 
 
 def _env_flag(name: str) -> bool:
@@ -229,6 +231,7 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             "agent": agent_type,
             "action": action,
         }
+    # enterprise-gate: broad-except-ok reason=agent-step-boundary-returns-typed-failure-result
     except Exception as exc:
         return failure_result(
             step_id=step["id"],
@@ -509,8 +512,12 @@ async def _execute_wait(step: dict, state: dict) -> dict[str, Any]:
             args=[run_id, step["id"]],
             eta=resume_at,
         )
-    except Exception:  # noqa: S110
-        pass
+    # enterprise-gate: broad-except-ok reason=wait-resume-scheduling-failure-leaves-step-waiting
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "workflow_wait_resume_schedule_failed",
+            extra={"run_id": state.get("id", ""), "step_id": step["id"], "error": str(exc)},
+        )
 
     return {
         "step_id": step["id"],
@@ -568,8 +575,12 @@ async def _execute_wait_for_event(step: dict, state: dict) -> dict[str, Any]:
             args=[run_id, step["id"]],
             eta=timeout_at,
         )
-    except Exception:  # noqa: S110
-        pass
+    # enterprise-gate: broad-except-ok reason=event-timeout-scheduling-failure-leaves-durable-listener
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "workflow_event_timeout_schedule_failed",
+            extra={"run_id": run_id, "step_id": step["id"], "error": str(exc)},
+        )
 
     return {
         "step_id": step["id"],

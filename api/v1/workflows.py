@@ -140,6 +140,7 @@ async def generate_workflow_endpoint(
             503,
             detail="Workflow generation is not available. LLM backend may not be configured.",
         ) from None
+    # enterprise-gate: broad-except-ok reason=llm-generation-route-maps-provider-errors-to-http-failures
     except Exception as exc:
         error_msg = str(exc)
         if "API key" in error_msg or "authentication" in error_msg.lower():
@@ -541,6 +542,7 @@ async def _execute_workflow_bg(
             ):
                 break
 
+    # enterprise-gate: broad-except-ok reason=background-workflow-boundary-marks-db-run-failed
     except Exception as exc:
         _log.error("workflow_bg_failed", run_id=str(run_id), error=str(exc))
         try:
@@ -553,6 +555,7 @@ async def _execute_workflow_bg(
                 db_run.status = "failed"
                 db_run.error = {"message": str(exc)}
                 db_run.completed_at = datetime.now(UTC)
+        # enterprise-gate: broad-except-ok reason=background-error-handler-logs-secondary-db-failure
         except Exception as inner:
             _log.error("workflow_bg_error_handler_failed", error=str(inner))
     finally:
@@ -577,6 +580,7 @@ async def _execute_workflow_bg(
                             _uuid.UUID(variant_id),
                             success=db_run.status == "completed",
                         )
+        # enterprise-gate: broad-except-ok reason=ab-outcome-recording-is-best-effort-after-run-terminal
         except Exception:
             _log.debug("workflow_ab_record_outcome_skipped", run_id=str(run_id))
 
@@ -635,6 +639,7 @@ async def run_workflow(
 
             subject = (body.payload or {}).get("user_id") or tenant_id
             variant_pick = await pick_variant(wf.id, str(subject))
+        # enterprise-gate: broad-except-ok reason=ab-variant-selection-falls-back-to-base-definition
         except Exception:
             _log.debug("workflow_ab_pick_variant_skipped", workflow_id=str(wf_id))
 
@@ -717,6 +722,7 @@ async def get_workflow_run(
             wf_name = wf_result.scalar_one_or_none()
             if wf_name:
                 d["workflow_name"] = wf_name
+    # enterprise-gate: broad-except-ok reason=workflow-name-enrichment-is-best-effort-read-model
     except Exception:
         _log.debug("workflow_name_lookup_failed", run_id=str(run_id))
 
@@ -820,6 +826,7 @@ async def cancel_workflow_run(
                 await state_store.init()
                 engine = WorkflowEngine(state_store)
                 await engine.cancel(engine_run_id)
+            # enterprise-gate: broad-except-ok reason=db-status-is-authoritative-when-engine-cancel-fails
             except Exception as exc:  # noqa: BLE001 — engine cancel is best-effort
                 _log.warning(
                     "workflow_engine_cancel_failed",
@@ -856,6 +863,7 @@ async def cancel_workflow_run(
             resource_id=str(run_id),
             details={"run_id": str(run_id)},
         )
+    # enterprise-gate: broad-except-ok reason=audit-log-failure-must-not-block-idempotent-cancel
     except Exception as exc:  # noqa: BLE001 — audit best-effort, must not block cancel
         _log.warning("workflow_cancel_audit_failed", run_id=str(run_id), error=str(exc))
 

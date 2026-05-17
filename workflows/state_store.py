@@ -330,6 +330,7 @@ class WorkflowStateStore:
             return
         try:
             await self.redis.set(f"wfstate:{state['id']}", json.dumps(_json_safe(state)))
+        # enterprise-gate: broad-except-ok reason=postgres-is-authoritative-redis-cache-best-effort
         except Exception as exc:  # noqa: BLE001 - Redis cache must not gate correctness.
             logger.warning(
                 "workflow_state_cache_write_failed",
@@ -342,6 +343,7 @@ class WorkflowStateStore:
             return None
         try:
             data = await self.redis.get(f"wfstate:{run_id}")
+        # enterprise-gate: broad-except-ok reason=legacy-redis-fallback-is-non-authoritative
         except Exception as exc:  # noqa: BLE001 - Redis fallback is best effort.
             logger.warning("workflow_state_cache_read_failed", run_id=run_id, error=str(exc))
             return None

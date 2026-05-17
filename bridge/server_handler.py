@@ -310,6 +310,7 @@ async def _send_brokered_request_to_bridge(bridge_id: str, message: dict[str, An
             "method": message.get("method", "post_xml"),
             "xml_body": message.get("xml_body", ""),
         }))
+    # enterprise-gate: broad-except-ok reason=bridge-send-failure-marks-durable-request-failed
     except Exception as exc:
         await get_bridge_state_repository().mark_failed(
             request_id=request_id,
@@ -494,6 +495,7 @@ async def route_to_bridge(
             effective_request_id,
             _response_handler,
         )
+    # enterprise-gate: broad-except-ok reason=broker-subscribe-failure-marks-durable-request-failed
     except Exception as exc:
         _pending_requests.pop(effective_request_id, None)
         await get_bridge_state_repository().mark_failed(
@@ -521,6 +523,7 @@ async def route_to_bridge(
                 "xml_body": xml_body,
             },
         )
+    # enterprise-gate: broad-except-ok reason=broker-publish-failure-marks-durable-request-failed
     except Exception as exc:
         _pending_requests.pop(effective_request_id, None)
         await response_subscription.close()

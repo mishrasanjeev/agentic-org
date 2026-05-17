@@ -75,6 +75,7 @@ def _get_redis() -> aioredis.Redis | None:
     if _redis_client is None:
         try:
             _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        # enterprise-gate: broad-except-ok reason=token-blacklist-strict-runtime-refuses-memory-fallback
         except Exception as exc:
             if _auth_state_strict():
                 logger.error(
@@ -148,6 +149,7 @@ def blacklist_token(token: str) -> None:
             asyncio.run(r.setex(key, _BLACKLIST_TTL, "1"))
         if not strict:
             _remember_blacklisted_token(token)
+    # enterprise-gate: broad-except-ok reason=token-blacklist-write-fails-closed-in-strict-runtime
     except Exception as exc:
         if not strict:
             _remember_blacklisted_token(token)
@@ -183,6 +185,7 @@ async def _is_blacklisted(token: str) -> bool:
 
     try:
         val = await r.get(_token_redis_key(token))
+    # enterprise-gate: broad-except-ok reason=token-blacklist-read-fails-closed-in-strict-runtime
     except Exception as exc:
         if strict:
             raise RuntimeError(
@@ -310,6 +313,7 @@ async def validate_token(token: str) -> dict[str, Any]:
     # Fall back to JWKS RS256
     try:
         return await _validate_jwks_token(token)
+    # enterprise-gate: broad-except-ok reason=jwks-validation-errors-become-token-validation-failure
     except Exception as e:
         raise ValueError(str(e)) from e
 

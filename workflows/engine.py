@@ -149,6 +149,7 @@ class WorkflowEngine:
             # ---- execute the step (with retry if configured) ----
             try:
                 result = await self._execute_with_retry(step, state, context)
+            # enterprise-gate: broad-except-ok reason=step-boundary-marks-durable-workflow-failed
             except Exception as exc:
                 # ---- dynamic re-planning ----
                 replan_enabled = (
@@ -327,6 +328,7 @@ class WorkflowEngine:
 
             try:
                 result = await self._execute_with_retry(step, state, context)
+            # enterprise-gate: broad-except-ok reason=legacy-step-boundary-marks-durable-workflow-failed
             except Exception as exc:
                 state["step_results"][step_id] = {
                     "output": None,
@@ -574,6 +576,7 @@ class WorkflowEngine:
                 failed_step=failed_context,
                 remaining_steps=remaining_steps,
             )
+        # enterprise-gate: broad-except-ok reason=replan-boundary-falls-back-to-original-step-failure
         except (ReplanError, Exception) as exc:
             logger.warning(
                 "workflow_replan_failed",

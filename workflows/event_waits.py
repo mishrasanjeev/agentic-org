@@ -497,6 +497,7 @@ class WorkflowEventWaitStore:
         try:
             kwargs = {"ex": ttl_seconds} if ttl_seconds else {}
             await self.redis.set(self._redis_key(record), json.dumps(_json_safe(payload)), **kwargs)
+        # enterprise-gate: broad-except-ok reason=postgres-event-wait-registration-is-authoritative
         except Exception as exc:  # noqa: BLE001 - Redis index is best-effort only.
             logger.warning(
                 "workflow_event_wait_cache_write_failed",
@@ -510,6 +511,7 @@ class WorkflowEventWaitStore:
             return
         try:
             await self.redis.delete(self._redis_key(record))
+        # enterprise-gate: broad-except-ok reason=postgres-event-wait-status-is-authoritative
         except Exception as exc:  # noqa: BLE001 - Redis cleanup is best-effort only.
             logger.warning(
                 "workflow_event_wait_cache_delete_failed",

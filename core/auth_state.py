@@ -55,6 +55,7 @@ async def _get_redis() -> aioredis.Redis | None:
         )
         await _redis.ping()
         return _redis
+    # enterprise-gate: broad-except-ok reason=auth-state-strict-runtime-refuses-memory-fallback
     except Exception as exc:
         if _strict():
             logger.error(
@@ -122,6 +123,7 @@ async def record_auth_failure(ip: str) -> bool:
                 await r.setex(f"auth:blocked:{ip}", AUTH_BLOCK_DURATION, "1")
                 return True
             return False
+        # enterprise-gate: broad-except-ok reason=auth-failure-recording-fails-closed-in-strict-runtime
         except Exception as exc:
             _raise_if_strict("record_auth_failure", exc)
             logger.warning("auth_state: Redis failure tracking failed, using memory (%s)", exc)
@@ -146,6 +148,7 @@ async def is_ip_blocked(ip: str) -> bool:
             if val:
                 return True
             return False
+        # enterprise-gate: broad-except-ok reason=ip-block-check-fails-closed-in-strict-runtime
         except Exception as exc:
             _raise_if_strict("is_ip_blocked", exc)
             logger.warning("auth_state: Redis block check failed, using memory (%s)", exc)
@@ -166,6 +169,7 @@ async def clear_auth_failures(ip: str) -> None:
     if r:
         try:
             await r.delete(f"auth:failures:{ip}", f"auth:blocked:{ip}")
+        # enterprise-gate: broad-except-ok reason=auth-failure-clear-fails-closed-in-strict-runtime
         except Exception as exc:
             _raise_if_strict("clear_auth_failures", exc)
             logger.warning("auth_state: Redis clear_failures failed (%s)", exc)
@@ -210,6 +214,7 @@ async def blacklist_token(token: str) -> None:
         try:
             await r.setex(f"auth:blacklist:{h}", TOKEN_BLACKLIST_TTL, "1")
             return
+        # enterprise-gate: broad-except-ok reason=token-blacklist-write-fails-closed-in-strict-runtime
         except Exception as exc:
             _raise_if_strict("blacklist_token", exc)
             logger.warning("auth_state: Redis blacklist write failed (%s)", exc)
@@ -234,6 +239,7 @@ async def is_token_blacklisted(token: str) -> bool:
                 _mem_blacklist[h] = time.time() + TOKEN_BLACKLIST_TTL
                 return True
             return False
+        # enterprise-gate: broad-except-ok reason=token-blacklist-read-fails-closed-in-strict-runtime
         except Exception as exc:
             _raise_if_strict("is_token_blacklisted", exc)
             logger.warning("auth_state: Redis blacklist read failed (%s)", exc)
@@ -257,6 +263,7 @@ async def check_signup_rate(ip: str) -> bool:
             if count == 1:
                 await r.expire(key, SIGNUP_WINDOW)
             return count > SIGNUP_MAX_PER_HOUR
+        # enterprise-gate: broad-except-ok reason=signup-rate-limit-fails-closed-in-strict-runtime
         except Exception as exc:
             _raise_if_strict("check_signup_rate", exc)
             logger.warning("auth_state: Redis signup rate check failed, using memory (%s)", exc)
