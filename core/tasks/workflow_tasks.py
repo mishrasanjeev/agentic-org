@@ -59,6 +59,7 @@ def _best_effort_clean_event_wait_keys(run_id: str, step_id: str) -> None:
             close = getattr(r, "close", None)
             if close is not None:
                 close()
+    # enterprise-gate: broad-except-ok reason=best-effort-redis-cleanup-after-durable-state-change
     except Exception as exc:  # noqa: BLE001 - cleanup cache must not block state progress.
         logger.warning(
             "workflow_event_wait_cleanup_failed",
@@ -131,6 +132,7 @@ def resume_workflow_wait(run_id: str, step_id: str) -> dict:
         if result.get("status") in {"resumed", "noop"}:
             _best_effort_clean_event_wait_keys(run_id, step_id)
         return result
+    # enterprise-gate: broad-except-ok reason=celery-boundary-returns-structured-workflow-error
     except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
         logger.error(
             "resume_workflow_wait_failed",
@@ -211,6 +213,7 @@ def timeout_workflow_event(run_id: str, step_id: str) -> dict:
         if result.get("status") in {"timed_out", "already_completed", "noop"}:
             _best_effort_clean_event_wait_keys(run_id, step_id)
         return result
+    # enterprise-gate: broad-except-ok reason=celery-boundary-returns-structured-workflow-error
     except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
         logger.error(
             "timeout_workflow_event_failed",

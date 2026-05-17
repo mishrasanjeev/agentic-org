@@ -47,6 +47,34 @@ def test_gate_allows_broad_exception_with_non_empty_reason(tmp_path: Path) -> No
     assert gates.scan_broad_exceptions([path], tmp_path) == []
 
 
+def test_broad_exception_allowance_requires_non_empty_reason(tmp_path: Path) -> None:
+    missing_reason = _write(
+        tmp_path,
+        "api/v1/example.py",
+        "def route():\n"
+        "    try:\n"
+        "        risky()\n"
+        "    # enterprise-gate: broad-except-ok\n"
+        "    except Exception:\n"
+        "        pass\n",
+    )
+    allowed = _write(
+        tmp_path,
+        "api/v1/allowed.py",
+        "def route():\n"
+        "    try:\n"
+        "        cleanup()\n"
+        "    # enterprise-gate: broad-except-ok reason=best-effort cleanup\n"
+        "    except Exception:\n"
+        "        pass\n",
+    )
+
+    findings = gates.scan_broad_exceptions([missing_reason, allowed], tmp_path)
+
+    assert [finding.category for finding in findings] == ["broad_exception"]
+    assert findings[0].path == "api/v1/example.py"
+
+
 def test_gate_detects_process_local_mutable_store(tmp_path: Path) -> None:
     path = _write(tmp_path, "core/cdc/receiver.py", "_event_store: list[dict] = []\n")
 
@@ -342,6 +370,14 @@ def test_process_local_state_baseline_is_zero_after_burndown() -> None:
     process_local_entries = baseline.get("allowed_findings", {}).get("process_local_state", [])
 
     assert process_local_entries == []
+
+
+def test_broad_exception_baseline_reduced_by_runtime_slice() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    broad_entries = baseline.get("allowed_findings", {}).get("broad_exception", [])
+
+    assert len(broad_entries) < 439
+    assert len(broad_entries) <= 399
 
 
 def test_docs_tests_and_migrations_are_ignored(tmp_path: Path) -> None:

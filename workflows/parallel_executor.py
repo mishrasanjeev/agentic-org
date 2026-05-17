@@ -17,6 +17,7 @@ async def execute_parallel(
     async def _run_one(index: int, task_factory: Callable[[], Coroutine]) -> dict[str, Any]:
         try:
             value = await task_factory()
+        # enterprise-gate: broad-except-ok reason=parallel-child-exceptions-normalized-to-failed-results
         except Exception as exc:
             return normalize_child_result(exc, child_id=str(index))
         return normalize_child_result(value, child_id=str(index))

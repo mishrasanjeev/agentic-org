@@ -15,6 +15,7 @@ async def retry_with_backoff(
     for attempt in range(max_retries + 1):
         try:
             return await func()
+        # enterprise-gate: broad-except-ok reason=retry-boundary-retries-and-reraises-final-failure
         except Exception:
             if attempt == max_retries:
                 raise

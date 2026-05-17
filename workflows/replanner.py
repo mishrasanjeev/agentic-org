@@ -149,6 +149,7 @@ async def _call_llm(prompt: str) -> str:
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content(prompt)
             return response.text
+    # enterprise-gate: broad-except-ok reason=provider-fallback-continues-to-next-llm-backend
     except Exception as exc:
         logger.debug("gemini_llm_unavailable", error=str(exc))
 
@@ -167,6 +168,7 @@ async def _call_llm(prompt: str) -> str:
                 temperature=0.2,
             )
             return resp.choices[0].message.content or ""
+    # enterprise-gate: broad-except-ok reason=provider-fallback-ends-in-explicit-replan-error
     except Exception as exc:
         logger.debug("openai_llm_unavailable", error=str(exc))
 

@@ -114,6 +114,7 @@ async def _run_agent(
             "status": result.get("status", "completed"),
             "output": result.get("output", {}),
         }
+    # enterprise-gate: broad-except-ok reason=collaboration-child-failure-normalized-to-failed-result
     except Exception as exc:
         logger.warning("collaboration_agent_failed", agent=agent_name, error=str(exc))
         return {
@@ -144,6 +145,7 @@ async def _run_all_agents(
             try:
                 name, result = task.result()
                 results[name] = result
+            # enterprise-gate: broad-except-ok reason=collaboration-task-result-normalized-and-logged
             except Exception as exc:
                 logger.warning("collaboration_task_result_error", error=str(exc))
 
@@ -152,6 +154,7 @@ async def _run_all_agents(
             task.cancel()
             try:
                 await task
+            # enterprise-gate: broad-except-ok reason=expected-cancellation-drain-after-timeout
             except (asyncio.CancelledError, Exception):  # noqa: S110
                 pass  # Expected during cancellation
 
@@ -165,6 +168,7 @@ async def _run_all_agents(
                     "output": {},
                     "error": f"Agent {name} timed out after {timeout_seconds}s",
                 }
+    # enterprise-gate: broad-except-ok reason=collaboration-aggregate-boundary-returns-failed-children
     except Exception as exc:
         logger.error("collaboration_run_all_error", error=str(exc))
 
@@ -196,6 +200,7 @@ async def _first_complete(
             task.cancel()
             try:
                 await task
+            # enterprise-gate: broad-except-ok reason=expected-cancellation-drain-after-first-completion
             except (asyncio.CancelledError, Exception):  # noqa: S110
                 pass  # Expected during cancellation
 
@@ -219,6 +224,7 @@ async def _first_complete(
             "agents_completed": 0,
             "error": f"All agents timed out after {timeout_seconds}s",
         }
+    # enterprise-gate: broad-except-ok reason=first-complete-boundary-returns-failed-step-result
     except Exception as exc:
         return {
             "status": "failed",

@@ -226,6 +226,7 @@ async def _store_email_event(
         )
         try:
             resume_workflow_wait.delay(wait.engine_run_id, wait.step_id)
+        # enterprise-gate: broad-except-ok reason=celery-enqueue-fallback-resumes-durable-wait-directly
         except Exception as exc:  # noqa: BLE001 - fall back to direct durable resume.
             logger.warning(
                 "workflow_event_resume_enqueue_failed",
@@ -247,6 +248,7 @@ async def _store_email_event(
             for k, v in extra.items():
                 mapping[k] = str(v)
         await r.hset(key, mapping=mapping)
+    # enterprise-gate: broad-except-ok reason=email-event-history-cache-is-best-effort-after-durable-match
     except Exception as exc:  # noqa: BLE001 - Redis event history is best-effort.
         logger.warning(
             "email_event_redis_store_failed",

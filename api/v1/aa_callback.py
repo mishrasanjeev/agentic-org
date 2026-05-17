@@ -90,6 +90,7 @@ async def consent_callback(request: Request) -> dict[str, str]:
         # during the verify call.
         try:
             await redis_client.close()
+        # enterprise-gate: broad-except-ok reason=redis-close-failure-after-callback-verification-is-nonfatal
         except Exception as _close_exc:  # noqa: BLE001, S110 — close failures are non-fatal
             logger.debug("aa_callback_redis_close_failed", error=str(_close_exc))
 
