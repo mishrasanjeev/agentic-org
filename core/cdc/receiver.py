@@ -691,6 +691,9 @@ async def handle_cdc_webhook(
     except ValueError as exc:
         logger.warning("cdc_webhook_invalid_tenant", tenant_id=tenant_id, error=str(exc))
         return {"status": "rejected", "reason": "invalid_tenant", "http_status": 422}
+    # enterprise-gate: broad-except-ok reason=cdc-store-failure-returns-retryable-503-without-accepting-event
+    # enterprise-gate: broad-except-ok reason=cdc-trigger-failure-dead-letters-durable-event
+    # enterprise-gate: broad-except-ok reason=cdc-replay-trigger-failure-marks-replay-failed
     except Exception as exc:  # noqa: BLE001
         logger.exception("cdc_webhook_store_failed", connector=connector, error=str(exc))
         return {"status": "error", "reason": "store_unavailable", "http_status": 503}
@@ -719,6 +722,7 @@ async def handle_cdc_webhook(
             "matched_workflows": matched_workflows,
             "workflow_count": len(matched_workflows),
         }
+    # enterprise-gate: broad-except-ok reason=cdc-replay-trigger-failure-marks-replay-failed
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "cdc_trigger_evaluation_failed",
@@ -835,6 +839,7 @@ async def replay_cdc_event(
             "matched_workflows": matched_workflows,
             "http_status": 202,
         }
+    # enterprise-gate: broad-except-ok reason=cdc-replay-trigger-failure-marks-replay-failed
     except Exception as exc:  # noqa: BLE001
         await event_store.mark_failed(
             event_id,

@@ -59,6 +59,7 @@ class LinkedinAdsConnector(BaseConnector):
         try:
             result = await self._get("/me")
             return {"status": "healthy", "id": result.get("id", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

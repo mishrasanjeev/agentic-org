@@ -107,6 +107,7 @@ class MailchimpConnector(BaseConnector):
                 "status": "healthy",
                 "health_status": data.get("health_status", ""),
             }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

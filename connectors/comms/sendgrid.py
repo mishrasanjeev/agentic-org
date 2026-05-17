@@ -43,6 +43,7 @@ class SendgridConnector(BaseConnector):
                 "status": "healthy",
                 "scopes": data.get("scopes", [])[:10],
             }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

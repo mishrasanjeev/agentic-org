@@ -93,6 +93,7 @@ class QuickbooksConnector(BaseConnector):
                             realm_id=self._realm_id,
                         )
                 return data["access_token"]
+        # enterprise-gate: broad-except-ok reason=quickbooks-oauth-refresh-falls-back-to-existing-token
         except Exception as exc:
             logger.warning("quickbooks_token_refresh_failed", error=str(exc))
             return None
@@ -128,6 +129,7 @@ class QuickbooksConnector(BaseConnector):
                     "quickbooks_realm_id_auto_fetched",
                     realm_id=self._realm_id,
                 )
+        # enterprise-gate: broad-except-ok reason=quickbooks-realm-discovery-best-effort-before-tool-failure
         except Exception as exc:  # noqa: BLE001 — best effort
             logger.warning(
                 "quickbooks_realm_id_auto_fetch_failed", error=str(exc)
@@ -221,6 +223,7 @@ class QuickbooksConnector(BaseConnector):
                 "status": "healthy",
                 "company_name": info.get("CompanyName", "") if isinstance(info, dict) else "",
             }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

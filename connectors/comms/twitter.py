@@ -107,6 +107,7 @@ class TwitterConnector(BaseConnector):
                 "auth_mode": "bearer_token",
                 "result_count": data.get("meta", {}).get("result_count", 0),
             }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

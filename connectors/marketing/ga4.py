@@ -56,6 +56,7 @@ class GA4Connector(BaseConnector):
         try:
             result = await self._get(f"/properties/{self._property_id}/metadata")
             return {"status": "healthy", "dimensions": len(result.get("dimensions", []))}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

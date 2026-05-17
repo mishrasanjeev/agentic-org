@@ -104,6 +104,7 @@ class YouTubeConnector(BaseConnector):
                     "auth_mode": "api_key",
                     "result_count": data.get("pageInfo", {}).get("totalResults", 0),
                 }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

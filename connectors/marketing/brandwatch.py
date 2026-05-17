@@ -57,6 +57,7 @@ class BrandwatchConnector(BaseConnector):
         try:
             result = await self._get("/me")
             return {"status": "healthy", "username": result.get("username", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

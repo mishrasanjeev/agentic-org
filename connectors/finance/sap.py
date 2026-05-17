@@ -107,6 +107,7 @@ class SapConnector(BaseConnector):
                 params={"$top": "1"},
             )
             return {"status": "healthy", "sample": data}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

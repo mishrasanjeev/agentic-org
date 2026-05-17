@@ -37,6 +37,7 @@ class MetaAdsConnector(BaseConnector):
         try:
             result = await self._get("/me", {"fields": "id,name"})
             return {"status": "healthy", "name": result.get("name", "")}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

@@ -32,6 +32,7 @@ def _get_toolset(api_key: str | None = None) -> Any | None:
         return None
     try:
         return ComposioToolSet(api_key=resolved_key)
+    # enterprise-gate: broad-except-ok reason=composio-sdk-init-failure-returns-unavailable
     except Exception as exc:
         logger.warning("composio_auth_bridge_init_failed", error=str(exc))
         return None
@@ -74,6 +75,7 @@ def initiate_composio_oauth(
             ),
             "status": "pending",
         }
+    # enterprise-gate: broad-except-ok reason=composio-oauth-init-failure-returns-error
     except Exception as exc:
         logger.error("composio_oauth_initiate_failed", app=app_name, error=str(exc))
         return {"error": f"OAuth initiation failed: {exc}"}
@@ -111,6 +113,7 @@ def get_composio_connection_status(
                 }
 
         return {"connected": False, "app": app_name, "status": "not_connected"}
+    # enterprise-gate: broad-except-ok reason=composio-status-check-failure-returns-disconnected-error
     except Exception as exc:
         logger.error("composio_status_check_failed", app=app_name, error=str(exc))
         return {"connected": False, "app": app_name, "status": "error", "error": str(exc)}

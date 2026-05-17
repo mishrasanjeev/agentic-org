@@ -66,6 +66,7 @@ def discover_composio_tools(
     try:
         toolset = _ComposioToolSet(api_key=resolved_key)
         raw_tools = toolset.get_tools()  # returns list of tool definitions
+    # enterprise-gate: broad-except-ok reason=composio-discovery-failure-returns-stale-cache
     except Exception as exc:
         logger.warning("composio_discovery_failed", error=str(exc))
         return _cached_tools  # return stale cache on failure

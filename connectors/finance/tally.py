@@ -315,6 +315,7 @@ class TallyConnector(BaseConnector):
                 "request_id": exc.request_id,
                 "error_category": exc.error_category,
             }
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as exc:  # defensive — connector health must never raise
             return {"status": "unhealthy", "error": str(exc)}
 

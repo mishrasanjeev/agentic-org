@@ -33,6 +33,7 @@ class LangsmithConnector(BaseConnector):
         try:
             await self._get("/sessions", {"limit": 1})
             return {"status": "healthy"}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

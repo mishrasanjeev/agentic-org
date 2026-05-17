@@ -67,6 +67,7 @@ class TrustRadiusConnector(BaseConnector):
                 params={"q": "test", "limit": 1},
             )
             return {"status": "healthy", "sample_vendors": len(data.get("vendors", []))}
+        # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as exc:
             return {"status": "unhealthy", "error": str(exc)}
 

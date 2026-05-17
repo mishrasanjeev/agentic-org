@@ -1045,6 +1045,7 @@ class _RedisSubscription:
                 await self._handler(payload)
         except asyncio.CancelledError:
             raise
+        # enterprise-gate: broad-except-ok reason=bridge-broker-listener-failure-logs-and-stops-subscription
         except Exception as exc:  # noqa: BLE001 - broker subscription should not crash process.
             logger.warning("bridge_broker_subscription_failed", channel=self._channel, error=str(exc))
 
