@@ -9,11 +9,12 @@
 #   2. Builds/pushes or verifies the API and UI images for that commit.
 #   3. Optionally runs Alembic migrations through the existing Cloud Run job.
 #   4. Captures existing Cloud Run traffic before touching services.
-#   5. Updates API/UI service templates with --no-traffic and records the new
-#      revision names created for the target images.
+#   5. Updates service templates with --no-traffic and records the new revision
+#      names created for the target images.
 #   6. Depending on --traffic:
 #      - latest: probe the API revision by tag when possible, then route 100%
-#        traffic to the captured API/UI revisions and verify public health.
+#        traffic to the captured API revision, verify public health, and only
+#        then stage and route the UI revision.
 #      - preserve: stage revisions only and report NOT DEPLOYED.
 #      - manual: stage revisions only and print exact traffic commands.
 #
@@ -217,23 +218,149 @@ latest_ready_revision() {
   service_value "$1" "status.latestReadyRevisionName"
 }
 
-wait_for_revision_ready() {
+revision_json() {
+  local svc="$1"
+  local revision="$2"
+
+  gcloud run revisions describe "$revision" \
+    --project="$GCP_PROJECT_ID" \
+    --region="$GCP_REGION" \
+    --format=json
+}
+
+revision_ready_state() {
+  local label="$1"
+  local revision="$2"
+  local image="$3"
+  local image_digest="$4"
+  local env_name="$5"
+  local expected_sha="$6"
+  local svc="$7"
+
+  python3 -c '
+import json
+import sys
+
+label, revision, image, image_digest, env_name, expected_sha, svc = sys.argv[1:]
+rev = json.load(sys.stdin)
+
+revision_service = rev.get("metadata", {}).get("labels", {}).get(
+    "serving.knative.dev/service", ""
+)
+if revision_service and revision_service != svc:
+    print(
+        f"{label} revision {revision} service mismatch: "
+        f"expected {svc}; saw {revision_service}"
+    )
+    sys.exit(1)
+
+conditions = rev.get("status", {}).get("conditions", []) or []
+ready = next((item for item in conditions if item.get("type") == "Ready"), {})
+ready_status = ready.get("status", "")
+ready_reason = ready.get("reason", "")
+ready_message = ready.get("message", "")
+
+containers = rev.get("spec", {}).get("containers", []) or []
+status_digest = rev.get("status", {}).get("imageDigest", "")
+single_container_status_digest_matches = (
+    len(containers) == 1
+    and image_digest
+    and (status_digest.endswith("@" + image_digest) or status_digest.endswith(image_digest))
+)
+
+def image_matches(candidate: str) -> bool:
+    if candidate == image:
+        return True
+    if image_digest and (
+        candidate.endswith("@" + image_digest)
+        or candidate.endswith(image_digest)
+        or single_container_status_digest_matches
+    ):
+        return True
+    return False
+
+matched_containers = [
+    container for container in containers if image_matches(container.get("image", ""))
+]
+if not matched_containers:
+    seen_images = ", ".join(
+        container.get("image", "<missing>") for container in containers
+    ) or "<none>"
+    print(
+        f"{label} revision {revision} image mismatch: expected {image}"
+        f" or digest {image_digest or '<unknown>'}; saw {seen_images}"
+    )
+    sys.exit(1)
+
+def env_value(container, key):
+    for item in container.get("env", []) or []:
+        if item.get("name") == key:
+            return item.get("value")
+    return None
+
+commit_values = [
+    env_value(container, env_name)
+    for container in matched_containers
+    if env_value(container, env_name) is not None
+]
+if expected_sha not in commit_values:
+    safe_values = ", ".join(value or "<unset>" for value in commit_values) or "<missing>"
+    print(
+        f"{label} revision {revision} commit metadata mismatch: "
+        f"{env_name} expected {expected_sha}; saw {safe_values}"
+    )
+    sys.exit(1)
+
+details = (
+    f"Ready={ready_status or '<missing>'}"
+    f" reason={ready_reason or '<none>'}"
+    f" message={ready_message or '<none>'}"
+)
+if ready_status == "True":
+    print(
+        f"Ready: {label} revision {revision} ({details}); "
+        "image and commit metadata matched"
+    )
+    sys.exit(0)
+if ready_status == "False":
+    print(f"{label} revision {revision} is not ready ({details})")
+    sys.exit(1)
+
+print(f"{label} revision {revision} is still becoming ready ({details})")
+sys.exit(2)
+' "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc"
+}
+
+wait_for_staged_revision_ready() {
   local svc="$1"
   local revision="$2"
   local label="$3"
+  local image="$4"
+  local image_digest="$5"
+  local env_name="$6"
+  local expected_sha="$7"
+  local state_output=""
+  local state_rc=0
 
-  echo "Waiting for $label revision to become ready: $revision"
+  echo "Waiting for $label staged revision object to become ready: $revision"
   for attempt in $(seq 1 30); do
-    ready="$(latest_ready_revision "$svc" || true)"
-    if [[ "$ready" == "$revision" ]]; then
-      echo "Ready: $label revision $revision"
+    set +e
+    state_output="$(revision_json "$svc" "$revision" | revision_ready_state "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc")"
+    state_rc=$?
+    set -e
+    if [[ $state_rc -eq 0 ]]; then
+      echo "$state_output"
       return 0
     fi
-    echo "  attempt $attempt: latestReadyRevision=${ready:-?} (want $revision) - retrying in 10s"
+    if [[ $state_rc -eq 1 ]]; then
+      echo "::error::$state_output" >&2
+      return 1
+    fi
+    echo "  attempt $attempt: $state_output - retrying in 10s"
     sleep 10
   done
 
-  echo "::error::$label revision did not become ready: $revision" >&2
+  echo "::error::$label staged revision object did not become ready: $revision" >&2
   return 1
 }
 
@@ -243,6 +370,8 @@ update_service_no_traffic() {
   local image="$3"
   local env_vars="$4"
   local label="$5"
+  local image_digest="$6"
+  local env_name="$7"
   local before
   local after
 
@@ -262,7 +391,7 @@ update_service_no_traffic() {
 
   echo "$label previous latest revision: ${before:-none}"
   echo "$label new staged revision    : $after"
-  wait_for_revision_ready "$svc" "$after" "$label"
+  wait_for_staged_revision_ready "$svc" "$after" "$label" "$image" "$image_digest" "$env_name" "$DEPLOY_SHA"
   printf -v "$result_var" '%s' "$after"
 }
 
@@ -490,9 +619,10 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo "[dry-run] staged UI revision placeholder : $UI_NEW_REVISION"
   case "$TRAFFIC_MODE" in
     latest)
+      echo "[dry-run] would check staged API/UI readiness from revision objects, not service latestReadyRevisionName"
       echo "[dry-run] would tag/probe $API_NEW_REVISION before traffic shift when Cloud Run returns a tagged URL"
       echo "[dry-run] would route API traffic 100% to $API_NEW_REVISION"
-      echo "[dry-run] would route UI traffic 100% to $UI_NEW_REVISION only after API health passes"
+      echo "[dry-run] would stage and route UI traffic 100% to $UI_NEW_REVISION only after API health passes"
       ;;
     preserve)
       echo "[dry-run] NOT DEPLOYED: --traffic preserve would leave API/UI traffic unchanged"
@@ -505,16 +635,17 @@ if [[ $DRY_RUN -eq 1 ]]; then
   exit 0
 fi
 
-# 6. Stage new revisions without moving traffic.
+# 6. Stage API without moving traffic. In latest mode, UI is staged only after
+# API public health passes so an API failure cannot leave a new UI revision live.
 API_NEW_REVISION=""
 UI_NEW_REVISION=""
-update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "AGENTICORG_GIT_SHA=${DEPLOY_SHA}" "API"
-update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI"
+update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "AGENTICORG_GIT_SHA=${DEPLOY_SHA}" "API" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"
 
 echo "Staged API revision: $API_NEW_REVISION"
-echo "Staged UI revision : $UI_NEW_REVISION"
 
 if [[ "$TRAFFIC_MODE" == "preserve" ]]; then
+  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
+  echo "Staged UI revision : $UI_NEW_REVISION"
   echo "NOT DEPLOYED: --traffic preserve staged revisions but left production traffic unchanged."
   echo "Current API traffic: $(traffic_summary "$API_SERVICE")"
   echo "Current UI traffic : $(traffic_summary "$UI_SERVICE")"
@@ -522,6 +653,8 @@ if [[ "$TRAFFIC_MODE" == "preserve" ]]; then
 fi
 
 if [[ "$TRAFFIC_MODE" == "manual" ]]; then
+  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
+  echo "Staged UI revision : $UI_NEW_REVISION"
   echo "NOT DEPLOYED: --traffic manual staged revisions but left production traffic unchanged."
   print_manual_traffic_commands "$API_NEW_REVISION" "$UI_NEW_REVISION"
   exit 0
@@ -562,6 +695,15 @@ if ! poll_health_url "$HEALTH_URL" "public API" 30; then
   rollback_service_traffic "$UI_SERVICE" "$PREVIOUS_UI_TRAFFIC_SPEC" "UI"
   exit 1
 fi
+
+if ! update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"; then
+  remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
+  echo "::error::Failed to stage UI revision after API verification; rolling back API/UI traffic." >&2
+  rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"
+  rollback_service_traffic "$UI_SERVICE" "$PREVIOUS_UI_TRAFFIC_SPEC" "UI"
+  exit 1
+fi
+echo "Staged UI revision : $UI_NEW_REVISION"
 
 if ! move_traffic_to_revision "$UI_SERVICE" "$UI_NEW_REVISION" "UI"; then
   remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"

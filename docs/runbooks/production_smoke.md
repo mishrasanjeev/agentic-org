@@ -174,3 +174,9 @@ The official deploy helper stages API and UI revisions with `--no-traffic`, reco
 If API health fails after a traffic shift, the script rolls API and UI traffic back to the previously captured allocation. If UI traffic movement fails after API verification, the script also rolls back both services. This prevents a new UI revision from remaining live against an old or unhealthy API revision.
 
 Dry-run mode prints the previous traffic allocation and the planned traffic changes without updating services or traffic.
+
+### No-Traffic Revision Readiness
+
+Cloud Run revisions staged with `--no-traffic` may report `Ready=True` on the revision object while the service-level `status.latestReadyRevisionName` remains pinned to the currently serving revision. The deploy helper must therefore check readiness on the specific staged revision object, not on the service-level latest-ready field.
+
+This was observed during the attempted deploy of commit `2d3a9ac6eb2249fe6debe915f9c521692a8b9f75`: API revision `agenticorg-api-00067-fpj` was created with `Ready=True` and no public traffic, while `agenticorg-api` still reported `latestReadyRevisionName=agenticorg-api-00065-zp4`. The script now treats the staged revision as ready only when the revision object has `Ready=True`, belongs to the expected service, and its image plus commit metadata match the requested deploy SHA.
