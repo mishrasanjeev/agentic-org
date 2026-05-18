@@ -20,14 +20,19 @@ def test_cloud_run_deploy_stamps_api_and_ui_commit_metadata() -> None:
 
 def test_ui_metadata_is_set_on_ui_service_update() -> None:
     script = _deploy_script()
-    ui_update_start = script.index(
-        'update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"'
-    )
-    ui_update_end = script.index('echo "Staged API revision:', ui_update_start)
-    ui_update_block = script[ui_update_start:ui_update_end]
 
-    assert '"$UI_IMAGE"' in ui_update_block
-    assert '"GIT_SHA=${DEPLOY_SHA}"' in ui_update_block
+    ui_update_calls = [
+        line
+        for line in script.splitlines()
+        if 'update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"' in line
+    ]
+
+    assert len(ui_update_calls) >= 3
+    for ui_update_call in ui_update_calls:
+        assert '"$UI_IMAGE"' in ui_update_call
+        assert '"GIT_SHA=${DEPLOY_SHA}"' in ui_update_call
+        assert '"$UI_IMAGE_DIGEST"' in ui_update_call
+        assert '"GIT_SHA"' in ui_update_call
 
 
 def test_pinned_traffic_is_detected_before_rollout() -> None:
@@ -48,7 +53,57 @@ def test_services_are_staged_without_traffic_before_shift() -> None:
     assert 'update_service_no_traffic API_NEW_REVISION "$API_SERVICE"' in script
     assert 'update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"' in script
     assert "latest_created_revision" in script
-    assert "wait_for_revision_ready" in script
+    assert "wait_for_staged_revision_ready" in script
+
+
+def test_staged_revision_readiness_uses_revision_object_not_latest_ready() -> None:
+    script = _deploy_script()
+    wait_start = script.index("wait_for_staged_revision_ready()")
+    wait_end = script.index("update_service_no_traffic()", wait_start)
+    wait_block = script[wait_start:wait_end]
+
+    assert "revision_json" in wait_block
+    assert "revision_ready_state" in wait_block
+    assert "latest_ready_revision" not in wait_block
+    assert "latestReadyRevisionName" not in wait_block
+    assert "staged revision object" in wait_block
+
+
+def test_retired_ready_staged_revision_is_accepted_when_target_matches() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert 'ready_status == "True"' in ready_block
+    assert "Active" not in ready_block
+    assert "Retired" not in ready_block
+    assert "image and commit metadata matched" in ready_block
+
+
+def test_staged_revision_ready_false_surfaces_condition_message() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert 'ready_status == "False"' in ready_block
+    assert "ready_reason" in ready_block
+    assert "ready_message" in ready_block
+    assert "is not ready" in ready_block
+
+
+def test_staged_revision_image_digest_and_commit_metadata_are_verified() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert "image mismatch" in ready_block
+    assert "commit metadata mismatch" in ready_block
+    assert "image_digest" in ready_block
+    assert "expected_sha" in ready_block
+    assert "serving.knative.dev/service" in ready_block
 
 
 def test_dry_run_reports_planned_traffic_changes() -> None:
@@ -57,7 +112,11 @@ def test_dry_run_reports_planned_traffic_changes() -> None:
     assert "[dry-run] would update $API_SERVICE image/env with --no-traffic" in script
     assert "[dry-run] would route API traffic 100% to $API_NEW_REVISION" in script
     assert (
-        "[dry-run] would route UI traffic 100% to $UI_NEW_REVISION only after API health passes"
+        "[dry-run] would stage and route UI traffic 100% to $UI_NEW_REVISION only after API health passes"
+        in script
+    )
+    assert (
+        "[dry-run] would check staged API/UI readiness from revision objects, not service latestReadyRevisionName"
         in script
     )
 
@@ -89,6 +148,19 @@ def test_api_failure_rolls_back_ui_traffic_plan() -> None:
 
     assert 'rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC"' in failure_block
     assert 'rollback_service_traffic "$UI_SERVICE" "$PREVIOUS_UI_TRAFFIC_SPEC"' in failure_block
+
+
+def test_ui_is_staged_only_after_api_public_health_in_latest_mode() -> None:
+    script = _deploy_script()
+
+    api_stage = script.index(
+        'update_service_no_traffic API_NEW_REVISION "$API_SERVICE"'
+    )
+    public_health = script.index('poll_health_url "$HEALTH_URL" "public API" 30')
+    ui_stage = script.index('update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"', public_health)
+    ui_traffic = script.index('move_traffic_to_revision "$UI_SERVICE" "$UI_NEW_REVISION"')
+
+    assert api_stage < public_health < ui_stage < ui_traffic
 
 
 def test_script_refuses_success_when_public_health_reports_old_sha() -> None:
