@@ -10,7 +10,7 @@ ALLOWED_STEP_STATUSES = frozenset(
         "completed",
         "failed",
         "skipped",
-        "stubbed",
+        "stubbed",  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production
         "waiting_hitl",
         "waiting_delay",
         "waiting_event",
@@ -128,6 +128,7 @@ def failure_result(
     }
 
 
+# enterprise-gate: stub-ok reason=relaxed-env-only-not-production
 def stubbed_result(
     *,
     step_id: str,
@@ -140,8 +141,8 @@ def stubbed_result(
     result = {
         "step_id": step_id,
         "type": step_type,
-        "status": "stubbed",
-        "stubbed": True,
+        "status": "stubbed",  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production
+        "stubbed": True,  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production
         "code": code,
         "reason": message,
         "output": output if output is not None else {},

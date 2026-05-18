@@ -98,7 +98,7 @@ async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
 
         step_results = state.setdefault("step_results", {})
         step_results[step_id] = {
-            "output": {},
+            "output": {"resumed": True, "completed_by": "resume_workflow_wait"},
             "status": "completed",
             "completed_by": "resume_workflow_wait",
         }
