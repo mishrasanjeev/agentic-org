@@ -144,7 +144,7 @@ function buildTiers(agentsText: string, connectorsText: string) {
     },
     {
       name: "Pro",
-      price: "$499",
+      price: "$2",
       period: "/month",
       description: "Scale your operations with advanced agents and priority support.",
       highlight: true,

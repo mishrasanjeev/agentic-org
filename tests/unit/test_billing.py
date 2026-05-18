@@ -215,7 +215,7 @@ class TestIndiaPricingInINR:
 
         assert pro["price_inr"] == 9_999
         assert ent["price_inr"] == 49_999
-        assert pro["price_usd"] == 99
+        assert pro["price_usd"] == 2
         assert ent["price_usd"] == 499
 
     def test_pinelabs_plan_amounts(self):
@@ -778,8 +778,6 @@ class TestStripeCheckoutSession:
     def test_create_checkout_session(self, mock_get_stripe):
         mock_stripe = MagicMock()
 
-        # Mock Customer.search to return empty (no existing customer)
-        mock_stripe.Customer.search.return_value = MagicMock(data=[])
         # Mock Customer.create
         mock_customer = MagicMock()
         mock_customer.id = "cus_test123"
@@ -810,19 +808,44 @@ class TestStripeCheckoutSession:
         call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
         assert call_kwargs["mode"] == "subscription"
         assert call_kwargs["customer"] == "cus_test123"
+        assert call_kwargs["line_items"] == [{"price": "price_pro_real", "quantity": 1}]
         assert call_kwargs["metadata"]["tenant_id"] == "t1"
         assert call_kwargs["metadata"]["plan"] == "pro"
+        mock_stripe.Customer.search.assert_not_called()
 
     @patch("core.billing.stripe_client._get_stripe")
-    def test_create_checkout_rejects_missing_price(self, mock_get_stripe):
+    def test_create_checkout_uses_dynamic_pro_price_when_price_id_missing(self, mock_get_stripe):
+        mock_stripe = MagicMock()
+        mock_customer = MagicMock()
+        mock_customer.id = "cus_test123"
+        mock_stripe.Customer.create.return_value = mock_customer
+        mock_session = MagicMock()
+        mock_session.id = "cs_test_session_001"
+        mock_session.url = "https://checkout.stripe.com/c/pay/cs_test_session_001"
+        mock_stripe.checkout.Session.create.return_value = mock_session
+        mock_get_stripe.return_value = mock_stripe
+
+        from core.billing.stripe_client import create_checkout_session
+
+        with patch("core.billing.stripe_client.PLAN_PRICE_MAP", {"pro": ""}):
+            result = create_checkout_session(tenant_id="t1", plan="pro")
+
+        assert result["session_id"] == "cs_test_session_001"
+        call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
+        assert call_kwargs["line_items"][0]["price_data"]["currency"] == "usd"
+        assert call_kwargs["line_items"][0]["price_data"]["unit_amount"] == 2_00
+        assert call_kwargs["line_items"][0]["price_data"]["recurring"] == {"interval": "month"}
+        assert call_kwargs["line_items"][0]["price_data"]["product_data"]["metadata"] == {"plan": "pro"}
+        mock_stripe.Customer.search.assert_not_called()
+
+    @patch("core.billing.stripe_client._get_stripe")
+    def test_create_checkout_rejects_unknown_plan(self, mock_get_stripe):
         mock_get_stripe.return_value = MagicMock()
 
         from core.billing.stripe_client import create_checkout_session
 
-        # Empty price map means no price ID configured
-        with patch("core.billing.stripe_client.PLAN_PRICE_MAP", {"pro": ""}):
-            with pytest.raises(ValueError, match="Unknown plan or missing price"):
-                create_checkout_session(tenant_id="t1", plan="pro")
+        with pytest.raises(ValueError, match="Unknown plan or missing price"):
+            create_checkout_session(tenant_id="t1", plan="unknown")
 
 
 class TestStripeSessionVerification:
@@ -1050,6 +1073,7 @@ class TestStripeCustomerPortal:
 
         assert urlparse(url).hostname == "billing.stripe.com"
         mock_stripe.billing_portal.Session.create.assert_called_once()
+        mock_stripe.Customer.search.assert_not_called()
 
 
 class TestStripeE2ECheckoutFlow:
@@ -1062,7 +1086,6 @@ class TestStripeE2ECheckoutFlow:
         mock_get_stripe.return_value = mock_stripe
 
         # Step 1: Create checkout session
-        mock_stripe.Customer.search.return_value = MagicMock(data=[])
         mock_customer = MagicMock()
         mock_customer.id = "cus_e2e_stripe"
         mock_stripe.Customer.create.return_value = mock_customer
@@ -1079,6 +1102,7 @@ class TestStripeE2ECheckoutFlow:
 
         assert checkout["session_id"] == "cs_e2e_001"
         assert urlparse(checkout["checkout_url"]).hostname == "checkout.stripe.com"
+        mock_stripe.Customer.search.assert_not_called()
 
         # Step 2: User pays on Stripe... (simulated)
 

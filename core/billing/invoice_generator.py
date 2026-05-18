@@ -33,7 +33,7 @@ logger = structlog.get_logger()
 # Plan pricing — aligned with core.billing.limits.PLAN_PRICING
 PLAN_MONTHLY_FEE = {
     "free": Decimal("0"),
-    "pro": Decimal("99.00"),
+    "pro": Decimal("2.00"),
     "enterprise": Decimal("499.00"),
 }
 USAGE_RATE_PER_1K_TASKS = Decimal("2.50")  # $2.50 per 1000 tasks above plan allowance

@@ -35,12 +35,12 @@ async def test_billing_health_refuses_ready_when_stripe_sdk_missing(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_billing_health_requires_stripe_price_ids(monkeypatch) -> None:
+async def test_billing_health_accepts_dynamic_stripe_prices(monkeypatch) -> None:
     from api.v1 import billing
 
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_configured")
     monkeypatch.delenv("STRIPE_PRICE_PRO", raising=False)
-    monkeypatch.setenv("STRIPE_PRICE_ENTERPRISE", "price_enterprise")
+    monkeypatch.delenv("STRIPE_PRICE_ENTERPRISE", raising=False)
     monkeypatch.delenv("PINELABS_API_KEY", raising=False)
     monkeypatch.delenv("PLURAL_API_KEY", raising=False)
     monkeypatch.setattr(billing, "_is_module_installed", lambda name: True)
@@ -48,6 +48,8 @@ async def test_billing_health_requires_stripe_price_ids(monkeypatch) -> None:
     result = await billing.billing_health()
 
     assert result["stripe_sdk_installed"] is True
-    assert result["stripe_prices_configured"] is False
-    assert result["stripe_configured"] is False
-    assert result["ready_for_release"] is False
+    assert result["stripe_price_ids_configured"] is False
+    assert result["stripe_dynamic_prices_configured"] is True
+    assert result["stripe_prices_configured"] is True
+    assert result["stripe_configured"] is True
+    assert result["ready_for_release"] is True
