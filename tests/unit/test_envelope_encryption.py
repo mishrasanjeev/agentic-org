@@ -216,3 +216,36 @@ class TestTenantSecretsRouting:
         assert result.startswith(_ENVELOPE_PREFIX)
         # Round-trip
         assert decrypt_for_tenant(result) == "byok-secret"
+
+    @patch("core.crypto.tenant_secrets.async_session_factory")
+    @patch("core.crypto.tenant_secrets.encrypt_to_string")
+    def test_encrypt_for_tenant_configured_kek_failure_does_not_downgrade_to_legacy(
+        self, mock_encrypt_to_string, mock_session_factory, monkeypatch
+    ):
+        """Configured envelope encryption failures fail closed instead of Fernet fallback."""
+        monkeypatch.setenv(
+            "AGENTICORG_PLATFORM_KEK",
+            "projects/platform/locations/asia-south1/keyRings/r/cryptoKeys/k",
+        )
+        mock_encrypt_to_string.side_effect = RuntimeError("kms unavailable")
+
+        from contextlib import asynccontextmanager
+
+        session = MagicMock()
+        scalar = MagicMock()
+        scalar.scalar_one_or_none = MagicMock(return_value="")
+        from unittest.mock import AsyncMock as _AsyncMock
+
+        session.execute = _AsyncMock(return_value=scalar)
+
+        @asynccontextmanager
+        async def _ctx():
+            yield session
+
+        mock_session_factory.side_effect = lambda: _ctx()
+
+        async def run():
+            return await encrypt_for_tenant("plaintext", uuid.uuid4())
+
+        with pytest.raises(RuntimeError, match="kms unavailable"):
+            asyncio.run(run())

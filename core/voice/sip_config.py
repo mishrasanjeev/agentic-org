@@ -107,7 +107,7 @@ def decrypt_credentials(credentials: dict) -> dict:
         import hashlib
         import os
 
-        from cryptography.fernet import Fernet
+        from cryptography.fernet import Fernet, InvalidToken
 
         secret = os.getenv("AGENTICORG_SECRET_KEY", "")
         if not secret:
@@ -119,7 +119,7 @@ def decrypt_credentials(credentials: dict) -> dict:
             if isinstance(v, str) and v:
                 try:
                     decrypted[k] = f.decrypt(v.encode()).decode()
-                except Exception:
+                except InvalidToken:
                     decrypted[k] = v  # not encrypted, return as-is
             else:
                 decrypted[k] = v
@@ -218,6 +218,7 @@ async def _test_twilio(config: SIPConfig) -> dict[str, Any]:
             "message": "Twilio SDK not installed — run: pip install twilio",
             "details": {},
         }
+    # enterprise-gate: broad-except-ok reason=twilio-provider-probe-failure-returns-explicit-unhealthy
     except Exception as exc:
         return {
             "success": False,
@@ -249,6 +250,7 @@ async def _test_vonage(config: SIPConfig) -> dict[str, Any]:
             "message": "Vonage SDK not installed — run: pip install vonage",
             "details": {},
         }
+    # enterprise-gate: broad-except-ok reason=vonage-provider-probe-failure-returns-explicit-unhealthy
     except Exception as exc:
         return {
             "success": False,

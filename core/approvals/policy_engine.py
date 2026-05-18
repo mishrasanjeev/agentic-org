@@ -51,6 +51,7 @@ def _condition_matches(condition: str | None, context: dict[str, Any]) -> bool:
         from workflows.condition_evaluator import evaluate_condition
 
         return bool(evaluate_condition(condition, context))
+    # enterprise-gate: broad-except-ok reason=approval-policy-condition-failure-defaults-safe-false
     except Exception:
         logger.warning("approval_policy_condition_eval_failed", condition=condition)
         return False

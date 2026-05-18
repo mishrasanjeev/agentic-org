@@ -1,29 +1,6 @@
 {
   "allowed_findings": {
-    "broad_exception": [
-      "broad_exception:api/v1/voice.py:336:b6ce1f3ca752",
-      "broad_exception:core/approvals/policy_engine.py:54:0bc50f18028e",
-      "broad_exception:core/async_redis.py:38:76ee9880559b",
-      "broad_exception:core/crypto/backfill_connector_secrets.py:87:82601d37963c",
-      "broad_exception:core/crypto/credential_vault.py:184:769a5fd524b1",
-      "broad_exception:core/crypto/migration_helpers.py:145:454dc8178697",
-      "broad_exception:core/crypto/rewrap.py:133:b4cb59a2f12d",
-      "broad_exception:core/crypto/rewrap.py:346:530373f6b063",
-      "broad_exception:core/crypto/tenant_secrets.py:57:d015ac4e6358",
-      "broad_exception:core/crypto/tenant_secrets.py:73:bde78cfef094",
-      "broad_exception:core/explainer.py:138:658c378bbe3e",
-      "broad_exception:core/langgraph/agent_graph.py:607:28824f9b6c42",
-      "broad_exception:core/langgraph/llm_factory.py:128:2443358327e4",
-      "broad_exception:core/langgraph/llm_factory.py:188:498e61368f92",
-      "broad_exception:core/marketing/ab_test.py:141:7e4f76140361",
-      "broad_exception:core/marketing/intent_aggregator.py:152:1f608f2ca879",
-      "broad_exception:core/marketing/intent_aggregator.py:166:fed5e336de92",
-      "broad_exception:core/marketing/intent_aggregator.py:180:5a2f8b189684",
-      "broad_exception:core/seed_knowledge.py:273:a87993832fa9",
-      "broad_exception:core/voice/sip_config.py:122:11665f755ba7",
-      "broad_exception:core/voice/sip_config.py:221:d1a8368e334b",
-      "broad_exception:core/voice/sip_config.py:252:1184513c8219"
-    ],
+    "broad_exception": [],
     "stub_path": [
       "stub_path:workflows/collaboration.py:89:59ffc28f11d0",
       "stub_path:workflows/engine.py:669:facd4b3e7b16",

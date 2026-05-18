@@ -142,6 +142,7 @@ class EncryptedMigrationContext:
                     else:
                         decrypt_credential(ct if isinstance(ct, str) else ct.decode())
                     ok += 1
+                # enterprise-gate: broad-except-ok reason=encrypted-migration-preflight-failure-raises
                 except Exception as exc:  # noqa: BLE001
                     failures.append(f"{type(exc).__name__}: {str(exc)[:120]}")
             results[col] = ok

@@ -125,6 +125,7 @@ def create_chat_model(
             routed_model = smart_router.route(query=query, config=cfg)
             if routed_model:
                 model = routed_model
+        # enterprise-gate: broad-except-ok reason=smart-routing-failure-falls-back-to-explicit-model
         except Exception as exc:  # noqa: BLE001
             logger.warning("smart_routing_failed", error=str(exc), fallback=model)
             # Fall through to normal model resolution
@@ -185,6 +186,7 @@ def _resolve_cloud_api_key(provider: str, tenant_id: str | None = None) -> str:
         # library surface the usual "missing API key" error so the
         # symptom is actionable.
         return ""
+    # enterprise-gate: broad-except-ok reason=llm-key-resolver-failure-returns-provider-unavailable
     except Exception as exc:
         logger.warning("llm_key_resolve_failed", provider=provider, error=str(exc))
         return ""
