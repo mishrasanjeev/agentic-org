@@ -160,3 +160,17 @@ If smoke checks fail after a deploy:
 2. Check Cloud Run revision health and application logs.
 3. Use the deployment rollback target documented in `docs/deployments/2026-05-17-post-deploy-46798ad.md` if the active revision is unhealthy.
 4. If credentials are missing or disabled, treat authenticated smoke as `SKIPPED`, not as a product outage.
+
+## Cloud Run Pinned-Traffic Deploys
+
+Cloud Run services can retain explicit revision traffic pinning after `gcloud run services update`. In that state a new image/env update can create a new revision without sending public traffic to it. A deploy script that only polls the public health URL will keep seeing the old commit and must not report success.
+
+The official deploy helper stages API and UI revisions with `--no-traffic`, records the previous traffic allocation, and then uses an explicit traffic mode:
+
+- `--traffic latest` stages the target revisions, probes the new API revision through a Cloud Run tag when Cloud Run returns a tagged URL, moves API traffic to the target revision, verifies public health reports the target commit, then moves UI traffic.
+- `--traffic preserve` stages target revisions only and reports `NOT DEPLOYED`.
+- `--traffic manual` stages target revisions only, reports `NOT DEPLOYED`, and prints the exact `gcloud run services update-traffic` commands an operator can run after separate approval.
+
+If API health fails after a traffic shift, the script rolls API and UI traffic back to the previously captured allocation. If UI traffic movement fails after API verification, the script also rolls back both services. This prevents a new UI revision from remaining live against an old or unhealthy API revision.
+
+Dry-run mode prints the previous traffic allocation and the planned traffic changes without updating services or traffic.
