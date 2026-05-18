@@ -839,6 +839,7 @@ def print_findings(findings: list[Finding]) -> None:
 
 
 def scorecard(findings: list[Finding], allowed: list[Finding], blocked: list[Finding], heads: list[str], routes: list[RouteEntry]) -> dict[str, int]:
+    stub_categories = {"stub_path", "stub_success_status"}
     counts = {
         "alembic_head_count": len(heads),
         "broad_exceptions_allowed": sum(f.category == "broad_exception" for f in allowed),
@@ -846,8 +847,12 @@ def scorecard(findings: list[Finding], allowed: list[Finding], blocked: list[Fin
         "process_local_allowed": sum(f.category == "process_local_state" for f in allowed),
         "process_local_blocked": sum(f.category == "process_local_state" for f in blocked),
         "routes_missing_metadata": sum(f.category == "route_missing_metadata" for f in findings),
-        "stub_paths_allowed": sum(f.category in {"stub_path", "stub_success_status"} for f in allowed),
-        "stub_paths_blocked": sum(f.category in {"stub_path", "stub_success_status"} for f in blocked),
+        "stub_false_success_allowed": sum(f.category == "stub_success_status" for f in allowed),
+        "stub_false_success_blocked": sum(f.category == "stub_success_status" for f in blocked),
+        "stub_path_allowed": sum(f.category == "stub_path" for f in allowed),
+        "stub_path_blocked": sum(f.category == "stub_path" for f in blocked),
+        "stub_paths_allowed": sum(f.category in stub_categories for f in allowed),
+        "stub_paths_blocked": sum(f.category in stub_categories for f in blocked),
         "total_blocked": len(blocked),
         "total_routes": len(routes),
     }

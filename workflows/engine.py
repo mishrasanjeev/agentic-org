@@ -666,8 +666,8 @@ class WorkflowEngine:
         }
         if result.get("error"):
             state_result["error"] = result["error"]
-        if result.get("stubbed"):
-            state_result["stubbed"] = True
+        if result.get("stubbed"):  # enterprise-gate: stub-ok reason=transparent-relaxed-env-marker
+            state_result["stubbed"] = True  # enterprise-gate: stub-ok reason=transparent-relaxed-env-marker
             state_result["reason"] = result.get("reason")
             state_result["code"] = result.get("code")
             if result.get("connector"):

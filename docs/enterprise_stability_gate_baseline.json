@@ -1,35 +1,8 @@
 {
   "allowed_findings": {
     "broad_exception": [],
-    "stub_path": [
-      "stub_path:workflows/collaboration.py:89:59ffc28f11d0",
-      "stub_path:workflows/engine.py:669:facd4b3e7b16",
-      "stub_path:workflows/engine.py:670:39697419f2fe",
-      "stub_path:workflows/step_results.py:131:126bb236505c",
-      "stub_path:workflows/step_results.py:13:0ee85e358421",
-      "stub_path:workflows/step_results.py:143:92f27c9b31b6",
-      "stub_path:workflows/step_results.py:144:47c59541cf2b",
-      "stub_path:workflows/step_types.py:25:90369e4105f5",
-      "stub_path:workflows/step_types.py:36:45cf8ed02d5b",
-      "stub_path:workflows/step_types.py:37:e78854633fbd",
-      "stub_path:workflows/step_types.py:382:aa6c9d3ea86d",
-      "stub_path:workflows/step_types.py:383:30c7392df60a",
-      "stub_path:workflows/step_types.py:387:12ac8d41901d",
-      "stub_path:workflows/step_types.py:423:d430c0b3a276",
-      "stub_path:workflows/step_types.py:424:ad08d8145548",
-      "stub_path:workflows/step_types.py:428:56ac81b879f4",
-      "stub_path:workflows/step_types.py:64:44b33f999aa3",
-      "stub_path:workflows/step_types.py:65:53a764b0f22f",
-      "stub_path:workflows/step_types.py:69:585b6132bfc0",
-      "stub_path:workflows/step_types.py:82:583e914ead91",
-      "stub_path:workflows/step_types.py:83:185598d289e0",
-      "stub_path:workflows/step_types.py:87:af8eb4225b5c"
-    ],
-    "stub_success_status": [
-      "stub_success_status:connectors/marketing/mailchimp.py:218:1c64f37a2936",
-      "stub_success_status:core/tasks/workflow_tasks.py:102:4fb2877f806c",
-      "stub_success_status:workflows/collaboration.py:49:c023db34971a"
-    ]
+    "stub_path": [],
+    "stub_success_status": []
   },
   "description": "Baseline of existing enterprise stability gate debt. New unannotated findings fail CI.",
   "routes_missing_metadata": [],

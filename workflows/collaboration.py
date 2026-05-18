@@ -46,9 +46,13 @@ async def execute_collaboration_step(step: dict, state: dict) -> dict[str, Any]:
         return {
             "step_id": step.get("id", ""),
             "type": "collaboration",
-            "status": "completed",
-            "output": {},
+            "status": "failed",
+            "output": {"agents": []},
             "agents_run": 0,
+            "error": {
+                "code": "collaboration_agents_not_configured",
+                "message": "Collaboration step requires at least one agent.",
+            },
         }
 
     # Shared context dict — agents can read/write during execution
@@ -85,8 +89,7 @@ async def _run_agent(
 ) -> dict[str, Any]:
     """Execute a single agent within the collaboration.
 
-    Uses the workflow step_types agent executor if available,
-    otherwise returns a stub result.
+    Uses the workflow step_types agent executor and normalizes failures.
     """
     try:
         from workflows.step_types import execute_step
@@ -109,11 +112,14 @@ async def _run_agent(
             if isinstance(agent_contribution, dict):
                 shared_context.update(agent_contribution)
 
-        return {
+        normalized = {
             "agent": agent_name,
             "status": result.get("status", "completed"),
             "output": result.get("output", {}),
         }
+        if result.get("error"):
+            normalized["error"] = result["error"]
+        return normalized
     # enterprise-gate: broad-except-ok reason=collaboration-child-failure-normalized-to-failed-result
     except Exception as exc:
         logger.warning("collaboration_agent_failed", agent=agent_name, error=str(exc))
@@ -207,6 +213,16 @@ async def _first_complete(
         if done:
             first_task = next(iter(done))
             name, result = first_task.result()
+            if result.get("status") != "completed":
+                return {
+                    "status": "failed",
+                    "aggregation": "first_complete",
+                    "winner": name,
+                    "output": result.get("output", {}),
+                    "agents_run": len(agent_tasks),
+                    "agents_completed": 1,
+                    "error": result.get("error") or "First completed agent did not succeed.",
+                }
             return {
                 "status": "completed",
                 "aggregation": "first_complete",
@@ -247,8 +263,12 @@ def _aggregate_merge(results: dict[str, dict[str, Any]]) -> dict[str, Any]:
         else:
             agents_failed += 1
 
+    status = "completed"
+    if agents_succeeded == 0 and agents_failed > 0:
+        status = "failed"
+
     return {
-        "status": "completed",
+        "status": status,
         "aggregation": "merge",
         "output": merged_output,
         "agents_run": len(results),
@@ -272,7 +292,7 @@ def _aggregate_vote(results: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
     if not votes:
         return {
-            "status": "completed",
+            "status": "failed" if results else "completed",
             "aggregation": "vote",
             "output": {"decision": None, "reason": "No agents provided a decision"},
             "votes": {},

@@ -92,6 +92,19 @@ async def _mock_execute_step_failing(step: dict, state: dict) -> dict:
     }
 
 
+async def _mock_execute_step_failed_status(step: dict, state: dict) -> dict:
+    """Mock agent that returns a typed failed result."""
+    agent_name = step.get("agent", step.get("agent_type", "unknown"))
+    await asyncio.sleep(0.01)
+    return {
+        "step_id": step["id"],
+        "type": "agent",
+        "status": "failed",
+        "output": {"agent": agent_name},
+        "error": {"code": "agent_failed", "message": "Agent failed"},
+    }
+
+
 async def _mock_execute_step_race(step: dict, state: dict) -> dict:
     """Mock agent with different speeds for first_complete tests."""
     agent_name = step.get("agent", step.get("agent_type", "unknown"))
@@ -225,6 +238,51 @@ class TestOneAgentFailsOthersContinue:
         assert "failing_agent" in output
         assert result["agents_failed"] >= 1
         assert result["agents_succeeded"] >= 2
+
+
+class TestCollaborationFalseSuccessPrevention:
+    """Collaboration must not report success when no agent did useful work."""
+
+    @pytest.mark.asyncio
+    async def test_no_agents_is_failed_configuration(self, _base_state):
+        from workflows.collaboration import execute_collaboration_step
+
+        result = await execute_collaboration_step(_make_step([]), _base_state)
+
+        assert result["status"] == "failed"
+        assert result["error"]["code"] == "collaboration_agents_not_configured"
+
+    @pytest.mark.asyncio
+    async def test_merge_fails_when_every_agent_fails(self, _base_state):
+        step = _make_step(["agent_a", "agent_b"], aggregation="merge")
+
+        with patch(
+            "workflows.step_types.execute_step",
+            side_effect=_mock_execute_step_failed_status,
+        ):
+            from workflows.collaboration import execute_collaboration_step
+
+            result = await execute_collaboration_step(step, _base_state)
+
+        assert result["status"] == "failed"
+        assert result["agents_succeeded"] == 0
+        assert result["agents_failed"] == 2
+
+    @pytest.mark.asyncio
+    async def test_first_complete_failed_agent_is_not_success(self, _base_state):
+        step = _make_step(["agent_a"], aggregation="first_complete")
+
+        with patch(
+            "workflows.step_types.execute_step",
+            side_effect=_mock_execute_step_failed_status,
+        ):
+            from workflows.collaboration import execute_collaboration_step
+
+            result = await execute_collaboration_step(step, _base_state)
+
+        assert result["status"] == "failed"
+        assert result["aggregation"] == "first_complete"
+        assert result["error"]["code"] == "agent_failed"
 
 
 class TestTimeoutCancelsLongRunning:
