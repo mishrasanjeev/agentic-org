@@ -69,6 +69,54 @@ def test_staged_revision_readiness_uses_revision_object_not_latest_ready() -> No
     assert "staged revision object" in wait_block
 
 
+def test_deploy_script_uses_shell_safe_python_heredocs() -> None:
+    script = _deploy_script()
+
+    assert "python3 -c '" not in script
+    assert 'python3 -c "' not in script
+    assert "python -c '" not in script
+    assert 'python -c "' not in script
+    assert "<<'PY'" in script
+    assert '"$PYTHON_BIN" - "$json_file"' in script
+
+
+def test_revision_readiness_helper_is_safe_for_unknown_markers() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert '"$PYTHON_BIN" - "$json_file"' in ready_block
+    assert "<<'PY'" in ready_block
+    assert "python3 -c" not in ready_block
+    assert "python -c" not in ready_block
+    assert "'<unknown>'" in ready_block
+    assert '"<missing>"' in ready_block
+    assert '"<none>"' in ready_block
+
+
+def test_script_resolves_usable_python_for_git_bash_on_windows() -> None:
+    script = _deploy_script()
+
+    assert "resolve_python_bin()" in script
+    assert 'PYTHON_BIN="$(resolve_python_bin)"' in script
+    assert 'for candidate in python3 python; do' in script
+    assert "Missing: usable python3 or python" in script
+
+
+def test_health_poll_json_parsing_uses_shell_safe_helper() -> None:
+    script = _deploy_script()
+    poll_start = script.index("poll_health_url()")
+    poll_end = script.index("print_manual_traffic_commands()", poll_start)
+    poll_block = script[poll_start:poll_end]
+
+    assert "json_field_from_stdin" in script
+    assert "python3 -c" not in poll_block
+    assert "python -c" not in poll_block
+    assert 'json_field_from_stdin status' in poll_block
+    assert 'json_field_from_stdin commit' in poll_block
+
+
 def test_retired_ready_staged_revision_is_accepted_when_target_matches() -> None:
     script = _deploy_script()
     ready_start = script.index("revision_ready_state()")

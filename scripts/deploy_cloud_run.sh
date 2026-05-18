@@ -117,7 +117,40 @@ require_cmd gcloud
 require_cmd docker
 require_cmd git
 require_cmd curl
-require_cmd python3
+require_cmd mktemp
+
+resolve_python_bin() {
+  local candidate
+
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    if "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import json
+import sys
+PY
+    then
+      echo "$PYTHON_BIN"
+      return 0
+    fi
+    echo "::error::PYTHON_BIN is set but is not usable: $PYTHON_BIN" >&2
+    exit 1
+  fi
+
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" - <<'PY' >/dev/null 2>&1
+import json
+import sys
+PY
+    then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  echo "Missing: usable python3 or python" >&2
+  exit 1
+}
+
+PYTHON_BIN="$(resolve_python_bin)"
 
 service_json() {
   gcloud run services describe "$1" \
@@ -134,9 +167,16 @@ service_value() {
 }
 
 traffic_summary() {
-  service_json "$1" | python3 -c '
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  service_json "$1" > "$json_file"
+  "$PYTHON_BIN" - "$json_file" <<'PY' || rc=$?
 import json, sys
-svc = json.load(sys.stdin)
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    svc = json.load(fh)
 traffic = svc.get("status", {}).get("traffic", []) or []
 items = []
 for item in traffic:
@@ -152,13 +192,22 @@ for item in traffic:
     extra = " (" + ", ".join(suffix) + ")" if suffix else ""
     items.append(f"{revision}={percent}%{extra}")
 print(", ".join(items) if items else "none")
-'
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 traffic_to_revisions() {
-  service_json "$1" | python3 -c '
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  service_json "$1" > "$json_file"
+  "$PYTHON_BIN" - "$json_file" <<'PY' || rc=$?
 import json, sys
-svc = json.load(sys.stdin)
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    svc = json.load(fh)
 traffic = svc.get("status", {}).get("traffic", []) or []
 parts = []
 for item in traffic:
@@ -171,24 +220,34 @@ for item in traffic:
     if revision:
         parts.append(f"{revision}={percent}")
 print(",".join(parts))
-'
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 tagged_revision_url() {
   local svc="$1"
   local tag="$2"
   local revision="$3"
-  service_json "$svc" | python3 -c '
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  service_json "$svc" > "$json_file"
+  "$PYTHON_BIN" - "$json_file" "$tag" "$revision" <<'PY' || rc=$?
 import json, sys
 
-wanted_tag = sys.argv[1]
-wanted_revision = sys.argv[2]
-svc = json.load(sys.stdin)
+wanted_tag = sys.argv[2]
+wanted_revision = sys.argv[3]
+with open(sys.argv[1], encoding="utf-8") as fh:
+    svc = json.load(fh)
 for item in svc.get("status", {}).get("traffic", []) or []:
     if item.get("tag") == wanted_tag and item.get("revisionName") == wanted_revision:
         print(item.get("url", ""))
         break
-' "$tag" "$revision"
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 image_digest() {
@@ -236,13 +295,18 @@ revision_ready_state() {
   local env_name="$5"
   local expected_sha="$6"
   local svc="$7"
+  local json_file
+  local rc=0
 
-  python3 -c '
+  json_file="$(mktemp)"
+  cat > "$json_file"
+  "$PYTHON_BIN" - "$json_file" "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc" <<'PY' || rc=$?
 import json
 import sys
 
-label, revision, image, image_digest, env_name, expected_sha, svc = sys.argv[1:]
-rev = json.load(sys.stdin)
+json_file, label, revision, image, image_digest, env_name, expected_sha, svc = sys.argv[1:]
+with open(json_file, encoding="utf-8") as fh:
+    rev = json.load(fh)
 
 revision_service = rev.get("metadata", {}).get("labels", {}).get(
     "serving.knative.dev/service", ""
@@ -328,7 +392,9 @@ if ready_status == "False":
 
 print(f"{label} revision {revision} is still becoming ready ({details})")
 sys.exit(2)
-' "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc"
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 wait_for_staged_revision_ready() {
@@ -451,6 +517,26 @@ rollback_service_traffic() {
     --to-revisions="$traffic_spec"
 }
 
+json_field_from_stdin() {
+  local field="$1"
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  cat > "$json_file"
+  "$PYTHON_BIN" - "$json_file" "$field" <<'PY' || rc=$?
+import json
+import sys
+
+json_file, field = sys.argv[1:]
+with open(json_file, encoding="utf-8") as fh:
+    payload = json.load(fh)
+print(payload.get(field, ""))
+PY
+  rm -f "$json_file"
+  return "$rc"
+}
+
 poll_health_url() {
   local url="$1"
   local label="$2"
@@ -462,8 +548,8 @@ poll_health_url() {
   echo "Polling $label health at $url for commit=$SHORT_SHA ..."
   for attempt in $(seq 1 "$attempts"); do
     resp="$(curl -fsS "$url" 2>/dev/null || true)"
-    status="$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)"
-    commit="$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)"
+    status="$(printf '%s' "$resp" | json_field_from_stdin status 2>/dev/null || true)"
+    commit="$(printf '%s' "$resp" | json_field_from_stdin commit 2>/dev/null || true)"
     if [[ "$status" == "healthy" && "${commit:0:7}" == "$SHORT_SHA" ]]; then
       echo "Verified $label health: status=healthy commit=$commit"
       return 0
