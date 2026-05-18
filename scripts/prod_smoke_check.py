@@ -10,6 +10,7 @@ Core environment:
   AGENTICORG_SMOKE_BEARER_TOKEN or AGENTICORG_SMOKE_EMAIL + AGENTICORG_SMOKE_PASSWORD
 
 Optional authenticated checks:
+  AGENTICORG_PROD_SMOKE_ENABLE_COST_RISKY=1
   AGENTICORG_SMOKE_CA_AGENT_ID
   AGENTICORG_SMOKE_ZOHO_MISSING_AGENT_ID
   AGENTICORG_SMOKE_WORKFLOW_RUN_ID or AGENTICORG_SMOKE_WORKFLOW_ID
@@ -19,6 +20,7 @@ Optional authenticated checks:
   AGENTICORG_SMOKE_CONTENT_SAFETY_TEXT
 
 Optional signed CDC/event-wait dedupe check:
+  AGENTICORG_PROD_SMOKE_ENABLE_SIGNED_EVENT=1
   AGENTICORG_SMOKE_CDC_TENANT_ID
   AGENTICORG_SMOKE_CDC_CONNECTOR
   AGENTICORG_SMOKE_CDC_SECRET
@@ -41,10 +43,46 @@ import httpx
 
 DEFAULT_API_BASE_URL = "https://app.agenticorg.ai/api/v1"
 DEFAULT_TIMEOUT_SECONDS = 20.0
+ENABLE_COST_RISKY_ENV = "AGENTICORG_PROD_SMOKE_ENABLE_COST_RISKY"
+ENABLE_SIGNED_EVENT_ENV = "AGENTICORG_PROD_SMOKE_ENABLE_SIGNED_EVENT"
+DRY_RUN_ENV = "AGENTICORG_PROD_SMOKE_DRY_RUN"
 
 PASS = "PASS"
 FAIL = "FAIL"
 SKIPPED = "SKIPPED"
+
+CATEGORY_PUBLIC = "public"
+CATEGORY_AUTHENTICATED = "authenticated"
+CATEGORY_SIGNED_EVENT = "signed-event"
+CATEGORY_COST_RISKY = "cost-risky"
+
+REQUIRED_ENV_VARS = (
+    "AGENTICORG_PROD_API_BASE_URL",
+)
+AUTH_ENV_VARS = (
+    "AGENTICORG_SMOKE_BEARER_TOKEN",
+    "AGENTICORG_SMOKE_EMAIL",
+    "AGENTICORG_SMOKE_PASSWORD",
+)
+OPTIONAL_ENV_VARS = (
+    "AGENTICORG_PROD_SMOKE_TIMEOUT_SECONDS",
+    DRY_RUN_ENV,
+    ENABLE_COST_RISKY_ENV,
+    ENABLE_SIGNED_EVENT_ENV,
+    "AGENTICORG_SMOKE_BRIDGE_ID",
+    "AGENTICORG_SMOKE_CA_AGENT_ID",
+    "AGENTICORG_SMOKE_ZOHO_MISSING_AGENT_ID",
+    "AGENTICORG_SMOKE_WORKFLOW_RUN_ID",
+    "AGENTICORG_SMOKE_WORKFLOW_ID",
+    "AGENTICORG_SMOKE_CHAT_QUERY",
+    "AGENTICORG_SMOKE_CHAT_AGENT_ID",
+    "AGENTICORG_SMOKE_KNOWLEDGE_QUERY",
+    "AGENTICORG_SMOKE_CONTENT_SAFETY_TEXT",
+    "AGENTICORG_SMOKE_CDC_TENANT_ID",
+    "AGENTICORG_SMOKE_CDC_CONNECTOR",
+    "AGENTICORG_SMOKE_CDC_SECRET",
+    "AGENTICORG_SMOKE_CDC_EVENT_ID",
+)
 
 SENSITIVE_NAME_FRAGMENTS = (
     "AUTH",
@@ -82,6 +120,7 @@ class SmokeResult:
     status: str
     detail: str
     http_status: int | None = None
+    category: str = CATEGORY_PUBLIC
 
 
 @dataclass(frozen=True)
@@ -132,11 +171,20 @@ def _timeout_seconds() -> float:
     return max(1.0, timeout)
 
 
+def truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def missing_env(names: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(name for name in names if not os.getenv(name))
 
 
-def skip_missing(name: str, required_env: tuple[str, ...]) -> SmokeResult | None:
+def skip_missing(
+    name: str,
+    required_env: tuple[str, ...],
+    *,
+    category: str = CATEGORY_PUBLIC,
+) -> SmokeResult | None:
     missing = missing_env(required_env)
     if not missing:
         return None
@@ -144,6 +192,25 @@ def skip_missing(name: str, required_env: tuple[str, ...]) -> SmokeResult | None
         name=name,
         status=SKIPPED,
         detail=f"missing required env: {', '.join(missing)}",
+        category=category,
+    )
+
+
+def skip_disabled(name: str, *, env_var: str, category: str) -> SmokeResult:
+    return SmokeResult(
+        name=name,
+        status=SKIPPED,
+        detail=f"{category} check disabled; set {env_var}=1 to run",
+        category=category,
+    )
+
+
+def skip_dry_run(name: str, *, category: str) -> SmokeResult:
+    return SmokeResult(
+        name=name,
+        status=SKIPPED,
+        detail="dry-run mode: mutating or provider-backed check was not called",
+        category=category,
     )
 
 
@@ -157,9 +224,24 @@ def _parse_json_body(text: str) -> Any:
 
 
 class ProdSmokeRunner:
-    def __init__(self, *, api_base_url: str | None = None, timeout_seconds: float | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        api_base_url: str | None = None,
+        timeout_seconds: float | None = None,
+        dry_run: bool | None = None,
+        enable_cost_risky: bool | None = None,
+        enable_signed_event: bool | None = None,
+    ) -> None:
         self.api_base_url = (api_base_url or _api_base_url()).rstrip("/")
         self.timeout_seconds = timeout_seconds or _timeout_seconds()
+        self.dry_run = truthy_env(DRY_RUN_ENV) if dry_run is None else dry_run
+        self.enable_cost_risky = (
+            truthy_env(ENABLE_COST_RISKY_ENV) if enable_cost_risky is None else enable_cost_risky
+        )
+        self.enable_signed_event = (
+            truthy_env(ENABLE_SIGNED_EVENT_ENV) if enable_signed_event is None else enable_signed_event
+        )
 
     def _url(self, path: str) -> str:
         normalized = path if path.startswith("/") else f"/{path}"
@@ -211,14 +293,22 @@ class ProdSmokeRunner:
         expected: set[int],
         *,
         detail: str,
+        category: str = CATEGORY_PUBLIC,
     ) -> SmokeResult:
         if result.status_code in expected:
-            return SmokeResult(name=name, status=PASS, detail=detail, http_status=result.status_code)
+            return SmokeResult(
+                name=name,
+                status=PASS,
+                detail=detail,
+                http_status=result.status_code,
+                category=category,
+            )
         return SmokeResult(
             name=name,
             status=FAIL,
             detail=f"unexpected HTTP status {result.status_code}; expected {sorted(expected)}",
             http_status=result.status_code or None,
+            category=category,
         )
 
     def health_checks(self) -> list[SmokeResult]:
@@ -231,7 +321,15 @@ class ProdSmokeRunner:
         results: list[SmokeResult] = []
         for name, method, path, expected in checks:
             response = self.request_json(method, path)
-            results.append(self.pass_if_status(name, response, expected, detail="endpoint reachable"))
+            results.append(
+                self.pass_if_status(
+                    name,
+                    response,
+                    expected,
+                    detail="endpoint reachable",
+                    category=CATEGORY_PUBLIC,
+                )
+            )
         return results
 
     def authenticate(self) -> tuple[AuthContext | None, SmokeResult]:
@@ -241,10 +339,11 @@ class ProdSmokeRunner:
                 name="auth.token",
                 status=PASS,
                 detail="using env-provided bearer token",
+                category=CATEGORY_AUTHENTICATED,
             )
 
         required = ("AGENTICORG_SMOKE_EMAIL", "AGENTICORG_SMOKE_PASSWORD")
-        skipped = skip_missing("auth.login", required)
+        skipped = skip_missing("auth.login", required, category=CATEGORY_AUTHENTICATED)
         if skipped:
             return None, skipped
 
@@ -259,6 +358,7 @@ class ProdSmokeRunner:
                 status=FAIL,
                 detail=f"login failed with HTTP {response.status_code}",
                 http_status=response.status_code,
+                category=CATEGORY_AUTHENTICATED,
             )
         access_token = response.body.get("access_token")
         if not isinstance(access_token, str) or not access_token:
@@ -267,6 +367,7 @@ class ProdSmokeRunner:
                 status=FAIL,
                 detail="login response did not include access_token",
                 http_status=response.status_code,
+                category=CATEGORY_AUTHENTICATED,
             )
         user = response.body.get("user") if isinstance(response.body.get("user"), dict) else {}
         tenant_id = user.get("tenant_id") if isinstance(user, dict) else None
@@ -275,6 +376,7 @@ class ProdSmokeRunner:
             status=PASS,
             detail="login returned bearer token",
             http_status=response.status_code,
+            category=CATEGORY_AUTHENTICATED,
         )
 
     def authenticated_checks(self, auth: AuthContext | None) -> list[SmokeResult]:
@@ -284,6 +386,7 @@ class ProdSmokeRunner:
                     name="authenticated.checks",
                     status=SKIPPED,
                     detail="missing authenticated smoke token or login credentials",
+                    category=CATEGORY_AUTHENTICATED,
                 )
             ]
 
@@ -293,6 +396,7 @@ class ProdSmokeRunner:
                 self.request_json("GET", "/bridge/list", token=auth.token),
                 {200},
                 detail="authenticated bridge list reachable",
+                category=CATEGORY_AUTHENTICATED,
             ),
             self.content_safety_check(auth),
             self.knowledge_search_check(auth),
@@ -309,6 +413,7 @@ class ProdSmokeRunner:
                     self.request_json("GET", f"/bridge/{bridge_id}/status", token=auth.token),
                     {200, 404},
                     detail="authenticated bridge status returned deterministic state",
+                    category=CATEGORY_AUTHENTICATED,
                 )
             )
         else:
@@ -317,11 +422,20 @@ class ProdSmokeRunner:
                     name="bridge.status",
                     status=SKIPPED,
                     detail="missing required env: AGENTICORG_SMOKE_BRIDGE_ID",
+                    category=CATEGORY_AUTHENTICATED,
                 )
             )
         return results
 
     def content_safety_check(self, auth: AuthContext) -> SmokeResult:
+        if not self.enable_cost_risky:
+            return skip_disabled(
+                "content_safety.check",
+                env_var=ENABLE_COST_RISKY_ENV,
+                category=CATEGORY_COST_RISKY,
+            )
+        if self.dry_run:
+            return skip_dry_run("content_safety.check", category=CATEGORY_COST_RISKY)
         text = os.getenv("AGENTICORG_SMOKE_CONTENT_SAFETY_TEXT", "AgenticOrg deployment smoke text.")
         response = self.request_json(
             "POST",
@@ -337,15 +451,21 @@ class ProdSmokeRunner:
             response,
             {200},
             detail="authenticated content-safety check returned a decision",
+            category=CATEGORY_COST_RISKY,
         )
 
     def knowledge_search_check(self, auth: AuthContext) -> SmokeResult:
+        if not self.enable_cost_risky:
+            return skip_disabled("knowledge.search", env_var=ENABLE_COST_RISKY_ENV, category=CATEGORY_COST_RISKY)
+        if self.dry_run:
+            return skip_dry_run("knowledge.search", category=CATEGORY_COST_RISKY)
         query = os.getenv("AGENTICORG_SMOKE_KNOWLEDGE_QUERY")
         if not query:
             return SmokeResult(
                 name="knowledge.search",
                 status=SKIPPED,
                 detail="missing required env: AGENTICORG_SMOKE_KNOWLEDGE_QUERY",
+                category=CATEGORY_COST_RISKY,
             )
         response = self.request_json(
             "POST",
@@ -358,15 +478,21 @@ class ProdSmokeRunner:
             response,
             {200, 500, 503},
             detail="knowledge search returned success or explicit deterministic failure",
+            category=CATEGORY_COST_RISKY,
         )
 
     def chat_query_check(self, auth: AuthContext) -> SmokeResult:
+        if not self.enable_cost_risky:
+            return skip_disabled("chat.query", env_var=ENABLE_COST_RISKY_ENV, category=CATEGORY_COST_RISKY)
+        if self.dry_run:
+            return skip_dry_run("chat.query", category=CATEGORY_COST_RISKY)
         query = os.getenv("AGENTICORG_SMOKE_CHAT_QUERY")
         if not query:
             return SmokeResult(
                 name="chat.query",
                 status=SKIPPED,
                 detail="missing required env: AGENTICORG_SMOKE_CHAT_QUERY",
+                category=CATEGORY_COST_RISKY,
             )
         payload: dict[str, Any] = {"query": query}
         agent_id = os.getenv("AGENTICORG_SMOKE_CHAT_AGENT_ID")
@@ -378,10 +504,15 @@ class ProdSmokeRunner:
             response,
             {200, 400, 409, 422, 500, 503},
             detail="chat query returned success or explicit deterministic failure",
+            category=CATEGORY_COST_RISKY,
         )
 
     def ca_pack_promotion_check(self, auth: AuthContext) -> SmokeResult:
-        skipped = skip_missing("ca_pack.promote", ("AGENTICORG_SMOKE_CA_AGENT_ID",))
+        if not self.enable_cost_risky:
+            return skip_disabled("ca_pack.promote", env_var=ENABLE_COST_RISKY_ENV, category=CATEGORY_COST_RISKY)
+        if self.dry_run:
+            return skip_dry_run("ca_pack.promote", category=CATEGORY_COST_RISKY)
+        skipped = skip_missing("ca_pack.promote", ("AGENTICORG_SMOKE_CA_AGENT_ID",), category=CATEGORY_COST_RISKY)
         if skipped:
             return skipped
         agent_id = os.environ["AGENTICORG_SMOKE_CA_AGENT_ID"]
@@ -391,10 +522,23 @@ class ProdSmokeRunner:
             response,
             {200},
             detail="approved CA pack promotion route succeeded",
+            category=CATEGORY_COST_RISKY,
         )
 
     def zoho_fail_closed_check(self, auth: AuthContext) -> SmokeResult:
-        skipped = skip_missing("ca_pack.zoho_missing_fail_closed", ("AGENTICORG_SMOKE_ZOHO_MISSING_AGENT_ID",))
+        if not self.enable_cost_risky:
+            return skip_disabled(
+                "ca_pack.zoho_missing_fail_closed",
+                env_var=ENABLE_COST_RISKY_ENV,
+                category=CATEGORY_COST_RISKY,
+            )
+        if self.dry_run:
+            return skip_dry_run("ca_pack.zoho_missing_fail_closed", category=CATEGORY_COST_RISKY)
+        skipped = skip_missing(
+            "ca_pack.zoho_missing_fail_closed",
+            ("AGENTICORG_SMOKE_ZOHO_MISSING_AGENT_ID",),
+            category=CATEGORY_COST_RISKY,
+        )
         if skipped:
             return skipped
         agent_id = os.environ["AGENTICORG_SMOKE_ZOHO_MISSING_AGENT_ID"]
@@ -405,12 +549,14 @@ class ProdSmokeRunner:
                 status=PASS,
                 detail="missing Zoho connector produced deterministic non-success",
                 http_status=response.status_code,
+                category=CATEGORY_COST_RISKY,
             )
         return SmokeResult(
             name="ca_pack.zoho_missing_fail_closed",
             status=FAIL,
             detail=f"expected fail-closed non-success, got HTTP {response.status_code}",
             http_status=response.status_code,
+            category=CATEGORY_COST_RISKY,
         )
 
     def workflow_state_check(self, auth: AuthContext) -> SmokeResult:
@@ -422,6 +568,7 @@ class ProdSmokeRunner:
                 response,
                 {200},
                 detail="existing workflow run state is readable",
+                category=CATEGORY_AUTHENTICATED,
             )
 
         workflow_id = os.getenv("AGENTICORG_SMOKE_WORKFLOW_ID")
@@ -430,7 +577,16 @@ class ProdSmokeRunner:
                 name="workflow.durable_state",
                 status=SKIPPED,
                 detail="missing required env: AGENTICORG_SMOKE_WORKFLOW_RUN_ID or AGENTICORG_SMOKE_WORKFLOW_ID",
+                category=CATEGORY_AUTHENTICATED,
             )
+        if not self.enable_cost_risky:
+            return skip_disabled(
+                "workflow.durable_state",
+                env_var=ENABLE_COST_RISKY_ENV,
+                category=CATEGORY_COST_RISKY,
+            )
+        if self.dry_run:
+            return skip_dry_run("workflow.durable_state", category=CATEGORY_COST_RISKY)
 
         trigger_payload = {"source": "prod_smoke", "ts": int(time.time())}
         response = self.request_json(
@@ -445,6 +601,7 @@ class ProdSmokeRunner:
                 status=FAIL,
                 detail=f"workflow run creation failed with HTTP {response.status_code}",
                 http_status=response.status_code,
+                category=CATEGORY_COST_RISKY,
             )
         created_run_id = response.body.get("run_id")
         if not isinstance(created_run_id, str) or not created_run_id:
@@ -453,6 +610,7 @@ class ProdSmokeRunner:
                 status=FAIL,
                 detail="workflow run response missing run_id",
                 http_status=response.status_code,
+                category=CATEGORY_COST_RISKY,
             )
         state_response = self.request_json("GET", f"/workflows/runs/{created_run_id}", token=auth.token)
         return self.pass_if_status(
@@ -460,15 +618,24 @@ class ProdSmokeRunner:
             state_response,
             {200},
             detail="created workflow run state is readable",
+            category=CATEGORY_COST_RISKY,
         )
 
     def cdc_event_dedupe_check(self) -> SmokeResult:
+        if not self.enable_signed_event:
+            return skip_disabled(
+                "cdc.event_dedupe",
+                env_var=ENABLE_SIGNED_EVENT_ENV,
+                category=CATEGORY_SIGNED_EVENT,
+            )
+        if self.dry_run:
+            return skip_dry_run("cdc.event_dedupe", category=CATEGORY_SIGNED_EVENT)
         required = (
             "AGENTICORG_SMOKE_CDC_TENANT_ID",
             "AGENTICORG_SMOKE_CDC_CONNECTOR",
             "AGENTICORG_SMOKE_CDC_SECRET",
         )
-        skipped = skip_missing("cdc.event_dedupe", required)
+        skipped = skip_missing("cdc.event_dedupe", required, category=CATEGORY_SIGNED_EVENT)
         if skipped:
             return skipped
 
@@ -504,6 +671,7 @@ class ProdSmokeRunner:
                 status=PASS,
                 detail="signed CDC event accepted and duplicate delivery deduped",
                 http_status=second.status_code,
+                category=CATEGORY_SIGNED_EVENT,
             )
         return SmokeResult(
             name="cdc.event_dedupe",
@@ -513,6 +681,7 @@ class ProdSmokeRunner:
                 f"got HTTP {first.status_code}/{second.status_code}"
             ),
             http_status=second.status_code or first.status_code or None,
+            category=CATEGORY_SIGNED_EVENT,
         )
 
     def run(self) -> list[SmokeResult]:
@@ -527,8 +696,9 @@ class ProdSmokeRunner:
 def print_results(results: list[SmokeResult]) -> None:
     for result in results:
         status = result.status.ljust(7)
+        category = f"[{result.category}]"
         http = f" http={result.http_status}" if result.http_status is not None else ""
-        print(f"{status} {result.name}{http} - {result.detail}")
+        print(f"{status} {category} {result.name}{http} - {result.detail}")
 
 
 def exit_code(results: list[SmokeResult]) -> int:
@@ -542,8 +712,28 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="API base URL including /api/v1. Defaults to AGENTICORG_PROD_API_BASE_URL or production.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run read-only checks and skip mutating/provider-backed checks.",
+    )
+    parser.add_argument(
+        "--enable-cost-risky",
+        action="store_true",
+        help=f"Run checks guarded by {ENABLE_COST_RISKY_ENV}=1.",
+    )
+    parser.add_argument(
+        "--enable-signed-event",
+        action="store_true",
+        help=f"Run the signed CDC/event-wait dedupe check guarded by {ENABLE_SIGNED_EVENT_ENV}=1.",
+    )
     args = parser.parse_args(argv)
-    runner = ProdSmokeRunner(api_base_url=args.api_base_url)
+    runner = ProdSmokeRunner(
+        api_base_url=args.api_base_url,
+        dry_run=args.dry_run or None,
+        enable_cost_risky=args.enable_cost_risky or None,
+        enable_signed_event=args.enable_signed_event or None,
+    )
     results = runner.run()
     print_results(results)
     return exit_code(results)
