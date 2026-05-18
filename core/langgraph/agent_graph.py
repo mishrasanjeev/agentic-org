@@ -604,7 +604,7 @@ def _check_hitl_trigger(
                 op_fn = ops.get(type(tree.body.ops[0]))
                 if op_fn and op_fn(float(left_val), float(right_val)):
                     return f"condition matched: {hitl_condition}"
-        except Exception:  # noqa: S110
+        except (AttributeError, KeyError, SyntaxError, TypeError, ValueError):  # noqa: S110
             pass  # HITL condition eval is best-effort; silent failure is intentional
 
     return ""

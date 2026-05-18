@@ -22,6 +22,7 @@ import uuid
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.crypto.credential_vault import (
     decrypt_credential as _legacy_decrypt,
@@ -54,7 +55,7 @@ async def _resolve_kek(tenant_id: uuid.UUID) -> str:
             row = result.scalar_one_or_none()
             if row:
                 return row
-    except Exception:
+    except SQLAlchemyError:
         logger.debug("tenant_kek_lookup_failed", tenant_id=str(tenant_id))
     return os.getenv("AGENTICORG_PLATFORM_KEK", "")
 
@@ -68,10 +69,7 @@ async def encrypt_for_tenant(plaintext: str, tenant_id: uuid.UUID) -> str:
     """
     kek = await _resolve_kek(tenant_id)
     if kek:
-        try:
-            return _ENVELOPE_PREFIX + encrypt_to_string(plaintext.encode(), kek)
-        except Exception:
-            logger.exception("envelope_encrypt_failed_falling_back", tenant_id=str(tenant_id))
+        return _ENVELOPE_PREFIX + encrypt_to_string(plaintext.encode(), kek)
     # Fallback — legacy Fernet
     return _legacy_encrypt(plaintext)
 

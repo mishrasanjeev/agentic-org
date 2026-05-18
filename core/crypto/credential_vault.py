@@ -181,5 +181,5 @@ def verify_credential(ciphertext: str) -> bool:
         return True
     except InvalidToken:
         return False
-    except Exception:
+    except (TypeError, ValueError):
         return False

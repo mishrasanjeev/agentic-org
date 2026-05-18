@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 
 import redis.asyncio as aioredis
+from redis.exceptions import RedisError
 
 from core.config import redis_socket_timeout_kwargs, redis_url_from_env
 
@@ -35,7 +36,7 @@ async def get_async_redis() -> aioredis.Redis | None:
         )
         await _pool.ping()
         return _pool
-    except Exception:
+    except (OSError, RedisError, ValueError):
         logger.warning("async_redis: Redis unavailable")
         _pool = None
         return None
