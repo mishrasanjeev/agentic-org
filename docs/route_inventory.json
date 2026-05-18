@@ -1203,7 +1203,7 @@
     "public_exempt_reason": "gateway-redirect-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.plural",
-    "source_line": 463,
+    "source_line": 460,
     "tenant_required": true
   },
   {
@@ -1221,7 +1221,7 @@
     "public_exempt_reason": "stripe-hosted-checkout-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.stripe",
-    "source_line": 577,
+    "source_line": 574,
     "tenant_required": true
   },
   {
@@ -1239,7 +1239,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscription.cancel",
-    "source_line": 714,
+    "source_line": 711,
     "tenant_required": true
   },
   {
@@ -1329,7 +1329,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-status",
     "scope": "billing.order_status.read",
-    "source_line": 681,
+    "source_line": 678,
     "tenant_required": true
   },
   {
@@ -1365,7 +1365,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.portal.create",
-    "source_line": 644,
+    "source_line": 641,
     "tenant_required": true
   },
   {
@@ -1383,7 +1383,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscribe.stripe",
-    "source_line": 306,
+    "source_line": 310,
     "tenant_required": true
   },
   {
@@ -1401,7 +1401,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscribe.plural",
-    "source_line": 407,
+    "source_line": 404,
     "tenant_required": true
   },
   {
@@ -1455,7 +1455,7 @@
     "public_exempt_reason": "plural-hmac-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.plural",
-    "source_line": 813,
+    "source_line": 810,
     "tenant_required": true
   },
   {
@@ -1473,7 +1473,7 @@
     "public_exempt_reason": "stripe-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.stripe",
-    "source_line": 781,
+    "source_line": 778,
     "tenant_required": true
   },
   {

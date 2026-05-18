@@ -944,7 +944,7 @@ export default function Landing() {
                   <Link to="/signup" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Start Free →</Link>
                 </div>
                 <div className="border-x border-slate-200 px-6">
-                  <div className="text-2xl font-bold text-blue-600">Pro — $499/mo</div>
+                  <div className="text-2xl font-bold text-blue-600">Pro - $2/mo</div>
                   <p className="text-sm text-slate-500 mt-1">Unlimited agents, unlimited tasks, priority support</p>
                   <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Get Started →</button>
                 </div>

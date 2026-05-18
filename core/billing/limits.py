@@ -55,7 +55,7 @@ PLAN_PRICING: list[dict[str, Any]] = [
     {
         "plan": "pro",
         "label": "Pro",
-        "price_usd": 99,
+        "price_usd": 2,
         "price_inr": 9_999,
         "agents": 15,
         "runs": "10,000/mo",

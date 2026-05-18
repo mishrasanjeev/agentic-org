@@ -60,18 +60,18 @@ class TestBuildLineItems:
 
     def test_pro_plan_under_allowance(self):
         items, subtotal = _build_line_items("pro", task_count=5_000)
-        # Pro = $99 base, 10K allowance, no overage
-        assert subtotal == Decimal("99.00")
+        # Pro = $2 base, 10K allowance, no overage
+        assert subtotal == Decimal("2.00")
         assert len(items) == 1
         assert items[0]["description"].startswith("Pro plan")
 
     def test_pro_plan_with_overage(self):
         items, subtotal = _build_line_items("pro", task_count=15_000)
-        # Pro: $99 base + 5000 overage / 1000 * $2.50 = $99 + $12.50 = $111.50
-        assert subtotal == Decimal("111.50")
+        # Pro: $2 base + 5000 overage / 1000 * $2.50 = $2 + $12.50 = $14.50
+        assert subtotal == Decimal("14.50")
         assert len(items) == 2
         # First item is base subscription
-        assert items[0]["amount"] == "99.00"
+        assert items[0]["amount"] == "2.00"
         # Second item is overage line
         assert "overage" in items[1]["description"]
         assert items[1]["amount"] == "12.50"
@@ -114,8 +114,8 @@ class TestRenderPDF:
                 {
                     "description": "Pro plan — monthly subscription",
                     "qty": 1,
-                    "unit_price": "99.00",
-                    "amount": "99.00",
+                    "unit_price": "2.00",
+                    "amount": "2.00",
                 },
                 {
                     "description": "Usage overage — 5000 tasks",
@@ -124,9 +124,9 @@ class TestRenderPDF:
                     "amount": "12.50",
                 },
             ],
-            "subtotal": Decimal("111.50"),
+            "subtotal": Decimal("14.50"),
             "tax": Decimal("0.00"),
-            "total": Decimal("111.50"),
+            "total": Decimal("14.50"),
             "currency": "USD",
         }
 
@@ -162,4 +162,4 @@ class TestRenderPDF:
         assert "Invoice AO-ABC123-202604" in text
         assert "Acme Inc" in text
         assert "Pro plan" in text
-        assert "111.50" in text
+        assert "14.50" in text
