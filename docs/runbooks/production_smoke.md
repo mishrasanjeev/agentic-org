@@ -180,3 +180,11 @@ Dry-run mode prints the previous traffic allocation and the planned traffic chan
 Cloud Run revisions staged with `--no-traffic` may report `Ready=True` on the revision object while the service-level `status.latestReadyRevisionName` remains pinned to the currently serving revision. The deploy helper must therefore check readiness on the specific staged revision object, not on the service-level latest-ready field.
 
 This was observed during the attempted deploy of commit `2d3a9ac6eb2249fe6debe915f9c521692a8b9f75`: API revision `agenticorg-api-00067-fpj` was created with `Ready=True` and no public traffic, while `agenticorg-api` still reported `latestReadyRevisionName=agenticorg-api-00065-zp4`. The script now treats the staged revision as ready only when the revision object has `Ready=True`, belongs to the expected service, and its image plus commit metadata match the requested deploy SHA.
+
+### Embedded Python Quoting
+
+During the attempted deploy of commit `83fa3ac56e3765e273b3eb2e07bed0cbc388d41a`, the deploy helper staged API revision `agenticorg-api-00068-d4q` with the correct image digest and `AGENTICORG_GIT_SHA`, but failed before moving traffic. Traffic remained unchanged at `agenticorg-api-00065-zp4` and `agenticorg-ui-00034-zck`.
+
+Root cause: the non-dry-run revision readiness path used multiline `python3 -c '...'` snippets containing Python string literals such as `'<unknown>'`. Bash closed the single-quoted shell string early and treated `<unknown>` as redirection. Dry-run did not catch the issue because it did not execute the revision readiness parser.
+
+The deploy helper now uses quoted Python here-docs and a resolved `PYTHON_BIN` interpreter for embedded parsing. This keeps Python string literals opaque to Bash and works under both normal Linux bash and Git Bash on Windows.
