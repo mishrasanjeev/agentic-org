@@ -131,6 +131,22 @@ Do not enable AgenticOrg public commerce discovery if any of these are true:
 - Legal/compliance, security, product wording, operations, and named merchant
   approvals are incomplete.
 
+## Human Gates Required
+
+Before AgenticOrg public commerce discovery is enabled in production:
+
+- Security review of public MCP/A2A metadata, route gating, and rollback.
+- Legal/compliance review of Grantex dependency wording, merchant claims, and
+  consent/payment language.
+- Product wording approval for public capability/status language.
+- Operations/on-call/support owner approval for monitoring, rollback, and
+  support responsibility.
+- Backup/RPO review for any production dependency touched by the broader
+  Grantex read-only discovery path.
+- Named merchant approval for every merchant profile referenced by public
+  AgenticOrg commerce metadata.
+- AgenticOrg dependency approval after Grantex read-only discovery smoke passes.
+
 ## Decision Table
 
 | Option | Description | Benefits | Risks | Recommendation |
