@@ -17,7 +17,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@fontsource/geist": "^5.2.8",
+    "@fontsource/geist": "^5.2.9",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@monaco-editor/react": "^4.6.0",
     "@radix-ui/react-dialog": "^1.1.0",
