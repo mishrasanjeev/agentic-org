@@ -85,6 +85,16 @@ def _is_india_config(config: dict[str, Any]) -> bool:
     return _region_from_config(config) == "in"
 
 
+def _as_bool(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "n", "missing", "unavailable"}
+    return bool(value)
+
+
 class ZohoBooksConnector(BaseConnector):
     name = "zoho_books"
     category = "finance"
@@ -94,8 +104,19 @@ class ZohoBooksConnector(BaseConnector):
     tools = [
         "create_invoice",
         "list_invoices",
+        "list_vendor_bills",
+        "get_bill_by_id",
+        "get_purchase_invoices",
         "list_overdue_invoices",
+        "list_expense_transactions",
+        "get_expense_transactions",
         "record_expense",
+        "get_vendor_payables",
+        "list_vendors",
+        "get_vendor_details",
+        "create_journal_entry",
+        "create_tds_entry",
+        "update_bill",
         "get_balance_sheet",
         "get_profit_loss",
         "get_ledger_balance",
@@ -123,8 +144,19 @@ class ZohoBooksConnector(BaseConnector):
     def _register_tools(self):
         self._tool_registry["create_invoice"] = self.create_invoice
         self._tool_registry["list_invoices"] = self.list_invoices
+        self._tool_registry["list_vendor_bills"] = self.list_vendor_bills
+        self._tool_registry["get_bill_by_id"] = self.get_bill_by_id
+        self._tool_registry["get_purchase_invoices"] = self.get_purchase_invoices
         self._tool_registry["list_overdue_invoices"] = self.list_overdue_invoices
+        self._tool_registry["list_expense_transactions"] = self.list_expense_transactions
+        self._tool_registry["get_expense_transactions"] = self.get_expense_transactions
         self._tool_registry["record_expense"] = self.record_expense
+        self._tool_registry["get_vendor_payables"] = self.get_vendor_payables
+        self._tool_registry["list_vendors"] = self.list_vendors
+        self._tool_registry["get_vendor_details"] = self.get_vendor_details
+        self._tool_registry["create_journal_entry"] = self.create_journal_entry
+        self._tool_registry["create_tds_entry"] = self.create_tds_entry
+        self._tool_registry["update_bill"] = self.update_bill
         self._tool_registry["get_balance_sheet"] = self.get_balance_sheet
         self._tool_registry["get_profit_loss"] = self.get_profit_loss
         self._tool_registry["get_ledger_balance"] = self.get_ledger_balance
@@ -343,6 +375,34 @@ class ZohoBooksConnector(BaseConnector):
             "page_context": data.get("page_context", {}),
         }
 
+    async def list_vendor_bills(self, **params) -> dict[str, Any]:
+        """List vendor bills / purchase invoices from Zoho Books.
+
+        Optional: vendor_id, status, date_start, date_end, bill_number, page.
+        """
+        qp: dict[str, Any] = {}
+        for field in ("vendor_id", "status", "date_start", "date_end", "bill_number", "page"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/bills", params=self._org_params(qp))
+        bills = self._unwrap(data, "bills")
+        return {
+            "bills": bills if isinstance(bills, list) else [],
+            "page_context": data.get("page_context", {}),
+        }
+
+    async def get_bill_by_id(self, **params) -> dict[str, Any]:
+        """Fetch one vendor bill / purchase invoice by bill_id."""
+        bill_id = params.get("bill_id") or params.get("id")
+        if not bill_id:
+            return {"error": "bill_id is required"}
+        data = await self._get(f"/bills/{bill_id}", params=self._org_params())
+        return self._unwrap(data, "bill")
+
+    async def get_purchase_invoices(self, **params) -> dict[str, Any]:
+        """Alias for list_vendor_bills used by accounting agents."""
+        return await self.list_vendor_bills(**params)
+
     # ── Expenses ───────────────────────────────────────────────────────
 
     async def list_overdue_invoices(self, **params) -> dict[str, Any]:
@@ -353,6 +413,26 @@ class ZohoBooksConnector(BaseConnector):
         query = dict(params)
         query["status"] = "overdue"
         return await self.list_invoices(**query)
+
+    async def list_expense_transactions(self, **params) -> dict[str, Any]:
+        """List expense transactions from Zoho Books.
+
+        Optional: vendor_id, account_id, date_start, date_end, status, page.
+        """
+        qp: dict[str, Any] = {}
+        for field in ("vendor_id", "account_id", "date_start", "date_end", "status", "page"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/expenses", params=self._org_params(qp))
+        expenses = self._unwrap(data, "expenses")
+        return {
+            "expenses": expenses if isinstance(expenses, list) else [],
+            "page_context": data.get("page_context", {}),
+        }
+
+    async def get_expense_transactions(self, **params) -> dict[str, Any]:
+        """Alias for list_expense_transactions."""
+        return await self.list_expense_transactions(**params)
 
     async def record_expense(self, **params) -> dict[str, Any]:
         """Record an expense in Zoho Books.
@@ -375,6 +455,121 @@ class ZohoBooksConnector(BaseConnector):
 
         data = await self._post("/expenses", data=body)
         return self._unwrap(data, "expense")
+
+    async def get_vendor_payables(self, **params) -> dict[str, Any]:
+        """Return unpaid/open vendor bills for payable and TDS workflows."""
+        query = dict(params)
+        query.setdefault("status", "open")
+        bills = await self.list_vendor_bills(**query)
+        return {
+            "payables": bills.get("bills", []),
+            "page_context": bills.get("page_context", {}),
+        }
+
+    async def list_vendors(self, **params) -> dict[str, Any]:
+        """List vendor contacts, including PAN/GST fields where Zoho returns them.
+
+        Optional: search_text, page.
+        """
+        qp: dict[str, Any] = {"contact_type": "vendor"}
+        for field in ("search_text", "page"):
+            if params.get(field):
+                qp[field] = params[field]
+        data = await self._get("/contacts", params=self._org_params(qp))
+        contacts = self._unwrap(data, "contacts")
+        return {
+            "vendors": contacts if isinstance(contacts, list) else [],
+            "page_context": data.get("page_context", {}),
+        }
+
+    async def get_vendor_details(self, **params) -> dict[str, Any]:
+        """Fetch one vendor/contact master record."""
+        vendor_id = params.get("vendor_id") or params.get("contact_id") or params.get("id")
+        if not vendor_id:
+            return {"error": "vendor_id is required"}
+        data = await self._get(f"/contacts/{vendor_id}", params=self._org_params())
+        return self._unwrap(data, "contact")
+
+    async def create_journal_entry(self, **params) -> dict[str, Any]:
+        """Create a Zoho Books journal entry.
+
+        Required: date, line_items. Optional: notes, reference_number.
+        """
+        if not params.get("date"):
+            return {"error": "date is required"}
+        line_items = params.get("line_items") or params.get("journal_line_items")
+        if not line_items:
+            return {"error": "line_items is required"}
+        body: dict[str, Any] = {"date": params["date"], "line_items": line_items}
+        for field in ("notes", "reference_number"):
+            if params.get(field):
+                body[field] = params[field]
+        data = await self._post("/journals", data=body)
+        return self._unwrap(data, "journal")
+
+    async def create_tds_entry(self, **params) -> dict[str, Any]:
+        """Create a TDS accounting journal entry."""
+        if params.get("line_items") or params.get("journal_line_items"):
+            return await self.create_journal_entry(**params)
+        for required in (
+            "date",
+            "expense_account_id",
+            "vendor_account_id",
+            "tds_payable_account_id",
+            "amount",
+            "tds_amount",
+        ):
+            if params.get(required) in (None, ""):
+                return {"error": f"{required} is required"}
+        try:
+            gross_amount = float(params["amount"])
+            tds_amount = float(params["tds_amount"])
+        except (TypeError, ValueError):
+            return {"error": "amount and tds_amount must be numeric"}
+        if gross_amount <= 0 or tds_amount < 0 or tds_amount > gross_amount:
+            return {"error": "tds_amount must be between 0 and amount"}
+        vendor_credit = round(gross_amount - tds_amount, 2)
+        line_items = [
+            {
+                "account_id": params["expense_account_id"],
+                "debit_or_credit": "debit",
+                "amount": round(gross_amount, 2),
+                "description": params.get("description", "Expense gross amount"),
+            },
+            {
+                "account_id": params["vendor_account_id"],
+                "debit_or_credit": "credit",
+                "amount": vendor_credit,
+                "description": params.get("vendor_description", "Vendor net payable"),
+            },
+            {
+                "account_id": params["tds_payable_account_id"],
+                "debit_or_credit": "credit",
+                "amount": round(tds_amount, 2),
+                "description": params.get("tds_description", "TDS payable"),
+            },
+        ]
+        return await self.create_journal_entry(
+            date=params["date"],
+            line_items=line_items,
+            notes=params.get("notes") or "TDS deduction entry",
+            reference_number=params.get("reference_number"),
+        )
+
+    async def update_bill(self, **params) -> dict[str, Any]:
+        """Update a vendor bill in Zoho Books."""
+        bill_id = params.get("bill_id") or params.get("id")
+        if not bill_id:
+            return {"error": "bill_id is required"}
+        body = {
+            key: value
+            for key, value in params.items()
+            if key not in {"bill_id", "id"} and value is not None
+        }
+        if not body:
+            return {"error": "at least one field is required"}
+        data = await self._put(f"/bills/{bill_id}", data=body)
+        return self._unwrap(data, "bill")
 
     # ── Reports ────────────────────────────────────────────────────────
 
@@ -484,7 +679,7 @@ class ZohoBooksConnector(BaseConnector):
         section = str(params.get("section") or "").upper().replace("SECTION", "").strip()
         section = section.replace(" ", "")
         deductee_type = str(params.get("deductee_type") or "individual").lower()
-        pan_available = bool(params.get("pan_available", True))
+        pan_available = _as_bool(params.get("pan_available"), True)
 
         section_rates = {
             "194A": 0.10,

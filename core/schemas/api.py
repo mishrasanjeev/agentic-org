@@ -53,7 +53,7 @@ class AgentCreate(BaseModel):
     hitl_policy: HITLPolicyConfig = Field(
         default_factory=lambda: HITLPolicyConfig(condition="confidence < 0.88")
     )
-    confidence_floor: float = 0.88
+    confidence_floor: float = Field(0.88, ge=0.0, le=1.0)
     max_retries: int = 3
     output_schema: str | None = None
     initial_status: str = "shadow"
@@ -62,7 +62,7 @@ class AgentCreate(BaseModel):
     # BUG-012 (Ramesh 2026-04-20): aligned with the ORM default —
     # 0.95 was unrealistic for LLM-driven agents; see
     # core/models/agent.py for the full rationale.
-    shadow_accuracy_floor: float = 0.80
+    shadow_accuracy_floor: float = Field(0.80, ge=0.0, le=1.0)
     scaling: ScalingConfig = Field(default_factory=ScalingConfig)
     cost_controls: CostControlConfig = Field(default_factory=CostControlConfig)
     ttl_hours: int | None = None
@@ -93,7 +93,7 @@ class AgentUpdate(BaseModel):
     prompt_variables: dict[str, str] | None = None
     authorized_tools: list[str] | None = None
     hitl_policy: HITLPolicyConfig | None = None
-    confidence_floor: float | None = None
+    confidence_floor: float | None = Field(None, ge=0.0, le=1.0)
     llm: LLMConfig | None = None
     # Virtual employee persona fields
     employee_name: str | None = None
