@@ -20,8 +20,8 @@ Pinned contracts:
 - AgentUpdate handles non-existent ids with 404 (not 5xx).
 - DELETE /agents/{id} refuses non-deletable statuses with 409 +
   the documented message ("Pause or retire the agent first.").
-- Audit log entry MUST be written BEFORE the row delete so the
-  audit trail isn't lost when the deletion succeeds.
+- Audit log entry MUST be written BEFORE the soft-delete status
+  transition so the audit trail isn't lost when deletion succeeds.
 - Concurrent agent creation is gated by tenant-scoped uniqueness
   + per-(name, version) constraints at the model layer.
 - UI logout removes BOTH token AND user from localStorage so
@@ -31,6 +31,9 @@ Pinned contracts:
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -68,6 +71,38 @@ def test_tc_neg_001_jwt_validation_pins_audience_and_issuer() -> None:
     assert '"verify_iss": True' in src
 
 
+def test_tc_neg_003_confidence_floor_rejects_out_of_range_values() -> None:
+    """Create and update schemas must reject impossible confidence floors."""
+    from core.schemas.api import AgentCreate, AgentUpdate
+
+    with pytest.raises(ValidationError):
+        AgentCreate(
+            name="bad-high",
+            agent_type="test",
+            domain="test",
+            confidence_floor=1.5,
+        )
+    with pytest.raises(ValidationError):
+        AgentCreate(
+            name="bad-low",
+            agent_type="test",
+            domain="test",
+            confidence_floor=-0.01,
+        )
+    with pytest.raises(ValidationError):
+        AgentUpdate(confidence_floor=1.5)
+
+    assert (
+        AgentCreate(
+            name="boundary",
+            agent_type="test",
+            domain="test",
+            confidence_floor=1.0,
+        ).confidence_floor
+        == 1.0
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 # TC-NEG-003 — Create agent with confidence floor out of range
 # ─────────────────────────────────────────────────────────────────
@@ -75,12 +110,12 @@ def test_tc_neg_001_jwt_validation_pins_audience_and_issuer() -> None:
 
 def test_tc_neg_003_confidence_floor_default_documented() -> None:
     """confidence_floor defaults to 0.88 (the BUG-012 alignment
-    with the model's default). Pydantic typing is plain float,
-    so values <0 or >1 ARE accepted at the schema layer — the
-    handler enforces the [0, 1] range. Pin the default so a
+    with the model's default). The schema also enforces the [0, 1]
+    range so impossible values cannot reach the handler. Pin the default so a
     refactor can't silently shift it."""
-    src = (REPO / "core" / "schemas" / "api.py").read_text(encoding="utf-8")
-    assert "confidence_floor: float = 0.88" in src
+    from core.schemas.api import AgentCreate
+
+    assert AgentCreate.model_fields["confidence_floor"].default == 0.88
 
 
 def test_tc_neg_003_shadow_accuracy_floor_default_pinned() -> None:
@@ -88,8 +123,9 @@ def test_tc_neg_003_shadow_accuracy_floor_default_pinned() -> None:
     0.95 was unreachable for LLM agents). If the default
     moves to 0.95 again, every new agent gets stuck in shadow
     mode forever."""
-    src = (REPO / "core" / "schemas" / "api.py").read_text(encoding="utf-8")
-    assert "shadow_accuracy_floor: float = 0.80" in src
+    from core.schemas.api import AgentCreate
+
+    assert AgentCreate.model_fields["shadow_accuracy_floor"].default == 0.80
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -192,23 +228,30 @@ def test_tc_neg_009_delete_refuses_non_deletable_status_with_409() -> None:
     assert "raise HTTPException(\n                409," in src or 'HTTPException(409' in src
 
 
-def test_tc_neg_009_delete_writes_audit_before_row_drop() -> None:
-    """The audit log MUST be written BEFORE the agent row is
-    deleted. If the order flips, a deletion that succeeds at
-    the row level but fails at the audit write would leave no
-    trail — Module 12 audit contract requires every mutation
-    be visible in the log."""
+def test_tc_neg_009_delete_writes_audit_before_soft_delete() -> None:
+    """The audit log MUST be written BEFORE the agent is marked deleted."""
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    delete_block = src.split("# ── DELETE /agents/", 1)[1][:3500]
+    delete_block = src.split("# ── DELETE /agents/", 1)[1].split("# ── ", 1)[0]
     audit_idx = delete_block.find("AuditLog(")
-    delete_idx = delete_block.find("session.delete(")
+    delete_idx = delete_block.find('agent.status = "deleted"')
     assert audit_idx > 0, "AuditLog write missing from delete handler"
-    assert delete_idx > 0, "session.delete missing from delete handler"
+    assert delete_idx > 0, "soft-delete status transition missing from delete handler"
     assert audit_idx < delete_idx, (
-        "AuditLog must be created BEFORE the row delete — "
+        "AuditLog must be created BEFORE the soft-delete transition — "
         "otherwise a successful delete with a failed audit "
         "leaves no trail"
     )
+
+
+def test_tc_neg_009_delete_is_fk_safe_soft_delete_not_row_drop() -> None:
+    """User-facing delete must not physically drop the agent row."""
+    src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+    delete_block = src.split("# ── DELETE /agents/", 1)[1][:5000]
+    assert "await session.delete(agent)" not in delete_block
+    assert 'agent.status = "deleted"' in delete_block
+    assert "StepExecution.agent_id == agent_id" in delete_block
+    assert "LeadPipeline.assigned_agent_id == agent_id" in delete_block
+    assert "Agent.parent_agent_id == agent_id" in delete_block
 
 
 # ─────────────────────────────────────────────────────────────────

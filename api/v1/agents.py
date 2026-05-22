@@ -13,7 +13,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import (
@@ -27,11 +27,14 @@ from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
+from core.models.approval_policy import ApprovalPolicy
 from core.models.audit import AuditLog
 from core.models.company import Company
 from core.models.hitl import HITLQueue
+from core.models.lead_pipeline import LeadPipeline
 from core.models.prompt_template import PromptEditHistory
 from core.models.tenant import Tenant
+from core.models.workflow import StepExecution
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
@@ -3792,7 +3795,16 @@ async def delete_agent(
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
-    """Permanently delete an agent. Only paused, retired, or inactive agents can be deleted."""
+    """Delete an agent without row-level FK fragility.
+
+    Agents have execution history, prompt history, HITL rows, workflow steps,
+    org-chart links, and optional sales assignments. A physical row delete
+    succeeds only for agents with no remaining references and fails
+    intermittently for agents that have actually been used. Treat user-facing
+    deletion as a lifecycle state transition instead: hide the agent from all
+    normal fleet surfaces, preserve audit/history, and clear live references
+    that could route new work to the deleted agent.
+    """
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -3802,6 +3814,9 @@ async def delete_agent(
         if not agent:
             raise HTTPException(404, "Agent not found")
         _enforce_domain_access(agent, user_domains)
+
+        if agent.status == "deleted":
+            return {"id": str(agent_id), "deleted": True, "status": "deleted", "already_deleted": True}
 
         deletable_statuses = {"paused", "retired", "inactive", "shadow"}
         if agent.status not in deletable_statuses:
@@ -3827,18 +3842,62 @@ async def delete_agent(
         )
         session.add(audit)
 
-        # Delete related records that may have FK constraints
-        for related_model in (AgentLifecycleEvent, AgentCostLedger, AgentVersion):
-            await session.execute(
-                related_model.__table__.delete().where(
-                    related_model.agent_id == agent_id
-                )
-            )
-        # Clear HITL queue entries for this agent
+        previous_status = agent.status
+
+        # Clear active/live references so deleted agents cannot remain in
+        # routing, approval, org-chart, workflow, or sales assignment paths.
         await session.execute(
-            HITLQueue.__table__.delete().where(HITLQueue.agent_id == agent_id)
+            update(Agent)
+            .where(Agent.tenant_id == tid, Agent.parent_agent_id == agent_id)
+            .values(parent_agent_id=None, reporting_to=None)
+        )
+        await session.execute(
+            update(Agent)
+            .where(Agent.tenant_id == tid, Agent.shadow_comparison_agent_id == agent_id)
+            .values(shadow_comparison_agent_id=None)
+        )
+        await session.execute(
+            update(StepExecution)
+            .where(StepExecution.tenant_id == tid, StepExecution.agent_id == agent_id)
+            .values(agent_id=None)
+        )
+        await session.execute(
+            update(LeadPipeline)
+            .where(LeadPipeline.tenant_id == tid, LeadPipeline.assigned_agent_id == agent_id)
+            .values(assigned_agent_id=None)
+        )
+        await session.execute(
+            update(ApprovalPolicy)
+            .where(ApprovalPolicy.tenant_id == tid, ApprovalPolicy.agent_id == agent_id)
+            .values(agent_id=None)
         )
 
-        await session.delete(agent)
+        # Pending HITL items should not remain actionable once the agent is
+        # deleted. Historical execution rows stay intact for explanations and
+        # audit review.
+        await session.execute(
+            HITLQueue.__table__.delete().where(
+                HITLQueue.tenant_id == tid,
+                HITLQueue.agent_id == agent_id,
+            )
+        )
 
-    return {"id": str(agent_id), "deleted": True}
+        lifecycle = AgentLifecycleEvent(
+            tenant_id=tid,
+            agent_id=agent_id,
+            from_status=previous_status,
+            to_status="deleted",
+            triggered_by="user",
+            reason="agent_deleted",
+        )
+        session.add(lifecycle)
+
+        config = dict(agent.config or {})
+        config["deleted_at"] = datetime.now(UTC).isoformat()
+        config["deleted_by"] = "api"
+        agent.config = config
+        agent.status = "deleted"
+        agent.updated_at = datetime.now(UTC)
+        session.add(agent)
+
+    return {"id": str(agent_id), "deleted": True, "status": "deleted"}

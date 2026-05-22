@@ -24,7 +24,7 @@
 fastapi==0.136.1
 uvicorn[standard]==0.47.0
 # starlette pulled by fastapi (>=0.49.1 required for CVE-2025-54121, CVE-2025-62727)
-python-multipart==0.0.28
+python-multipart==0.0.29
 websockets==15.0.1
 
 # ─── Database & ORM ──────────────────────────────────────────────────────────
@@ -57,36 +57,36 @@ stripe==15.1.0
 # ─── LLM Providers ──────────────────────────────────────────────────────────
 google-genai==1.75.0
 anthropic==0.102.0
-openai==2.36.0
+openai==2.37.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
 langgraph==1.2.0
-langchain==1.3.0
+langchain==1.3.1
 langchain-core>=1.4.0
 langchain-google-genai==4.2.2
 langchain-anthropic==1.4.3
 langchain-openai==1.2.1
 langgraph-checkpoint-postgres==3.1.0
-langsmith==0.8.4
+langsmith==0.8.5
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0
 google-cloud-secret-manager==2.28.0
 google-api-python-client==2.196.0
-google-auth==2.52.0
+google-auth==2.53.0
 
 # ─── Observability & Monitoring ──────────────────────────────────────────────
 structlog==25.5.0
-opentelemetry-api==1.41.1
+opentelemetry-api==1.42.0
 opentelemetry-sdk==1.41.1
 opentelemetry-exporter-otlp==1.41.1
-opentelemetry-instrumentation-fastapi==0.62b1
+opentelemetry-instrumentation-fastapi==0.63b0
 prometheus-client==0.25.0
 
 # ─── Document Processing & Reporting ─────────────────────────────────────────
 pypdf==6.11.0
 # CVE-2026-41066: keep python-docx/transitive XML parsing on patched lxml.
-lxml==6.1.0
+lxml==6.1.1
 pyyaml==6.0.3
 jinja2==3.1.6
 defusedxml==0.7.1
