@@ -68,18 +68,17 @@ async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_o
 async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session with RLS tenant context set."""
     async with async_session_factory() as session:
-        # asyncpg does not support bound parameters in SET LOCAL.
-        # We MUST validate the UUID format before interpolating.
         import re as _re
 
         tid_str = str(tenant_id)
         if not _re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", tid_str):
             raise ValueError(f"Invalid tenant_id format: {tid_str}")
-        # Construct the SQL statement from the validated, safe UUID string.
-        # This is NOT user-controlled — tenant_id comes from JWT claims validated
-        # by auth middleware. The regex above is defense-in-depth.
-        stmt = "SET LOCAL agenticorg.tenant_id = '" + tid_str + "'"  # noqa: S608
-        await session.execute(text(stmt))
+        # set_config(..., is_local=true) is the parameterized equivalent of
+        # SET LOCAL and avoids interpolating tenant context into SQL text.
+        await session.execute(
+            text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
+            {"tenant_id": tid_str},
+        )
         try:
             yield session
             await session.commit()
