@@ -75,6 +75,7 @@ async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, No
             raise ValueError(f"Invalid tenant_id format: {tid_str}")
         # set_config(..., is_local=true) is the parameterized equivalent of
         # SET LOCAL and avoids interpolating tenant context into SQL text.
+        # UUID validation remains defense-in-depth for tenant context boundaries.
         await session.execute(
             text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
             {"tenant_id": tid_str},
