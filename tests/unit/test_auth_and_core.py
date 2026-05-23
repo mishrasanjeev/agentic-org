@@ -1695,8 +1695,9 @@ class TestGetTenantSession:
             # The first arg to execute is a text() clause; check its .text attribute
             text_clause = calls[0][0][0]
             sql_text = getattr(text_clause, "text", str(text_clause))
-            assert TENANT_ID in sql_text
-            assert "SET LOCAL" in sql_text
+            assert TENANT_ID not in sql_text
+            assert "set_config" in sql_text
+            assert calls[0][0][1] == {"tenant_id": TENANT_ID}
 
     @pytest.mark.asyncio
     async def test_rollback_on_exception(self):

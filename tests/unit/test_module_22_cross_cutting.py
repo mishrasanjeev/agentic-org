@@ -13,8 +13,9 @@ Pinned contracts:
   scope check accepts the actor when scopes contain anything
   starting with ``agenticorg:admin``. The auditor role gets
   read scopes only — no write scope is derivable.
-- Tenant isolation = SET LOCAL agenticorg.tenant_id at session
-  open + RLS policies on every tenant-scoped table.
+- Tenant isolation = parameterized set_config('agenticorg.tenant_id', ...)
+  with transaction-local scope at session open + RLS policies on every
+  tenant-scoped table.
 - Error envelope is the E-series shape:
   ``{"error": {"code", "name", "message", "severity",
   "retryable", "timestamp"}}``. The codes are part of the
@@ -25,9 +26,9 @@ Pinned contracts:
   budget cap.
 - Prompt lock on active agents: PATCH/POST flows return 400
   with the exact message the UI parses.
-- SQL injection: all asyncpg queries use bind parameters; the
-  one place that interpolates (SET LOCAL tenant_id) validates
-  the UUID with a regex first.
+- SQL injection: all asyncpg queries use bind parameters; tenant context
+  setup binds the UUID through set_config and keeps regex validation as
+  defense-in-depth.
 - XSS / arbitrary-content: defusedxml is used for any XML
   parsing path (RPA scrapers); JSON is parsed by Pydantic
   with strict typing.
@@ -95,17 +96,19 @@ def test_tc_cc_003_auditor_role_does_not_get_write_scopes() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────
-# TC-CC-004 — Tenant isolation (SET LOCAL + RLS)
+# TC-CC-004 — Tenant isolation (set_config + RLS)
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_tc_cc_004_get_tenant_session_validates_uuid_before_set_local() -> None:
-    """asyncpg can't bind parameters in SET LOCAL, so we
-    interpolate. The interpolation is safe ONLY because we
-    regex-validate the UUID first. If the validation goes
-    away, the SET LOCAL becomes a SQL injection vector."""
+def test_tc_cc_004_get_tenant_session_sets_parameterized_local_context() -> None:
+    """Tenant context must be written with a bind parameter, not SQL
+    interpolation. set_config(..., is_local=true) provides the same
+    transaction-local behavior as SET LOCAL while keeping the value out
+    of the SQL text. UUID validation remains defense-in-depth."""
     src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
-    assert "SET LOCAL agenticorg.tenant_id" in src
+    assert "set_config('agenticorg.tenant_id', :tenant_id, true)" in src
+    assert '{"tenant_id": tid_str}' in src
+    assert "SET LOCAL agenticorg.tenant_id = '" not in src
     # The defense-in-depth UUID regex must remain.
     assert "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" in src
     assert "ValueError" in src and "tenant_id" in src
@@ -114,7 +117,7 @@ def test_tc_cc_004_get_tenant_session_validates_uuid_before_set_local() -> None:
 def test_tc_cc_004_rls_policy_uses_current_setting() -> None:
     """RLS policies must filter on
     ``current_setting('agenticorg.tenant_id', true)`` — the
-    same key the session-open SET LOCAL writes. Mismatched
+    same key the session-open set_config call writes. Mismatched
     keys silently disable RLS without anyone noticing."""
     src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
     assert "current_setting('agenticorg.tenant_id', true)" in src
@@ -227,13 +230,15 @@ def test_tc_cc_010_audit_event_type_uses_bind_parameter_not_concat() -> None:
     assert 'f"DELETE' not in src
 
 
-def test_tc_cc_010_set_local_uuid_validation_is_defense_in_depth() -> None:
-    """Cross-pin with TC-CC-004: the one place we DO interpolate
-    SQL (SET LOCAL agenticorg.tenant_id) is gated by a UUID
-    regex. This is defense-in-depth on top of the JWT-supplied
-    tenant_id."""
+def test_tc_cc_010_tenant_context_uses_bind_parameter_with_uuid_validation() -> None:
+    """Cross-pin with TC-CC-004: tenant context setup binds the
+    tenant_id value and keeps UUID validation as defense-in-depth
+    on top of the JWT-supplied tenant_id."""
     src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
-    assert "defense-in-depth" in src.lower() or "regex above" in src.lower()
+    assert "set_config('agenticorg.tenant_id', :tenant_id, true)" in src
+    assert '{"tenant_id": tid_str}' in src
+    assert "SET LOCAL agenticorg.tenant_id = '" not in src
+    assert "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" in src
 
 
 # ─────────────────────────────────────────────────────────────────
