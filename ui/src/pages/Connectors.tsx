@@ -210,7 +210,12 @@ export default function Connectors() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Connectors</h2>
-        <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => navigate("/dashboard/connectors/cmo-vendor-sandbox")}>
+            CMO Sandbox Setup
+          </Button>
+          <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
+        </div>
       </div>
 
       {/* Tab System */}

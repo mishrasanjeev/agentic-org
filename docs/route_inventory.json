@@ -2283,7 +2283,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 568,
+    "source_line": 796,
     "tenant_required": true
   },
   {
@@ -2301,7 +2301,43 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.create",
-    "source_line": 637,
+    "source_line": 865,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.cmo_vendor_sandbox.read",
+    "auth_required": true,
+    "function": "get_cmo_vendor_sandbox_connectors",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors/cmo-vendor-sandbox api/v1/connectors.py:get_cmo_vendor_sandbox_connectors",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/cmo-vendor-sandbox",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.read",
+    "source_line": 1028,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.cmo_vendor_sandbox.upsert",
+    "auth_required": true,
+    "function": "upsert_cmo_vendor_sandbox_connectors",
+    "idempotency": "tenant-cmo-vendor-sandbox-upsert",
+    "key": "POST /api/v1/connectors/cmo-vendor-sandbox api/v1/connectors.py:upsert_cmo_vendor_sandbox_connectors",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/cmo-vendor-sandbox",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.create",
+    "source_line": 1089,
     "tenant_required": true
   },
   {
@@ -2373,7 +2409,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.registry.read",
-    "source_line": 430,
+    "source_line": 658,
     "tenant_required": false
   },
   {
@@ -2391,7 +2427,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1055,
+    "source_line": 1524,
     "tenant_required": true
   },
   {
@@ -2409,7 +2445,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 801,
+    "source_line": 1270,
     "tenant_required": true
   },
   {
@@ -2427,7 +2463,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 840,
+    "source_line": 1309,
     "tenant_required": true
   },
   {
@@ -2445,7 +2481,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1088,
+    "source_line": 1557,
     "tenant_required": true
   },
   {
@@ -2463,7 +2499,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1143,
+    "source_line": 1612,
     "tenant_required": true
   },
   {
@@ -3183,7 +3219,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cbo",
-    "source_line": 593,
+    "source_line": 996,
     "tenant_required": true
   },
   {
@@ -3201,7 +3237,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.ceo",
-    "source_line": 473,
+    "source_line": 876,
     "tenant_required": true
   },
   {
@@ -3219,7 +3255,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cfo",
-    "source_line": 502,
+    "source_line": 905,
     "tenant_required": true
   },
   {
@@ -3237,7 +3273,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.chro",
-    "source_line": 536,
+    "source_line": 939,
     "tenant_required": true
   },
   {
@@ -3255,7 +3291,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cmo",
-    "source_line": 555,
+    "source_line": 958,
     "tenant_required": true
   },
   {
@@ -3273,7 +3309,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.coo",
-    "source_line": 574,
+    "source_line": 977,
     "tenant_required": true
   },
   {
@@ -4695,7 +4731,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.tools.read",
-    "source_line": 491,
+    "source_line": 719,
     "tenant_required": false
   },
   {
