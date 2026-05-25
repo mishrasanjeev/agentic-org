@@ -126,6 +126,354 @@
     "cooDashboard": "COO डैशबोर्ड",
     "cboDashboard": "CBO डैशबोर्ड"
   },
+  "cmoCapability": {
+    "title": "CMO क्षमता स्थिति",
+    "subtitle": "मौजूदा CMO स्वायत्तता आंशिक है: मजबूत ऑपरेटरों को बीटा, स्टब, अनुपलब्ध और डेमो सतहों से अलग दिखाया गया है।",
+    "notice": "इस डैशबोर्ड को end-to-end CMO agent autonomy का प्रमाण न मानें।",
+    "capability": "क्षमता",
+    "state": "स्थिति",
+    "currentLimit": "मौजूदा सीमा",
+    "states": {
+      "production": "प्रोडक्शन",
+      "beta": "बीटा",
+      "stub": "स्टब",
+      "unavailable": "अनुपलब्ध",
+      "demo": "डेमो"
+    },
+    "campaignPilot": {
+      "name": "Campaign Pilot",
+      "detail": "मौजूदा सबसे मजबूत CMO एजेंट: डोमेन-विशिष्ट अभियान निष्पादन, बजट जांच, प्रदर्शन पोलिंग और HITL गेट।"
+    },
+    "contentFactory": {
+      "name": "Content Factory",
+      "detail": "ड्राफ्ट जनरेशन और ब्रांड जांच सहित पर्याप्त कंटेंट वर्कफ़्लो मौजूद है; पब्लिश लूप और QA नीति अभी परिपक्व हो रहे हैं।"
+    },
+    "emailMarketing": {
+      "name": "Email Marketing",
+      "detail": "अलग LangGraph पथ और अनुमोदन-गेटेड टूलिंग से उपलब्ध है, पर अभी पूर्ण स्वायत्त CMO स्तंभ नहीं है।"
+    },
+    "brandMonitor": {
+      "name": "Brand Monitor",
+      "detail": "रजिस्टर्ड है, लेकिन core marketing implementation अभी shared/base behavior को wrap करता है; production-grade brand monitoring नहीं है।"
+    },
+    "seoStrategist": {
+      "name": "SEO Strategist",
+      "detail": "रजिस्टर्ड है, लेकिन core marketing implementation अभी shared/base behavior को wrap करता है; production-grade SEO execution नहीं है।"
+    },
+    "crmIntelligence": {
+      "name": "CRM Intelligence",
+      "detail": "First-class deterministic CRM/pipeline intelligence (velocity, funnel conversion, lead scoring refresh, churn signals, segments, SQL promotion, account health) policy/approval/audit/write-confirmation gates के साथ। Real HubSpot/Salesforce/intent connectors और pilot proof के बिना production नहीं।"
+    },
+    "socialMedia": {
+      "name": "Social Media",
+      "detail": "अभी first-class core marketing agent नहीं है; graph-level surface को experimental/demo ही मानें।"
+    },
+    "abm": {
+      "name": "ABM",
+      "detail": "ABM dashboard/API surfaces मौजूद हैं, लेकिन first-class core marketing ABM agent अभी implemented नहीं है।"
+    },
+    "competitiveIntel": {
+      "name": "Competitive Intel",
+      "detail": "अभी first-class core marketing agent नहीं है; graph-level surface को experimental/demo ही मानें।"
+    },
+    "kpiFeed": {
+      "name": "CMO KPI feed",
+      "demoDetail": "यह डैशबोर्ड अभी demo KPI data दिखा रहा है, end-to-end autonomous CMO operation का प्रमाण नहीं।",
+      "liveDetail": "KPI data demo के रूप में flag नहीं है, लेकिन capability maturity ऊपर सूचीबद्ध agent states के अनुसार ही है।"
+    }
+  },
+  "cmoConnectors": {
+    "title": "Marketing Connector Setup",
+    "subtitle": "Real-company CMO readiness connected CRM, ads, analytics, CMS, email, social, SEO, brand, ABM और finance systems पर निर्भर है।",
+    "productionBlocked": "Production CMO data तब तक blocked है जब तक real marketing connectors configured और synced न हों।",
+    "summaryHealthyLabel": "healthy",
+    "summaryNeedsActionLabel": "need action",
+    "summaryMissingLabel": "missing",
+    "empty": "Connector setup status unavailable है। इसके बिना dashboard production CMO readiness claim नहीं कर सकता।",
+    "system": "System",
+    "status": "Status",
+    "coverageLabel": "Coverage",
+    "owner": "Owner",
+    "account": "Account",
+    "lastSync": "Last Sync",
+    "requiredAccess": "Required Access",
+    "action": "Action",
+    "missingScopesLabel": "Missing",
+    "unassigned": "Unassigned",
+    "notAvailable": "N/A",
+    "health": {
+      "healthy": "Healthy",
+      "missing": "Missing",
+      "expiredAuth": "Expired Auth",
+      "insufficientScope": "Insufficient Scope",
+      "stale": "Stale Sync",
+      "degraded": "Degraded",
+      "unknown": "Unknown"
+    },
+    "coverage": {
+      "ready": "Ready",
+      "missing": "Missing",
+      "blocked": "Blocked",
+      "stale": "Stale",
+      "partial": "Partial",
+      "unavailable": "Unavailable"
+    },
+    "cta": {
+      "none": "No Action",
+      "setup": "Set Up",
+      "reconnect": "Reconnect",
+      "addScope": "Add Scope",
+      "refresh": "Refresh Sync",
+      "review": "Review"
+    }
+  },
+  "cmoConnectorContracts": {
+    "title": "Marketing Connector Contracts",
+    "subtitle": "Read access, write access, retry budgets, idempotency और external write confirmation production CMO workflows के लिए अलग-अलग evaluate होते हैं।",
+    "summaryReadReadyLabel": "read-ready",
+    "summaryWriteReadyLabel": "write-ready",
+    "summaryUnconfirmedLabel": "unconfirmed",
+    "empty": "Connector contract status unavailable है। इसके बिना production CMO workflows connector access या external writes को ready नहीं मान सकते।",
+    "system": "System",
+    "contractState": "Contract",
+    "read": "Read",
+    "write": "Write",
+    "authFreshness": "Auth / Freshness",
+    "retry": "Retry",
+    "confirmation": "Confirmation",
+    "action": "Action",
+    "noWrites": "No write capability",
+    "missingScopes": "Missing",
+    "mockProof": "Mock/test proof production proof नहीं है।",
+    "idempotencyReady": "Idempotency ready",
+    "idempotencyMissing": "No idempotency proof",
+    "states": {
+      "healthy": "Healthy",
+      "missingScope": "Missing Scope",
+      "authExpired": "Auth Expired",
+      "rateLimited": "Rate Limited",
+      "timeout": "Timeout",
+      "vendor5xx": "Vendor 5xx",
+      "partialData": "Partial Data",
+      "staleData": "Stale Data",
+      "degraded": "Degraded",
+      "writeUnconfirmed": "Write Unconfirmed",
+      "writeConfirmed": "Write Confirmed",
+      "none": "None",
+      "unknown": "Unknown"
+    },
+    "readiness": {
+      "ready": "Ready",
+      "blocked": "Blocked",
+      "degraded": "Degraded",
+      "readOnly": "Read-only",
+      "missingScope": "Missing Scope",
+      "idempotencyMissing": "Idempotency Missing",
+      "unknown": "Unknown"
+    },
+    "cta": {
+      "none": "No Action",
+      "setup": "Set Up",
+      "reconnect": "Reconnect",
+      "addScope": "Add Scope",
+      "reviewRetryBudget": "Review Retry Budget",
+      "reviewDegraded": "Review Degraded",
+      "configureIdempotency": "Configure Idempotency"
+    }
+  },
+  "cmoDataReadiness": {
+    "title": "Marketing Data Readiness",
+    "subtitle": "Canonical CMO KPIs need validated field mappings and historical backfill before production confidence is available.",
+    "summaryMappedLabel": "mapped",
+    "summaryBackfilledLabel": "backfilled",
+    "kpiBlocked": "CMO KPI readiness is blocked by missing mappings or incomplete backfill.",
+    "kpiDegraded": "CMO KPI readiness is degraded; treat values as directional until setup is complete.",
+    "fieldMappingsTitle": "Field Mapping",
+    "backfillTitle": "Historical Backfill",
+    "emptyMappings": "Field mapping status is unavailable. Production CMO KPIs cannot be considered ready without it.",
+    "emptyBackfill": "No connected marketing source has a historical backfill projection yet.",
+    "mapping": "Mapping",
+    "status": "Status",
+    "sources": "Sources",
+    "missingFields": "Missing Fields",
+    "affectedKpis": "Affected KPIs",
+    "lastUpdated": "Last Updated",
+    "source": "Source",
+    "dateRange": "Date Range",
+    "records": "Records",
+    "lastRun": "Last Run",
+    "blocker": "Blocker",
+    "action": "Action",
+    "none": "None",
+    "readiness": {
+      "ready": "Ready",
+      "degraded": "Degraded",
+      "blocked": "Blocked"
+    },
+    "fieldStatus": {
+      "valid": "Valid",
+      "unmapped": "Unmapped",
+      "partiallyMapped": "Partially Mapped",
+      "invalid": "Invalid",
+      "stale": "Stale",
+      "blocked": "Blocked",
+      "unknown": "Unknown"
+    },
+    "backfillStatus": {
+      "completed": "Completed",
+      "notStarted": "Not Started",
+      "queued": "Queued",
+      "running": "Running",
+      "partial": "Partial",
+      "failed": "Failed",
+      "blocked": "Blocked",
+      "unknown": "Unknown"
+    },
+    "cta": {
+      "none": "No Action",
+      "connectSource": "Connect Source",
+      "mapFields": "Map Fields",
+      "completeMapping": "Complete Mapping",
+      "reviewMapping": "Review Mapping",
+      "fixMapping": "Fix Mapping",
+      "resolveMappingBlocker": "Resolve Blocker",
+      "startBackfill": "Start Backfill",
+      "monitorBackfill": "Monitor Backfill",
+      "reviewFailedRecords": "Review Failed Records",
+      "retryBackfill": "Retry Backfill",
+      "resolveBlocker": "Resolve Blocker"
+    }
+  },
+  "cmoWorkflowGates": {
+    "title": "CMO Workflow Promotion Gates",
+    "subtitle": "Workflows तब तक read-only रहते हैं जब तक उनके connector, mapping, backfill, policy और shadow-quality gates pass न हों।",
+    "summaryActiveLabel": "active",
+    "summaryReadyLabel": "ready",
+    "summaryBlockedLabel": "blocked",
+    "empty": "Workflow activation status unavailable है। Per-workflow gates के बिना production CMO workflows promote नहीं किए जा सकते।",
+    "workflow": "Workflow",
+    "state": "State",
+    "mode": "Mode",
+    "owners": "Owners",
+    "shadowQuality": "Shadow Quality",
+    "blockers": "Blockers",
+    "externalWrites": "External Writes",
+    "action": "Action",
+    "approvalOwner": "Approval",
+    "policyOwner": "Policy",
+    "runs": "runs",
+    "writesAllowed": "Allowed",
+    "readOnly": "Read-only",
+    "states": {
+      "active": "Active",
+      "promotionReady": "Ready to Promote",
+      "shadow": "Shadow",
+      "promotionBlocked": "Blocked",
+      "degraded": "Degraded",
+      "paused": "Paused",
+      "unavailable": "Unavailable",
+      "unknown": "Unknown"
+    },
+    "cta": {
+      "none": "No Action",
+      "promoteWorkflow": "Promote",
+      "runShadowQuality": "Run Shadow QA",
+      "fixRequiredConnector": "Fix Connector",
+      "fixRequiredMapping": "Fix Mapping",
+      "completeBackfill": "Complete Backfill",
+      "configurePolicyOwner": "Configure Policy",
+      "reviewDegradedDependency": "Review Degraded",
+      "resumeWorkflow": "Resume",
+      "implementFirstClassAgent": "Implement Agent",
+      "resolvePromotionBlocker": "Resolve Blocker"
+    }
+  },
+  "cmoWorkQueue": {
+    "title": "CMO Work Queue",
+    "subtitle": "Approvals, escalations, connectors, data readiness, writes, policy, audit, KPIs, reconciliation aur report gates se operator-visible CMO work.",
+    "summaryTotalLabel": "open items",
+    "summaryCriticalHighLabel": "critical/high",
+    "empty": "No CMO work queue items are open. Isse stub, unavailable, ya demo capabilities production-ready nahi banti.",
+    "priority": "Priority",
+    "item": "Item",
+    "severityLabel": "Severity",
+    "owner": "Owner",
+    "affected": "Affected",
+    "due": "Due",
+    "action": "Action",
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
+    },
+    "status": {
+      "open": "Open",
+      "blocked": "Blocked",
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    }
+  },
+  "cmoApprovalReviews": {
+    "title": "CMO Approval Reviews",
+    "subtitle": "Pending aur blocked marketing approvals with preview, impact, policy, timeout, write, audit, and rollback context.",
+    "summaryNeedsActionLabel": "need review",
+    "summaryBlockedLabel": "blocked",
+    "empty": "No CMO approval reviews are projected. External ya customer-facing marketing actions ko approval se pehle policy, write-readiness, timeout, aur audit evidence chahiye.",
+    "safeToApprove": "Approve enabled",
+    "approvalBlocked": "Approve blocked",
+    "ownerDue": "Owner / Due",
+    "risks": "Risks",
+    "budget": "Budget",
+    "audience": "Audience",
+    "diff": "Diff",
+    "rationale": "Rationale",
+    "noRationale": "No agent rationale provided",
+    "safeguards": "Safeguards",
+    "rollback": "Rollback / Stop",
+    "blockedReasons": "Blocked",
+    "workQueueRefs": "Work queue",
+    "allowedActions": "Allowed actions",
+    "noneAllowed": "None",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "overridden": "Overridden",
+      "timedOut": "Timed Out",
+      "escalated": "Escalated",
+      "blocked": "Blocked"
+    }
+  },
+  "cmoKpiLineage": {
+    "title": "CMO KPI Drill-Down",
+    "subtitle": "Canonical CMO KPIs ke liye formula, source, mapping, reconciliation, freshness, confidence, work queue aur report-gate lineage.",
+    "summaryReadyLabel": "ready",
+    "summaryBlockedLabel": "blocked",
+    "summaryLineageBlockedLabel": "lineage blocked",
+    "empty": "KPI drill-down lineage unavailable hai. Formula, source, freshness aur confidence evidence ke bina production CMO KPIs trusted nahi ho sakte.",
+    "kpi": "KPI",
+    "statusLabel": "Status",
+    "formula": "Formula",
+    "inputs": "Inputs",
+    "sources": "Sources",
+    "confidence": "Confidence",
+    "issue": "Issue",
+    "action": "Action",
+    "notProductionProof": "Not production lineage proof",
+    "notAvailable": "N/A",
+    "freshness": "Freshness",
+    "workQueueRefs": "Work queue",
+    "reportRefs": "Reports",
+    "status": {
+      "ready": "Ready",
+      "degraded": "Degraded",
+      "blocked": "Blocked",
+      "unavailable": "Unavailable"
+    }
+  },
   "dashboard": {
     "totalAgents": "कुल एजेंट",
     "activeAgents": "सक्रिय एजेंट",

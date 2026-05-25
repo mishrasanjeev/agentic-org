@@ -64,6 +64,9 @@ from core.models.tenant_ai_credential import TenantAICredential as TenantAICrede
 from core.models.tenant_ai_setting import TenantAISetting as TenantAISetting
 from core.models.tool_call import ToolCall as ToolCall
 from core.models.user import User as User
+from core.models.weekly_report_pilot_proof import (
+    WeeklyReportPilotProof as WeeklyReportPilotProof,
+)
 from core.models.workflow import StepExecution as StepExecution
 from core.models.workflow import WorkflowDefinition as WorkflowDefinition
 from core.models.workflow import WorkflowEventWait as WorkflowEventWait

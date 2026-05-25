@@ -43,7 +43,7 @@ The platform has real infrastructure but demo product surface:
 | Connectors | 54 native + 1000+ Composio | All connector classes exist with real API integrations (Tally TDL/XML, Darwinbox POST-based, GSTN GSP auth, AA consent flow, etc.) |
 | Agents | 35 registered types | All 35 agent classes are empty shells that call `super().execute()` with no domain logic. The BaseAgent handles LLM reasoning, tool calling, and HITL but individual agents add nothing. |
 | CFO Dashboard | Exists | Renders hardcoded demo data from `/kpis/cfo` endpoint. Shows AR/AP aging charts, P&L table, bank balances, tax calendar -- all static numbers. |
-| CMO Dashboard | Exists | Renders hardcoded demo data from `/kpis/cmo` endpoint. Shows CAC, MQLs, ROAS, email metrics, social engagement -- all static numbers. |
+| CMO Dashboard | Exists | Reads `/kpis/cmo` basic KPI/task metrics and now receives marketing connector setup, connector contract, field-mapping, backfill, workflow-promotion readiness, a unified CMO KPI schema/evaluation projection, KPI drill-down/data-lineage projection, KPI reconciliation checks/summary, report quality gates/summary, a prioritized CMO work queue/summary, approval review projection/summary, and pilot proof projection/summary. Real tenant data gaps, failed reconciliation, failed report gates, unresolved work queue blockers, blocked approvals, unsafe write readiness, blocked KPI lineage, or demo/test-double pilot proof must remain labeled blocked/degraded/demo-only/test-only rather than hidden behind demo values. |
 | CHRO Dashboard | Does NOT exist | No page, no route, no API endpoint. |
 | COO Dashboard | Does NOT exist | No page, no route, no API endpoint. |
 | CBO Dashboard | Does NOT exist | No page, no route, no API endpoint. |
@@ -419,7 +419,7 @@ The CEO/Admin role serves as the cross-departmental command center with visibili
   - UNIT: `test_recon_no_match` -- Bank txn with no corresponding book entry -> flagged as unmatched.
   - UNIT: `test_recon_break_escalation` -- Break of 60,000 (> 50,000 threshold) triggers HITL.
   - UNIT: `test_recon_old_outstanding_flag` -- Item unmatched for 35 days -> flagged.
-  - INTEGRATION: `test_recon_daily_workflow_execution` -- Full workflow runs with mock AA and Tally data.
+  - INTEGRATION: `test_recon_daily_workflow_execution` -- Full workflow runs with AA and Tally contract test doubles; production readiness still requires real connector or sandbox proof.
   - E2E: `test_recon_brs_report_download` -- BRS report generates and is downloadable from dashboard.
 
 #### 2.2.5 Tax Compliance
@@ -481,7 +481,7 @@ The CEO/Admin role serves as the cross-departmental command center with visibili
   - UNIT: `test_tds_computation_vendor` -- Given vendor payment of 50,000 for professional services, verify TDS @ 10%.
   - UNIT: `test_advance_tax_estimation` -- Given YTD income, verify advance tax installment calculation.
   - UNIT: `test_tax_calendar_upcoming_alert` -- Filing due in 5 days triggers alert.
-  - INTEGRATION: `test_gstr3b_filing_workflow` -- Full GSTR-3B workflow with mock GSTN responses.
+  - INTEGRATION: `test_gstr3b_filing_workflow` -- Full GSTR-3B workflow with GSTN contract test doubles; production readiness still requires real connector or sandbox proof.
   - E2E: `test_tax_tab_shows_calendar` -- CFO dashboard Tax tab shows 12-month filing calendar with correct statuses.
   - E2E: `test_tax_tab_shows_itc_mismatch` -- ITC reconciliation section shows mismatch amount.
 
@@ -526,7 +526,7 @@ The CEO/Admin role serves as the cross-departmental command center with visibili
   - UNIT: `test_close_depreciation_calculation` -- Given asset of 10L with 10% SLM, verify monthly depreciation = 8,333.
   - UNIT: `test_close_trial_balance_validation_pass` -- Debit = Credit -> pass.
   - UNIT: `test_close_trial_balance_validation_fail` -- Debit != Credit -> HITL triggered.
-  - INTEGRATION: `test_close_full_workflow` -- All close steps execute in sequence with mock Tally.
+  - INTEGRATION: `test_close_full_workflow` -- All close steps execute in sequence with Tally contract test doubles; production readiness still requires real connector or sandbox proof.
   - E2E: `test_close_tab_shows_checklist` -- CFO dashboard Close tab shows checklist with completion percentage.
 
 #### 2.2.7 Budgeting & FP&A
@@ -945,6 +945,176 @@ The CEO/Admin role serves as the cross-departmental command center with visibili
 
 ### 2.4 CMO (Chief Marketing Officer)
 
+**Implementation truth note (2026-05-24):** The CMO section below is a target specification unless a capability is explicitly marked production or beta in the table below. AgenticOrg must not claim an end-to-end CMO organization is agent-run today. Campaign Pilot is production-strength. Content Factory, Email Marketing, Social Media, ABM, Competitive Intel, Brand Monitor, SEO Strategist, and CRM Intelligence (deepened by CMO-4.3) are beta. Every CMO marketing-agent pillar in `core/agents/marketing` now has first-class deterministic beta code with policy/approval/audit/external-write-confirmation safety gates; production claim still requires real-vendor pilot proof.
+
+| Capability | Current status | Product truth |
+|------------|----------------|---------------|
+| Campaign Pilot | Production | Domain-specific campaign execution, budget checks, performance polling, optimization decisions, and HITL gates exist. |
+| Content Factory | Beta | Substantial content generation and brand-check workflow exists; formal QA, policy, and performance feedback loops are incomplete. |
+| Email Marketing | Beta | Separate LangGraph path and approval-gated tooling exist; not a complete autonomous CMO pillar. |
+| Brand Monitor | Beta | First-class deterministic brand monitoring logic for mentions, sentiment trends, spike detection, false-positive suppression, crisis severity, playbooks, and safety-gated public response; not production-grade without real-vendor/pilot proof. |
+| SEO Strategist | Beta | First-class deterministic SEO logic for keyword gaps, ranking deltas, technical issue prioritization, effort/impact recommendation bundling, content optimization, sprint planning, and safety-gated site changes; not production-grade without real-vendor/pilot proof. |
+| CRM Intelligence | Beta | First-class deterministic CRM/pipeline intelligence for pipeline velocity, funnel conversion (with safe division and low-sample handling), lead scoring refresh, churn risk signal extraction, segment recommendation, SQL promotion criteria, account/deal health, and stale/partial/missing-mapping data handling. CRM writes (lead score push, lifecycle stage change, segment/list change, target-account change, bulk CRM update) are gated by policy/approval/audit/connector-write-safety/external-write-confirmation. Not production-grade without real HubSpot/Salesforce/intent connector readiness, policy/approval/audit evidence, confirmed writes, and pilot proof. |
+| Social Media | Beta first-class core agent | Domain-specific `core/agents/marketing/social_media.py` exists for calendar, scheduling, triage, risk classification, drafts, and guarded publishing. It is not production-ready without Social connector write readiness, policy/approval/escalation/audit evidence, confirmed writes, and real-vendor/pilot proof. |
+| ABM | Beta first-class core agent | Domain-specific `core/agents/marketing/abm_agent.py` exists for account scoring, ICP fit, intent heat, source weighting, next-best-action planning, CSV ingest validation, high-intent alerts, and guarded ABM actions. It is not production-ready without ABM/CRM connector readiness, policy/approval/escalation/audit evidence, confirmed writes, and real-vendor/pilot proof. |
+| Competitive Intel | Beta first-class core agent | Domain-specific `core/agents/marketing/competitive_intel.py` exists for competitor snapshots, profile normalization, pricing-change detection, feature/capability diffing, win/loss signal extraction, duplicate suppression, alert thresholds, and guarded positioning/public-response recommendations. It is not production-ready without competitive-source connector readiness, policy/approval/escalation/audit evidence, confirmed writes where applicable, and real-vendor/pilot proof. |
+| CMO KPI dashboard feed | Demo when `"demo": true` | Demo KPI values are sample data, not proof of autonomous CMO execution. |
+
+#### 2.4.0 CMO Production Replan For Real Companies
+
+The CMO product must be planned as a real marketing operating system for companies with existing teams, agencies, tools, budgets, legal constraints, and revenue targets. It must not be a dashboard of mock KPIs or a collection of prompt wrappers.
+
+**Production principle:** a feature is production CMO software only when it can operate on a tenant's configured marketing systems, expose its data lineage, respect approval policy, and produce an auditable decision or recommendation. Test doubles are acceptable in automated tests. Customer-facing production tenants must use real configured data sources, cached real data, or explicit empty/degraded states.
+
+##### Real Marketing Team Personas
+
+| Persona | Jobs to be done | UX requirement |
+|---------|-----------------|----------------|
+| CMO | Understand pipeline impact, approve high-risk actions, explain marketing performance to CEO/CFO | Executive cockpit with KPI lineage, risks, approvals, and board-ready exports |
+| VP/Growth Lead | Run campaign calendar, optimize spend, launch experiments | Campaign workbench with budgets, experiments, channel drill-downs, and recommendations |
+| Marketing Ops / RevOps | Keep CRM, attribution, UTM, lifecycle stages, and reporting clean | Data quality queue, field mapping, source health, reconciliation, and formula controls |
+| Content Lead | Plan, review, approve, and measure content | Editorial calendar, brand review, SEO guidance, approval history, and post-publish feedback |
+| Brand/Comms Lead | Monitor sentiment, crisis risks, competitor moves, and public claims | Brand room with alerts, severity, response drafts, playbooks, and escalation |
+| SDR/Sales Partner | Receive SQLs and account context without noise | Handoff view with reason, source signals, next action, and CRM sync status |
+| CFO/CEO Viewer | Validate spend efficiency and pipeline contribution | Read-only financial summary with CAC, ROAS, payback, forecast, and confidence |
+
+##### Real Data Foundation
+
+Every CMO tenant needs a source map before agents can be promoted to active mode.
+
+| Data domain | Required source options | Required setup proof |
+|-------------|-------------------------|----------------------|
+| CRM and pipeline | HubSpot or Salesforce | OAuth/API key validation, lifecycle-stage mapping, opportunity/revenue field mapping, owner mapping |
+| Paid media | Google Ads, Meta Ads, LinkedIn Ads | Account selection, currency/timezone validation, campaign ID sync, spend/conversion read access |
+| Web analytics | GA4, Mixpanel where configured | Property selection, conversion event mapping, UTM parameter validation |
+| Content/CMS | WordPress or configured CMS adapter | Draft/create/update permissions, publish permission separated from draft permission |
+| Email | Mailchimp, SendGrid, MoEngage | List/audience mapping, consent/unsubscribe fields, send permission separated from draft permission |
+| Social and scheduling | Buffer, Twitter/X, YouTube, LinkedIn/Facebook where adapter exists | Profile mapping, post permission separated from draft/schedule permission |
+| SEO and content intelligence | Ahrefs, GA4, Search Console where available | Domain verification, keyword/ranking pull, site-audit pull |
+| Brand/listening | Brandwatch and social search adapters | Brand query configuration, competitor list, baseline window |
+| ABM intent | Bombora, G2, TrustRadius | Account-domain matching, topic taxonomy mapping, scoring weights |
+| Finance alignment | FP&A/Tally/ERP where configured | Marketing spend categories, budget owner, period close status |
+
+No dashboard KPI may silently fall back to sample data in a production tenant. Missing sources must produce explicit setup CTAs, partial-data warnings, and confidence downgrades.
+
+##### Agent Production Criteria
+
+Each marketing agent must satisfy all criteria below before its status can move to production.
+
+1. Domain implementation exists in `core/agents/marketing` and does more than invoke shared/base behavior.
+2. The agent has typed input and output schemas, including `status`, `confidence`, `rationale`, `source_refs`, `policy_result`, `recommended_actions`, and `audit_refs`.
+3. The agent reads from real connector adapters or persisted tenant data populated from real connectors.
+4. The agent can run in shadow mode without writing to external systems.
+5. Write actions are separated from read/recommendation actions and require policy evaluation before execution.
+6. HITL approvals include full context, risk labels, budget/audience impact, preview, rollback plan, and timeout behavior.
+7. Every decision writes an audit record with input snapshot hash, source refs, agent version, prompt/template version, connector versions, approver, and final action.
+8. Tests cover unit, contract, connector-error, stale-data, authorization, HITL, workflow, and UI behavior.
+9. The UI labels production, beta, shadow, degraded, unavailable, and demo states consistently.
+
+##### Enterprise Onboarding And Promotion Flow
+
+1. **Workspace setup:** admin creates company, region, currency, fiscal calendar, marketing org roles, and approval owners.
+2. **Connector setup:** Marketing Ops connects CRM, ad platforms, analytics, CMS, email, social, SEO, and brand/intent tools. Each connector shows validated scopes, account IDs, last sync, health, and owner.
+3. **Field mapping:** RevOps maps lifecycle stages, campaign naming, UTM fields, revenue fields, account domains, consent fields, and custom segments.
+4. **Policy setup:** CMO configures budget thresholds, allowed channels, blocked claims, competitor mention rules, legal categories, review SLAs, escalation path, and auto-cancel rules.
+5. **Historical backfill:** product imports 6-12 months of campaign, pipeline, content, email, and web data where APIs permit. Backfill progress and gaps are visible.
+6. **Shadow mode:** agents produce recommendations only. CMO can compare recommendations against past performance and approve promotion per workflow.
+7. **Controlled activation:** CMO activates one workflow at a time: weekly report, campaign optimization, content pipeline, ABM sprint, or brand monitor.
+8. **Operational review:** after each cycle, the product shows agent precision, approval rate, override rate, time saved, KPI movement, and failure causes.
+
+**Implementation note (CMO-1.1, 2026-05-23):** `GET /kpis/cmo` now returns `connector_setup` and `connector_setup_summary` so the dashboard can show configured, missing, stale, expired-auth, insufficient-scope, healthy, and degraded marketing connectors before KPI cards. Strict production runtimes suppress silent demo KPI fallback with `production_data_blocked: true` when real CMO data is absent.
+
+**Implementation note (CMO-1.2, 2026-05-23):** `GET /kpis/cmo` now also returns `field_mapping_status`, `field_mapping_summary`, `backfill_status`, `backfill_summary`, and `kpi_readiness`. Field mappings cover lifecycle stages, opportunity revenue, campaign IDs, UTM fields, account domains, consent/unsubscribe, fiscal calendar, currency, and timezone. Historical backfill projections expose source connector key, requested date range, record counts where stored, last run, blocker, and next action. Strict production runtimes mark KPI confidence as blocked or degraded when mappings or backfills are incomplete, instead of treating sample or incomplete data as production-ready.
+
+**Implementation note (CMO-1.3, 2026-05-23; updated by CMO-3.1 on 2026-05-24):** `GET /kpis/cmo` now also returns `workflow_activation_status` and `workflow_activation_summary` for weekly report, campaign launch, daily spend optimization, content pipeline, lead nurture, social publishing, ABM sprint, brand crisis response, and SEO sprint workflows. Workflow states are `unavailable`, `shadow`, `promotion_blocked`, `promotion_ready`, `active`, `degraded`, and `paused`. A workflow reaches `active` only through explicit per-workflow promotion after required connectors, field mappings, backfills, approval/policy owners, and shadow-run quality gates pass. Shadow and non-active states are read-only for external marketing writes.
+
+**Implementation note (CMO-2.1, 2026-05-23):** `GET /kpis/cmo` now also returns `connector_contracts` and `connector_contract_summary`. Connector contracts distinguish read capabilities from write capabilities, required scopes from granted scopes, read readiness from write readiness, and production proof from mock/test-double proof. They expose auth state, health/contract state, data freshness/TTL, source refs, retry-budget metadata, idempotency-key support, degraded-mode reason, and external write confirmation status. Workflow activation consumes these contract rows so workflows that need external writes are blocked unless the required connector category is write-ready; write-oriented steps cannot be treated as complete without external write confirmation unless the workflow remains shadow/draft/internal-only.
+
+**Implementation note (CMO-5.2, 2026-05-23):** Marketing connector retry and degraded-mode behavior is now policy-backed for timeout, rate limit, vendor 5xx, expired auth, insufficient scope, partial data, stale data, malformed payload, quota exhaustion, and disabled connector states. Connector contracts expose the failure class, retryability, max attempts, backoff metadata, idempotency requirements, confidence impact, external-write blocking, production KPI confidence blocking, CTA, audit event code, and structured degraded-mode projection. Data readiness, workflow activation, external-write completion, and marketing workflow linting consume this policy so read-only/reporting workflows degrade visibly, production KPI confidence is blocked or downgraded, and active external writes fail closed when the connector is not write-safe.
+
+**Implementation note (CMO-5.3, 2026-05-23):** Marketing workflow step execution now evaluates concrete external-write final states: `accepted`, `rejected`, `timeout_unknown`, `retry_scheduled`, `idempotent_recovered`, `write_confirmed`, `write_unconfirmed`, `draft_created`, and `shadow_only`. Active external write steps fail closed unless the connector output includes explicit write confirmation with connector key, external object ID, idempotency metadata where applicable, request fingerprint, confirmation timestamp, available actor/agent/workflow/run IDs, and audit reference. Shadow workflows remain read-only, draft/internal steps must be labeled as such, timeout retries require idempotency metadata, and duplicate retries can recover only an existing confirmed write with the same idempotency key.
+
+**Implementation note (CMO-5.4, 2026-05-23):** CMO approval timeout policy is now code-backed for approval-sensitive marketing actions: ad campaign launch, ad budget change, email send, content publish, landing-page change, target account list change, crisis/public response, social post targeting, and high-risk copy/pricing/claims review. Timeout outcomes are `auto_cancel`, `auto_escalate`, `continue_read_only`, `pause_workflow`, and `require_manual_resolution`, each with SLA, escalation role, external-write allowance, notification/audit event code, and fallback CTA/message. Workflow activation exposes timeout-policy readiness, workflow lint flags production approval-sensitive steps without timeout policy, active external writes fail closed after timeout unless explicitly pre-approved, and `GET /kpis/cmo` returns `approval_timeout_risk` for pending/overdue marketing HITL approvals.
+
+**Implementation note (CMO-6.1, 2026-05-23):** CMO marketing policy is now represented by `core.marketing.policy_manifest`, a machine-checkable manifest with conservative default rules for budget thresholds, publish/send/launch approvals, high-risk copy, pricing/legal/compliance/comparative/competitor claims, region constraints, audience and target-account thresholds, crisis/public response, allowed read-only autonomous actions, disallowed destructive actions, required owner roles, and required audit evidence. Policy evaluation returns `allowed`, `blocked`, `requires_approval`, `requires_escalation`, `read_only_only`, or `missing_policy` with matched rules, reason, approver/escalation role, audit evidence, affected workflow/action, and CTA. Workflow activation, workflow linting, approval timeout decisions, external-write completion, and `GET /kpis/cmo` consume this policy; active customer-facing writes fail closed without matching policy coverage and satisfied approval/escalation evidence.
+
+**Implementation note (CMO-6.2, 2026-05-23):** CMO escalation routing is now represented by `core.marketing.escalation_matrix`, a machine-checkable matrix with conservative default routes for approval timeouts, crisis/public response, budget threshold exceptions, connector auth/degraded failures, data mapping blockers, backfill failures, missing policy, rejected or timeout/unknown external writes, high-risk copy, pricing/legal claims, and target-account changes. Escalation evaluation returns owner role, backup owner, escalation chain, SLA/due time, fallback outcome, notification channels, audit event code, audit reference, and decision (`notify_owner`, `escalate`, `escalate_to_legal`, `escalate_to_finance`, `escalate_to_admin`, `pause_workflow`, or `require_manual_resolution`). Approval timeouts, marketing policy decisions, connector retry/degraded states, data readiness blockers, external-write completion, workflow activation, workflow linting, and `GET /kpis/cmo` now consume escalation route/evidence; production workflows with escalation-sensitive actions block when no route exists.
+
+**Implementation note (CMO-6.3, 2026-05-23):** CMO decision auditing is now represented by `core.marketing.decision_audit`, a deterministic package shape with schema version, audit ID/reference, tenant/company IDs, workflow/run/step IDs, agent/action/capability, event and decision type, actor identity, timestamps, input snapshot hash, source/connector refs, policy/escalation/approval/timeout/external-write refs, rationale, alternatives, risk flags, confidence, final outcome, override fields, and WORM-ready canonical JSON serialization with secret/token redaction. Policy evaluation, escalation routing, approval timeouts, connector degraded/failure projections, data readiness blockers, workflow activation/promotion, external-write attempts/final states, workflow linting, and `GET /kpis/cmo` now consume or expose decision-audit evidence; production customer-facing workflow lint fails when required audit evidence metadata is missing.
+
+**Implementation note (CMO-7.1, 2026-05-23):** Unified CMO KPI schema and formula foundations are now represented by `core.marketing.kpi_schema`, with schema version `2026-05-23.cmo-7.1` and deterministic definitions/evaluators for CAC, MQL, SQL, MQL-to-SQL conversion, ROAS, pipeline contribution, conversion rates by funnel stage, LTV/CAC, experiment velocity, content performance, email performance, brand sentiment, and ABM intent/account readiness. Each KPI definition carries formula, required connector categories/source domains, required mappings/backfills, TTL, unit, owner, confidence/freshness rules, missing-data behavior, source lineage refs, and audit evidence classes. `GET /kpis/cmo` now exposes `unified_cmo_kpi_schema`, `unified_cmo_kpi_results`, and `unified_cmo_kpi_summary`; individual KPI results return `ready`, `degraded`, `blocked`, or `unavailable` with formula refs, source refs, missing requirements, freshness, confidence, and next action. Production KPI paths still fail blocked/degraded when connector, mapping, backfill, freshness, or source facts are missing.
+
+**Implementation note (CMO-7.2, 2026-05-23):** CMO KPI reconciliation checks are now represented by `core.marketing.kpi_reconciliation`, with projection version `2026-05-23.cmo-7.2`. The checks compare paid spend totals by channel against campaign-level spend, ad platform conversions against CRM campaign-attributed outcomes, GA4/web conversions against CRM leads, email sends/clicks/unsubscribes against CRM/list engagement, WordPress/content traffic against GA4 content performance, ABM target account domains against CRM and intent-source domains, currency/timezone consistency, and stale-sync or partial-data impact. `GET /kpis/cmo` now exposes `cmo_kpi_reconciliation_checks` and `cmo_kpi_reconciliation_summary`; high-severity failed or blocked checks block affected KPIs, while warnings and medium-severity failures downgrade confidence/freshness. CMO-7.2 itself did not implement report quality gates or persistent KPI history storage.
+
+**Implementation note (CMO-7.3, 2026-05-23):** CMO report quality gates are now represented by `core.marketing.report_quality`, with projection version `2026-05-23.cmo-7.3`. Gates cover weekly marketing reports, daily ad performance, monthly marketing ROI, campaign ad-hoc reports, and executive board summaries. Each gate consumes unified KPI status/confidence/freshness, KPI reconciliation checks, connector setup/contracts, mapping/backfill readiness, workflow activation state, policy/escalation/audit readiness, approval refs for sensitive or external delivery, and production demo/sample/fallback data policy. `GET /kpis/cmo` now exposes `report_quality_gates` and `report_quality_summary`; CMO report generation attaches gate metadata and the scheduled report task skips external delivery unless the CMO report gate is `deliverable`. This task does not implement persistent report history storage, a full report editor, missing production marketing agents, or vendor-specific adapters.
+
+**Implementation note (CMO-8.1, 2026-05-23):** The CMO work queue is now represented by `core.marketing.work_queue`, with projection version `2026-05-23.cmo-8.1`. It aggregates approval timeout risk, escalations, connector setup/contract issues, data readiness blockers, workflow activation blockers, external-write failures, policy/audit gaps, blocked/degraded KPIs, failed/warning reconciliation checks, report quality gate blockers/warnings, demo/sample production blockers, and crisis/public-response risks where available. `GET /kpis/cmo` now exposes `cmo_work_queue` and `cmo_work_queue_summary`, and the CMO dashboard renders the queue ahead of readiness sections with priority, severity, owner, affected object, due time, and CTA. This task does not implement KPI drill-down/data-lineage UX, full approval review UX, persistent task storage, missing production marketing agents, or vendor-specific adapters.
+
+**Implementation note (CMO-8.2, 2026-05-23):** CMO KPI drill-down/data lineage is now represented by `core.marketing.kpi_drilldown`, with projection version `2026-05-23.cmo-8.2`. Drill-downs explain canonical KPI status, value, unit, confidence, formula, resolved formula inputs, required and actual source/connector refs, field mappings, backfill state, reconciliation checks, freshness, confidence impact, missing requirements, work queue item refs, report gate refs, policy/audit refs, owner role, and next action CTA. `GET /kpis/cmo` now exposes `cmo_kpi_drilldowns` and `cmo_kpi_drilldown_summary`, and the CMO dashboard renders a compact lineage table after the work queue. Demo, mock, stub, hardcoded, sample, fallback, and test-double inputs are explicitly blocked from production lineage proof. This task does not implement persistent KPI history storage, a full drill-down workbench, report rendering, full approval review UX, missing production marketing agents, or vendor-specific adapters.
+
+**Implementation note (CMO-8.3, 2026-05-23):** CMO approval review UX is now represented by `core.marketing.approval_review`, with projection version `2026-05-23.cmo-8.3`. Approval reviews cover campaign launch, ad budget change, content publish, email send, landing-page change, target-account list change, crisis/public response, high-risk copy/pricing/legal claim, and workflow promotion contexts. `GET /kpis/cmo` now exposes `cmo_approval_reviews` and `cmo_approval_review_summary`, links approval-timeout decisions to review IDs, and lets work queue approval items point at the review payload. Each review carries preview payload, before/after diff, budget and audience impact, brand/legal/policy risk flags, source and connector refs, agent rationale, policy/escalation/timeout/write/audit refs, rollback/stop plan, allowed reviewer actions, blocked reasons, and CTA. Approve fails closed when policy coverage is missing or blocking, connector/write readiness is unsafe, timeout policy requires manual resolution, or required decision-audit evidence is absent. The CMO dashboard renders compact approval review cards after the work queue without implementing persistent approval storage or vendor-specific write adapters.
+
+**Implementation note (CMO-9.1, 2026-05-24):** CMO per-agent contract coverage is now represented by `core.marketing.agent_contracts`, with contract version `2026-05-24.cmo-9.1`, required output keys, truthful capability statuses, aliases, and production-readiness blockers for Campaign Pilot, Content Factory, Email Marketing / `email_agent`, Brand Monitor, SEO Strategist, CRM Intelligence, Social Media, ABM / `abm_agent`, and Competitive Intel. Campaign Pilot and Content Factory emit the shared contract fields for approval/HITL state, policy result, audit reference, source refs, degraded or blocked reasons, external-write confirmation status, and production status. Campaign Pilot active write paths now fail closed when write confirmation is absent, and Content Factory publish/schedule paths remain draft/approval-gated until external delivery is explicitly confirmed. The contract tests prove implemented/beta shape and safety behavior while also proving stub/unavailable surfaces stay non-production and blocked from active production workflows.
+
+**Implementation note (CMO-9.4, 2026-05-24):** CMO pilot proof is now represented by `core.marketing.pilot_proof`, with proof version `2026-05-24.cmo-9.4`. The proof package evaluates connector setup, connector contracts, field mapping/backfill, workflow activation/linting, policy, escalation, approval timeout readiness, external-write confirmation, decision-audit evidence, unified KPIs, reconciliation, report quality gates, work queue blockers, KPI drill-down lineage, approval reviews, agent contract status, and scenario/chaos test evidence. `GET /kpis/cmo` now exposes `cmo_pilot_proof`, `cmo_pilot_proof_summary`, and a redacted evidence bundle. Demo tenants return `demo_only`, test-double/mock environments return `test_only`, vendor-sandbox proof can pass only sandbox criteria, and real-vendor proof can pass only when critical readiness criteria pass. Social Media, ABM, Competitive Intel, Brand Monitor, and SEO Strategist beta remain unproven for production until real-vendor/pilot proof exists. This task adds proof packaging, not live vendor credentials, persistent proof storage, full pilot rollout, or missing agent implementations.
+
+**Implementation note (CMO-4.1, 2026-05-24):** Brand Monitor now has first-class deterministic beta logic in `core.agents.marketing.brand_monitor` for mention aggregation, sentiment classification/trends, negative-volume spike detection, false-positive suppression, crisis severity classification, competitor/brand grouping, response playbooks, and escalation recommendations. Public/crisis response and claim-making paths remain policy, approval, escalation, audit, connector write-safety, and write-confirmation gated. This is not production proof; Brand Monitor still requires real Brand/Social connectors and pilot evidence before production claims.
+
+**Implementation note (CMO-4.2, 2026-05-24):** SEO Strategist now has first-class deterministic beta logic in `core.agents.marketing.seo_strategist` for keyword gap analysis, ranking delta computation, technical SEO issue prioritization, effort/impact recommendation bundling, content optimization recommendations, SEO sprint planning, and stale/partial data handling. Technical site changes such as metadata, canonical, redirect, robots, sitemap, landing-page, and indexing actions remain policy, approval, audit, connector write-safety, and write-confirmation gated. This is not production proof; SEO Strategist still requires real SEO/Analytics/CMS connectors and pilot evidence before production claims.
+
+**Implementation note (CMO-4.3, 2026-05-24):** CRM Intelligence now has first-class deterministic beta logic in `core.agents.marketing.crm_intelligence` for pipeline velocity analysis (per-stage averages, bottlenecks, stuck deals), funnel conversion analysis with safe division and low-sample handling, deterministic explainable lead scoring refresh, churn risk signal extraction, segment recommendation (with enrol/follow-up/win-back action plans), SQL promotion classification, account/deal health composite scoring, and stale/partial/missing-mapping data handling. CRM writes such as lead score push, lifecycle stage change, segment/list change, target-account change, and bulk CRM update remain policy, approval, audit, connector write-safety, and write-confirmation gated. This is not production proof; CRM Intelligence still requires real HubSpot/Salesforce/intent connectors and pilot evidence before production claims.
+
+**Implementation note (CMO-PROD-1, 2026-05-24):** A strict weekly-marketing-report pilot-evidence path now exists in `core.marketing.weekly_report_pilot_proof`, with a CLI validator at `scripts/validate_weekly_report_pilot_proof.py` and a redacted projection at `/kpis/cmo` (`weekly_report_pilot_proof`, `_summary`, `_evidence_bundle`). The proof gate is fail-closed: demo, test-double, vendor-sandbox, and unknown inputs never produce a real-vendor production claim, and missing connectors, mappings, backfill, KPIs, reconciliation, report-quality gates, report artifacts, decision-audit refs, or source-lineage refs each produce explicit blockers with next actions. No live or vendor-sandbox evidence is present in the worktree, so the proof gate is the path — pilot tenants must supply a real `WeeklyReportPilotEvidence` bundle before any external "weekly report production-proven" claim is permitted.
+
+**Implementation note (CMO-PROD-2, 2026-05-24):** Weekly-report pilot proof verdicts are now durably representable. A new ORM model `WeeklyReportPilotProof` plus Alembic migration `v4917_weekly_report_proof` (on top of `v4916_merge_p0_heads`) defines an append-only `weekly_report_pilot_proofs` table. `core.marketing.weekly_report_pilot_persistence` exposes a persistence helper (`persist_weekly_report_pilot_proof`), a latest-by-tenant retrieval (`latest_weekly_report_pilot_proof`), an evidence builder that turns a successful weekly-report run into a `WeeklyReportPilotEvidence` bundle, and a Celery-safe sync wrapper. `core/tasks/report_tasks.generate_report` now calls the wrapper after every `cmo_weekly` / `weekly_marketing_report` run, so verdicts (including `blocked` and `unavailable` outcomes when evidence is incomplete) flow into durable storage. `/kpis/cmo` exposes the latest persisted verdict alongside the existing ad-hoc projection. Secret/token redaction runs both in the validator and again at persistence time. **The migration is included but no `weekly_report_pilot_proofs` row exists in any tenant DB in this worktree**; a credentialed pilot tenant must actually run the weekly report before the first verdict materialises.
+
+**Implementation note (CMO-PROD-3, 2026-05-24):** A fail-closed sandbox walk-through orchestrator now exists at `core.marketing.weekly_report_sandbox_pilot.run_sandbox_pilot` with a CLI wrapper at `scripts/run_weekly_report_sandbox_pilot.py`. The orchestrator discovers configuration *only* from `AGENTICORG_CMO_SANDBOX_*` env vars (per repo convention) plus the standard `AGENTICORG_DB_URL`; it refuses to invent data and never inserts a synthetic row. When env vars are missing it returns a redacted preflight envelope listing the exact missing connectors and next actions; when env vars are present it invokes the same `generate_report` Celery entry point production uses, with `params.pilot_environment_type="vendor_sandbox"`, so the CMO-PROD-2 hook persists a `sandbox_proven` / `partial` / `blocked` row — never a real-vendor `passed`. **As of 2026-05-24 no sandbox credentials and no DB are configured in this worktree, so CMO-PROD-3 is BLOCKED on prerequisites.** The backlog's CMO-PROD-3 section carries the exact runbook (env vars, alembic upgrade, expected SQL verification) a pilot operator must follow.
+
+**Implementation note (CMO-3.1, 2026-05-24):** Social Media is now represented by `core.agents.marketing.social_media`, a deterministic beta core marketing agent. It generates content calendars, optimizes posting schedules, triages engagement, classifies reply risk, drafts social posts, recommends crisis escalation, and gates post/reply publishing through connector write-safety, marketing policy, HITL approval, escalation, decision-audit evidence, and external-write confirmation. Shadow mode remains read-only. This is not a production readiness claim: live vendor credentials/adapters, real-vendor pilot proof, and persistent proof operations remain required before Social Media can be marketed as production autonomous social management.
+
+**Implementation note (CMO-3.2, 2026-05-24):** ABM is now represented by `core.agents.marketing.abm_agent`, a deterministic beta core marketing agent. It scores accounts, computes ICP fit and intent heat, applies configurable Bombora/G2/TrustRadius/CRM source weights, recommends next-best actions, validates CSV account ingest, raises high-intent or risky target-list alerts, and gates ABM writes through connector write-safety, marketing policy, HITL approval, escalation, decision-audit evidence, and external-write confirmation. Shadow mode remains read-only. This is not a production readiness claim: live vendor credentials/adapters, real-vendor pilot proof, and persistent proof operations remain required before ABM can be marketed as production account-based marketing automation.
+
+**Implementation note (CMO-3.3, 2026-05-24):** Competitive Intel is now represented by `core.agents.marketing.competitive_intel`, a deterministic beta core marketing agent. It creates weekly competitor snapshots, normalizes competitor profiles, detects pricing changes with confidence scores, diffs features/capabilities, extracts win/loss signals, suppresses duplicate changes, applies alert thresholds, and recommends positioning or next-best actions. Public response, pricing claim, comparative claim, and competitive campaign actions are gated through connector write-safety, marketing policy, HITL approval, escalation, decision-audit evidence, and external-write confirmation. Shadow mode remains read-only. This is not a production readiness claim: live competitive-source/social/ads connectors, vendor-specific adapters, real-vendor pilot proof, and persistent proof operations remain required before Competitive Intel can be marketed as production competitive-intelligence automation.
+
+**Implementation note (CMO-5.1, 2026-05-23):** `core.marketing.workflow_linter` now provides code-backed lint entry points for marketing workflow YAML. Lint findings identify workflow file, workflow id/name, step id/name, severity, code, message, and suggested fix. Production lint fails undefined marketing agents/actions, stub or unavailable production behavior, missing connector contract readiness, unsafe external-write steps, missing write-confirmation/idempotency metadata, and shadow-mode external-write attempts. Target, demo, and shadow workflows can still carry roadmap placeholders, but only as warnings rather than production proof.
+
+##### Production CMO Workflows
+
+| Workflow | Real input | Agent actions | Required HITL | Production output |
+|----------|------------|---------------|---------------|-------------------|
+| Weekly Marketing Review | CRM pipeline, ad spend, GA4, email, content, brand data | Reconcile KPIs, explain deltas, flag risks, draft executive summary | Required before external delivery | PDF/XLSX report with formulas, lineage, exceptions, and confidence |
+| Campaign Launch | Approved brief, audience, budget, landing page, assets | Draft variants, validate policy, create platform drafts, prepare tracking plan | Required before launch and spend commitment | Campaigns created in draft or active state per approval, audit package |
+| Daily Spend Optimization | Paid media performance and budget plan | Detect overspend/underperformance, recommend pause/scale/reallocate | Required above threshold; auto-pause only if pre-approved policy allows | Recommendation or approved budget/action update with rollback plan |
+| Content Pipeline | Keyword gaps, calendar, brand guide, CMS data | Brief, draft, SEO review, brand/legal check, CMS draft creation | Required before publish | CMS draft/published post, approval record, performance tracking task |
+| Lead Nurture | CRM leads, consent, email engagement | Segment, draft sequence, monitor events, recommend SQL handoff | Required before send/list changes | Email workflow in draft/active state, CRM sync, handoff tasks |
+| ABM Sprint | Target account list, intent signals, CRM engagement | Score accounts, identify next best action, recommend LinkedIn/email/content plays | Required for target list or budget changes | Ranked account plan, CRM tasks, campaign drafts |
+| Brand Crisis Response | Mentions, sentiment, volume baseline, competitor/news signals | Classify severity, summarize evidence, draft holding response, notify owners | Required for any public response | Incident room, escalation trail, approved response package |
+| SEO Sprint | Ahrefs/GA4/Search Console data, content inventory | Prioritize fixes, generate content/update briefs, estimate impact | Required for technical site changes | Sprint plan with effort/impact, tasks, and measurable target |
+
+##### UX Requirements For A Serious CMO Team
+
+The CMO dashboard must be a working cockpit, not a marketing brochure.
+
+- **Header:** date range, connected company, data freshness, connector health, active policy mode, and global refresh.
+- **Command center:** prioritized work queue for approvals, risks, stale data, connector issues, budget exceptions, and agent recommendations.
+- **KPI cards:** each card shows value, trend, target, formula, owner, last sync, confidence, data coverage, and drill-down.
+- **Agent status:** each agent tile shows status, current mode, last run, success rate, open approvals, blocked connectors, and exact reason if unavailable.
+- **Approvals:** approval pages show preview, diff, risk flags, budget/audience impact, source refs, agent rationale, policy result, timeout, and rollback/stop action.
+- **Campaigns:** operators can inspect spend, pacing, ROAS, conversion lag, experiment status, and generated recommendations without leaving the dashboard.
+- **Content:** editorial calendar supports draft/review/approved/published states, assigned owner, channel, SEO target, and performance feedback.
+- **ABM:** account table supports search, filters, score decomposition, source signals, CRM owner, next action, and sync status.
+- **Brand:** crisis alerts show severity, evidence, volume baseline, sentiment trend, response status, and escalation owner.
+- **Accessibility and responsiveness:** all charts require table/text equivalents, keyboard navigation, and WCAG 2.1 AA contrast. Tablet view is fully usable for review/approval flows.
+
+##### What Must Not Ship
+
+- Production CMO dashboard cards backed by hardcoded values or sample arrays.
+- Agent statuses that say production while implementation is a prompt wrapper.
+- Workflow steps that mark external actions complete without connector write confirmation.
+- Reports that omit missing critical fields without a visible confidence downgrade.
+- Approval requests without source data, policy result, and rollback/stop plan.
+- Demo data mixed into a real tenant without an explicit demo-mode tenant flag.
+
 #### 2.4.1 Demand Generation
 
 - **Description:** Lead generation campaign management across Google Ads, Meta Ads, and LinkedIn, including landing page optimization and webinar management.
@@ -1070,8 +1240,10 @@ The CEO/Admin role serves as the cross-departmental command center with visibili
 
 #### 2.4.5 Social Media
 
+- **Status:** Beta first-class core marketing agent. The implementation is deterministic and guarded, but not production-ready without real Social connector write readiness, policy/HITL approval, escalation/audit evidence, confirmed external writes, and pilot proof.
 - **Description:** Post scheduling, engagement monitoring, influencer identification, crisis monitoring, and community management.
 - **Agents Responsible:**
+  - `social_media` -- Content calendar generation, posting schedule optimization, engagement triage, reply risk classification, social post draft/recommendation, and guarded publish/reply actions
   - `content_factory` -- Post creation and scheduling
   - `brand_monitor` -- Social listening, crisis detection
 - **Connectors Required:**
@@ -1091,6 +1263,7 @@ The CEO/Admin role serves as the cross-departmental command center with visibili
 - **Test Cases:**
   - UNIT: `test_social_engagement_aggregation` -- Sum across platforms.
   - UNIT: `test_crisis_detection` -- Negative sentiment spike > 3x baseline -> alert.
+  - UNIT: `test_social_media_publish_requires_confirmation` -- Active publish blocks until connector write readiness, policy/approval/audit, and confirmed external write evidence exist.
   - E2E: `test_brand_tab_shows_sentiment` -- Brand tab renders sentiment gauge.
 
 #### 2.4.6 ABM (Account-Based Marketing)
@@ -1778,13 +1951,13 @@ class ApProcessorAgent(BaseAgent):
 
 **Marketing Domain Agents:**
 
-| Agent | Pre-Processing | Domain Rules | Tool Selection | Post-Processing | Confidence Floor |
-|-------|---------------|--------------|----------------|-----------------|-----------------|
-| `campaign_pilot` | Parse campaign brief, extract objectives | Budget allocation rules, ROAS minimum (1.5x), overspend alert (>120%) | Google Ads, Meta Ads, LinkedIn Ads for campaigns, HubSpot for leads | Verify ROAS calculated, budget tracked | 0.85 |
-| `content_factory` | Identify content type and audience | Brand voice check, competitor mention review, SEO keyword inclusion | WordPress for blog, Buffer for social, Mailchimp for email | Verify readability score, SEO score | 0.82 |
-| `seo_strategist` | Analyze current rankings and gaps | Keyword difficulty threshold (< 70 for targeting), content gap rules | Ahrefs for SEO data, GA4 for traffic | Verify keyword recommendations, audit score | 0.85 |
-| `brand_monitor` | Ingest social mentions and news | Sentiment baseline comparison (>3x negative = crisis), competitive tracking | Brandwatch for monitoring, Twitter for mentions | Verify sentiment calculation, crisis detection | 0.82 |
-| `crm_intelligence` | Aggregate CRM and intent data | Intent threshold (>70 = target), ABM engagement scoring | HubSpot for CRM, Bombora + G2 + TrustRadius for intent | Verify intent scores, target list updates | 0.85 |
+| Agent | Current status | Pre-Processing | Domain Rules | Tool Selection | Post-Processing | Confidence Floor |
+|-------|----------------|---------------|--------------|----------------|-----------------|-----------------|
+| `campaign_pilot` | Production | Parse campaign brief, extract objectives | Budget allocation rules, ROAS minimum (1.5x), overspend alert (>120%) | Google Ads, Meta Ads, LinkedIn Ads for campaigns, HubSpot for leads | Verify ROAS calculated, budget tracked | 0.85 |
+| `content_factory` | Beta | Identify content type and audience | Brand voice check, competitor mention review, SEO keyword inclusion | WordPress for blog, Buffer for social, Mailchimp for email | Verify readability score, SEO score | 0.82 |
+| `seo_strategist` | Beta in core marketing agent layer | Deterministic keyword gap analysis, ranking deltas, technical SEO prioritization, content optimization, and sprint planning | Keyword difficulty threshold (< 70 for targeting), content gap rules, severity/impact/effort issue ordering, write-confirmation gates for site changes | Ahrefs/Search Console for SEO data, GA4 for traffic, CMS for site changes | Verify keyword recommendations, ranking deltas, technical priority order, degraded data labels, approval/audit/write gates | 0.84 |
+| `brand_monitor` | Beta in core marketing agent layer | Ingest social mentions and news | Deterministic mention aggregation, sentiment distribution/trends, negative spike detection, false-positive suppression, crisis severity classification, competitor/brand grouping, playbook recommendation | Brandwatch for monitoring, Twitter/Social for mentions and guarded response | Verify sentiment calculation, crisis detection, false-positive suppression, approval/escalation/write gates | 0.85 |
+| `crm_intelligence` | Stub in core marketing agent layer | Aggregate CRM and intent data | Intent threshold (>70 = target), ABM engagement scoring | HubSpot for CRM, Bombora + G2 + TrustRadius for intent | Verify intent scores, target list updates | 0.85 |
 
 **Ops Domain Agents:**
 
@@ -3092,39 +3265,54 @@ Response includes:
 
 **Route:** `/dashboard/cmo` (existing)
 
-**Changes:** Add tab navigation, replace hardcoded data.
+**Changes:** Add tab navigation, replace hardcoded data, and make the screen usable by real marketing teams operating real companies. The dashboard must never hide mock or stub behavior behind polished UI. It should show connected data, explicit empty/degraded states, and a clear path from insight to approval to action.
 
 **Tab Navigation:** Pipeline | Campaigns | Content | ABM | Brand
+
+**Top-level CMO Cockpit Requirements:**
+- Header includes company selector, date range, active currency, data freshness, connector health, and policy mode.
+- First row prioritizes work: pending approvals, spend exceptions, stale data, connector failures, agent recommendations, and crisis alerts.
+- Every KPI card supports drill-down with formula, source rows, last sync, confidence, and owner.
+- Every agent/capability card shows status (`production`, `beta`, `shadow`, `stub`, `unavailable`, `demo`, `degraded`) and the reason for that status.
+- No card may render as a success state when its required connector is missing, stale, unauthorized, or returning demo data.
+- Primary actions are concrete: approve, reject, override, reconnect, create campaign draft, open incident room, export report, assign owner.
 
 **Tab: Pipeline** (default)
 - MQL/SQL funnel: Vertical funnel chart with numbers and conversion rates at each stage.
 - CAC trend: Line chart (12 months). Target line at company CAC goal.
 - LTV/CAC ratio: Large number with trend arrow.
 - Pipeline value: Large number with stage breakdown.
+- Data quality panel: lifecycle-stage mapping status, attribution coverage, stale CRM sync warnings, and unmapped campaigns.
 
 **Tab: Campaigns**
 - Active campaigns table: Campaign name, channel, budget, spend, impressions, clicks, conversions, ROAS. Sortable.
 - Spend vs Budget: Stacked bar chart by channel.
 - ROAS by channel: Existing bar chart with real data.
 - Campaign performance trend: Line chart of daily conversions.
+- Experiment tracker: active A/B tests, sample size, winner confidence, next decision date, and approval status.
+- Budget guardrail panel: overspend risk, policy threshold, agent recommendation, and rollback/stop action.
 
 **Tab: Content**
 - Content calendar: Monthly view with planned vs published content.
 - Top performing content: Existing table with real data from GA4 / WordPress.
 - Social engagement: Existing chart with real data from Buffer / Twitter.
 - Email metrics: Open rate, click rate, unsubscribe rate with trends.
+- Editorial queue: draft, review, approved, scheduled, and published states with owner and due date.
+- Content quality panel: SEO score, brand-policy flags, legal-risk flags, and post-publish feedback.
 
 **Tab: ABM**
 - Target accounts table: Company name, intent score (Bombora), engagement score, pipeline stage. Sortable.
 - Intent heatmap: Topic x Company matrix with surge scores.
 - ABM pipeline: Pipeline value from ABM-tagged accounts.
 - Multi-touch attribution: Pie chart showing channel contributions.
+- Account drill-down: score decomposition, signal sources, CRM owner, last engagement, next best action, and sync status.
 
 **Tab: Brand**
 - Brand sentiment gauge: Existing gauge with real data from Brandwatch.
 - Share of voice: Donut chart (brand vs competitors).
 - Media mentions: Timeline chart with daily mention count.
 - Competitor tracking: Table with competitor name, sentiment, SOV, recent activity.
+- Crisis room: severity, evidence, baseline comparison, assigned owner, response draft, approval status, and escalation trail.
 
 ### 6.5 COO Dashboard (NEW `COODashboard.tsx`)
 
@@ -3317,10 +3505,12 @@ For each of the 6 KPI endpoints, test:
 
 For each of the 54 connectors, test:
 
+These tests use contract test doubles only to make CI deterministic. They do not count as production readiness. Every production connector also needs setup validation, health checks, and either real vendor-sandbox proof or pilot-tenant proof before customer rollout.
+
 | Test Category | Test Count per Connector | Total |
 |---------------|-------------------------|-------|
-| Auth flow (mock) | 1 | 54 |
-| Each tool function (mock external API) | 2-8 (varies) | ~300 |
+| Auth flow with contract test double | 1 | 54 |
+| Each tool function with contract test double | 2-8 (varies) | ~300 |
 | Error handling (timeout, 401, 500) | 3 | 162 |
 | Rate limiting | 1 | 54 |
 | Health check | 1 | 54 |
@@ -3330,11 +3520,11 @@ For each of the 54 connectors, test:
 
 | Test | Description | Components Involved |
 |------|-------------|-------------------|
-| `test_cfo_dashboard_real_data_pipeline` | CFO API -> FPA agent -> Tally connector -> Mock Tally -> KPI cache -> API response | API, agent, connector, cache |
-| `test_chro_dashboard_real_data_pipeline` | CHRO API -> Payroll agent -> Darwinbox connector -> Mock Darwinbox -> KPI cache -> API | API, agent, connector, cache |
-| `test_cmo_dashboard_real_data_pipeline` | CMO API -> Campaign agent -> HubSpot connector -> Mock HubSpot -> KPI cache -> API | API, agent, connector, cache |
-| `test_coo_dashboard_real_data_pipeline` | COO API -> IT Ops agent -> PagerDuty connector -> Mock PagerDuty -> KPI cache -> API | API, agent, connector, cache |
-| `test_cbo_dashboard_real_data_pipeline` | CBO API -> Legal Ops agent -> DocuSign connector -> Mock DocuSign -> KPI cache -> API | API, agent, connector, cache |
+| `test_cfo_dashboard_real_data_pipeline` | CFO API -> FPA agent -> Tally connector -> Tally contract test double -> KPI cache -> API response | API, agent, connector, cache |
+| `test_chro_dashboard_real_data_pipeline` | CHRO API -> Payroll agent -> Darwinbox connector -> Darwinbox contract test double -> KPI cache -> API | API, agent, connector, cache |
+| `test_cmo_dashboard_real_data_pipeline` | CMO API -> Campaign agent -> HubSpot connector -> HubSpot contract test double -> KPI cache -> API | API, agent, connector, cache |
+| `test_coo_dashboard_real_data_pipeline` | COO API -> IT Ops agent -> PagerDuty connector -> PagerDuty contract test double -> KPI cache -> API | API, agent, connector, cache |
+| `test_cbo_dashboard_real_data_pipeline` | CBO API -> Legal Ops agent -> DocuSign connector -> DocuSign contract test double -> KPI cache -> API | API, agent, connector, cache |
 | `test_ceo_dashboard_aggregation` | CEO API -> All 5 CxO agent results -> Aggregation -> API response | API, 5 agents, cache |
 | `test_invoice_processing_workflow` | Invoice upload -> AP agent -> GSTN + Tally -> Match -> Post -> Notify | Workflow engine, agent, 3 connectors |
 | `test_bank_recon_workflow` | Daily trigger -> Recon agent -> AA + Tally -> Match -> Report | Workflow engine, agent, 2 connectors |
@@ -3657,9 +3847,9 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
 **New sections to add to `Landing.tsx`:**
 
 1. **Role-Specific Sections:**
-   - "For CHROs" section: Headcount dashboard mockup, payroll automation stats, compliance calendar
-   - "For COOs" section: Incident dashboard mockup, support deflection stats, vendor management
-   - "For CBOs" section: Contract review mockup, compliance scoring, board meeting management
+   - "For CHROs" section: Real dashboard screenshot or clearly labeled illustrative preview, payroll automation stats, compliance calendar
+   - "For COOs" section: Real incident dashboard screenshot or clearly labeled illustrative preview, support deflection stats, vendor management
+   - "For CBOs" section: Real contract review screenshot or clearly labeled illustrative preview, compliance scoring, board meeting management
    - (CFO and CMO sections already exist -- update with new dashboard screenshots)
 
 2. **"For Enterprise" Section:**
@@ -3764,7 +3954,7 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
   14. `contract_intelligence` -- Contract lifecycle
   15. `risk_sentinel` -- Risk scoring + fraud detection
   16. `compliance_guard` -- Compliance scoring + deadline tracking
-  17-25. Remaining agents (competitive_intel, email_agent, expense_manager, fixed_assets_agent, nexus_orchestrator, notification_agent, rev_rec_agent, sales_agent, social_media, treasury_agent)
+  17-25. Remaining or appendix-only agents (email_agent, expense_manager, fixed_assets_agent, nexus_orchestrator, notification_agent, rev_rec_agent, sales_agent, treasury_agent); Competitive Intel now has first-class beta CMO coverage, not production proof
 - [ ] Write unit tests for remaining agents (~540 tests)
 
 **Week 8:**
@@ -3812,7 +4002,9 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
 
 **Week 12:**
 - [ ] Customer pilot preparation:
-  - Set up demo tenant with sample data
+  - Set up an explicitly labeled demo tenant for sales/demo flows only; it must never be used as production-readiness proof
+  - Set up pilot tenant with real or vendor-sandbox connector credentials and connected marketing/finance/HR/ops data
+  - Generate and attach the redacted CMO pilot proof bundle; demo and test-double bundles must remain `demo_only` or `test_only`
   - Create onboarding runbook for pilot customers
   - Configure monitoring and alerting for pilot
 - [ ] Deploy to production (GCP)
@@ -3898,6 +4090,8 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
 
 ### Appendix A. Complete Agent Registry
 
+Registration alone is not a production-readiness claim. For current CMO truth labels, use the CMO capability table in Section 2.4: Campaign Pilot is production; Content Factory, Email Marketing, Social Media, ABM, Competitive Intel, Brand Monitor, SEO Strategist, and CRM Intelligence are beta. Every CMO marketing-agent pillar now has first-class deterministic beta code in `core/agents/marketing`; production claim still requires real-vendor pilot proof.
+
 | # | Agent Type | Domain | Prompt File | Confidence Floor | HITL Conditions | Authorized Tools |
 |---|-----------|--------|-------------|-----------------|-----------------|-----------------|
 | 1 | `ap_processor` | finance | `ap_processor.prompt.txt` | 0.88 | amount > 500K, match delta > 2%, vendor risk > 7, confidence < 0.88 | tally.post_voucher, tally.get_ledger_balance, gstn.generate_einvoice_irn, banking_aa.fetch_bank_statement, sendgrid.send_email |
@@ -3914,7 +4108,7 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
 | 12 | `offboarding_agent` | hr | `offboarding_agent.prompt.txt` | 0.95 | F&F > 5L, access not revoked in 24h, F&F dispute | darwinbox.terminate_employee, okta.deactivate_user, slack.remove_user, jira.create_issue, epfo.check_claim_status, docusign.send_envelope, sendgrid.send_email |
 | 13 | `campaign_pilot` | marketing | `campaign_pilot.prompt.txt` | 0.85 | daily spend > 120% budget, ROAS < 1.5x, new campaign > 1L | google_ads.search_campaigns, google_ads.get_campaign_performance, google_ads.mutate_campaign_budget, meta_ads.get_campaign_insights, linkedin_ads.get_campaign_analytics, hubspot.create_contact |
 | 14 | `content_factory` | marketing | `content_factory.prompt.txt` | 0.82 | competitor mention in blog, email > 10K recipients, product launch video | wordpress.create_post, wordpress.get_posts, buffer.create_post, buffer.get_analytics, youtube.upload_video, mailchimp.create_campaign |
-| 15 | `seo_strategist` | marketing | `seo_strategist.prompt.txt` | 0.85 | (none -- advisory only) | ahrefs.get_backlinks, ahrefs.get_keywords, ahrefs.get_site_audit, ga4.get_report |
+| 15 | `seo_strategist` | marketing | `seo_strategist.prompt.txt` | 0.84 | technical site changes require policy approval, audit, connector write safety, and confirmed write evidence | ahrefs.get_backlinks, ahrefs.get_keywords, ahrefs.get_site_audit, ga4.get_report, wordpress.apply_seo_site_change, google_search_console.submit_url_to_index |
 | 16 | `brand_monitor` | marketing | `brand_monitor.prompt.txt` | 0.82 | negative sentiment > 3x baseline (crisis), competitor campaign detected | brandwatch.get_mentions, brandwatch.get_sentiment, brandwatch.get_competitors, twitter.search_mentions |
 | 17 | `crm_intelligence` | marketing | `crm_intelligence.prompt.txt` | 0.85 | target list change > 20%, ABM budget > 50K/month | bombora.get_surge_scores, bombora.search_companies, g2.get_buyer_intent, trustradius.get_intent, hubspot.list_companies, hubspot.update_contact, linkedin_ads.get_campaign_analytics |
 | 18 | `it_operations` | ops | `it_operations.prompt.txt` | 0.88 | P1 not ack'd in 5min, change to production, uptime < 99.5%, MTTR > 60min for P1 | pagerduty.create_incident, pagerduty.acknowledge_incident, pagerduty.resolve_incident, pagerduty.get_on_call, pagerduty.list_incidents, pagerduty.create_postmortem, servicenow.create_incident, servicenow.submit_change_request, servicenow.check_sla_status, jira.create_issue, jira.search_issues |
@@ -4439,16 +4633,16 @@ Every agent mentioned in Section 2 (CxO Role Definitions) must appear in Appendi
 | `risk_sentinel` | 2.1.1H, 2.5.7, 2.6.2, 2.6.5 (CEO, COO, CBO) | #25 | Back Office Domain Agents | Yes |
 | `facilities_agent` | 2.5.4 (COO) | #26 | Back Office Domain Agents | Yes |
 | `email_agent` | Mentioned in Appendix only | #27 | Not in 3.2.2 tables | **GAP -- Added below** |
-| `social_media` | Mentioned in Appendix only | #28 | Not in 3.2.2 tables | **GAP -- Added below** |
+| `social_media` | 2.4.5 (CMO Social Media) | #28 | Marketing Domain Agents | Beta first-class core agent; not production without connector/write/policy/audit/pilot proof |
 | `expense_manager` | Mentioned in Appendix only | #29 | Not in 3.2.2 tables | **GAP -- Added below** |
 | `fixed_assets_agent` | Mentioned in Appendix only | #30 | Not in 3.2.2 tables | **GAP -- Added below** |
 | `rev_rec_agent` | Mentioned in Appendix only | #31 | Not in 3.2.2 tables | **GAP -- Added below** |
 | `treasury_agent` | Mentioned in Appendix only | #32 | Not in 3.2.2 tables | **GAP -- Added below** |
 | `sales_agent` | Mentioned in Appendix only | #33 | Not in 3.2.2 tables | **GAP -- Added below** |
-| `competitive_intel` | Mentioned in Appendix only | #34 | Not in 3.2.2 tables | **GAP -- Added below** |
+| `competitive_intel` | Appendix plus CMO beta implementation | #34 | First-class beta core marketing agent | **Implemented beta -- not production without connector/write, policy, approval, audit, and pilot proof** |
 | `notification_agent` | Mentioned in Appendix only | #35 | Not in 3.2.2 tables | **GAP -- Added below** |
 
-**Agents 27-35 Domain Logic (fills the gap from Section 3.2.2):**
+**Agents 27-35 Target Domain Logic:** These rows describe intended behavior. Social Media, ABM, Competitive Intel, Brand Monitor, and SEO Strategist now have beta first-class `core/agents/marketing` implementations and tests, but that still does not prove production readiness without real connector/write, policy, approval, audit, and pilot evidence.
 
 | Agent | Pre-Processing | Domain Rules | Tool Selection | Post-Processing | Confidence Floor |
 |-------|---------------|--------------|----------------|-----------------|-----------------|

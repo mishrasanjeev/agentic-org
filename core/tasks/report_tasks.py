@@ -182,6 +182,29 @@ def generate_report(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
             company_id=company_id,
             tenant_id=tenant_id,
         )
+        gate = output.content_data.get("report_quality_gate")
+        if channels and gate is not None:
+            from core.marketing.report_quality import cmo_report_trusted_delivery_allowed
+
+            if not cmo_report_trusted_delivery_allowed(gate):
+                log.warning(
+                    "report_delivery_blocked_by_quality_gate",
+                    report_id=report_id,
+                    report_type=report_type,
+                    safe_report_mode=gate.get("safe_report_mode"),
+                    status=gate.get("status"),
+                    next_action_cta=gate.get("next_action_cta"),
+                )
+                return {
+                    "report_id": report_id,
+                    "report_type": report_type,
+                    "paths": [],
+                    "elapsed_sec": round(time.monotonic() - start_ts, 2),
+                    "status": "blocked",
+                    "safe_report_mode": gate.get("safe_report_mode", "draft_only"),
+                    "next_action_cta": gate.get("next_action_cta", "review_report_quality"),
+                    "blocked_reasons": gate.get("blocked_reasons", []),
+                }
 
         # 2. Render to requested format(s)
         from core.reports.renderer import render_excel, render_pdf
@@ -221,13 +244,42 @@ def generate_report(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
             elapsed_sec=elapsed,
         )
 
-        return {
+        pilot_proof_summary: dict[str, Any] | None = None
+        if report_type in {"cmo_weekly", "weekly_marketing_report"}:
+            from core.marketing.weekly_report_pilot_persistence import (
+                persist_weekly_report_pilot_proof_from_report_output_sync,
+            )
+
+            pilot_proof_summary = persist_weekly_report_pilot_proof_from_report_output_sync(
+                tenant_id=tenant_id,
+                company_id=company_id,
+                report_id=report_id,
+                report_data=output.content_data,
+                rendered_paths=rendered_paths,
+            )
+            if pilot_proof_summary is not None:
+                log.info(
+                    "weekly_report_pilot_proof_persisted",
+                    report_id=report_id,
+                    tenant_id=tenant_id,
+                    company_id=company_id,
+                    proof_status=pilot_proof_summary.get("proof_status"),
+                    production_claim_allowed=pilot_proof_summary.get(
+                        "production_claim_allowed"
+                    ),
+                    readiness_score=pilot_proof_summary.get("readiness_score"),
+                )
+
+        result: dict[str, Any] = {
             "report_id": report_id,
             "report_type": report_type,
             "paths": rendered_paths,
             "elapsed_sec": elapsed,
             "status": "completed",
         }
+        if pilot_proof_summary is not None:
+            result["weekly_report_pilot_proof"] = pilot_proof_summary
+        return result
 
     # enterprise-gate: broad-except-ok reason=report-generation-task-retries-failed-pipeline
     except Exception as exc:

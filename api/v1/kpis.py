@@ -13,13 +13,38 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from core.config import is_strict_runtime_env, settings
 from core.database import get_tenant_session
 from core.kpi_cache import KPICache
+from core.marketing.approval_review import build_cmo_approval_review_projection
+from core.marketing.approval_timeouts import build_approval_timeout_risk
+from core.marketing.connector_contracts import (
+    build_marketing_connector_contracts,
+    summarize_marketing_connector_contracts,
+)
+from core.marketing.connector_setup import (
+    build_marketing_connector_setup,
+    marketing_connector_keys,
+    summarize_marketing_connector_setup,
+)
+from core.marketing.data_readiness import build_marketing_data_readiness
+from core.marketing.decision_audit import build_marketing_decision_audit_projection
+from core.marketing.escalation_matrix import build_marketing_escalation_projection
+from core.marketing.kpi_drilldown import build_cmo_kpi_drilldown_projection
+from core.marketing.kpi_schema import build_unified_cmo_kpi_projection, collect_cmo_kpi_facts
+from core.marketing.pilot_proof import build_cmo_pilot_proof_projection
+from core.marketing.policy_manifest import build_marketing_policy_projection
+from core.marketing.report_quality import build_cmo_report_quality_projection
+from core.marketing.weekly_report_pilot_proof import (
+    build_weekly_marketing_report_proof_projection,
+)
+from core.marketing.work_queue import build_cmo_work_queue_projection
+from core.marketing.workflow_activation import build_cmo_workflow_activation
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -459,6 +484,384 @@ async def _build_kpi_response(
     }
 
 
+async def _load_marketing_connector_configs(tenant_id: str) -> list[Any]:
+    """Load marketing ConnectorConfig rows for CMO readiness projections."""
+
+    from core.models.connector_config import ConnectorConfig
+
+    connector_keys = marketing_connector_keys()
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            rows = (
+                await session.execute(
+                    select(ConnectorConfig).where(
+                        ConnectorConfig.tenant_id == tenant_id,
+                        ConnectorConfig.connector_name.in_(connector_keys)
+                    )
+                )
+            ).scalars().all()
+    except SQLAlchemyError:
+        logger.debug("cmo_connector_setup_query_failed", exc_info=True)
+        return []
+    return list(rows)
+
+
+async def _load_latest_weekly_report_pilot_proof(
+    tenant_id: str, company_id: str | None
+) -> dict[str, Any] | None:
+    """Load the most recent persisted weekly-report pilot proof for the tenant.
+
+    Returns ``None`` when no row exists or the DB query fails — the
+    caller falls back to exposing only the ad-hoc CMO-PROD-1 projection.
+    """
+
+    try:
+        from core.marketing.weekly_report_pilot_persistence import (
+            latest_weekly_report_pilot_proof,
+            serialize_persisted_proof,
+            summarize_persisted_proof,
+        )
+    except ImportError:
+        return None
+
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            row = await latest_weekly_report_pilot_proof(
+                session,
+                tenant_id=tenant_id,
+                company_id=company_id if company_id and company_id != "default" else None,
+            )
+    except SQLAlchemyError:
+        logger.debug("cmo_weekly_report_pilot_proof_query_failed", exc_info=True)
+        return None
+    # enterprise-gate: broad-except-ok reason=missing-table-pre-migration-returns-no-pilot-proof
+    except Exception:  # noqa: BLE001
+        logger.debug("cmo_weekly_report_pilot_proof_lookup_failed", exc_info=True)
+        return None
+    if row is None:
+        return None
+    return {
+        "latest_weekly_report_pilot_proof": serialize_persisted_proof(row),
+        "latest_weekly_report_pilot_proof_summary": summarize_persisted_proof(row),
+    }
+
+
+async def _load_marketing_connector_setup(tenant_id: str) -> list[dict[str, Any]]:
+    """Load CMO connector setup states from existing ConnectorConfig rows."""
+
+    rows = await _load_marketing_connector_configs(tenant_id)
+    return build_marketing_connector_setup(rows)
+
+
+async def _load_cmo_approval_timeout_risk(
+    tenant_id: str,
+    company_id: str | None = None,
+) -> dict[str, Any]:
+    """Project pending marketing HITL approvals into timeout risk state."""
+
+    from core.models.agent import Agent
+    from core.models.hitl import HITLQueue
+
+    company_uuid = _parse_company_uuid(company_id)
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            query = (
+                select(HITLQueue, Agent)
+                .join(Agent, Agent.id == HITLQueue.agent_id)
+                .where(
+                    HITLQueue.tenant_id == tenant_id,
+                    HITLQueue.status == "pending",
+                    Agent.domain.in_(["marketing", "content", "sales"]),
+                )
+            )
+            if company_uuid is not None:
+                query = query.where(Agent.company_id == company_uuid)
+            rows = (await session.execute(query)).all()
+    except SQLAlchemyError:
+        logger.debug("cmo_approval_timeout_risk_query_failed", exc_info=True)
+        return build_approval_timeout_risk([])
+
+    approvals: list[dict[str, Any]] = []
+    for item, agent in rows:
+        context = item.context if isinstance(item.context, dict) else {}
+        approvals.append(
+            {
+                **context,
+                "approval_id": str(item.id),
+                "title": item.title,
+                "workflow_run_id": str(item.workflow_run_id) if item.workflow_run_id else None,
+                "workflow_id": context.get("workflow_id"),
+                "step_id": context.get("step_id"),
+                "action": (
+                    context.get("approval_action")
+                    or context.get("action")
+                    or context.get("blocked_action")
+                    or item.trigger_type
+                ),
+                "approval_type": context.get("approval_type"),
+                "requested_approver": context.get("requested_approver"),
+                "requested_approver_role": item.assignee_role,
+                "agent_id": str(agent.id),
+                "agent_type": agent.agent_type,
+                "assignee_role": item.assignee_role,
+                "decision_options": item.decision_options,
+                "status": item.status,
+                "created_at": item.created_at,
+                "due_at": item.expires_at,
+            }
+        )
+    risk = build_approval_timeout_risk(approvals)
+    risk["approval_records"] = approvals
+    return risk
+
+
+def _attach_approval_review_refs(
+    approval_timeout_risk: dict[str, Any],
+    approval_reviews: list[dict[str, Any]],
+) -> None:
+    """Link timeout-risk decisions to their richer CMO approval review rows."""
+
+    by_approval_id = {
+        str(review.get("approval_id")): review
+        for review in approval_reviews
+        if review.get("approval_id")
+    }
+    for decision in approval_timeout_risk.get("approval_timeout_decisions") or []:
+        if not isinstance(decision, dict):
+            continue
+        review = by_approval_id.get(str(decision.get("approval_id")))
+        if not review:
+            continue
+        decision["approval_review_id"] = review.get("approval_review_id")
+        decision["approval_review_status"] = review.get("status")
+
+
+def _apply_cmo_production_data_policy(
+    base: dict[str, Any],
+    connector_summary: dict[str, int | bool | str],
+    kpi_readiness: dict[str, Any] | None = None,
+    connector_contract_summary: dict[str, Any] | None = None,
+    *,
+    strict_runtime: bool,
+) -> dict[str, Any]:
+    """Prevent strict-runtime CMO paths from presenting demo KPI fallback."""
+
+    if not strict_runtime:
+        return base
+
+    readiness = str(connector_summary.get("readiness") or "")
+    kpi_status = str((kpi_readiness or {}).get("status") or "")
+    contract_readiness = str((connector_contract_summary or {}).get("readiness") or "")
+    mock_or_test_double = int((connector_contract_summary or {}).get("mock_or_test_double") or 0)
+    blocked_by_readiness = kpi_status == "blocked" or contract_readiness == "blocked" or mock_or_test_double > 0
+    degraded_by_readiness = kpi_status == "degraded" or contract_readiness == "degraded"
+
+    if base.get("demo") or blocked_by_readiness:
+        data_coverage_status = "blocked_mapping_or_backfill"
+        if base.get("demo"):
+            data_coverage_status = "blocked_setup" if readiness != "ready" else "empty_real_data"
+        return {
+            **base,
+            "demo": False,
+            "demo_suppressed": bool(base.get("demo")),
+            "production_data_blocked": True,
+            "kpi_confidence_status": "blocked",
+            "data_coverage_status": data_coverage_status,
+            "source": "empty_real_tenant" if base.get("demo") else base.get("source"),
+            "message": (
+                "CMO KPI readiness is blocked for this production tenant. "
+                "Configure connectors, complete field mappings, and finish "
+                "historical backfill with production connector contracts before "
+                "treating these KPIs as production-ready."
+            ),
+        }
+
+    if degraded_by_readiness:
+        return {
+            **base,
+            "production_data_blocked": False,
+            "kpi_confidence_status": "degraded",
+            "data_coverage_status": "degraded_mapping_or_backfill",
+            "message": (
+                "CMO KPI readiness is degraded because mappings or historical "
+                "backfill or connector contracts are incomplete. Treat KPI "
+                "values as directional."
+            ),
+        }
+
+    return {
+        **base,
+        "production_data_blocked": False,
+        "kpi_confidence_status": "ready",
+    }
+
+
+async def _build_cmo_kpi_response(tenant_id: str, company_id: str) -> dict[str, Any]:
+    base = await _build_kpi_response(tenant_id, "cmo", company_id)
+    connector_configs = await _load_marketing_connector_configs(tenant_id)
+    connector_setup = build_marketing_connector_setup(connector_configs)
+    connector_summary = summarize_marketing_connector_setup(connector_setup)
+    connector_contracts = build_marketing_connector_contracts(
+        connector_setup,
+        connector_configs,
+    )
+    connector_contract_summary = summarize_marketing_connector_contracts(connector_contracts)
+    data_readiness = build_marketing_data_readiness(
+        connector_setup,
+        connector_configs,
+        connector_contracts=connector_contracts,
+    )
+    workflow_activation = build_cmo_workflow_activation(
+        connector_setup,
+        data_readiness,
+        connector_configs,
+        connector_contracts=connector_contracts,
+    )
+    policy_projection = build_marketing_policy_projection(connector_configs)
+    escalation_projection = build_marketing_escalation_projection(connector_configs)
+    decision_audit_projection = build_marketing_decision_audit_projection(connector_configs)
+    unified_kpi_projection = build_unified_cmo_kpi_projection(
+        connector_setup=connector_setup,
+        data_readiness=data_readiness,
+        connector_contracts=connector_contracts,
+        connector_configs=connector_configs,
+    )
+    approval_timeout_risk = await _load_cmo_approval_timeout_risk(tenant_id, company_id)
+    approval_review_projection = build_cmo_approval_review_projection(
+        approval_timeout_risk.get("approval_records") or [],
+        connector_contracts=connector_contracts,
+        policy_projection=policy_projection,
+        escalation_projection=escalation_projection,
+        decision_audit_projection=decision_audit_projection,
+        approval_timeout_risk=approval_timeout_risk,
+    )
+    _attach_approval_review_refs(
+        approval_timeout_risk,
+        approval_review_projection["cmo_approval_reviews"],
+    )
+    base = _apply_cmo_production_data_policy(
+        base,
+        connector_summary,
+        data_readiness["kpi_readiness"],
+        connector_contract_summary,
+        strict_runtime=is_strict_runtime_env(settings.env),
+    )
+    report_quality_projection = build_cmo_report_quality_projection(
+        kpi_results=unified_kpi_projection["unified_cmo_kpi_results"],
+        reconciliation_checks=unified_kpi_projection["cmo_kpi_reconciliation_checks"],
+        connector_setup=connector_setup,
+        data_readiness=data_readiness,
+        connector_contracts=connector_contracts,
+        workflow_activation=workflow_activation,
+        policy_projection=policy_projection,
+        escalation_projection=escalation_projection,
+        decision_audit_projection=decision_audit_projection,
+        source_context=base,
+        production_tenant=is_strict_runtime_env(settings.env),
+    )
+    work_queue_projection = build_cmo_work_queue_projection(
+        approval_timeout_risk=approval_timeout_risk,
+        escalation_projection=escalation_projection,
+        connector_setup=connector_setup,
+        connector_contracts=connector_contracts,
+        data_readiness=data_readiness,
+        workflow_activation=workflow_activation,
+        policy_projection=policy_projection,
+        decision_audit_projection=decision_audit_projection,
+        source_context={**base, **approval_review_projection},
+        kpi_results=unified_kpi_projection["unified_cmo_kpi_results"],
+        reconciliation_checks=unified_kpi_projection["cmo_kpi_reconciliation_checks"],
+        report_quality_gates=report_quality_projection["report_quality_gates"],
+    )
+    kpi_source_facts = collect_cmo_kpi_facts(connector_configs=connector_configs)
+    kpi_drilldown_projection = build_cmo_kpi_drilldown_projection(
+        kpi_schema=unified_kpi_projection["unified_cmo_kpi_schema"],
+        kpi_results=unified_kpi_projection["unified_cmo_kpi_results"],
+        reconciliation_checks=unified_kpi_projection["cmo_kpi_reconciliation_checks"],
+        connector_setup=connector_setup,
+        data_readiness=data_readiness,
+        connector_contracts=connector_contracts,
+        work_queue=work_queue_projection["cmo_work_queue"],
+        report_quality_gates=report_quality_projection["report_quality_gates"],
+        source_data=kpi_source_facts,
+        source_context=base,
+    )
+    weekly_report_proof_projection = build_weekly_marketing_report_proof_projection(
+        {
+            "tenant_id": tenant_id,
+            "company_id": company_id,
+            "environment_type": base.get("cmo_pilot_environment_type")
+            or base.get("pilot_environment_type")
+            or base.get("environment_type"),
+            "connector_evidence": connector_setup,
+            "mapping_evidence": data_readiness.get("field_mapping_status") or [],
+            "backfill_evidence": data_readiness.get("backfill_status") or [],
+            "kpi_results": unified_kpi_projection["unified_cmo_kpi_results"],
+            "reconciliation_checks": unified_kpi_projection["cmo_kpi_reconciliation_checks"],
+            "report_quality_gates": report_quality_projection["report_quality_gates"],
+            "report_artifact_refs": base.get("weekly_report_artifact_refs")
+            or base.get("report_artifact_refs")
+            or [],
+            "decision_audit_refs": base.get("weekly_report_audit_refs")
+            or base.get("decision_audit_refs")
+            or [],
+            "source_refs": base.get("weekly_report_source_refs") or [],
+            "source_context": base,
+        },
+    )
+    pilot_proof_projection = build_cmo_pilot_proof_projection(
+        tenant_id=tenant_id,
+        company_id=company_id,
+        source_context=base,
+        connector_setup=connector_setup,
+        connector_contracts=connector_contracts,
+        data_readiness=data_readiness,
+        workflow_activation=workflow_activation,
+        workflow_lint_results=base.get("workflow_lint_results") or base.get("marketing_workflow_lint_results") or [],
+        policy_projection=policy_projection,
+        escalation_projection=escalation_projection,
+        approval_timeout_risk=approval_timeout_risk,
+        external_write_results=base.get("external_write_results") or base.get("marketing_external_write_results") or [],
+        decision_audit_projection=decision_audit_projection,
+        kpi_schema=unified_kpi_projection["unified_cmo_kpi_schema"],
+        kpi_results=unified_kpi_projection["unified_cmo_kpi_results"],
+        reconciliation_checks=unified_kpi_projection["cmo_kpi_reconciliation_checks"],
+        report_quality_gates=report_quality_projection["report_quality_gates"],
+        work_queue=work_queue_projection["cmo_work_queue"],
+        kpi_drilldowns=kpi_drilldown_projection["cmo_kpi_drilldowns"],
+        approval_review_projection=approval_review_projection,
+        agent_contracts=base.get("marketing_agent_contracts") or base.get("agent_contracts") or [],
+        scenario_evidence=base.get("cmo_scenario_evidence") or [],
+        chaos_evidence=base.get("cmo_chaos_evidence") or [],
+    )
+    latest_weekly_report_persisted = await _load_latest_weekly_report_pilot_proof(
+        tenant_id, company_id
+    )
+    response: dict[str, Any] = {
+        **base,
+        "connector_setup": connector_setup,
+        "connector_setup_summary": connector_summary,
+        "connector_contracts": connector_contracts,
+        "connector_contract_summary": connector_contract_summary,
+        **data_readiness,
+        **policy_projection,
+        **escalation_projection,
+        **decision_audit_projection,
+        **unified_kpi_projection,
+        **report_quality_projection,
+        **approval_review_projection,
+        **work_queue_projection,
+        **kpi_drilldown_projection,
+        **pilot_proof_projection,
+        **weekly_report_proof_projection,
+        **workflow_activation,
+        "approval_timeout_risk": approval_timeout_risk,
+    }
+    if latest_weekly_report_persisted is not None:
+        response.update(latest_weekly_report_persisted)
+    return response
+
+
 # ── CEO KPIs ───────────────────────────────────────────────────────────
 
 @router.get("/kpis/ceo")
@@ -557,7 +960,7 @@ async def get_cmo_kpis(
     company_id: str = Query("default", description="Multi-company selector"),
 ):
     """Marketing KPIs for the CMO executive dashboard."""
-    return await _build_kpi_response(tenant_id, "cmo", company_id)
+    return await _build_cmo_kpi_response(tenant_id, company_id)
 
 
 # ── COO KPIs ───────────────────────────────────────────────────────────

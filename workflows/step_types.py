@@ -8,12 +8,16 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from core.config import external_keys, is_relaxed_env, is_strict_runtime_env, settings
+from core.marketing.approval_timeouts import timeout_policy_for_action
+from core.marketing.external_writes import evaluate_marketing_external_write_result
+from core.marketing.workflow_activation import EXTERNAL_WRITE_ACTIONS
 from workflows.condition_evaluator import evaluate_condition
 from workflows.event_waits import WorkflowEventWaitStore
 from workflows.parallel_executor import execute_parallel
 from workflows.step_results import (
     ALLOWED_STEP_STATUSES,
     AgentExecutionError,
+    ExternalWriteConfirmationMissingError,
     MissingAgentConfigError,
     MissingLLMProviderConfigError,
     NotifySideEffectNotConfiguredError,
@@ -27,6 +31,30 @@ from workflows.step_results import (
 
 TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 logger = logging.getLogger(__name__)
+MARKETING_AGENT_TYPES = {
+    "abm_agent",
+    "brand_monitor",
+    "campaign_pilot",
+    "competitive_intel",
+    "content_factory",
+    "crm_intelligence",
+    "email_marketing",
+    "seo_strategist",
+    "social_media",
+}
+MARKETING_WRITE_ACTION_HINTS = (
+    "activate",
+    "add_to_drip",
+    "launch",
+    "mutate",
+    "publish",
+    "schedule",
+    "send",
+    "setup",
+    "spend",
+    "start_nurture",
+    "update_crm",
+)
 
 
 def _env_flag(name: str) -> bool:
@@ -96,6 +124,152 @@ def _missing_llm_result(step: dict, agent_type: str, action: str) -> dict[str, A
         step_id=step_id,
         step_type="agent",
         failure=MissingLLMProviderConfigError(agent=agent_type, step_id=step_id),
+    )
+
+
+def _normalize_key(value: Any) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _state_lookup(state: dict, *keys: str) -> Any:
+    containers = [
+        state,
+        state.get("context") if isinstance(state.get("context"), dict) else {},
+        state.get("definition") if isinstance(state.get("definition"), dict) else {},
+    ]
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        for key in keys:
+            value = container.get(key)
+            if value is not None:
+                return value
+    return None
+
+
+def _workflow_mode(step: dict, state: dict, output: dict[str, Any]) -> str:
+    return _normalize_key(
+        step.get("workflow_mode")
+        or step.get("mode")
+        or output.get("workflow_mode")
+        or output.get("mode")
+        or _state_lookup(state, "workflow_mode", "cmo_workflow_mode", "configured_mode", "mode")
+    )
+
+
+def _marketing_context(step: dict, state: dict, agent_type: str) -> bool:
+    domain = _normalize_key(step.get("domain") or _state_lookup(state, "domain"))
+    return domain == "marketing" or _normalize_key(agent_type) in MARKETING_AGENT_TYPES
+
+
+def _requires_marketing_write_confirmation(
+    step: dict,
+    state: dict,
+    *,
+    agent_type: str,
+    action: str,
+) -> bool:
+    if step.get("external_write_required") is False or step.get("requires_external_write") is False:
+        return False
+    if step.get("external_write_required") is True or step.get("requires_external_write") is True:
+        return True
+    if not _marketing_context(step, state, agent_type):
+        return False
+    normalized_action = _normalize_key(action)
+    if normalized_action in EXTERNAL_WRITE_ACTIONS:
+        return True
+    return any(hint in normalized_action for hint in MARKETING_WRITE_ACTION_HINTS)
+
+
+def _connector_key(step: dict, output: dict[str, Any]) -> str | None:
+    value = (
+        step.get("connector_key")
+        or step.get("connector")
+        or output.get("connector_key")
+        or output.get("connector")
+    )
+    return str(value).strip().lower() if value else None
+
+
+def _connector_contracts_from_state(state: dict) -> list[dict[str, Any]]:
+    value = _state_lookup(
+        state,
+        "connector_contracts",
+        "marketing_connector_contracts",
+        "cmo_connector_contracts",
+    )
+    return value if isinstance(value, list) else []
+
+
+def _external_write_decision(
+    step: dict,
+    state: dict,
+    *,
+    agent_type: str,
+    action: str,
+    output: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not _requires_marketing_write_confirmation(
+        step,
+        state,
+        agent_type=agent_type,
+        action=action,
+    ):
+        return None
+
+    mode = _workflow_mode(step, state, output)
+    connector_key = _connector_key(step, output)
+    return evaluate_marketing_external_write_result(
+        _connector_contracts_from_state(state),
+        connector_key=connector_key,
+        action=action,
+        workflow_mode=mode or "active",
+        output=output,
+        step=step,
+        state=state,
+    )
+
+
+def _output_with_external_write_decision(
+    output: Any,
+    decision: dict[str, Any],
+) -> dict[str, Any]:
+    base = dict(output) if isinstance(output, dict) else {"result": output}
+    base["external_write_state"] = decision.get("final_state")
+    base["external_write_reason"] = decision.get("reason")
+    base["external_write_next_action"] = decision.get("next_action")
+    base["external_write_attempt"] = decision.get("attempt")
+    base["external_write_confirmation"] = decision.get("confirmation")
+    base["external_write_retry_plan"] = decision.get("retry_plan")
+    base["external_write_audit"] = decision.get("audit_events") or []
+    base["external_write_audit_reference"] = decision.get("audit_reference")
+    base["decision_audit"] = decision.get("decision_audit")
+    base["decision_audit_ref"] = decision.get("decision_audit_ref")
+    if decision.get("escalation_decision") is not None:
+        base["external_write_escalation_decision"] = decision.get("escalation_decision")
+        base["external_write_escalation_evidence"] = decision.get("escalation_evidence")
+    if decision.get("marketing_policy_decision") is not None:
+        base["marketing_policy_decision"] = decision.get("marketing_policy_decision")
+    return base
+
+
+def _external_write_failure(
+    step: dict,
+    action: str,
+    connector_key: str | None,
+    mode: str,
+    decision: dict[str, Any],
+) -> ExternalWriteConfirmationMissingError:
+    return ExternalWriteConfirmationMissingError(
+        step_id=str(step.get("id", "")),
+        action=action,
+        connector=connector_key,
+        mode=mode or None,
+        reason=str(decision.get("reason") or "External write confirmation is missing."),
+        final_state=str(decision.get("final_state") or ""),
+        next_action=str(decision.get("next_action") or ""),
+        audit_reference=str(decision.get("audit_reference") or ""),
+        code=str(decision.get("error_code") or "external_write_confirmation_missing"),
     )
 
 
@@ -193,6 +367,7 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
 
         result = await agent_instance.execute(task)
         result_status = result.status
+        final_output = result.output
         if result_status == "hitl_triggered":
             result_status = "waiting_hitl"
         if result_status not in ALLOWED_STEP_STATUSES:
@@ -224,11 +399,54 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
                 output=result.output,
             )
 
+        if result_status == "completed":
+            output = result.output if isinstance(result.output, dict) else {}
+            write_decision = _external_write_decision(
+                step,
+                state,
+                agent_type=agent_type,
+                action=action,
+                output=output,
+            )
+            if write_decision:
+                augmented_output = _output_with_external_write_decision(result.output, write_decision)
+                step_status = str(write_decision.get("step_status") or "failed")
+                if step_status == "failed":
+                    mode = _workflow_mode(step, state, output)
+                    connector_key = _connector_key(step, output)
+                    confirmation_failure = _external_write_failure(
+                        step,
+                        action,
+                        connector_key,
+                        mode,
+                        write_decision,
+                    )
+                    return failure_result(
+                        step_id=step["id"],
+                        step_type="agent",
+                        failure=confirmation_failure,
+                        output=augmented_output,
+                    )
+                if step_status == "waiting_delay":
+                    return {
+                        "step_id": step["id"],
+                        "type": "agent",
+                        "status": "waiting_delay",
+                        "output": augmented_output,
+                        "resume_at": write_decision.get("resume_at"),
+                        "confidence": result.confidence,
+                        "reasoning_trace": result.reasoning_trace,
+                        "tool_calls": [tc.model_dump() for tc in result.tool_calls],
+                        "agent": agent_type,
+                        "action": action,
+                    }
+                final_output = augmented_output
+
         return {
             "step_id": step["id"],
             "type": "agent",
             "status": result_status,
-            "output": result.output,
+            "output": final_output,
             "confidence": result.confidence,
             "reasoning_trace": result.reasoning_trace,
             "tool_calls": [tc.model_dump() for tc in result.tool_calls],
@@ -264,12 +482,25 @@ async def _execute_condition(step: dict, state: dict) -> dict[str, Any]:
 
 
 async def _execute_hitl(step: dict, state: dict) -> dict[str, Any]:
+    action = (
+        step.get("approval_action")
+        or step.get("action")
+        or _state_lookup(state, "action", "approval_action", "blocked_action")
+    )
+    timeout_policy = timeout_policy_for_action(action, step) if action else None
+    timeout_hours = (
+        timeout_policy.get("default_sla_hours")
+        if isinstance(timeout_policy, dict)
+        else step.get("timeout_hours", 4)
+    )
     return {
         "step_id": step["id"],
         "type": "human_in_loop",
         "status": "waiting_hitl",
         "assignee_role": step.get("assignee_role", ""),
-        "timeout_hours": step.get("timeout_hours", 4),
+        "timeout_hours": timeout_hours,
+        "approval_action": action,
+        "approval_timeout_policy": timeout_policy,
     }
 
 
