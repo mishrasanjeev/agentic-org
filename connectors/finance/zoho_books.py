@@ -755,10 +755,9 @@ class ZohoBooksConnector(BaseConnector):
                     "page_context": invoice_data.get("page_context", {}),
                 }
             }
-        data = await self._get(
-            "/reports/gstsummary",
-            params=self._org_params(qp, source_params=params),
-        )
+        data = await self._get("/reports/gstsummary", params=self._org_params(
+            qp, source_params=params
+        ))
         return self._unwrap(data, "gst_summary")
 
     async def calculate_tds(self, **params) -> dict[str, Any]:
