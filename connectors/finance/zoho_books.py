@@ -38,6 +38,7 @@ _ZOHO_REGION_HOSTS = {
     "jp": ("zohoapis.jp", "accounts.zoho.jp"),
     "us": ("zohoapis.com", "accounts.zoho.com"),
 }
+_ORG_ID_KEYS = ("organization_id", "org_id", "zoho_organization_id")
 
 
 def _host_from_urlish(value: Any) -> str:
@@ -95,6 +96,20 @@ def _as_bool(value: Any, default: bool = True) -> bool:
     return bool(value)
 
 
+def _normalise_org_id(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() in {"", "none", "null"} else text
+
+
+def _redact_org_id(value: Any) -> str:
+    text = _normalise_org_id(value)
+    if not text:
+        return ""
+    return f"***{text[-4:]}" if len(text) > 4 else "***"
+
+
 class ZohoBooksConnector(BaseConnector):
     name = "zoho_books"
     category = "finance"
@@ -139,7 +154,9 @@ class ZohoBooksConnector(BaseConnector):
         self.config["region"] = region
         self.config["base_url"] = self.base_url
         self.config["token_url"] = _ZOHO_TOKEN_URLS[region]
-        self._org_id: str = self.config.get("organization_id", "")
+        self._org_id: str = _normalise_org_id(self.config.get("organization_id", ""))
+        if self._org_id:
+            self.config["organization_id"] = self._org_id
 
     def _register_tools(self):
         self._tool_registry["create_invoice"] = self.create_invoice
@@ -246,10 +263,10 @@ class ZohoBooksConnector(BaseConnector):
             data = await self._get("/organizations")
             orgs = data.get("organizations", []) if isinstance(data, dict) else []
             if orgs:
-                self._org_id = str(orgs[0].get("organization_id", ""))
+                self._set_org_id(orgs[0].get("organization_id"))
                 logger.info(
                     "zoho_books_org_id_auto_fetched",
-                    org_id=self._org_id,
+                    org_id=_redact_org_id(self._org_id),
                     org_name=orgs[0].get("name", ""),
                 )
         # enterprise-gate: broad-except-ok reason=connector-org-discovery-fallback-requires-org-before-tool-success
@@ -289,11 +306,60 @@ class ZohoBooksConnector(BaseConnector):
             )
             return await super().execute_tool(tool_name, params)
 
-    def _org_params(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Build query params with organization_id always included."""
-        params: dict[str, Any] = {"organization_id": self._org_id}
-        if extra:
-            params.update({k: v for k, v in extra.items() if v is not None})
+    def _set_org_id(self, value: Any) -> None:
+        org_id = _normalise_org_id(value)
+        if org_id:
+            self._org_id = org_id
+            self.config["organization_id"] = org_id
+
+    def _org_id_from_params(self, params: dict[str, Any] | None = None) -> tuple[str, str]:
+        """Resolve the Zoho organization for one API call.
+
+        QA reopened this because ``get_organization`` returned valid org ids,
+        but downstream tools ignored an explicit ``organization_id`` supplied
+        by the caller and kept using a stale configured/default org. Explicit
+        call params must therefore win over connector state.
+        """
+        source_params = params or {}
+        for key in _ORG_ID_KEYS:
+            if key in source_params:
+                org_id = _normalise_org_id(source_params.get(key))
+                if org_id:
+                    return org_id, key
+        org_id = _normalise_org_id(self._org_id or self.config.get("organization_id"))
+        return (org_id, "connector_config") if org_id else ("", "missing")
+
+    def _copy_org_aliases(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: params[key]
+            for key in _ORG_ID_KEYS
+            if key in params and _normalise_org_id(params.get(key))
+        }
+
+    def _clean_non_org_params(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return {
+            str(k): v
+            for k, v in (params or {}).items()
+            if v is not None and str(k) not in _ORG_ID_KEYS
+        }
+
+    def _org_params(
+        self,
+        extra: dict[str, Any] | None = None,
+        *,
+        source_params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build query params with a normalized organization_id when available."""
+        params = self._clean_non_org_params(extra)
+        org_id, source = self._org_id_from_params(source_params or extra)
+        if org_id:
+            params["organization_id"] = org_id
+            self._set_org_id(org_id)
+        logger.debug(
+            "zoho_books_org_context_resolved",
+            source=source,
+            org_id=_redact_org_id(org_id),
+        )
         return params
 
     def _unwrap(self, data: dict[str, Any], key: str | None = None) -> dict[str, Any]:
@@ -347,6 +413,7 @@ class ZohoBooksConnector(BaseConnector):
         data = await self._post(
             "/invoices",
             data=body,
+            params=self._org_params(source_params=params),
         )
         # Inject org_id as query param via raw request override
         return self._unwrap(data, "invoice")
@@ -368,7 +435,7 @@ class ZohoBooksConnector(BaseConnector):
         if params.get("page"):
             qp["page"] = params["page"]
 
-        data = await self._get("/invoices", params=self._org_params(qp))
+        data = await self._get("/invoices", params=self._org_params(qp, source_params=params))
         invoices = self._unwrap(data, "invoices")
         return {
             "invoices": invoices if isinstance(invoices, list) else [],
@@ -384,7 +451,7 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("vendor_id", "status", "date_start", "date_end", "bill_number", "page"):
             if params.get(field):
                 qp[field] = params[field]
-        data = await self._get("/bills", params=self._org_params(qp))
+        data = await self._get("/bills", params=self._org_params(qp, source_params=params))
         bills = self._unwrap(data, "bills")
         return {
             "bills": bills if isinstance(bills, list) else [],
@@ -396,7 +463,7 @@ class ZohoBooksConnector(BaseConnector):
         bill_id = params.get("bill_id") or params.get("id")
         if not bill_id:
             return {"error": "bill_id is required"}
-        data = await self._get(f"/bills/{bill_id}", params=self._org_params())
+        data = await self._get(f"/bills/{bill_id}", params=self._org_params(source_params=params))
         return self._unwrap(data, "bill")
 
     async def get_purchase_invoices(self, **params) -> dict[str, Any]:
@@ -423,7 +490,7 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("vendor_id", "account_id", "date_start", "date_end", "status", "page"):
             if params.get(field):
                 qp[field] = params[field]
-        data = await self._get("/expenses", params=self._org_params(qp))
+        data = await self._get("/expenses", params=self._org_params(qp, source_params=params))
         expenses = self._unwrap(data, "expenses")
         return {
             "expenses": expenses if isinstance(expenses, list) else [],
@@ -453,7 +520,11 @@ class ZohoBooksConnector(BaseConnector):
             if params.get(field):
                 body[field] = params[field]
 
-        data = await self._post("/expenses", data=body)
+        data = await self._post(
+            "/expenses",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
         return self._unwrap(data, "expense")
 
     async def get_vendor_payables(self, **params) -> dict[str, Any]:
@@ -475,7 +546,7 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("search_text", "page"):
             if params.get(field):
                 qp[field] = params[field]
-        data = await self._get("/contacts", params=self._org_params(qp))
+        data = await self._get("/contacts", params=self._org_params(qp, source_params=params))
         contacts = self._unwrap(data, "contacts")
         return {
             "vendors": contacts if isinstance(contacts, list) else [],
@@ -487,7 +558,10 @@ class ZohoBooksConnector(BaseConnector):
         vendor_id = params.get("vendor_id") or params.get("contact_id") or params.get("id")
         if not vendor_id:
             return {"error": "vendor_id is required"}
-        data = await self._get(f"/contacts/{vendor_id}", params=self._org_params())
+        data = await self._get(
+            f"/contacts/{vendor_id}",
+            params=self._org_params(source_params=params),
+        )
         return self._unwrap(data, "contact")
 
     async def create_journal_entry(self, **params) -> dict[str, Any]:
@@ -504,7 +578,11 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("notes", "reference_number"):
             if params.get(field):
                 body[field] = params[field]
-        data = await self._post("/journals", data=body)
+        data = await self._post(
+            "/journals",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
         return self._unwrap(data, "journal")
 
     async def create_tds_entry(self, **params) -> dict[str, Any]:
@@ -554,6 +632,7 @@ class ZohoBooksConnector(BaseConnector):
             line_items=line_items,
             notes=params.get("notes") or "TDS deduction entry",
             reference_number=params.get("reference_number"),
+            **self._copy_org_aliases(params),
         )
 
     async def update_bill(self, **params) -> dict[str, Any]:
@@ -564,11 +643,15 @@ class ZohoBooksConnector(BaseConnector):
         body = {
             key: value
             for key, value in params.items()
-            if key not in {"bill_id", "id"} and value is not None
+            if key not in {"bill_id", "id", *_ORG_ID_KEYS} and value is not None
         }
         if not body:
             return {"error": "at least one field is required"}
-        data = await self._put(f"/bills/{bill_id}", data=body)
+        data = await self._put(
+            f"/bills/{bill_id}",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
         return self._unwrap(data, "bill")
 
     # ── Reports ────────────────────────────────────────────────────────
@@ -581,7 +664,10 @@ class ZohoBooksConnector(BaseConnector):
         qp: dict[str, Any] = {}
         if params.get("date"):
             qp["date"] = params["date"]
-        data = await self._get("/reports/balancesheet", params=self._org_params(qp))
+        data = await self._get(
+            "/reports/balancesheet",
+            params=self._org_params(qp, source_params=params),
+        )
         return self._unwrap(data, "balance_sheet")
 
     async def get_profit_loss(self, **params) -> dict[str, Any]:
@@ -594,7 +680,10 @@ class ZohoBooksConnector(BaseConnector):
             qp["from_date"] = params["from_date"]
         if params.get("to_date"):
             qp["to_date"] = params["to_date"]
-        data = await self._get("/reports/profitandloss", params=self._org_params(qp))
+        data = await self._get(
+            "/reports/profitandloss",
+            params=self._org_params(qp, source_params=params),
+        )
         return self._unwrap(data, "profit_and_loss")
 
     # ── Organization details ───────────────────────────────────────────
@@ -608,7 +697,7 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("account_id", "account_name", "from_date", "to_date"):
             if params.get(field):
                 qp[field] = params[field]
-        data = await self._get("/reports/ledger", params=self._org_params(qp))
+        data = await self._get("/reports/ledger", params=self._org_params(qp, source_params=params))
         ledger = self._unwrap(data, "ledger")
         if isinstance(ledger, dict):
             return ledger
@@ -623,7 +712,10 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("date", "from_date", "to_date"):
             if params.get(field):
                 qp[field] = params[field]
-        data = await self._get("/reports/trialbalance", params=self._org_params(qp))
+        data = await self._get(
+            "/reports/trialbalance",
+            params=self._org_params(qp, source_params=params),
+        )
         return self._unwrap(data, "trial_balance")
 
     async def generate_gst_report(self, **params) -> dict[str, Any]:
@@ -647,7 +739,10 @@ class ZohoBooksConnector(BaseConnector):
                 "page": params.get("page"),
             }
             invoice_data = await self.list_invoices(
-                **{k: v for k, v in invoice_qp.items() if v is not None}
+                **{
+                    **{k: v for k, v in invoice_qp.items() if v is not None},
+                    **self._copy_org_aliases(params),
+                }
             )
             return {
                 "gst_summary": {
@@ -660,7 +755,10 @@ class ZohoBooksConnector(BaseConnector):
                     "page_context": invoice_data.get("page_context", {}),
                 }
             }
-        data = await self._get("/reports/gstsummary", params=self._org_params(qp))
+        data = await self._get(
+            "/reports/gstsummary",
+            params=self._org_params(qp, source_params=params),
+        )
         return self._unwrap(data, "gst_summary")
 
     async def calculate_tds(self, **params) -> dict[str, Any]:
@@ -705,26 +803,25 @@ class ZohoBooksConnector(BaseConnector):
             "filing_required": True,
         }
 
-    async def get_organization(self, **_params) -> dict[str, Any]:
+    async def get_organization(self, **params) -> dict[str, Any]:
         """Get organization details (name, organization_id, address, currency).
 
         Returns the active organization from the connected Zoho Books
         account. Useful for agents whose prompts reference the
-        company by name or need the organization_id for follow-up
-        calls. Takes no parameters; the connector's configured
-        organization_id selects which org to fetch when the account
-        spans multiple.
+        company by name or need the organization_id for follow-up calls.
+        If a caller supplies organization_id, the connector records that
+        as the active org for later calls in the same session.
         """
-        # _get auto-injects organization_id from the connector config
-        # (see _get override below). Zoho returns the matching org
-        # under the "organizations" array even for the singleton query.
-        data = await self._get("/organizations")
+        query = self._org_params(source_params=params) if self._copy_org_aliases(params) else None
+        data = await super()._get("/organizations", query)
         orgs = data.get("organizations", []) if isinstance(data, dict) else []
         if not orgs:
             return {"organizations": []}
-        # Active org first; callers that asked for "company name and
-        # organization_id" want the configured one, which Zoho lists
-        # filtered by the organization_id query param we injected.
+        explicit_org_id, _source = self._org_id_from_params(params)
+        if explicit_org_id:
+            self._set_org_id(explicit_org_id)
+        elif not self._org_id:
+            self._set_org_id(orgs[0].get("organization_id"))
         return {"organizations": orgs}
 
     # ── Chart of Accounts ──────────────────────────────────────────────
@@ -737,7 +834,10 @@ class ZohoBooksConnector(BaseConnector):
         qp: dict[str, Any] = {}
         if params.get("filter_by"):
             qp["filter_by"] = params["filter_by"]
-        data = await self._get("/chartofaccounts", params=self._org_params(qp))
+        data = await self._get(
+            "/chartofaccounts",
+            params=self._org_params(qp, source_params=params),
+        )
         accounts = self._unwrap(data, "chartofaccounts")
         return {
             "chartofaccounts": accounts if isinstance(accounts, list) else [],
@@ -759,7 +859,7 @@ class ZohoBooksConnector(BaseConnector):
         """
         account_id = params.get("account_id")
         path = f"/bankaccounts/{account_id}" if account_id else "/bankaccounts"
-        data = await self._get(path, params=self._org_params())
+        data = await self._get(path, params=self._org_params(source_params=params))
         if account_id:
             return self._unwrap(data, "bankaccount")
         accounts = self._unwrap(data, "bankaccounts")
@@ -774,7 +874,10 @@ class ZohoBooksConnector(BaseConnector):
         for field in ("account_id", "from_date", "to_date", "page"):
             if params.get(field):
                 qp[field] = params[field]
-        data = await self._get("/banktransactions", params=self._org_params(qp))
+        data = await self._get(
+            "/banktransactions",
+            params=self._org_params(qp, source_params=params),
+        )
         transactions = self._unwrap(data, "banktransactions")
         return {
             "transactions": transactions if isinstance(transactions, list) else [],
@@ -806,40 +909,67 @@ class ZohoBooksConnector(BaseConnector):
             ],
         }
 
-        data = await self._put(f"/banktransactions/{transaction_id}/match", data=body)
+        data = await self._put(
+            f"/banktransactions/{transaction_id}/match",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
         return self._unwrap(data, "bank_transaction")
 
     # ── Internal: override _get/_post to inject organization_id ────────
 
-    async def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
-        """GET with organization_id always injected."""
-        params = params or {}
-        params.setdefault("organization_id", self._org_id)
-        return await super()._get(path, params)
+    def _requires_org_id(self, path: str) -> bool:
+        return path.rstrip("/") != "/organizations"
 
-    async def _post(self, path: str, data: dict | None = None) -> dict[str, Any]:
+    async def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
+        """GET with organization_id injected for Zoho resource endpoints."""
+        query = dict(params or {})
+        if self._requires_org_id(path):
+            query = self._org_params(query)
+        else:
+            query = self._clean_non_org_params(query)
+            if params and any(key in params for key in _ORG_ID_KEYS):
+                org_id, _source = self._org_id_from_params(params)
+                if org_id:
+                    query["organization_id"] = org_id
+                    self._set_org_id(org_id)
+        return await super()._get(path, query or None)
+
+    async def _post(
+        self,
+        path: str,
+        data: dict | None = None,
+        params: dict | None = None,
+    ) -> dict[str, Any]:
         """POST with organization_id injected as query param.
 
         Zoho Books requires organization_id on the query string even for POST.
         """
         if not self._client:
             raise RuntimeError("Connector not connected")
+        query = self._org_params(params)
         resp = await self._client.post(
             path,
             json=data,
-            params={"organization_id": self._org_id},
+            params=query,
         )
         resp.raise_for_status()
         return resp.json()
 
-    async def _put(self, path: str, data: dict | None = None) -> dict[str, Any]:
+    async def _put(
+        self,
+        path: str,
+        data: dict | None = None,
+        params: dict | None = None,
+    ) -> dict[str, Any]:
         """PUT with organization_id injected as query param."""
         if not self._client:
             raise RuntimeError("Connector not connected")
+        query = self._org_params(params)
         resp = await self._client.put(
             path,
             json=data,
-            params={"organization_id": self._org_id},
+            params=query,
         )
         resp.raise_for_status()
         return resp.json()

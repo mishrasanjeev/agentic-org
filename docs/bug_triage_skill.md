@@ -158,6 +158,8 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 - [ ] Any list fed to a fail-closed gate has an explicit required/optional split defaulting to all-required; narrowing a gate names the second control that still enforces what was removed (Rule 12).
 - [ ] Coupled client error-path swept — a structured error body does not crash the UI (Rule 12).
 - [ ] Baseline / route-inventory re-keys proven debt-neutral (counts unchanged, only line churn); new broad excepts annotated, not rebaselined (Rule 12).
+- [ ] Connector discovery-to-action context is preserved: IDs returned by discovery tools are accepted by downstream tools, normalized without lossy type coercion, sent in the provider-required location, and kept out of request bodies when they are query/path context (Rule 13).
+- [ ] Connector catalog/tool-list claims are backed by executable native connector methods, endpoint-path tests, and a UI/Playwright check when the claim is operator-visible (Rule 13).
 
 ---
 
@@ -301,6 +303,59 @@ Reference: `tests/regression/test_uday_17may_promotion_connector_gate.py`,
 `ui/e2e/qa-uday-17may2026.spec.ts`, `core/agents/packs/ca/__init__.py`,
 `core/agents/packs/installer.py`, `api/v1/agents.py`,
 `ui/src/pages/AgentDetail.tsx`.
+
+---
+
+## Rule 13 - Connector context must survive discovery-to-action hops
+
+Added 2026-05-25 after Uday's CA-Firms Zoho Books reopen and the
+CRM-TOOLS-002 connector-surface review. The shallow failure pattern was
+again a "green" local path that did not replay the tester's actual
+sequence:
+
+- `get_organization` returned real Zoho Books `organization_id` values.
+- The next tools (`list_vendors`, `list_vendor_bills`, etc.) accepted an
+  `organization_id` argument in the prompt, but the connector silently
+  ignored it and reused the stale configured/default org.
+- Mutating tools risked putting connector context fields into JSON
+  bodies instead of query/path context.
+- CRM catalog claims mentioned production CRM operations that did not
+  all exist as native HubSpot/Salesforce connector methods.
+
+The discipline this rule adds:
+
+1. **Discovery output is a contract for the next tool call.** If a tool
+   returns `organization_id`, `realm_id`, `account_id`, `property_id`,
+   or similar provider context, every downstream tool that needs that
+   context must accept it explicitly, normalize it as a string without
+   rejecting numeric-looking values, and let explicit call params win
+   over connector config.
+2. **Provider context belongs in the provider-required transport
+   location.** For Zoho Books, `organization_id` is query context even
+   for POST/PUT. It must not be copied into mutation JSON bodies.
+3. **Discovery endpoints must not be polluted by stale scoped context.**
+   A list/discovery call such as `GET /organizations` should not inject
+   an old configured org unless the caller explicitly supplies one.
+4. **Connector health is not action proof.** A health check that lists
+   organizations only proves auth; it does not prove downstream tools
+   will use the returned org correctly. Regression tests must replay the
+   discovery-to-action sequence.
+5. **Operator-visible tool claims require executable tools.** If the UI
+   or product copy claims CRM operations such as company/deal/contact
+   CRUD, associations, tasks, notes, or validation, native connector
+   registries must expose real provider-backed methods and endpoint-path
+   tests. Otherwise classify the item honestly as an enhancement, not a
+   fixed bug.
+6. **No raw credential or tenant identifiers in logs/summaries.** Secrets
+   are never printed; provider account/context identifiers should be
+   redacted in connector logs unless they are already safe public
+   metadata required for operator output.
+
+Reference: `tests/regression/test_ca_firms_uday25_zoho_crm_tools.py`,
+`ui/e2e/qa-uday-25may2026.spec.ts`,
+`connectors/finance/zoho_books.py`,
+`connectors/marketing/hubspot.py`, and
+`connectors/marketing/salesforce.py`.
 
 ---
 

@@ -37,9 +37,14 @@ async def test_zoho_reconcile_transaction_uses_match_endpoint() -> None:
     connector = ZohoBooksConnector({"region": "in", "organization_id": "org-1"})
     calls: dict[str, object] = {}
 
-    async def fake_put(path: str, data: dict | None = None) -> dict:
+    async def fake_put(
+        path: str,
+        data: dict | None = None,
+        params: dict | None = None,
+    ) -> dict:
         calls["path"] = path
         calls["data"] = data
+        calls["params"] = params
         return {"bank_transaction": {"transaction_id": "bank-1", "status": "matched"}}
 
     connector._put = fake_put  # type: ignore[method-assign]
@@ -56,6 +61,7 @@ async def test_zoho_reconcile_transaction_uses_match_endpoint() -> None:
             {"transaction_id": "book-1", "transaction_type": "deposit"}
         ]
     }
+    assert calls["params"] == {"organization_id": "org-1"}
     assert result["status"] == "matched"
 
 
