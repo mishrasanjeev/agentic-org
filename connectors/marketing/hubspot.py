@@ -666,6 +666,7 @@ class HubspotConnector(BaseConnector):
                     "status": "blocked",
                     "http_status": exc.response.status_code,
                 }
+            # enterprise-gate: broad-except-ok reason=hubspot-object-access-probe-reports-blocked
             except Exception as exc:  # noqa: BLE001
                 checks[object_type] = {
                     "status": "blocked",
