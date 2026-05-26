@@ -924,6 +924,17 @@ class ZohoBooksConnector(BaseConnector):
                     "in the authenticated account."
                 )
         else:
+            configured_org_id = _normalise_org_id(
+                self._org_id or self.config.get("organization_id")
+            )
+            if configured_org_id:
+                configured_orgs = [
+                    org
+                    for org in orgs
+                    if str(org.get("organization_id") or "") == str(configured_org_id)
+                ]
+                if configured_orgs:
+                    orgs = configured_orgs
             self._set_org_id(orgs[0].get("organization_id"))
         return {"organizations": [self._normalize_organization(orgs[0])]}
 
