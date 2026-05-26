@@ -840,10 +840,8 @@ class ZohoBooksConnector(BaseConnector):
                 "Use the GSTN connector for statutory GST reports; use "
                 "list_invoices only when you explicitly need invoice source data."
             )
-        data = await self._get(
-            "/reports/gstsummary",
-            params=self._org_params(qp, source_params=params),
-        )
+        query = self._org_params(qp, source_params=params)
+        data = await self._get("/reports/gstsummary", params=query)
         return self._unwrap(data, "gst_summary")
 
     async def calculate_tds(self, **params) -> dict[str, Any]:
@@ -897,7 +895,14 @@ class ZohoBooksConnector(BaseConnector):
         If a caller supplies organization_id, the connector records that
         as the active org for later calls in the same session.
         """
-        data = await super()._get("/organizations")
+        explicit_org_id = ""
+        query: dict[str, Any] | None = None
+        if any(key in params for key in _ORG_ID_KEYS):
+            explicit_org_id, _source = self._org_id_from_params(params)
+            if explicit_org_id:
+                query = {"organization_id": explicit_org_id}
+
+        data = await super()._get("/organizations", query)
         self._raise_for_zoho_error(data, "/organizations")
         orgs = data.get("organizations", []) if isinstance(data, dict) else []
         if not orgs:
@@ -906,22 +911,19 @@ class ZohoBooksConnector(BaseConnector):
                 "refresh_token, client_id, client_secret, and organization_id "
                 "are configured."
             )
-        explicit_org_id, _source = self._org_id_from_params(params)
         if explicit_org_id:
             self._set_org_id(explicit_org_id)
-        selected_org_id = explicit_org_id or self._org_id
-        if selected_org_id:
             orgs = [
                 org
                 for org in orgs
-                if str(org.get("organization_id") or "") == str(selected_org_id)
+                if str(org.get("organization_id") or "") == str(explicit_org_id)
             ]
             if not orgs:
                 raise RuntimeError(
-                    f"Zoho Books organization_id {selected_org_id} was not found "
+                    f"Zoho Books organization_id {explicit_org_id} was not found "
                     "in the authenticated account."
                 )
-        elif not self._org_id:
+        else:
             self._set_org_id(orgs[0].get("organization_id"))
         return {"organizations": [self._normalize_organization(orgs[0])]}
 
