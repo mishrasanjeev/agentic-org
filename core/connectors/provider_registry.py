@@ -40,7 +40,7 @@ ZOHO_REGIONS: dict[str, dict[str, str]] = {
         "authorize_url": "https://accounts.zoho.in/oauth/v2/auth",
         "token_url": "https://accounts.zoho.in/oauth/v2/token",
         "revoke_url": "https://accounts.zoho.in/oauth/v2/token/revoke",
-        "api_base_url": "https://www.zohoapis.in/books/v3",
+        "api_base_url": "https://books.zoho.in/api/v3",
     },
     "eu": {
         "authorize_url": "https://accounts.zoho.eu/oauth/v2/auth",

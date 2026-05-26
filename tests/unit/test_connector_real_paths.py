@@ -196,7 +196,7 @@ class TestZohoBooksRealPaths:
     async def test_get_organization_path(self):
         c = self._make_connector()
         c._client.get = _async_response(
-            {"organizations": [{"organization_id": "1", "name": "Acme"}]}
+            {"organizations": [{"organization_id": "org123", "name": "Acme"}]}
         )
         out = await c.get_organization()
         args = c._client.get.call_args
@@ -207,8 +207,108 @@ class TestZohoBooksRealPaths:
     async def test_get_organization_empty(self):
         c = self._make_connector()
         c._client.get = _async_response({"organizations": []})
-        out = await c.get_organization()
-        assert out == {"organizations": []}
+        with pytest.raises(RuntimeError, match="returned no organizations"):
+            await c.get_organization()
+
+    @pytest.mark.asyncio
+    async def test_list_vendors_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"contacts": [{"contact_id": "v1"}]})
+        out = await c.list_vendors(search_text="acme")
+        args = c._client.get.call_args
+        assert args[0][0] == "/contacts"
+        assert args[1]["params"]["organization_id"] == "org123"
+        assert args[1]["params"]["contact_type"] == "vendor"
+        assert out["vendors"][0]["contact_id"] == "v1"
+
+    @pytest.mark.asyncio
+    async def test_get_vendor_details_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"contact": {"contact_id": "v1"}})
+        out = await c.get_vendor_details(vendor_id="v1")
+        args = c._client.get.call_args
+        assert args[0][0] == "/contacts/v1"
+        assert out["vendor"]["contact_id"] == "v1"
+
+    @pytest.mark.asyncio
+    async def test_list_expense_transactions_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"expenses": [{"expense_id": "e1"}]})
+        out = await c.list_expense_transactions(vendor_id="v1")
+        args = c._client.get.call_args
+        assert args[0][0] == "/expenses"
+        assert args[1]["params"]["vendor_id"] == "v1"
+        assert out["expense_transactions"][0]["expense_id"] == "e1"
+
+    @pytest.mark.asyncio
+    async def test_list_vendor_bills_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"bills": [{"bill_id": "b1"}]})
+        out = await c.list_vendor_bills(vendor_id="v1")
+        args = c._client.get.call_args
+        assert args[0][0] == "/bills"
+        assert args[1]["params"]["vendor_id"] == "v1"
+        assert out["bills"][0]["bill_id"] == "b1"
+
+    @pytest.mark.asyncio
+    async def test_get_bill_by_id_path(self):
+        c = self._make_connector()
+        c._client.get = _async_response({"bill": {"bill_id": "b1"}})
+        out = await c.get_bill_by_id(bill_id="b1")
+        args = c._client.get.call_args
+        assert args[0][0] == "/bills/b1"
+        assert out["bill"]["bill_id"] == "b1"
+
+    @pytest.mark.asyncio
+    async def test_update_bill_path(self):
+        c = self._make_connector()
+        c._client.put = _async_response({"bill": {"bill_id": "b1", "notes": "ok"}})
+        out = await c.update_bill(bill_id="b1", notes="ok")
+        args = c._client.put.call_args
+        assert args[0][0] == "/bills/b1"
+        assert args[1]["params"]["organization_id"] == "org123"
+        assert args[1]["json"] == {"notes": "ok"}
+        assert out["notes"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_create_journal_entry_path(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"journal": {"journal_id": "j1"}})
+        out = await c.create_journal_entry(
+            journal_date="2026-05-26",
+            line_items=[
+                {"account_id": "a1", "debit_or_credit": "debit", "amount": 100},
+                {"account_id": "a2", "debit_or_credit": "credit", "amount": 100},
+            ],
+        )
+        args = c._client.post.call_args
+        assert args[0][0] == "/journals"
+        assert args[1]["params"]["organization_id"] == "org123"
+        assert out["journal_id"] == "j1"
+
+    @pytest.mark.asyncio
+    async def test_create_tds_entry_does_not_discover_vendor_when_vendor_id_supplied(self):
+        c = self._make_connector()
+        c._client.post = _async_response({"journal": {"journal_id": "tds-1"}})
+        c.list_vendors = AsyncMock(side_effect=AssertionError("must not list vendors"))
+
+        out = await c.create_tds_entry(
+            vendor_id="vendor-1",
+            expense_account_id="expense",
+            vendor_account_id="payable",
+            tds_payable_account_id="tds",
+            gross_amount=1000,
+            tds_amount=100,
+            journal_date="2026-05-26",
+        )
+
+        c.list_vendors.assert_not_called()
+        args = c._client.post.call_args
+        assert args[0][0] == "/journals"
+        line_items = args[1]["json"]["line_items"]
+        assert line_items[1]["customer_id"] == "vendor-1"
+        assert line_items[1]["amount"] == 900
+        assert out["journal_id"] == "tds-1"
 
     @pytest.mark.asyncio
     async def test_health_check_returns_org_count(self):

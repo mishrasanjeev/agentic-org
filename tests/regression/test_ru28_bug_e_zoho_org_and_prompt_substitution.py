@@ -105,15 +105,13 @@ async def test_zoho_books_get_organization_routes_to_organizations_endpoint(
     finally:
         await conn.disconnect()
 
-    assert result == {
-        "organizations": [
-            {
-                "organization_id": "60001234567",
-                "name": "TechSolutions India Pvt Ltd",
-                "currency_code": "INR",
-            }
-        ]
-    }
+    org = result["organizations"][0]
+    assert org["organization_id"] == "60001234567"
+    assert org["name"] == "TechSolutions India Pvt Ltd"
+    assert org["currency_code"] == "INR"
+    assert "gstin" in org
+    assert "pan_number" in org
+    assert "tan_number" in org
 
 
 # ─────────────────────────────────────────────────────────────────

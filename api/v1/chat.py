@@ -630,6 +630,7 @@ async def chat_query(
 
     try:
         from api.v1.agents import (
+            _assert_connectors_ready_for_dispatch,
             _resolve_agent_connector_ids_for_type,
             _resolve_connector_configs,
         )
@@ -639,6 +640,9 @@ async def chat_query(
             agent_type=resolved_agent_type,
         )
         if connector_ids:
+            tid = _uuid.UUID(tenant_id)
+            async with get_tenant_session(tid) as session:
+                await _assert_connectors_ready_for_dispatch(session, tid, connector_ids)
             connector_config, resolved_names = await _resolve_connector_configs(
                 tenant_id=tenant_id,
                 connector_ids=connector_ids,

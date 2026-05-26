@@ -151,6 +151,7 @@ async def create_task(
     # Execute via LangGraph
     try:
         from api.v1.agents import (
+            _assert_connectors_ready_for_dispatch,
             _load_connector_configs_for_agent,
             _resolve_agent_connector_ids_for_type,
         )
@@ -181,6 +182,30 @@ async def create_task(
         connector_ids = await _resolve_agent_connector_ids_for_type(
             tenant_id=tenant_id, agent_type=body.agent_type,
         )
+        if connector_ids:
+            try:
+                async with get_tenant_session(tid) as session:
+                    await _assert_connectors_ready_for_dispatch(
+                        session,
+                        tid,
+                        connector_ids,
+                    )
+            except HTTPException as exc:
+                async with get_tenant_session(tid) as session:
+                    db_result = await session.execute(
+                        select(A2ATask).where(
+                            A2ATask.task_id == task_id,
+                            A2ATask.tenant_id == tid,
+                        )
+                    )
+                    task_row = db_result.scalar_one_or_none()
+                    if task_row:
+                        task_row.status = "failed"
+                        task_row.error = "connector_not_ready_for_dispatch"
+                        task_row.output_data = (
+                            exc.detail if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
+                        )
+                raise
         connector_config = await _load_connector_configs_for_agent(
             tenant_id=tenant_id,
             connector_ids=connector_ids,

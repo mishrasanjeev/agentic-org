@@ -991,6 +991,32 @@ async def _assert_connectors_ready_for_activation(
         )
 
 
+async def _assert_connectors_ready_for_dispatch(
+    session: Any,
+    tenant_id: _uuid.UUID,
+    connector_ids: list[str] | None,
+) -> None:
+    """Block agent execution before tools run when required connectors are not ready."""
+    try:
+        await _assert_connectors_ready_for_activation(session, tenant_id, connector_ids)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        connectors = detail.get("connectors") if isinstance(detail, dict) else None
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "connector_not_ready_for_dispatch",
+                "message": (
+                    "This agent cannot run because a required connector is not "
+                    "authenticated, healthy, and refreshable. Go to Dashboard -> "
+                    "Connectors, reconnect the connector, run its health check, "
+                    "then retry the agent."
+                ),
+                "connectors": connectors or [],
+            },
+        ) from exc
+
+
 @router.get("/agents/default-tools/{agent_type}")
 @route_meta(
     auth_required=True,
@@ -2201,6 +2227,7 @@ async def run_agent(
             )
 
         agent_config = _agent_to_dict(agent_row)
+        dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)
 
     # 2. Prepare execution config
     authorized_tools = agent_config.get("authorized_tools", []) or []
@@ -2412,6 +2439,15 @@ async def run_agent(
         raw_connector_ids = list(
             _AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(agent_config.get("agent_type"), [])
         )
+    if not dispatch_connector_ids:
+        dispatch_connector_ids = raw_connector_ids
+    if dispatch_connector_ids:
+        async with get_tenant_session(tid) as session:
+            await _assert_connectors_ready_for_dispatch(
+                session,
+                tid,
+                list(dispatch_connector_ids),
+            )
     resolved_connector_config, resolved_connector_names = await _resolve_connector_configs(
         tenant_id=tenant_id,
         connector_ids=raw_connector_ids,

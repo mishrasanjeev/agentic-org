@@ -166,6 +166,7 @@ CA_PACK: dict[str, Any] = {
                 "zoho_books:get_vendor_details",
                 "zoho_books:create_journal_entry",
                 "zoho_books:create_tds_entry",
+                "zoho_books:list_chartofaccounts",
                 "zoho_books:update_bill",
                 "income_tax_india:calculate_tds",
                 "income_tax_india:map_tds_section",
