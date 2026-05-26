@@ -190,6 +190,7 @@ class TestTDSComplianceAgentTools:
         assert "zoho_books:get_vendor_details" in tools
         assert "zoho_books:create_journal_entry" in tools
         assert "zoho_books:create_tds_entry" in tools
+        assert "zoho_books:list_chartofaccounts" in tools
         assert "zoho_books:update_bill" in tools
         assert "income_tax_india:calculate_tds" in tools
         assert "income_tax_india:map_tds_section" in tools
@@ -210,7 +211,7 @@ class TestTDSComplianceAgentTools:
         from core.agents.packs.ca import CA_PACK
 
         tds_agent = next(a for a in CA_PACK["agents"] if a["name"] == "TDS Compliance Agent")
-        assert len(tds_agent["tools"]) == 24
+        assert len(tds_agent["tools"]) == 25
 
     def test_tds_compliance_agent_uses_canonical_26q_tool_only(self):
         from core.agents.packs.ca import CA_PACK

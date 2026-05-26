@@ -36,6 +36,7 @@ class ThresholdRule:
     severity: Severity
     description: str
     label_filters: dict[str, str] = field(default_factory=dict)
+    consecutive_violations: int = 1
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +112,28 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
         name="shadow_accuracy_low",
         metric_name="agenticorg_shadow_accuracy",
         operator="lt",
-        threshold=0.90,
+        threshold=0.70,
+        severity=Severity.CRITICAL,
+        description="Shadow accuracy below 70% for 3 consecutive samples",
+        consecutive_violations=3,
+    ),
+    ThresholdRule(
+        name="tool_success_rate_zero",
+        metric_name="agenticorg_tool_success_rate",
+        operator="lte",
+        threshold=0.0,
+        severity=Severity.CRITICAL,
+        description="Agent tool success rate is 0% for 5 consecutive runs",
+        consecutive_violations=5,
+    ),
+    ThresholdRule(
+        name="agent_confidence_all_low",
+        metric_name="agenticorg_agent_confidence_avg",
+        operator="lt",
+        threshold=0.40,
         severity=Severity.WARNING,
-        description="Shadow accuracy below floor",
+        description="Agent confidence below 40% for 5 consecutive runs",
+        consecutive_violations=5,
     ),
     ThresholdRule(
         name="replicas_at_max",
@@ -198,6 +218,7 @@ class AlertManager:
         self._slack_webhook_url = slack_webhook_url
         self._alert_email = alert_email or external_keys.hitl_notification_email
         self._fired: dict[str, _FiredAlert] = {}  # key = rule_name:label_hash
+        self._violation_counts: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Threshold checking
@@ -220,7 +241,10 @@ class AlertManager:
                 if rule.label_filters and not _labels_match(labels, rule.label_filters):
                     continue
 
+                cooldown_key = f"{rule.name}:{_label_hash(labels)}"
                 if _compare(value, rule.operator, rule.threshold):
+                    consecutive_count = self._violation_counts.get(cooldown_key, 0) + 1
+                    self._violation_counts[cooldown_key] = consecutive_count
                     violation = {
                         "rule": rule.name,
                         "metric": rule.metric_name,
@@ -230,12 +254,16 @@ class AlertManager:
                         "severity": rule.severity.value,
                         "description": rule.description,
                         "labels": labels,
+                        "consecutive_violations": consecutive_count,
+                        "required_consecutive_violations": rule.consecutive_violations,
                     }
                     violations.append(violation)
 
-                    # Fire alert if not in cooldown
-                    cooldown_key = f"{rule.name}:{_label_hash(labels)}"
-                    if self._should_fire(cooldown_key):
+                    # Fire alert only after the required consecutive run count.
+                    if (
+                        consecutive_count >= rule.consecutive_violations
+                        and self._should_fire(cooldown_key)
+                    ):
                         await self._dispatch_alert(rule, violation)
                         self._fired[cooldown_key] = _FiredAlert(
                             rule_name=rule.name,
@@ -243,6 +271,8 @@ class AlertManager:
                             value=value,
                             fired_at=time.monotonic(),
                         )
+                else:
+                    self._violation_counts[cooldown_key] = 0
 
         return violations
 

@@ -283,6 +283,73 @@ class ZohoBooksConnector(BaseConnector):
         if not self._org_id and self._client:
             await self._fetch_org_id_from_api()
 
+    @staticmethod
+    def _filter_params(params: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+        return {field: params[field] for field in fields if params.get(field) is not None}
+
+    @staticmethod
+    def _raise_for_zoho_error(data: Any, path: str) -> None:
+        """Raise on Zoho's HTTP-200 error envelope."""
+        if not isinstance(data, dict) or "code" not in data:
+            return
+        raw_code = data.get("code")
+        try:
+            code = int(raw_code or 0)
+        except (TypeError, ValueError):
+            code = 0 if str(raw_code).strip() in {"", "0"} else -1
+        if code == 0:
+            return
+        message = str(data.get("message") or "Unknown Zoho Books error")
+        raise RuntimeError(
+            f"Zoho Books {path} error {code}: {message}. "
+            "Credentials missing, expired, or not authorized. "
+            "Configure Zoho Books at Dashboard -> Connectors -> Zoho Books."
+        )
+
+    @staticmethod
+    def _runtime_error_from_http_status(exc: httpx.HTTPStatusError) -> RuntimeError:
+        response = exc.response
+        request = exc.request
+        try:
+            zoho_body = response.json()
+        except ValueError:
+            zoho_body = {}
+        if isinstance(zoho_body, dict):
+            zoho_code = zoho_body.get("code", "N/A")
+            zoho_message = zoho_body.get("message") or response.text[:200]
+        else:
+            zoho_code = "N/A"
+            zoho_message = response.text[:200]
+        return RuntimeError(
+            f"Zoho Books API error: HTTP {response.status_code} "
+            f"on {request.method} {request.url}. "
+            f"Zoho code: {zoho_code} - {zoho_message}"
+        )
+
+    @staticmethod
+    def _normalize_organization(org: dict[str, Any]) -> dict[str, Any]:
+        address = org.get("address") if isinstance(org.get("address"), dict) else {}
+        return {
+            **org,
+            "organization_id": org.get("organization_id"),
+            "name": org.get("name"),
+            "gstin": org.get("gstin") or org.get("gst_no"),
+            "pan_number": org.get("pan_number") or org.get("pan"),
+            "tan_number": org.get("tan_number") or org.get("tan"),
+            "fiscal_year_start_month": org.get("fiscal_year_start_month"),
+            "currency_code": org.get("currency_code"),
+            "time_zone": org.get("time_zone"),
+            "address": {
+                "address_line1": address.get("address_line1"),
+                "city": address.get("city"),
+                "state": address.get("state"),
+                "zip": address.get("zip"),
+                "country": address.get("country"),
+            },
+            "contact_name": org.get("contact_name"),
+            "phone": org.get("phone"),
+        }
+
     async def execute_tool(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
         """Execute tool with org_id pre-flight + automatic 401 retry.
 
@@ -294,7 +361,7 @@ class ZohoBooksConnector(BaseConnector):
             return await super().execute_tool(tool_name, params)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code != 401:
-                raise
+                raise self._runtime_error_from_http_status(exc) from exc
             logger.info("zoho_books_401_retry", tool=tool_name)
             await self._authenticate()
             if self._client:
@@ -304,7 +371,10 @@ class ZohoBooksConnector(BaseConnector):
                 timeout=self.timeout_ms / 1000,
                 headers=self._auth_headers,
             )
-            return await super().execute_tool(tool_name, params)
+            try:
+                return await super().execute_tool(tool_name, params)
+            except httpx.HTTPStatusError as retry_exc:
+                raise self._runtime_error_from_http_status(retry_exc) from retry_exc
 
     def _set_org_id(self, value: Any) -> None:
         org_id = _normalise_org_id(value)
@@ -379,13 +449,24 @@ class ZohoBooksConnector(BaseConnector):
 
     async def health_check(self) -> dict[str, Any]:
         """Verify connectivity by listing organizations."""
+        if not self._has_credentials():
+            return {
+                "status": "not_configured",
+                "reason": "No Zoho Books OAuth credentials configured",
+            }
         try:
             data = await self._get("/organizations")
             orgs = data.get("organizations", [])
+            if not orgs:
+                return {
+                    "status": "unhealthy",
+                    "organizations": 0,
+                    "error": "no_organizations",
+                }
             return {"status": "healthy", "organizations": len(orgs)}
         # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
-            return {"status": "unhealthy", "error": type(e).__name__}
+            return {"status": "unhealthy", "error": type(e).__name__, "message": str(e)}
 
     # ── Invoices ───────────────────────────────────────────────────────
 
@@ -453,8 +534,10 @@ class ZohoBooksConnector(BaseConnector):
                 qp[field] = params[field]
         data = await self._get("/bills", params=self._org_params(qp, source_params=params))
         bills = self._unwrap(data, "bills")
+        bill_list = bills if isinstance(bills, list) else []
         return {
-            "bills": bills if isinstance(bills, list) else [],
+            "bills": bill_list,
+            "vendor_bills": bill_list,
             "page_context": data.get("page_context", {}),
         }
 
@@ -464,7 +547,8 @@ class ZohoBooksConnector(BaseConnector):
         if not bill_id:
             return {"error": "bill_id is required"}
         data = await self._get(f"/bills/{bill_id}", params=self._org_params(source_params=params))
-        return self._unwrap(data, "bill")
+        bill = self._unwrap(data, "bill")
+        return {"bill": bill, **bill} if isinstance(bill, dict) else {"bill": bill}
 
     async def get_purchase_invoices(self, **params) -> dict[str, Any]:
         """Alias for list_vendor_bills used by accounting agents."""
@@ -492,8 +576,10 @@ class ZohoBooksConnector(BaseConnector):
                 qp[field] = params[field]
         data = await self._get("/expenses", params=self._org_params(qp, source_params=params))
         expenses = self._unwrap(data, "expenses")
+        expense_list = expenses if isinstance(expenses, list) else []
         return {
-            "expenses": expenses if isinstance(expenses, list) else [],
+            "expenses": expense_list,
+            "expense_transactions": expense_list,
             "page_context": data.get("page_context", {}),
         }
 
@@ -534,6 +620,8 @@ class ZohoBooksConnector(BaseConnector):
         bills = await self.list_vendor_bills(**query)
         return {
             "payables": bills.get("bills", []),
+            "vendor_payables": bills.get("bills", []),
+            **bills,
             "page_context": bills.get("page_context", {}),
         }
 
@@ -562,21 +650,37 @@ class ZohoBooksConnector(BaseConnector):
             f"/contacts/{vendor_id}",
             params=self._org_params(source_params=params),
         )
-        return self._unwrap(data, "contact")
+        contact = self._unwrap(data, "contact")
+        if isinstance(contact, dict):
+            return {"vendor": contact, "contact": contact, **contact}
+        return {"vendor": contact, "contact": contact}
 
     async def create_journal_entry(self, **params) -> dict[str, Any]:
         """Create a Zoho Books journal entry.
 
-        Required: date, line_items. Optional: notes, reference_number.
+        Required: journal_date/date, line_items. Optional: notes, reference_number.
         """
-        if not params.get("date"):
-            return {"error": "date is required"}
-        line_items = params.get("line_items") or params.get("journal_line_items")
-        if not line_items:
+        journal_date = params.get("journal_date") or params.get("date")
+        if not journal_date:
+            return {"error": "journal_date is required"}
+        line_items = (
+            params.get("line_items")
+            or params.get("journal_line_items")
+            or params.get("journal_lines")
+        )
+        if not isinstance(line_items, list) or not line_items:
             return {"error": "line_items is required"}
-        body: dict[str, Any] = {"date": params["date"], "line_items": line_items}
-        for field in ("notes", "reference_number"):
-            if params.get(field):
+        body: dict[str, Any] = {"journal_date": journal_date, "line_items": line_items}
+        for field in (
+            "notes",
+            "reference_number",
+            "journal_type",
+            "currency_id",
+            "exchange_rate",
+            "custom_fields",
+            "tags",
+        ):
+            if params.get(field) is not None:
                 body[field] = params[field]
         data = await self._post(
             "/journals",
@@ -587,20 +691,20 @@ class ZohoBooksConnector(BaseConnector):
 
     async def create_tds_entry(self, **params) -> dict[str, Any]:
         """Create a TDS accounting journal entry."""
-        if params.get("line_items") or params.get("journal_line_items"):
+        if params.get("line_items") or params.get("journal_line_items") or params.get("journal_lines"):
             return await self.create_journal_entry(**params)
-        for required in (
-            "date",
-            "expense_account_id",
-            "vendor_account_id",
-            "tds_payable_account_id",
-            "amount",
-            "tds_amount",
-        ):
+        journal_date = params.get("journal_date") or params.get("date")
+        if not journal_date:
+            return {"error": "journal_date is required"}
+        for required in ("expense_account_id", "vendor_account_id", "tds_payable_account_id"):
             if params.get(required) in (None, ""):
                 return {"error": f"{required} is required"}
+        if params.get("amount") in (None, "") and params.get("gross_amount") in (None, ""):
+            return {"error": "amount is required"}
+        if params.get("tds_amount") in (None, ""):
+            return {"error": "tds_amount is required"}
         try:
-            gross_amount = float(params["amount"])
+            gross_amount = float(params.get("gross_amount") or params["amount"])
             tds_amount = float(params["tds_amount"])
         except (TypeError, ValueError):
             return {"error": "amount and tds_amount must be numeric"}
@@ -616,6 +720,7 @@ class ZohoBooksConnector(BaseConnector):
             },
             {
                 "account_id": params["vendor_account_id"],
+                **({"customer_id": params["vendor_id"]} if params.get("vendor_id") else {}),
                 "debit_or_credit": "credit",
                 "amount": vendor_credit,
                 "description": params.get("vendor_description", "Vendor net payable"),
@@ -628,7 +733,7 @@ class ZohoBooksConnector(BaseConnector):
             },
         ]
         return await self.create_journal_entry(
-            date=params["date"],
+            journal_date=journal_date,
             line_items=line_items,
             notes=params.get("notes") or "TDS deduction entry",
             reference_number=params.get("reference_number"),
@@ -729,35 +834,16 @@ class ZohoBooksConnector(BaseConnector):
                 qp[field] = params[field]
 
         if self.config.get("region") == "in" or self.base_url == _ZOHO_IN_BASE:
-            # Zoho Books India does not expose /reports/gstsummary on the
-            # regional API host. Build a read-only GST data slice from the
-            # supported invoices endpoint instead of advertising a tool that
-            # deterministically 404s for India tenants.
-            invoice_qp = {
-                "date_start": qp.get("from_date"),
-                "date_end": qp.get("to_date"),
-                "page": params.get("page"),
-            }
-            invoice_data = await self.list_invoices(
-                **{
-                    **{k: v for k, v in invoice_qp.items() if v is not None},
-                    **self._copy_org_aliases(params),
-                }
+            raise RuntimeError(
+                "GST reports (GSTR-1, GSTR-3B, GSTR-2A) are not available "
+                "via the Zoho Books India /reports/gstsummary endpoint. "
+                "Use the GSTN connector for statutory GST reports; use "
+                "list_invoices only when you explicitly need invoice source data."
             )
-            return {
-                "gst_summary": {
-                    "source": "invoices",
-                    "region": "in",
-                    "gstin": qp.get("gstin"),
-                    "from_date": qp.get("from_date"),
-                    "to_date": qp.get("to_date"),
-                    "invoices": invoice_data.get("invoices", []),
-                    "page_context": invoice_data.get("page_context", {}),
-                }
-            }
-        data = await self._get("/reports/gstsummary", params=self._org_params(
-            qp, source_params=params
-        ))
+        data = await self._get(
+            "/reports/gstsummary",
+            params=self._org_params(qp, source_params=params),
+        )
         return self._unwrap(data, "gst_summary")
 
     async def calculate_tds(self, **params) -> dict[str, Any]:
@@ -811,17 +897,33 @@ class ZohoBooksConnector(BaseConnector):
         If a caller supplies organization_id, the connector records that
         as the active org for later calls in the same session.
         """
-        query = self._org_params(source_params=params) if self._copy_org_aliases(params) else None
-        data = await super()._get("/organizations", query)
+        data = await super()._get("/organizations")
+        self._raise_for_zoho_error(data, "/organizations")
         orgs = data.get("organizations", []) if isinstance(data, dict) else []
         if not orgs:
-            return {"organizations": []}
+            raise RuntimeError(
+                "Zoho Books returned no organizations. Ensure access_token, "
+                "refresh_token, client_id, client_secret, and organization_id "
+                "are configured."
+            )
         explicit_org_id, _source = self._org_id_from_params(params)
         if explicit_org_id:
             self._set_org_id(explicit_org_id)
+        selected_org_id = explicit_org_id or self._org_id
+        if selected_org_id:
+            orgs = [
+                org
+                for org in orgs
+                if str(org.get("organization_id") or "") == str(selected_org_id)
+            ]
+            if not orgs:
+                raise RuntimeError(
+                    f"Zoho Books organization_id {selected_org_id} was not found "
+                    "in the authenticated account."
+                )
         elif not self._org_id:
             self._set_org_id(orgs[0].get("organization_id"))
-        return {"organizations": orgs}
+        return {"organizations": [self._normalize_organization(orgs[0])]}
 
     # ── Chart of Accounts ──────────────────────────────────────────────
 
@@ -932,7 +1034,9 @@ class ZohoBooksConnector(BaseConnector):
                 if org_id:
                     query["organization_id"] = org_id
                     self._set_org_id(org_id)
-        return await super()._get(path, query or None)
+        data = await super()._get(path, query or None)
+        self._raise_for_zoho_error(data, path)
+        return data
 
     async def _post(
         self,
@@ -953,7 +1057,9 @@ class ZohoBooksConnector(BaseConnector):
             params=query,
         )
         resp.raise_for_status()
-        return resp.json()
+        body = resp.json()
+        self._raise_for_zoho_error(body, path)
+        return body
 
     async def _put(
         self,
@@ -971,4 +1077,6 @@ class ZohoBooksConnector(BaseConnector):
             params=query,
         )
         resp.raise_for_status()
-        return resp.json()
+        body = resp.json()
+        self._raise_for_zoho_error(body, path)
+        return body

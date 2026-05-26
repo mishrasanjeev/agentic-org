@@ -45,6 +45,11 @@ confidence_avg = Gauge(
     "Average confidence score",
     ["agent_type"],
 )
+tool_success_rate = Gauge(
+    "agenticorg_tool_success_rate",
+    "Tool success rate observed during agent runs",
+    ["agent_type"],
+)
 shadow_accuracy = Gauge(
     "agenticorg_shadow_accuracy",
     "Shadow comparison accuracy",

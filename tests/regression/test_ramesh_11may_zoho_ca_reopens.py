@@ -30,6 +30,16 @@ def test_zoho_books_india_url_overrides_invalid_db_base_url() -> None:
     assert connector.config["token_url"] == _ZOHO_IN_TOKEN_URL
 
 
+def test_provider_registry_zoho_india_url_matches_runtime_books_host() -> None:
+    from core.connectors.provider_registry import get_provider
+
+    provider = get_provider("zoho_books")
+    assert provider is not None
+    assert provider.urls_for({"region": "in"})["api_base_url"] == (
+        "https://books.zoho.in/api/v3"
+    )
+
+
 @pytest.mark.asyncio
 async def test_zoho_reconcile_transaction_uses_match_endpoint() -> None:
     from connectors.finance.zoho_books import ZohoBooksConnector
