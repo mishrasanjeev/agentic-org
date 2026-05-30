@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 # Zoho API regions
 _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
-_ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
+_ZOHO_IN_BASE = "https://www.zohoapis.in/books/v3"
 _ZOHO_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
 _ZOHO_IN_TOKEN_URL = "https://accounts.zoho.in/oauth/v2/token"
 _ZOHO_BASE_URLS = {
@@ -128,6 +128,9 @@ class ZohoBooksConnector(BaseConnector):
         "record_expense",
         "get_vendor_payables",
         "list_vendors",
+        "create_vendor",
+        "create_item",
+        "create_bill",
         "get_vendor_details",
         "create_journal_entry",
         "create_tds_entry",
@@ -170,6 +173,9 @@ class ZohoBooksConnector(BaseConnector):
         self._tool_registry["record_expense"] = self.record_expense
         self._tool_registry["get_vendor_payables"] = self.get_vendor_payables
         self._tool_registry["list_vendors"] = self.list_vendors
+        self._tool_registry["create_vendor"] = self.create_vendor
+        self._tool_registry["create_item"] = self.create_item
+        self._tool_registry["create_bill"] = self.create_bill
         self._tool_registry["get_vendor_details"] = self.get_vendor_details
         self._tool_registry["create_journal_entry"] = self.create_journal_entry
         self._tool_registry["create_tds_entry"] = self.create_tds_entry
@@ -628,10 +634,10 @@ class ZohoBooksConnector(BaseConnector):
     async def list_vendors(self, **params) -> dict[str, Any]:
         """List vendor contacts, including PAN/GST fields where Zoho returns them.
 
-        Optional: search_text, page.
+        Optional: search_text, status, page.
         """
         qp: dict[str, Any] = {"contact_type": "vendor"}
-        for field in ("search_text", "page"):
+        for field in ("search_text", "status", "page"):
             if params.get(field):
                 qp[field] = params[field]
         data = await self._get("/contacts", params=self._org_params(qp, source_params=params))
@@ -640,6 +646,121 @@ class ZohoBooksConnector(BaseConnector):
             "vendors": contacts if isinstance(contacts, list) else [],
             "page_context": data.get("page_context", {}),
         }
+
+    async def create_vendor(self, **params) -> dict[str, Any]:
+        """Create a vendor contact in Zoho Books."""
+        contact_name = (
+            params.get("contact_name")
+            or params.get("vendor_name")
+            or params.get("name")
+            or params.get("company_name")
+        )
+        if not contact_name:
+            return {"error": "contact_name or vendor_name is required"}
+
+        body: dict[str, Any] = {
+            "contact_name": contact_name,
+            "contact_type": "vendor",
+        }
+        for field in (
+            "company_name",
+            "website",
+            "gst_no",
+            "gst_treatment",
+            "place_of_contact",
+            "billing_address",
+            "shipping_address",
+        ):
+            if params.get(field) is not None:
+                body[field] = params[field]
+
+        contact_persons = params.get("contact_persons")
+        if isinstance(contact_persons, list) and contact_persons:
+            body["contact_persons"] = contact_persons
+        else:
+            person: dict[str, Any] = {}
+            for src, dest in (
+                ("first_name", "first_name"),
+                ("last_name", "last_name"),
+                ("email", "email"),
+                ("phone", "phone"),
+                ("mobile", "mobile"),
+            ):
+                if params.get(src):
+                    person[dest] = params[src]
+            if person:
+                body["contact_persons"] = [person]
+
+        data = await self._post(
+            "/contacts",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
+        return self._unwrap(data, "contact")
+
+    async def create_item(self, **params) -> dict[str, Any]:
+        """Create an item in Zoho Books."""
+        item_name = params.get("name") or params.get("item_name")
+        if not item_name:
+            return {"error": "name or item_name is required"}
+        if params.get("rate") is None:
+            return {"error": "rate is required"}
+
+        body: dict[str, Any] = {
+            "name": item_name,
+            "rate": params["rate"],
+        }
+        for field in (
+            "description",
+            "sku",
+            "purchase_rate",
+            "vendor_id",
+            "account_id",
+            "purchase_account_id",
+            "item_type",
+            "product_type",
+            "hsn_or_sac",
+        ):
+            if params.get(field) is not None:
+                body[field] = params[field]
+
+        data = await self._post(
+            "/items",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
+        return self._unwrap(data, "item")
+
+    async def create_bill(self, **params) -> dict[str, Any]:
+        """Create a vendor bill in Zoho Books."""
+        vendor_id = params.get("vendor_id")
+        if not vendor_id:
+            return {"error": "vendor_id is required"}
+        line_items = params.get("line_items")
+        if not line_items:
+            return {"error": "line_items is required"}
+
+        body: dict[str, Any] = {
+            "vendor_id": vendor_id,
+            "line_items": line_items,
+        }
+        for field in (
+            "bill_number",
+            "date",
+            "due_date",
+            "reference_number",
+            "notes",
+            "payment_terms",
+        ):
+            if params.get(field) is not None:
+                body[field] = params[field]
+
+        data = await self._post(
+            "/bills",
+            data=body,
+            params=self._org_params(source_params=params),
+        )
+        return self._unwrap(data, "bill")
 
     async def get_vendor_details(self, **params) -> dict[str, Any]:
         """Fetch one vendor/contact master record."""

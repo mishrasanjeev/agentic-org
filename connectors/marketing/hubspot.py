@@ -13,6 +13,57 @@ from connectors.framework.base_connector import BaseConnector
 logger = structlog.get_logger()
 
 
+_CONTACT_FIELDS = {
+    "email",
+    "firstname",
+    "lastname",
+    "company",
+    "phone",
+    "jobtitle",
+    "website",
+    "lifecyclestage",
+    "hs_lead_status",
+    "hubspot_owner_id",
+}
+_DEAL_FIELDS = {
+    "dealname",
+    "amount",
+    "dealstage",
+    "pipeline",
+    "closedate",
+    "hubspot_owner_id",
+}
+_COMPANY_FIELDS = {
+    "name",
+    "domain",
+    "industry",
+    "phone",
+    "city",
+    "numberofemployees",
+    "hubspot_owner_id",
+}
+
+
+def _non_empty(value: Any) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _valid_email(value: Any) -> bool:
+    text = str(value or "").strip()
+    return "@" in text and "." in text.rsplit("@", 1)[-1]
+
+
+def _merge_properties(params: dict[str, Any], allowed_fields: set[str]) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    native = params.get("properties")
+    if isinstance(native, dict):
+        properties.update({str(k): v for k, v in native.items() if v is not None})
+    for field in allowed_fields:
+        if params.get(field) is not None:
+            properties[field] = params[field]
+    return properties
+
+
 class HubspotConnector(BaseConnector):
     name = "hubspot"
     category = "marketing"
@@ -26,6 +77,8 @@ class HubspotConnector(BaseConnector):
         "get_contact",
         "update_contact",
         "delete_contact",
+        "assign_contact_owner",
+        "associate_contact_to_company",
         "list_deals",
         "search_deals",
         "create_deal",
@@ -48,6 +101,7 @@ class HubspotConnector(BaseConnector):
         "list_notes",
         "create_note",
         "validate_crm_access",
+        "list_owners",
         "get_campaign_analytics",
     ]
 
@@ -59,6 +113,8 @@ class HubspotConnector(BaseConnector):
         self._tool_registry["get_contact"] = self.get_contact
         self._tool_registry["update_contact"] = self.update_contact
         self._tool_registry["delete_contact"] = self.delete_contact
+        self._tool_registry["assign_contact_owner"] = self.assign_contact_owner
+        self._tool_registry["associate_contact_to_company"] = self.associate_contact_to_company
         # Deals
         self._tool_registry["list_deals"] = self.list_deals
         self._tool_registry["search_deals"] = self.search_deals
@@ -85,6 +141,7 @@ class HubspotConnector(BaseConnector):
         self._tool_registry["list_notes"] = self.list_notes
         self._tool_registry["create_note"] = self.create_note
         self._tool_registry["validate_crm_access"] = self.validate_crm_access
+        self._tool_registry["list_owners"] = self.list_owners
         # Analytics
         self._tool_registry["get_campaign_analytics"] = self.get_campaign_analytics
 
@@ -301,13 +358,14 @@ class HubspotConnector(BaseConnector):
         )
 
     async def create_contact(self, **params) -> dict[str, Any]:
-        """Create a new contact."""
-        properties: dict[str, Any] = {}
-        for field in ("email", "firstname", "lastname", "company", "phone", "jobtitle", "website"):
-            if params.get(field):
-                properties[field] = params[field]
-        if not properties.get("email"):
-            return {"error": "email is required"}
+        """Create a new contact.
+
+        Accepts both wrapper-friendly direct fields and HubSpot-native
+        {"properties": {...}} payloads.
+        """
+        properties = _merge_properties(params, _CONTACT_FIELDS)
+        if not _valid_email(properties.get("email")):
+            return {"error": "HubSpot create_contact requires properties.email or email."}
         return await self._post("/crm/v3/objects/contacts", {"properties": properties})
 
     async def update_contact(self, **params) -> dict[str, Any]:
@@ -315,17 +373,45 @@ class HubspotConnector(BaseConnector):
         contact_id = params.get("contact_id") or params.get("id")
         if not contact_id:
             return {"error": "contact_id is required"}
-        properties = {
-            k: v
-            for k, v in params.items()
-            if k not in {"contact_id", "id"} and v is not None
-        }
+        properties = _merge_properties(params, _CONTACT_FIELDS)
         return await self._patch(f"/crm/v3/objects/contacts/{contact_id}", {"properties": properties})
 
     async def delete_contact(self, **params) -> dict[str, Any]:
         """Delete a contact by ID."""
         contact_id = params.get("contact_id") or params.get("id")
         return await self._delete_object("contacts", contact_id)
+
+    async def assign_contact_owner(self, **params) -> dict[str, Any]:
+        """Assign a HubSpot owner to a contact."""
+        contact_id = params.get("contact_id") or params.get("id")
+        owner_id = params.get("owner_id") or params.get("hubspot_owner_id")
+        if not contact_id:
+            return {"error": "contact_id is required"}
+        if not owner_id:
+            return {"error": "owner_id or hubspot_owner_id is required"}
+        return await self._patch(
+            f"/crm/v3/objects/contacts/{contact_id}",
+            {"properties": {"hubspot_owner_id": str(owner_id)}},
+        )
+
+    async def associate_contact_to_company(self, **params) -> dict[str, Any]:
+        """Associate a contact to a company using HubSpot's default association."""
+        contact_id = params.get("contact_id") or params.get("from_id")
+        company_id = params.get("company_id") or params.get("to_id")
+        if not contact_id:
+            return {"error": "contact_id is required"}
+        if not company_id:
+            return {"error": "company_id is required"}
+        data = await self._request_json(
+            "PUT",
+            f"/crm/v4/objects/contacts/{contact_id}/associations/default/companies/{company_id}",
+        )
+        return {
+            "status": "associated",
+            "contact_id": str(contact_id),
+            "company_id": str(company_id),
+            "response": data,
+        }
 
     # ── Deals ───────────────────────────────────────────────────────────
 
@@ -380,16 +466,12 @@ class HubspotConnector(BaseConnector):
 
     async def create_deal(self, **params) -> dict[str, Any]:
         """Create a new deal in the pipeline."""
-        properties: dict[str, Any] = {
-            "dealname": params.get("dealname", ""),
-            "pipeline": params.get("pipeline", "default"),
-            "dealstage": params.get("dealstage", "appointmentscheduled"),
-        }
-        if params.get("amount"):
+        properties = _merge_properties(params, _DEAL_FIELDS)
+        properties.setdefault("pipeline", "default")
+        properties.setdefault("dealstage", "appointmentscheduled")
+        if params.get("amount") is not None:
             properties["amount"] = str(params["amount"])
-        if params.get("closedate"):
-            properties["closedate"] = params["closedate"]
-        if not properties["dealname"]:
+        if not _non_empty(properties.get("dealname")):
             return {"error": "dealname is required"}
         return await self._post("/crm/v3/objects/deals", {"properties": properties})
 
@@ -398,7 +480,9 @@ class HubspotConnector(BaseConnector):
         deal_id = params.get("deal_id", "")
         if not deal_id:
             return {"error": "deal_id is required"}
-        properties = {k: v for k, v in params.items() if k not in {"deal_id", "id"} and v is not None}
+        properties = _merge_properties(params, _DEAL_FIELDS)
+        if "amount" in properties:
+            properties["amount"] = str(properties["amount"])
         return await self._patch(f"/crm/v3/objects/deals/{deal_id}", {"properties": properties})
 
     async def delete_deal(self, **params) -> dict[str, Any]:
@@ -473,11 +557,8 @@ class HubspotConnector(BaseConnector):
 
     async def create_company(self, **params) -> dict[str, Any]:
         """Create a company."""
-        properties: dict[str, Any] = {}
-        for field in ("name", "domain", "industry", "phone", "city", "numberofemployees"):
-            if params.get(field):
-                properties[field] = params[field]
-        if not properties.get("name"):
+        properties = _merge_properties(params, _COMPANY_FIELDS)
+        if not _non_empty(properties.get("name")):
             return {"error": "name is required"}
         return await self._post("/crm/v3/objects/companies", {"properties": properties})
 
@@ -512,11 +593,7 @@ class HubspotConnector(BaseConnector):
         company_id = params.get("company_id") or params.get("id")
         if not company_id:
             return {"error": "company_id is required"}
-        properties = {
-            k: v
-            for k, v in params.items()
-            if k not in {"company_id", "id"} and v is not None
-        }
+        properties = _merge_properties(params, _COMPANY_FIELDS)
         return await self._patch(
             f"/crm/v3/objects/companies/{company_id}",
             {"properties": properties},
@@ -674,6 +751,17 @@ class HubspotConnector(BaseConnector):
                 }
         ready = all(row.get("status") == "ready" for row in checks.values())
         return {"status": "healthy" if ready else "unhealthy", "objects": checks}
+
+    async def list_owners(self, **params) -> dict[str, Any]:
+        """List HubSpot owners for owner assignment workflows."""
+        query: dict[str, Any] = {"limit": params.get("limit", 100)}
+        if params.get("after"):
+            query["after"] = params["after"]
+        data = await self._get("/crm/v3/owners", params=query)
+        return {
+            "owners": data.get("results", []),
+            "paging": data.get("paging", {}),
+        }
 
     # ── Analytics ───────────────────────────────────────────────────────
 

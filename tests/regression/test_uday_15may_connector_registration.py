@@ -68,7 +68,7 @@ def test_zoho_runtime_uses_fixed_region_endpoints_not_user_token_url() -> None:
         }
     )
 
-    assert connector.base_url == "https://books.zoho.in/api/v3"
+    assert connector.base_url == "https://www.zohoapis.in/books/v3"
     assert connector.config["token_url"] == "https://accounts.zoho.in/oauth/v2/token"
 
 

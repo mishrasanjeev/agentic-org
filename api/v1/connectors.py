@@ -134,7 +134,7 @@ class CMOVendorSandboxConnectorInput(BaseModel):
 class CMOVendorSandboxConnectorsRequest(BaseModel):
     connectors: dict[str, CMOVendorSandboxConnectorInput] = Field(default_factory=dict)
 
-_ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
+_ZOHO_IN_BASE = "https://www.zohoapis.in/books/v3"
 _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
 _ZOHO_API_BASE_URLS = {
     "in": _ZOHO_IN_BASE,

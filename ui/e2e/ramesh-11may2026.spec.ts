@@ -5,6 +5,9 @@ const zohoTools = [
   "list_invoices",
   "list_overdue_invoices",
   "list_vendors",
+  "create_vendor",
+  "create_item",
+  "create_bill",
   "get_vendor_details",
   "record_expense",
   "list_expense_transactions",
@@ -53,7 +56,7 @@ async function installRoutes(page: Page) {
 
     if (path.endsWith("/product-facts")) {
       await route.fulfill({
-        json: { version: "test", connector_count: 1, agent_count: 1, tool_count: 28 },
+        json: { version: "test", connector_count: 1, agent_count: 1, tool_count: 31 },
       });
       return;
     }
@@ -118,7 +121,7 @@ async function installRoutes(page: Page) {
           name: "zoho_books",
           category: "finance",
           description: "Zoho Books",
-          base_url: "https://books.zoho.in/api/v3",
+          base_url: "https://www.zohoapis.in/books/v3",
           auth_type: "oauth2",
           tool_functions: zohoTools,
           data_schema_ref: null,
@@ -168,8 +171,8 @@ test.describe("Ramesh 11 May 2026 CA/Zoho regressions", () => {
     await installRoutes(page);
 
     await page.goto(`${baseURL}/dashboard/connectors/zoho-1`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main")).toContainText("https://books.zoho.in/api/v3");
-    await expect(page.locator("main")).toContainText("Registered Tools (28)");
+    await expect(page.locator("main")).toContainText("https://www.zohoapis.in/books/v3");
+    await expect(page.locator("main")).toContainText("Registered Tools (31)");
     await expect(page.locator("main")).toContainText("get_trial_balance");
     await expect(page.locator("main")).toContainText("reconcile_transaction");
     await expect(page.locator("main")).toContainText("create_tds_entry");
