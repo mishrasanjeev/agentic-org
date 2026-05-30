@@ -24,6 +24,16 @@ DEFAULT_TOOLS = [
 
     'create_contact',
 
+    'update_contact',
+
+    'delete_contact',
+
+    'assign_contact_owner',
+
+    'associate_contact_to_company',
+
+    'list_owners',
+
 ]
 
 

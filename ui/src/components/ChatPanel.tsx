@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import api from "../lib/api";
+import api, { extractApiError } from "../lib/api";
 
 interface Message {
   id: string;
@@ -196,11 +196,11 @@ export default function ChatPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);
-    } catch {
+    } catch (err) {
       const errMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        text: "Sorry, something went wrong. Please try again.",
+        text: extractApiError(err, "Sorry, something went wrong. Please try again."),
         agent: "System",
         timestamp: new Date(),
       };
@@ -229,8 +229,13 @@ export default function ChatPanel({
 
       {/* Panel */}
       <div
+        role="dialog"
+        aria-label={agentName ? `Chat with ${agentName}` : agentId ? "Agent Chat" : "Ask Anything"}
+        aria-modal={open ? "true" : undefined}
+        aria-hidden={!open}
+        inert={open ? undefined : true}
         className={`fixed top-0 right-0 h-full w-full sm:w-[420px] bg-slate-900 border-l border-slate-700 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}
       >
         {/* Header */}
@@ -324,8 +329,8 @@ export default function ChatPanel({
         </div>
 
         {/* Input */}
-        <div className="border-t border-slate-700 p-3">
-          <div className="flex gap-2">
+        <div className="shrink-0 border-t border-slate-700 bg-slate-900 p-3">
+          <div className="flex min-w-0 items-center gap-2">
             <input
               ref={inputRef}
               type="text"
@@ -334,12 +339,12 @@ export default function ChatPanel({
               onKeyDown={handleKeyDown}
               placeholder="Type a message..."
               disabled={sending}
-              className="flex-1 h-9 rounded-lg border border-slate-700 bg-slate-800/50 px-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800/50 px-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
             />
             <button
               onClick={sendMessage}
               disabled={sending || !input.trim()}
-              className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="h-9 min-w-[56px] shrink-0 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Send
             </button>

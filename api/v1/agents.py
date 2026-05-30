@@ -52,6 +52,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "ap_processor": [
         "fetch_bank_statement", "check_account_balance",
         "post_voucher", "get_ledger_balance", "get_trial_balance",
+        "list_vendors", "create_vendor", "create_item", "create_bill",
         "create_order", "check_order_status",
     ],
     "ar_collections": [
@@ -90,7 +91,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_balance", "get_balance_sheet", "get_cash_position",
     ],
     "expense_manager": [
-        "record_expense", "create_ap_invoice",
+        "record_expense", "create_bill", "list_vendors", "create_vendor",
+        "create_ap_invoice",
         "check_order_status", "list_invoices", "get_profit_loss",
     ],
     "rev_rec": [
@@ -145,6 +147,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "crm_intelligence": [
         "list_contacts", "search_contacts", "list_deals",
         "get_deal", "get_campaign_analytics", "create_contact",
+        "update_contact", "delete_contact", "assign_contact_owner",
+        "associate_contact_to_company", "list_owners",
     ],
     "brand_monitor": [
         "get_post_analytics", "get_campaign_performance",
@@ -230,7 +234,7 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "commerce": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "finance": [
         "fetch_bank_statement", "create_payment_intent",
-        "get_balance", "list_invoices",
+        "get_balance", "list_invoices", "list_vendors", "create_bill",
     ],
     "hr": [
         "get_employee", "create_employee",

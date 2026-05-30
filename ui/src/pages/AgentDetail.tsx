@@ -71,6 +71,75 @@ function isMeaningfulRunTask(value: string): boolean {
   return task.length >= 3 && /\p{L}/u.test(task);
 }
 
+function normalizeResultText(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return normalizeResultText(parsed) || trimmed;
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferred = record.message || record.error || record.detail || record.reason;
+    if (preferred) return String(preferred);
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function firstToolFailureMessage(run: unknown): string {
+  const toolCalls = (run as { tool_calls?: unknown })?.tool_calls;
+  if (!Array.isArray(toolCalls)) return "";
+  for (const call of toolCalls) {
+    if (!call || typeof call !== "object") continue;
+    const record = call as Record<string, unknown>;
+    const status = String(record.status || "").toLowerCase();
+    const result = record.result;
+    const parsedResult =
+      typeof result === "string" && result.trim().startsWith("{")
+        ? (() => {
+            try {
+              return JSON.parse(result);
+            } catch {
+              return result;
+            }
+          })()
+        : result;
+    const hasError =
+      status === "error" ||
+      status === "failed" ||
+      Boolean(record.error) ||
+      Boolean(parsedResult && typeof parsedResult === "object" && (parsedResult as Record<string, unknown>).error);
+    if (!hasError) continue;
+    const tool = String(record.tool || "tool");
+    const message = normalizeResultText(record.error || parsedResult || result);
+    return message ? `${tool}: ${message}` : `${tool} failed.`;
+  }
+  return "";
+}
+
+export function formatRunResult(run: unknown): string {
+  const record = (run || {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (record.error) parts.push(`Error: ${normalizeResultText(record.error)}`);
+  const toolFailure = firstToolFailureMessage(run);
+  if (toolFailure) parts.push(`Tool failure: ${toolFailure}`);
+  if (record.output != null && record.output !== "") {
+    parts.push(formatRunOutput(record.output));
+  }
+  return parts.filter(Boolean).join("\n\n") || "No output returned.";
+}
+
 function formatRunOutput(output: unknown): string {
   if (output == null || output === "") return "No output returned.";
   if (typeof output === "string") return output;
@@ -205,7 +274,13 @@ export default function AgentDetail() {
         inputs: { task },
       });
       setRunResult(data);
-      setActionNotice(`Agent run ${data?.status || "completed"}.`);
+      const runStatus = data?.status || "completed";
+      const failureMessage = runStatus === "failed" ? (data?.error || firstToolFailureMessage(data)) : "";
+      if (failureMessage) {
+        setActionError(`Agent run failed: ${failureMessage}`);
+      } else {
+        setActionNotice(`Agent run ${runStatus}.`);
+      }
       void fetchAgent(true);
     } catch (err: any) {
       setActionError(errorDetailToMessage(err, "Run failed"));
@@ -344,7 +419,7 @@ export default function AgentDetail() {
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-sm font-semibold">Run Result</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant={runResult.status === "completed" ? "success" : "secondary"}>
+                <Badge variant={runResult.status === "completed" ? "success" : runResult.status === "failed" ? "destructive" : "secondary"}>
                   {runResult.status || "completed"}
                 </Badge>
                 {runResult.confidence != null && (
@@ -357,7 +432,7 @@ export default function AgentDetail() {
           </CardHeader>
           <CardContent>
             <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
-              {formatRunOutput(runResult.output)}
+              {formatRunResult(runResult)}
             </pre>
           </CardContent>
         </Card>

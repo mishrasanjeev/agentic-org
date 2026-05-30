@@ -10,6 +10,9 @@ from core.langgraph.runner import run_agent
 
 DEFAULT_TOOLS = [
     "record_expense",
+    "create_bill",
+    "list_vendors",
+    "create_vendor",
     "create_ap_invoice",
     "check_order_status",
     "list_invoices",
