@@ -3,6 +3,11 @@
 This document explains what AgenticOrg must provide so merchants can safely join
 agentic commerce through Grantex.
 
+The consolidated cross-repo PRD lives in the Grantex repo at
+`docs/guides/commerce-v1-agentic-commerce-prd.md`. This AgenticOrg PRD is the
+buyer-agent implementation companion and must stay aligned with that canonical
+source.
+
 AgenticOrg is not the merchant system of record. It is the buyer-agent and
 workflow layer. It helps users discover products, compare options, draft carts,
 request consent, and follow checkout/order status only through Grantex-approved

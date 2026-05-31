@@ -5,6 +5,10 @@ commerce journey in plain English. It is documentation only. It does not enable
 public discovery, production Commerce V1, checkout/payment creation, live
 payments, live Plural, merchant approval, or any production allowlist.
 
+The consolidated cross-repo PRD is maintained in the Grantex repo at
+`docs/guides/commerce-v1-agentic-commerce-prd.md`. This document is the
+AgenticOrg buyer-agent companion view of that PRD.
+
 ## The Simple Mental Model
 
 AgenticOrg is the buyer-agent layer. A buyer can start from a familiar chat

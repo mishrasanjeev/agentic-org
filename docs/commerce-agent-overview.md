@@ -14,6 +14,11 @@ For the full implementation gap plan, read
 PRD maps the current AgenticOrg implementation to the merchant self-serve gaps
 that Grantex must close before real merchant launch.
 
+The consolidated cross-repo PRD is maintained in the Grantex repo at
+`docs/guides/commerce-v1-agentic-commerce-prd.md`. AgenticOrg docs should treat
+that file as the product source of truth and this repo's docs as the buyer-agent
+execution companion.
+
 For a plain-language buyer and seller walkthrough, read
 `docs/commerce-agent-end-to-end-agentic-commerce-flow.md`. It explains what a
 buyer does once, what a seller does once in Grantex, and how a normal agentic
