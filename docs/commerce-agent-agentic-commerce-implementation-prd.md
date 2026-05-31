@@ -80,7 +80,105 @@ The target AgenticOrg buyer journey should be:
 9. Agent refuses unsupported refunds, returns, discounts, delivery promises,
    live-provider claims, and certification claims unless Grantex provides them.
 
-## 4. Merchant Education Journey
+## 4. Buyer Agent Launch From Existing Chat Interfaces
+
+This is a critical product requirement: buyers should not need to learn a new
+shopping interface just to use agentic commerce. A buyer should be able to start
+from the chat surface they already use, such as ChatGPT, Claude, Gemini,
+WhatsApp, Telegram, a merchant website chat widget, voice assistant, or a future
+agent marketplace.
+
+The current implementation does not yet provide full channel launch coverage.
+The PRD therefore requires an AgenticOrg channel adapter layer that makes each
+interface feel simple while keeping commerce execution inside Grantex.
+
+```mermaid
+flowchart LR
+  chat["Buyer chat surface"]
+  adapter["AgenticOrg channel adapter"]
+  session["Buyer agent session"]
+  tools["Grantex-only commerce aliases"]
+  grantex["Grantex Commerce"]
+
+  chat --> adapter
+  adapter --> session
+  session --> tools
+  tools --> grantex
+```
+
+Channel adapter principles:
+
+- One buyer prompt should create or resume a buyer-agent session.
+- The user should not need to understand MCP, UCP, ACP, AP2, passports, or
+  provider details.
+- Each channel must normalize user identity, locale, currency, consent state,
+  conversation ID, channel message limits, attachment handling, and handoff URLs.
+- Every commerce action must still go through Grantex-only tools.
+- Channel adapters must never store provider credentials or private merchant
+  integration credentials.
+- Payment and checkout actions must require Grantex consent and Commerce
+  Passport evidence, even if the chat interface has its own confirmation UX.
+
+| Buyer interface | Launch path AgenticOrg should support | Current platform reality to design around | Required AgenticOrg work |
+| --- | --- | --- | --- |
+| ChatGPT | Publish an AgenticOrg/Grantex Commerce app using remote MCP-backed tools and Apps SDK packaging. | ChatGPT apps can be connected and invoked in chat, and custom apps use MCP-backed tools. Workspace admins can control actions. OpenAI docs also state that ChatGPT Agent Mode does not use custom apps today, and Deep Research custom-app usage is read/fetch only. | Build remote MCP app manifest, OAuth/account linking, read vs write action labels, confirmation copy, app review checklist, frozen-tool-version update workflow, and fallback to read-only discovery when write actions are unavailable. |
+| Claude | Expose a remote MCP connector for Claude-compatible clients. | MCP is the primary official integration path for Claude and other clients; remote MCP gives Claude access to external tools and data. | Build remote MCP endpoint, auth, tool descriptions, least-privilege scopes, connector test harness, and refusal behavior for missing Grantex approval. |
+| Gemini | Support a Gemini API or Vertex/ADK wrapper using function declarations that call AgenticOrg channel tools. | Gemini API function calling lets a model call declared functions and return structured parameters; consumer Gemini app distribution for arbitrary third-party commerce actions is not the same as a public MCP app directory. | Build Gemini function-declaration schema, tool execution loop, response normalization, user consent handoff, and clear "supported via AgenticOrg-hosted Gemini channel" vs "native Gemini app support pending" labels. |
+| WhatsApp | Provide a WhatsApp Business Platform channel adapter backed by webhooks. | WhatsApp Cloud API uses WABA/business phone numbers, permissions, approved templates, inbound message webhooks, and delivery-status webhooks. | Build WABA setup guide, webhook receiver, message template policy, session window handling, identity binding, consent link handoff, rate-limit handling, opt-out, and human support escalation. |
+| Telegram | Provide a Telegram bot channel adapter. | Telegram Bot API is HTTPS-based, uses bot tokens, and receives updates through polling or webhooks; webhooks can include a secret token header. | Build BotFather setup guide, webhook receiver, secret validation, chat/user identity mapping, inline buttons, consent link handoff, rate limits, and bot token secret handling. |
+| Merchant website or mobile app | Embed AgenticOrg buyer chat or deep-link into an AgenticOrg hosted session. | This is the most controllable first-party channel. | Build web/mobile SDK or embeddable widget, session resume, Grantex merchant selector, consent redirect, and analytics attribution. |
+| Other agent/chat surfaces | Use remote MCP, A2A handoff, REST, or webhook adapter depending on platform support. | Capability support differs by platform and changes over time. | Maintain a channel certification matrix with supported actions, auth, consent, message constraints, and known limitations. |
+
+Do not describe this as "flawless across every chat app" until each channel has:
+
+- one-click or low-friction user launch;
+- account/channel identity binding;
+- approved Grantex merchant and capability discovery;
+- Grantex-only tool execution;
+- consent and Commerce Passport handoff;
+- payment/checkout confirmation wording;
+- refusal and recovery UX;
+- telemetry, audit, and redacted evidence;
+- regression tests and channel-specific smoke tests;
+- a documented fallback when the platform does not allow write actions.
+
+### Buyer Agent Launch Acceptance Criteria
+
+A channel is launch-ready only when all of these pass:
+
+1. A real user can start with a natural prompt such as "help me buy a sofa from
+   this merchant" and reach the AgenticOrg buyer agent without manual developer
+   setup.
+2. The channel creates or resumes a stable AgenticOrg buyer-agent session.
+3. The session is bound to channel user identity without exposing private tokens.
+4. Merchant discovery comes from Grantex, not from model guesses.
+5. Product, price, inventory, delivery, return, and checkout facts are grounded
+   in Grantex responses.
+6. The channel shows clear consent and checkout handoff copy before any
+   payment-affecting action.
+7. If the channel cannot support write actions, the agent offers read-only
+   discovery and a safe handoff link instead of pretending checkout is possible.
+8. The agent refuses unsupported claims and logs redacted evidence.
+9. A merchant can see channel attribution and failure reasons in operational
+   reporting.
+10. Channel launch is disabled by default until Grantex approves merchant
+    read-only discovery and any checkout scope separately.
+
+Implementation must re-check current platform documentation before build because
+chat-platform capabilities and approval rules change. Current reference inputs:
+
+- OpenAI ChatGPT custom apps and remote MCP developer-mode documentation:
+  <https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt>
+- Anthropic Claude MCP connector documentation:
+  <https://docs.anthropic.com/en/docs/agents-and-tools/mcp-connector>
+- Google Gemini API function-calling documentation:
+  <https://ai.google.dev/gemini-api/docs/function-calling>
+- Meta WhatsApp Business Platform / Cloud API documentation:
+  <https://developers.facebook.com/docs/whatsapp/cloud-api/>
+- Telegram Bot API documentation:
+  <https://core.telegram.org/bots/api>
+
+## 5. Merchant Education Journey
 
 AgenticOrg should help merchants understand the journey without creating false
 production confidence:
@@ -95,7 +193,7 @@ production confidence:
 7. Show a launch rehearsal that ends in "request rollout", not automatic
    production enablement.
 
-## 5. Standards And Protocol Fit
+## 6. Standards And Protocol Fit
 
 AgenticOrg should treat standards as surfaces published by Grantex, not as
 separate sources of truth.
@@ -103,8 +201,8 @@ separate sources of truth.
 | Surface | AgenticOrg behavior |
 | --- | --- |
 | Native Grantex tools | Primary runtime path for all commerce actions. |
-| MCP | Use tool aliases backed by Grantex policy and audit. Do not add direct provider tools. |
-| UCP-style profile | Consume only Grantex-published capability profiles after approval. |
+| MCP | Use tool aliases backed by Grantex policy and audit. Do not add direct provider tools. This is the primary bridge for ChatGPT custom apps, Claude-compatible connectors, and other MCP-capable clients. |
+| UCP-style profile | Consume only Grantex-published capability profiles after approval. Use it to explain merchant capabilities to channel adapters. |
 | ACP-style checkout | Render checkout state and buyer messages from Grantex; do not complete checkout outside Grantex. |
 | AP2-style evidence | Present mandate/consent status only when Grantex provides deterministic signed evidence. |
 | schema.org | Use public-safe product/offer/shipping/return metadata generated by Grantex. |
@@ -112,10 +210,11 @@ separate sources of truth.
 Do not claim UCP, ACP, AP2, A2A, MPP, schema.org production, or live-provider
 compliance unless Grantex implementation and conformance evidence exist.
 
-## 6. AgenticOrg Gap Register
+## 7. AgenticOrg Gap Register
 
 | Gap | Why it matters | Required AgenticOrg work | Dependency |
 | --- | --- | --- | --- |
+| Buyer-agent creation and launch | Real buyers should start from familiar chat interfaces without developer setup. | Channel adapter layer for ChatGPT, Claude, Gemini, WhatsApp, Telegram, web/mobile, and future agent surfaces. | Platform-specific app/bot/API approval plus Grantex capability approval. |
 | Buyer-facing commerce UX | Buyers need a safe, understandable flow. | Product comparison, grounded cart draft, consent handoff, checkout status, refusal copy. | Grantex catalog/consent/payment APIs. |
 | Merchant-facing demo UX | Merchants need to understand how publishing works. | Demo Home Goods Store walkthrough, launch rehearsal, status labels, blocked-path examples. | Grantex demo packet and self-serve docs. |
 | Order and fulfillment reads | Buyers ask "where is my order?" | Add Grantex-only aliases and UI copy after Grantex order/fulfillment APIs exist. | Grantex order/fulfillment implementation. |
@@ -129,20 +228,24 @@ compliance unless Grantex implementation and conformance evidence exist.
 | Landing page copy | Prospects need clear positioning without overclaiming. | Add future public copy only after approval: "Agentic commerce readiness through Grantex"; no live/certification claims. | Product/web approval. |
 | GitHub workflows | Docs-only changes should not push images or deploy. | Keep docs-only guard current and treat workflow changes as non-docs-only. | Existing CI guard. |
 
-## 7. Fast-Track AgenticOrg Plan
+## 8. Fast-Track AgenticOrg Plan
 
 | Slice | Goal | AgenticOrg output | Guardrail |
 | --- | --- | --- | --- |
 | A. Merchant education pack | Explain the self-serve journey. | Demo script, screenshots/walkthrough, blocked-path labels. | Synthetic/demo only. |
 | B. Buyer read-only discovery UX | Let a user ask product questions safely. | Grantex-only product comparison and inventory caution copy. | No checkout or payment. |
-| C. Cart and consent UX | Rehearse safe checkout. | Cart draft and Grantex consent handoff. | No passport displayed or logged. |
-| D. Sandbox checkout demo | Show end-to-end sandbox flow. | Checkout status and payment status rendering. | Mock/sandbox provider only. |
-| E. Order/fulfillment support | Answer post-purchase questions. | Grantex-only order and fulfillment aliases after Grantex ships them. | No invented status. |
-| F. Returns/refunds support | Guide support safely. | Refusal/manual handoff now; Grantex-only request/status later. | No refund execution. |
-| G. Protocol display | Show standard capability status. | UCP/ACP/schema.org/AP2 readiness labels from Grantex. | No unsupported compliance claims. |
-| H. Real merchant pilot support | Assist one approved merchant rollout. | Controlled agent workflow and eval evidence. | Separate Grantex rollout approval. |
+| C. First-party web/mobile buyer channel | Prove low-friction session creation. | AgenticOrg hosted buyer-agent session and embeddable merchant link/widget. | Still Grantex-only; no public discovery unless approved. |
+| D. ChatGPT and Claude MCP channels | Reach major AI chat surfaces through remote MCP. | Remote MCP app/connector, auth, action labels, confirmation copy, smoke tests. | Respect platform limits; no unsupported write-action claims. |
+| E. WhatsApp and Telegram bot channels | Reach common messaging surfaces. | Webhook adapters, identity binding, consent links, opt-out, human escalation. | Tokens/webhook secrets never logged or committed. |
+| F. Gemini channel | Support Gemini-powered buyer-agent sessions. | Gemini function declarations or hosted wrapper calling AgenticOrg tools. | Label native Gemini app support as pending unless approved. |
+| G. Cart and consent UX | Rehearse safe checkout. | Cart draft and Grantex consent handoff. | No passport displayed or logged. |
+| H. Sandbox checkout demo | Show end-to-end sandbox flow. | Checkout status and payment status rendering. | Mock/sandbox provider only. |
+| I. Order/fulfillment support | Answer post-purchase questions. | Grantex-only order and fulfillment aliases after Grantex ships them. | No invented status. |
+| J. Returns/refunds support | Guide support safely. | Refusal/manual handoff now; Grantex-only request/status later. | No refund execution. |
+| K. Protocol display | Show standard capability status. | UCP/ACP/schema.org/AP2 readiness labels from Grantex. | No unsupported compliance claims. |
+| L. Real merchant pilot support | Assist one approved merchant rollout. | Controlled agent workflow and eval evidence. | Separate Grantex rollout approval. |
 
-## 8. Release Acceptance Criteria
+## 9. Release Acceptance Criteria
 
 Before AgenticOrg can participate in a real merchant pilot:
 
@@ -150,6 +253,9 @@ Before AgenticOrg can participate in a real merchant pilot:
 - AgenticOrg public commerce discovery remains disabled until Grantex read-only
   discovery is approved.
 - Every commerce tool alias maps to a Grantex API or MCP tool.
+- Each approved buyer channel has a documented launch path, auth model, consent
+  handoff, write-action support status, fallback behavior, telemetry, and smoke
+  evidence.
 - No commerce code imports or calls direct provider SDKs, Plural, Stripe, Pine,
   or merchant private checkout APIs.
 - Buyer-facing copy distinguishes "known", "unknown", "stale", "blocked", and
@@ -161,7 +267,7 @@ Before AgenticOrg can participate in a real merchant pilot:
   blocker codes, and non-secret references.
 - Docs-only PRs skip cloud build/push/deploy-adjacent jobs by policy.
 
-## 9. Public Landing Page Copy Draft
+## 10. Public Landing Page Copy Draft
 
 If product/web owners update the AgenticOrg landing page later, use safe
 positioning like this:
@@ -188,19 +294,20 @@ Avoid these claims until separately approved:
 - "Agents can refund customers."
 - "Agents can call merchant systems directly."
 
-## 10. Documentation And Workflow Coverage
+## 11. Documentation And Workflow Coverage
 
 | Surface | Required AgenticOrg update |
 | --- | --- |
 | `docs/commerce-agent-overview.md` | Keep architecture, merchant journey, standards fit, and gap summary current. |
 | `docs/commerce-agent-developer-guide.md` | Keep safe extension rules, direct-provider bans, and future alias requirements current. |
+| Channel adapter docs | Maintain per-channel setup/runbooks for ChatGPT, Claude, Gemini, WhatsApp, Telegram, web/mobile, and future agent surfaces. |
 | C5 planning reports | Continue using C5-series docs for implementation slices and evidence packets. |
 | Demo docs | Keep Demo Home Goods Store explicitly synthetic/demo-only. |
 | Evals and regressions | Add tests whenever new commerce aliases or refusal cases are added. |
 | `.github/workflows/deploy.yml` | Preserve docs-only guard so planning merges skip cloud build/push/deploy-adjacent jobs. |
 | Product landing page | Future copy must be reviewed before runtime/UI change and must not imply production readiness. |
 
-## 11. Stop Conditions
+## 12. Stop Conditions
 
 Stop AgenticOrg work if any of these occur:
 
@@ -215,5 +322,8 @@ Stop AgenticOrg work if any of these occur:
   discovery is approved.
 - The agent invents seller details, prices, discounts, availability, delivery
   dates, refund eligibility, order status, or payment status.
+- A channel claims to support checkout, payment, order, refund, or live commerce
+  when that platform only supports read/fetch actions or when Grantex has not
+  approved the merchant capability.
 - A docs-only change triggers cloud build/push/deploy-adjacent work without an
   explicit policy decision.

@@ -67,6 +67,26 @@ WooCommerce, Magento, a custom store, an ERP, an OMS, a WMS, a payment provider,
 or a support desk, those systems should connect to Grantex. AgenticOrg should
 receive only the Grantex-approved, public-safe, policy-checked view.
 
+## Buyer Agent Launch Surfaces
+
+The buyer agent must be easy to start from the places buyers already chat. The
+current implementation does not yet make every surface launch-ready; this is a
+tracked PRD gap.
+
+| Surface | Intended launch model | Current readiness posture |
+| --- | --- | --- |
+| ChatGPT | Custom app/remote MCP backed by Grantex-only tools. | Planned; must respect ChatGPT app approval, action controls, and current write-action limits. |
+| Claude | Remote MCP connector backed by Grantex-only tools. | Planned; must include auth, scopes, and smoke evidence. |
+| Gemini | AgenticOrg-hosted Gemini API/function-calling wrapper or approved future native channel. | Planned; native consumer Gemini launch support must not be claimed until available and approved. |
+| WhatsApp | WhatsApp Business Platform bot/webhook adapter. | Planned; requires WABA, phone number, templates, opt-out, webhook, and consent-link handling. |
+| Telegram | Telegram Bot API webhook adapter. | Planned; requires bot token, webhook secret validation, chat identity mapping, and consent-link handling. |
+| Web/mobile | AgenticOrg-hosted buyer-agent session or embedded merchant widget. | Best first controllable channel after Grantex approval. |
+
+Every channel must create or resume a buyer-agent session, call only Grantex
+commerce aliases, show clear consent/checkout handoff, and fall back to
+read-only discovery when the platform or approval state does not allow write
+actions.
+
 ## Standards And Protocol Fit
 
 AgenticOrg should be ready to work with the standards ecosystem without claiming

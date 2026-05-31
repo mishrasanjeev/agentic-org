@@ -162,3 +162,27 @@ must remain Grantex-only:
 
 See `docs/commerce-agent-agentic-commerce-implementation-prd.md` for the full
 gap register and fast-track plan.
+
+## Future Channel Adapter Requirements
+
+Buyer channels such as ChatGPT, Claude, Gemini, WhatsApp, Telegram, web/mobile,
+and future agent marketplaces must be implemented as thin AgenticOrg channel
+adapters. They may translate message formats and session identity, but they must
+not implement commerce execution outside Grantex.
+
+Each channel adapter must define:
+
+- channel type and platform capability limits;
+- auth/account-linking model;
+- buyer session creation and resume behavior;
+- message, attachment, locale, currency, and identity normalization;
+- which actions are read-only, consent-required, checkout-capable, or blocked;
+- Grantex-only tool mapping;
+- consent and checkout handoff copy;
+- redacted evidence fields;
+- rate-limit, retry, and human escalation behavior;
+- smoke tests and regression tests.
+
+Do not mark a channel launch-ready until a real user can start from that channel
+without developer setup and the channel has documented fallback behavior when it
+cannot perform write actions.
