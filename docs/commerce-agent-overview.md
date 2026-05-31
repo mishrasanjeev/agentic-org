@@ -40,6 +40,66 @@ AgenticOrg does not own catalog truth, consent grants, Commerce Passport
 issuance, merchant policy enforcement, provider credentials, provider webhooks,
 or payment reconciliation. Those controls stay in Grantex.
 
+## Merchant Self-Serve Journey
+
+For merchants, the intended product experience should be simple:
+
+1. The merchant signs up in Grantex Commerce.
+2. The merchant connects an existing store, catalog, ERP, inventory, OMS,
+   payment provider, or support system.
+3. Grantex normalizes that data into safe merchant profile, catalog, inventory,
+   policy, consent, checkout, order, audit, and protocol-publishing records.
+4. The merchant previews exactly what an AI agent can see.
+5. The merchant chooses which actions agents may request, such as browse,
+   cart draft, checkout request, order status, or support handoff.
+6. Grantex runs validation scans and review gates.
+7. AgenticOrg agents use only the approved Grantex tools.
+8. Live discovery or checkout is enabled only after a separate approved rollout.
+
+AgenticOrg should feel like the buyer-facing assistant and merchant-facing demo
+layer, not the merchant system of record. If a merchant already uses Shopify,
+WooCommerce, Magento, a custom store, an ERP, an OMS, a WMS, a payment provider,
+or a support desk, those systems should connect to Grantex. AgenticOrg should
+receive only the Grantex-approved, public-safe, policy-checked view.
+
+## Standards And Protocol Fit
+
+AgenticOrg should be ready to work with the standards ecosystem without claiming
+unsupported certification:
+
+| Surface | How AgenticOrg should use it |
+| --- | --- |
+| Native Grantex tools | Primary integration path for merchant profile, catalog, inventory, cart, consent, payment intent, checkout, and payment status. |
+| MCP | Agent tool surface for safe commerce actions backed by Grantex policy and audit. |
+| UCP | Future capability discovery and shopping capability mapping. AgenticOrg should consume Grantex-published UCP-style profiles only after Grantex approves them. |
+| ACP | Future checkout/session compatibility. AgenticOrg may render checkout state, but Grantex remains the seller/control-plane endpoint. |
+| AP2 | Future signed checkout/payment mandate evidence. AgenticOrg may present mandate status only when Grantex provides deterministic evidence. |
+| schema.org | Public product, offer, shipping, and return-policy metadata generated from Grantex-approved merchant data. |
+
+Do not claim UCP, ACP, AP2, A2A, or live-provider compliance unless the
+corresponding Grantex implementation, conformance tests, approvals, and rollout
+evidence exist.
+
+## Pending Gaps Before Real Merchant Launch
+
+AgenticOrg can demo the buyer-agent journey, but real merchant launch depends on
+Grantex closing these gaps first:
+
+- Self-serve merchant onboarding and approval workflow.
+- Existing-system connectors for catalog, inventory, orders, fulfillment,
+  payment status, and support.
+- Hardened large catalog import jobs.
+- Fresh inventory, stock holds, and delivery/pickup promise handling.
+- Production order, fulfillment, shipment, cancellation, and return status APIs.
+- Refund/return request workflow before any refund execution.
+- Live provider approval, webhook signature verification, reconciliation, and
+  rollback readiness.
+- UCP/ACP/schema.org adapter generation from one canonical Grantex model.
+
+Until those gaps close, AgenticOrg must refuse to invent sellers, products,
+prices, discounts, delivery promises, return promises, checkout status, or
+payment status.
+
 ## Tool Aliases
 
 | Alias | Purpose |
