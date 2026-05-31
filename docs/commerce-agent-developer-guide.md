@@ -145,3 +145,20 @@ When adding commerce behavior:
    new commerce files are added.
 4. Keep all payment-affecting work on Grantex tools.
 5. Update evidence docs only with scrubbed, non-secret summaries.
+
+## Future Commerce Alias Requirements
+
+Do not add new AgenticOrg commerce aliases until the corresponding Grantex
+runtime API, policy gate, audit event, and tests exist. Planned future aliases
+must remain Grantex-only:
+
+| Future area | AgenticOrg behavior before Grantex ships it | Required behavior after Grantex ships it |
+| --- | --- | --- |
+| Order status | Refuse or explain that order status is unavailable. | Read order status through Grantex only. |
+| Fulfillment and shipment | Refuse delivery promises unless Grantex provides verified data. | Read fulfillment, tracking, pickup, and delivery fields through Grantex only. |
+| Returns and refunds | Refuse refund execution and route to merchant support/manual handoff. | Request/read return or refund status through Grantex only, with policy and audit. |
+| Offers, discounts, EMI, rewards | Do not invent promotions or affordability. | Show only Grantex-provided offer metadata and eligibility. |
+| UCP/ACP/schema.org/AP2 readiness | Do not claim compliance or certification. | Display only Grantex-published capability and evidence states. |
+
+See `docs/commerce-agent-agentic-commerce-implementation-prd.md` for the full
+gap register and fast-track plan.

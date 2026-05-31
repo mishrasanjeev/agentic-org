@@ -9,6 +9,11 @@ This page is documentation only. It does not deploy, change production config,
 enable production Commerce V1, enable live payments, enable live Plural, or
 approve production discovery.
 
+For the full implementation gap plan, read
+`docs/commerce-agent-agentic-commerce-implementation-prd.md`. That companion
+PRD maps the current AgenticOrg implementation to the merchant self-serve gaps
+that Grantex must close before real merchant launch.
+
 ## Current Posture
 
 | Area | Status |
@@ -95,6 +100,11 @@ Grantex closing these gaps first:
 - Live provider approval, webhook signature verification, reconciliation, and
   rollback readiness.
 - UCP/ACP/schema.org adapter generation from one canonical Grantex model.
+- Order, fulfillment, delivery/pickup, cancellation, support, return, refund,
+  settlement, and payout surfaces that agents can read without inventing facts.
+- Product/landing copy that explains "agentic commerce readiness" without
+  implying public discovery, checkout, payment, live provider, or certification
+  approval.
 
 Until those gaps close, AgenticOrg must refuse to invent sellers, products,
 prices, discounts, delivery promises, return promises, checkout status, or
@@ -169,6 +179,7 @@ gate for production until Grantex read-only production discovery is approved.
 
 ## Evidence Links
 
+- `docs/commerce-agent-agentic-commerce-implementation-prd.md`
 - `docs/reports/commerce-agent-real-staging-evidence.md`
 - `docs/reports/commerce-agent-hosted-smoke-evidence.md`
 - `docs/reports/commerce-agent-production-discovery-readiness.md`
