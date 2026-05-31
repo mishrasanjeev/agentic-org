@@ -14,6 +14,11 @@ For the full implementation gap plan, read
 PRD maps the current AgenticOrg implementation to the merchant self-serve gaps
 that Grantex must close before real merchant launch.
 
+For a plain-language buyer and seller walkthrough, read
+`docs/commerce-agent-end-to-end-agentic-commerce-flow.md`. It explains what a
+buyer does once, what a seller does once in Grantex, and how a normal agentic
+commerce transaction should work end to end.
+
 ## Current Posture
 
 | Area | Status |
@@ -66,6 +71,25 @@ layer, not the merchant system of record. If a merchant already uses Shopify,
 WooCommerce, Magento, a custom store, an ERP, an OMS, a WMS, a payment provider,
 or a support desk, those systems should connect to Grantex. AgenticOrg should
 receive only the Grantex-approved, public-safe, policy-checked view.
+
+## End-To-End Flow
+
+The operational flow is:
+
+1. Seller completes one-time setup in Grantex: workspace, verification,
+   connected systems, catalog, inventory, policy, payment path, approvals,
+   smoke evidence, and rollback ownership.
+2. Buyer completes one-time setup in their preferred channel: account/session
+   linking, safe preferences, and understanding that checkout requires Grantex
+   consent.
+3. Buyer asks the agent to find, compare, or buy.
+4. AgenticOrg calls only Grantex aliases for merchant profile, catalog,
+   inventory, cart, consent, payment intent, checkout, and status.
+5. Grantex enforces source-of-truth, policy, consent, Commerce Passport,
+   provider handoff, audit, order/fulfillment state, support/refund handoff, and
+   rollback.
+6. AgenticOrg explains the result to the buyer and refuses anything Grantex has
+   not approved or cannot verify.
 
 ## Buyer Agent Launch Surfaces
 
