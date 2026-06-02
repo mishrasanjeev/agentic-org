@@ -1,9 +1,10 @@
 # Commerce Sales Agent Overview
 
 The AgenticOrg Commerce Sales Agent is the agent and workflow layer for
-Grantex-controlled commerce. It helps users discover products, draft carts,
-request consent, use Commerce Passport fixtures during approved smoke runs, and
-follow Grantex payment-intent and checkout status flows.
+Grantex-controlled commerce. It helps users inspect Grantex-grounded read-only
+buyer discovery previews, discover products, draft carts, request consent, use
+Commerce Passport fixtures during approved smoke runs, and follow Grantex
+payment-intent and checkout status flows.
 
 This page is documentation only. It does not deploy, change production config,
 enable production Commerce V1, enable live payments, enable live Plural, or
@@ -35,6 +36,7 @@ commerce transaction should work end to end.
 | Production discovery | Commerce metadata is gated by default behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`; it is not final production readiness. |
 | Direct provider calls | Blocked for commerce. AgenticOrg commerce uses Grantex only. |
 | Live checkout/payments/Plural | Blocked. |
+| C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
 
 ## Architecture
 
@@ -170,6 +172,7 @@ payment status.
 | `grantex_commerce:cart_create` | Create a cart draft from grounded items. |
 | `grantex_commerce:consent_request` | Request user consent with supported checkout scopes. |
 | `grantex_commerce:consent_exchange` | Exchange granted consent only when granted consent fixture material exists. |
+| `grantex_commerce:buyer_discovery_preview` | Read Grantex C6G sandbox buyer discovery handoff preview data. |
 | `grantex_commerce:payment_create_intent` | Create Grantex provider-neutral payment intent with supported fields only. |
 | `grantex_commerce:checkout_create` | Create Grantex checkout handoff. |
 | `grantex_commerce:payment_get_status` | Poll Grantex payment status. |

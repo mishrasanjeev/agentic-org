@@ -17,6 +17,7 @@ GRANTEX_COMMERCE_TOOL_ALIASES = [
     "cart_create",
     "consent_request",
     "consent_exchange",
+    "buyer_discovery_preview",
     "payment_create_intent",
     "checkout_create",
     "payment_get_status",
