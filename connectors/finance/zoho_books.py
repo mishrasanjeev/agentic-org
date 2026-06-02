@@ -119,7 +119,11 @@ class ZohoBooksConnector(BaseConnector):
     tools = [
         "create_invoice",
         "list_invoices",
+        "search_invoices",
+        "get_invoice_by_id",
+        "list_bills",
         "list_vendor_bills",
+        "search_bills",
         "get_bill_by_id",
         "get_purchase_invoices",
         "list_overdue_invoices",
@@ -164,7 +168,11 @@ class ZohoBooksConnector(BaseConnector):
     def _register_tools(self):
         self._tool_registry["create_invoice"] = self.create_invoice
         self._tool_registry["list_invoices"] = self.list_invoices
+        self._tool_registry["search_invoices"] = self.search_invoices
+        self._tool_registry["get_invoice_by_id"] = self.get_invoice_by_id
+        self._tool_registry["list_bills"] = self.list_bills
         self._tool_registry["list_vendor_bills"] = self.list_vendor_bills
+        self._tool_registry["search_bills"] = self.search_bills
         self._tool_registry["get_bill_by_id"] = self.get_bill_by_id
         self._tool_registry["get_purchase_invoices"] = self.get_purchase_invoices
         self._tool_registry["list_overdue_invoices"] = self.list_overdue_invoices
@@ -453,6 +461,53 @@ class ZohoBooksConnector(BaseConnector):
                 return v
         return data
 
+    @staticmethod
+    def _looks_like_visible_reference(value: Any, prefixes: tuple[str, ...]) -> bool:
+        text = str(value or "").strip().upper()
+        return any(text.startswith(prefix) for prefix in prefixes)
+
+    @staticmethod
+    def _first_param(params: dict[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = params.get(key)
+            if value not in (None, ""):
+                return str(value).strip()
+        return ""
+
+    @staticmethod
+    def _pick_exact_record(
+        records: list[dict[str, Any]],
+        reference: str,
+        *,
+        id_key: str,
+        reference_keys: tuple[str, ...],
+    ) -> dict[str, Any]:
+        needle = str(reference or "").strip().lower()
+        if not needle:
+            return {}
+        exact = [
+            record
+            for record in records
+            if any(str(record.get(key, "")).strip().lower() == needle for key in reference_keys)
+        ]
+        if len(exact) == 1:
+            return exact[0]
+        if not exact and len(records) == 1:
+            return records[0]
+        if exact or records:
+            candidates = exact if exact else records
+            return {
+                "error": "ambiguous_reference",
+                "message": (
+                    f"Reference matched {len(candidates)} records; pass the internal {id_key}."
+                ),
+                "candidates": [
+                    {key: record.get(key) for key in (id_key, *reference_keys) if record.get(key)}
+                    for record in candidates[:5]
+                ],
+            }
+        return {}
+
     async def health_check(self) -> dict[str, Any]:
         """Verify connectivity by listing organizations."""
         if not self._has_credentials():
@@ -508,11 +563,20 @@ class ZohoBooksConnector(BaseConnector):
     async def list_invoices(self, **params) -> dict[str, Any]:
         """List invoices with optional filters.
 
-        Optional: status, date_start, date_end, customer_id, page.
+        Optional: status, date_start, date_end, customer_id, page, search_text.
         """
         qp: dict[str, Any] = {}
         if params.get("status"):
             qp["status"] = params["status"]
+        search_text = (
+            params.get("search_text")
+            or params.get("invoice_number")
+            or params.get("invoice_no")
+            or params.get("reference_number")
+            or params.get("number")
+        )
+        if search_text:
+            qp["search_text"] = search_text
         if params.get("date_start"):
             qp["date_start"] = params["date_start"]
         if params.get("date_end"):
@@ -529,12 +593,95 @@ class ZohoBooksConnector(BaseConnector):
             "page_context": data.get("page_context", {}),
         }
 
+    async def search_invoices(self, **params) -> dict[str, Any]:
+        """Search invoices by visible invoice/reference number or text."""
+        query = self._first_param(
+            params,
+            "query",
+            "search_text",
+            "invoice_number",
+            "invoice_no",
+            "reference_number",
+            "number",
+        )
+        if not query:
+            return {"error": "query is required"}
+        next_params = dict(params)
+        next_params["search_text"] = query
+        return await self.list_invoices(**next_params)
+
+    async def _resolve_invoice_id_from_reference(self, reference: str) -> dict[str, Any]:
+        search_result = await self.search_invoices(query=reference)
+        invoices = search_result.get("invoices", [])
+        if not isinstance(invoices, list) or not invoices:
+            return {
+                "error": "invoice_reference_not_found",
+                "message": f"No invoice found for reference {reference!r}.",
+            }
+        record = self._pick_exact_record(
+            [r for r in invoices if isinstance(r, dict)],
+            reference,
+            id_key="invoice_id",
+            reference_keys=("invoice_id", "invoice_number", "number", "reference_number"),
+        )
+        if record.get("error"):
+            return record
+        invoice_id = record.get("invoice_id") or record.get("id")
+        if not invoice_id:
+            return {
+                "error": "invoice_id_missing",
+                "message": f"Invoice search found {reference!r} but did not return invoice_id.",
+                "invoice": record,
+            }
+        return {"invoice_id": str(invoice_id), "invoice": record}
+
+    async def get_invoice_by_id(self, **params) -> dict[str, Any]:
+        """Fetch one invoice by internal invoice_id, resolving visible references first."""
+        invoice_id = self._first_param(params, "invoice_id", "id")
+        reference = self._first_param(
+            params,
+            "invoice_number",
+            "invoice_no",
+            "reference_number",
+            "number",
+        )
+        if invoice_id and self._looks_like_visible_reference(invoice_id, ("INV-",)):
+            reference = reference or invoice_id
+            invoice_id = ""
+        if not invoice_id:
+            if not reference:
+                return {"error": "invoice_id or invoice_number is required"}
+            resolved = await self._resolve_invoice_id_from_reference(reference)
+            if resolved.get("error"):
+                return resolved
+            invoice_id = str(resolved["invoice_id"])
+
+        data = await self._get(f"/invoices/{invoice_id}", params=self._org_params(source_params=params))
+        invoice = self._unwrap(data, "invoice")
+        if isinstance(invoice, dict) and reference:
+            invoice.setdefault("resolved_from_reference", reference)
+        return {"invoice": invoice, **invoice} if isinstance(invoice, dict) else {"invoice": invoice}
+
+    async def list_bills(self, **params) -> dict[str, Any]:
+        """Alias for list_vendor_bills."""
+        return await self.list_vendor_bills(**params)
+
     async def list_vendor_bills(self, **params) -> dict[str, Any]:
         """List vendor bills / purchase invoices from Zoho Books.
 
-        Optional: vendor_id, status, date_start, date_end, bill_number, page.
+        Optional: vendor_id, status, date_start, date_end, bill_number, search_text, page.
         """
         qp: dict[str, Any] = {}
+        search_text = (
+            params.get("search_text")
+            or params.get("query")
+            or params.get("bill_number")
+            or params.get("bill_no")
+            or params.get("reference_number")
+            or params.get("number")
+        )
+        if search_text:
+            qp["search_text"] = search_text
         for field in ("vendor_id", "status", "date_start", "date_end", "bill_number", "page"):
             if params.get(field):
                 qp[field] = params[field]
@@ -547,13 +694,73 @@ class ZohoBooksConnector(BaseConnector):
             "page_context": data.get("page_context", {}),
         }
 
-    async def get_bill_by_id(self, **params) -> dict[str, Any]:
-        """Fetch one vendor bill / purchase invoice by bill_id."""
-        bill_id = params.get("bill_id") or params.get("id")
+    async def search_bills(self, **params) -> dict[str, Any]:
+        """Search vendor bills by visible bill/reference number or text."""
+        query = self._first_param(
+            params,
+            "query",
+            "search_text",
+            "bill_number",
+            "bill_no",
+            "reference_number",
+            "number",
+        )
+        if not query:
+            return {"error": "query is required"}
+        next_params = dict(params)
+        next_params["search_text"] = query
+        return await self.list_vendor_bills(**next_params)
+
+    async def _resolve_bill_id_from_reference(self, reference: str) -> dict[str, Any]:
+        search_result = await self.search_bills(query=reference)
+        bills = search_result.get("bills", [])
+        if not isinstance(bills, list) or not bills:
+            return {
+                "error": "bill_reference_not_found",
+                "message": f"No bill found for reference {reference!r}.",
+            }
+        record = self._pick_exact_record(
+            [r for r in bills if isinstance(r, dict)],
+            reference,
+            id_key="bill_id",
+            reference_keys=("bill_id", "bill_number", "number", "reference_number"),
+        )
+        if record.get("error"):
+            return record
+        bill_id = record.get("bill_id") or record.get("id")
         if not bill_id:
-            return {"error": "bill_id is required"}
+            return {
+                "error": "bill_id_missing",
+                "message": f"Bill search found {reference!r} but did not return bill_id.",
+                "bill": record,
+            }
+        return {"bill_id": str(bill_id), "bill": record}
+
+    async def get_bill_by_id(self, **params) -> dict[str, Any]:
+        """Fetch one vendor bill by internal bill_id, resolving visible references first."""
+        bill_id = self._first_param(params, "bill_id", "id")
+        reference = self._first_param(
+            params,
+            "bill_number",
+            "bill_no",
+            "reference_number",
+            "number",
+        )
+        if bill_id and self._looks_like_visible_reference(bill_id, ("BILL-",)):
+            reference = reference or bill_id
+            bill_id = ""
+        if not bill_id:
+            if not reference:
+                return {"error": "bill_id or bill_number is required"}
+            resolved = await self._resolve_bill_id_from_reference(reference)
+            if resolved.get("error"):
+                return resolved
+            bill_id = str(resolved["bill_id"])
+
         data = await self._get(f"/bills/{bill_id}", params=self._org_params(source_params=params))
         bill = self._unwrap(data, "bill")
+        if isinstance(bill, dict) and reference:
+            bill.setdefault("resolved_from_reference", reference)
         return {"bill": bill, **bill} if isinstance(bill, dict) else {"bill": bill}
 
     async def get_purchase_invoices(self, **params) -> dict[str, Any]:

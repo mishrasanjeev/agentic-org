@@ -320,10 +320,14 @@ class TestApProcessor:
         assert "create_vendor" in AP_PROCESSOR_TOOLS        # Zoho AP vendor creation
         assert "create_item" in AP_PROCESSOR_TOOLS          # Zoho AP item creation
         assert "create_bill" in AP_PROCESSOR_TOOLS          # Zoho AP bill creation
+        assert "list_vendor_bills" in AP_PROCESSOR_TOOLS    # Zoho AP bill lookup
+        assert "list_bills" in AP_PROCESSOR_TOOLS           # Zoho AP bill lookup alias
+        assert "search_bills" in AP_PROCESSOR_TOOLS         # Zoho AP visible bill number search
+        assert "get_bill_by_id" in AP_PROCESSOR_TOOLS       # Zoho AP bill detail
         assert "create_order" in AP_PROCESSOR_TOOLS         # PineLabs payment execution
         assert "check_order_status" in AP_PROCESSOR_TOOLS   # PineLabs payment verification
         assert "initiate_neft" not in AP_PROCESSOR_TOOLS    # AA is read-only
-        assert len(AP_PROCESSOR_TOOLS) == 11
+        assert len(AP_PROCESSOR_TOOLS) == 15
 
 
 # ═══════════════════════════════════════════════════════════════════════════

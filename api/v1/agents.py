@@ -53,10 +53,11 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "fetch_bank_statement", "check_account_balance",
         "post_voucher", "get_ledger_balance", "get_trial_balance",
         "list_vendors", "create_vendor", "create_item", "create_bill",
+        "list_vendor_bills", "list_bills", "search_bills", "get_bill_by_id",
         "create_order", "check_order_status",
     ],
     "ar_collections": [
-        "create_invoice", "list_invoices",
+        "create_invoice", "list_invoices", "search_invoices", "get_invoice_by_id",
         "create_payment_link", "send_email",
         "check_account_balance",
     ],
@@ -234,7 +235,8 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "commerce": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "finance": [
         "fetch_bank_statement", "create_payment_intent",
-        "get_balance", "list_invoices", "list_vendors", "create_bill",
+        "get_balance", "list_invoices", "search_invoices", "list_vendors",
+        "create_bill", "list_vendor_bills", "list_bills", "search_bills",
     ],
     "hr": [
         "get_employee", "create_employee",
@@ -1590,10 +1592,12 @@ async def delegate_to_agent(
 )
 async def import_agents_csv(
     file: UploadFile,
+    company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Import agents from CSV with two-pass parent linking."""
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(company_id)
     filename = (file.filename or "").lower()
     if filename and not filename.endswith(".csv"):
         raise HTTPException(422, detail="Only .csv files are supported for agent import")
@@ -1627,6 +1631,13 @@ async def import_agents_csv(
     rows_with_parent: list[dict] = []
 
     async with get_tenant_session(tid) as session:
+        if company_uuid is not None:
+            company_exists = await session.execute(
+                select(Company.id).where(Company.id == company_uuid, Company.tenant_id == tid)
+            )
+            if company_exists.scalar_one_or_none() is None:
+                raise HTTPException(404, "Company not found")
+
         for row in reader:
             name = (row.get("name") or row.get("Name") or "").strip()
             agent_type = (row.get("agent_type") or "").strip()
@@ -1670,7 +1681,7 @@ async def import_agents_csv(
                     confidence_floor = Decimal("0.88")
 
             agent = Agent(
-                tenant_id=tid, name=name, employee_name=name,
+                tenant_id=tid, company_id=company_uuid, name=name, employee_name=name,
                 agent_type=agent_type, domain=domain,
                 designation=designation or None,
                 specialization=specialization or None,
@@ -1686,6 +1697,7 @@ async def import_agents_csv(
             imported.append({
                 "id": str(agent.id), "name": name,
                 "agent_type": agent_type, "domain": domain,
+                "company_id": str(company_uuid) if company_uuid else None,
             })
             if reporting_to_name:
                 rows_with_parent.append({
@@ -1697,9 +1709,10 @@ async def import_agents_csv(
     parent_links_set = 0
     if rows_with_parent:
         async with get_tenant_session(tid) as session:
-            all_result = await session.execute(
-                select(Agent).where(Agent.tenant_id == tid)
-            )
+            query = select(Agent).where(Agent.tenant_id == tid)
+            if company_uuid is not None:
+                query = query.where(Agent.company_id == company_uuid)
+            all_result = await session.execute(query)
             all_agents = all_result.scalars().all()
             name_map: dict[tuple[str, str], _uuid.UUID] = {}
             for a in all_agents:
@@ -1760,6 +1773,7 @@ async def generate_agent(
 
     description = body.get("description", "")
     deploy = body.get("deploy", False)
+    company_uuid = _parse_company_id(body.get("company_id")) if deploy else None
 
     if not description or len(description) < 10:
         raise HTTPException(
@@ -1794,8 +1808,16 @@ async def generate_agent(
             )
 
         async with get_tenant_session(tid) as session:
+            if company_uuid is not None:
+                company_exists = await session.execute(
+                    select(Company.id).where(Company.id == company_uuid, Company.tenant_id == tid)
+                )
+                if company_exists.scalar_one_or_none() is None:
+                    raise HTTPException(404, "Company not found")
+
             agent = Agent(
                 tenant_id=tid,
+                company_id=company_uuid,
                 name=top.get("employee_name", "Generated Agent"),
                 employee_name=top.get("employee_name", "Generated Agent"),
                 agent_type=top.get("agent_type", ""),
@@ -1843,6 +1865,7 @@ async def generate_agent(
 
             created_agent = {
                 "agent_id": str(agent.id),
+                "company_id": str(agent.company_id) if agent.company_id else None,
                 "name": agent.name,
                 "status": "shadow",
                 "agent_type": agent.agent_type,

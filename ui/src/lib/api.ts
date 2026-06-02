@@ -153,7 +153,7 @@ export const agentsApi = {
   clone: (id: string, data: any) => api.post(`/agents/${id}/clone`, data),
   promptHistory: (id: string) => api.get(`/agents/${id}/prompt-history`),
   orgTree: (params?: Record<string, string>) => api.get("/agents/org-tree", { params }),
-  importCsv: (file: File) => { const fd = new FormData(); fd.append("file", file); return api.post("/agents/import-csv", fd); },
+  importCsv: (file: File, params?: Record<string, string>) => { const fd = new FormData(); fd.append("file", file); return api.post("/agents/import-csv", fd, { params }); },
   generate: (description: string, deploy = false) => api.post("/agents/generate", { description, deploy }),
 };
 export const promptTemplatesApi = {

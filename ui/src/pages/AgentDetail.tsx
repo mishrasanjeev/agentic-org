@@ -515,11 +515,16 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
 
   useEffect(() => {
     if (editingParent) {
-      agentsApi.listAll({ domain: agent.domain, status: "active" })
+      const params: Record<string, string> = {
+        domain: agent.domain,
+        status: "active",
+      };
+      if (agent.company_id) params.company_id = agent.company_id;
+      agentsApi.listAll(params)
         .then((items) => setParentCandidates(items.filter((a: Agent) => a.id !== agent.id)))
         .catch(() => setParentCandidates([]));
     }
-  }, [editingParent, agent.domain, agent.id]);
+  }, [editingParent, agent.company_id, agent.domain, agent.id]);
 
   async function saveParent() {
     setSavingParent(true);
