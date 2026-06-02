@@ -58,6 +58,24 @@ async def test_zoho_get_bill_by_id_resolves_visible_bill_number_first() -> None:
 
 
 @pytest.mark.asyncio
+async def test_zoho_get_bill_by_id_keeps_internal_id_direct() -> None:
+    from connectors.finance.zoho_books import ZohoBooksConnector
+
+    connector = ZohoBooksConnector({"access_token": "fake", "organization_id": "org-1"})
+    connector._client = MagicMock()
+    connector._client.get = AsyncMock(
+        return_value=_mock_client_response({"bill": {"bill_id": "b1"}})
+    )
+
+    result = await connector.get_bill_by_id(bill_id="b1")
+
+    assert result["bill_id"] == "b1"
+    connector._client.get.assert_called_once()
+    call = connector._client.get.call_args
+    assert call.args[0] == "/bills/b1"
+
+
+@pytest.mark.asyncio
 async def test_zoho_get_invoice_by_id_resolves_visible_invoice_number_first() -> None:
     from connectors.finance.zoho_books import ZohoBooksConnector
 

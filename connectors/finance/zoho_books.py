@@ -462,9 +462,9 @@ class ZohoBooksConnector(BaseConnector):
         return data
 
     @staticmethod
-    def _looks_like_internal_zoho_id(value: Any) -> bool:
-        text = str(value or "").strip()
-        return bool(text) and text.isdigit()
+    def _looks_like_visible_reference(value: Any, prefixes: tuple[str, ...]) -> bool:
+        text = str(value or "").strip().upper()
+        return any(text.startswith(prefix) for prefix in prefixes)
 
     @staticmethod
     def _first_param(params: dict[str, Any], *keys: str) -> str:
@@ -645,7 +645,7 @@ class ZohoBooksConnector(BaseConnector):
             "reference_number",
             "number",
         )
-        if invoice_id and not self._looks_like_internal_zoho_id(invoice_id):
+        if invoice_id and self._looks_like_visible_reference(invoice_id, ("INV-",)):
             reference = reference or invoice_id
             invoice_id = ""
         if not invoice_id:
@@ -746,7 +746,7 @@ class ZohoBooksConnector(BaseConnector):
             "reference_number",
             "number",
         )
-        if bill_id and not self._looks_like_internal_zoho_id(bill_id):
+        if bill_id and self._looks_like_visible_reference(bill_id, ("BILL-",)):
             reference = reference or bill_id
             bill_id = ""
         if not bill_id:
