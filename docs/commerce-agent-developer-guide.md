@@ -11,6 +11,9 @@ Sales Agent without weakening the Grantex-only commerce boundary.
   staging or exact temporary smoke URL.
 - Use only `grantex_commerce:*` commerce tools.
 - Do not call Stripe, Plural, Pine, or provider credential paths for commerce.
+- Treat `grantex_commerce:buyer_discovery_preview` as read-only sandbox preview
+  data. It is not public discovery, production approval, checkout/payment,
+  fulfillment, returns, refunds, or live provider access.
 - Do not print fixture env values, passports/JWTs, auth material, idempotency
   values, raw payloads, DB/Redis URLs, private keys, or secrets.
 - Do not present mocked output as hosted or real-staging evidence.
@@ -72,6 +75,7 @@ network work.
 | Fixture path outside `.tmp/` | Refused. |
 | Fake connector/provider path | Refused by regression tests and runtime guardrails. |
 | Direct provider imports/calls in commerce code | Blocked by static regression. |
+| Buyer discovery asks for checkout/payment/live provider/fulfillment/refund work | Refused by the C6H buyer discovery consumer. |
 
 ## Evidence Interpretation
 
@@ -145,6 +149,8 @@ When adding commerce behavior:
    new commerce files are added.
 4. Keep all payment-affecting work on Grantex tools.
 5. Update evidence docs only with scrubbed, non-secret summaries.
+6. For buyer discovery, consume only Grantex C6G read-only preview payloads and
+   do not expose the Grantex operator handoff request or withdrawal endpoints.
 
 ## Future Commerce Alias Requirements
 

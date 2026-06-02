@@ -111,7 +111,7 @@ Regular transaction:
 
 | Area | Current evidence | Current state |
 | --- | --- | --- |
-| Grantex-only connector | `connectors/commerce/grantex_commerce.py` exposes `merchant_get_profile`, `catalog_search`, `catalog_get_item`, `inventory_check`, `cart_create`, `consent_request`, `consent_exchange`, `payment_create_intent`, `checkout_create`, and `payment_get_status`. | Correct boundary exists. |
+| Grantex-only connector | `connectors/commerce/grantex_commerce.py` exposes `merchant_get_profile`, `catalog_search`, `catalog_get_item`, `inventory_check`, `cart_create`, `consent_request`, `consent_exchange`, `buyer_discovery_preview`, `payment_create_intent`, `checkout_create`, and `payment_get_status`. | Correct boundary exists. C6H adds a GET-only sandbox buyer discovery preview consumer; it is not a handoff request, public discovery, checkout/payment, or live provider path. |
 | Payment guardrails | `core/commerce/sales_guardrails.py` blocks missing consent/passport, amount-cap breach, disabled merchant/agent, policy denial, and non-mock provider choices. | Good local fail-closed behavior; must expand as Grantex adds order/refund/fulfillment. |
 | Demo and evals | `demos/commerce_sales_agent_demo.py`, golden commerce evals, no-provider-call regression tests, real-staging and hosted smoke tests. | Strong demo/smoke foundation. |
 | Public discovery gate | Commerce metadata is fail-closed behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`. | Safe posture. |
@@ -287,7 +287,7 @@ compliance unless Grantex implementation and conformance evidence exist.
 | Slice | Goal | AgenticOrg output | Guardrail |
 | --- | --- | --- | --- |
 | A. Merchant education pack | Explain the self-serve journey. | Demo script, screenshots/walkthrough, blocked-path labels. | Synthetic/demo only. |
-| B. Buyer read-only discovery UX | Let a user ask product questions safely. | Grantex-only product comparison and inventory caution copy. | No checkout or payment. |
+| B. Buyer read-only discovery UX | Let a user ask merchant/product questions safely. | Grantex C6G read-only buyer discovery preview consumer plus product comparison and inventory caution copy. | No public discovery, checkout/payment, fulfillment, refunds, live Plural, live provider paths, or invented merchant/product claims. |
 | C. First-party web/mobile buyer channel | Prove low-friction session creation. | AgenticOrg hosted buyer-agent session and embeddable merchant link/widget. | Still Grantex-only; no public discovery unless approved. |
 | D. ChatGPT and Claude MCP channels | Reach major AI chat surfaces through remote MCP. | Remote MCP app/connector, auth, action labels, confirmation copy, smoke tests. | Respect platform limits; no unsupported write-action claims. |
 | E. WhatsApp and Telegram bot channels | Reach common messaging surfaces. | Webhook adapters, identity binding, consent links, opt-out, human escalation. | Tokens/webhook secrets never logged or committed. |
