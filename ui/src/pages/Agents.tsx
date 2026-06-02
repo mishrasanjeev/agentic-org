@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
 import KillSwitch from "@/components/KillSwitch";
-import { agentsApi } from "@/lib/api";
+import { agentsApi, companiesApi } from "@/lib/api";
 import type { Agent } from "@/types";
 
 const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice", "comms"];
@@ -22,15 +22,57 @@ export default function Agents() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(
+    () => localStorage.getItem("company_id") || "",
+  );
+  const [companyScopeReady, setCompanyScopeReady] = useState(false);
 
   useEffect(() => {
-    fetchAgents();
-  }, [domainFilter, statusFilter]);
+    let cancelled = false;
+    (async () => {
+      const stored = localStorage.getItem("company_id") || "";
+      if (stored) {
+        setSelectedCompanyId(stored);
+        setCompanyScopeReady(true);
+        return;
+      }
+
+      try {
+        const { data } = await companiesApi.list();
+        if (cancelled) return;
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.items)
+            ? data.items
+            : [];
+        const first = list[0]?.id ? String(list[0].id) : "";
+        if (first) {
+          localStorage.setItem("company_id", first);
+          setSelectedCompanyId(first);
+        }
+      } catch {
+        // No company list means no selected-company scope to apply.
+      } finally {
+        if (!cancelled) setCompanyScopeReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (companyScopeReady) {
+      fetchAgents();
+    }
+  }, [domainFilter, statusFilter, selectedCompanyId, companyScopeReady]);
 
   async function fetchAgents() {
+    if (!companyScopeReady) return;
     setLoading(true);
     try {
       const params: Record<string, string> = {};
+      if (selectedCompanyId) params.company_id = selectedCompanyId;
       if (domainFilter !== "all") params.domain = domainFilter;
       if (statusFilter !== "all") params.status = statusFilter;
       const items = await agentsApi.listAll(params);
@@ -72,7 +114,8 @@ export default function Agents() {
     setImporting(true);
     setImportResult(null);
     try {
-      const { data } = await agentsApi.importCsv(importFile);
+      const params = selectedCompanyId ? { company_id: selectedCompanyId } : undefined;
+      const { data } = await agentsApi.importCsv(importFile, params);
       // TC-009: Treat zero imports with zero skips as an error
       if (data && data.imported === 0 && data.skipped === 0 && !data.error) {
         setImportResult({ error: "CSV file contains no valid agent rows. Please check the file format and ensure it has data rows with required columns: name, agent_type, domain." });

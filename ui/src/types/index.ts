@@ -1,5 +1,6 @@
 export interface Agent {
   id: string; name: string; agent_type: string; domain: string; status: string;
+  company_id?: string | null;
   version: string; confidence_floor: number; shadow_sample_count: number;
   shadow_accuracy_current: number | null; created_at: string;
   description?: string; hitl_condition?: string; authorized_tools?: string[];

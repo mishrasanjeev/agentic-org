@@ -12,6 +12,7 @@ certificate path is configured (``dsc_path`` in config).
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 
 import httpx
@@ -70,9 +71,33 @@ class GstnConnector(BaseConnector):
     async def _authenticate(self):
         """Adaequare GSP 2-step auth: authenticate to get session token."""
         api_key = self._get_secret("api_key")
+        client_id = self._get_secret("client_id")
+        client_secret = self._get_secret("client_secret")
+        if api_key and client_id == api_key and "client_id" not in self.config:
+            client_id = ""
+        if api_key and client_secret == api_key and "client_secret" not in self.config:
+            client_secret = ""
         gstin = self._get_secret("gstin")
         username = self._get_secret("username")
         password = self._get_secret("password")
+        state_code = str(gstin or "")[:2]
+
+        if client_id and client_secret:
+            auth_headers = {
+                "clientid": client_id,
+                "client-secret": client_secret,
+                "Content-Type": "application/json",
+            }
+            if state_code:
+                auth_headers["state-cd"] = state_code
+            auth_headers["txn"] = uuid.uuid4().hex
+        elif api_key:
+            auth_headers = {
+                "aspid": api_key,
+                "Content-Type": "application/json",
+            }
+        else:
+            raise ValueError("GSTN requires api_key or client_id/client_secret")
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -82,20 +107,27 @@ class GstnConnector(BaseConnector):
                     "username": username,
                     "password": password,
                 },
-                headers={
-                    "aspid": api_key,
-                    "Content-Type": "application/json",
-                },
+                headers=auth_headers,
             )
             resp.raise_for_status()
             auth_token = resp.json()["auth-token"]
 
         self._auth_headers = {
             "auth-token": auth_token,
-            "aspid": api_key,
             "gstin": gstin,
             "Content-Type": "application/json",
         }
+        if client_id and client_secret:
+            self._auth_headers.update(
+                {
+                    "clientid": client_id,
+                    "client-secret": client_secret,
+                }
+            )
+            if state_code:
+                self._auth_headers["state-cd"] = state_code
+        else:
+            self._auth_headers["aspid"] = api_key
 
     async def _sign_and_post(self, path: str, data: dict) -> dict[str, Any]:
         """Sign the payload with DSC and POST to the GSP endpoint.

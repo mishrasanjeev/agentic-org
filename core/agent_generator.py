@@ -178,11 +178,13 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "fetch_bank_statement", "check_account_balance", "post_voucher",
         "get_ledger_balance", "get_trial_balance", "create_order",
         "check_order_status", "list_vendors", "create_vendor",
-        "create_item", "create_bill",
+        "create_item", "create_bill", "list_vendor_bills", "list_bills",
+        "search_bills", "get_bill_by_id",
     ],
     "ar_collections": [
-        "create_invoice", "list_invoices", "create_payment_link",
-        "send_email", "check_account_balance",
+        "create_invoice", "list_invoices", "search_invoices",
+        "get_invoice_by_id", "create_payment_link", "send_email",
+        "check_account_balance",
     ],
     "recon_agent": [
         "fetch_bank_statement", "get_transaction_list",
