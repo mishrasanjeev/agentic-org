@@ -28,6 +28,7 @@ LIVE_PROVIDER_TERMS = (
 FULFILLMENT_TERMS = (
     "fulfillment",
     "fulfilment",
+    "ship",
     "shipping",
     "delivery",
     "deliver",
@@ -170,6 +171,9 @@ async def run_buyer_discovery_preview(
 
 def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) -> dict[str, Any]:
     """Select public-safe C6G fields and ignore anything private or raw."""
+    if isinstance(grantex_payload, Mapping) and grantex_payload.get("error") and not grantex_payload.get("data"):
+        return {"status": "unavailable", "source_reference": {"system": "grantex", "endpoint": C6G_PREVIEW_ENDPOINT}}
+
     data = _data_object(grantex_payload)
     if not data:
         return {"status": "unavailable", "source_reference": {"system": "grantex", "endpoint": C6G_PREVIEW_ENDPOINT}}

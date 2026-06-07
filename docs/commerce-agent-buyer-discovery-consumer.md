@@ -19,6 +19,18 @@ The buyer-facing response is built only from the fields Grantex returns. If
 Grantex does not return data, reports blockers, or has not requested sandbox
 handoff, AgenticOrg refuses or shows a preview-only response.
 
+C6I adds a buyer discovery session wrapper around that route. The wrapper first
+classifies intent as read-only discovery, checkout/payment, live provider,
+fulfillment, refund/return, or unsupported. Only read-only discovery proceeds to
+the Grantex preview call. Blocked intents return a refusal without calling a
+provider, merchant private API, checkout, payment, fulfillment, or refund path.
+
+The session response is channel-neutral for ChatGPT, Claude, Gemini, WhatsApp,
+Telegram, web chat, and future channels. Every response includes `status`,
+`message`, `merchant_preview`, `catalog_samples`, `allowed_capabilities`,
+`blocked_capabilities`, `source_reference`, `refusal_code`, and
+`evidence_summary`.
+
 ## Safe Fields
 
 AgenticOrg may show:
@@ -83,6 +95,19 @@ The AgenticOrg connector exposes one new read-only alias:
 
 It maps to the Grantex C6G preview route and does not expose Grantex operator
 handoff request or withdrawal endpoints.
+
+Application and channel adapters should call
+`core.commerce.buyer_session.start_buyer_discovery_session(...)` instead of
+formatting the raw preview directly. The session wrapper keeps the response
+shape stable and prevents checkout/payment/live-provider/fulfillment/refund
+requests from reaching any non-read-only path.
+
+## Rollback Notes
+
+Rollback is code-only: remove or disable usage of the C6I session wrapper and
+return callers to the C6H read-only consumer. No production config, public
+discovery flag, allowlist, provider credential, checkout/payment, fulfillment,
+refund, or merchant-system state is changed by this slice.
 
 ## Stop Conditions
 
