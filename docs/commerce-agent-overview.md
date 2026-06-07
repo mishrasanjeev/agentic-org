@@ -34,6 +34,7 @@ commerce transaction should work end to end.
 | C2G local handoff evidence | 13 passed, 0 failed, 2 skipped, with `consent_exchange` skipped using the stable fixture blocker. |
 | C3 hosted API-only smoke | 14 passed, 0 failed for liveness, health, MCP tools, A2A agent card, and A2A agents discovery. |
 | Production discovery | Commerce metadata is gated by default behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`; it is not final production readiness. |
+| C6I buyer discovery session | Channel-neutral read-only session wrapper around Grantex buyer preview data; no checkout/payment, provider, fulfillment, or refund execution. |
 | Direct provider calls | Blocked for commerce. AgenticOrg commerce uses Grantex only. |
 | Live checkout/payments/Plural | Blocked. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
@@ -56,6 +57,20 @@ flowchart LR
 AgenticOrg does not own catalog truth, consent grants, Commerce Passport
 issuance, merchant policy enforcement, provider credentials, provider webhooks,
 or payment reconciliation. Those controls stay in Grantex.
+
+## Buyer Discovery Session
+
+C6I lets a buyer-facing channel start a safe read-only discovery session. The
+session wrapper classifies each request before doing anything else:
+read-only discovery can call Grantex `buyer_discovery_preview`; checkout/payment,
+live provider, fulfillment, refund/return, and unsupported requests are refused
+without reaching any non-read-only path.
+
+The response shape is the same for ChatGPT, Claude, Gemini, WhatsApp, Telegram,
+web chat, and future channels. It includes status, message, merchant preview,
+catalog samples, allowed and blocked capabilities, source reference, refusal
+code, and evidence summary. It does not invent sellers, products, prices,
+stock, delivery, refund, launch, or payment facts.
 
 ## Merchant Self-Serve Journey
 
