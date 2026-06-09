@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from core.commerce.sales_guardrails import inventory_caution
+
 C6G_PREVIEW_ENDPOINT = "/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview"
 
 CHECKOUT_PAYMENT_TERMS = (
@@ -69,6 +71,35 @@ PRIVATE_OUTPUT_KEYS = {
     "redis_url",
     "raw_payload",
     "allowlist",
+}
+
+PRIVATE_SOURCE_MARKERS = (
+    "private",
+    "internal",
+    "provider",
+    "credential",
+    "secret",
+    "token",
+    "jwt",
+    "passport",
+    "raw",
+    "payload",
+    "postgres://",
+    "postgresql://",
+    "redis://",
+    "http://",
+    "https://",
+)
+
+SOURCE_STATUS_VALUES = {
+    "current",
+    "fresh",
+    "preview",
+    "stale",
+    "unknown",
+    "not_checked",
+    "unverified",
+    "blocked",
 }
 
 NON_ENABLING_CONTROL_FIELDS = (
@@ -322,23 +353,221 @@ def _safe_evidence_checklist(value: Any) -> list[dict[str, str]]:
     return entries
 
 
-def _safe_catalog_samples(value: Any) -> list[dict[str, str]]:
+def _safe_catalog_samples(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, Sequence) or isinstance(value, str):
         return []
-    samples: list[dict[str, str]] = []
+    samples: list[dict[str, Any]] = []
     for item in value[:3]:
         if not isinstance(item, Mapping):
             continue
-        samples.append(
-            _drop_empty(
-                {
-                    "title": _safe_text(item.get("title"), limit=160),
-                    "brand": _safe_text(item.get("brand"), limit=120),
-                    "category": _safe_text(item.get("category_preset") or item.get("category"), limit=120),
-                }
-            )
+        sample = _drop_empty(
+            {
+                "title": _safe_public_text(item.get("title"), limit=160),
+                "brand": _safe_public_text(item.get("brand"), limit=120),
+                "category": _safe_public_text(item.get("category_preset") or item.get("category"), limit=120),
+            }
         )
+        commercial_facts = _buyer_safe_commercial_facts(item)
+        if commercial_facts:
+            sample["commercial_facts"] = commercial_facts
+        source_summary = _buyer_safe_source_summary(item)
+        if source_summary:
+            sample["source_summary"] = source_summary
+        samples.append(sample)
     return samples
+
+
+def _buyer_safe_commercial_facts(item: Mapping[str, Any]) -> dict[str, Any]:
+    variant = _first_mapping(item.get("variants"))
+    fact_source = variant or item
+    price_amount = _first_value(fact_source, item, keys=("price_amount", "price", "amount", "amount_minor_units"))
+    currency = _safe_currency(_first_value(fact_source, item, keys=("currency", "price_currency")))
+    availability = _safe_status(
+        _first_value(
+            fact_source,
+            item,
+            keys=("availability_status", "inventory_status", "stock_status", "freshness"),
+        )
+    )
+    warranty = _safe_public_text(_first_value(fact_source, item, keys=("warranty_summary", "warranty")), limit=240)
+    return_policy = _safe_public_text(
+        _first_value(fact_source, item, keys=("return_policy_summary", "return_policy")),
+        limit=240,
+    )
+    tax_value = _first_value(
+        fact_source,
+        item,
+        keys=("tax_inclusive", "tax_rate", "tax_amount_minor_units", "gst_slab", "hsn_code", "tax"),
+    )
+
+    inventory = inventory_caution({"items": [fact_source]})
+    facts: dict[str, Any] = {
+        "price": _drop_empty(
+            {
+                "status": "preview_only" if price_amount not in (None, "") and currency else "unknown",
+                "display": f"{currency} {_safe_text(price_amount, limit=60)}"
+                if price_amount not in (None, "") and currency
+                else "",
+                "final_price_confirmed": False,
+                "message": (
+                    "Preview price only. Final tax, fees, discounts, delivery charges, "
+                    "and checkout totals are not confirmed."
+                    if price_amount not in (None, "") and currency
+                    else "Price is not confirmed by Grantex for this preview."
+                ),
+            }
+        ),
+        "tax": _drop_empty(
+            {
+                "status": "provided_by_grantex" if tax_value not in (None, "") else "unknown",
+                "final_tax_confirmed": False,
+                "message": "Final tax/GST is not confirmed for checkout."
+                if tax_value in (None, "")
+                else "Tax metadata is present, but final checkout tax is not confirmed here.",
+            }
+        ),
+        "warranty": _drop_empty(
+            {
+                "status": "provided_by_grantex" if warranty else "unknown",
+                "summary": warranty,
+                "message": "Warranty terms are not confirmed by Grantex for this preview." if not warranty else "",
+            }
+        ),
+        "return_policy": _drop_empty(
+            {
+                "status": "provided_by_grantex" if return_policy else "unknown",
+                "summary": return_policy,
+                "message": "Return or refund handling is not confirmed by Grantex for this preview."
+                if not return_policy
+                else "",
+            }
+        ),
+        "inventory": _drop_empty(
+            {
+                "status": "unknown_or_stale"
+                if inventory.get("caution_required")
+                else availability or "preview_bucket",
+                "preview_availability": availability,
+                "caution_required": bool(inventory.get("caution_required")),
+                "stock_promise": False,
+                "message": inventory.get("message")
+                or "Availability is a Grantex preview bucket, not a reserved quantity.",
+            }
+        ),
+        "unsupported": [
+            "discounts",
+            "coupons",
+            "emi",
+            "delivery",
+            "support",
+            "fulfillment",
+            "refunds",
+            "settlement",
+            "payout",
+        ],
+    }
+    return facts
+
+
+def _buyer_safe_source_summary(item: Mapping[str, Any]) -> dict[str, Any]:
+    variant = _first_mapping(item.get("variants"))
+    fact_source = variant or item
+    source_label = _safe_source_label(
+        _first_value(
+            fact_source,
+            item,
+            keys=("source_label", "source_system", "connector_source", "source", "source_type"),
+        )
+    )
+    freshness = _safe_status(
+        _first_value(
+            fact_source,
+            item,
+            keys=("freshness", "freshness_status", "sync_status", "health_state"),
+        )
+    )
+    stale = _truthy(_first_value(fact_source, item, keys=("stale", "is_stale")))
+    if stale:
+        freshness = "stale"
+    last_checked_at = _safe_timestamp(
+        _first_value(
+            fact_source,
+            item,
+            keys=("last_synced_at", "last_successful_sync_at", "source_snapshot_at", "generated_at"),
+        )
+    )
+    return _drop_empty(
+        {
+            "source": source_label or "grantex_preview",
+            "freshness_status": freshness or ("unknown" if not last_checked_at else "preview"),
+            "last_checked_at": last_checked_at,
+        }
+    )
+
+
+def _first_mapping(value: Any) -> Mapping[str, Any]:
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        for item in value:
+            if isinstance(item, Mapping):
+                return item
+    if isinstance(value, Mapping):
+        return value
+    return {}
+
+
+def _first_value(*mappings: Mapping[str, Any], keys: Sequence[str]) -> Any:
+    for mapping in mappings:
+        for key in keys:
+            value = mapping.get(key)
+            if value not in (None, ""):
+                return value
+    return None
+
+
+def _safe_public_text(value: Any, *, limit: int = 240) -> str:
+    text = _safe_text(value, limit=limit)
+    if not text:
+        return ""
+    lowered = text.lower()
+    if any(marker in lowered for marker in PRIVATE_SOURCE_MARKERS):
+        return ""
+    return text
+
+
+def _safe_source_label(value: Any) -> str:
+    text = _safe_text(value, limit=80)
+    if not text:
+        return ""
+    lowered = text.lower()
+    if any(marker in lowered for marker in PRIVATE_SOURCE_MARKERS):
+        return "grantex_controlled_source"
+    return text
+
+
+def _safe_currency(value: Any) -> str:
+    text = _safe_text(value, limit=3).upper()
+    return text if len(text) == 3 and text.isalpha() else ""
+
+
+def _safe_status(value: Any) -> str:
+    text = _safe_text(value, limit=40).lower().replace(" ", "_").replace("-", "_")
+    safe_availability = {"in_stock", "out_of_stock", "pre_order", "back_order"}
+    return text if text in SOURCE_STATUS_VALUES or text in safe_availability else ""
+
+
+def _safe_timestamp(value: Any) -> str:
+    text = _safe_text(value, limit=40)
+    if len(text) >= 10 and "://" not in text and not any(marker in text.lower() for marker in PRIVATE_SOURCE_MARKERS):
+        return text
+    return ""
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value in (None, ""):
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "stale", "expired", "blocked"}
 
 
 def _string_list(value: Any, *, limit: int = 20) -> list[str]:

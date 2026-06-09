@@ -145,10 +145,13 @@ async def test_buyer_session_calls_grantex_for_read_only_discovery() -> None:
     assert response["contract"] == BUYER_SESSION_CONTRACT
     assert response["status"] == "preview_only"
     assert response["merchant_preview"]["display_name"] == "Grounded Preview Store"
-    assert response["catalog_samples"] == [
-        {"title": "Grounded Mixer", "brand": "SafeBrand", "category": "electronics_appliances"},
-        {"title": "Grounded Cooker", "brand": "SafeBrand"},
+    assert [sample["title"] for sample in response["catalog_samples"]] == [
+        "Grounded Mixer",
+        "Grounded Cooker",
     ]
+    assert response["catalog_samples"][0]["brand"] == "SafeBrand"
+    assert response["catalog_samples"][0]["category"] == "electronics_appliances"
+    assert response["catalog_samples"][0]["commercial_facts"]["price"]["status"] == "unknown"
     assert response["allowed_capabilities"] == ["read_only_profile_discovery_preview"]
     assert "checkout_payment_creation" in response["blocked_capabilities"]
     assert response["source_reference"]["system"] == "grantex"
@@ -198,8 +201,8 @@ def test_buyer_session_redacts_private_fields_and_stays_grounded() -> None:
     assert "secret" not in serialized
     assert "raw_payload" not in serialized
     assert "999" not in serialized
-    assert "discount" not in serialized.lower()
-    assert "delivery" not in serialized.lower()
+    assert "discount promise" not in serialized.lower()
+    assert "delivery promise" not in serialized.lower()
     assert "refund promise" not in serialized.lower()
 
 
