@@ -7,6 +7,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from core.commerce.session_authority import session_authority_from_payload
+
 COMMERCE_AGENT_TYPE = "commerce_sales_agent"
 COMMERCE_DISPLAY_NAME = "commerce-sales-agent"
 
@@ -41,10 +43,18 @@ PAYMENT_REFUSAL_ERROR_CODES = frozenset(
         "checkout_passport_required",
         "checkout_not_enabled",
         "checkout_payment_not_enabled",
+        "checkout_payment_not_enabled_by_c6u6",
         "commerce_disabled",
+        "agent_status_missing",
+        "authority_ambiguous",
+        "authority_freshness_missing",
+        "authority_stale",
+        "buyer_mismatch",
         "consent_denied",
         "consent_expired",
+        "consent_missing",
         "consent_not_granted",
+        "consent_revoked",
         "emergency_disabled",
         "live_payment_not_enabled",
         "live_provider_blocked",
@@ -53,11 +63,17 @@ PAYMENT_REFUSAL_ERROR_CODES = frozenset(
         "merchant_agentic_commerce_disabled",
         "merchant_disabled",
         "merchant_emergency_disabled",
+        "merchant_mismatch",
+        "merchant_status_missing",
         "passport_expired",
+        "passport_invalid",
+        "passport_missing",
         "passport_not_yet_valid",
         "passport_required",
         "passport_revoked",
         "passport_scope_missing",
+        "policy_decision_ambiguous",
+        "policy_decision_missing",
         "policy_decision_deny",
         "policy_denied",
         "provider_blocked",
@@ -65,6 +81,10 @@ PAYMENT_REFUSAL_ERROR_CODES = frozenset(
         "provider_unavailable",
         "public_discovery_disabled",
         "public_discovery_not_enabled",
+        "session_expired",
+        "session_mismatch",
+        "session_missing",
+        "session_revoked",
         "stale_inventory",
     }
 )
@@ -192,6 +212,33 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
             "Grantex Commerce refused this checkout/payment action. Do not continue without remediation.",
         )
 
+    authority_payload = _lookup(params, "session_authority", "authority", "commerce_authority")
+    if authority_payload is not None:
+        if not isinstance(authority_payload, Mapping):
+            return refusal(
+                "authority_ambiguous",
+                "Grantex authority state is ambiguous, so this checkout/payment action is refused.",
+            )
+        authority = session_authority_from_payload(
+            authority_payload,
+            expected_merchant_id=_as_optional_text(_lookup(params, "merchant_id")),
+            expected_agent_id=_as_optional_text(_lookup(params, "agent_id")),
+            expected_buyer_id=_as_optional_text(_lookup(params, "buyer_id", "subject")),
+            expected_session_id=_as_optional_text(_lookup(params, "buyer_session_id", "session_id")),
+        )
+        if not authority.get("authority_valid"):
+            return refusal(
+                _as_text(authority.get("refusal_code")) or "authority_ambiguous",
+                _as_message(authority.get("reason")),
+                {"authority": authority},
+            )
+        if authority.get("protected_action_allowed") is not True:
+            return refusal(
+                _as_text(authority.get("refusal_code")) or "checkout_payment_not_enabled_by_c6u6",
+                _as_message(authority.get("reason")),
+                {"authority": authority},
+            )
+
     consent_status = _as_text(_lookup(params, "consent_status", "consent.status", "consent_request.status"))
     if consent_status in CONSENT_DENIED_STATUSES:
         return refusal("consent_denied", "Checkout/payment requires granted consent; the current consent was denied.")
@@ -275,6 +322,16 @@ def _sanitize_grantex_error_message(value: Any) -> str:
             "credential, or raw payload details were redacted."
         )
     return message[:500].rstrip()
+
+
+def _as_optional_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _as_message(value: Any) -> str:
+    text = str(value or "").replace("\x00", "").strip()
+    return text[:500].rstrip() if text else "Grantex authority state requires refresh before continuing."
 
 
 def _inventory_records(inventory: Any) -> list[Mapping[str, Any]]:
