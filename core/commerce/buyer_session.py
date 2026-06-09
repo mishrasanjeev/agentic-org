@@ -10,6 +10,7 @@ from core.commerce.buyer_discovery import (
     CHECKOUT_PAYMENT_TERMS,
     FULFILLMENT_TERMS,
     LIVE_PROVIDER_TERMS,
+    MERCHANT_PRIVATE_API_TERMS,
     REFUND_RETURN_TERMS,
     build_buyer_discovery_response,
 )
@@ -71,6 +72,11 @@ BLOCKED_CAPABILITIES_BY_INTENT = {
         "provider_credential_access",
         "provider_private_api",
     ),
+    "merchant_private_api": (
+        "merchant_private_api",
+        "merchant_existing_system",
+        "direct_merchant_system_access",
+    ),
     "fulfillment": (
         "order_fulfillment",
         "shipping_delivery",
@@ -89,6 +95,8 @@ BLOCKED_CAPABILITIES_BY_INTENT = {
 def classify_buyer_session_intent(request_text: str) -> str:
     """Classify buyer intent before any Grantex call or side-effect path."""
     text = str(request_text or "").strip().lower()
+    if _contains_any(text, MERCHANT_PRIVATE_API_TERMS):
+        return "merchant_private_api"
     if _contains_any(text, LIVE_PROVIDER_TERMS):
         return "live_provider"
     if _contains_any(text, CHECKOUT_PAYMENT_TERMS):
@@ -159,6 +167,10 @@ def _intent_refusal(intent: str) -> dict[str, Any]:
         "live_provider": (
             "Live providers, live Plural, provider credentials, and provider APIs are blocked in this session."
         ),
+        "merchant_private_api": (
+            "Merchant private APIs and merchant existing systems are blocked in this session. "
+            "Commerce requests must use Grantex-owned contracts."
+        ),
         "fulfillment": (
             "Fulfillment, shipping, delivery, dispatch, tracking, and order-status execution are blocked here."
         ),
@@ -168,7 +180,9 @@ def _intent_refusal(intent: str) -> dict[str, Any]:
     return {
         "status": "refused",
         "refusal": True,
-        "refusal_code": f"{intent}_not_enabled",
+        "refusal_code": "merchant_private_api_not_allowed"
+        if intent == "merchant_private_api"
+        else f"{intent}_not_enabled",
         "message": messages[intent],
         "allowed_capabilities": list(READ_ONLY_ALLOWED_CAPABILITIES),
         "blocked_capabilities": list(BLOCKED_CAPABILITIES_BY_INTENT[intent]),

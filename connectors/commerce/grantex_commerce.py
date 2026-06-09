@@ -172,6 +172,9 @@ class GrantexCommerceConnector(BaseConnector):
 
     async def payment_get_status(self, **params: Any) -> dict[str, Any]:
         """Poll payment status through Grantex Commerce only."""
+        guardrail = validate_payment_action("payment_get_status", params)
+        if not guardrail.get("allowed"):
+            return guardrail
         return await self._call_mcp_alias("payment_get_status", params)
 
     def _require_idempotency_key(self, alias: str, params: dict[str, Any]) -> dict[str, Any] | None:
