@@ -129,7 +129,7 @@ jobs:
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ tests/regression/ --cov=. --cov-report=xml --cov-fail-under=55
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
       # Foundation #9 release-acceptance gate runs in its own job
       # and needs the .coverage + coverage.xml from this run to
       # enforce per-module floors. Without artefact pass-through
