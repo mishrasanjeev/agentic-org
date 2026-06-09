@@ -365,7 +365,7 @@ def _bool_value(value: str | None) -> bool | None:
 
 
 def _finding(category: str, path: str, line: int, code: str, message: str) -> Finding:
-    digest = hashlib.sha1(f"{category}:{path}:{line}:{code}".encode()).hexdigest()[:12]
+    digest = hashlib.sha256(f"{category}:{path}:{line}:{code}".encode()).hexdigest()[:12]
     return Finding(category=category, path=path, line=line, code=code, message=message, key=f"{category}:{path}:{line}:{digest}")
 
 

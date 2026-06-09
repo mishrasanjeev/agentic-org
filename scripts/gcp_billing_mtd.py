@@ -56,7 +56,7 @@ def run_query(sql: str) -> list[dict]:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:  # noqa: S310  # nosec B310
+    with urllib.request.urlopen(req) as resp:  # noqa: S310  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         body = json.loads(resp.read())
     if not body.get("jobComplete"):
         sys.exit("Query did not complete synchronously; rerun.")
@@ -81,7 +81,7 @@ def find_billing_table() -> str:
         url,
         headers={"Authorization": f"Bearer {token}"},
     )
-    with urllib.request.urlopen(req) as resp:  # noqa: S310  # nosec B310
+    with urllib.request.urlopen(req) as resp:  # noqa: S310  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         body = json.loads(resp.read())
     tables = [t["tableReference"]["tableId"] for t in body.get("tables", [])]
     standard = [t for t in tables if t.startswith("gcp_billing_export_v1_")]
@@ -119,7 +119,7 @@ def main() -> None:
     WHERE EXTRACT(YEAR FROM usage_start_time) = {year}
       AND EXTRACT(MONTH FROM usage_start_time) = {month}
     GROUP BY currency
-    """  # noqa: S608
+    """  # noqa: S608  # nosec B608
     by_service_sql = f"""
     SELECT
       service.description AS service,
@@ -131,7 +131,7 @@ def main() -> None:
     HAVING net_cost > 0
     ORDER BY net_cost DESC
     LIMIT 15
-    """  # noqa: S608
+    """  # noqa: S608  # nosec B608
 
     print(f"=== {year}-{month:02d} (project: {PROJECT}) ===\n")
     totals = run_query(total_sql)

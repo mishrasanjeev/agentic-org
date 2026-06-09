@@ -117,7 +117,7 @@ def upgrade():
     # Table names are hardcoded — not user input.
     for tbl in ["agents", "workflow_definitions", "workflow_runs", "audit_log"]:
         policy_sql = (
-            f"CREATE POLICY company_isolation ON {tbl} USING ("  # noqa: S608
+            f"CREATE POLICY company_isolation ON {tbl} USING ("  # noqa: S608  # nosec B608
             f"  company_id IS NULL"
             f"  OR company_id IN ("
             f"    SELECT id FROM companies"

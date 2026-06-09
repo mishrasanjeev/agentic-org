@@ -70,7 +70,7 @@ def _run_celery_beat() -> int:
     # at /tmp (writable tmpfs on Cloud Run) so the scheduler can
     # persist its last-run state for the lifetime of the revision.
     schedule_path = os.environ.get(
-        "AGENTICORG_BEAT_SCHEDULE_PATH", "/tmp/celerybeat-schedule"  # noqa: S108
+        "AGENTICORG_BEAT_SCHEDULE_PATH", "/tmp/celerybeat-schedule"  # noqa: S108  # nosec B108
     )
     sys.argv = [
         "celery",

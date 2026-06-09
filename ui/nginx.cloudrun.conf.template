@@ -22,7 +22,7 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    rewrite ^(.+)/$ $1 permanent;
+    rewrite ^(.+)/$ https://$host$1 permanent;
 
     error_page 502 503 504 /index.html;
 
