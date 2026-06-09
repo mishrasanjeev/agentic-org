@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import KillSwitch from "@/components/KillSwitch";
 import api, { agentsApi } from "@/lib/api";
+import { extractReadableAgentOutput } from "@/lib/agent-output";
 import type { Agent, PromptEditHistoryEntry } from "@/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -141,18 +142,7 @@ export function formatRunResult(run: unknown): string {
 }
 
 function formatRunOutput(output: unknown): string {
-  if (output == null || output === "") return "No output returned.";
-  if (typeof output === "string") return output;
-  if (typeof output === "object") {
-    const record = output as Record<string, unknown>;
-    const preferred = record.answer || record.response || record.summary || record.message;
-    if (preferred) return String(preferred);
-  }
-  try {
-    return JSON.stringify(output, null, 2);
-  } catch {
-    return String(output);
-  }
+  return extractReadableAgentOutput(output, "No output returned.");
 }
 
 export default function AgentDetail() {
@@ -431,9 +421,9 @@ export default function AgentDetail() {
             </div>
           </CardHeader>
           <CardContent>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+            <div className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-sm leading-relaxed">
               {formatRunResult(runResult)}
-            </pre>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -967,7 +957,9 @@ function LearningTab({ agent }: { agent: Agent }) {
                   <div className="flex-1">
                     {entry.text && <p className="text-sm">{entry.text}</p>}
                     {entry.corrected_output && (
-                      <p className="text-xs text-muted-foreground mt-1">Corrected: {typeof entry.corrected_output === "string" ? entry.corrected_output : JSON.stringify(entry.corrected_output)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Corrected: {extractReadableAgentOutput(entry.corrected_output, "")}
+                      </p>
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">

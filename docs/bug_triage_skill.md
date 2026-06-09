@@ -359,6 +359,41 @@ Reference: `tests/regression/test_ca_firms_uday25_zoho_crm_tools.py`,
 
 ---
 
+## Rule 14 - Fix protocol drift and output-envelope leaks at the contract boundary, not one caller
+
+Added 2026-06-09 after the CA/Marketing reopen sweep. Three different
+symptoms had the same shallow-fix pattern: patching the visible page or the
+named file while leaving the shared contract wrong.
+
+1. **Provider connector auth must pin the current provider contract.** If a
+   connector auth bug cites a live provider flow, assert the endpoint, query
+   string, credential header names, response token field, and downstream auth
+   header in tests. For Adaequare GSTN this means
+   `/authenticate?grant_type=token`, `gspappid`/`gspappsecret`,
+   `access_token`, and `Authorization: Bearer ...` on normal and DSC-signed
+   calls. Do not keep a legacy flow alive just because an older test mocked it.
+2. **Final agent output must be sanitized at every render boundary.** Backend
+   chat formatting, explicit agent-run result cards, sales-agent result cards,
+   and playground traces must all use the same extraction rules: unwrap
+   `raw_output`, `answer`, `response`, `message`, `text`, `content`, and
+   `result`; parse JSON/Python-repr envelopes; suppress `status`, `signature`,
+   `extras`, `metadata`, tool outputs, trace IDs, and secrets. A
+   `JSON.stringify(output)` fallback is a bug unless the surface is explicitly
+   an operator debug export.
+3. **Dropdown additions belong in shared option contracts.** Adding a value
+   only to the page named in the ticket creates edit/create drift. Add it to
+   the shared constants, verify the API schema accepts it, and cover the
+   visible dropdown with Playwright.
+
+Reference: `tests/regression/test_uday_09jun2026_ca_marketing_bugs.py`,
+`tests/integration/test_gstn_sandbox.py`, `ui/src/lib/agent-output.ts`,
+`ui/src/__tests__/agent-output.test.ts`, `ui/e2e/qa-uday-09jun2026.spec.ts`,
+`connectors/finance/gstn.py`, `api/v1/chat.py`,
+`ui/src/pages/ConnectorCreate.tsx`, `ui/src/pages/AgentDetail.tsx`,
+`ui/src/pages/SalesPipeline.tsx`.
+
+---
+
 ## Why this file lives in the repo, not my memory
 
 Memory files live under `~/.claude/` and don't ship with the product. This skill lives in `docs/` so:

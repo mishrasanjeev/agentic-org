@@ -25,6 +25,7 @@ const FALLBACK_AUTH_FIELDS: Record<string, { key: string; label: string; placeho
     { key: "client_id", label: "Client ID", placeholder: "Enter client ID" },
     { key: "client_secret", label: "Certificate / PEM", placeholder: "Paste certificate content" },
   ],
+  custom: [],
   none: [],
 };
 

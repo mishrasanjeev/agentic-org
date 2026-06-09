@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { extractReadableAgentOutput } from "@/lib/agent-output";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -349,7 +350,7 @@ function parseTraceLines(
   const meaningfulFields = ["status", "invoice_id", "score", "classification", "net_pay", "matched", "recommendation", "root_cause", "sentiment_score"];
   const hasMeaningful = meaningfulFields.some(f => p[f] !== undefined);
   if (!hasMeaningful && Object.keys(p).length > 0) {
-    lines.push({ text: JSON.stringify(p, null, 2).substring(0, 500), color: "gray" });
+    lines.push({ text: extractReadableAgentOutput(p), color: "gray" });
   }
 
   // Tool call results
@@ -368,7 +369,7 @@ function parseTraceLines(
       const res = tr.result as Record<string, unknown> | undefined;
       lines.push({ text: `  ${tr.connector}.${tr.tool} result:`, color: "green" });
       if (res) {
-        const preview = JSON.stringify(res).substring(0, 300);
+        const preview = extractReadableAgentOutput(res, "Tool completed.").substring(0, 300);
         lines.push({ text: `    ${preview}`, color: "gray" });
       }
     }

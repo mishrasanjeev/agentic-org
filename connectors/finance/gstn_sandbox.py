@@ -5,9 +5,8 @@ development and integration testing before going live.
 
 Usage:
     connector = GstnSandboxConnector(config={
-        "username": "your-sandbox-user",
-        "password": "your-sandbox-pass",
-        "api_key": "your-sandbox-aspid",
+        "client_id": "your-sandbox-gsp-app-id",
+        "client_secret": "your-sandbox-gsp-app-secret",
     })
 """
 

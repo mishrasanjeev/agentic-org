@@ -1671,7 +1671,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 854,
+    "source_line": 860,
     "tenant_required": true
   },
   {
@@ -1689,7 +1689,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 511,
+    "source_line": 517,
     "tenant_required": true
   },
   {

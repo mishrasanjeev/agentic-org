@@ -109,8 +109,8 @@ def test_tc_004_stop_button_uses_abort_controller() -> None:
 
 def test_tc_005_chat_extractor_handles_text_envelope() -> None:
     """Pin the readable-keys list + Python-repr fallback in
-    ChatPanel's extractReadableText."""
-    src = (REPO / "ui" / "src" / "components" / "ChatPanel.tsx").read_text(
+    the shared agent output sanitizer used by ChatPanel."""
+    src = (REPO / "ui" / "src" / "lib" / "agent-output.ts").read_text(
         encoding="utf-8"
     )
     # `text` must be in the readable-keys list (the LangGraph envelope).
@@ -119,9 +119,13 @@ def test_tc_005_chat_extractor_handles_text_envelope() -> None:
     for key in ("answer", "response", "message", "summary", "result", "content"):
         assert f'"{key}"' in src, f"readable key {key!r} must be present"
     # Python repr fallback helper.
-    assert "_pythonReprToJson" in src
+    assert "pythonReprToJson" in src
     # CSS bubble overflow fix on both user + agent bubbles.
-    assert "whitespace-pre-wrap break-words" in src
+    chat_src = (REPO / "ui" / "src" / "components" / "ChatPanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "extractReadableAgentOutput" in chat_src
+    assert "whitespace-pre-wrap break-words" in chat_src
 
 
 # ──────────────────────────────────────────────────────────────────

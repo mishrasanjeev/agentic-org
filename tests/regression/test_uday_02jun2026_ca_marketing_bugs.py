@@ -183,11 +183,11 @@ class _GSTNAuthClient:
 
     async def post(self, url: str, *, json: dict, headers: dict):
         self.posts.append({"url": url, "json": json, "headers": headers})
-        return _mock_client_response({"auth-token": "gstn-token"})
+        return _mock_client_response({"access_token": "gstn-token"})
 
 
 @pytest.mark.asyncio
-async def test_gstn_auth_uses_api_key_pattern_without_client_secret(monkeypatch) -> None:
+async def test_gstn_auth_uses_api_key_alias_with_api_secret(monkeypatch) -> None:
     import connectors.finance.gstn as gstn_module
     from connectors.finance.gstn import GstnConnector
 
@@ -196,23 +196,26 @@ async def test_gstn_auth_uses_api_key_pattern_without_client_secret(monkeypatch)
     connector = GstnConnector(
         {
             "api_key": "asp-id",
+            "api_secret": "app-secret",
             "gstin": "27ABCDE1234F1Z5",
-            "username": "gst-user",
-            "password": "gst-pass",
         }
     )
 
     await connector._authenticate()
 
+    assert recording.posts[0]["url"].endswith("/authenticate?grant_type=token")
+    assert recording.posts[0]["json"] == {}
     headers = recording.posts[0]["headers"]
-    assert headers["aspid"] == "asp-id"
+    assert headers["gspappid"] == "asp-id"
+    assert headers["gspappsecret"] == "app-secret"
+    assert "aspid" not in headers
     assert "clientid" not in headers
-    assert connector._auth_headers["aspid"] == "asp-id"
-    assert connector._auth_headers["auth-token"] == "gstn-token"
+    assert connector._auth_headers["Authorization"] == "Bearer gstn-token"
+    assert "auth-token" not in connector._auth_headers
 
 
 @pytest.mark.asyncio
-async def test_gstn_auth_uses_client_secret_pattern_when_provided(monkeypatch) -> None:
+async def test_gstn_auth_uses_client_credentials_as_gsp_headers(monkeypatch) -> None:
     import connectors.finance.gstn as gstn_module
     from connectors.finance.gstn import GstnConnector
 
@@ -223,18 +226,17 @@ async def test_gstn_auth_uses_client_secret_pattern_when_provided(monkeypatch) -
             "client_id": "gstn-client",
             "client_secret": "gstn-secret",
             "gstin": "27ABCDE1234F1Z5",
-            "username": "gst-user",
-            "password": "gst-pass",
         }
     )
 
     await connector._authenticate()
 
     headers = recording.posts[0]["headers"]
-    assert headers["clientid"] == "gstn-client"
-    assert headers["client-secret"] == "gstn-secret"
-    assert headers["state-cd"] == "27"
+    assert headers["gspappid"] == "gstn-client"
+    assert headers["gspappsecret"] == "gstn-secret"
+    assert "state-cd" not in headers
+    assert "client-secret" not in headers
     assert "aspid" not in headers
-    assert connector._auth_headers["clientid"] == "gstn-client"
-    assert connector._auth_headers["client-secret"] == "gstn-secret"
-    assert connector._auth_headers["auth-token"] == "gstn-token"
+    assert connector._auth_headers["Authorization"] == "Bearer gstn-token"
+    assert connector._auth_headers["gstin"] == "27ABCDE1234F1Z5"
+    assert "auth-token" not in connector._auth_headers
