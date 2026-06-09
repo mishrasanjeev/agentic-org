@@ -2,7 +2,7 @@
 
 Tests are fully mocked for CI but structured so they can run against
 the real Adaequare sandbox by setting env vars:
-    GSTN_SANDBOX_USER, GSTN_SANDBOX_PASS, GSTN_SANDBOX_ASPID
+    GSTN_SANDBOX_CLIENT_ID, GSTN_SANDBOX_CLIENT_SECRET
 """
 
 from __future__ import annotations
@@ -71,9 +71,8 @@ def self_signed_pfx():
 @pytest.fixture
 def sandbox_config():
     return {
-        "username": os.getenv("GSTN_SANDBOX_USER", "sandbox-user"),
-        "password": os.getenv("GSTN_SANDBOX_PASS", "sandbox-pass"),
-        "api_key": os.getenv("GSTN_SANDBOX_ASPID", "sandbox-aspid"),
+        "client_id": os.getenv("GSTN_SANDBOX_CLIENT_ID", "sandbox-client-id"),
+        "client_secret": os.getenv("GSTN_SANDBOX_CLIENT_SECRET", "sandbox-client-secret"),
         "gstin": "29AADCB2230M1ZT",
     }
 
@@ -154,8 +153,8 @@ class TestGstnAuthFlow:
     """Test the Adaequare GSP authentication flow."""
 
     @pytest.mark.asyncio
-    async def test_authenticate_gets_session_token(self, sandbox_config):
-        """Verify 2-step auth flow: POST to /authenticate → get auth-token."""
+    async def test_authenticate_gets_access_token(self, sandbox_config):
+        """Verify current Adaequare flow: grant_type=token -> access_token."""
         from unittest.mock import MagicMock
 
         from connectors.finance.gstn import GstnConnector
@@ -163,20 +162,49 @@ class TestGstnAuthFlow:
         connector = GstnConnector(config=sandbox_config)
 
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"auth-token": "test-session-token-123"}
+        mock_resp.json.return_value = {
+            "access_token": "test-access-token-123",
+            "token_type": "bearer",
+            "expires_in": 535533,
+        }
         mock_resp.raise_for_status = MagicMock()
 
         with patch("httpx.AsyncClient.post", return_value=mock_resp) as mock_post:
             await connector._authenticate()
 
-            # Verify it posted to /authenticate
             call_args = mock_post.call_args
-            assert "/authenticate" in str(call_args)
+            assert call_args.args[0].endswith("/authenticate?grant_type=token")
+            assert call_args.kwargs["headers"]["gspappid"] == "sandbox-client-id"
+            assert call_args.kwargs["headers"]["gspappsecret"] == "sandbox-client-secret"
+            assert "clientid" not in call_args.kwargs["headers"]
+            assert "client-secret" not in call_args.kwargs["headers"]
 
-            # Verify auth headers are set
-            assert connector._auth_headers["auth-token"] == "test-session-token-123"
-            assert connector._auth_headers["aspid"] == "sandbox-aspid"
+            assert connector._access_token == "test-access-token-123"
+            assert connector._auth_headers["Authorization"] == "Bearer test-access-token-123"
             assert connector._auth_headers["gstin"] == "29AADCB2230M1ZT"
+            assert "auth-token" not in connector._auth_headers
+
+    @pytest.mark.asyncio
+    async def test_authenticate_extracts_legacy_auth_token_as_bearer(self, sandbox_config):
+        """Legacy auth-token response still yields bearer headers."""
+        from unittest.mock import MagicMock
+
+        from connectors.finance.gstn import GstnConnector
+
+        connector = GstnConnector(config=sandbox_config)
+        connector._auth_headers = {
+            "Authorization": "Bearer test-access-token",
+            "Content-Type": "application/json",
+        }
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"auth-token": "legacy-token-123"}
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.post", return_value=mock_resp):
+            await connector._authenticate()
+
+        assert connector._auth_headers["Authorization"] == "Bearer legacy-token-123"
+        assert connector._auth_headers["auth-token"] == "legacy-token-123"
 
     @pytest.mark.asyncio
     async def test_base_url_is_correct(self, sandbox_config):
@@ -205,6 +233,11 @@ class TestGstnFilingWithDSC:
         from connectors.finance.gstn import GstnConnector
 
         connector = GstnConnector(config=sandbox_config)
+        connector._auth_headers = {
+            "Authorization": "Bearer test-access-token",
+            "gstin": sandbox_config["gstin"],
+            "Content-Type": "application/json",
+        }
 
         # Mock the HTTP client — json() and raise_for_status() are sync calls
         from unittest.mock import MagicMock
@@ -227,6 +260,7 @@ class TestGstnFilingWithDSC:
         # Verify DSC headers were included
         call_kwargs = mock_client.post.call_args
         headers = call_kwargs.kwargs.get("headers", {})
+        assert headers["Authorization"] == "Bearer test-access-token"
         assert headers["X-DSC-Signed"] == "true"
         assert "X-DSC-Signature" in headers
 

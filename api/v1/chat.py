@@ -236,11 +236,17 @@ _INTERNAL_FIELDS = {
     "status", "confidence", "trace", "tool_calls", "signature",
     "sig_hash", "hash", "hmac", "token", "access_token", "refresh_token",
     "secret", "password", "api_key", "correlation_id", "thread_id",
-    "trace_id", "request_id", "tenant_id", "agent_id",
+    "trace_id", "request_id", "tenant_id", "agent_id", "extras",
+    "metadata", "debug", "debug_info", "debugging_information",
+    "internal_id", "internal_ids", "tool_outputs", "tool_results",
+    "tool_calls_log",
 }
 
 
-_READABLE_KEYS = ("text", "content", "answer", "response", "message", "summary", "result")
+_READABLE_KEYS = (
+    "text", "content", "answer", "response", "message", "summary",
+    "result", "raw_output",
+)
 
 
 def _try_parse_dict_string(raw: str) -> Any | None:
@@ -286,6 +292,9 @@ def _extract_readable(val: Any) -> str | None:
         return None
     if isinstance(val, str):
         s = val.strip()
+        unwrapped = _try_parse_dict_string(s)
+        if unwrapped is not None:
+            return _extract_readable(unwrapped)
         return s if s else None
     if isinstance(val, (int, float, bool)):
         return str(val)
@@ -356,10 +365,7 @@ def _format_agent_output(output: dict | str | Any) -> str:
     # renders as just the text.
     for key in ("answer", "response", "message", "summary", "result"):
         if key in output and output[key]:
-            val = output[key]
-            if isinstance(val, str):
-                return val
-            text = _extract_readable(val)
+            text = _extract_readable(output[key])
             if text:
                 return text
     # Bare text/content block at top level (e.g.

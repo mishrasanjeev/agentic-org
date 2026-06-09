@@ -64,7 +64,7 @@ The dashboard respects RBAC: only users with CFO or CEO roles can access `/dashb
 ### 4. Tax Compliance Agent
 **What it does**: GST filing (GSTR-1, GSTR-3B, GSTR-9), TDS computation and filing, ITC reconciliation, and tax calendar management.
 
-**Key capabilities**: Pushes GSTR-1 outbound supply data to GSTN via Adaequare GSP. 2-step authentication (session token + API calls). DSC signing for returns (PKCS#1 v1.5 RSA-SHA256). Automatic ITC reconciliation (GSTR-2A vs. books). Tax deadline tracking with proactive alerts.
+**Key capabilities**: Pushes GSTR-1 outbound supply data to GSTN via Adaequare GSP. Current Adaequare GSP authentication exchanges `gspappid`/`gspappsecret` for an `access_token`, then sends `Authorization: Bearer <token>` on GST API calls. DSC signing for returns (PKCS#1 v1.5 RSA-SHA256). Automatic ITC reconciliation (GSTR-2A vs. books). Tax deadline tracking with proactive alerts.
 
 **HITL triggers**: All GST filings require CFO approval before submission. ITC mismatches above threshold. DSC certificate nearing expiry.
 

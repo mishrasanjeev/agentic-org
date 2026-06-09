@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
+import { extractReadableAgentOutput } from "@/lib/agent-output";
 
 const STAGES = [
   { key: "new", label: "New", color: "bg-slate-500" },
@@ -423,7 +424,9 @@ export default function SalesPipeline() {
                 <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Qualification</p>
                 <div className="bg-muted rounded p-3 text-sm">
                   {typeof agentResult.output.qualification === "object" ? (
-                    <pre className="font-mono text-xs whitespace-pre-wrap">{JSON.stringify(agentResult.output.qualification, null, 2)}</pre>
+                    <p className="whitespace-pre-wrap">
+                      {extractReadableAgentOutput(agentResult.output.qualification)}
+                    </p>
                   ) : (
                     <p>{String(agentResult.output.qualification)}</p>
                   )}
@@ -484,9 +487,9 @@ export default function SalesPipeline() {
             {!agentResult.output.qualification && !agentResult.output.recommendation && !agentResult.output.email && Object.keys(agentResult.output).length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Agent Output</p>
-                <pre className="bg-muted rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-60 overflow-auto">
-                  {JSON.stringify(agentResult.output, null, 2)}
-                </pre>
+                <div className="bg-muted rounded p-3 text-sm whitespace-pre-wrap max-h-60 overflow-auto">
+                  {extractReadableAgentOutput(agentResult.output)}
+                </div>
               </div>
             )}
           </CardContent>

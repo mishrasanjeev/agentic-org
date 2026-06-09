@@ -492,24 +492,20 @@ def _bootstrap() -> None:
             api_base_url="https://gsp.adaequare.com/gsp",
             user_fields=(
                 ProviderField(
-                    key="api_key",
-                    label="GSP API Key (aspid)",
-                    placeholder="aspid value from your GSP",
+                    key="client_id",
+                    label="GSP App ID (gspappid)",
+                    placeholder="gspappid from Adaequare GSP",
+                ),
+                ProviderField(
+                    key="client_secret",
+                    label="GSP App Secret (gspappsecret)",
+                    placeholder="gspappsecret from Adaequare GSP",
                     secret=True,
                 ),
                 ProviderField(
                     key="gstin",
                     label="GSTIN",
                     placeholder="09AABCU9355J1ZS",
-                ),
-                ProviderField(
-                    key="username",
-                    label="GST Portal Username",
-                ),
-                ProviderField(
-                    key="password",
-                    label="GST Portal Password",
-                    secret=True,
                 ),
                 ProviderField(
                     key="dsc_path",

@@ -89,7 +89,7 @@ pytest tests/unit/test_langgraph_runtime.py::TestApProcessor::test_default_tools
 ### What Was Broken
 Two bugs:
 1. `base_url` was `https://gsp.adaequare.com/gsp/authenticate` — every API call became `.../authenticate/fetch/gstr2a` (wrong)
-2. Auth passed DSC file path as an HTTP header (`X-DSC-Path`) instead of implementing the proper Adaequare 2-step auth flow
+2. Auth passed DSC file path as an HTTP header (`X-DSC-Path`) instead of implementing the proper Adaequare GSP app-token auth flow
 
 ### Root Cause
 URL: `/authenticate` is an endpoint, not a base path — copy-paste error in the generator spec.
@@ -98,7 +98,7 @@ Auth: DSC signing was stubbed out and the interim auth used header-passing as a 
 ### What Was Fixed
 | File | Change |
 |------|--------|
-| `connectors/finance/gstn.py` | Fixed `base_url` to `https://gsp.adaequare.com/gsp`. Implemented 2-step Adaequare auth (POST to `/authenticate` → get session token → use in headers). Added `_sign_and_post()` for DSC-signed filing. Added `get_dsc_info()`. |
+| `connectors/finance/gstn.py` | Fixed `base_url` to `https://gsp.adaequare.com/gsp`. Implemented current Adaequare auth (POST to `/authenticate?grant_type=token` with `gspappid`/`gspappsecret` headers, extract `access_token`, send `Authorization: Bearer <token>`). Added `_sign_and_post()` for DSC-signed filing. Added `get_dsc_info()`. |
 | `connectors/framework/auth_adapters.py` | Replaced DSCAdapter stub with real RSA-SHA256 PKCS#1 v1.5 signing using `cryptography` library. Added `verify_certificate()` for expiry checks. |
 | `connectors/finance/gstn_sandbox.py` | New — sandbox connector with Adaequare test environment config |
 | `scripts/generate_connectors.py` | Fixed GSTN base_url in generator spec |
@@ -122,7 +122,7 @@ pytest tests/integration/test_gstn_sandbox.py::TestGstnFilingWithDSC -v
 | # | Test | What It Verifies |
 |---|------|-----------------|
 | 1 | `test_step3_gstn_base_url_correct` | `base_url == "https://gsp.adaequare.com/gsp"`, no `/authenticate` |
-| 2 | `test_authenticate_gets_session_token` | POSTs to `/authenticate`, sets `auth-token`, `aspid`, `gstin` headers |
+| 2 | `test_authenticate_gets_access_token` | POSTs to `/authenticate?grant_type=token`, sets `Authorization: Bearer <token>` and `gstin` headers |
 | 3 | `test_sign_request_produces_valid_signature` | RSA-SHA256 signature is 256 bytes (RSA-2048) |
 | 4 | `test_sign_and_get_headers` | Returns `X-DSC-Signed: true` + `X-DSC-Signature` |
 | 5 | `test_verify_certificate_details` | Returns subject, issuer, expiry, `is_expired: false` |

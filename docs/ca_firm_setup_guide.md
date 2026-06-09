@@ -15,7 +15,7 @@ This guide covers everything needed to demo and deploy the AgenticOrg AI agent p
 | 1 | **Tally Prime license details** | Verify Tally version (Prime 4.x or ERP 9) | CA firm IT | Must have ODBC/XML server enabled on port 9000 |
 | 2 | **Tally company name** | Target company file for voucher posting | CA firm | Exact name as it appears in Tally |
 | 3 | **Tally machine IP** | Bridge agent target (usually localhost) | CA firm IT | If multi-machine setup, provide Tally server IP |
-| 4 | **Adaequare GSP credentials** | GSTN filing via GSP | CA firm or Adaequare | aspid (API key), username, password |
+| 4 | **Adaequare GSP credentials** | GSTN filing via GSP | CA firm or Adaequare | GSP App ID (`gspappid`) and GSP App Secret (`gspappsecret`) |
 | 5 | **GSTIN numbers** | All client GSTINs for filing | CA firm | 15-character GSTINs for each client entity |
 | 6 | **DSC (.pfx) file + password** | Digital signature for GST/IT filing | CA firm | Class 2 or Class 3 DSC, PAN-linked |
 | 7 | **Bank Account Aggregator consent** | Read bank statements via Finvu AA | CA firm's clients | Each client must approve via Finvu consent UI |
@@ -103,9 +103,8 @@ POST /api/v1/connectors/configure
 {
   "connector": "gstn",
   "config": {
-    "api_key": "<ADAEQUARE_ASPID>",
-    "username": "<GSP_USERNAME>",
-    "password": "<GSP_PASSWORD>",
+    "client_id": "<ADAEQUARE_GSP_APP_ID>",
+    "client_secret": "<ADAEQUARE_GSP_APP_SECRET>",
     "gstin": "<PRIMARY_GSTIN>",
     "dsc_path": "/path/to/dsc.pfx",        # For filing
     "dsc_password": "<DSC_PASSWORD>"
@@ -203,7 +202,7 @@ For a quick demo to a prospective CA firm:
 | Issue | Resolution |
 |-------|-----------|
 | Bridge can't reach Tally | Verify Tally XML server is enabled (F12 → Data Config → Allow XML Server = Yes) |
-| GSTN auth fails | Check aspid, username, password. Try sandbox first: `https://gsp.adaequare.com/test/enriched/gsp` |
+| GSTN auth fails | Check the Adaequare `gspappid` and `gspappsecret`. Try sandbox first: `https://gsp.adaequare.com/test/enriched/gsp` |
 | DSC signing fails | Verify .pfx password, check certificate expiry with `GET /connectors/gstn/dsc-info` |
 | AA consent times out | Client must complete approval on Finvu UI within 5 minutes |
 | Tally voucher rejected | Check company name matches exactly, verify voucher type exists in Tally |
