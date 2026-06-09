@@ -86,18 +86,32 @@ SENSITIVE_ERROR_PATTERNS = (
 )
 
 UNSUPPORTED_CLAIM_TERMS: dict[str, tuple[str, ...]] = {
+    "final_price": ("final price", "final payable", "payable amount", "checkout total", "all taxes included"),
     "emi": ("emi", "installment", "instalment", "no-cost emi", "no cost emi"),
     "discount": ("discount", "coupon", "promo", "cashback", "deal", "sale price"),
     "offer": ("offer", "promotion", "bundle"),
+    "inventory": ("guaranteed in stock", "in stock", "available now", "reserved stock"),
+    "delivery": ("delivery", "deliver", "shipping", "ship by", "delivery tomorrow"),
+    "fulfillment": ("fulfillment", "dispatch", "tracking", "order status"),
+    "refund": ("refund", "chargeback"),
+    "settlement": ("settlement", "payout", "reconciliation"),
+    "support": ("support promise", "service center", "customer support"),
     "return_policy": ("return policy", "returns", "refund", "replacement"),
     "tax": ("tax", "gst", "vat"),
     "warranty": ("warranty", "guarantee"),
 }
 
 TOOL_DATA_CLAIM_KEYS: dict[str, tuple[str, ...]] = {
+    "final_price": ("final_price", "final_amount", "payable_amount", "checkout_total"),
     "emi": ("emi", "installment", "instalment", "financing"),
     "discount": ("discount", "coupon", "promo", "cashback"),
     "offer": ("offer", "promotion", "bundle"),
+    "inventory": ("inventory_confirmed", "reserved_stock"),
+    "delivery": ("delivery", "serviceability", "shipping"),
+    "fulfillment": ("fulfillment", "dispatch", "tracking", "order_status"),
+    "refund": ("refund", "chargeback"),
+    "settlement": ("settlement", "payout", "reconciliation"),
+    "support": ("support", "service_center"),
     "return_policy": ("return", "refund", "replacement"),
     "tax": ("tax", "gst", "vat"),
     "warranty": ("warranty", "guarantee"),

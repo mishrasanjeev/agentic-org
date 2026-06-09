@@ -118,11 +118,15 @@ def test_sanitizer_parses_valid_read_only_discovery_handoff() -> None:
         "currency": "INR",
         "discovery_description": "Preview-only appliance catalog for buyer-agent tests.",
     }
-    assert safe["catalog_samples"] == [
-        {"title": "Countertop Mixer", "brand": "TestBrand", "category": "electronics_appliances"},
-        {"title": "Rice Cooker", "brand": "TestBrand"},
-        {"title": "Induction Cooktop", "brand": "TestBrand"},
+    assert [sample["title"] for sample in safe["catalog_samples"]] == [
+        "Countertop Mixer",
+        "Rice Cooker",
+        "Induction Cooktop",
     ]
+    assert safe["catalog_samples"][0]["brand"] == "TestBrand"
+    assert safe["catalog_samples"][0]["category"] == "electronics_appliances"
+    assert safe["catalog_samples"][0]["commercial_facts"]["price"]["status"] == "unknown"
+    assert safe["catalog_samples"][0]["source_summary"]["source"] == "grantex_preview"
     assert "buyer_agent_readiness_context" in safe["allowed_capabilities"]
     assert "checkout_payment_creation" in safe["blocked_capabilities"]
 

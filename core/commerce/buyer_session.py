@@ -318,6 +318,8 @@ def _is_safe_value(value: Any) -> bool:
         return bool(_safe_text(value))
     if isinstance(value, int | float | bool):
         return True
+    if isinstance(value, Mapping):
+        return all(isinstance(key, str) and _is_safe_value(nested) for key, nested in value.items())
     if isinstance(value, Sequence) and not isinstance(value, str):
-        return all(isinstance(item, str | int | float | bool) for item in value)
+        return all(_is_safe_value(item) for item in value)
     return False
