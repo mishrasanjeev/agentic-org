@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -38,12 +39,17 @@ PAYMENT_REFUSAL_ERROR_CODES = frozenset(
         "amount_cap_exceeded",
         "checkout_amount_exceeds_passport",
         "checkout_passport_required",
+        "checkout_not_enabled",
+        "checkout_payment_not_enabled",
         "commerce_disabled",
         "consent_denied",
         "consent_expired",
         "consent_not_granted",
         "emergency_disabled",
+        "live_payment_not_enabled",
         "live_provider_blocked",
+        "live_provider_not_enabled",
+        "merchant_private_api_not_allowed",
         "merchant_agentic_commerce_disabled",
         "merchant_disabled",
         "merchant_emergency_disabled",
@@ -55,8 +61,28 @@ PAYMENT_REFUSAL_ERROR_CODES = frozenset(
         "policy_decision_deny",
         "policy_denied",
         "provider_blocked",
+        "provider_call_not_allowed",
         "provider_unavailable",
+        "public_discovery_disabled",
+        "public_discovery_not_enabled",
+        "stale_inventory",
     }
+)
+
+SENSITIVE_ERROR_PATTERNS = (
+    re.compile(r"-----BEGIN [A-Z ]+PRIVATE KEY-----.*?-----END [A-Z ]+PRIVATE KEY-----", re.I | re.S),
+    re.compile(r"\b(?:postgresql?|redis)://[^\s'\"<>]+", re.I),
+    re.compile(r"\bhttps?://[^\s'\"<>]*(?:private|internal|merchant|provider)[^\s'\"<>]*", re.I),
+    re.compile(
+        r"\b(?:bearer|token|jwt|passport|secret|api[_-]?key|webhook[_-]?secret|"
+        r"client[_-]?secret|password)\s*[:=]\s*[^\s,'\"{}]+",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:raw[_-]?payload|provider[_-]?(?:payload|metadata|credential|credentials))"
+        r"\b\s*[:=]\s*\{[^{}]*\}",
+        re.I,
+    ),
 )
 
 UNSUPPORTED_CLAIM_TERMS: dict[str, tuple[str, ...]] = {
@@ -178,10 +204,15 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
     if policy_decision in POLICY_DENIALS:
         return refusal("policy_denied", "Grantex policy denied this checkout/payment action.")
 
-    if action in {"checkout_create", "payment_create_intent"}:
+    if action in {"checkout_create", "payment_create_intent", "payment_get_status"}:
         passport_jwt = _lookup(params, "passport_jwt", "passport.jwt", "commerce_passport.jwt")
         if not passport_jwt:
-            return refusal("consent_required", "Checkout/payment requires a granted Grantex Commerce Passport.")
+            message = (
+                "Payment status requires a Grantex Commerce Passport."
+                if action == "payment_get_status"
+                else "Checkout/payment requires a granted Grantex Commerce Passport."
+            )
+            return refusal("consent_required", message)
 
     amount_minor_units = _as_int(_lookup(params, "amount_minor_units", "amount", "total_amount_minor_units"))
     passport_cap = _as_int(
@@ -216,6 +247,20 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
         )
 
     return allowed()
+
+
+def _sanitize_grantex_error_message(value: Any) -> str:
+    message = str(value or "").replace("\x00", "").strip()
+    if not message:
+        return "Grantex Commerce request failed."
+    for pattern in SENSITIVE_ERROR_PATTERNS:
+        message = pattern.sub("[redacted]", message)
+    if "[redacted]" in message:
+        return (
+            "Grantex Commerce refused the request. Private provider, merchant, "
+            "credential, or raw payload details were redacted."
+        )
+    return message[:500].rstrip()
 
 
 def _inventory_records(inventory: Any) -> list[Mapping[str, Any]]:
@@ -326,7 +371,7 @@ def normalize_grantex_error(payload: Any, status_code: int | None = None) -> dic
         code = "grantex_jsonrpc_error"
 
     raw_message = error_obj.get("message") if isinstance(error_obj, Mapping) else None
-    message = str(raw_message).strip() if raw_message else "Grantex Commerce request failed."
+    message = _sanitize_grantex_error_message(raw_message)
 
     retryable = bool(error_obj.get("retryable")) if isinstance(error_obj, Mapping) else False
     normalized: dict[str, Any] = {
@@ -337,9 +382,13 @@ def normalize_grantex_error(payload: Any, status_code: int | None = None) -> dic
         "refusal": code in PAYMENT_REFUSAL_ERROR_CODES,
     }
 
-    for field in ("decision_id", "audit_event_id", "remediation"):
+    for field in ("decision_id", "audit_event_id"):
         value = error_obj.get(field) if isinstance(error_obj, Mapping) else None
         if value:
             normalized[field] = value
+
+    remediation = error_obj.get("remediation") if isinstance(error_obj, Mapping) else None
+    if isinstance(remediation, str):
+        normalized["remediation"] = _sanitize_grantex_error_message(remediation)
 
     return normalized

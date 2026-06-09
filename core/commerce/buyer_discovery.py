@@ -22,8 +22,22 @@ LIVE_PROVIDER_TERMS = (
     "live commerce",
     "plural",
     "pine labs",
+    "direct provider",
+    "payment provider",
+    "provider api",
+    "provider call",
     "provider credential",
     "provider secret",
+)
+MERCHANT_PRIVATE_API_TERMS = (
+    "merchant private api",
+    "merchant private endpoint",
+    "merchant private system",
+    "merchant existing system",
+    "merchant backend",
+    "merchant internal api",
+    "private merchant api",
+    "private merchant endpoint",
 )
 FULFILLMENT_TERMS = (
     "fulfillment",
@@ -76,6 +90,8 @@ NON_ENABLING_CONTROL_FIELDS = (
 def classify_buyer_discovery_request(request_text: str) -> str:
     """Classify requests that C6H must refuse before any write-like behavior."""
     text = str(request_text or "").strip().lower()
+    if _contains_any(text, MERCHANT_PRIVATE_API_TERMS):
+        return "merchant_private_api"
     if _contains_any(text, LIVE_PROVIDER_TERMS):
         return "live_provider"
     if _contains_any(text, CHECKOUT_PAYMENT_TERMS):
@@ -235,6 +251,10 @@ def _refusal_for_intent(intent: str, source_reference: Mapping[str, Any]) -> dic
             "Live payment/provider access is not enabled in this read-only discovery slice. "
             "I cannot request provider access or live routing."
         ),
+        "merchant_private_api": (
+            "Merchant private APIs and merchant existing systems are not available to AgenticOrg. "
+            "Commerce requests must go through Grantex-owned contracts."
+        ),
         "fulfillment": (
             "Fulfillment, shipment, delivery, and order-status execution are not enabled in this slice."
         ),
@@ -243,7 +263,9 @@ def _refusal_for_intent(intent: str, source_reference: Mapping[str, Any]) -> dic
     return {
         "status": "refused",
         "refusal": True,
-        "refusal_code": f"{intent}_not_enabled",
+        "refusal_code": "merchant_private_api_not_allowed"
+        if intent == "merchant_private_api"
+        else f"{intent}_not_enabled",
         "message": messages[intent],
         "source_reference": dict(source_reference),
     }
