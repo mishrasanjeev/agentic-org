@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from core.commerce.public_discovery_state import public_discovery_decision_from_payload
 from core.commerce.sales_guardrails import inventory_caution
 
 C6G_PREVIEW_ENDPOINT = "/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview"
@@ -143,6 +144,7 @@ def build_buyer_discovery_response(
     intent = classify_buyer_discovery_request(request_text)
     safe_preview = sanitize_buyer_discovery_preview(grantex_payload)
     source_reference = safe_preview.get("source_reference", {})
+    public_discovery_state = safe_preview.get("public_discovery_state", {})
 
     if intent != "read_only_discovery":
         return _refusal_for_intent(intent, source_reference)
@@ -169,6 +171,7 @@ def build_buyer_discovery_response(
             "remediation_items": _string_list(safe_preview.get("remediation_items")),
             "blocked_capabilities": _string_list(safe_preview.get("blocked_capabilities")),
             "safety_labels": safe_preview.get("safety_labels", {}),
+            "public_discovery_state": public_discovery_state,
             "source_reference": source_reference,
         }
 
@@ -201,6 +204,7 @@ def build_buyer_discovery_response(
         "allowed_capabilities": safe_preview.get("allowed_capabilities", []),
         "blocked_capabilities": safe_preview.get("blocked_capabilities", []),
         "safety_labels": safety_labels,
+        "public_discovery_state": public_discovery_state,
         "source_reference": source_reference,
     }
 
@@ -253,6 +257,7 @@ def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) 
             "audit_event_id": _safe_text(data.get("audit_event_id")),
         }
     )
+    public_discovery_state = public_discovery_decision_from_payload(data)
 
     return {
         "status": "available",
@@ -268,6 +273,7 @@ def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) 
         "blockers": _string_list(data.get("blockers")),
         "remediation_items": _string_list(data.get("remediation_items")),
         "safety_labels": safety_labels,
+        "public_discovery_state": public_discovery_state,
         "source_reference": source_reference,
     }
 

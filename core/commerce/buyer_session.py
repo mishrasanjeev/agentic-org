@@ -242,6 +242,9 @@ def _evidence_summary(
         summary["refusal_code"] = _safe_refusal_code(response.get("refusal_code"))
     if safety_labels:
         summary["safety_labels"] = safety_labels
+    public_discovery_state = _mapping(response.get("public_discovery_state"))
+    if public_discovery_state:
+        summary["public_discovery_state"] = public_discovery_state
     for source_key, target_key in (
         ("readiness_summary", "readiness"),
         ("agent_facing_preview_summary", "agent_preview"),
