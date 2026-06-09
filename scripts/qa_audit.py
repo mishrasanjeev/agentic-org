@@ -184,7 +184,7 @@ def _check_url_health(paths: set[str], base: str, head_cache: dict[str, int]) ->
             # nosec B310 — base scheme validated above; URL is built
             # from a trusted config + a path the audit script controls.
             req = urllib.request.Request(url, method="HEAD")  # noqa: S310
-            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310  # nosec B310
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 head_cache[path] = resp.status
                 out[path] = resp.status
         except urllib.error.HTTPError as e:

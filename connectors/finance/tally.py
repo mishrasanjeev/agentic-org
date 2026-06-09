@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
-from xml.etree.ElementTree import Element, SubElement, tostring
+
+# stdlib ElementTree is used only to construct outbound XML envelopes.
+# All untrusted Tally responses are parsed through defusedxml below.
+from xml.etree.ElementTree import Element, SubElement, tostring  # nosemgrep
 
 import structlog
 from defusedxml.ElementTree import ParseError as XMLParseError
