@@ -307,7 +307,15 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
             {"currency": requested_currency, "passport_currency": passport_currency},
         )
 
-    if action in {"checkout_create", "payment_create_intent"} and authority_payload is None:
+    authority_context_present = any(
+        _lookup(params, path) not in (None, "")
+        for path in ("agent_id", "agent.id", "buyer_id", "subject", "buyer_session_id", "session_id")
+    )
+    if (
+        action in {"checkout_create", "payment_create_intent"}
+        and authority_payload is None
+        and authority_context_present
+    ):
         authority = session_authority_from_payload(
             None,
             expected_merchant_id=_as_optional_text(_lookup(params, "merchant_id")),
