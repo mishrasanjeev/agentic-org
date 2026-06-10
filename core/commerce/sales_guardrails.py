@@ -307,6 +307,20 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
             {"currency": requested_currency, "passport_currency": passport_currency},
         )
 
+    if action in {"checkout_create", "payment_create_intent"} and authority_payload is None:
+        authority = session_authority_from_payload(
+            None,
+            expected_merchant_id=_as_optional_text(_lookup(params, "merchant_id")),
+            expected_agent_id=_as_optional_text(_lookup(params, "agent_id")),
+            expected_buyer_id=_as_optional_text(_lookup(params, "buyer_id", "subject")),
+            expected_session_id=_as_optional_text(_lookup(params, "buyer_session_id", "session_id")),
+        )
+        return refusal(
+            _as_text(authority.get("refusal_code")) or "authority_freshness_missing",
+            _as_message(authority.get("reason")),
+            {"authority": authority},
+        )
+
     return allowed()
 
 

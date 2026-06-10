@@ -98,6 +98,22 @@ def _decision(authority: dict[str, Any]) -> dict[str, Any]:
             "authority_stale",
         ),
         (
+            "malformed authority timestamp",
+            {
+                "session": {
+                    "status": "active",
+                    "id": "buyer_session_synthetic_c6u6",
+                    "authority_checked_at": "not-a-date",
+                }
+            },
+            "authority_stale",
+        ),
+        (
+            "malformed passport expiry",
+            {"passport": {"status": "valid", "expires_at": "not-a-date"}},
+            "passport_expired",
+        ),
+        (
             "mismatched merchant",
             {"passport": {"status": "valid", "merchant_id": "merchant_other"}},
             "merchant_mismatch",
@@ -182,6 +198,28 @@ def test_fresh_cached_authority_still_does_not_enable_payment() -> None:
     assert result["error"] == "checkout_payment_not_enabled_by_c6u6"
     assert result["details"]["authority"]["authority_valid"] is True
     assert result["details"]["authority"]["protected_action_allowed"] is False
+
+
+def test_missing_authority_summary_refuses_payment_even_with_passport_string() -> None:
+    result = validate_payment_action(
+        "payment_create_intent",
+        {
+            "merchant_id": "merchant_synthetic_c6u6",
+            "agent_id": "agent_synthetic_c6u6",
+            "buyer_id": "buyer_synthetic_c6u6",
+            "buyer_session_id": "buyer_session_synthetic_c6u6",
+            "passport_jwt": "passport.synthetic.raw.value",
+            "amount_minor_units": 1000,
+            "currency": "INR",
+            "provider_key": "mock",
+        },
+    )
+    serialized = json.dumps(result, sort_keys=True).lower()
+
+    assert result["allowed"] is False
+    assert result["error"] == "consent_missing"
+    assert "passport.synthetic.raw.value" not in serialized
+    assert result["details"]["authority"]["authority_valid"] is False
 
 
 def test_ambiguous_cached_authority_refuses_payment_action() -> None:

@@ -370,7 +370,7 @@ def _parse_datetime(value: datetime | str | Any | None) -> datetime:
             parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
         except ValueError:
-            return datetime.max.replace(tzinfo=UTC)
+            return datetime.min.replace(tzinfo=UTC)
     return datetime.now(UTC)
 
 
