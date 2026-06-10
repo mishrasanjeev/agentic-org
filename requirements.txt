@@ -56,7 +56,7 @@ stripe==15.2.0
 
 # ─── LLM Providers ──────────────────────────────────────────────────────────
 google-genai==1.75.0
-anthropic==0.105.2
+anthropic==0.109.1
 openai==2.41.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
