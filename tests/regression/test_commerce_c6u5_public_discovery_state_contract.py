@@ -30,7 +30,7 @@ def _state_payload(grantex_state: str, agenticorg_state: str | None = None, **ov
         "grantex_state": grantex_state,
         "agenticorg_state": agenticorg_state or grantex_state,
         "freshness_status": "fresh",
-        "expires_at": "2026-06-10T00:00:00Z",
+        "expires_at": "2099-06-10T00:00:00Z",
         "evidence": [
             {"key": "grantex_review_decision", "status": "pass"},
             {"key": "agenticorg_exposure_decision", "status": "pass"},

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 SESSION_AUTHORITY_CONTRACT = "agenticorg.commerce.session_authority.v1"
+MAX_FUTURE_SKEW = timedelta(seconds=60)
 
 VALID_CONSENT_STATUSES = frozenset({"granted", "approved", "active"})
 VALID_PASSPORT_STATUSES = frozenset({"valid", "verified", "issued", "active"})
@@ -76,7 +77,7 @@ def session_authority_from_payload(
         or data.get("buyer_session_authority")
     )
     source = authority or data
-    current_time = _parse_datetime(now)
+    current_time = _parse_now(now)
 
     statuses = {
         "consent": _normalize_status(
@@ -184,27 +185,50 @@ def _authority_blockers(
     checked_at = _parse_datetime(checked_at_value)
     if checked_at_value in (None, ""):
         blockers.append("authority_freshness_missing")
+    elif checked_at is None:
+        blockers.append("authority_freshness_invalid")
+    elif checked_at - now > MAX_FUTURE_SKEW:
+        blockers.append("authority_freshness_future")
     elif now - checked_at > timedelta(seconds=max_age_seconds):
         blockers.append("authority_stale")
 
-    for code, value in (
-        ("consent_expired", _lookup(source, "consent_expires_at", "consent.expires_at", "consent_request.expires_at")),
+    for code, invalid_code, value in (
+        (
+            "consent_expired",
+            "consent_expiry_invalid",
+            _lookup(source, "consent_expires_at", "consent.expires_at", "consent_request.expires_at"),
+        ),
         (
             "passport_expired",
+            "passport_expiry_invalid",
             _lookup(source, "passport_expires_at", "passport.expires_at", "commerce_passport.expires_at"),
         ),
-        ("session_expired", _lookup(source, "session_expires_at", "session.expires_at")),
+        ("session_expired", "session_expiry_invalid", _lookup(source, "session_expires_at", "session.expires_at")),
     ):
         expires_at = _parse_datetime(value)
-        if value not in (None, "") and expires_at <= now:
+        if value in (None, ""):
+            continue
+        if expires_at is None:
+            blockers.append(invalid_code)
+        elif expires_at <= now:
             blockers.append(code)
 
     if _truthy(_lookup(source, "revoked", "passport.revoked", "commerce_passport.revoked")):
         blockers.append("passport_revoked")
     if _lookup(source, "revoked_at", "passport.revoked_at", "commerce_passport.revoked_at") not in (None, ""):
         blockers.append("passport_revoked")
-    if _truthy(_lookup(source, "consent_revoked", "consent.revoked")):
+    if _truthy(_lookup(source, "consent_revoked", "consent.revoked", "consent_request.revoked")):
         blockers.append("consent_revoked")
+    if _lookup(source, "consent_revoked_at", "consent.revoked_at", "consent_request.revoked_at") not in (None, ""):
+        blockers.append("consent_revoked")
+    if _truthy(_lookup(source, "session_revoked", "session.revoked")):
+        blockers.append("session_revoked")
+    if _lookup(source, "session_revoked_at", "session.revoked_at") not in (None, ""):
+        blockers.append("session_revoked")
+    if _truthy(_lookup(source, "session_disabled", "session.disabled")):
+        blockers.append("session_disabled")
+    if _truthy(_lookup(source, "emergency_disabled", "merchant.emergency_disabled")):
+        blockers.append("merchant_emergency_disabled")
 
     blockers.extend(
         _mismatch_blockers(
@@ -288,7 +312,15 @@ def _buyer_safe_reason(code: str) -> str:
         "agent_disabled": "The commerce agent is not enabled for this action.",
         "policy_denied": "Grantex policy did not allow this commerce action.",
         "authority_freshness_missing": "Authority freshness is missing, so the session must be refreshed.",
+        "authority_freshness_invalid": "Authority freshness is invalid, so the session must be refreshed.",
+        "authority_freshness_future": "Authority freshness is in the future, so the session must be refreshed.",
         "authority_stale": "Authority is stale, so the session must be refreshed.",
+        "consent_expiry_invalid": "Grantex consent expiry is invalid and must be refreshed.",
+        "passport_expiry_invalid": "The Commerce Passport expiry is invalid and must be refreshed.",
+        "session_expiry_invalid": "Session expiry is invalid and must be refreshed.",
+        "session_revoked": "The buyer session was revoked and must be refreshed.",
+        "session_disabled": "The buyer session is disabled and must be refreshed.",
+        "merchant_emergency_disabled": "Commerce is disabled by merchant emergency controls.",
         "merchant_mismatch": "Merchant authority does not match the buyer session.",
         "agent_mismatch": "Agent authority does not match the buyer session.",
         "buyer_mismatch": "Buyer authority does not match the buyer session.",
@@ -329,7 +361,7 @@ def _normalize_status(value: Any) -> str:
 
 def _safe_evidence_keys(value: Any) -> list[str]:
     if isinstance(value, Mapping):
-        iterable: Sequence[Any] = list(value.values())
+        iterable: Sequence[Any] = list(value.keys())
     elif isinstance(value, Sequence) and not isinstance(value, str):
         iterable = value
     else:
@@ -362,7 +394,12 @@ def _text(value: Any) -> str:
     return str(value).replace("\x00", "").strip()
 
 
-def _parse_datetime(value: datetime | str | Any | None) -> datetime:
+def _parse_now(value: datetime | str | Any | None) -> datetime:
+    parsed = _parse_datetime(value)
+    return parsed or datetime.now(UTC)
+
+
+def _parse_datetime(value: datetime | str | Any | None) -> datetime | None:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=UTC)
     if isinstance(value, str) and value.strip():
@@ -370,8 +407,8 @@ def _parse_datetime(value: datetime | str | Any | None) -> datetime:
             parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
         except ValueError:
-            return datetime.min.replace(tzinfo=UTC)
-    return datetime.now(UTC)
+            return None
+    return None
 
 
 def _truthy(value: Any) -> bool:

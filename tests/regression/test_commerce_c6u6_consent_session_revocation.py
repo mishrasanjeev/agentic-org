@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -13,7 +13,12 @@ from core.commerce.session_authority import session_authority_from_payload
 NOW = datetime(2026, 6, 9, 0, 0, tzinfo=UTC)
 
 
-def _authority(**overrides: Any) -> dict[str, Any]:
+def _iso(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _authority(*, checked_at: datetime | None = None, **overrides: Any) -> dict[str, Any]:
+    authority_checked_at = _iso(checked_at or datetime.now(UTC))
     authority: dict[str, Any] = {
         "consent": {"status": "granted", "expires_at": "2099-06-09T00:10:00Z"},
         "passport": {
@@ -26,7 +31,7 @@ def _authority(**overrides: Any) -> dict[str, Any]:
         "session": {
             "status": "active",
             "id": "buyer_session_synthetic_c6u6",
-            "authority_checked_at": "2099-06-08T23:59:00Z",
+            "authority_checked_at": authority_checked_at,
         },
         "merchant": {"status": "enabled"},
         "agent": {"status": "trusted"},
@@ -83,7 +88,18 @@ def _decision(authority: dict[str, Any]) -> dict[str, Any]:
         ("expired passport", {"passport": {"status": "expired"}}, "passport_expired"),
         ("revoked passport", {"passport": {"status": "revoked"}}, "passport_revoked"),
         ("revoked passport marker", {"passport": {"status": "valid", "revoked": True}}, "passport_revoked"),
+        (
+            "revoked consent marker",
+            {"consent": {"status": "granted", "revoked_at": "2026-06-08T23:59:30Z"}},
+            "consent_revoked",
+        ),
+        ("revoked session marker", {"session": {"status": "active", "revoked": True}}, "session_revoked"),
         ("disabled merchant", {"merchant": {"status": "disabled"}}, "merchant_disabled"),
+        (
+            "merchant emergency disable",
+            {"merchant": {"status": "enabled", "emergency_disabled": True}},
+            "merchant_emergency_disabled",
+        ),
         ("disabled agent", {"agent": {"status": "disabled"}}, "agent_disabled"),
         ("policy denial", {"policy": {"decision": "deny"}}, "policy_denied"),
         (
@@ -98,20 +114,31 @@ def _decision(authority: dict[str, Any]) -> dict[str, Any]:
             "authority_stale",
         ),
         (
-            "malformed authority timestamp",
+            "invalid authority freshness",
             {
                 "session": {
                     "status": "active",
                     "id": "buyer_session_synthetic_c6u6",
-                    "authority_checked_at": "not-a-date",
+                    "authority_checked_at": "not-a-timestamp",
                 }
             },
-            "authority_stale",
+            "authority_freshness_invalid",
         ),
         (
-            "malformed passport expiry",
-            {"passport": {"status": "valid", "expires_at": "not-a-date"}},
-            "passport_expired",
+            "future authority freshness",
+            {
+                "session": {
+                    "status": "active",
+                    "id": "buyer_session_synthetic_c6u6",
+                    "authority_checked_at": _iso(NOW + timedelta(seconds=61)),
+                }
+            },
+            "authority_freshness_future",
+        ),
+        (
+            "invalid passport expiry",
+            {"passport": {"status": "valid", "expires_at": "not-a-timestamp"}},
+            "passport_expiry_invalid",
         ),
         (
             "mismatched merchant",
@@ -135,7 +162,7 @@ def _decision(authority: dict[str, Any]) -> dict[str, Any]:
     ],
 )
 def test_authority_state_fails_closed(label: str, authority: dict[str, Any], refusal_code: str) -> None:
-    result = _decision(_authority(**authority))
+    result = _decision(_authority(checked_at=NOW, **authority))
 
     assert result["authority_valid"] is False, label
     assert result["protected_action_allowed"] is False
@@ -146,7 +173,7 @@ def test_authority_state_fails_closed(label: str, authority: dict[str, Any], ref
 
 
 def test_fresh_authority_is_buyer_safe_but_not_checkout_permission() -> None:
-    result = _decision(_authority())
+    result = _decision(_authority(checked_at=NOW))
 
     assert result["authority_valid"] is True
     assert result["protected_action_allowed"] is False
@@ -200,7 +227,7 @@ def test_fresh_cached_authority_still_does_not_enable_payment() -> None:
     assert result["details"]["authority"]["protected_action_allowed"] is False
 
 
-def test_missing_authority_summary_refuses_payment_even_with_passport_string() -> None:
+def test_missing_authority_summary_refuses_contextual_payment_even_with_passport_string() -> None:
     result = validate_payment_action(
         "payment_create_intent",
         {
@@ -264,6 +291,21 @@ def test_buyer_session_projects_redacted_authority_and_keeps_public_discovery_hi
     assert "merchant-private.internal" not in serialized
     assert "synthetic-secret" not in serialized
     assert "raw_payload" not in serialized
+
+
+def test_buyer_session_refuses_when_explicit_authority_is_revoked() -> None:
+    response = build_channel_neutral_buyer_response(
+        _preview_payload(_authority(passport={"status": "revoked"})),
+        request_text="Show merchant preview.",
+        channel="web_chat",
+    )
+
+    authority = response["evidence_summary"]["session_authority"]
+    assert response["status"] == "blocked"
+    assert response["refusal_code"] == "passport_revoked"
+    assert response["evidence_summary"]["refusal_code"] == "passport_revoked"
+    assert authority["authority_valid"] is False
+    assert "passport_revoked" in authority["blockers"]
 
 
 @pytest.mark.parametrize(

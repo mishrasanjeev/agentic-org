@@ -160,6 +160,23 @@ def build_buyer_discovery_response(
             "source_reference": source_reference,
         }
 
+    if safe_preview.get("session_authority_input_present") and session_authority.get("authority_valid") is False:
+        return {
+            "status": "blocked",
+            "refusal": True,
+            "refusal_code": _safe_text(session_authority.get("refusal_code")) or "authority_ambiguous",
+            "message": _safe_text(
+                session_authority.get("reason")
+                or "Grantex authority must be refreshed before this buyer session can continue.",
+                limit=800,
+            ),
+            "merchant": safe_preview.get("merchant", {}),
+            "blocked_capabilities": _string_list(safe_preview.get("blocked_capabilities")),
+            "public_discovery_state": public_discovery_state,
+            "session_authority": session_authority,
+            "source_reference": source_reference,
+        }
+
     blockers = _string_list(safe_preview.get("blockers"))
     integration_status = _safe_text(safe_preview.get("integration_status"))
     if integration_status != "sandbox_handoff_requested" or blockers:
@@ -262,6 +279,7 @@ def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) 
         }
     )
     public_discovery_state = public_discovery_decision_from_payload(data)
+    session_authority_input_present = _has_session_authority_payload(data)
     session_authority = session_authority_from_payload(data)
 
     return {
@@ -279,6 +297,7 @@ def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) 
         "remediation_items": _string_list(data.get("remediation_items")),
         "safety_labels": safety_labels,
         "public_discovery_state": public_discovery_state,
+        "session_authority_input_present": session_authority_input_present,
         "session_authority": session_authority,
         "source_reference": source_reference,
     }
@@ -325,6 +344,20 @@ def _data_object(payload: Mapping[str, Any] | None) -> Mapping[str, Any]:
     if isinstance(data, Mapping):
         return data
     return payload
+
+
+def _has_session_authority_payload(data: Mapping[str, Any]) -> bool:
+    authority_keys = (
+        "session_authority",
+        "authority",
+        "commerce_authority",
+        "buyer_session_authority",
+        "consent_status",
+        "passport_status",
+        "session_status",
+        "policy_decision",
+    )
+    return any(key in data for key in authority_keys)
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
