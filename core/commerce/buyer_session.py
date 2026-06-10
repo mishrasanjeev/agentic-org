@@ -245,6 +245,9 @@ def _evidence_summary(
     public_discovery_state = _mapping(response.get("public_discovery_state"))
     if public_discovery_state:
         summary["public_discovery_state"] = public_discovery_state
+    session_authority = _mapping(response.get("session_authority"))
+    if session_authority:
+        summary["session_authority"] = session_authority
     for source_key, target_key in (
         ("readiness_summary", "readiness"),
         ("agent_facing_preview_summary", "agent_preview"),

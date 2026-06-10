@@ -7,6 +7,7 @@ from typing import Any
 
 from core.commerce.public_discovery_state import public_discovery_decision_from_payload
 from core.commerce.sales_guardrails import inventory_caution
+from core.commerce.session_authority import session_authority_from_payload
 
 C6G_PREVIEW_ENDPOINT = "/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview"
 
@@ -145,6 +146,7 @@ def build_buyer_discovery_response(
     safe_preview = sanitize_buyer_discovery_preview(grantex_payload)
     source_reference = safe_preview.get("source_reference", {})
     public_discovery_state = safe_preview.get("public_discovery_state", {})
+    session_authority = safe_preview.get("session_authority", {})
 
     if intent != "read_only_discovery":
         return _refusal_for_intent(intent, source_reference)
@@ -155,6 +157,23 @@ def build_buyer_discovery_response(
             "refusal": True,
             "refusal_code": "grantex_discovery_unavailable",
             "message": "Grantex did not return buyer discovery data, so I cannot describe this merchant.",
+            "source_reference": source_reference,
+        }
+
+    if safe_preview.get("session_authority_input_present") and session_authority.get("authority_valid") is False:
+        return {
+            "status": "blocked",
+            "refusal": True,
+            "refusal_code": _safe_text(session_authority.get("refusal_code")) or "authority_ambiguous",
+            "message": _safe_text(
+                session_authority.get("reason")
+                or "Grantex authority must be refreshed before this buyer session can continue.",
+                limit=800,
+            ),
+            "merchant": safe_preview.get("merchant", {}),
+            "blocked_capabilities": _string_list(safe_preview.get("blocked_capabilities")),
+            "public_discovery_state": public_discovery_state,
+            "session_authority": session_authority,
             "source_reference": source_reference,
         }
 
@@ -172,6 +191,7 @@ def build_buyer_discovery_response(
             "blocked_capabilities": _string_list(safe_preview.get("blocked_capabilities")),
             "safety_labels": safe_preview.get("safety_labels", {}),
             "public_discovery_state": public_discovery_state,
+            "session_authority": session_authority,
             "source_reference": source_reference,
         }
 
@@ -205,6 +225,7 @@ def build_buyer_discovery_response(
         "blocked_capabilities": safe_preview.get("blocked_capabilities", []),
         "safety_labels": safety_labels,
         "public_discovery_state": public_discovery_state,
+        "session_authority": session_authority,
         "source_reference": source_reference,
     }
 
@@ -258,6 +279,8 @@ def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) 
         }
     )
     public_discovery_state = public_discovery_decision_from_payload(data)
+    session_authority_input_present = _has_session_authority_payload(data)
+    session_authority = session_authority_from_payload(data)
 
     return {
         "status": "available",
@@ -274,6 +297,8 @@ def sanitize_buyer_discovery_preview(grantex_payload: Mapping[str, Any] | None) 
         "remediation_items": _string_list(data.get("remediation_items")),
         "safety_labels": safety_labels,
         "public_discovery_state": public_discovery_state,
+        "session_authority_input_present": session_authority_input_present,
+        "session_authority": session_authority,
         "source_reference": source_reference,
     }
 
@@ -319,6 +344,20 @@ def _data_object(payload: Mapping[str, Any] | None) -> Mapping[str, Any]:
     if isinstance(data, Mapping):
         return data
     return payload
+
+
+def _has_session_authority_payload(data: Mapping[str, Any]) -> bool:
+    authority_keys = (
+        "session_authority",
+        "authority",
+        "commerce_authority",
+        "buyer_session_authority",
+        "consent_status",
+        "passport_status",
+        "session_status",
+        "policy_decision",
+    )
+    return any(key in data for key in authority_keys)
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
