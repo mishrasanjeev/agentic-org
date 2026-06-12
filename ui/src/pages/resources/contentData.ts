@@ -134,7 +134,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { heading: "AgenticOrg vs Alternatives", body: "AgenticOrg provides 50+ pre-built agents that call real APIs (Jira, HubSpot, GitHub), 54 native connectors + 1000+ via Composio (340+ tools), no-code agent builder, HITL governance, shadow mode, and India-first compliance — all deployable in under 5 minutes on any Kubernetes cluster." },
     ],
     faqs: [
-      { q: "How much does an enterprise AI platform cost?", a: "Pricing varies. AgenticOrg offers a free tier (50+ agents), Pro at $499/month (12 agents), and custom Enterprise plans. Total cost is typically 50-80% less than equivalent RPA deployments." },
+      { q: "How much does an enterprise AI platform cost?", a: "Pricing varies. AgenticOrg offers a free tier (50+ agents), Pro at $2/month (12 agents), and custom Enterprise plans. Total cost is typically 50-80% less than equivalent RPA deployments." },
     ],
     relatedSlugs: ["what-are-ai-agents-for-enterprise", "ai-agents-vs-rpa", "no-code-ai-agent-builder"],
     cta: { text: "Start Free — 50+ Agents Included", link: "/signup" },

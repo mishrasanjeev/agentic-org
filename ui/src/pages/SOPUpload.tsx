@@ -43,6 +43,7 @@ export default function SOPUpload() {
   const [error, setError] = useState("");
   const [parsedConfig, setParsedConfig] = useState<ParsedConfig | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const selectedCompanyId = localStorage.getItem("company_id") || "";
 
   async function handleParse() {
     setError("");
@@ -79,7 +80,10 @@ export default function SOPUpload() {
     setError("");
     setDeploying(true);
     try {
-      const { data } = await api.post("/sop/deploy", { config: parsedConfig });
+      const { data } = await api.post("/sop/deploy", {
+        config: parsedConfig,
+        company_id: selectedCompanyId || undefined,
+      });
       navigate(`/dashboard/agents/${data.agent_id}`);
     } catch (e: unknown) {
       setError(extractApiError(e, "Failed to deploy agent."));

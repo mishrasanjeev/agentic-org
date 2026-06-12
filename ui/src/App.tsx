@@ -52,6 +52,7 @@ const Approvals = lazyRetry(() => import("./pages/Approvals"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
 const ConnectorCreate = lazyRetry(() => import("./pages/ConnectorCreate"));
 const ConnectorDetail = lazyRetry(() => import("./pages/ConnectorDetail"));
+const CMOVendorSandboxConnectors = lazyRetry(() => import("./pages/CMOVendorSandboxConnectors"));
 const Schemas = lazyRetry(() => import("./pages/Schemas"));
 const Audit = lazyRetry(() => import("./pages/Audit"));
 const Observatory = lazyRetry(() => import("./pages/Observatory"));
@@ -501,6 +502,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <ConnectorCreate />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/connectors/cmo-vendor-sandbox"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <CMOVendorSandboxConnectors />
             </Layout>
           </ProtectedRoute>
         }

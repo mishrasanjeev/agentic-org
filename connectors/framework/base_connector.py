@@ -5,7 +5,6 @@ from __future__ import annotations
 import abc
 import re
 from typing import Any
-from xml.etree.ElementTree import Element
 
 import httpx
 import structlog
@@ -312,7 +311,7 @@ class BaseConnector(abc.ABC):
             return body["value"] if isinstance(body["value"], list) else body
         return body
 
-    async def _post_xml(self, xml_body: str) -> Element:
+    async def _post_xml(self, xml_body: str) -> Any:
         """POST an XML body and return the parsed XML response.
 
         Used by connectors that speak XML over HTTP (e.g. Tally TDL).

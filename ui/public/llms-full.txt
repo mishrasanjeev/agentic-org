@@ -307,7 +307,7 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 - Basic audit log
 - Single workspace
 
-### Pro ($499/month)
+### Pro ($2/month)
 - Unlimited AI agents
 - Unlimited tasks
 - Email support

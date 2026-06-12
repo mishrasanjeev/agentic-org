@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 COMMERCE_CODE = [
     ROOT / "connectors" / "commerce" / "grantex_commerce.py",
+    ROOT / "core" / "commerce" / "buyer_discovery.py",
+    ROOT / "core" / "commerce" / "buyer_session.py",
     ROOT / "core" / "commerce" / "discovery_gate.py",
     ROOT / "core" / "commerce" / "sales_guardrails.py",
     ROOT / "core" / "commerce" / "staging_evidence.py",
@@ -62,6 +64,7 @@ def test_commerce_agent_default_toolset_is_grantex_only() -> None:
     domain_tools = _DOMAIN_DEFAULT_TOOLS["commerce"]
 
     assert tools == domain_tools
+    assert "grantex_commerce:buyer_discovery_preview" in tools
     assert tools
     assert all(tool.startswith("grantex_commerce:") for tool in tools)
     assert all("stripe" not in tool.lower() for tool in tools)

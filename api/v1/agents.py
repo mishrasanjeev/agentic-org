@@ -13,7 +13,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import (
@@ -27,11 +27,14 @@ from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
+from core.models.approval_policy import ApprovalPolicy
 from core.models.audit import AuditLog
 from core.models.company import Company
 from core.models.hitl import HITLQueue
+from core.models.lead_pipeline import LeadPipeline
 from core.models.prompt_template import PromptEditHistory
 from core.models.tenant import Tenant
+from core.models.workflow import StepExecution
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
@@ -49,10 +52,12 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "ap_processor": [
         "fetch_bank_statement", "check_account_balance",
         "post_voucher", "get_ledger_balance", "get_trial_balance",
+        "list_vendors", "create_vendor", "create_item", "create_bill",
+        "list_vendor_bills", "list_bills", "search_bills", "get_bill_by_id",
         "create_order", "check_order_status",
     ],
     "ar_collections": [
-        "create_invoice", "list_invoices",
+        "create_invoice", "list_invoices", "search_invoices", "get_invoice_by_id",
         "create_payment_link", "send_email",
         "check_account_balance",
     ],
@@ -87,7 +92,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_balance", "get_balance_sheet", "get_cash_position",
     ],
     "expense_manager": [
-        "record_expense", "create_ap_invoice",
+        "record_expense", "create_bill", "list_vendors", "create_vendor",
+        "create_ap_invoice",
         "check_order_status", "list_invoices", "get_profit_loss",
     ],
     "rev_rec": [
@@ -142,6 +148,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "crm_intelligence": [
         "list_contacts", "search_contacts", "list_deals",
         "get_deal", "get_campaign_analytics", "create_contact",
+        "update_contact", "delete_contact", "assign_contact_owner",
+        "associate_contact_to_company", "list_owners",
     ],
     "brand_monitor": [
         "get_post_analytics", "get_campaign_performance",
@@ -227,7 +235,8 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "commerce": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "finance": [
         "fetch_bank_statement", "create_payment_intent",
-        "get_balance", "list_invoices",
+        "get_balance", "list_invoices", "search_invoices", "list_vendors",
+        "create_bill", "list_vendor_bills", "list_bills", "search_bills",
     ],
     "hr": [
         "get_employee", "create_employee",
@@ -988,6 +997,32 @@ async def _assert_connectors_ready_for_activation(
         )
 
 
+async def _assert_connectors_ready_for_dispatch(
+    session: Any,
+    tenant_id: _uuid.UUID,
+    connector_ids: list[str] | None,
+) -> None:
+    """Block agent execution before tools run when required connectors are not ready."""
+    try:
+        await _assert_connectors_ready_for_activation(session, tenant_id, connector_ids)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        connectors = detail.get("connectors") if isinstance(detail, dict) else None
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "connector_not_ready_for_dispatch",
+                "message": (
+                    "This agent cannot run because a required connector is not "
+                    "authenticated, healthy, and refreshable. Go to Dashboard -> "
+                    "Connectors, reconnect the connector, run its health check, "
+                    "then retry the agent."
+                ),
+                "connectors": connectors or [],
+            },
+        ) from exc
+
+
 @router.get("/agents/default-tools/{agent_type}")
 @route_meta(
     auth_required=True,
@@ -1557,10 +1592,12 @@ async def delegate_to_agent(
 )
 async def import_agents_csv(
     file: UploadFile,
+    company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Import agents from CSV with two-pass parent linking."""
     tid = _uuid.UUID(tenant_id)
+    company_uuid = _parse_company_id(company_id)
     filename = (file.filename or "").lower()
     if filename and not filename.endswith(".csv"):
         raise HTTPException(422, detail="Only .csv files are supported for agent import")
@@ -1594,6 +1631,13 @@ async def import_agents_csv(
     rows_with_parent: list[dict] = []
 
     async with get_tenant_session(tid) as session:
+        if company_uuid is not None:
+            company_exists = await session.execute(
+                select(Company.id).where(Company.id == company_uuid, Company.tenant_id == tid)
+            )
+            if company_exists.scalar_one_or_none() is None:
+                raise HTTPException(404, "Company not found")
+
         for row in reader:
             name = (row.get("name") or row.get("Name") or "").strip()
             agent_type = (row.get("agent_type") or "").strip()
@@ -1637,7 +1681,7 @@ async def import_agents_csv(
                     confidence_floor = Decimal("0.88")
 
             agent = Agent(
-                tenant_id=tid, name=name, employee_name=name,
+                tenant_id=tid, company_id=company_uuid, name=name, employee_name=name,
                 agent_type=agent_type, domain=domain,
                 designation=designation or None,
                 specialization=specialization or None,
@@ -1653,6 +1697,7 @@ async def import_agents_csv(
             imported.append({
                 "id": str(agent.id), "name": name,
                 "agent_type": agent_type, "domain": domain,
+                "company_id": str(company_uuid) if company_uuid else None,
             })
             if reporting_to_name:
                 rows_with_parent.append({
@@ -1664,9 +1709,10 @@ async def import_agents_csv(
     parent_links_set = 0
     if rows_with_parent:
         async with get_tenant_session(tid) as session:
-            all_result = await session.execute(
-                select(Agent).where(Agent.tenant_id == tid)
-            )
+            query = select(Agent).where(Agent.tenant_id == tid)
+            if company_uuid is not None:
+                query = query.where(Agent.company_id == company_uuid)
+            all_result = await session.execute(query)
             all_agents = all_result.scalars().all()
             name_map: dict[tuple[str, str], _uuid.UUID] = {}
             for a in all_agents:
@@ -1727,6 +1773,7 @@ async def generate_agent(
 
     description = body.get("description", "")
     deploy = body.get("deploy", False)
+    company_uuid = _parse_company_id(body.get("company_id")) if deploy else None
 
     if not description or len(description) < 10:
         raise HTTPException(
@@ -1761,8 +1808,16 @@ async def generate_agent(
             )
 
         async with get_tenant_session(tid) as session:
+            if company_uuid is not None:
+                company_exists = await session.execute(
+                    select(Company.id).where(Company.id == company_uuid, Company.tenant_id == tid)
+                )
+                if company_exists.scalar_one_or_none() is None:
+                    raise HTTPException(404, "Company not found")
+
             agent = Agent(
                 tenant_id=tid,
+                company_id=company_uuid,
                 name=top.get("employee_name", "Generated Agent"),
                 employee_name=top.get("employee_name", "Generated Agent"),
                 agent_type=top.get("agent_type", ""),
@@ -1810,6 +1865,7 @@ async def generate_agent(
 
             created_agent = {
                 "agent_id": str(agent.id),
+                "company_id": str(agent.company_id) if agent.company_id else None,
                 "name": agent.name,
                 "status": "shadow",
                 "agent_type": agent.agent_type,
@@ -2198,6 +2254,7 @@ async def run_agent(
             )
 
         agent_config = _agent_to_dict(agent_row)
+        dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)
 
     # 2. Prepare execution config
     authorized_tools = agent_config.get("authorized_tools", []) or []
@@ -2409,6 +2466,15 @@ async def run_agent(
         raw_connector_ids = list(
             _AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(agent_config.get("agent_type"), [])
         )
+    if not dispatch_connector_ids:
+        dispatch_connector_ids = raw_connector_ids
+    if dispatch_connector_ids:
+        async with get_tenant_session(tid) as session:
+            await _assert_connectors_ready_for_dispatch(
+                session,
+                tid,
+                list(dispatch_connector_ids),
+            )
     resolved_connector_config, resolved_connector_names = await _resolve_connector_configs(
         tenant_id=tenant_id,
         connector_ids=raw_connector_ids,
@@ -3792,7 +3858,16 @@ async def delete_agent(
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
-    """Permanently delete an agent. Only paused, retired, or inactive agents can be deleted."""
+    """Delete an agent without row-level FK fragility.
+
+    Agents have execution history, prompt history, HITL rows, workflow steps,
+    org-chart links, and optional sales assignments. A physical row delete
+    succeeds only for agents with no remaining references and fails
+    intermittently for agents that have actually been used. Treat user-facing
+    deletion as a lifecycle state transition instead: hide the agent from all
+    normal fleet surfaces, preserve audit/history, and clear live references
+    that could route new work to the deleted agent.
+    """
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -3802,6 +3877,9 @@ async def delete_agent(
         if not agent:
             raise HTTPException(404, "Agent not found")
         _enforce_domain_access(agent, user_domains)
+
+        if agent.status == "deleted":
+            return {"id": str(agent_id), "deleted": True, "status": "deleted", "already_deleted": True}
 
         deletable_statuses = {"paused", "retired", "inactive", "shadow"}
         if agent.status not in deletable_statuses:
@@ -3827,18 +3905,62 @@ async def delete_agent(
         )
         session.add(audit)
 
-        # Delete related records that may have FK constraints
-        for related_model in (AgentLifecycleEvent, AgentCostLedger, AgentVersion):
-            await session.execute(
-                related_model.__table__.delete().where(
-                    related_model.agent_id == agent_id
-                )
-            )
-        # Clear HITL queue entries for this agent
+        previous_status = agent.status
+
+        # Clear active/live references so deleted agents cannot remain in
+        # routing, approval, org-chart, workflow, or sales assignment paths.
         await session.execute(
-            HITLQueue.__table__.delete().where(HITLQueue.agent_id == agent_id)
+            update(Agent)
+            .where(Agent.tenant_id == tid, Agent.parent_agent_id == agent_id)
+            .values(parent_agent_id=None, reporting_to=None)
+        )
+        await session.execute(
+            update(Agent)
+            .where(Agent.tenant_id == tid, Agent.shadow_comparison_agent_id == agent_id)
+            .values(shadow_comparison_agent_id=None)
+        )
+        await session.execute(
+            update(StepExecution)
+            .where(StepExecution.tenant_id == tid, StepExecution.agent_id == agent_id)
+            .values(agent_id=None)
+        )
+        await session.execute(
+            update(LeadPipeline)
+            .where(LeadPipeline.tenant_id == tid, LeadPipeline.assigned_agent_id == agent_id)
+            .values(assigned_agent_id=None)
+        )
+        await session.execute(
+            update(ApprovalPolicy)
+            .where(ApprovalPolicy.tenant_id == tid, ApprovalPolicy.agent_id == agent_id)
+            .values(agent_id=None)
         )
 
-        await session.delete(agent)
+        # Pending HITL items should not remain actionable once the agent is
+        # deleted. Historical execution rows stay intact for explanations and
+        # audit review.
+        await session.execute(
+            HITLQueue.__table__.delete().where(
+                HITLQueue.tenant_id == tid,
+                HITLQueue.agent_id == agent_id,
+            )
+        )
 
-    return {"id": str(agent_id), "deleted": True}
+        lifecycle = AgentLifecycleEvent(
+            tenant_id=tid,
+            agent_id=agent_id,
+            from_status=previous_status,
+            to_status="deleted",
+            triggered_by="user",
+            reason="agent_deleted",
+        )
+        session.add(lifecycle)
+
+        config = dict(agent.config or {})
+        config["deleted_at"] = datetime.now(UTC).isoformat()
+        config["deleted_by"] = "api"
+        agent.config = config
+        agent.status = "deleted"
+        agent.updated_at = datetime.now(UTC)
+        session.add(agent)
+
+    return {"id": str(agent_id), "deleted": True, "status": "deleted"}

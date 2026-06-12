@@ -15,7 +15,7 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 | Area | Status | Assessment |
 | --- | --- | --- |
 | Grantex-only commerce connector | `done` | `GrantexCommerceConnector` exposes `grantex_commerce:*` aliases and does not import Stripe, Plural, Pine, or provider credential connectors. |
-| Safe tool aliases | `done` | Aliases map to Grantex MCP tools plus Grantex passport REST endpoints: catalog, inventory, cart, consent, passport exchange, payment intent, checkout, and status. |
+| Safe tool aliases | `done` | Aliases map to Grantex MCP tools plus Grantex passport REST endpoints and the C6H GET-only buyer discovery preview endpoint: catalog, inventory, cart, consent, passport exchange, buyer preview, payment intent, checkout, and status. |
 | Consent/passport guardrails | `partial` | Local guardrails refuse missing, denied, revoked, or expired passport inputs; final cryptographic verification remains Grantex-owned and hosted staging is not yet exercised. |
 | Amount cap guardrails | `done` | Local guardrails refuse requested amounts above passport cap before calling Grantex. |
 | Disabled merchant/agent guardrails | `partial` | Local status/error handling exists; real staging disabled merchant and untrusted agent cases are not yet executed. |
@@ -38,6 +38,7 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 | `cart_create` alias | `done` | Requires idempotency key and maps to `cart.create`. | Hosted staging evidence pending. |
 | `consent_request` alias | `done` | Calls `/v1/commerce/passports/consent-requests`. | Hosted staging consent UX and delivery pending. |
 | `consent_exchange` alias | `done` | Calls `/v1/commerce/passports/exchange`. | Hosted staging approval flow pending. |
+| `buyer_discovery_preview` alias | `done` | Calls `/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview` with GET only. | Sandbox preview-only; no public discovery, checkout/payment, provider, or handoff request endpoint is exposed. |
 | `payment_create_intent` alias | `done` | Requires idempotency key, local guardrail pass, then maps to `payment.create_intent`. | Hosted staging evidence pending. |
 | `checkout_create` alias | `done` | Requires idempotency key, local guardrail pass, then maps to `checkout.create`. | Hosted staging evidence pending. |
 | `payment_get_status` alias | `done` | Maps to `payment.get_status`. | Hosted staging evidence pending. |

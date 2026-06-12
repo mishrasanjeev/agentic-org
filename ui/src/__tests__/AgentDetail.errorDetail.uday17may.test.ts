@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { errorDetailToMessage } from "@/pages/AgentDetail";
+import { errorDetailToMessage, formatRunResult } from "@/pages/AgentDetail";
 
 /**
  * Uday CA-Firms 2026-05-17 bug 1 — UI half of the promotion reopen.
@@ -77,5 +77,30 @@ describe("errorDetailToMessage", () => {
         "fallback",
       ),
     ).toBe("fallback");
+  });
+});
+
+describe("formatRunResult", () => {
+  it("surfaces failed connector tool detail in run results", () => {
+    const text = formatRunResult({
+      status: "failed",
+      output: {},
+      error: "connector tool failed",
+      tool_calls: [
+        {
+          tool: "zoho_books__list_vendors",
+          status: "error",
+          result: JSON.stringify({
+            error: "invalid_access_token",
+            message: "Upstream zoho_books API returned HTTP 401: Invalid access token",
+          }),
+        },
+      ],
+    });
+
+    expect(text).toContain("connector tool failed");
+    expect(text).toContain("zoho_books__list_vendors");
+    expect(text).toContain("Invalid access token");
+    expect(text).not.toBe("No output returned.");
   });
 });

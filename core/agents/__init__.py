@@ -28,11 +28,14 @@ from core.agents.hr import (
 
 # Marketing agents
 from core.agents.marketing import (
+    abm_agent,  # noqa: F401
     brand_monitor,  # noqa: F401
     campaign_pilot,  # noqa: F401
+    competitive_intel,  # noqa: F401
     content_factory,  # noqa: F401
     crm_intelligence,  # noqa: F401
     seo_strategist,  # noqa: F401
+    social_media,  # noqa: F401
 )
 
 # Ops agents

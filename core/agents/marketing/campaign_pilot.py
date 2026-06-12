@@ -38,6 +38,26 @@ DEFAULT_CHANNEL_ALLOCATION = {
 HITL_BUDGET_THRESHOLD = 500_000  # INR 5 lakhs
 
 
+def _external_write_confirmation_status(result: dict[str, Any] | None) -> str:
+    if not result:
+        return "write_unconfirmed"
+    return str(
+        result.get("external_write_confirmation_status")
+        or result.get("write_confirmation_status")
+        or result.get("status")
+        or "write_unconfirmed"
+    )
+
+
+def _is_confirmed_external_write(result: dict[str, Any] | None) -> bool:
+    if not result or "error" in result:
+        return False
+    status = _external_write_confirmation_status(result)
+    return status == "write_confirmed" and bool(
+        result.get("external_object_id") or result.get("external_id") or result.get("confirmed_at")
+    )
+
+
 @AgentRegistry.register
 class CampaignPilotAgent(BaseAgent):
     agent_type = "campaign_pilot"
@@ -136,6 +156,7 @@ class CampaignPilotAgent(BaseAgent):
             actions_taken: list[dict] = []
             channels_paused: list[str] = []
             channels_scaled: list[str] = []
+            unconfirmed_external_writes: list[str] = []
 
             for channel, perf in channel_performance.items():
                 roas = perf.get("roas", 0)
@@ -155,13 +176,27 @@ class CampaignPilotAgent(BaseAgent):
                             {"campaign_id": campaign_id, "campaign_name": campaign_name},
                             trace, tool_calls,
                         )
-                        paused = pause_result and "error" not in pause_result
-                        actions_taken.append({
+                        confirmation_status = _external_write_confirmation_status(pause_result)
+                        paused = _is_confirmed_external_write(pause_result)
+                        action_record = {
                             "channel": channel,
                             "action": "paused",
                             "reason": f"ROAS {roas:.2f} < {ROAS_PAUSE_THRESHOLD}",
                             "success": paused,
-                        })
+                            "external_write_confirmation_status": confirmation_status,
+                            "external_object_id": (
+                                pause_result.get("external_object_id")
+                                if isinstance(pause_result, dict)
+                                else None
+                            ),
+                        }
+                        if not paused:
+                            action_record["blocked_reason"] = (
+                                "Pause action is not complete because connector write confirmation "
+                                "with an external object ID was not returned."
+                            )
+                            unconfirmed_external_writes.append(f"{channel}:pause_campaign")
+                        actions_taken.append(action_record)
                         if paused:
                             channels_paused.append(channel)
 
@@ -177,14 +212,28 @@ class CampaignPilotAgent(BaseAgent):
                             },
                             trace, tool_calls,
                         )
-                        scaled = scale_result and "error" not in scale_result
-                        actions_taken.append({
+                        confirmation_status = _external_write_confirmation_status(scale_result)
+                        scaled = _is_confirmed_external_write(scale_result)
+                        action_record = {
                             "channel": channel,
                             "action": "scaled_up",
                             "reason": f"ROAS {roas:.2f} > {ROAS_SCALE_THRESHOLD}",
                             "budget_increase": scale_amount,
                             "success": scaled,
-                        })
+                            "external_write_confirmation_status": confirmation_status,
+                            "external_object_id": (
+                                scale_result.get("external_object_id")
+                                if isinstance(scale_result, dict)
+                                else None
+                            ),
+                        }
+                        if not scaled:
+                            action_record["blocked_reason"] = (
+                                "Budget update is not complete because connector write confirmation "
+                                "with an external object ID was not returned."
+                            )
+                            unconfirmed_external_writes.append(f"{channel}:update_budget")
+                        actions_taken.append(action_record)
                         if scaled:
                             channels_scaled.append(channel)
 
@@ -244,6 +293,35 @@ class CampaignPilotAgent(BaseAgent):
                 hitl_reasons.append(f"budget overspent by {budget_utilization - 100:.1f}%")
             if confidence < self.confidence_floor:
                 hitl_reasons.append(f"confidence {confidence:.3f} < floor")
+            if unconfirmed_external_writes:
+                hitl_reasons.append(
+                    "external write confirmation missing for "
+                    + ", ".join(unconfirmed_external_writes)
+                )
+
+            source_refs = [
+                {"kind": "tool_call", "tool_name": call.tool_name, "status": call.status}
+                for call in tool_calls
+            ]
+            blocked_reasons = [
+                action["blocked_reason"]
+                for action in actions_taken
+                if action.get("blocked_reason")
+            ]
+            degraded_reasons = [
+                f"{channel} performance data unavailable"
+                for channel, perf in channel_performance.items()
+                if perf.get("status") == "data_unavailable"
+            ]
+            write_actions = [
+                action for action in actions_taken if action.get("action") in {"paused", "scaled_up"}
+            ]
+            if write_actions and all(action.get("success") for action in write_actions):
+                write_status = "write_confirmed"
+            elif write_actions:
+                write_status = "write_unconfirmed"
+            else:
+                write_status = "not_required"
 
             output = {
                 "status": "optimized",
@@ -257,6 +335,27 @@ class CampaignPilotAgent(BaseAgent):
                 "channels_scaled": channels_scaled,
                 "confidence": confidence,
                 "hitl_required": len(hitl_reasons) > 0,
+                "approval_required": len(hitl_reasons) > 0,
+                "rationale": (
+                    f"Evaluated {len(channels)} channels for {objective}; "
+                    f"overall ROAS is {overall_roas:.2f} with {budget_utilization:.1f}% budget utilization."
+                ),
+                "recommended_actions": actions_taken,
+                "source_refs": source_refs,
+                "policy_result": {
+                    "decision": "requires_approval" if hitl_reasons else "allowed",
+                    "reason": (
+                        "; ".join(hitl_reasons)
+                        if hitl_reasons
+                        else "Campaign optimization is advisory or confirmed."
+                    ),
+                },
+                "audit_ref": f"campaign_pilot:{task.correlation_id}:{task.step_id}",
+                "degraded_reasons": degraded_reasons,
+                "blocked_reasons": blocked_reasons,
+                "external_write_confirmation_status": write_status,
+                "external_writes_completed": write_status == "write_confirmed",
+                "production_status": "production",
             }
 
             if hitl_reasons:

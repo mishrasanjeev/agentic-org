@@ -192,6 +192,7 @@ async def deploy_sop_agent(
     hitl_conditions = config.get("hitl_conditions", [])
     prompt = config.get("suggested_prompt", "")
     escalation = config.get("escalation_chain", [])
+    company_id = body.get("company_id") or config.get("company_id")
 
     # Build HITL condition expression
     hitl_expr = " OR ".join(hitl_conditions) if hitl_conditions else f"confidence < {confidence}"
@@ -230,6 +231,7 @@ async def deploy_sop_agent(
         llm=LLMConfig(model=config.get("llm_model", "gemini-2.5-flash")),
         employee_name=agent_name,
         initial_status="shadow",
+        company_id=company_id,
     )
 
     result = await create_agent(body=agent_body, tenant_id=tenant_id)

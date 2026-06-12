@@ -30,7 +30,7 @@ def test_shadow_fixture_prompts_are_marked_trusted_and_skip_redaction() -> None:
     assert "pii_redaction_skipped_for_shadow_fixture" in runner_src
 
 
-def test_zoho_india_gst_report_avoids_missing_gstsummary_endpoint() -> None:
+def test_zoho_india_gst_report_refuses_invoice_fallback() -> None:
     src = _read("connectors/finance/zoho_books.py")
     india_branch = src.split("async def generate_gst_report", 1)[1].split(
         'data = await self._get("/reports/gstsummary"',
@@ -38,7 +38,8 @@ def test_zoho_india_gst_report_avoids_missing_gstsummary_endpoint() -> None:
     )[0]
 
     assert 'self.config.get("region") == "in"' in india_branch
-    assert 'await self.list_invoices(' in india_branch
+    assert "GSTN connector" in india_branch
+    assert 'await self.list_invoices(' not in india_branch
     assert '"/reports/gstsummary"' not in india_branch
 
 

@@ -85,14 +85,23 @@ api.interceptors.response.use(
   }
 );
 export function extractApiError(e: unknown, fallback = "An error occurred"): string {
-  const detail = (e as any)?.response?.data?.detail;
+  const data = (e as any)?.response?.data;
+  const detail = data?.detail;
   if (typeof detail === "string") return detail;
   if (detail && typeof detail === "object") {
+    if (Array.isArray((detail as any).connectors)) {
+      const connectors = (detail as any).connectors
+        .map((c: any) => `${c.connector || "connector"} (${String(c.reason || "not ready").replace(/_/g, " ")})`)
+        .join(", ");
+      if (typeof (detail as any).message === "string") return `${(detail as any).message} Affected: ${connectors}.`;
+    }
     if (typeof detail.message === "string") return detail.message;
     if (typeof detail.error === "string") {
       return detail.message ? `${detail.error}: ${detail.message}` : detail.error;
     }
   }
+  if (typeof data?.message === "string") return data.message;
+  if (typeof data?.error === "string") return data.error;
   return fallback;
 }
 export default api;
@@ -144,7 +153,7 @@ export const agentsApi = {
   clone: (id: string, data: any) => api.post(`/agents/${id}/clone`, data),
   promptHistory: (id: string) => api.get(`/agents/${id}/prompt-history`),
   orgTree: (params?: Record<string, string>) => api.get("/agents/org-tree", { params }),
-  importCsv: (file: File) => { const fd = new FormData(); fd.append("file", file); return api.post("/agents/import-csv", fd); },
+  importCsv: (file: File, params?: Record<string, string>) => { const fd = new FormData(); fd.append("file", file); return api.post("/agents/import-csv", fd, { params }); },
   generate: (description: string, deploy = false) => api.post("/agents/generate", { description, deploy }),
 };
 export const promptTemplatesApi = {

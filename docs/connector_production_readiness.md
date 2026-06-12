@@ -17,9 +17,9 @@ This document categorizes every connector by production readiness and lists exac
 |-----------|--------|--------------------------|
 | **Stripe** | READY | API key from Stripe Dashboard → Settings → API Keys. Standard REST/JSON. Test with `sk_test_*` key first, then switch to `sk_live_*`. |
 | **QuickBooks** | READY | OAuth2 app registered at developer.intuit.com. Get client_id + client_secret. Sandbox available at `sandbox-quickbooks.api.intuit.com`. |
-| **Zoho Books** | READY | OAuth2 app at api-console.zoho.in. Get client_id + client_secret + refresh_token. India datacenter: `books.zoho.in`. |
+| **Zoho Books** | READY | OAuth2 app at api-console.zoho.in. Get client_id + client_secret + refresh_token. India API base: `www.zohoapis.in/books/v3`. |
 | **Tally** | READY | Fixed in this sprint. Requires Tally bridge agent on CA's machine. Tally XML server must be enabled (port 9000). Bridge handles tunneling. |
-| **GSTN** | SANDBOX FIRST | Fixed in this sprint. Register with Adaequare as ASP. Test in sandbox (`gsp.adaequare.com/test/enriched/gsp`) with test GSTINs. DSC signing implemented for filing. Production needs real aspid + DSC certificate. |
+| **GSTN** | SANDBOX FIRST | Fixed in this sprint. Register with Adaequare as ASP. Test in sandbox (`gsp.adaequare.com/test/enriched/gsp`) with test GSTINs. DSC signing implemented for filing. Production needs real `gspappid`/`gspappsecret` credentials + DSC certificate. |
 | **GSTN Sandbox** | READY | Pre-configured for testing. Use test GSTINs provided in `gstn_sandbox.py`. |
 | **Banking AA** | SANDBOX FIRST | Fixed in this sprint. Register as FIU with Finvu (finvu.in). Get client_id + client_secret + FIU ID. Consent flow implemented. Each end-client must approve data sharing via Finvu consent UI. |
 | **Income Tax India** | BLOCKED | Government portal (`incometax.gov.in`). Needs: (1) Registered e-Filing account, (2) Class 3 DSC linked to PAN, (3) DSC signing for return filing — uses same DSCAdapter we built. Auth flow similar to GSTN but different portal. **Action needed:** Implement proper Income Tax portal auth (OTP-based + DSC). |

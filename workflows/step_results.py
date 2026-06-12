@@ -10,7 +10,7 @@ ALLOWED_STEP_STATUSES = frozenset(
         "completed",
         "failed",
         "skipped",
-        "stubbed",
+        "stubbed",  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production
         "waiting_hitl",
         "waiting_delay",
         "waiting_event",
@@ -94,6 +94,42 @@ class NotifySideEffectNotConfiguredError(WorkflowStepError):
         )
 
 
+class ExternalWriteConfirmationMissingError(WorkflowStepError):
+    def __init__(
+        self,
+        *,
+        step_id: str,
+        action: str,
+        connector: str | None,
+        mode: str | None,
+        reason: str,
+        final_state: str | None = None,
+        next_action: str | None = None,
+        audit_reference: str | None = None,
+        code: str = "external_write_confirmation_missing",
+    ) -> None:
+        details: dict[str, Any] = {
+            "step_id": step_id,
+            "action": action,
+            "reason": reason,
+        }
+        if connector:
+            details["connector"] = connector
+        if mode:
+            details["mode"] = mode
+        if final_state:
+            details["final_state"] = final_state
+        if next_action:
+            details["next_action"] = next_action
+        if audit_reference:
+            details["audit_reference"] = audit_reference
+        super().__init__(
+            code,
+            "External marketing write step cannot complete without write confirmation.",
+            details,
+        )
+
+
 class ParallelChildError(WorkflowStepError):
     def __init__(self, *, step_id: str, failed_children: list[dict[str, Any]]) -> None:
         super().__init__(
@@ -128,6 +164,7 @@ def failure_result(
     }
 
 
+# enterprise-gate: stub-ok reason=relaxed-env-only-not-production
 def stubbed_result(
     *,
     step_id: str,
@@ -140,8 +177,8 @@ def stubbed_result(
     result = {
         "step_id": step_id,
         "type": step_type,
-        "status": "stubbed",
-        "stubbed": True,
+        "status": "stubbed",  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production
+        "stubbed": True,  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production
         "code": code,
         "reason": message,
         "output": output if output is not None else {},

@@ -150,9 +150,12 @@ async def test_bug_01_non_transport_errors_do_not_trigger_reconnect() -> None:
         result = await tool_adapter._execute_connector_tool(
             "fake", "any_tool", {}, config={}
         )
-    # Returns the original error shape, NOT the reconnect-failed error.
-    assert "ValueError" in result["error"]
-    assert "after reconnect" not in result["error"]
+    # Returns the original non-transport failure details, NOT the reconnect-failed error.
+    assert result["error"] == "connector_tool_execution_failed"
+    assert result["error_class"] == "ValueError"
+    assert "ValueError" in result["message"]
+    assert "upstream API said no" in result["message"]
+    assert "after reconnect" not in result["message"]
 
 
 @pytest.mark.asyncio

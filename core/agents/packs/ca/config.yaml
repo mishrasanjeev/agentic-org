@@ -34,7 +34,7 @@ agents:
   - type: tds_compliance
     domain: finance
     prompt_file: prompts/tds_compliance.prompt.txt
-    tools: [zoho_books:calculate_tds, zoho_books:get_ledger_balance, income_tax_india:calculate_tds, income_tax_india:file_26q_return, income_tax_india:file_24q_return, income_tax_india:check_tds_credit_in_26as, income_tax_india:download_form_16a, income_tax_india:pay_tax_challan, tally:get_ledger_balance, tally:post_voucher]
+    tools: [zoho_books:calculate_tds, zoho_books:get_ledger_balance, zoho_books:list_vendor_bills, zoho_books:get_bill_by_id, zoho_books:get_purchase_invoices, zoho_books:list_expense_transactions, zoho_books:get_vendor_payables, zoho_books:list_vendors, zoho_books:get_vendor_details, zoho_books:create_journal_entry, zoho_books:create_tds_entry, zoho_books:list_chartofaccounts, zoho_books:update_bill, income_tax_india:calculate_tds, income_tax_india:map_tds_section, income_tax_india:validate_pan, income_tax_india:detect_tds_applicability, income_tax_india:generate_tds_summary, income_tax_india:file_26q_return, income_tax_india:file_24q_return, income_tax_india:check_tds_credit_in_26as, income_tax_india:download_form_16a, income_tax_india:pay_tax_challan, tally:get_ledger_balance, tally:post_voucher]
     llm_model: gpt-4o
     hitl_condition: always_before_filing
     system_prompt_suffix: >
@@ -42,6 +42,8 @@ agents:
       ALWAYS trigger human-in-the-loop before filing returns or paying challans.
       ALWAYS trigger human-in-the-loop when the gross transaction/payment amount exceeds INR 5,00,000; do not evaluate this gate against the computed TDS amount.
       Validate PAN and section applicability for every deductee before computing TDS.
+      For autonomous/batch runs, fetch vendor bills, expense transactions, and vendor master records from Zoho Books before computing TDS.
+      Use structured pan_available=false when PAN is missing or invalid so Section 206AA is applied by calculate_tds.
       Never proceed if 26AS credit does not reconcile with books within 1% tolerance.
 
       INTERACTIVE EXTRACTION (issue #440): When the user message already

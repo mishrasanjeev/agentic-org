@@ -130,6 +130,7 @@ def _fire_cache_invalidators(label: str) -> None:
                     column=label,
                     invalidator=dotted,
                 )
+        # enterprise-gate: broad-except-ok reason=rewrap-cache-invalidator-failure-logs-after-durable-rewrap
         except Exception as exc:
             logger.warning(
                 "rewrap_cache_invalidator_failed",
@@ -343,6 +344,7 @@ async def run(
                     old_kid = _stamp_kid(ct)
                     try:
                         plaintext = decrypt_credential(ct)
+                    # enterprise-gate: broad-except-ok reason=rewrap-decrypt-failure-aborts-with-nonzero-status
                     except Exception as exc:
                         logger.exception(
                             "rewrap_decrypt_failed",

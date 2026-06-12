@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from core.database import get_tenant_session
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])
 _log = structlog.get_logger()
@@ -164,6 +165,7 @@ async def call_tool(
     else:
         try:
             from api.v1.agents import (
+                _assert_connectors_ready_for_dispatch,
                 _load_connector_configs_for_agent,
                 _resolve_agent_connector_ids_for_type,
             )
@@ -171,6 +173,10 @@ async def call_tool(
             connector_ids = await _resolve_agent_connector_ids_for_type(
                 tenant_id=tenant_id, agent_type=agent_type,
             )
+            if connector_ids:
+                tid = _uuid.UUID(tenant_id)
+                async with get_tenant_session(tid) as session:
+                    await _assert_connectors_ready_for_dispatch(session, tid, connector_ids)
             connector_config = await _load_connector_configs_for_agent(
                 tenant_id=tenant_id, connector_ids=connector_ids,
             )

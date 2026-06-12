@@ -1,9 +1,9 @@
 """GSTN connector — finance.
 
 Integrates with GST Network via Adaequare GSP (GST Suvidha Provider).
-Uses the proper 2-step auth flow:
-  1. POST to /gsp/authenticate with API key to obtain a session token
-  2. Use the session token (auth-token header) for all subsequent API calls
+Uses Adaequare's GSP app-token auth flow:
+  1. POST to /gsp/authenticate?grant_type=token with GSP app credentials
+  2. Use Authorization: Bearer <access_token> for subsequent API calls
 
 Filing operations (GSTR-3B, GSTR-9) are signed with DSC when a
 certificate path is configured (``dsc_path`` in config).
@@ -106,6 +106,7 @@ class GstnConnector(BaseConnector):
         super().__init__(safe_config)
         self._provider_base_url = provider_base_url
         self._dsc_adapter = None
+        self._access_token = ""
 
         dsc_path = self.config.get("dsc_path", "")
         if dsc_path:
@@ -127,35 +128,79 @@ class GstnConnector(BaseConnector):
         self._tool_registry["check_filing_status"] = self.check_filing_status
         self._tool_registry["get_compliance_notice"] = self.get_compliance_notice
 
+    def _get_gsp_secret(self, *keys: str) -> str:
+        """Fetch GSTN credentials without BaseConnector's api_key fallback.
+
+        ``BaseConnector._get_secret("client_secret")`` falls back to
+        ``api_key`` when the requested key is absent. That fallback is useful
+        for single-token connectors, but it is dangerous here because the
+        Adaequare flow needs distinct app id and app secret values.
+        """
+        prefixes = (self.name.upper(), "GSTN", "GSTN_SANDBOX")
+        for key in keys:
+            candidates = [key, *(f"{prefix}_{key.upper()}" for prefix in prefixes)]
+            for candidate in candidates:
+                value = self.config.get(candidate)
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+
+            per_key_ref = self.config.get(f"secret_ref_{key}", "")
+            if per_key_ref:
+                value = self._resolve_gcp_secret(str(per_key_ref), key)
+                if value and str(value).strip():
+                    return str(value).strip()
+
+            global_ref = self.config.get("secret_ref", "")
+            if global_ref:
+                value = self._resolve_gcp_secret(str(global_ref), key)
+                if value and str(value).strip():
+                    return str(value).strip()
+        return ""
+
     async def _authenticate(self):
-        """Adaequare GSP 2-step auth: authenticate to get session token."""
-        api_key = self._get_secret("api_key")
-        gstin = self._get_secret("gstin")
-        username = self._get_secret("username")
-        password = self._get_secret("password")
+        """Authenticate with Adaequare GSP and prepare Bearer headers."""
+        gsp_app_id = self._get_gsp_secret(
+            "gspappid", "gsp_app_id", "client_id", "api_key", "aspid", "gsp_api_key"
+        )
+        gsp_app_secret = self._get_gsp_secret(
+            "gspappsecret", "gsp_app_secret", "client_secret", "api_secret", "gsp_api_secret"
+        )
+        gstin = self._get_gsp_secret("gstin")
+
+        if not gsp_app_id or not gsp_app_secret:
+            raise ValueError(
+                "GSTN Adaequare auth requires gspappid/client_id and "
+                "gspappsecret/client_secret credentials."
+            )
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{self._provider_base_url}/authenticate",
-                json={
-                    "action": "ACCESSTOKEN",
-                    "username": username,
-                    "password": password,
-                },
+                f"{self._provider_base_url}/authenticate?grant_type=token",
+                json={},
                 headers={
-                    "aspid": api_key,
+                    "gspappid": gsp_app_id,
+                    "gspappsecret": gsp_app_secret,
                     "Content-Type": "application/json",
                 },
             )
             resp.raise_for_status()
-            auth_token = resp.json()["auth-token"]
+            body = resp.json()
+            token = body.get("access_token") or body.get("auth-token")
+            legacy_auth_token = "access_token" not in body and bool(body.get("auth-token"))
 
+        if not token or not str(token).strip():
+            raise ValueError("GSTN Adaequare auth response did not include an access token.")
+
+        self._access_token = str(token).strip()
         self._auth_headers = {
-            "auth-token": auth_token,
-            "aspid": api_key,
+            "Authorization": f"Bearer {self._access_token}",
             "gstin": gstin,
             "Content-Type": "application/json",
         }
+        if not gstin:
+            self._auth_headers.pop("gstin", None)
+        if legacy_auth_token:
+            self._auth_headers["auth-token"] = self._access_token
 
     async def _sign_and_post(self, path: str, data: dict) -> dict[str, Any]:
         """Sign the payload with DSC and POST to the GSP endpoint.
@@ -175,7 +220,11 @@ class GstnConnector(BaseConnector):
             resp = await self._client.post(
                 path,
                 content=payload_bytes,
-                headers={**dsc_headers, "Content-Type": "application/json"},
+                headers={
+                    **self._auth_headers,
+                    **dsc_headers,
+                    "Content-Type": "application/json",
+                },
             )
             resp.raise_for_status()
             return resp.json()

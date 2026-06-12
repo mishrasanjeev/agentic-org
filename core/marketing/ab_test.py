@@ -10,6 +10,7 @@ from enum import StrEnum
 from typing import Any
 
 import structlog
+from redis.exceptions import RedisError
 
 logger = structlog.get_logger()
 
@@ -138,7 +139,7 @@ class ABTestEngine:
             self._redis = redis.from_url(url, decode_responses=True)
             self._redis.ping()
             logger.info("ab_test_engine_redis_connected")
-        except Exception as exc:
+        except (ImportError, OSError, RedisError, ValueError) as exc:
             logger.warning("ab_test_engine_redis_unavailable", error=str(exc))
             self._redis = None
 

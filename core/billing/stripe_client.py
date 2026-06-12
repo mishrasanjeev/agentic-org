@@ -21,6 +21,11 @@ from typing import Any
 
 import structlog
 
+try:
+    from redis.exceptions import RedisError
+except ImportError:  # pragma: no cover
+    RedisError = RuntimeError  # type: ignore[misc, assignment]
+
 logger = structlog.get_logger()
 
 # Guard Stripe import
@@ -32,7 +37,7 @@ except ImportError:  # pragma: no cover
 _STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
-# Price IDs created in Stripe Dashboard (Products → Pricing)
+# Optional price IDs created in Stripe Dashboard. Checkout uses price_data when absent.
 # enterprise-gate: process-local-ok reason=static-plan-price-environment-map
 PLAN_PRICE_MAP: dict[str, str] = {
     "free": "",
@@ -40,9 +45,9 @@ PLAN_PRICE_MAP: dict[str, str] = {
     "enterprise": os.getenv("STRIPE_PRICE_ENTERPRISE", ""),
 }
 
-# Plan → USD amount in cents (for display / validation only)
+# Plan -> USD amount in cents for dynamic Checkout price_data.
 PLAN_AMOUNT_USD: dict[str, int] = {
-    "pro": 99_00,        # $99/mo
+    "pro": 2_00,  # $2/mo
     "enterprise": 499_00,  # $499/mo
 }
 
@@ -101,6 +106,70 @@ def _plan_from_subscription(subscription: Any) -> str:
     return _price_to_plan(price_id)
 
 
+def _customer_cache_key(tenant_id: str) -> str:
+    return f"tenant:{tenant_id}:stripe_customer_id"
+
+
+def _read_cached_customer_id(tenant_id: str) -> str:
+    """Return the cached Stripe customer id if Redis is available.
+
+    Checkout must not depend on Redis or Stripe Search. Redis is only a
+    local acceleration for reusing an existing customer id.
+    """
+    try:
+        from core.billing.usage_tracker import _get_redis
+
+        redis = _get_redis()
+        stored = redis.get(_customer_cache_key(tenant_id))
+    except (ImportError, RuntimeError, OSError, RedisError) as exc:
+        logger.warning(
+            "stripe_customer_cache_read_unavailable",
+            tenant_id=tenant_id,
+            error_type=type(exc).__name__,
+        )
+        return ""
+    return stored if isinstance(stored, str) else (stored or b"").decode()
+
+
+def _cache_customer_id(tenant_id: str, customer_id: str) -> None:
+    try:
+        from core.billing.usage_tracker import _get_redis
+
+        redis = _get_redis()
+        redis.set(_customer_cache_key(tenant_id), customer_id)
+    except (ImportError, RuntimeError, OSError, RedisError) as exc:
+        logger.warning(
+            "stripe_customer_cache_write_unavailable",
+            tenant_id=tenant_id,
+            customer_id=customer_id,
+            error_type=type(exc).__name__,
+        )
+
+
+def _checkout_line_item(plan: str) -> dict[str, Any]:
+    price_id = PLAN_PRICE_MAP.get(plan)
+    if price_id:
+        return {"price": price_id, "quantity": 1}
+
+    amount = PLAN_AMOUNT_USD.get(plan)
+    if amount is None:
+        raise ValueError(f"Unknown plan or missing price: {plan}")
+
+    label = "Pro" if plan == "pro" else "Enterprise"
+    return {
+        "price_data": {
+            "currency": "usd",
+            "product_data": {
+                "name": f"AgenticOrg {label}",
+                "metadata": {"plan": plan},
+            },
+            "recurring": {"interval": "month"},
+            "unit_amount": amount,
+        },
+        "quantity": 1,
+    }
+
+
 # ── Create Customer ─────────────────────────────────────────────────
 
 
@@ -115,10 +184,9 @@ def get_or_create_customer(
     """
     s = _get_stripe()
 
-    # Search for existing customer by metadata
-    existing = s.Customer.search(query=f'metadata["tenant_id"]:"{tenant_id}"')
-    if existing.data:
-        return existing.data[0].id
+    cached_customer_id = _read_cached_customer_id(tenant_id)
+    if cached_customer_id:
+        return cached_customer_id
 
     # Create new customer
     params: dict[str, Any] = {
@@ -130,6 +198,7 @@ def get_or_create_customer(
         params["name"] = name
 
     customer = s.Customer.create(**params)
+    _cache_customer_id(tenant_id, customer.id)
     logger.info("stripe_customer_created", tenant_id=tenant_id, customer_id=customer.id)
     return customer.id
 
@@ -155,9 +224,7 @@ def create_checkout_session(
     dict with session_id, checkout_url, customer_id.
     """
     s = _get_stripe()
-    price_id = PLAN_PRICE_MAP.get(plan)
-    if not price_id:
-        raise ValueError(f"Unknown plan or missing price ID: {plan}")
+    line_item = _checkout_line_item(plan)
 
     # Get or create customer
     customer_id = get_or_create_customer(
@@ -179,7 +246,7 @@ def create_checkout_session(
     session = s.checkout.Session.create(
         mode="subscription",
         customer=customer_id,
-        line_items=[{"price": price_id, "quantity": 1}],
+        line_items=[line_item],
         success_url=effective_success_url,
         cancel_url=effective_cancel_url,
         metadata={"tenant_id": tenant_id, "plan": plan},
@@ -512,19 +579,7 @@ def create_portal_session(tenant_id: str, return_url: str = "") -> str:
     """
     s = _get_stripe()
 
-    # Look up customer
-    customer_id = ""
-    from core.billing.usage_tracker import _get_redis
-    redis = _get_redis()
-    stored = redis.get(f"tenant:{tenant_id}:stripe_customer_id")
-    if stored:
-        customer_id = stored if isinstance(stored, str) else stored.decode()
-
-    if not customer_id:
-        existing = s.Customer.search(query=f'metadata["tenant_id"]:"{tenant_id}"')
-        if existing.data:
-            customer_id = existing.data[0].id
-
+    customer_id = _read_cached_customer_id(tenant_id)
     if not customer_id:
         raise ValueError(f"No Stripe customer found for tenant {tenant_id}")
 

@@ -20,6 +20,14 @@ AP_PROCESSOR_TOOLS = [
     "post_voucher",
     "get_ledger_balance",
     "get_trial_balance",
+    "list_vendors",
+    "create_vendor",
+    "create_item",
+    "create_bill",
+    "list_vendor_bills",
+    "list_bills",
+    "search_bills",
+    "get_bill_by_id",
     "create_order",         # PineLabs Plural — execute payment
     "check_order_status",   # PineLabs Plural — verify payment
 ]

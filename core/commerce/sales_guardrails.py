@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
+
+from core.commerce.session_authority import session_authority_from_payload
 
 COMMERCE_AGENT_TYPE = "commerce_sales_agent"
 COMMERCE_DISPLAY_NAME = "commerce-sales-agent"
@@ -17,6 +20,7 @@ GRANTEX_COMMERCE_TOOL_ALIASES = [
     "cart_create",
     "consent_request",
     "consent_exchange",
+    "buyer_discovery_preview",
     "payment_create_intent",
     "checkout_create",
     "payment_get_status",
@@ -37,40 +41,103 @@ PAYMENT_REFUSAL_ERROR_CODES = frozenset(
         "amount_cap_exceeded",
         "checkout_amount_exceeds_passport",
         "checkout_passport_required",
+        "checkout_not_enabled",
+        "checkout_payment_not_enabled",
+        "checkout_payment_not_enabled_by_c6u6",
         "commerce_disabled",
+        "agent_status_missing",
+        "authority_ambiguous",
+        "authority_freshness_future",
+        "authority_freshness_invalid",
+        "authority_freshness_missing",
+        "authority_stale",
+        "buyer_mismatch",
         "consent_denied",
+        "consent_expiry_invalid",
         "consent_expired",
+        "consent_missing",
         "consent_not_granted",
+        "consent_revoked",
         "emergency_disabled",
+        "live_payment_not_enabled",
         "live_provider_blocked",
+        "live_provider_not_enabled",
+        "merchant_private_api_not_allowed",
         "merchant_agentic_commerce_disabled",
         "merchant_disabled",
         "merchant_emergency_disabled",
+        "merchant_mismatch",
+        "merchant_status_missing",
+        "passport_expiry_invalid",
         "passport_expired",
+        "passport_invalid",
+        "passport_missing",
         "passport_not_yet_valid",
         "passport_required",
         "passport_revoked",
         "passport_scope_missing",
+        "policy_decision_ambiguous",
+        "policy_decision_missing",
         "policy_decision_deny",
         "policy_denied",
         "provider_blocked",
+        "provider_call_not_allowed",
         "provider_unavailable",
+        "public_discovery_disabled",
+        "public_discovery_not_enabled",
+        "session_disabled",
+        "session_expiry_invalid",
+        "session_expired",
+        "session_mismatch",
+        "session_missing",
+        "session_revoked",
+        "stale_inventory",
     }
 )
 
+SENSITIVE_ERROR_PATTERNS = (
+    re.compile(r"-----BEGIN [A-Z ]+PRIVATE KEY-----.*?-----END [A-Z ]+PRIVATE KEY-----", re.I | re.S),
+    re.compile(r"\b(?:postgresql?|redis)://[^\s'\"<>]+", re.I),
+    re.compile(r"\bhttps?://[^\s'\"<>]*(?:private|internal|merchant|provider)[^\s'\"<>]*", re.I),
+    re.compile(
+        r"\b(?:bearer|token|jwt|passport|secret|api[_-]?key|webhook[_-]?secret|"
+        r"client[_-]?secret|password)\s*[:=]\s*[^\s,'\"{}]+",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:raw[_-]?payload|provider[_-]?(?:payload|metadata|credential|credentials))"
+        r"\b\s*[:=]\s*\{[^{}]*\}",
+        re.I,
+    ),
+)
+
 UNSUPPORTED_CLAIM_TERMS: dict[str, tuple[str, ...]] = {
+    "final_price": ("final price", "final payable", "payable amount", "checkout total", "all taxes included"),
     "emi": ("emi", "installment", "instalment", "no-cost emi", "no cost emi"),
     "discount": ("discount", "coupon", "promo", "cashback", "deal", "sale price"),
     "offer": ("offer", "promotion", "bundle"),
+    "inventory": ("guaranteed in stock", "in stock", "available now", "reserved stock"),
+    "delivery": ("delivery", "deliver", "shipping", "ship by", "delivery tomorrow"),
+    "fulfillment": ("fulfillment", "dispatch", "tracking", "order status"),
+    "refund": ("refund", "chargeback"),
+    "settlement": ("settlement", "payout", "reconciliation"),
+    "support": ("support promise", "service center", "customer support"),
     "return_policy": ("return policy", "returns", "refund", "replacement"),
     "tax": ("tax", "gst", "vat"),
     "warranty": ("warranty", "guarantee"),
 }
 
 TOOL_DATA_CLAIM_KEYS: dict[str, tuple[str, ...]] = {
+    "final_price": ("final_price", "final_amount", "payable_amount", "checkout_total"),
     "emi": ("emi", "installment", "instalment", "financing"),
     "discount": ("discount", "coupon", "promo", "cashback"),
     "offer": ("offer", "promotion", "bundle"),
+    "inventory": ("inventory_confirmed", "reserved_stock"),
+    "delivery": ("delivery", "serviceability", "shipping"),
+    "fulfillment": ("fulfillment", "dispatch", "tracking", "order_status"),
+    "refund": ("refund", "chargeback"),
+    "settlement": ("settlement", "payout", "reconciliation"),
+    "support": ("support", "service_center"),
     "return_policy": ("return", "refund", "replacement"),
     "tax": ("tax", "gst", "vat"),
     "warranty": ("warranty", "guarantee"),
@@ -151,6 +218,33 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
             "Grantex Commerce refused this checkout/payment action. Do not continue without remediation.",
         )
 
+    authority_payload = _lookup(params, "session_authority", "authority", "commerce_authority")
+    if authority_payload is not None:
+        if not isinstance(authority_payload, Mapping):
+            return refusal(
+                "authority_ambiguous",
+                "Grantex authority state is ambiguous, so this checkout/payment action is refused.",
+            )
+        authority = session_authority_from_payload(
+            authority_payload,
+            expected_merchant_id=_as_optional_text(_lookup(params, "merchant_id")),
+            expected_agent_id=_as_optional_text(_lookup(params, "agent_id")),
+            expected_buyer_id=_as_optional_text(_lookup(params, "buyer_id", "subject")),
+            expected_session_id=_as_optional_text(_lookup(params, "buyer_session_id", "session_id")),
+        )
+        if not authority.get("authority_valid"):
+            return refusal(
+                _as_text(authority.get("refusal_code")) or "authority_ambiguous",
+                _as_message(authority.get("reason")),
+                {"authority": authority},
+            )
+        if authority.get("protected_action_allowed") is not True:
+            return refusal(
+                _as_text(authority.get("refusal_code")) or "checkout_payment_not_enabled_by_c6u6",
+                _as_message(authority.get("reason")),
+                {"authority": authority},
+            )
+
     consent_status = _as_text(_lookup(params, "consent_status", "consent.status", "consent_request.status"))
     if consent_status in CONSENT_DENIED_STATUSES:
         return refusal("consent_denied", "Checkout/payment requires granted consent; the current consent was denied.")
@@ -177,10 +271,15 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
     if policy_decision in POLICY_DENIALS:
         return refusal("policy_denied", "Grantex policy denied this checkout/payment action.")
 
-    if action in {"checkout_create", "payment_create_intent"}:
+    if action in {"checkout_create", "payment_create_intent", "payment_get_status"}:
         passport_jwt = _lookup(params, "passport_jwt", "passport.jwt", "commerce_passport.jwt")
         if not passport_jwt:
-            return refusal("consent_required", "Checkout/payment requires a granted Grantex Commerce Passport.")
+            message = (
+                "Payment status requires a Grantex Commerce Passport."
+                if action == "payment_get_status"
+                else "Checkout/payment requires a granted Grantex Commerce Passport."
+            )
+            return refusal("consent_required", message)
 
     amount_minor_units = _as_int(_lookup(params, "amount_minor_units", "amount", "total_amount_minor_units"))
     passport_cap = _as_int(
@@ -214,7 +313,53 @@ def validate_payment_action(action: str, params: dict[str, Any]) -> dict[str, An
             {"currency": requested_currency, "passport_currency": passport_currency},
         )
 
+    authority_context_present = any(
+        _lookup(params, path) not in (None, "")
+        for path in ("agent_id", "agent.id", "buyer_id", "subject", "buyer_session_id", "session_id")
+    )
+    if (
+        action in {"checkout_create", "payment_create_intent"}
+        and authority_payload is None
+        and authority_context_present
+    ):
+        authority = session_authority_from_payload(
+            None,
+            expected_merchant_id=_as_optional_text(_lookup(params, "merchant_id")),
+            expected_agent_id=_as_optional_text(_lookup(params, "agent_id")),
+            expected_buyer_id=_as_optional_text(_lookup(params, "buyer_id", "subject")),
+            expected_session_id=_as_optional_text(_lookup(params, "buyer_session_id", "session_id")),
+        )
+        return refusal(
+            _as_text(authority.get("refusal_code")) or "authority_freshness_missing",
+            _as_message(authority.get("reason")),
+            {"authority": authority},
+        )
+
     return allowed()
+
+
+def _sanitize_grantex_error_message(value: Any) -> str:
+    message = str(value or "").replace("\x00", "").strip()
+    if not message:
+        return "Grantex Commerce request failed."
+    for pattern in SENSITIVE_ERROR_PATTERNS:
+        message = pattern.sub("[redacted]", message)
+    if "[redacted]" in message:
+        return (
+            "Grantex Commerce refused the request. Private provider, merchant, "
+            "credential, or raw payload details were redacted."
+        )
+    return message[:500].rstrip()
+
+
+def _as_optional_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _as_message(value: Any) -> str:
+    text = str(value or "").replace("\x00", "").strip()
+    return text[:500].rstrip() if text else "Grantex authority state requires refresh before continuing."
 
 
 def _inventory_records(inventory: Any) -> list[Mapping[str, Any]]:
@@ -325,7 +470,7 @@ def normalize_grantex_error(payload: Any, status_code: int | None = None) -> dic
         code = "grantex_jsonrpc_error"
 
     raw_message = error_obj.get("message") if isinstance(error_obj, Mapping) else None
-    message = str(raw_message).strip() if raw_message else "Grantex Commerce request failed."
+    message = _sanitize_grantex_error_message(raw_message)
 
     retryable = bool(error_obj.get("retryable")) if isinstance(error_obj, Mapping) else False
     normalized: dict[str, Any] = {
@@ -336,9 +481,13 @@ def normalize_grantex_error(payload: Any, status_code: int | None = None) -> dic
         "refusal": code in PAYMENT_REFUSAL_ERROR_CODES,
     }
 
-    for field in ("decision_id", "audit_event_id", "remediation"):
+    for field in ("decision_id", "audit_event_id"):
         value = error_obj.get(field) if isinstance(error_obj, Mapping) else None
         if value:
             normalized[field] = value
+
+    remediation = error_obj.get("remediation") if isinstance(error_obj, Mapping) else None
+    if isinstance(remediation, str):
+        normalized["remediation"] = _sanitize_grantex_error_message(remediation)
 
     return normalized

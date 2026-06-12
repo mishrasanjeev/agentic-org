@@ -11,6 +11,13 @@ Sales Agent without weakening the Grantex-only commerce boundary.
   staging or exact temporary smoke URL.
 - Use only `grantex_commerce:*` commerce tools.
 - Do not call Stripe, Plural, Pine, or provider credential paths for commerce.
+- Treat `grantex_commerce:buyer_discovery_preview` as read-only sandbox preview
+  data. It is not public discovery, production approval, checkout/payment,
+  fulfillment, returns, refunds, or live provider access.
+- Use `core.commerce.buyer_session.start_buyer_discovery_session(...)` for
+  buyer-facing discovery. It returns the channel-neutral C6I response contract
+  for ChatGPT, Claude, Gemini, WhatsApp, Telegram, web chat, and future channel
+  wrappers.
 - Do not print fixture env values, passports/JWTs, auth material, idempotency
   values, raw payloads, DB/Redis URLs, private keys, or secrets.
 - Do not present mocked output as hosted or real-staging evidence.
@@ -72,6 +79,8 @@ network work.
 | Fixture path outside `.tmp/` | Refused. |
 | Fake connector/provider path | Refused by regression tests and runtime guardrails. |
 | Direct provider imports/calls in commerce code | Blocked by static regression. |
+| Buyer discovery asks for checkout/payment/live provider/fulfillment/refund work | Refused by the C6I buyer discovery session wrapper before any non-read-only path. |
+| Buyer discovery asks for unrelated unsupported work | Refused by the C6I buyer discovery session wrapper. |
 
 ## Evidence Interpretation
 
@@ -145,3 +154,53 @@ When adding commerce behavior:
    new commerce files are added.
 4. Keep all payment-affecting work on Grantex tools.
 5. Update evidence docs only with scrubbed, non-secret summaries.
+6. For buyer discovery, consume only Grantex C6G read-only preview payloads and
+   do not expose the Grantex operator handoff request or withdrawal endpoints.
+
+## C6I Rollback
+
+C6I adds only local AgenticOrg orchestration, prompt, docs, and tests. Roll back
+by reverting the buyer session wrapper usage. No production config, public
+discovery setting, allowlist, provider credential, checkout/payment state,
+fulfillment state, refund state, or merchant private API integration is changed.
+
+## Future Commerce Alias Requirements
+
+Do not add new AgenticOrg commerce aliases until the corresponding Grantex
+runtime API, policy gate, audit event, and tests exist. Planned future aliases
+must remain Grantex-only:
+
+| Future area | AgenticOrg behavior before Grantex ships it | Required behavior after Grantex ships it |
+| --- | --- | --- |
+| Order status | Refuse or explain that order status is unavailable. | Read order status through Grantex only. |
+| Fulfillment and shipment | Refuse delivery promises unless Grantex provides verified data. | Read fulfillment, tracking, pickup, and delivery fields through Grantex only. |
+| Returns and refunds | Refuse refund execution and route to merchant support/manual handoff. | Request/read return or refund status through Grantex only, with policy and audit. |
+| Offers, discounts, EMI, rewards | Do not invent promotions or affordability. | Show only Grantex-provided offer metadata and eligibility. |
+| UCP/ACP/schema.org/AP2 readiness | Do not claim compliance or certification. | Display only Grantex-published capability and evidence states. |
+
+See `docs/commerce-agent-agentic-commerce-implementation-prd.md` for the full
+gap register and fast-track plan.
+
+## Future Channel Adapter Requirements
+
+Buyer channels such as ChatGPT, Claude, Gemini, WhatsApp, Telegram, web/mobile,
+and future agent marketplaces must be implemented as thin AgenticOrg channel
+adapters. They may translate message formats and session identity, but they must
+not implement commerce execution outside Grantex.
+
+Each channel adapter must define:
+
+- channel type and platform capability limits;
+- auth/account-linking model;
+- buyer session creation and resume behavior;
+- message, attachment, locale, currency, and identity normalization;
+- which actions are read-only, consent-required, checkout-capable, or blocked;
+- Grantex-only tool mapping;
+- consent and checkout handoff copy;
+- redacted evidence fields;
+- rate-limit, retry, and human escalation behavior;
+- smoke tests and regression tests.
+
+Do not mark a channel launch-ready until a real user can start from that channel
+without developer setup and the channel has documented fallback behavior when it
+cannot perform write actions.

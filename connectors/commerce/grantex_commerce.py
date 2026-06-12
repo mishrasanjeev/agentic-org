@@ -6,6 +6,7 @@ import json
 import os
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -26,6 +27,10 @@ TOOL_ALIAS_TO_GRANTEX: dict[str, str] = {
 REST_CONSENT_ENDPOINTS: dict[str, str] = {
     "consent_request": "/v1/commerce/passports/consent-requests",
     "consent_exchange": "/v1/commerce/passports/exchange",
+}
+
+REST_READ_ONLY_ENDPOINTS: dict[str, str] = {
+    "buyer_discovery_preview": "/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview",
 }
 
 IDEMPOTENT_TOOL_ALIASES = frozenset({"cart_create", "payment_create_intent", "checkout_create"})
@@ -57,6 +62,7 @@ class GrantexCommerceConnector(BaseConnector):
             "cart_create": self.cart_create,
             "consent_request": self.consent_request,
             "consent_exchange": self.consent_exchange,
+            "buyer_discovery_preview": self.buyer_discovery_preview,
             "payment_create_intent": self.payment_create_intent,
             "checkout_create": self.checkout_create,
             "payment_get_status": self.payment_get_status,
@@ -129,6 +135,21 @@ class GrantexCommerceConnector(BaseConnector):
         """Exchange granted consent for a Grantex-minted Commerce Passport."""
         return await self._post_rest(REST_CONSENT_ENDPOINTS["consent_exchange"], params)
 
+    async def buyer_discovery_preview(self, **params: Any) -> dict[str, Any]:
+        """Read Grantex AgenticOrg buyer-agent discovery preview evidence."""
+        merchant_id = str(params.get("merchant_id", "") or "").strip()
+        if not merchant_id:
+            return {
+                "error": "merchant_id_required",
+                "message": "merchant_id is required for buyer discovery preview.",
+                "retryable": False,
+                "refusal": True,
+            }
+        path = REST_READ_ONLY_ENDPOINTS["buyer_discovery_preview"].format(
+            merchant_id=quote(merchant_id, safe="")
+        )
+        return await self._get_rest(path)
+
     async def payment_create_intent(self, **params: Any) -> dict[str, Any]:
         """Create a payment intent through Grantex Commerce only."""
         missing = self._require_idempotency_key("payment_create_intent", params)
@@ -151,6 +172,9 @@ class GrantexCommerceConnector(BaseConnector):
 
     async def payment_get_status(self, **params: Any) -> dict[str, Any]:
         """Poll payment status through Grantex Commerce only."""
+        guardrail = validate_payment_action("payment_get_status", params)
+        if not guardrail.get("allowed"):
+            return guardrail
         return await self._call_mcp_alias("payment_get_status", params)
 
     def _require_idempotency_key(self, alias: str, params: dict[str, Any]) -> dict[str, Any] | None:
@@ -194,6 +218,24 @@ class GrantexCommerceConnector(BaseConnector):
             raise RuntimeError("Connector not connected")
         try:
             response = await self._client.post(path, json=params)
+        except httpx.HTTPError:
+            return {
+                "error": "grantex_transport_error",
+                "message": "Grantex Commerce is unreachable.",
+                "retryable": True,
+                "refusal": False,
+            }
+
+        payload = self._response_json(response)
+        if response.status_code >= 400:
+            return normalize_grantex_error(payload, response.status_code)
+        return payload if isinstance(payload, dict) else {"data": payload}
+
+    async def _get_rest(self, path: str) -> dict[str, Any]:
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        try:
+            response = await self._client.get(path)
         except httpx.HTTPError:
             return {
                 "error": "grantex_transport_error",
