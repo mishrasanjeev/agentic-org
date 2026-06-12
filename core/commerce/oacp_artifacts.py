@@ -38,6 +38,42 @@ AdapterPreviewSurface = Literal[
     "a2a_agent_card_task_capability",
     "mcp_tool_resource_capability",
 ]
+CommitmentBoundaryAction = Literal[
+    "browse_merchant_profile",
+    "inspect_seller_card",
+    "compare_catalog_summaries",
+    "explain_policy",
+    "explain_available_capabilities",
+    "show_source_freshness_labels",
+    "prepare_buyer_question",
+    "prepare_seller_agent_remediation_suggestion",
+    "prepare_draft_quote",
+    "prepare_draft_cart",
+    "ask_refresh_source_facts",
+    "prepare_non_binding_reservation_request",
+    "prepare_mandate_capability_check_request",
+    "prepare_human_confirmation_prompt",
+    "price_lock",
+    "inventory_hold",
+    "reservation",
+    "order_placement",
+    "payment_intent",
+    "mandate_setup_use",
+    "cancellation",
+    "refund_request",
+    "return_authorization",
+    "support_escalation_sla_promise",
+    "live_payment_execution",
+    "live_plural_provider_call",
+    "public_discovery_enablement",
+    "production_checkout_payment_creation",
+    "merchant_private_api_call",
+    "provider_private_api_call",
+    "protocol_publication_submission",
+    "certification_conformance_claim",
+    "final_delivery_refund_settlement_payout_promise",
+]
+ActionClass = Literal["non_binding_preview", "commitment_adjacent", "commitment_bound", "always_blocked"]
 OfflineAction = Literal[
     "browse",
     "compare",
@@ -195,6 +231,105 @@ OACP_C6W4_NON_BINDING_ADAPTER_ACTIONS: frozenset[str] = frozenset(
         "tool_discovery",
     }
 )
+
+OACP_C6W5_NON_BINDING_PREVIEW_ACTIONS: frozenset[str] = frozenset(
+    {
+        "browse_merchant_profile",
+        "inspect_seller_card",
+        "compare_catalog_summaries",
+        "explain_policy",
+        "explain_available_capabilities",
+        "show_source_freshness_labels",
+        "prepare_buyer_question",
+        "prepare_seller_agent_remediation_suggestion",
+    }
+)
+OACP_C6W5_COMMITMENT_ADJACENT_ACTIONS: frozenset[str] = frozenset(
+    {
+        "prepare_draft_quote",
+        "prepare_draft_cart",
+        "ask_refresh_source_facts",
+        "prepare_non_binding_reservation_request",
+        "prepare_mandate_capability_check_request",
+        "prepare_human_confirmation_prompt",
+    }
+)
+OACP_C6W5_COMMITMENT_BOUND_ACTIONS: frozenset[str] = frozenset(
+    {
+        "price_lock",
+        "inventory_hold",
+        "reservation",
+        "order_placement",
+        "payment_intent",
+        "mandate_setup_use",
+        "cancellation",
+        "refund_request",
+        "return_authorization",
+        "support_escalation_sla_promise",
+    }
+)
+OACP_C6W5_ALWAYS_BLOCKED_ACTIONS: frozenset[str] = frozenset(
+    {
+        "live_payment_execution",
+        "live_plural_provider_call",
+        "public_discovery_enablement",
+        "production_checkout_payment_creation",
+        "merchant_private_api_call",
+        "provider_private_api_call",
+        "protocol_publication_submission",
+        "certification_conformance_claim",
+        "final_delivery_refund_settlement_payout_promise",
+    }
+)
+
+_C6W5_BASE_PREVIEW_ARTIFACTS: frozenset[ArtifactType] = frozenset(
+    {"merchant_capability", "seller_agent_capability", "policy", "protocol_adapter"}
+)
+OACP_C6W5_REQUIRED_FRESH_ARTIFACT_FAMILIES: dict[str, frozenset[ArtifactType]] = {
+    "browse_merchant_profile": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "inspect_seller_card": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "compare_catalog_summaries": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"catalog_snapshot"}),
+    "explain_policy": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "explain_available_capabilities": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "show_source_freshness_labels": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "prepare_buyer_question": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "prepare_seller_agent_remediation_suggestion": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "prepare_draft_quote": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"catalog_snapshot", "price"}),
+    "prepare_draft_cart": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"catalog_snapshot", "price", "inventory"}),
+    "ask_refresh_source_facts": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "prepare_non_binding_reservation_request": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"offer", "inventory"}),
+    "prepare_mandate_capability_check_request": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"mandate_capability"}),
+    "prepare_human_confirmation_prompt": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    "price_lock": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"offer", "price"}),
+    "inventory_hold": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"inventory"}),
+    "reservation": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"offer", "inventory"}),
+    "order_placement": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"offer", "price", "inventory"}),
+    "payment_intent": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"price", "mandate_capability"}),
+    "mandate_setup_use": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"mandate_capability"}),
+    "cancellation": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"commitment_evidence"}),
+    "refund_request": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"commitment_evidence"}),
+    "return_authorization": _C6W5_BASE_PREVIEW_ARTIFACTS | frozenset({"commitment_evidence"}),
+    "support_escalation_sla_promise": _C6W5_BASE_PREVIEW_ARTIFACTS,
+    **{action: frozenset() for action in OACP_C6W5_ALWAYS_BLOCKED_ACTIONS},
+}
+OACP_C6W5_ACTION_RISK_TIERS: dict[str, RiskTier] = dict.fromkeys(
+    OACP_C6W5_NON_BINDING_PREVIEW_ACTIONS,
+    cast(RiskTier, "informational"),
+)
+OACP_C6W5_ACTION_RISK_TIERS.update(dict.fromkeys(OACP_C6W5_COMMITMENT_ADJACENT_ACTIONS, cast(RiskTier, "low")))
+OACP_C6W5_ACTION_RISK_TIERS.update({
+    "price_lock": "medium",
+    "inventory_hold": "medium",
+    "reservation": "medium",
+    "order_placement": "high",
+    "payment_intent": "high",
+    "mandate_setup_use": "high",
+    "cancellation": "high",
+    "refund_request": "high",
+    "return_authorization": "high",
+    "support_escalation_sla_promise": "medium",
+})
+OACP_C6W5_ACTION_RISK_TIERS.update(dict.fromkeys(OACP_C6W5_ALWAYS_BLOCKED_ACTIONS, cast(RiskTier, "critical")))
 
 OACP_REQUIRED_ENVELOPE_FIELDS = (
     "artifact_id",
@@ -1147,6 +1282,329 @@ def summarize_oacp_adapter_preview_for_buyer(preview: dict[str, Any]) -> dict[st
         "non_authoritative_for_transaction": True,
         "commerce_facts_invented": False,
     }
+
+
+def _c6w5_action_class(action: str) -> ActionClass:
+    if action in OACP_C6W5_NON_BINDING_PREVIEW_ACTIONS:
+        return "non_binding_preview"
+    if action in OACP_C6W5_COMMITMENT_ADJACENT_ACTIONS:
+        return "commitment_adjacent"
+    if action in OACP_C6W5_COMMITMENT_BOUND_ACTIONS:
+        return "commitment_bound"
+    return "always_blocked"
+
+
+def _c6w5_blocked_capabilities(preview: dict[str, Any]) -> list[str]:
+    blocked = set(OACP_C6W4_BLOCKED_ADAPTER_ACTIONS) | set(OACP_C6W5_ALWAYS_BLOCKED_ACTIONS)
+    blocked.update(_string_list(preview.get("blocked_capabilities")))
+    blocked.update(_string_list(preview.get("unsupported_capabilities")))
+    return sorted(blocked)
+
+
+def _artifact_type_from_cached(artifact: dict[str, Any]) -> ArtifactType | None:
+    envelope = artifact.get("envelope")
+    if not isinstance(envelope, dict):
+        return None
+    artifact_type = envelope.get("artifact_type")
+    return cast(ArtifactType, artifact_type) if artifact_type in OACP_ARTIFACT_TTLS_SECONDS else None
+
+
+def _c6w5_freshness_summary(artifacts: list[dict[str, Any]]) -> dict[str, Any]:
+    artifact_freshness: dict[str, str] = {}
+    expires: list[datetime] = []
+    freshness_values: set[str] = set()
+    for artifact in artifacts:
+        envelope = artifact.get("envelope")
+        if not isinstance(envelope, dict):
+            continue
+        artifact_id = _string_field(envelope, "artifact_id")
+        freshness = _string_field(envelope, "freshness_class")
+        expires_at = _parse_iso(_string_field(envelope, "expires_at"))
+        if artifact_id is not None and freshness is not None:
+            artifact_freshness[artifact_id] = freshness
+            freshness_values.add(freshness)
+        if expires_at is not None:
+            expires.append(expires_at)
+    tier = next(iter(freshness_values)) if len(freshness_values) == 1 else "mixed"
+    earliest = min(expires).isoformat(timespec="milliseconds").replace("+00:00", "Z") if expires else None
+    return {
+        "freshness_tier": tier,
+        "artifact_freshness": artifact_freshness,
+        "earliest_expires_at": earliest,
+    }
+
+
+def _c6w5_decision(
+    *,
+    action: str,
+    action_class: ActionClass,
+    allowed_to_preview: bool,
+    allowed_to_prepare: bool,
+    reason: str | None,
+    required: frozenset[ArtifactType],
+    source_artifacts: list[dict[str, Any]],
+    risk_tier: RiskTier,
+    offline_mode_status: str,
+    buyer_safe_message: str,
+    blocked_capabilities: list[str],
+) -> dict[str, Any]:
+    source_ids: list[str] = []
+    source_families: list[str] = []
+    for artifact in source_artifacts:
+        envelope = artifact.get("envelope")
+        if not isinstance(envelope, dict):
+            continue
+        artifact_id = _string_field(envelope, "artifact_id")
+        artifact_type = _string_field(envelope, "artifact_type")
+        if artifact_id is not None:
+            source_ids.append(artifact_id)
+        if artifact_type is not None:
+            source_families.append(artifact_type)
+    return {
+        "action": action,
+        "action_class": action_class,
+        "allowed_to_preview": allowed_to_preview,
+        "allowed_to_prepare": allowed_to_prepare,
+        "allowed_to_execute": False,
+        "refusal_or_escalation_reason": reason,
+        "required_fresh_artifact_families": sorted(required),
+        "source_artifact_ids": source_ids,
+        "source_artifact_families": source_families,
+        "source_authority": "grantex_canonical_oacp_artifact_authority",
+        "freshness_summary": _c6w5_freshness_summary(source_artifacts),
+        "risk_tier": risk_tier,
+        "offline_mode_status": offline_mode_status,
+        "buyer_safe_message": buyer_safe_message,
+        "blocked_capabilities": blocked_capabilities,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+    }
+
+
+def _c6w5_requires_risk_context(action: str, action_class: ActionClass) -> bool:
+    return action_class not in {"non_binding_preview", "always_blocked"} and action not in {
+        "ask_refresh_source_facts",
+        "prepare_human_confirmation_prompt",
+        "prepare_mandate_capability_check_request",
+    }
+
+
+def _c6w5_risk_context_reason(
+    *,
+    risk_tier: RiskTier,
+    currency: str | None,
+    amount_minor_units: int | None,
+    total_quantity: int | None,
+    max_quantity_per_sku: int | None,
+) -> str | None:
+    if currency not in {"INR", "USD"} or amount_minor_units is None or amount_minor_units < 0:
+        return "risk_context_missing_or_ambiguous"
+    if total_quantity is None or total_quantity <= 0:
+        return "risk_context_missing_or_ambiguous"
+    cap = OACP_FIRST_RELEASE_RISK_CAPS[risk_tier]
+    amount_cap = cap["currency_caps"].get(currency)
+    if amount_cap is None or amount_minor_units > amount_cap:
+        return "risk_cap_exceeded"
+    total_cap = cap["total_quantity_cap"]
+    per_sku_cap = cap["per_sku_quantity_cap"]
+    if total_cap is not None and total_quantity > total_cap:
+        return "quantity_cap_exceeded"
+    if max_quantity_per_sku is not None and per_sku_cap is not None and max_quantity_per_sku > per_sku_cap:
+        return "quantity_cap_exceeded"
+    return None
+
+
+def evaluate_agenticorg_c6w5_commitment_boundary(
+    *,
+    action: str,
+    cached_artifacts: list[dict[str, Any]],
+    adapter_preview: dict[str, Any],
+    now_iso: str,
+    grantex_available: bool,
+    revocation_snapshot_age_seconds: int | None = None,
+    currency: str | None = None,
+    amount_minor_units: int | None = None,
+    total_quantity: int | None = None,
+    max_quantity_per_sku: int | None = None,
+) -> dict[str, Any]:
+    """Resolve C6W5 preview/prepare boundaries from local artifacts only."""
+
+    action_class = _c6w5_action_class(action)
+    risk_tier = OACP_C6W5_ACTION_RISK_TIERS.get(action, "critical")
+    required = OACP_C6W5_REQUIRED_FRESH_ARTIFACT_FAMILIES.get(action, frozenset())
+    blocked_capabilities = _c6w5_blocked_capabilities(adapter_preview)
+    source_artifacts = [artifact for artifact in cached_artifacts if _artifact_type_from_cached(artifact) is not None]
+    by_type = {_artifact_type_from_cached(artifact): artifact for artifact in source_artifacts}
+    offline_mode_status = (
+        "online_policy_available"
+        if grantex_available
+        else "offline_prepared_not_executed"
+        if action_class == "commitment_bound"
+        else "offline_cache_valid"
+    )
+
+    if action_class == "always_blocked":
+        return _c6w5_decision(
+            action=action,
+            action_class=action_class,
+            allowed_to_preview=False,
+            allowed_to_prepare=False,
+            reason="blocked_in_c6w5",
+            required=required,
+            source_artifacts=source_artifacts,
+            risk_tier=risk_tier,
+            offline_mode_status="offline_blocked",
+            buyer_safe_message="This C6W5 action is blocked and cannot be prepared or executed from adapter previews.",
+            blocked_capabilities=blocked_capabilities,
+        )
+
+    preview_check = evaluate_agenticorg_oacp_adapter_preview_use(preview=adapter_preview, action="browse")
+    preview_expires_at = _parse_iso(_string_field(adapter_preview, "expires_at"))
+    now = _parse_iso(now_iso)
+    if (
+        not preview_check["allowed"]
+        or preview_expires_at is None
+        or now is None
+        or now > preview_expires_at
+    ):
+        return _c6w5_decision(
+            action=action,
+            action_class=action_class,
+            allowed_to_preview=False,
+            allowed_to_prepare=False,
+            reason="adapter_preview_missing_safety_or_freshness",
+            required=required,
+            source_artifacts=source_artifacts,
+            risk_tier=risk_tier,
+            offline_mode_status="online_policy_available" if grantex_available else "offline_blocked",
+            buyer_safe_message="Adapter previews cannot override missing safety flags or expired metadata.",
+            blocked_capabilities=blocked_capabilities,
+        )
+
+    missing = sorted(required - {artifact_type for artifact_type in by_type if artifact_type is not None})
+    if missing:
+        return _c6w5_decision(
+            action=action,
+            action_class=action_class,
+            allowed_to_preview=action_class == "non_binding_preview",
+            allowed_to_prepare=False,
+            reason=f"required_artifact_missing:{','.join(missing)}",
+            required=required,
+            source_artifacts=source_artifacts,
+            risk_tier=risk_tier,
+            offline_mode_status="online_policy_available" if grantex_available else "offline_blocked",
+            buyer_safe_message="Required source artifacts are missing, so the action can only remain non-executing.",
+            blocked_capabilities=blocked_capabilities,
+        )
+
+    required_artifacts = [by_type[artifact_type] for artifact_type in required if artifact_type in by_type]
+    for artifact in required_artifacts:
+        envelope = artifact["envelope"]
+        payload = artifact["payload"]
+        validation = validate_oacp_artifact_family(envelope=envelope, payload=payload, now_iso=now_iso)
+        if not validation["valid"]:
+            return _c6w5_decision(
+                action=action,
+                action_class=action_class,
+                allowed_to_preview=False,
+                allowed_to_prepare=False,
+                reason=str(validation["refusal_code"]),
+                required=required,
+                source_artifacts=required_artifacts,
+                risk_tier=risk_tier,
+                offline_mode_status="online_policy_available" if grantex_available else "offline_blocked",
+                buyer_safe_message="A required OACP artifact is invalid, stale, revoked, or ambiguous.",
+                blocked_capabilities=blocked_capabilities,
+            )
+        freshness = _string_field(envelope, "freshness_class")
+        if freshness in {"stale", "unknown"} or (action_class != "non_binding_preview" and freshness != "fresh"):
+            return _c6w5_decision(
+                action=action,
+                action_class=action_class,
+                allowed_to_preview=action_class == "non_binding_preview",
+                allowed_to_prepare=False,
+                reason="artifact_freshness_missing_stale_or_ambiguous",
+                required=required,
+                source_artifacts=required_artifacts,
+                risk_tier=risk_tier,
+                offline_mode_status="online_policy_available" if grantex_available else "offline_blocked",
+                buyer_safe_message="Source facts must be fresh enough before a commitment-bound request is prepared.",
+                blocked_capabilities=blocked_capabilities,
+            )
+
+    max_revocation_age = OACP_REVOCATION_SNAPSHOT_MAX_AGE_SECONDS[risk_tier]
+    if action_class != "non_binding_preview" and (
+        revocation_snapshot_age_seconds is None
+        or max_revocation_age is None
+        or revocation_snapshot_age_seconds > max_revocation_age
+    ):
+        return _c6w5_decision(
+            action=action,
+            action_class=action_class,
+            allowed_to_preview=True,
+            allowed_to_prepare=False,
+            reason="revocation_snapshot_missing_or_stale",
+            required=required,
+            source_artifacts=required_artifacts,
+            risk_tier=risk_tier,
+            offline_mode_status="online_policy_available" if grantex_available else "offline_blocked",
+            buyer_safe_message="The local revocation posture is too stale for a commitment-bound preparation.",
+            blocked_capabilities=blocked_capabilities,
+        )
+
+    if _c6w5_requires_risk_context(action, action_class):
+        risk_reason = _c6w5_risk_context_reason(
+            risk_tier=risk_tier,
+            currency=currency,
+            amount_minor_units=amount_minor_units,
+            total_quantity=total_quantity,
+            max_quantity_per_sku=max_quantity_per_sku,
+        )
+        if risk_reason is not None:
+            return _c6w5_decision(
+                action=action,
+                action_class=action_class,
+                allowed_to_preview=True,
+                allowed_to_prepare=False,
+                reason=risk_reason,
+                required=required,
+                source_artifacts=required_artifacts,
+                risk_tier=risk_tier,
+                offline_mode_status="online_policy_available" if grantex_available else "offline_blocked",
+                buyer_safe_message=(
+                    "Amount, currency, or quantity is missing or outside the conservative C6W5 risk caps."
+                ),
+                blocked_capabilities=blocked_capabilities,
+            )
+
+    allowed_to_prepare = action_class != "non_binding_preview"
+    if action_class == "non_binding_preview":
+        message = "Preview can continue from sourced OACP artifacts; this is not purchase approval."
+        reason = None
+    elif action_class == "commitment_adjacent":
+        message = (
+            "Prepared request only; no checkout, payment, provider call, or merchant private API call is executed."
+        )
+        reason = None
+    else:
+        message = "Prepared, not executed. C6W5 does not grant transaction authority from adapter previews."
+        reason = "prepared_not_executed_c6w5"
+    return _c6w5_decision(
+        action=action,
+        action_class=action_class,
+        allowed_to_preview=True,
+        allowed_to_prepare=allowed_to_prepare,
+        reason=reason,
+        required=required,
+        source_artifacts=required_artifacts,
+        risk_tier=risk_tier,
+        offline_mode_status=offline_mode_status,
+        buyer_safe_message=message,
+        blocked_capabilities=blocked_capabilities,
+    )
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
