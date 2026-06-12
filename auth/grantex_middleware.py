@@ -78,6 +78,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/webhooks/",
         "/api/v1/aa/consent/callback",
         "/api/v1/billing/webhook/",  # Plural & Stripe server-to-server webhooks
+        "/api/v1/client-portal/public/",  # Signed client portal invite/access tokens
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (pre-session)
     )
 

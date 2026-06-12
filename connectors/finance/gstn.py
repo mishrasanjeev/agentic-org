@@ -12,6 +12,7 @@ certificate path is configured (``dsc_path`` in config).
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
@@ -25,12 +26,70 @@ GSTN_API_BASE_URL = "https://gsp.adaequare.com/gsp"
 GSTN_SANDBOX_API_BASE_URL = "https://gsp.adaequare.com/test/enriched/gsp"
 GSTN_ALLOWED_BASE_URLS = {GSTN_API_BASE_URL, GSTN_SANDBOX_API_BASE_URL}
 
+EWAY_PART_A_REQUIRED = (
+    "supply_type",
+    "sub_supply_type",
+    "document_type",
+    "document_number",
+    "document_date",
+    "from_gstin",
+    "from_pin_code",
+    "from_state_code",
+    "to_gstin",
+    "to_pin_code",
+    "to_state_code",
+    "product_name",
+    "hsn_code",
+    "quantity",
+    "unit",
+    "taxable_amount",
+    "total_invoice_value",
+)
+EWAY_PART_B_REQUIRED = ("transport_mode", "distance_km")
+EWAY_NUMERIC_FIELDS = {
+    "from_pin_code",
+    "to_pin_code",
+    "from_state_code",
+    "to_state_code",
+    "quantity",
+    "taxable_amount",
+    "total_invoice_value",
+    "cgst_value",
+    "sgst_value",
+    "igst_value",
+    "cess_value",
+    "distance_km",
+}
+
 
 def _provider_base_url(connector_cls: type[GstnConnector]) -> str:
     base_url = getattr(connector_cls, "base_url", GSTN_API_BASE_URL)
     if base_url not in GSTN_ALLOWED_BASE_URLS:
         raise ValueError("GSTN base URL must be an Adaequare provider endpoint")
     return base_url
+
+
+def _present(value: Any) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _to_number(value: Any) -> int | float:
+    try:
+        dec = Decimal(str(value).replace(",", "").strip())
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"must be numeric, got {value!r}") from exc
+    if dec == dec.to_integral_value():
+        return int(dec)
+    return float(dec)
+
+
+def _collect_part(params: dict[str, Any], section: str, fields: tuple[str, ...]) -> dict[str, Any]:
+    raw = params.get(section)
+    if isinstance(raw, dict):
+        source = raw
+    else:
+        source = params
+    return {field: source.get(field) for field in fields if field in source}
 
 
 class GstnConnector(BaseConnector):
@@ -64,6 +123,7 @@ class GstnConnector(BaseConnector):
         self._tool_registry["file_gstr3b"] = self.file_gstr3b
         self._tool_registry["file_gstr9"] = self.file_gstr9
         self._tool_registry["generate_eway_bill"] = self.generate_eway_bill
+        self._tool_registry["bulk_generate_eway_bills"] = self.bulk_generate_eway_bills
         self._tool_registry["generate_einvoice_irn"] = self.generate_einvoice_irn
         self._tool_registry["check_filing_status"] = self.check_filing_status
         self._tool_registry["get_compliance_notice"] = self.get_compliance_notice
@@ -189,9 +249,99 @@ class GstnConnector(BaseConnector):
         """File GSTR-9 annual return (DSC-signed)."""
         return await self._sign_and_post("/returns/gstr9", params)
 
+    def normalise_eway_bill_payload(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Validate and normalize GSTN e-way bill Part A + Part B payload.
+
+        GSTN rejects partial e-way bill payloads late and opaquely.  Keep the
+        validation here, at the connector boundary, so UI/API/bulk imports all
+        enforce the same contract before any live provider call is made.
+        """
+        part_a = _collect_part(params, "part_a", EWAY_PART_A_REQUIRED)
+        part_b = _collect_part(
+            params,
+            "part_b",
+            (*EWAY_PART_B_REQUIRED, "vehicle_number", "vehicle_type", "transporter_id", "transporter_name"),
+        )
+
+        missing = [field for field in EWAY_PART_A_REQUIRED if not _present(part_a.get(field))]
+        missing.extend(field for field in EWAY_PART_B_REQUIRED if not _present(part_b.get(field)))
+        if not _present(part_b.get("vehicle_number")) and not _present(part_b.get("transporter_id")):
+            missing.append("vehicle_number_or_transporter_id")
+        if missing:
+            raise ValueError("Missing required e-way bill fields: " + ", ".join(sorted(set(missing))))
+
+        payload = {
+            "part_a": dict(part_a),
+            "part_b": {k: v for k, v in part_b.items() if _present(v)},
+            "source": params.get("source", "manual"),
+            "client_reference": params.get("client_reference")
+            or params.get("invoice_number")
+            or part_a.get("document_number"),
+        }
+
+        for container in (payload["part_a"], payload["part_b"]):
+            for key, value in list(container.items()):
+                if key in EWAY_NUMERIC_FIELDS and _present(value):
+                    container[key] = _to_number(value)
+                elif isinstance(value, str):
+                    container[key] = value.strip()
+
+        for key in ("from_gstin", "to_gstin", "hsn_code", "document_type", "supply_type", "sub_supply_type"):
+            if key in payload["part_a"] and isinstance(payload["part_a"][key], str):
+                payload["part_a"][key] = payload["part_a"][key].strip().upper()
+        for key in ("vehicle_number", "vehicle_type", "transport_mode", "transporter_id"):
+            if key in payload["part_b"] and isinstance(payload["part_b"][key], str):
+                payload["part_b"][key] = payload["part_b"][key].strip().upper()
+
+        return payload
+
     async def generate_eway_bill(self, **params):
-        """Generate E-Way Bill for goods movement."""
-        return await self._post("/ewaybill/generate", params)
+        """Generate or validate an E-Way Bill for goods movement."""
+        payload = self.normalise_eway_bill_payload(params)
+        if params.get("dry_run") or params.get("validate_only"):
+            return {"status": "validated", "payload": payload}
+        return await self._post("/ewaybill/generate", payload)
+
+    async def bulk_generate_eway_bills(self, **params):
+        """Validate or submit a batch of e-way bills with per-row outcomes."""
+        invoices = params.get("invoices") or params.get("rows") or []
+        submit = bool(params.get("submit", False))
+        generated: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+
+        for index, invoice in enumerate(invoices, start=1):
+            try:
+                row = dict(invoice)
+                row.setdefault("source", params.get("source", "bulk_upload"))
+                result = await self.generate_eway_bill(
+                    **row,
+                    dry_run=not submit,
+                )
+                generated.append({
+                    "row_number": index,
+                    "client_reference": result.get("payload", {}).get("client_reference")
+                    or invoice.get("client_reference")
+                    or invoice.get("document_number"),
+                    "result": result,
+                })
+            except (TypeError, ValueError) as exc:
+                failed.append({
+                    "row_number": index,
+                    "client_reference": invoice.get("client_reference") or invoice.get("document_number"),
+                    "error": str(exc),
+                })
+
+        return {
+            "status": "completed" if not failed else "completed_with_errors",
+            "summary": {
+                "input_rows": len(invoices),
+                "generated": len(generated),
+                "failed": len(failed),
+                "submitted_to_gstn": submit,
+            },
+            "generated": generated,
+            "failed": failed,
+        }
 
     async def generate_einvoice_irn(self, **params):
         """Generate E-Invoice IRN (Invoice Reference Number)."""

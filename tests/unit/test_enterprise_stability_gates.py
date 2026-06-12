@@ -651,7 +651,7 @@ def test_core_execution_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 74
+    assert len(routes) == 76
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)

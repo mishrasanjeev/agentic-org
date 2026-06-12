@@ -128,6 +128,10 @@ const CompanyDashboard = lazyRetry(() => import("./pages/CompanyDashboard"));
 const CompanyOnboard = lazyRetry(() => import("./pages/CompanyOnboard"));
 const CompanyDetail = lazyRetry(() => import("./pages/CompanyDetail"));
 const PartnerDashboard = lazyRetry(() => import("./pages/PartnerDashboard"));
+const CAOperations = lazyRetry(() => import("./pages/CAOperations"));
+const ProfessionalTax = lazyRetry(() => import("./pages/ProfessionalTax"));
+const ClientPortal = lazyRetry(() => import("./pages/ClientPortal"));
+const CABilling = lazyRetry(() => import("./pages/CABilling"));
 
 /* ── Loading fallback ── */
 function PageLoader() {
@@ -640,6 +644,46 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
             <Layout>
               <PartnerDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ca-operations"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <CAOperations />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/professional-tax"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <ProfessionalTax />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/client-portal"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <ClientPortal />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ca-billing"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <CABilling />
             </Layout>
           </ProtectedRoute>
         }
