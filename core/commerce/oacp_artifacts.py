@@ -30,6 +30,14 @@ ArtifactType = Literal[
     "revocation",
     "protocol_adapter",
 ]
+AdapterPreviewSurface = Literal[
+    "schema_org_jsonld",
+    "ucp_capability_profile",
+    "acp_commerce_capability",
+    "ap2_evidence_intent_summary",
+    "a2a_agent_card_task_capability",
+    "mcp_tool_resource_capability",
+]
 OfflineAction = Literal[
     "browse",
     "compare",
@@ -143,6 +151,50 @@ OACP_FIRST_E2E_BRIDGES: dict[str, str] = {
     "gemini_style": "a2a_task_bridge_with_openapi_fallback",
     "perplexity_style": "hosted_answer_search_bridge_with_openapi_read_and_commit_preflight",
 }
+
+OACP_C6W4_PROTOCOL_ADAPTER_SURFACES: tuple[AdapterPreviewSurface, ...] = (
+    "schema_org_jsonld",
+    "ucp_capability_profile",
+    "acp_commerce_capability",
+    "ap2_evidence_intent_summary",
+    "a2a_agent_card_task_capability",
+    "mcp_tool_resource_capability",
+)
+
+OACP_C6W4_BLOCKED_ADAPTER_ACTIONS: frozenset[str] = frozenset(
+    {
+        "checkout_create",
+        "payment_authorize",
+        "payment_capture",
+        "refund_execute",
+        "settlement_execute",
+        "payout_execute",
+        "fulfillment_start",
+        "merchant_approval",
+        "public_discovery_publish",
+        "public_discovery_unpublish",
+        "live_provider_call",
+        "live_plural_call",
+        "provider_call",
+        "carrier_call",
+        "shipping_provider_call",
+        "merchant_private_api_call",
+        "protocol_publication",
+    }
+)
+
+OACP_C6W4_NON_BINDING_ADAPTER_ACTIONS: frozenset[str] = frozenset(
+    {
+        "browse",
+        "compare",
+        "draft_cart",
+        "quote_preview",
+        "policy_explain",
+        "seller_card_display",
+        "agent_route",
+        "tool_discovery",
+    }
+)
 
 OACP_REQUIRED_ENVELOPE_FIELDS = (
     "artifact_id",
@@ -1009,6 +1061,92 @@ def evaluate_agenticorg_artifact_runtime_use(
             "refusal_code": "artifact_not_commerce_authority",
         }
     return {"allowed": True, "status": "allowed"}
+
+
+def _string_list(value: Any) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _adapter_preview_refusal(code: str, message: str) -> dict[str, Any]:
+    return {
+        "allowed": False,
+        "status": "refused",
+        "refusal_code": code,
+        "message": message,
+    }
+
+
+def evaluate_agenticorg_oacp_adapter_preview_use(
+    *,
+    preview: dict[str, Any],
+    action: str,
+) -> dict[str, Any]:
+    """Evaluate local use of a Grantex adapter preview without granting authority."""
+
+    if preview.get("generated") is not True or preview.get("status") != "preview_only":
+        return _adapter_preview_refusal("adapter_preview_invalid", "Adapter preview is not valid.")
+    if preview.get("surface") not in OACP_C6W4_PROTOCOL_ADAPTER_SURFACES:
+        return _adapter_preview_refusal("adapter_surface_unknown", "Adapter preview surface is unsupported.")
+
+    safety_flags = (
+        preview.get("non_authoritative_for_transaction") is True
+        and preview.get("no_checkout_payment_enablement") is True
+        and preview.get("no_live_provider_enablement") is True
+        and preview.get("no_public_discovery_enablement") is True
+    )
+    if not safety_flags:
+        return _adapter_preview_refusal(
+            "adapter_preview_not_buyer_safe",
+            "Adapter preview is missing required safety flags.",
+        )
+
+    source_ids = _string_list(preview.get("source_artifact_ids"))
+    source_families = _string_list(preview.get("source_artifact_families"))
+    if (
+        not source_ids
+        or not source_families
+        or preview.get("source_authority") != "grantex_canonical_oacp_artifact_authority"
+    ):
+        return _adapter_preview_refusal("adapter_source_missing", "Adapter preview must cite Grantex source artifacts.")
+
+    unsupported = set(_string_list(preview.get("unsupported_capabilities")))
+    blocked = OACP_C6W4_BLOCKED_ADAPTER_ACTIONS | unsupported
+    if action in blocked or action not in OACP_C6W4_NON_BINDING_ADAPTER_ACTIONS:
+        return _adapter_preview_refusal(
+            "adapter_not_transaction_authority",
+            "Adapter previews can route or display sourced facts, not approve commerce actions.",
+        )
+
+    return {
+        "allowed": True,
+        "status": "allowed",
+        "action": action,
+        "source_artifact_ids": source_ids,
+        "source_artifact_families": source_families,
+        "freshness_tier": preview.get("freshness_tier"),
+        "unsupported_capabilities": sorted(blocked),
+        "commerce_facts_invented": False,
+    }
+
+
+def summarize_oacp_adapter_preview_for_buyer(preview: dict[str, Any]) -> dict[str, Any]:
+    """Return channel-safe wording for buyer/seller surfaces."""
+
+    evaluation = evaluate_agenticorg_oacp_adapter_preview_use(preview=preview, action="browse")
+    if not evaluation["allowed"]:
+        return evaluation
+
+    return {
+        "allowed": True,
+        "status": "allowed",
+        "wording": "Preview facts are sourced from Grantex OACP artifacts and are not purchase approval.",
+        "source_artifact_ids": evaluation["source_artifact_ids"],
+        "source_artifact_families": evaluation["source_artifact_families"],
+        "freshness_tier": evaluation["freshness_tier"],
+        "unsupported_capabilities": evaluation["unsupported_capabilities"],
+        "non_authoritative_for_transaction": True,
+        "commerce_facts_invented": False,
+    }
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
