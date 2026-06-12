@@ -9,7 +9,7 @@ import json
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -280,7 +280,7 @@ async def create_client_portal_invite(
     audit_event="client_portal.invites.list",
 )
 async def list_client_portal_invites(
-    company_id: uuid.UUID | None = Query(None),
+    company_id: Annotated[uuid.UUID | None, Query()] = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[ClientPortalInviteOut]:
     tenant_uuid = uuid.UUID(tenant_id)
@@ -369,7 +369,7 @@ async def publish_client_portal_document(
     audit_event="client_portal.documents.list",
 )
 async def list_client_portal_documents(
-    company_id: uuid.UUID | None = Query(None),
+    company_id: Annotated[uuid.UUID | None, Query()] = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[ClientPortalDocumentOut]:
     tenant_uuid = uuid.UUID(tenant_id)

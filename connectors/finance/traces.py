@@ -217,8 +217,11 @@ class TracesConnector(BaseConnector):
             "amount_mismatches": len(amount_mismatches),
             "row_errors": len(row_errors),
         }
+        has_reconciliation_issues = bool(
+            missing_in_traces or extra_in_traces or amount_mismatches or row_errors
+        )
         return {
-            "status": "reconciled" if not (missing_in_traces or extra_in_traces or amount_mismatches or row_errors) else "needs_review",
+            "status": "needs_review" if has_reconciliation_issues else "reconciled",
             "summary": summary,
             "matched": matched,
             "missing_in_traces": missing_in_traces,

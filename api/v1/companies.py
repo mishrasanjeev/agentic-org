@@ -12,6 +12,7 @@ import logging
 import re
 import uuid as _uuid
 from datetime import datetime
+from typing import Annotated
 
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
@@ -645,7 +646,7 @@ async def create_company(
     audit_event="companies.bulk_upload.template",
 )
 async def download_company_bulk_upload_template(
-    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    template_format: Annotated[str, Query(alias="format", pattern="^(xlsx|csv)$")] = "xlsx",
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Download a bulk client upload template."""
@@ -673,8 +674,8 @@ async def download_company_bulk_upload_template(
             "MG Road",
         ],
     ]
-    filename = f"Company_Upload_Template.{format}"
-    if format == "csv":
+    filename = f"Company_Upload_Template.{template_format}"
+    if template_format == "csv":
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerows(rows)
@@ -724,8 +725,8 @@ async def download_company_bulk_upload_template(
     audit_event="companies.bulk_upload",
 )
 async def bulk_upload_companies(
-    file: UploadFile = File(...),
-    dry_run: bool = Query(False),
+    file: Annotated[UploadFile, File()],
+    dry_run: Annotated[bool, Query()] = False,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Create many client companies from a CSV/XLSX upload.

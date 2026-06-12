@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -279,8 +279,8 @@ async def create_service_plan(
     audit_event="ca_billing.invoices.list",
 )
 async def list_ca_client_invoices(
-    company_id: uuid.UUID | None = Query(None),
-    status: str | None = Query(None),
+    company_id: Annotated[uuid.UUID | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[CAClientInvoiceOut]:
     tenant_uuid = uuid.UUID(tenant_id)

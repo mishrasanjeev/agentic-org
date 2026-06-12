@@ -143,7 +143,10 @@ async def ca_capabilities_status(
                     "POST /api/v1/connectors/gstn/eway-bills/bulk-generate",
                     "Row-level import errors",
                 ],
-                "residual": "Live GSTN submission is fail-closed until encrypted GSTN credentials are wired to the batch route.",
+                "residual": (
+                    "Live GSTN submission is fail-closed until encrypted GSTN credentials "
+                    "are wired to the batch route."
+                ),
             },
             {
                 "id": "professional_tax_portals",
@@ -155,7 +158,10 @@ async def ca_capabilities_status(
                     "POST /api/v1/professional-tax/returns/prepare",
                     "POST /api/v1/professional-tax/returns/{return_id}/submit",
                 ],
-                "residual": "Live state portal filing requires per-state credentials; slab rates must come from firm-maintained compliance rules or payroll deductions.",
+                "residual": (
+                    "Live state portal filing requires per-state credentials; slab rates "
+                    "must come from firm-maintained compliance rules or payroll deductions."
+                ),
             },
             {
                 "id": "client_portal",
@@ -179,7 +185,10 @@ async def ca_capabilities_status(
                     "POST /api/v1/ca-billing/invoices/{invoice_id}/send",
                     "POST /api/v1/ca-billing/invoices/{invoice_id}/payments",
                 ],
-                "residual": "Payment gateway collection links are not yet wired; staff can issue invoices and record payments.",
+                "residual": (
+                    "Payment gateway collection links are not yet wired; staff can issue "
+                    "invoices and record payments."
+                ),
             },
         ],
     }

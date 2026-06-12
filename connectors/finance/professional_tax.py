@@ -8,7 +8,7 @@ effective-date controlled slab rules from the firm's compliance library.
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from connectors.framework.base_connector import BaseConnector

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -161,7 +161,7 @@ async def list_professional_tax_states(
     audit_event="professional_tax.registrations.list",
 )
 async def list_pt_registrations(
-    company_id: uuid.UUID | None = Query(None),
+    company_id: Annotated[uuid.UUID | None, Query()] = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[PTRegistrationOut]:
     tenant_uuid = uuid.UUID(tenant_id)
@@ -343,8 +343,8 @@ async def prepare_pt_return(
     audit_event="professional_tax.returns.list",
 )
 async def list_pt_returns(
-    company_id: uuid.UUID | None = Query(None),
-    state_code: str | None = Query(None),
+    company_id: Annotated[uuid.UUID | None, Query()] = None,
+    state_code: Annotated[str | None, Query()] = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> list[PTReturnOut]:
     tenant_uuid = uuid.UUID(tenant_id)

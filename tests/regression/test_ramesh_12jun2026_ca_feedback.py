@@ -16,10 +16,9 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_traces_reconciliation_reports_missing_extra_and_amount_mismatch() -> None:
+    import connectors  # noqa: F401
     from connectors.finance.traces import TracesConnector
     from connectors.registry import ConnectorRegistry
-
-    import connectors  # noqa: F401
 
     assert ConnectorRegistry.get("traces") is TracesConnector
     connector = TracesConnector({})
@@ -146,10 +145,9 @@ def test_bulk_company_upload_parser_and_validator_accepts_sheet_rows() -> None:
 
 @pytest.mark.asyncio
 async def test_professional_tax_connector_prepares_state_portal_payloads() -> None:
+    import connectors  # noqa: F401
     from connectors.finance.professional_tax import ProfessionalTaxConnector
     from connectors.registry import ConnectorRegistry
-
-    import connectors  # noqa: F401
 
     assert ConnectorRegistry.get("professional_tax") is ProfessionalTaxConnector
     connector = ProfessionalTaxConnector({})
