@@ -23,8 +23,11 @@ from api.v1 import (
     billing,
     branding,
     bridge,
+    ca_billing,
+    ca_operations,
     cdc_webhooks,
     chat,
+    client_portal,
     companies,
     compliance,
     composio,
@@ -47,6 +50,7 @@ from api.v1 import (
     oauth_connector,
     packs,
     product_facts,
+    professional_tax,
     prompt_templates,
     push,
     report_schedules,
@@ -206,6 +210,10 @@ app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
+app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
+app.include_router(professional_tax.router, prefix="/api/v1", tags=["Professional Tax"])
+app.include_router(client_portal.router, prefix="/api/v1", tags=["Client Portal"])
+app.include_router(ca_billing.router, prefix="/api/v1", tags=["CA Client Billing"])
 app.include_router(cron.router, prefix="/api/v1", tags=["Cron"])
 app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregator"])
 app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])

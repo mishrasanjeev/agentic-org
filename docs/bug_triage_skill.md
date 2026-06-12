@@ -158,6 +158,7 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 - [ ] Any list fed to a fail-closed gate has an explicit required/optional split defaulting to all-required; narrowing a gate names the second control that still enforces what was removed (Rule 12).
 - [ ] Coupled client error-path swept — a structured error body does not crash the UI (Rule 12).
 - [ ] Baseline / route-inventory re-keys proven debt-neutral (counts unchanged, only line churn); new broad excepts annotated, not rebaselined (Rule 12).
+- [ ] Capability claim backed by producer route/connector/UI/regression evidence; roadmap-scale items labeled as not shipped (Rule 13).
 
 ---
 
@@ -301,6 +302,54 @@ Reference: `tests/regression/test_uday_17may_promotion_connector_gate.py`,
 `ui/e2e/qa-uday-17may2026.spec.ts`, `core/agents/packs/ca/__init__.py`,
 `core/agents/packs/installer.py`, `api/v1/agents.py`,
 `ui/src/pages/AgentDetail.tsx`.
+
+---
+
+## Rule 13 - Product capability claims need producer evidence, not catalog text
+
+Added 2026-06-12 after the CA-firm feedback sheet from Ramesh. The failure
+pattern was broader than a missing button: docs and demos implied CA workflows
+were complete when the product only had adjacent pieces. Examples from the
+sheet:
+
+- TRACES reconciliation is not Income Tax 26AS. A 26AS connector does not
+  satisfy quarterly deductor-side TRACES matching.
+- "E-way bill integration" is not a raw POST wrapper. It must validate Part A,
+  Part B, bulk rows, and row-level failures before any provider call.
+- "CA billing" in platform subscription billing is not the same as a CA firm
+  billing its own clients.
+- Professional Tax, client portal, and CA-firm billing are roadmap-scale
+  modules unless they have real auth, routes, storage, UI, and tests.
+- Portal-scale features need a complete surface, not a connector stub. For
+  CAFEAT-004/005/006, the durable fix required models, Alembic migration,
+  tenant RLS, authenticated staff APIs, client-safe public token APIs where
+  applicable, operational UI, route metadata, and Playwright coverage. A status
+  card or connector registration alone would have reopened the same cases.
+
+Discipline:
+
+1. **A shipped capability needs four artifacts:** producer logic
+   (connector/service), API route, UI workflow, and regression coverage that
+   exercises the visible workflow. Catalog metadata or docs alone do not count.
+2. **Adjacent capability is not a substitute.** If the tester names a specific
+   government portal or user persona, verify that exact producer exists. Do not
+   map it to a nearby connector because the domain sounds similar.
+3. **Roadmap-scale items get an honest status surface.** If the correct fix is
+   multi-week schema/auth/portal work, expose `roadmap_not_shipped` or equivalent
+   instead of landing a dummy page that looks complete.
+4. **Batch workflows require row-level results.** CSV/XLSX uploads must report
+   row numbers, identifiers, created/validated/failed counts, and duplicate
+   handling. A whole-file failure on one bad row is not acceptable for CA firms
+   onboarding 50-200 clients or generating 50+ statutory artifacts.
+5. **Do not mark "Fixed" when the live provider path is not wired.** Use
+   "Partially closed" with residuals such as "offline reconciliation shipped;
+   live portal download still requires configured TRACES automation credentials."
+
+Reference: `tests/regression/test_ramesh_12jun2026_ca_feedback.py`,
+`ui/e2e/ramesh-12jun2026.spec.ts`, `connectors/finance/traces.py`,
+`connectors/finance/professional_tax.py`, `api/v1/professional_tax.py`,
+`api/v1/client_portal.py`, `api/v1/ca_billing.py`,
+`api/v1/ca_operations.py`, `api/v1/companies.py`, `connectors/finance/gstn.py`.
 
 ---
 

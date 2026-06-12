@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { Download, Plus, Upload } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,13 @@ interface CompanySummary {
   total_overdue: number;
 }
 
+interface BulkUploadReport {
+  created_count: number;
+  validated_count: number;
+  failed_count: number;
+  errors?: { row_number: number; identifier?: string | null; errors: string[] }[];
+}
+
 
 const INDUSTRY_COLORS: Record<string, string> = {
   Manufacturing: "from-blue-500 to-cyan-600",
@@ -88,6 +96,8 @@ export default function CompanyDashboard() {
     total_pending_filings: 0,
     total_overdue: 0,
   });
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkReport, setBulkReport] = useState<BulkUploadReport | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -233,6 +243,46 @@ export default function CompanyDashboard() {
     }
   };
 
+  const downloadBulkTemplate = async () => {
+    setError(null);
+    try {
+      const res = await api.get("/companies/bulk-upload/template", {
+        responseType: "blob",
+        params: { format: "xlsx" },
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Company_Upload_Template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(extractApiError(err, "Failed to download company upload template."));
+    }
+  };
+
+  const handleBulkUpload = async (file: File | null) => {
+    if (!file) return;
+    setBulkUploading(true);
+    setBulkReport(null);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post("/companies/bulk-upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setBulkReport(data as BulkUploadReport);
+      if (Number(data?.created_count || 0) > 0) {
+        await fetchData();
+      }
+    } catch (err) {
+      setError(extractApiError(err, "Failed to upload clients."));
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -263,14 +313,61 @@ export default function CompanyDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={fetchData}>Refresh</Button>
+          <Button variant="outline" onClick={downloadBulkTemplate}>
+            <Download className="mr-2 h-4 w-4" />
+            Template
+          </Button>
+          <input
+            id="company-bulk-upload"
+            type="file"
+            accept=".csv,.xlsx,.xlsm"
+            className="sr-only"
+            data-testid="company-bulk-upload-input"
+            onChange={(e) => {
+              void handleBulkUpload(e.target.files?.[0] || null);
+              e.currentTarget.value = "";
+            }}
+          />
+          <Button
+            variant="outline"
+            disabled={bulkUploading}
+            onClick={() => document.getElementById("company-bulk-upload")?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            {bulkUploading ? "Uploading..." : "Upload Clients"}
+          </Button>
           <Link to="/dashboard/partner">
             <Button variant="outline">Partner View</Button>
           </Link>
           <Link to="/dashboard/companies/new">
-            <Button>Add Client</Button>
+            <Button><Plus className="mr-2 h-4 w-4" />Add Client</Button>
           </Link>
         </div>
       </div>
+
+      {bulkReport && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            bulkReport.failed_count
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+          data-testid="bulk-upload-report"
+        >
+          <p className="font-medium">
+            {bulkReport.created_count} created · {bulkReport.validated_count} validated · {bulkReport.failed_count} failed
+          </p>
+          {bulkReport.errors && bulkReport.errors.length > 0 && (
+            <ul className="mt-1 list-disc pl-5">
+              {bulkReport.errors.slice(0, 5).map((item) => (
+                <li key={`${item.row_number}-${item.identifier || ""}`}>
+                  Row {item.row_number}: {item.errors.join("; ")}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

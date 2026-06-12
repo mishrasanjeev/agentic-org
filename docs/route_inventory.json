@@ -1599,7 +1599,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.subscription.sensitive.read",
-    "source_line": 1538,
+    "source_line": 1976,
     "tenant_required": true
   },
   {
@@ -1617,7 +1617,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.subscription.write",
-    "source_line": 1574,
+    "source_line": 2012,
     "tenant_required": true
   },
   {
@@ -1707,7 +1707,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.list",
-    "source_line": 307,
+    "source_line": 494,
     "tenant_required": true
   },
   {
@@ -1725,7 +1725,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.write",
-    "source_line": 373,
+    "source_line": 560,
     "tenant_required": true
   },
   {
@@ -1743,7 +1743,43 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "companies.approvals.decide",
-    "source_line": 1935,
+    "source_line": 2373,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.bulk_upload",
+    "auth_required": true,
+    "function": "bulk_upload_companies",
+    "idempotency": "unique-tenant-gstin-or-company-name-per-row",
+    "key": "POST /api/v1/companies/bulk-upload api/v1/companies.py:bulk_upload_companies",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/bulk-upload",
+    "public_exempt_reason": null,
+    "rate_limit": "company-bulk-write",
+    "scope": "companies.bulk_upload",
+    "source_line": 726,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.bulk_upload.template",
+    "auth_required": true,
+    "function": "download_company_bulk_upload_template",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/bulk-upload/template api/v1/companies.py:download_company_bulk_upload_template",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/bulk-upload/template",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.bulk_upload.template",
+    "source_line": 647,
     "tenant_required": true
   },
   {
@@ -1761,7 +1797,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.onboard",
-    "source_line": 728,
+    "source_line": 1166,
     "tenant_required": true
   },
   {
@@ -1779,7 +1815,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-bridge",
     "scope": "companies.tally.detect",
-    "source_line": 2335,
+    "source_line": 2773,
     "tenant_required": true
   },
   {
@@ -1797,7 +1833,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-bridge",
     "scope": "companies.tally.test",
-    "source_line": 2458,
+    "source_line": 2896,
     "tenant_required": true
   },
   {
@@ -1815,7 +1851,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.write",
-    "source_line": 578,
+    "source_line": 1016,
     "tenant_required": true
   },
   {
@@ -1833,7 +1869,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.read",
-    "source_line": 460,
+    "source_line": 898,
     "tenant_required": true
   },
   {
@@ -1851,7 +1887,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.write",
-    "source_line": 500,
+    "source_line": 938,
     "tenant_required": true
   },
   {
@@ -1869,7 +1905,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.approvals.list",
-    "source_line": 1032,
+    "source_line": 1470,
     "tenant_required": true
   },
   {
@@ -1887,7 +1923,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-write",
     "scope": "companies.approvals.write",
-    "source_line": 1097,
+    "source_line": 1535,
     "tenant_required": true
   },
   {
@@ -1905,7 +1941,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "companies.approvals.decide",
-    "source_line": 1165,
+    "source_line": 1603,
     "tenant_required": true
   },
   {
@@ -1923,7 +1959,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "companies.approvals.decide",
-    "source_line": 1256,
+    "source_line": 1694,
     "tenant_required": true
   },
   {
@@ -1941,7 +1977,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "companies.bridge.write",
-    "source_line": 2546,
+    "source_line": 2984,
     "tenant_required": true
   },
   {
@@ -1959,7 +1995,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.credentials.sensitive.list",
-    "source_line": 1694,
+    "source_line": 2132,
     "tenant_required": true
   },
   {
@@ -1977,7 +2013,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "companies.credentials.write",
-    "source_line": 1749,
+    "source_line": 2187,
     "tenant_required": true
   },
   {
@@ -1995,7 +2031,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "companies.credentials.write",
-    "source_line": 1806,
+    "source_line": 2244,
     "tenant_required": true
   },
   {
@@ -2013,7 +2049,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-credential-check",
     "scope": "companies.credentials.verify",
-    "source_line": 1858,
+    "source_line": 2296,
     "tenant_required": true
   },
   {
@@ -2031,7 +2067,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.deadlines.list",
-    "source_line": 2072,
+    "source_line": 2510,
     "tenant_required": true
   },
   {
@@ -2049,7 +2085,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.deadlines.write",
-    "source_line": 2149,
+    "source_line": 2587,
     "tenant_required": true
   },
   {
@@ -2067,7 +2103,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.deadlines.write",
-    "source_line": 2241,
+    "source_line": 2679,
     "tenant_required": true
   },
   {
@@ -2085,7 +2121,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.gstn_uploads.list",
-    "source_line": 1342,
+    "source_line": 1780,
     "tenant_required": true
   },
   {
@@ -2103,7 +2139,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.gstn_uploads.write",
-    "source_line": 1402,
+    "source_line": 1840,
     "tenant_required": true
   },
   {
@@ -2121,7 +2157,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.gstn_uploads.write",
-    "source_line": 1465,
+    "source_line": 1903,
     "tenant_required": true
   },
   {
@@ -2139,7 +2175,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.roles.read",
-    "source_line": 619,
+    "source_line": 1057,
     "tenant_required": true
   },
   {
@@ -2157,7 +2193,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.roles.write",
-    "source_line": 667,
+    "source_line": 1105,
     "tenant_required": true
   },
   {
@@ -3615,7 +3651,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.partner_dashboard",
-    "source_line": 2703,
+    "source_line": 3141,
     "tenant_required": true
   },
   {

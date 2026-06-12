@@ -30,9 +30,14 @@ from core.models.bridge import BridgeRegistration as BridgeRegistration
 from core.models.bridge import BridgeRequest as BridgeRequest
 from core.models.bridge import BridgeSession as BridgeSession
 from core.models.budget_alert import BudgetAlert as BudgetAlert
+from core.models.ca_client_billing import CAClientInvoice as CAClientInvoice
+from core.models.ca_client_billing import CAClientPayment as CAClientPayment
+from core.models.ca_client_billing import CAServicePlan as CAServicePlan
 from core.models.ca_subscription import CASubscription as CASubscription
 from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
+from core.models.client_portal import ClientPortalDocument as ClientPortalDocument
+from core.models.client_portal import ClientPortalInvite as ClientPortalInvite
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
@@ -53,6 +58,8 @@ from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
+from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
+from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
 from core.models.report_schedule import ReportSchedule as ReportSchedule

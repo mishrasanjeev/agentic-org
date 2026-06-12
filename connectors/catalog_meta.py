@@ -63,6 +63,14 @@ CATALOG_META: dict[str, dict[str, str]] = {
         "display_name": "GSTN",
         "description": "India GST network — returns, ITC, e-invoicing.",
     },
+    "traces": {
+        "display_name": "TRACES",
+        "description": "TDS reconciliation against TRACES statement exports.",
+    },
+    "professional_tax": {
+        "display_name": "Professional Tax",
+        "description": "State PT return preparation, challans, and portal filing handoff.",
+    },
     "darwinbox": {
         "display_name": "Darwinbox",
         "description": "India-first HCM / payroll / onboarding.",
