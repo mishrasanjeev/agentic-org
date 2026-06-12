@@ -98,6 +98,23 @@ ReconciliationStatus = Literal[
     "mismatched",
     "blocked",
 ]
+EligibilityPacketKind = Literal[
+    "execution_handoff_eligibility_packet",
+    "audit_trail_preparation_packet",
+    "missing_evidence_packet",
+    "blocked_execution_packet",
+    "manual_review_packet",
+]
+EligibilityStatus = Literal[
+    "eligible_for_future_handoff",
+    "missing_evidence",
+    "needs_human_review",
+    "blocked",
+    "stale",
+    "expired",
+    "mismatched",
+    "unsupported",
+]
 OfflineAction = Literal[
     "browse",
     "compare",
@@ -414,6 +431,34 @@ OACP_C6W7_RESPONSE_KIND_BY_ENVELOPE_KIND: dict[str, str] = {
     "merchant_confirmation_request": "merchant_confirmation_response",
     "mandate_capability_evidence_request": "mandate_capability_evidence_response",
     "support_escalation_preparation": "support_escalation_response",
+}
+OACP_C6W8_ELIGIBILITY_PACKET_KINDS: frozenset[str] = frozenset(
+    {
+        "execution_handoff_eligibility_packet",
+        "audit_trail_preparation_packet",
+        "missing_evidence_packet",
+        "blocked_execution_packet",
+        "manual_review_packet",
+    }
+)
+OACP_C6W8_ELIGIBILITY_STATUSES: frozenset[str] = frozenset(
+    {
+        "eligible_for_future_handoff",
+        "missing_evidence",
+        "needs_human_review",
+        "blocked",
+        "stale",
+        "expired",
+        "mismatched",
+        "unsupported",
+    }
+)
+OACP_C6W8_PACKET_TTL_SECONDS: dict[str, int] = {
+    "execution_handoff_eligibility_packet": 10 * 60,
+    "audit_trail_preparation_packet": 30 * 60,
+    "missing_evidence_packet": 10 * 60,
+    "blocked_execution_packet": 10 * 60,
+    "manual_review_packet": 15 * 60,
 }
 
 OACP_REQUIRED_ENVELOPE_FIELDS = (
@@ -2481,6 +2526,518 @@ def reconcile_agenticorg_c6w7_prepared_response(
             blocked_reconciliation,
         )
     return {"reconciled": True, "status": response_status, "reconciliation": reconciliation}
+
+
+_C6W8_PRIVATE_VALUE_MARKERS = _C6W7_PRIVATE_VALUE_MARKERS + (
+    "unredacted",
+    "private_merchant",
+    "private_customer",
+    "private_provider",
+)
+_C6W8_FORBIDDEN_EXECUTION_MARKERS = _C6W7_FORBIDDEN_EXECUTION_MARKERS + (
+    "hold_create",
+    "refund_execute",
+    "return_execute",
+    "mandate_create",
+)
+
+
+def _c6w8_safe_refs(values: list[str] | None) -> list[str] | None:
+    refs: list[str] = []
+    for value in values or []:
+        normalized = value.strip()
+        if not normalized:
+            continue
+        lowered = normalized.lower().replace("-", "_")
+        if any(marker in lowered for marker in _C6W8_PRIVATE_VALUE_MARKERS):
+            return None
+        if normalized not in refs:
+            refs.append(normalized)
+    return refs
+
+
+def _c6w8_ttl(
+    packet_kind: str,
+    created_at: str,
+    reconciliation: dict[str, Any],
+) -> dict[str, Any] | None:
+    created = _parse_iso(created_at)
+    reconciliation_expiry = _parse_iso(str(reconciliation.get("expires_at")))
+    if created is None or reconciliation_expiry is None:
+        return None
+    default_expiry = datetime.fromtimestamp(
+        created.timestamp() + OACP_C6W8_PACKET_TTL_SECONDS[packet_kind],
+        tz=UTC,
+    )
+    expires_at = min(default_expiry, reconciliation_expiry)
+    if expires_at <= created:
+        return {"expires_at": created_at, "max_ttl_seconds": 0, "expired": True}
+    return {
+        "expires_at": expires_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "max_ttl_seconds": int((expires_at - created).total_seconds()),
+        "expired": False,
+    }
+
+
+def _c6w8_default_confirmations(reconciliation: dict[str, Any]) -> list[str]:
+    response_kind = str(reconciliation.get("response_kind"))
+    if response_kind == "buyer_confirmation_response":
+        return ["buyer_confirmation"]
+    if response_kind == "seller_source_refresh_response":
+        return ["seller_source_refresh"]
+    if response_kind == "merchant_confirmation_response":
+        return ["merchant_source_confirmation"]
+    if response_kind == "mandate_capability_evidence_response":
+        return ["mandate_capability_evidence"]
+    return ["support_owner_review"]
+
+
+def _c6w8_missing_confirmations(required: list[str], provided: list[str] | None) -> list[str]:
+    provided_set = {value.strip() for value in provided or [] if value.strip()}
+    return [confirmation for confirmation in required if confirmation not in provided_set]
+
+
+def _c6w8_risk_context_missing(
+    *,
+    reconciliation: dict[str, Any],
+    currency: str | None,
+    amount_minor_units: int | None,
+    total_quantity: int | None,
+) -> bool:
+    action = str(reconciliation.get("requested_action"))
+    action_class = cast(ActionClass, str(reconciliation.get("action_class")))
+    if not _c6w5_requires_risk_context(action, action_class):
+        return False
+    return (
+        amount_minor_units is None
+        or amount_minor_units <= 0
+        or currency is None
+        or not currency.strip()
+        or total_quantity is None
+        or total_quantity <= 0
+    )
+
+
+def _c6w8_mandate_evidence_stale(
+    *,
+    reconciliation: dict[str, Any],
+    created_at: str,
+    mandate_evidence_issued_at: str | None,
+) -> bool:
+    response_kind = str(reconciliation.get("response_kind"))
+    requested_action = str(reconciliation.get("requested_action"))
+    if response_kind != "mandate_capability_evidence_response" and requested_action not in {
+        "payment_intent",
+        "mandate_setup_use",
+        "prepare_mandate_capability_check_request",
+    }:
+        return False
+    if mandate_evidence_issued_at is None:
+        return True
+    issued = _parse_iso(mandate_evidence_issued_at)
+    created = _parse_iso(created_at)
+    if issued is None or created is None:
+        return True
+    return (created - issued).total_seconds() > 120
+
+
+def _c6w8_packet_indicates_forbidden_execution(packet_flags: list[str] | None) -> bool:
+    for value in packet_flags or []:
+        normalized = value.lower().replace("-", "_")
+        if any(marker in normalized for marker in _C6W8_FORBIDDEN_EXECUTION_MARKERS):
+            return True
+    return False
+
+
+def _c6w8_source_freshness_status(
+    reconciliation: dict[str, Any],
+    ttl: dict[str, Any] | None,
+) -> str | None:
+    freshness = reconciliation.get("freshness_summary")
+    if (
+        not _string_list(reconciliation.get("source_artifact_ids"))
+        or not _string_list(reconciliation.get("source_artifact_families"))
+        or not isinstance(freshness, dict)
+        or freshness.get("earliest_expires_at") is None
+        or freshness.get("freshness_tier") == "unknown"
+    ):
+        return "missing_evidence"
+    if ttl is None or ttl.get("expired") is True or freshness.get("freshness_tier") == "stale":
+        return "expired"
+    return None
+
+
+def _c6w8_status_from_reconciliation(response_status: str) -> str:
+    if response_status == "accepted_for_preparation":
+        return "eligible_for_future_handoff"
+    if response_status == "needs_source_refresh":
+        return "missing_evidence"
+    if response_status == "needs_human_review":
+        return "needs_human_review"
+    if response_status in {"expired", "stale", "mismatched"}:
+        return response_status
+    return "blocked"
+
+
+def _c6w8_packet_kind_matches_status(packet_kind: str, status: str) -> bool:
+    if status == "eligible_for_future_handoff":
+        return packet_kind in {"execution_handoff_eligibility_packet", "audit_trail_preparation_packet"}
+    if status == "missing_evidence":
+        return packet_kind == "missing_evidence_packet"
+    if status == "needs_human_review":
+        return packet_kind == "manual_review_packet"
+    return packet_kind == "blocked_execution_packet"
+
+
+def _c6w8_reason(status: str, packet_kind: str) -> str:
+    if status == "eligible_for_future_handoff":
+        return (
+            "C6W8 found a prepared-only, reconciled-only request with local evidence refs "
+            "and required confirmations for a future controlled handoff packet."
+        )
+    if status == "missing_evidence":
+        return "C6W8 cannot prepare future handoff eligibility because evidence or confirmation material is missing."
+    if status == "needs_human_review":
+        return "C6W8 requires a human review label before any future handoff packet can be considered."
+    if status in {"stale", "expired"}:
+        return "C6W8 source or reconciliation freshness is stale or expired; refresh source artifacts first."
+    if status == "mismatched":
+        return "C6W8 detected a mismatch between reconciliation evidence and the prepared envelope lineage."
+    if status == "unsupported":
+        return "C6W8 marks this request unsupported for future handoff under the internal non-executing policy."
+    return (
+        f"{packet_kind} blocks future handoff and does not approve checkout, payment, order, hold, "
+        "refund, return, shipping, provider rail, or merchant private API behavior."
+    )
+
+
+def _c6w8_buyer_safe_message(status: str, reconciliation: dict[str, Any]) -> str:
+    if status == "eligible_for_future_handoff":
+        return (
+            f"The {reconciliation.get('requested_action')} request is eligible only for a future controlled "
+            "handoff packet. Nothing has been executed."
+        )
+    if status == "missing_evidence":
+        return "More source evidence or confirmation is needed before this request can move beyond preparation."
+    if status == "needs_human_review":
+        return "A human review is required before another prepared step can be considered."
+    if status in {"stale", "expired"}:
+        return "The cached source evidence is stale or expired, so the request is not eligible for handoff."
+    if status == "mismatched":
+        return "The response evidence does not match the prepared request lineage."
+    return "The request is blocked from future handoff and has not been executed."
+
+
+def _c6w8_seller_safe_message(status: str, reconciliation: dict[str, Any]) -> str:
+    if status == "eligible_for_future_handoff":
+        return (
+            f"Carry forward redacted refs for {reconciliation.get('reconciliation_id')}; "
+            "merchant systems and provider rails remain operational authorities."
+        )
+    if status == "missing_evidence":
+        return (
+            "Provide refreshed source artifacts or confirmation refs only; "
+            "do not send private payloads or credentials."
+        )
+    if status == "needs_human_review":
+        return "Route to the named human review owner label before any future prepared handoff."
+    if status in {"stale", "expired"}:
+        return "Refresh source facts from operational systems before preparing another packet."
+    if status == "mismatched":
+        return "Reconcile the mismatch against the original envelope and cached source refs."
+    return "Do not treat this packet as transaction authority or an execution approval."
+
+
+def _c6w8_next_human_step(status: str) -> str:
+    if status == "eligible_for_future_handoff":
+        return (
+            "Human owner must verify audit lineage before any future execution-controller slice "
+            "can consume this packet."
+        )
+    if status == "missing_evidence":
+        return "Collect missing source evidence or confirmation refs through non-executing channels."
+    if status == "needs_human_review":
+        return "Assign a human reviewer to inspect the reconciliation and source lineage."
+    if status in {"stale", "expired"}:
+        return "Ask the source owner to refresh cached artifacts before preparing another packet."
+    if status == "mismatched":
+        return "Resolve the mismatch before preparing any future handoff packet."
+    return "Stop the handoff path and keep buyer and seller messages non-executing."
+
+
+def _c6w8_next_system_step_label(status: str) -> str:
+    if status == "eligible_for_future_handoff":
+        return "future_execution_controller_review_label"
+    if status == "missing_evidence":
+        return "missing_evidence_refresh_label"
+    if status == "needs_human_review":
+        return "manual_review_packet_label"
+    if status in {"stale", "expired"}:
+        return "source_refresh_packet_label"
+    if status == "mismatched":
+        return "lineage_mismatch_review_label"
+    if status == "unsupported":
+        return "unsupported_handoff_label"
+    return "blocked_handoff_label"
+
+
+def _c6w8_packet_id(
+    *,
+    packet_kind: str,
+    reconciliation_id: str,
+    eligibility_status: str,
+    created_at: str,
+    audit_lineage_refs: list[str],
+) -> str:
+    payload = {
+        "packet_kind": packet_kind,
+        "reconciliation_id": reconciliation_id,
+        "eligibility_status": eligibility_status,
+        "created_at": created_at,
+        "audit_lineage_refs": audit_lineage_refs,
+    }
+    digest = hashlib.sha256(canonicalize_oacp_payload(payload).encode("utf-8")).hexdigest()
+    return f"oacp_c6w8_packet_{digest[:20]}"
+
+
+def _c6w8_packet(
+    *,
+    packet_kind: str,
+    reconciliation: dict[str, Any],
+    status: str,
+    reason: str,
+    missing_requirements: list[str],
+    required_confirmations: list[str],
+    created_at: str,
+    expires_at: str,
+    max_ttl_seconds: int,
+    response_evidence_refs: list[str],
+    audit_lineage_refs: list[str],
+) -> dict[str, Any]:
+    allowed_for_future_handoff = status == "eligible_for_future_handoff"
+    return {
+        "packet_id": _c6w8_packet_id(
+            packet_kind=packet_kind,
+            reconciliation_id=str(reconciliation.get("reconciliation_id")),
+            eligibility_status=status,
+            created_at=created_at,
+            audit_lineage_refs=audit_lineage_refs,
+        ),
+        "packet_kind": packet_kind,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "max_ttl_seconds": max_ttl_seconds,
+        "reconciliation_id": reconciliation.get("reconciliation_id"),
+        "envelope_id": reconciliation.get("envelope_id"),
+        "response_kind": reconciliation.get("response_kind"),
+        "response_status": reconciliation.get("response_status"),
+        "requested_action": reconciliation.get("requested_action"),
+        "action_class": reconciliation.get("action_class"),
+        "risk_tier": reconciliation.get("risk_tier"),
+        "eligibility_status": status,
+        "eligibility_reason": reason,
+        "missing_requirements": missing_requirements,
+        "required_confirmations": required_confirmations,
+        "source_artifact_ids": _string_list(reconciliation.get("source_artifact_ids")),
+        "source_artifact_families": _string_list(reconciliation.get("source_artifact_families")),
+        "response_evidence_refs": response_evidence_refs,
+        "audit_lineage_refs": audit_lineage_refs,
+        "freshness_summary": reconciliation.get("freshness_summary"),
+        "unsupported_capabilities": _string_list(reconciliation.get("unsupported_capabilities")),
+        "blocked_capabilities": _string_list(reconciliation.get("blocked_capabilities")),
+        "buyer_safe_message": _c6w8_buyer_safe_message(status, reconciliation),
+        "seller_safe_message": _c6w8_seller_safe_message(status, reconciliation),
+        "next_human_step": _c6w8_next_human_step(status),
+        "next_system_step_label": _c6w8_next_system_step_label(status),
+        "allowed_to_preview": reconciliation.get("allowed_to_preview") is True,
+        "allowed_to_prepare": allowed_for_future_handoff and reconciliation.get("allowed_to_prepare") is True,
+        "allowed_for_future_handoff": allowed_for_future_handoff,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "reconciled_only": True,
+        "eligibility_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+    }
+
+
+def _c6w8_refusal(
+    refusal_code: str,
+    message: str,
+    blocked_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "prepared": False,
+        "status": "blocked",
+        "refusal_code": refusal_code,
+        "message": message,
+    }
+    if blocked_packet is not None:
+        result["blocked_packet"] = blocked_packet
+    return result
+
+
+def prepare_agenticorg_c6w8_eligibility_packet(
+    *,
+    packet_kind: EligibilityPacketKind,
+    reconciliation: dict[str, Any] | None,
+    created_at: str,
+    audit_lineage_refs: list[str] | None = None,
+    required_confirmations: list[str] | None = None,
+    provided_confirmations: list[str] | None = None,
+    packet_flags: list[str] | None = None,
+    mandate_evidence_issued_at: str | None = None,
+    amount_minor_units: int | None = None,
+    currency: str | None = None,
+    total_quantity: int | None = None,
+) -> dict[str, Any]:
+    """Prepare a local C6W8 future handoff eligibility packet from C6W7 evidence."""
+
+    if reconciliation is None:
+        return _c6w8_refusal(
+            "reconciliation_missing",
+            "C6W8 requires a C6W7 reconciliation before preparing eligibility packets.",
+        )
+
+    response_evidence_refs = _c6w8_safe_refs(_string_list(reconciliation.get("response_evidence_refs")))
+    requested_lineage_refs = _c6w8_safe_refs(audit_lineage_refs)
+    requested_required_confirmations = (
+        None if required_confirmations is None else _c6w8_safe_refs(required_confirmations)
+    )
+    requested_provided_confirmations = _c6w8_safe_refs(provided_confirmations)
+    requested_packet_flags = _c6w8_safe_refs(packet_flags)
+    ttl = _c6w8_ttl(packet_kind, created_at, reconciliation)
+    default_lineage_refs = [
+        str(reconciliation.get("reconciliation_id")),
+        str(reconciliation.get("envelope_id")),
+        *_string_list(reconciliation.get("source_artifact_ids")),
+        *_string_list(reconciliation.get("response_evidence_refs")),
+    ]
+    audit_refs = None
+    if requested_lineage_refs is not None:
+        audit_refs = list(dict.fromkeys(requested_lineage_refs if requested_lineage_refs else default_lineage_refs))
+    required = list(dict.fromkeys(requested_required_confirmations or _c6w8_default_confirmations(reconciliation)))
+    missing_confirmations = _c6w8_missing_confirmations(required, requested_provided_confirmations)
+    missing_requirements: list[str] = []
+    status = _c6w8_status_from_reconciliation(str(reconciliation.get("response_status")))
+
+    if (
+        response_evidence_refs is None
+        or audit_refs is None
+        or requested_required_confirmations is None and required_confirmations is not None
+        or requested_provided_confirmations is None
+        or requested_packet_flags is None
+    ):
+        return _c6w8_refusal(
+            "private_or_forbidden_packet_field",
+            "C6W8 packet refs contain private, raw, or unredacted fields.",
+        )
+    if not response_evidence_refs or not audit_refs:
+        return _c6w8_refusal(
+            "evidence_refs_missing",
+            "C6W8 requires redacted response evidence refs and audit lineage refs.",
+        )
+    if reconciliation.get("allowed_to_execute") is not False:
+        return _c6w8_refusal(
+            "reconciliation_allows_execution",
+            "C6W8 refuses executable reconciliation input.",
+        )
+    if reconciliation.get("prepared_only") is not True or reconciliation.get("reconciled_only") is not True:
+        return _c6w8_refusal(
+            "reconciliation_not_prepared_or_reconciled_only",
+            "C6W8 accepts prepared-only and reconciled-only input only.",
+        )
+    if _c6w8_packet_indicates_forbidden_execution(packet_flags):
+        return _c6w8_refusal(
+            "packet_indicates_forbidden_execution",
+            "C6W8 refuses packet flags that imply live execution or publication behavior.",
+        )
+    if _c6w8_risk_context_missing(
+        reconciliation=reconciliation,
+        currency=currency,
+        amount_minor_units=amount_minor_units,
+        total_quantity=total_quantity,
+    ):
+        return _c6w8_refusal(
+            "risk_context_missing_or_ambiguous",
+            "C6W8 requires amount, currency, and quantity context for commitment-bound eligibility.",
+        )
+    if _c6w8_mandate_evidence_stale(
+        reconciliation=reconciliation,
+        created_at=created_at,
+        mandate_evidence_issued_at=mandate_evidence_issued_at,
+    ):
+        return _c6w8_refusal(
+            "mandate_evidence_stale",
+            "Mandate capability evidence is missing or stale at the C6W8 commitment boundary.",
+        )
+
+    source_status = _c6w8_source_freshness_status(reconciliation, ttl)
+    if source_status is not None:
+        status = source_status
+        missing_requirements.append("fresh_source_artifacts")
+    if str(reconciliation.get("requested_action")) in OACP_C6W5_ALWAYS_BLOCKED_ACTIONS:
+        status = "blocked"
+        missing_requirements.append("requested_action_blocked_by_c6w5")
+    if reconciliation.get("risk_tier") == "critical":
+        status = "unsupported"
+        missing_requirements.append("critical_risk_not_supported_for_prepared_handoff")
+    for confirmation in missing_confirmations:
+        missing_requirements.append(f"confirmation:{confirmation}")
+    if missing_confirmations and status == "eligible_for_future_handoff":
+        status = "missing_evidence"
+
+    if not _c6w8_packet_kind_matches_status(packet_kind, status):
+        blocked_packet = None
+        if ttl is not None:
+            blocked_packet = _c6w8_packet(
+                packet_kind="blocked_execution_packet",
+                reconciliation=reconciliation,
+                status="mismatched",
+                reason=_c6w8_reason("mismatched", "blocked_execution_packet"),
+                missing_requirements=["packet_kind_status_mismatch"],
+                required_confirmations=required,
+                created_at=created_at,
+                expires_at=str(ttl["expires_at"]),
+                max_ttl_seconds=int(ttl["max_ttl_seconds"]),
+                response_evidence_refs=response_evidence_refs,
+                audit_lineage_refs=audit_refs,
+            )
+        return _c6w8_refusal(
+            "packet_kind_status_mismatch",
+            "C6W8 packet kind does not match the derived eligibility status.",
+            blocked_packet,
+        )
+    if ttl is None:
+        return _c6w8_refusal(
+            "private_or_forbidden_packet_field",
+            "C6W8 cannot derive a safe TTL from reconciliation metadata.",
+        )
+
+    packet = _c6w8_packet(
+        packet_kind=packet_kind,
+        reconciliation=reconciliation,
+        status=status,
+        reason=_c6w8_reason(status, packet_kind),
+        missing_requirements=missing_requirements,
+        required_confirmations=required,
+        created_at=created_at,
+        expires_at=str(ttl["expires_at"]),
+        max_ttl_seconds=int(ttl["max_ttl_seconds"]),
+        response_evidence_refs=response_evidence_refs,
+        audit_lineage_refs=audit_refs,
+    )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(packet)
+    except ValueError:
+        return _c6w8_refusal(
+            "private_or_forbidden_packet_field",
+            "C6W8 eligibility packet contains private or enabling fields.",
+        )
+    return {"prepared": True, "status": status, "packet": packet}
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
