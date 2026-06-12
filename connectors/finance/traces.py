@@ -104,6 +104,7 @@ class TracesConnector(BaseConnector):
 
     def _register_tools(self) -> None:
         self._tool_registry["download_traces_statement"] = self.download_traces_statement
+        self._tool_registry["validate_traces_rows"] = self.validate_traces_rows
         self._tool_registry["reconcile_tds_with_traces"] = self.reconcile_tds_with_traces
         self._tool_registry["get_mismatch_report"] = self.get_mismatch_report
 
@@ -130,6 +131,38 @@ class TracesConnector(BaseConnector):
                 "message": "TRACES download requires configured deductor portal credentials.",
             }
         return await self._get("/deductor/tds-statement", params)
+
+    async def validate_traces_rows(self, **params: Any) -> dict[str, Any]:
+        """Validate downloaded TRACES/book rows before reconciliation."""
+        rows = params.get("rows") or params.get("traces_statement") or params.get("traces_rows") or []
+        source = _clean(params.get("source") or "traces") or "traces"
+        normalized: list[dict[str, Any]] = []
+        row_errors: list[dict[str, Any]] = []
+
+        if not isinstance(rows, list):
+            return {
+                "status": "invalid",
+                "summary": {"rows": 0, "valid": 0, "failed": 1},
+                "rows": [],
+                "errors": [{"row_number": 0, "error": "rows must be a list of objects"}],
+            }
+
+        for idx, row in enumerate(rows, start=1):
+            try:
+                normalized.append(_normalize_entry(dict(row), idx, source))
+            except (TypeError, ValueError) as exc:
+                row_errors.append({"source": source, "row_number": idx, "error": str(exc)})
+
+        return {
+            "status": "valid" if not row_errors else "invalid",
+            "summary": {
+                "rows": len(rows),
+                "valid": len(normalized),
+                "failed": len(row_errors),
+            },
+            "rows": [_public_entry(row) for row in normalized],
+            "errors": row_errors,
+        }
 
     async def reconcile_tds_with_traces(self, **params: Any) -> dict[str, Any]:
         expected_rows = params.get("expected_deductions") or params.get("books_rows") or []

@@ -79,6 +79,10 @@ async def test_traces_reconciliation_reports_missing_extra_and_amount_mismatch()
     assert result["summary"]["missing_in_traces"] == 1
     assert result["summary"]["extra_in_traces"] == 1
 
+    validation = await connector.validate_traces_rows(rows=[{"deductee_pan": "", "section": "194C"}])
+    assert validation["status"] == "invalid"
+    assert validation["summary"]["failed"] == 1
+
 
 @pytest.mark.asyncio
 async def test_gstn_eway_bill_bulk_validates_part_a_and_part_b() -> None:
