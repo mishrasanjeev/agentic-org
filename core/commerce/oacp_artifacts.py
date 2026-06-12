@@ -115,6 +115,24 @@ EligibilityStatus = Literal[
     "mismatched",
     "unsupported",
 ]
+DryRunVerificationKind = Literal[
+    "execution_controller_handoff_dry_run",
+    "audit_readiness_verification",
+    "missing_contract_requirement",
+    "blocked_handoff_verification",
+    "manual_review_required_verification",
+]
+DryRunVerificationStatus = Literal[
+    "dry_run_accepted_for_future_controller",
+    "missing_contract_requirement",
+    "needs_human_review",
+    "blocked",
+    "stale",
+    "expired",
+    "mismatched",
+    "unsupported",
+    "unsafe",
+]
 OfflineAction = Literal[
     "browse",
     "compare",
@@ -459,6 +477,60 @@ OACP_C6W8_PACKET_TTL_SECONDS: dict[str, int] = {
     "missing_evidence_packet": 10 * 60,
     "blocked_execution_packet": 10 * 60,
     "manual_review_packet": 15 * 60,
+}
+OACP_C6W9_DRY_RUN_VERIFICATION_KINDS: frozenset[str] = frozenset(
+    {
+        "execution_controller_handoff_dry_run",
+        "audit_readiness_verification",
+        "missing_contract_requirement",
+        "blocked_handoff_verification",
+        "manual_review_required_verification",
+    }
+)
+OACP_C6W9_VERIFIER_STATUSES: frozenset[str] = frozenset(
+    {
+        "dry_run_accepted_for_future_controller",
+        "missing_contract_requirement",
+        "needs_human_review",
+        "blocked",
+        "stale",
+        "expired",
+        "mismatched",
+        "unsupported",
+        "unsafe",
+    }
+)
+OACP_C6W9_CONTRACT_CHECKS: tuple[str, ...] = (
+    "packet_kind_recognized",
+    "eligibility_status_acceptable",
+    "reconciliation_lineage_present",
+    "envelope_lineage_present",
+    "source_artifact_refs_present",
+    "evidence_refs_redacted_and_non_private",
+    "required_confirmations_present",
+    "freshness_ttl_valid",
+    "mandate_evidence_valid",
+    "action_class_risk_tier_consistent",
+    "commitment_risk_context_present",
+    "non_enablement_flags_intact",
+    "no_executable_url_or_target",
+    "no_raw_private_labels_or_payloads",
+    "no_publication_certification_readiness_claims",
+)
+OACP_C6W9_AUDIT_READINESS_CHECKS: tuple[str, ...] = (
+    "audit_lineage_refs_present",
+    "audit_refs_redacted",
+    "decision_lineage_complete",
+    "source_refs_carried_forward",
+    "evidence_refs_carried_forward",
+    "messages_safe_and_non_executing",
+)
+OACP_C6W9_VERIFICATION_TTL_SECONDS: dict[str, int] = {
+    "execution_controller_handoff_dry_run": 5 * 60,
+    "audit_readiness_verification": 10 * 60,
+    "missing_contract_requirement": 5 * 60,
+    "blocked_handoff_verification": 5 * 60,
+    "manual_review_required_verification": 10 * 60,
 }
 
 OACP_REQUIRED_ENVELOPE_FIELDS = (
@@ -3038,6 +3110,571 @@ def prepare_agenticorg_c6w8_eligibility_packet(
             "C6W8 eligibility packet contains private or enabling fields.",
         )
     return {"prepared": True, "status": status, "packet": packet}
+
+
+_C6W9_FORBIDDEN_TARGET_MARKERS = (
+    "http://",
+    "https://",
+    "endpoint",
+    "checkout_url",
+    "payment_url",
+    "order_target",
+    "provider_target",
+    "merchant_private",
+    "live_rail",
+    "carrier_target",
+    "shipping_target",
+)
+_C6W9_PUBLICATION_CLAIM_MARKERS = (
+    "protocol_publication",
+    "protocol_submission",
+    "certification",
+    "compliance",
+    "conformance",
+    "standardization",
+    "production_ready",
+    "execution_ready",
+)
+
+
+def _c6w9_blank_contract_checks(value: bool = False) -> dict[str, bool]:
+    return dict.fromkeys(OACP_C6W9_CONTRACT_CHECKS, value)
+
+
+def _c6w9_blank_audit_checks(value: bool = False) -> dict[str, bool]:
+    return dict.fromkeys(OACP_C6W9_AUDIT_READINESS_CHECKS, value)
+
+
+def _c6w9_safe_refs(values: list[str] | None) -> list[str] | None:
+    return _c6w8_safe_refs(values)
+
+
+def _c6w9_values_safe(values: list[str] | None) -> bool:
+    refs = _c6w9_safe_refs(values)
+    if refs is None:
+        return False
+    for value in refs:
+        normalized = value.lower().replace("-", "_")
+        if any(marker in normalized for marker in _C6W9_FORBIDDEN_TARGET_MARKERS):
+            return False
+    return True
+
+
+def _c6w9_values_do_not_claim_publication_or_readiness(values: list[str] | None) -> bool:
+    for value in values or []:
+        normalized = value.lower().replace("-", "_")
+        if any(marker in normalized for marker in _C6W9_PUBLICATION_CLAIM_MARKERS):
+            return False
+    return True
+
+
+def _c6w9_ttl(
+    verification_kind: str,
+    created_at: str,
+    packet: dict[str, Any],
+) -> dict[str, Any] | None:
+    created = _parse_iso(created_at)
+    packet_expiry = _parse_iso(_string_field(packet, "expires_at"))
+    if created is None or packet_expiry is None:
+        return None
+    default_expiry = datetime.fromtimestamp(
+        created.timestamp() + OACP_C6W9_VERIFICATION_TTL_SECONDS[verification_kind],
+        tz=UTC,
+    )
+    expires_at = min(default_expiry, packet_expiry)
+    if expires_at <= created:
+        return {"expires_at": created_at, "max_ttl_seconds": 0, "expired": True}
+    return {
+        "expires_at": expires_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "max_ttl_seconds": int((expires_at - created).total_seconds()),
+        "expired": False,
+    }
+
+
+def _c6w9_provided_confirmations_present(required: list[str], provided: list[str] | None) -> bool:
+    if not required:
+        return False
+    safe_provided = _c6w9_safe_refs(provided)
+    if safe_provided is None:
+        return False
+    provided_set = set(safe_provided)
+    return all(confirmation in provided_set for confirmation in required)
+
+
+def _c6w9_risk_context_missing(
+    *,
+    packet: dict[str, Any],
+    currency: str | None,
+    amount_minor_units: int | None,
+    total_quantity: int | None,
+) -> bool:
+    action = str(packet.get("requested_action"))
+    action_class = cast(ActionClass, str(packet.get("action_class")))
+    if not _c6w5_requires_risk_context(action, action_class):
+        return False
+    return (
+        amount_minor_units is None
+        or amount_minor_units <= 0
+        or currency is None
+        or not currency.strip()
+        or total_quantity is None
+        or total_quantity <= 0
+    )
+
+
+def _c6w9_mandate_evidence_stale(
+    *,
+    packet: dict[str, Any],
+    created_at: str,
+    mandate_evidence_issued_at: str | None,
+) -> bool:
+    requested_action = str(packet.get("requested_action"))
+    if requested_action not in {
+        "payment_intent",
+        "mandate_setup_use",
+        "prepare_mandate_capability_check_request",
+    }:
+        return False
+    if mandate_evidence_issued_at is None:
+        return True
+    issued = _parse_iso(mandate_evidence_issued_at)
+    created = _parse_iso(created_at)
+    if issued is None or created is None:
+        return True
+    return (created - issued).total_seconds() > 120
+
+
+def _c6w9_action_risk_consistent(packet: dict[str, Any]) -> bool:
+    action_class = str(packet.get("action_class"))
+    risk_tier = str(packet.get("risk_tier"))
+    if action_class == "always_blocked" or risk_tier == "critical":
+        return False
+    if action_class == "commitment_bound":
+        return risk_tier in {"medium", "high"}
+    if action_class == "commitment_adjacent":
+        return risk_tier in {"low", "medium"}
+    return risk_tier in {"informational", "low"}
+
+
+def _c6w9_freshness_valid(
+    *,
+    packet: dict[str, Any],
+    created_at: str,
+    ttl: dict[str, Any] | None,
+) -> bool:
+    freshness = packet.get("freshness_summary")
+    if not isinstance(freshness, dict):
+        return False
+    earliest_expires_at = freshness.get("earliest_expires_at")
+    earliest_expiry = _parse_iso(str(earliest_expires_at)) if earliest_expires_at is not None else None
+    created = _parse_iso(created_at)
+    return (
+        ttl is not None
+        and ttl.get("expired") is not True
+        and int(packet.get("max_ttl_seconds") or 0) > 0
+        and freshness.get("freshness_tier") not in {"stale", "unknown"}
+        and earliest_expiry is not None
+        and created is not None
+        and earliest_expiry > created
+    )
+
+
+def _c6w9_non_enablement_flags_intact(packet: dict[str, Any]) -> bool:
+    return (
+        packet.get("allowed_to_execute") is False
+        and packet.get("prepared_only") is True
+        and packet.get("reconciled_only") is True
+        and packet.get("eligibility_only") is True
+        and packet.get("non_authoritative_for_transaction") is True
+        and packet.get("no_checkout_payment_enablement") is True
+        and packet.get("no_live_provider_enablement") is True
+        and packet.get("no_public_discovery_enablement") is True
+    )
+
+
+def _c6w9_no_executable_target(packet: dict[str, Any], verification_flags: list[str] | None) -> bool:
+    return (
+        _c6w9_values_safe(verification_flags)
+        and _c6w9_values_safe([str(packet.get("next_system_step_label", ""))])
+        and _c6w9_values_safe(_string_list(packet.get("audit_lineage_refs")))
+        and _c6w9_values_safe(_string_list(packet.get("response_evidence_refs")))
+    )
+
+
+def _c6w9_no_publication_or_readiness_claims(packet: dict[str, Any], verification_flags: list[str] | None) -> bool:
+    return (
+        _c6w9_values_do_not_claim_publication_or_readiness(verification_flags)
+        and _c6w9_values_do_not_claim_publication_or_readiness([str(packet.get("next_system_step_label", ""))])
+        and _c6w9_values_do_not_claim_publication_or_readiness(_string_list(packet.get("audit_lineage_refs")))
+        and _c6w9_values_do_not_claim_publication_or_readiness(_string_list(packet.get("response_evidence_refs")))
+    )
+
+
+def _c6w9_claimed_lineage_matches(
+    *,
+    packet: dict[str, Any],
+    claimed_packet_id: str | None,
+    claimed_reconciliation_id: str | None,
+    claimed_envelope_id: str | None,
+) -> bool:
+    return (
+        (claimed_packet_id is None or claimed_packet_id == packet.get("packet_id"))
+        and (claimed_reconciliation_id is None or claimed_reconciliation_id == packet.get("reconciliation_id"))
+        and (claimed_envelope_id is None or claimed_envelope_id == packet.get("envelope_id"))
+    )
+
+
+def _c6w9_status_from_packet(packet: dict[str, Any]) -> str:
+    eligibility_status = str(packet.get("eligibility_status"))
+    if eligibility_status == "eligible_for_future_handoff":
+        return "dry_run_accepted_for_future_controller"
+    if eligibility_status == "missing_evidence":
+        return "missing_contract_requirement"
+    if eligibility_status == "needs_human_review":
+        return "needs_human_review"
+    return eligibility_status
+
+
+def _c6w9_kind_matches_status(verification_kind: str, status: str) -> bool:
+    if status == "dry_run_accepted_for_future_controller":
+        return verification_kind in {"execution_controller_handoff_dry_run", "audit_readiness_verification"}
+    if status == "missing_contract_requirement":
+        return verification_kind == "missing_contract_requirement"
+    if status == "needs_human_review":
+        return verification_kind == "manual_review_required_verification"
+    return verification_kind == "blocked_handoff_verification"
+
+
+def _c6w9_operator_message(status: str) -> str:
+    if status == "dry_run_accepted_for_future_controller":
+        return (
+            "C6W9 dry-run accepted the local packet contract shape for a future controller review. "
+            "This is not execution readiness and does not execute."
+        )
+    if status == "missing_contract_requirement":
+        return "C6W9 found missing contract evidence, freshness, risk, or confirmation requirements."
+    if status == "needs_human_review":
+        return "C6W9 requires human review labels only and does not approve merchant, payment, or rail behavior."
+    if status in {"stale", "expired"}:
+        return "C6W9 found stale or expired packet lineage; refresh source artifacts before another dry run."
+    if status == "mismatched":
+        return "C6W9 found mismatched packet, reconciliation, envelope, or lineage references."
+    if status == "unsupported":
+        return "C6W9 marks this handoff contract unsupported under the internal non-executing policy."
+    if status == "unsafe":
+        return "C6W9 blocked unsafe private, executable, or publication-oriented packet content."
+    return "C6W9 blocks the future handoff path and keeps the request non-executing."
+
+
+def _c6w9_verification_id(
+    *,
+    verification_kind: str,
+    verification_status: str,
+    eligibility_packet_id: str,
+    created_at: str,
+    audit_lineage_refs: list[str],
+) -> str:
+    payload = {
+        "verification_kind": verification_kind,
+        "verification_status": verification_status,
+        "eligibility_packet_id": eligibility_packet_id,
+        "created_at": created_at,
+        "audit_lineage_refs": audit_lineage_refs,
+    }
+    digest = hashlib.sha256(canonicalize_oacp_payload(payload).encode("utf-8")).hexdigest()
+    return f"oacp_c6w9_verification_{digest[:20]}"
+
+
+def _c6w9_verification(
+    *,
+    verification_kind: str,
+    packet: dict[str, Any],
+    status: str,
+    created_at: str,
+    ttl: dict[str, Any],
+    contract_checks: dict[str, bool],
+    audit_readiness_checks: dict[str, bool],
+    missing_requirements: list[str],
+) -> dict[str, Any]:
+    allowed_for_future_handoff = (
+        status == "dry_run_accepted_for_future_controller" and packet.get("allowed_for_future_handoff") is True
+    )
+    audit_refs = _string_list(packet.get("audit_lineage_refs"))
+    return {
+        "verification_id": _c6w9_verification_id(
+            verification_kind=verification_kind,
+            verification_status=status,
+            eligibility_packet_id=str(packet.get("packet_id")),
+            created_at=created_at,
+            audit_lineage_refs=audit_refs,
+        ),
+        "verification_kind": verification_kind,
+        "verification_status": status,
+        "created_at": created_at,
+        "expires_at": ttl["expires_at"],
+        "max_ttl_seconds": ttl["max_ttl_seconds"],
+        "eligibility_packet_id": packet.get("packet_id"),
+        "packet_kind": packet.get("packet_kind"),
+        "eligibility_status": packet.get("eligibility_status"),
+        "reconciliation_id": packet.get("reconciliation_id"),
+        "envelope_id": packet.get("envelope_id"),
+        "requested_action": packet.get("requested_action"),
+        "action_class": packet.get("action_class"),
+        "risk_tier": packet.get("risk_tier"),
+        "source_artifact_ids": _string_list(packet.get("source_artifact_ids")),
+        "source_artifact_families": _string_list(packet.get("source_artifact_families")),
+        "response_evidence_refs": _string_list(packet.get("response_evidence_refs")),
+        "audit_lineage_refs": audit_refs,
+        "required_confirmations": _string_list(packet.get("required_confirmations")),
+        "missing_requirements": missing_requirements,
+        "freshness_summary": packet.get("freshness_summary"),
+        "contract_checks": contract_checks,
+        "audit_readiness_checks": audit_readiness_checks,
+        "unsupported_capabilities": _string_list(packet.get("unsupported_capabilities")),
+        "blocked_capabilities": _string_list(packet.get("blocked_capabilities")),
+        "buyer_safe_message": packet.get("buyer_safe_message"),
+        "seller_safe_message": packet.get("seller_safe_message"),
+        "operator_safe_message": _c6w9_operator_message(status),
+        "next_human_step": packet.get("next_human_step"),
+        "next_system_step_label": packet.get("next_system_step_label"),
+        "allowed_to_preview": packet.get("allowed_to_preview") is True,
+        "allowed_to_prepare": allowed_for_future_handoff and packet.get("allowed_to_prepare") is True,
+        "allowed_for_future_handoff": allowed_for_future_handoff,
+        "allowed_to_execute": False,
+        "dry_run_only": True,
+        "eligibility_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+    }
+
+
+def _c6w9_refusal(
+    refusal_code: str,
+    message: str,
+    status: str = "blocked",
+    blocked_verification: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "verified": False,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+    }
+    if blocked_verification is not None:
+        result["blocked_verification"] = blocked_verification
+    return result
+
+
+def verify_agenticorg_c6w9_execution_handoff_dry_run(
+    *,
+    verification_kind: DryRunVerificationKind,
+    eligibility_packet: dict[str, Any] | None,
+    created_at: str,
+    provided_confirmations: list[str] | None = None,
+    verification_flags: list[str] | None = None,
+    claimed_packet_id: str | None = None,
+    claimed_reconciliation_id: str | None = None,
+    claimed_envelope_id: str | None = None,
+    mandate_evidence_issued_at: str | None = None,
+    amount_minor_units: int | None = None,
+    currency: str | None = None,
+    total_quantity: int | None = None,
+) -> dict[str, Any]:
+    """Dry-run verify a local C6W8 eligibility packet for future controller review only."""
+
+    if eligibility_packet is None:
+        return _c6w9_refusal(
+            "packet_missing",
+            "C6W9 requires a C6W8 eligibility packet before dry-run verification.",
+        )
+
+    packet = eligibility_packet
+    if _c6w9_safe_refs(provided_confirmations) is None or _c6w9_safe_refs(verification_flags) is None:
+        return _c6w9_refusal(
+            "private_or_forbidden_verification_field",
+            "C6W9 verifier input contains private, raw, or unredacted fields.",
+            "unsafe",
+        )
+    if packet.get("allowed_to_execute") is not False:
+        return _c6w9_refusal(
+            "packet_allows_execution",
+            "C6W9 refuses eligibility packets that allow execution.",
+            "unsafe",
+        )
+    if (
+        packet.get("prepared_only") is not True
+        or packet.get("reconciled_only") is not True
+        or packet.get("eligibility_only") is not True
+    ):
+        return _c6w9_refusal(
+            "packet_not_prepared_reconciled_or_eligibility_only",
+            "C6W9 accepts prepared-only, reconciled-only, eligibility-only packets only.",
+        )
+
+    ttl = _c6w9_ttl(verification_kind, created_at, packet)
+    contract_checks = _c6w9_blank_contract_checks()
+    audit_checks = _c6w9_blank_audit_checks()
+    source_ids = _string_list(packet.get("source_artifact_ids"))
+    source_families = _string_list(packet.get("source_artifact_families"))
+    response_refs = _string_list(packet.get("response_evidence_refs"))
+    audit_refs = _string_list(packet.get("audit_lineage_refs"))
+    required_confirmations = _string_list(packet.get("required_confirmations"))
+    refs_safe = _c6w9_safe_refs(response_refs) is not None and _c6w9_safe_refs(audit_refs) is not None
+    confirmations_present = _c6w9_provided_confirmations_present(required_confirmations, provided_confirmations)
+    freshness_valid = _c6w9_freshness_valid(packet=packet, created_at=created_at, ttl=ttl)
+    mandate_evidence_valid = not _c6w9_mandate_evidence_stale(
+        packet=packet,
+        created_at=created_at,
+        mandate_evidence_issued_at=mandate_evidence_issued_at,
+    )
+    risk_context_present = not _c6w9_risk_context_missing(
+        packet=packet,
+        currency=currency,
+        amount_minor_units=amount_minor_units,
+        total_quantity=total_quantity,
+    )
+    lineage_matches = _c6w9_claimed_lineage_matches(
+        packet=packet,
+        claimed_packet_id=claimed_packet_id,
+        claimed_reconciliation_id=claimed_reconciliation_id,
+        claimed_envelope_id=claimed_envelope_id,
+    )
+    no_executable_target = _c6w9_no_executable_target(packet, verification_flags)
+    no_publication_claims = _c6w9_no_publication_or_readiness_claims(packet, verification_flags)
+    non_enablement_flags_intact = _c6w9_non_enablement_flags_intact(packet)
+    source_refs_present = bool(source_ids and source_families)
+    evidence_refs_present = bool(response_refs)
+    audit_lineage_present = bool(audit_refs)
+    reconciliation_id = _string_field(packet, "reconciliation_id") or ""
+    envelope_id = _string_field(packet, "envelope_id") or ""
+    decision_lineage_complete = (
+        audit_lineage_present
+        and reconciliation_id in audit_refs
+        and envelope_id in audit_refs
+        and lineage_matches
+    )
+    status = _c6w9_status_from_packet(packet)
+
+    contract_checks["packet_kind_recognized"] = str(packet.get("packet_kind")) in OACP_C6W8_ELIGIBILITY_PACKET_KINDS
+    contract_checks["eligibility_status_acceptable"] = packet.get("eligibility_status") == "eligible_for_future_handoff"
+    contract_checks["reconciliation_lineage_present"] = bool(reconciliation_id) and lineage_matches
+    contract_checks["envelope_lineage_present"] = bool(envelope_id) and lineage_matches
+    contract_checks["source_artifact_refs_present"] = source_refs_present
+    contract_checks["evidence_refs_redacted_and_non_private"] = refs_safe and evidence_refs_present
+    contract_checks["required_confirmations_present"] = confirmations_present
+    contract_checks["freshness_ttl_valid"] = freshness_valid
+    contract_checks["mandate_evidence_valid"] = mandate_evidence_valid
+    contract_checks["action_class_risk_tier_consistent"] = _c6w9_action_risk_consistent(packet)
+    contract_checks["commitment_risk_context_present"] = risk_context_present
+    contract_checks["non_enablement_flags_intact"] = non_enablement_flags_intact
+    contract_checks["no_executable_url_or_target"] = no_executable_target
+    contract_checks["no_raw_private_labels_or_payloads"] = refs_safe and no_executable_target
+    contract_checks["no_publication_certification_readiness_claims"] = no_publication_claims
+
+    audit_checks["audit_lineage_refs_present"] = audit_lineage_present
+    audit_checks["audit_refs_redacted"] = refs_safe
+    audit_checks["decision_lineage_complete"] = decision_lineage_complete
+    audit_checks["source_refs_carried_forward"] = source_refs_present
+    audit_checks["evidence_refs_carried_forward"] = evidence_refs_present
+    audit_checks["messages_safe_and_non_executing"] = _c6w9_values_safe(
+        [
+            str(packet.get("buyer_safe_message", "")),
+            str(packet.get("seller_safe_message", "")),
+            str(packet.get("next_human_step", "")),
+            str(packet.get("next_system_step_label", "")),
+        ]
+    )
+
+    missing_requirements = set(_string_list(packet.get("missing_requirements")))
+    if not contract_checks["reconciliation_lineage_present"] or not contract_checks["envelope_lineage_present"]:
+        status = "mismatched"
+        missing_requirements.add("complete_packet_reconciliation_envelope_lineage")
+    if not decision_lineage_complete:
+        status = "mismatched"
+        missing_requirements.add("complete_packet_reconciliation_envelope_lineage")
+    if not source_refs_present or not evidence_refs_present or not audit_lineage_present:
+        status = "missing_contract_requirement"
+        missing_requirements.add("source_evidence_and_audit_refs")
+    if not confirmations_present:
+        status = "missing_contract_requirement"
+        for confirmation in required_confirmations:
+            missing_requirements.add(f"confirmation:{confirmation}")
+    if not risk_context_present:
+        status = "missing_contract_requirement"
+        missing_requirements.add("amount_currency_quantity_context")
+    if not mandate_evidence_valid:
+        status = "stale"
+        missing_requirements.add("fresh_mandate_capability_evidence")
+    if not freshness_valid:
+        status = "expired" if ttl is None or ttl.get("expired") is True else "stale"
+        missing_requirements.add("fresh_source_artifacts")
+    if not contract_checks["action_class_risk_tier_consistent"]:
+        status = "unsupported" if packet.get("risk_tier") == "critical" else "mismatched"
+        missing_requirements.add("consistent_action_class_and_risk_tier")
+    if (
+        not contract_checks["non_enablement_flags_intact"]
+        or not contract_checks["no_executable_url_or_target"]
+        or not contract_checks["no_raw_private_labels_or_payloads"]
+        or not contract_checks["no_publication_certification_readiness_claims"]
+    ):
+        status = "unsafe"
+        missing_requirements.add("non_enablement_and_private_target_controls")
+
+    if not non_enablement_flags_intact:
+        return _c6w9_refusal(
+            "non_enablement_flags_missing",
+            "C6W9 refuses packets with missing or false non-enablement flags.",
+            "unsafe",
+        )
+    if not no_executable_target or not no_publication_claims or not refs_safe:
+        return _c6w9_refusal(
+            "private_or_forbidden_verification_field",
+            "C6W9 refuses private refs, executable targets, publication claims, or readiness claims.",
+            "unsafe",
+        )
+    if not _c6w9_kind_matches_status(verification_kind, status):
+        blocked_verification = None
+        if ttl is not None:
+            blocked_verification = _c6w9_verification(
+                verification_kind=verification_kind,
+                packet=packet,
+                status="mismatched",
+                created_at=created_at,
+                ttl=ttl,
+                contract_checks=contract_checks,
+                audit_readiness_checks=audit_checks,
+                missing_requirements=[*sorted(missing_requirements), "verification_kind_status_mismatch"],
+            )
+        return _c6w9_refusal(
+            "verification_kind_status_mismatch",
+            "C6W9 verification kind does not match the derived dry-run status.",
+            "blocked",
+            blocked_verification,
+        )
+
+    verification_ttl = ttl or {"expires_at": created_at, "max_ttl_seconds": 0}
+    verification = _c6w9_verification(
+        verification_kind=verification_kind,
+        packet=packet,
+        status=status,
+        created_at=created_at,
+        ttl=verification_ttl,
+        contract_checks=contract_checks,
+        audit_readiness_checks=audit_checks,
+        missing_requirements=sorted(missing_requirements),
+    )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(verification)
+    except ValueError:
+        return _c6w9_refusal(
+            "private_or_forbidden_verification_field",
+            "C6W9 dry-run verification contains private or enabling fields.",
+            "unsafe",
+        )
+    return {"verified": True, "status": status, "verification": verification}
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
