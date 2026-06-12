@@ -81,6 +81,23 @@ PreparedEnvelopeKind = Literal[
     "mandate_capability_evidence_request",
     "support_escalation_preparation",
 ]
+ResponseEvidenceKind = Literal[
+    "buyer_confirmation_response",
+    "seller_source_refresh_response",
+    "merchant_confirmation_response",
+    "mandate_capability_evidence_response",
+    "support_escalation_response",
+]
+ReconciliationStatus = Literal[
+    "accepted_for_preparation",
+    "rejected",
+    "needs_source_refresh",
+    "needs_human_review",
+    "expired",
+    "stale",
+    "mismatched",
+    "blocked",
+]
 OfflineAction = Literal[
     "browse",
     "compare",
@@ -363,6 +380,41 @@ OACP_C6W6_MANDATE_EVIDENCE_ACTIONS: frozenset[str] = frozenset(
 OACP_C6W6_SUPPORT_PREPARATION_ACTIONS: frozenset[str] = frozenset(
     {"support_escalation_sla_promise", "refund_request", "return_authorization", "cancellation"}
 )
+OACP_C6W7_RESPONSE_EVIDENCE_KINDS: frozenset[str] = frozenset(
+    {
+        "buyer_confirmation_response",
+        "seller_source_refresh_response",
+        "merchant_confirmation_response",
+        "mandate_capability_evidence_response",
+        "support_escalation_response",
+    }
+)
+OACP_C6W7_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
+    {
+        "accepted_for_preparation",
+        "rejected",
+        "needs_source_refresh",
+        "needs_human_review",
+        "expired",
+        "stale",
+        "mismatched",
+        "blocked",
+    }
+)
+OACP_C6W7_RESPONSE_TTL_SECONDS: dict[str, int] = {
+    "buyer_confirmation_response": 15 * 60,
+    "seller_source_refresh_response": 30 * 60,
+    "merchant_confirmation_response": 10 * 60,
+    "mandate_capability_evidence_response": 2 * 60,
+    "support_escalation_response": 10 * 60,
+}
+OACP_C6W7_RESPONSE_KIND_BY_ENVELOPE_KIND: dict[str, str] = {
+    "buyer_confirmation_request": "buyer_confirmation_response",
+    "seller_source_refresh_request": "seller_source_refresh_response",
+    "merchant_confirmation_request": "merchant_confirmation_response",
+    "mandate_capability_evidence_request": "mandate_capability_evidence_response",
+    "support_escalation_preparation": "support_escalation_response",
+}
 
 OACP_REQUIRED_ENVELOPE_FIELDS = (
     "artifact_id",
@@ -1979,6 +2031,456 @@ def prepare_agenticorg_c6w6_commitment_envelope(
             blocked_envelope,
         )
     return {"generated": True, "status": "prepared_only", "envelope": envelope}
+
+
+_C6W7_PRIVATE_VALUE_MARKERS = (
+    "http://",
+    "https://",
+    "postgres://",
+    "redis://",
+    "mongodb://",
+    "private_key",
+    "raw_jwt",
+    "passport",
+    "access_token",
+    "api_key",
+    "password",
+    "secret",
+    "credential",
+    "allowlist",
+    "customer_data",
+    "customer_identifier",
+    "customer_email",
+    "customer_phone",
+    "customer_address",
+    "raw_provider_payload",
+    "raw_connector_payload",
+)
+_C6W7_FORBIDDEN_EXECUTION_MARKERS = (
+    "execute",
+    "executed",
+    "execution",
+    "checkout",
+    "payment",
+    "order_create",
+    "order_created",
+    "order_placed",
+    "hold_created",
+    "refund_created",
+    "return_created",
+    "shipment",
+    "shipping",
+    "carrier",
+    "provider_call",
+    "merchant_private_api",
+    "public_discovery_enable",
+    "public_discovery_publish",
+    "protocol_publication",
+    "protocol_submission",
+    "certification",
+    "conformance",
+    "standardization",
+    "production_ready",
+    "live_provider",
+    "live_rail",
+    "live_payment",
+    "mandate_created",
+)
+
+
+def _c6w7_safe_evidence_refs(evidence_refs: list[str] | None) -> list[str] | None:
+    refs: list[str] = []
+    for value in evidence_refs or []:
+        if not isinstance(value, str) or not value:
+            continue
+        normalized = value.lower()
+        if any(marker in normalized for marker in _C6W7_PRIVATE_VALUE_MARKERS):
+            return None
+        if value not in refs:
+            refs.append(value)
+    return refs[:20]
+
+
+def _c6w7_ttl(response_kind: str, created_at: str, envelope: dict[str, Any]) -> dict[str, Any] | None:
+    created = _parse_iso(created_at)
+    envelope_expiry = _parse_iso(_string_field(envelope, "expires_at"))
+    if created is None or envelope_expiry is None:
+        return None
+    default_expiry = created.timestamp() + OACP_C6W7_RESPONSE_TTL_SECONDS[response_kind]
+    expires_timestamp = min(default_expiry, envelope_expiry.timestamp())
+    if expires_timestamp <= created.timestamp():
+        return None
+    expires_at = datetime.fromtimestamp(expires_timestamp, tz=UTC).isoformat(timespec="milliseconds")
+    return {
+        "expires_at": expires_at.replace("+00:00", "Z"),
+        "max_ttl_seconds": int(expires_timestamp - created.timestamp()),
+    }
+
+
+def _c6w7_risk_context_missing(
+    *,
+    envelope: dict[str, Any],
+    currency: str | None,
+    amount_minor_units: int | None,
+    total_quantity: int | None,
+) -> bool:
+    if (
+        envelope.get("envelope_kind") == "seller_source_refresh_request"
+        or envelope.get("action_class") != "commitment_bound"
+    ):
+        return False
+    return (
+        currency not in {"INR", "USD"}
+        or amount_minor_units is None
+        or amount_minor_units < 0
+        or total_quantity is None
+        or total_quantity <= 0
+    )
+
+
+def _c6w7_mandate_evidence_stale(
+    *,
+    response_kind: str,
+    response_status: str,
+    created_at: str,
+    response_evidence_issued_at: str | None,
+) -> bool:
+    if response_kind != "mandate_capability_evidence_response" or response_status != "accepted_for_preparation":
+        return False
+    created = _parse_iso(created_at)
+    issued = _parse_iso(response_evidence_issued_at)
+    if created is None or issued is None or issued > created:
+        return True
+    return created.timestamp() - issued.timestamp() > OACP_ARTIFACT_TTLS_SECONDS["mandate_capability"]
+
+
+def _c6w7_response_conflicts_with_envelope(
+    *,
+    envelope: dict[str, Any],
+    response_claimed_envelope_id: str | None,
+    response_claimed_action: str | None,
+) -> bool:
+    if response_claimed_envelope_id is not None and response_claimed_envelope_id != envelope.get("envelope_id"):
+        return True
+    if response_claimed_action is not None and response_claimed_action != envelope.get("requested_action"):
+        return True
+    return False
+
+
+def _c6w7_response_indicates_forbidden_execution(response_flags: list[str] | None) -> bool:
+    for value in response_flags or []:
+        if not isinstance(value, str):
+            continue
+        normalized = value.lower()
+        if any(marker in normalized for marker in _C6W7_FORBIDDEN_EXECUTION_MARKERS):
+            return True
+    return False
+
+
+def _c6w7_next_human_step(status: str, envelope: dict[str, Any]) -> str:
+    action = str(envelope.get("requested_action"))
+    if status == "accepted_for_preparation":
+        return f"Review reconciled {action} evidence before any separate execution handoff exists."
+    if status == "rejected":
+        return f"Stop {action} preparation and keep source evidence attached for audit."
+    if status in {"needs_source_refresh", "stale", "expired"}:
+        return "Refresh source artifacts before preparing another envelope."
+    if status in {"needs_human_review", "mismatched"}:
+        return "Route the response to a human reviewer with source and freshness labels."
+    return "Do not proceed; the response is blocked by C6W7 fail-closed policy."
+
+
+def _c6w7_next_system_step_label(status: str) -> str:
+    if status == "accepted_for_preparation":
+        return "local_reconciled_preparation_handoff_label"
+    if status in {"needs_source_refresh", "stale", "expired"}:
+        return "source_refresh_reconciliation_label"
+    if status in {"needs_human_review", "mismatched"}:
+        return "human_review_reconciliation_label"
+    if status == "rejected":
+        return "local_rejection_record_label"
+    return "blocked_reconciliation_label"
+
+
+def _c6w7_buyer_safe_message(status: str, envelope: dict[str, Any]) -> str:
+    action = str(envelope.get("requested_action"))
+    if status == "accepted_for_preparation":
+        return (
+            f"Response accepted for preparation only for {action}; no order, hold, checkout, "
+            "payment, mandate, refund, return, shipment, or provider action occurred."
+        )
+    if status == "rejected":
+        return f"Response rejected {action} preparation; no execution occurred."
+    if status in {"needs_source_refresh", "stale", "expired"}:
+        return (
+            "Source evidence is missing, stale, or expired. A refreshed source artifact is required "
+            "before preparation continues."
+        )
+    if status in {"needs_human_review", "mismatched"}:
+        return "The response needs human review because source or envelope evidence is ambiguous."
+    return "The response is blocked. C6W7 does not execute or approve live transaction actions."
+
+
+def _c6w7_seller_safe_message(status: str, envelope: dict[str, Any]) -> str:
+    if status == "accepted_for_preparation":
+        return (
+            f"Evidence for {envelope.get('envelope_kind')} was reconciled locally as prepared-only; "
+            "keep merchant systems and provider rails as operational authorities."
+        )
+    if status == "rejected":
+        return "Seller response is recorded as rejected and does not create operational obligations."
+    if status in {"needs_source_refresh", "stale", "expired"}:
+        return "Seller or source owner must provide refreshed cached evidence without private payloads or credentials."
+    if status in {"needs_human_review", "mismatched"}:
+        return (
+            "Seller response conflicts with local envelope metadata and must be reviewed before another "
+            "prepared handoff."
+        )
+    return "Seller response is blocked and must not be treated as transaction authority."
+
+
+def _c6w7_reconciliation_id(
+    *,
+    envelope_id: str,
+    response_kind: str,
+    response_status: str,
+    created_at: str,
+    response_evidence_refs: list[str],
+) -> str:
+    payload = {
+        "envelope_id": envelope_id,
+        "response_kind": response_kind,
+        "response_status": response_status,
+        "created_at": created_at,
+        "response_evidence_refs": response_evidence_refs,
+    }
+    digest = hashlib.sha256(canonicalize_oacp_payload(payload).encode("utf-8")).hexdigest()
+    return f"oacp_c6w7_reconciliation_{digest[:20]}"
+
+
+def _c6w7_reconciliation(
+    *,
+    envelope: dict[str, Any],
+    response_kind: str,
+    response_status: str,
+    created_at: str,
+    expires_at: str,
+    max_ttl_seconds: int,
+    response_evidence_refs: list[str],
+) -> dict[str, Any]:
+    allowed = response_status == "accepted_for_preparation"
+    envelope_id = str(envelope.get("envelope_id"))
+    return {
+        "reconciliation_id": _c6w7_reconciliation_id(
+            envelope_id=envelope_id,
+            response_kind=response_kind,
+            response_status=response_status,
+            created_at=created_at,
+            response_evidence_refs=response_evidence_refs,
+        ),
+        "envelope_id": envelope_id,
+        "envelope_kind": envelope.get("envelope_kind"),
+        "response_kind": response_kind,
+        "response_status": response_status,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "max_ttl_seconds": max_ttl_seconds,
+        "action_class": envelope.get("action_class"),
+        "requested_action": envelope.get("requested_action"),
+        "risk_tier": envelope.get("risk_tier"),
+        "source_artifact_ids": _string_list(envelope.get("source_artifact_ids")),
+        "source_artifact_families": _string_list(envelope.get("source_artifact_families")),
+        "source_authority": envelope.get("source_authority"),
+        "response_evidence_refs": response_evidence_refs,
+        "freshness_summary": envelope.get("freshness_summary"),
+        "decision_summary": {
+            "source_resolver_decision_id": envelope.get("source_resolver_decision_id"),
+            "action_class": envelope.get("action_class"),
+            "offline_mode_status": envelope.get("offline_mode_status"),
+            "allowed_to_prepare_from_envelope": envelope.get("allowed_to_prepare") is True,
+            "non_authoritative_for_transaction": True,
+        },
+        "unsupported_capabilities": _string_list(envelope.get("unsupported_capabilities")),
+        "blocked_capabilities": _string_list(envelope.get("blocked_capabilities")),
+        "required_next_artifact_families": _string_list(envelope.get("required_fresh_artifact_families")),
+        "buyer_safe_message": _c6w7_buyer_safe_message(response_status, envelope),
+        "seller_safe_message": _c6w7_seller_safe_message(response_status, envelope),
+        "next_human_step": _c6w7_next_human_step(response_status, envelope),
+        "next_system_step_label": _c6w7_next_system_step_label(response_status),
+        "allowed_to_preview": envelope.get("allowed_to_preview") is True,
+        "allowed_to_prepare": allowed and envelope.get("allowed_to_prepare") is True,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "reconciled_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+    }
+
+
+def _c6w7_refusal(
+    refusal_code: str,
+    message: str,
+    blocked_reconciliation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "reconciled": False,
+        "status": "blocked",
+        "refusal_code": refusal_code,
+        "message": message,
+    }
+    if blocked_reconciliation is not None:
+        result["blocked_reconciliation"] = blocked_reconciliation
+    return result
+
+
+def reconcile_agenticorg_c6w7_prepared_response(
+    *,
+    envelope: dict[str, Any] | None,
+    response_kind: ResponseEvidenceKind,
+    response_status: ReconciliationStatus,
+    created_at: str,
+    response_evidence_refs: list[str] | None = None,
+    response_flags: list[str] | None = None,
+    response_claimed_envelope_id: str | None = None,
+    response_claimed_action: str | None = None,
+    response_evidence_issued_at: str | None = None,
+    amount_minor_units: int | None = None,
+    currency: str | None = None,
+    total_quantity: int | None = None,
+) -> dict[str, Any]:
+    """Reconcile cached C6W7 response evidence against a C6W6 prepared envelope."""
+
+    if envelope is None:
+        return _c6w7_refusal(
+            "prepared_envelope_missing",
+            "C6W7 requires a C6W6 prepared envelope before response reconciliation.",
+        )
+
+    evidence_refs = _c6w7_safe_evidence_refs(response_evidence_refs)
+    ttl = _c6w7_ttl(response_kind, created_at, envelope)
+    blocked_reconciliation = None
+    if ttl is not None and evidence_refs:
+        blocked_reconciliation = _c6w7_reconciliation(
+            envelope=envelope,
+            response_kind=response_kind,
+            response_status="blocked",
+            created_at=created_at,
+            expires_at=str(ttl["expires_at"]),
+            max_ttl_seconds=int(ttl["max_ttl_seconds"]),
+            response_evidence_refs=evidence_refs,
+        )
+
+    if envelope.get("allowed_to_execute") is not False:
+        return _c6w7_refusal(
+            "prepared_envelope_allows_execution",
+            "C6W7 refuses executable envelope input.",
+            blocked_reconciliation,
+        )
+    if envelope.get("prepared_only") is not True or envelope.get("envelope_status") != "prepared_only":
+        return _c6w7_refusal(
+            "prepared_envelope_not_prepared_only",
+            "C6W7 reconciles prepared-only envelopes only.",
+            blocked_reconciliation,
+        )
+
+    freshness = envelope.get("freshness_summary")
+    if (
+        not _string_list(envelope.get("source_artifact_ids"))
+        or not _string_list(envelope.get("source_artifact_families"))
+        or not isinstance(freshness, dict)
+        or freshness.get("earliest_expires_at") is None
+        or freshness.get("freshness_tier") in {"stale", "unknown"}
+        or ttl is None
+    ):
+        return _c6w7_refusal(
+            "source_freshness_missing_or_stale",
+            "C6W7 requires fresh envelope source metadata and a live TTL.",
+            blocked_reconciliation,
+        )
+    if OACP_C6W7_RESPONSE_KIND_BY_ENVELOPE_KIND.get(str(envelope.get("envelope_kind"))) != response_kind:
+        return _c6w7_refusal(
+            "response_kind_envelope_mismatch",
+            "Response kind does not match the prepared envelope kind.",
+            blocked_reconciliation,
+        )
+    if response_status not in OACP_C6W7_RECONCILIATION_STATUSES:
+        return _c6w7_refusal(
+            "response_status_attempts_execution",
+            "Response status is not an allowed C6W7 fail-closed status.",
+            blocked_reconciliation,
+        )
+    if evidence_refs is None:
+        return _c6w7_refusal(
+            "private_or_forbidden_response_field",
+            "Response evidence refs contain private or enabling fields.",
+            blocked_reconciliation,
+        )
+    if not evidence_refs:
+        return _c6w7_refusal(
+            "response_evidence_refs_missing",
+            "C6W7 requires local cached response evidence refs.",
+            blocked_reconciliation,
+        )
+    if _c6w7_response_indicates_forbidden_execution(response_flags):
+        return _c6w7_refusal(
+            "response_indicates_forbidden_execution",
+            "Response evidence implies forbidden live execution or publication behavior.",
+            blocked_reconciliation,
+        )
+    if _c6w7_risk_context_missing(
+        envelope=envelope,
+        currency=currency,
+        amount_minor_units=amount_minor_units,
+        total_quantity=total_quantity,
+    ):
+        return _c6w7_refusal(
+            "risk_context_missing_or_ambiguous",
+            "Commitment-bound reconciliation requires amount, currency, and quantity context.",
+            blocked_reconciliation,
+        )
+    if _c6w7_mandate_evidence_stale(
+        response_kind=response_kind,
+        response_status=response_status,
+        created_at=created_at,
+        response_evidence_issued_at=response_evidence_issued_at,
+    ):
+        return _c6w7_refusal(
+            "mandate_evidence_stale",
+            "Mandate capability evidence is older than the commitment-boundary TTL.",
+            blocked_reconciliation,
+        )
+    if _c6w7_response_conflicts_with_envelope(
+        envelope=envelope,
+        response_claimed_envelope_id=response_claimed_envelope_id,
+        response_claimed_action=response_claimed_action,
+    ):
+        return _c6w7_refusal(
+            "response_conflicts_with_envelope",
+            "Response evidence conflicts with C6W6 envelope metadata.",
+            blocked_reconciliation,
+        )
+
+    reconciliation = _c6w7_reconciliation(
+        envelope=envelope,
+        response_kind=response_kind,
+        response_status=response_status,
+        created_at=created_at,
+        expires_at=str(ttl["expires_at"]),
+        max_ttl_seconds=int(ttl["max_ttl_seconds"]),
+        response_evidence_refs=evidence_refs,
+    )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(reconciliation)
+    except ValueError:
+        return _c6w7_refusal(
+            "private_or_forbidden_response_field",
+            "Prepared response reconciliation contains private or enabling fields.",
+            blocked_reconciliation,
+        )
+    return {"reconciled": True, "status": response_status, "reconciliation": reconciliation}
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
