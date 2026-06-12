@@ -74,6 +74,13 @@ CommitmentBoundaryAction = Literal[
     "final_delivery_refund_settlement_payout_promise",
 ]
 ActionClass = Literal["non_binding_preview", "commitment_adjacent", "commitment_bound", "always_blocked"]
+PreparedEnvelopeKind = Literal[
+    "buyer_confirmation_request",
+    "seller_source_refresh_request",
+    "merchant_confirmation_request",
+    "mandate_capability_evidence_request",
+    "support_escalation_preparation",
+]
 OfflineAction = Literal[
     "browse",
     "compare",
@@ -330,6 +337,32 @@ OACP_C6W5_ACTION_RISK_TIERS.update({
     "support_escalation_sla_promise": "medium",
 })
 OACP_C6W5_ACTION_RISK_TIERS.update(dict.fromkeys(OACP_C6W5_ALWAYS_BLOCKED_ACTIONS, cast(RiskTier, "critical")))
+
+OACP_C6W6_PREPARED_ENVELOPE_KINDS: frozenset[str] = frozenset(
+    {
+        "buyer_confirmation_request",
+        "seller_source_refresh_request",
+        "merchant_confirmation_request",
+        "mandate_capability_evidence_request",
+        "support_escalation_preparation",
+    }
+)
+OACP_C6W6_ENVELOPE_TTL_SECONDS: dict[str, int] = {
+    "buyer_confirmation_request": 15 * 60,
+    "seller_source_refresh_request": 30 * 60,
+    "merchant_confirmation_request": 10 * 60,
+    "mandate_capability_evidence_request": 2 * 60,
+    "support_escalation_preparation": 10 * 60,
+}
+OACP_C6W6_MERCHANT_CONFIRMATION_ACTIONS: frozenset[str] = frozenset(
+    {"price_lock", "inventory_hold", "reservation", "order_placement"}
+)
+OACP_C6W6_MANDATE_EVIDENCE_ACTIONS: frozenset[str] = frozenset(
+    {"payment_intent", "mandate_setup_use", "prepare_mandate_capability_check_request"}
+)
+OACP_C6W6_SUPPORT_PREPARATION_ACTIONS: frozenset[str] = frozenset(
+    {"support_escalation_sla_promise", "refund_request", "return_authorization", "cancellation"}
+)
 
 OACP_REQUIRED_ENVELOPE_FIELDS = (
     "artifact_id",
@@ -1605,6 +1638,347 @@ def evaluate_agenticorg_c6w5_commitment_boundary(
         buyer_safe_message=message,
         blocked_capabilities=blocked_capabilities,
     )
+
+
+_C6W6_PRIVATE_VALUE_MARKERS = (
+    "http://",
+    "https://",
+    "postgres://",
+    "redis://",
+    "mongodb://",
+    "private_key",
+    "raw_jwt",
+    "access_token",
+    "api_key",
+    "password",
+    "secret",
+    "credential",
+    "allowlist",
+)
+
+
+def _c6w6_decision_id(decision: dict[str, Any]) -> str:
+    payload = {
+        "action": decision.get("action"),
+        "action_class": decision.get("action_class"),
+        "source_artifact_ids": decision.get("source_artifact_ids"),
+        "required_fresh_artifact_families": decision.get("required_fresh_artifact_families"),
+        "freshness_summary": decision.get("freshness_summary"),
+        "risk_tier": decision.get("risk_tier"),
+        "offline_mode_status": decision.get("offline_mode_status"),
+    }
+    digest = hashlib.sha256(canonicalize_oacp_payload(payload).encode("utf-8")).hexdigest()
+    return f"oacp_c6w5_decision_{digest[:20]}"
+
+
+def _c6w6_redact_evidence_refs(evidence_refs: list[str] | None) -> list[str]:
+    redacted: list[str] = []
+    for value in evidence_refs or []:
+        if not isinstance(value, str) or not value:
+            continue
+        normalized = value.lower()
+        safe_value = (
+            "redacted_private_evidence_ref"
+            if any(marker in normalized for marker in _C6W6_PRIVATE_VALUE_MARKERS)
+            else value
+        )
+        if safe_value not in redacted:
+            redacted.append(safe_value)
+    return redacted[:20]
+
+
+def _c6w6_ttl(kind: str, created_at: str, decision: dict[str, Any]) -> dict[str, Any] | None:
+    created = _parse_iso(created_at)
+    if created is None:
+        return None
+    default_ttl = OACP_C6W6_ENVELOPE_TTL_SECONDS[kind]
+    freshness = decision.get("freshness_summary")
+    earliest_source_expiry = None
+    if isinstance(freshness, dict):
+        earliest_source_expiry = _parse_iso(_string_field(freshness, "earliest_expires_at"))
+    default_expiry = created.timestamp() + default_ttl
+    expires_timestamp = (
+        default_expiry
+        if earliest_source_expiry is None
+        else min(default_expiry, earliest_source_expiry.timestamp())
+    )
+    if expires_timestamp <= created.timestamp():
+        return None
+    expires_at = datetime.fromtimestamp(expires_timestamp, tz=UTC).isoformat(timespec="milliseconds")
+    return {
+        "expires_at": expires_at.replace("+00:00", "Z"),
+        "max_ttl_seconds": int(expires_timestamp - created.timestamp()),
+    }
+
+
+def _c6w6_kind_matches_decision(kind: str, decision: dict[str, Any]) -> bool:
+    action = str(decision.get("action"))
+    action_class = str(decision.get("action_class"))
+    allowed_to_prepare = decision.get("allowed_to_prepare") is True
+    if kind == "seller_source_refresh_request":
+        return action_class != "always_blocked"
+    if kind == "buyer_confirmation_request":
+        return allowed_to_prepare
+    if kind == "merchant_confirmation_request":
+        return allowed_to_prepare and action in OACP_C6W6_MERCHANT_CONFIRMATION_ACTIONS
+    if kind == "mandate_capability_evidence_request":
+        return allowed_to_prepare and action in OACP_C6W6_MANDATE_EVIDENCE_ACTIONS
+    return allowed_to_prepare and action in OACP_C6W6_SUPPORT_PREPARATION_ACTIONS
+
+
+def _c6w6_risk_context_missing(
+    *,
+    kind: str,
+    decision: dict[str, Any],
+    currency: str | None,
+    amount_minor_units: int | None,
+    total_quantity: int | None,
+) -> bool:
+    if kind == "seller_source_refresh_request" or decision.get("action_class") != "commitment_bound":
+        return False
+    return (
+        currency not in {"INR", "USD"}
+        or amount_minor_units is None
+        or amount_minor_units < 0
+        or total_quantity is None
+        or total_quantity <= 0
+    )
+
+
+def _c6w6_next_human_step(kind: str, decision: dict[str, Any]) -> str:
+    action = str(decision.get("action"))
+    if kind == "buyer_confirmation_request":
+        return f"Review sourced {action} preparation and confirm whether a non-executing request should be sent."
+    if kind == "seller_source_refresh_request":
+        return (
+            "Ask the seller agent or source owner to refresh stale or missing source facts "
+            "before preparation continues."
+        )
+    if kind == "merchant_confirmation_request":
+        return f"Ask the merchant source owner to confirm {action} facts before any execution path exists."
+    if kind == "mandate_capability_evidence_request":
+        return "Ask for provider-owned mandate capability evidence to be supplied as cached evidence only."
+    return (
+        "Prepare a support escalation note without promising SLA, refund, return, replacement, "
+        "or settlement outcome."
+    )
+
+
+def _c6w6_next_system_step_label(kind: str) -> str:
+    return {
+        "buyer_confirmation_request": "local_human_confirmation_handoff",
+        "seller_source_refresh_request": "seller_source_refresh_handoff_label",
+        "merchant_confirmation_request": "merchant_source_confirmation_handoff_label",
+        "mandate_capability_evidence_request": "mandate_evidence_preparation_handoff_label",
+        "support_escalation_preparation": "support_escalation_preparation_handoff_label",
+    }[kind]
+
+
+def _c6w6_seller_safe_message(kind: str, decision: dict[str, Any]) -> str:
+    if kind == "seller_source_refresh_request":
+        families = ", ".join(_string_list(decision.get("required_fresh_artifact_families"))) or "source"
+        return f"Refresh requested for {families} facts; do not include private credentials or raw payloads."
+    if kind == "merchant_confirmation_request":
+        return (
+            "Merchant confirmation is prepared as evidence-only text; no order, hold, checkout, "
+            "or payment is created."
+        )
+    if kind == "mandate_capability_evidence_request":
+        return "Mandate capability evidence is requested as cached evidence only; no provider rail is called."
+    if kind == "support_escalation_preparation":
+        return (
+            "Support escalation is non-binding and must not promise SLA, refund, return, replacement, "
+            "settlement, or payout."
+        )
+    return (
+        "Buyer confirmation is local and non-executing; seller cards and adapter previews "
+        "are not transaction authority."
+    )
+
+
+def _c6w6_envelope_id(kind: str, created_at: str, decision_id: str, requested_action: str) -> str:
+    payload = {
+        "kind": kind,
+        "created_at": created_at,
+        "decision_id": decision_id,
+        "requested_action": requested_action,
+    }
+    digest = hashlib.sha256(canonicalize_oacp_payload(payload).encode("utf-8")).hexdigest()
+    return f"oacp_c6w6_envelope_{digest[:20]}"
+
+
+def _c6w6_envelope(
+    *,
+    kind: str,
+    status: str,
+    created_at: str,
+    decision_id: str,
+    decision: dict[str, Any],
+    expires_at: str,
+    max_ttl_seconds: int,
+    redacted_evidence_refs: list[str],
+    unsupported_capabilities: list[str],
+) -> dict[str, Any]:
+    action = str(decision.get("action"))
+    return {
+        "envelope_id": _c6w6_envelope_id(kind, created_at, decision_id, action),
+        "envelope_kind": kind,
+        "envelope_status": status,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "max_ttl_seconds": max_ttl_seconds,
+        "source_resolver_decision_id": decision_id,
+        "action_class": decision.get("action_class"),
+        "requested_action": action,
+        "risk_tier": decision.get("risk_tier"),
+        "offline_mode_status": decision.get("offline_mode_status"),
+        "allowed_to_preview": status == "prepared_only" and decision.get("allowed_to_preview") is True,
+        "allowed_to_prepare": status == "prepared_only" and decision.get("allowed_to_prepare") is True,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "source_artifact_ids": _string_list(decision.get("source_artifact_ids")),
+        "source_artifact_families": _string_list(decision.get("source_artifact_families")),
+        "source_authority": decision.get("source_authority"),
+        "required_fresh_artifact_families": _string_list(decision.get("required_fresh_artifact_families")),
+        "freshness_summary": decision.get("freshness_summary"),
+        "blocked_capabilities": _string_list(decision.get("blocked_capabilities")),
+        "unsupported_capabilities": unsupported_capabilities,
+        "buyer_safe_message": str(decision.get("buyer_safe_message")),
+        "seller_safe_message": _c6w6_seller_safe_message(kind, decision),
+        "next_human_step": _c6w6_next_human_step(kind, decision),
+        "next_system_step_label": _c6w6_next_system_step_label(kind),
+        "redacted_evidence_refs": redacted_evidence_refs,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+    }
+
+
+def _c6w6_refusal(refusal_code: str, message: str, blocked_envelope: dict[str, Any] | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "generated": False,
+        "status": "blocked",
+        "refusal_code": refusal_code,
+        "message": message,
+    }
+    if blocked_envelope is not None:
+        result["blocked_envelope"] = blocked_envelope
+    return result
+
+
+def prepare_agenticorg_c6w6_commitment_envelope(
+    *,
+    envelope_kind: PreparedEnvelopeKind,
+    resolver_decision: dict[str, Any] | None,
+    created_at: str,
+    source_resolver_decision_id: str | None = None,
+    evidence_refs: list[str] | None = None,
+    unsupported_capabilities: list[str] | None = None,
+    currency: str | None = None,
+    amount_minor_units: int | None = None,
+    total_quantity: int | None = None,
+    max_quantity_per_sku: int | None = None,
+) -> dict[str, Any]:
+    """Prepare a C6W6 local handoff envelope from a C6W5 decision."""
+
+    del max_quantity_per_sku
+    if resolver_decision is None:
+        return _c6w6_refusal(
+            "resolver_decision_missing",
+            "C6W6 requires a C6W5 resolver decision before preparing an envelope.",
+        )
+
+    decision_id = source_resolver_decision_id or _c6w6_decision_id(resolver_decision)
+    ttl = _c6w6_ttl(envelope_kind, created_at, resolver_decision)
+    redacted_refs = _c6w6_redact_evidence_refs(evidence_refs)
+    unsupported = sorted(set(unsupported_capabilities or []))
+    blocked_envelope = None
+    if ttl is not None:
+        blocked_envelope = _c6w6_envelope(
+            kind=envelope_kind,
+            status="blocked",
+            created_at=created_at,
+            decision_id=decision_id,
+            decision=resolver_decision,
+            expires_at=str(ttl["expires_at"]),
+            max_ttl_seconds=int(ttl["max_ttl_seconds"]),
+            redacted_evidence_refs=redacted_refs,
+            unsupported_capabilities=unsupported,
+        )
+
+    if resolver_decision.get("allowed_to_execute") is not False:
+        return _c6w6_refusal(
+            "resolver_decision_allows_execution",
+            "C6W6 cannot prepare envelopes from executable decisions.",
+            blocked_envelope,
+        )
+    if not _string_list(resolver_decision.get("source_artifact_ids")) or not _string_list(
+        resolver_decision.get("source_artifact_families")
+    ):
+        return _c6w6_refusal(
+            "source_artifacts_missing",
+            "C6W6 requires source artifact references for prepared handoff envelopes.",
+            blocked_envelope,
+        )
+    if resolver_decision.get("action_class") == "always_blocked":
+        return _c6w6_refusal(
+            "action_blocked_in_c6w6",
+            "Always-blocked actions cannot produce prepared C6W6 envelopes.",
+            blocked_envelope,
+        )
+    freshness = resolver_decision.get("freshness_summary")
+    if (
+        not isinstance(freshness, dict)
+        or freshness.get("earliest_expires_at") is None
+        or freshness.get("freshness_tier") in {"stale", "unknown"}
+        or ttl is None
+    ):
+        return _c6w6_refusal(
+            "source_freshness_missing_or_stale",
+            "Prepared envelopes require source freshness and TTL metadata.",
+            blocked_envelope,
+        )
+    if not _c6w6_kind_matches_decision(envelope_kind, resolver_decision):
+        return _c6w6_refusal(
+            "envelope_kind_action_mismatch",
+            "Envelope kind does not match the C6W5 action class or requested action.",
+            blocked_envelope,
+        )
+    if _c6w6_risk_context_missing(
+        kind=envelope_kind,
+        decision=resolver_decision,
+        currency=currency,
+        amount_minor_units=amount_minor_units,
+        total_quantity=total_quantity,
+    ):
+        return _c6w6_refusal(
+            "risk_context_missing_or_ambiguous",
+            "Commitment-bound envelopes require amount, currency, and quantity context.",
+            blocked_envelope,
+        )
+
+    envelope = _c6w6_envelope(
+        kind=envelope_kind,
+        status="prepared_only",
+        created_at=created_at,
+        decision_id=decision_id,
+        decision=resolver_decision,
+        expires_at=str(ttl["expires_at"]),
+        max_ttl_seconds=int(ttl["max_ttl_seconds"]),
+        redacted_evidence_refs=redacted_refs,
+        unsupported_capabilities=unsupported,
+    )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(envelope)
+    except ValueError:
+        return _c6w6_refusal(
+            "private_or_forbidden_envelope_field",
+            "Prepared envelope contains forbidden private or enabling fields.",
+            blocked_envelope,
+        )
+    return {"generated": True, "status": "prepared_only", "envelope": envelope}
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
