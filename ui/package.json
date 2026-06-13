@@ -32,7 +32,7 @@
     "clsx": "^2.1.0",
     "date-fns": "^4.4.0",
     "i18next": "^26.3.1",
-    "lucide-react": "^1.17.0",
+    "lucide-react": "^1.18.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-helmet-async": "^3.0.0",
