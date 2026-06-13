@@ -189,6 +189,16 @@ OacpCacheMaintenanceReportKind = Literal[
     "stale_or_revoked_artifact_summary",
     "source_refresh_request_preview",
 ]
+OacpCacheOperatorDecisionKind = Literal[
+    "approve_future_refresh_request",
+    "approve_future_eviction_request",
+    "approve_future_quarantine_request",
+    "request_more_evidence",
+    "reject_maintenance_action",
+    "defer_until_freshness_update",
+    "escalate_to_human_support",
+    "block_unsafe_action",
+]
 
 OACP_ARTIFACT_SIGNATURE_PROFILE: dict[str, Any] = {
     "payload_format": "canonical_json",
@@ -5281,6 +5291,311 @@ def build_oacp_cache_maintenance_dry_run_report(
         "dry_run_report_only": True,
         "operator_review_only": True,
         "maintenance_report_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+    }
+
+
+_C6X7_DECISION_KINDS: frozenset[str] = frozenset(
+    {
+        "approve_future_refresh_request",
+        "approve_future_eviction_request",
+        "approve_future_quarantine_request",
+        "request_more_evidence",
+        "reject_maintenance_action",
+        "defer_until_freshness_update",
+        "escalate_to_human_support",
+        "block_unsafe_action",
+    }
+)
+_C6X7_DECISION_NEXT_STEP_LABELS: dict[str, str] = {
+    "approve_future_refresh_request": "future_refresh_request_label_only_no_api_call",
+    "approve_future_eviction_request": "future_eviction_request_label_only_no_api_call",
+    "approve_future_quarantine_request": "future_quarantine_request_label_only_no_api_call",
+    "request_more_evidence": "request_more_redacted_evidence_no_api_call",
+    "reject_maintenance_action": "reject_maintenance_action_no_execution",
+    "defer_until_freshness_update": "defer_until_freshness_update_no_execution",
+    "escalate_to_human_support": "human_support_review_label_only_no_api_call",
+    "block_unsafe_action": "block_unsafe_action_no_execution",
+}
+_C6X7_SAFE_FALLBACK_DECIDED_AT = "1970-01-01T00:00:00.000Z"
+_C6X7_OPAQUE_REVIEWER_PREFIXES = ("operator_ref_", "reviewer_ref_")
+_C6X7_REVIEWER_PRIVATE_MARKERS = (
+    "@",
+    "mailto:",
+    "tel:",
+    "phone",
+    "email",
+    "token",
+    "jwt",
+    "secret",
+    "password",
+    "credential",
+    "private",
+    "raw",
+)
+
+
+def _c6x7_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _c6x7_string_list(value: Any) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _c6x7_decision_record_id(payload: Mapping[str, Any]) -> str:
+    digest = hashlib.sha256(canonicalize_oacp_payload(dict(payload)).encode("utf-8")).hexdigest()
+    return f"oacp_c6x7_operator_decision_{digest[:20]}"
+
+
+def _c6x7_packet_flags_safe(packet: Mapping[str, Any]) -> bool:
+    return (
+        packet.get("allowed_to_execute") is False
+        and packet.get("no_execution") is True
+        and packet.get("maintenance_report_only") is True
+        and packet.get("operator_review_only") is True
+        and packet.get("non_authoritative_for_transaction") is True
+        and packet.get("no_checkout_payment_enablement") is True
+        and packet.get("no_live_provider_enablement") is True
+        and packet.get("no_public_discovery_enablement") is True
+    )
+
+
+def _c6x7_refs_safe(packet: Mapping[str, Any]) -> bool:
+    refs: list[str] = []
+    refs.extend(_c6x7_string_list(packet.get("source_refs")))
+    refs.extend(_c6x7_string_list(packet.get("evidence_refs")))
+    source_refresh_preview = packet.get("source_refresh_request_preview")
+    if isinstance(source_refresh_preview, Mapping):
+        refs.extend(_c6x7_string_list(source_refresh_preview.get("source_refs")))
+        refs.extend(_c6x7_string_list(source_refresh_preview.get("evidence_refs")))
+    return bool(refs) and _c6x2_refs_safe(tuple(refs))
+
+
+def _c6x7_reviewer_ref_safe(reviewer_identity_ref: str | None) -> bool:
+    if reviewer_identity_ref is None:
+        return False
+    normalized = reviewer_identity_ref.strip().lower()
+    if not normalized.startswith(_C6X7_OPAQUE_REVIEWER_PREFIXES):
+        return False
+    if any(marker in normalized for marker in _C6X7_REVIEWER_PRIVATE_MARKERS):
+        return False
+    return _c6x2_refs_safe((reviewer_identity_ref,))
+
+
+def _c6x7_packet_malformed(packet: Mapping[str, Any]) -> bool:
+    return (
+        _c6x7_string(packet.get("report_id")) is None
+        or _c6x7_string(packet.get("source_plan_id")) is None
+        or _c6x7_string(packet.get("generated_at")) is None
+        or not isinstance(packet.get("scope_summary"), Mapping)
+        or not isinstance(packet.get("artifact_family_counts"), Mapping)
+        or not isinstance(packet.get("per_record_reason_codes"), Mapping)
+    )
+
+
+def _c6x7_risky_state_requires_future_label(
+    packet: Mapping[str, Any],
+    decision_kind: str,
+    next_step_label: str,
+) -> bool:
+    if not decision_kind.startswith("approve_future_"):
+        return True
+    revocation_summary = packet.get("revocation_snapshot_summary")
+    risk_summary = packet.get("risk_tier_summary")
+    risky = False
+    if isinstance(revocation_summary, Mapping):
+        risky = any(key in revocation_summary for key in ("revoked", "ambiguous", "stale", "expired"))
+    if isinstance(risk_summary, Mapping):
+        risky = risky or any(key in risk_summary for key in ("high", "critical"))
+    if not risky:
+        return True
+    return "future" in next_step_label or "review" in next_step_label
+
+
+def _c6x7_blocked_decision_record(
+    *,
+    requested_decision_kind: str,
+    reason_code: str,
+    message: str,
+    review_packet: Mapping[str, Any] | None = None,
+    decided_at: str | None = None,
+) -> dict[str, Any]:
+    decision_time = (
+        decided_at
+        or (_c6x7_string(review_packet.get("generated_at")) if review_packet is not None else None)
+        or _C6X7_SAFE_FALLBACK_DECIDED_AT
+    )
+    review_packet_id = _c6x7_string(review_packet.get("report_id")) if review_packet is not None else None
+    maintenance_plan_id = _c6x7_string(review_packet.get("source_plan_id")) if review_packet is not None else None
+    payload = {
+        "decision_kind": "block_unsafe_action",
+        "requested_decision_kind": requested_decision_kind,
+        "review_packet_id": review_packet_id,
+        "maintenance_plan_id": maintenance_plan_id,
+        "decided_at": decision_time,
+        "reason_code": reason_code,
+    }
+    return {
+        "decision_record_id": _c6x7_decision_record_id(payload),
+        "decision_kind": "block_unsafe_action",
+        "requested_decision_kind": requested_decision_kind,
+        "review_packet_id": review_packet_id,
+        "maintenance_plan_id": maintenance_plan_id,
+        "generated_at": decision_time,
+        "decided_at": decision_time,
+        "status": "blocked",
+        "block_reason": reason_code,
+        "scope_summary": {"buyer_agent": {}, "seller_agent": {}, "tenant": {}, "merchant": {}},
+        "artifact_families_affected": [],
+        "artifact_family_counts": {},
+        "redacted_reason_codes": {},
+        "source_refs": [],
+        "evidence_refs": [],
+        "reviewer_identity_ref": None,
+        "next_step_labels": ["block_unsafe_action_no_execution"],
+        "buyer_safe_message": message,
+        "seller_safe_message": message,
+        "operator_safe_message": message,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "operator_decision_only": True,
+        "audit_safe_decision_record": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+    }
+
+
+def build_oacp_cache_operator_decision_record(
+    *,
+    review_packet: Mapping[str, Any] | None,
+    decision_kind: OacpCacheOperatorDecisionKind | str,
+    reviewer_identity_ref: str | None,
+    decided_at: str | None = None,
+) -> dict[str, Any]:
+    if decision_kind not in _C6X7_DECISION_KINDS:
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=str(decision_kind),
+            reason_code="unsupported_or_executable_decision_kind",
+            message="C6X7 only records known future-only operator decisions.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+    if review_packet is None:
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="review_packet_missing",
+            message="C6X7 requires a C6X6 operator review packet before recording a decision.",
+            decided_at=decided_at,
+        )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(review_packet)
+    except ValueError:
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="private_or_enabling_review_packet_field",
+            message="C6X7 refuses review packets with private, raw, or enabling fields.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+    if review_packet.get("report_kind") != "operator_review_packet":
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="review_packet_kind_mismatch",
+            message="C6X7 consumes C6X6 operator review packets only.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+    if _c6x7_packet_malformed(review_packet):
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="review_packet_malformed",
+            message="C6X7 requires report id, maintenance plan id, scope, family, and reason summaries.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+    if not _c6x7_packet_flags_safe(review_packet):
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="review_packet_executable_or_enabling",
+            message="C6X7 refuses executable or enabling operator review packets.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+    if not _c6x7_refs_safe(review_packet):
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="review_packet_private_or_missing_refs",
+            message="C6X7 requires redacted source and evidence refs only.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+    if not _c6x7_reviewer_ref_safe(reviewer_identity_ref):
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="reviewer_identity_not_opaque",
+            message="C6X7 requires an opaque reviewer reference, not raw contact or credential data.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+
+    next_step_label = _C6X7_DECISION_NEXT_STEP_LABELS[decision_kind]
+    if not _c6x7_risky_state_requires_future_label(review_packet, decision_kind, next_step_label):
+        return _c6x7_blocked_decision_record(
+            requested_decision_kind=decision_kind,
+            reason_code="risky_state_without_future_or_review_label",
+            message="C6X7 refuses risky decisions without future-only or review-only labels.",
+            review_packet=review_packet,
+            decided_at=decided_at,
+        )
+
+    review_packet_id = cast(str, review_packet["report_id"])
+    maintenance_plan_id = cast(str, review_packet["source_plan_id"])
+    decision_time = decided_at or cast(str, review_packet["generated_at"])
+    artifact_family_counts = dict(cast(Mapping[str, Any], review_packet["artifact_family_counts"]))
+    payload = {
+        "decision_kind": decision_kind,
+        "review_packet_id": review_packet_id,
+        "maintenance_plan_id": maintenance_plan_id,
+        "reviewer_identity_ref": reviewer_identity_ref,
+        "decided_at": decision_time,
+    }
+    return {
+        "decision_record_id": _c6x7_decision_record_id(payload),
+        "decision_kind": decision_kind,
+        "review_packet_id": review_packet_id,
+        "maintenance_plan_id": maintenance_plan_id,
+        "generated_at": decision_time,
+        "decided_at": decision_time,
+        "status": "recorded_for_future_review",
+        "scope_summary": dict(cast(Mapping[str, Any], review_packet["scope_summary"])),
+        "artifact_families_affected": sorted(str(key) for key in artifact_family_counts),
+        "artifact_family_counts": artifact_family_counts,
+        "redacted_reason_codes": dict(cast(Mapping[str, Any], review_packet["per_record_reason_codes"])),
+        "source_refs": sorted(set(_c6x7_string_list(review_packet.get("source_refs")))),
+        "evidence_refs": sorted(set(_c6x7_string_list(review_packet.get("evidence_refs")))),
+        "reviewer_identity_ref": reviewer_identity_ref,
+        "next_step_labels": [next_step_label],
+        "buyer_safe_message": (
+            "C6X7 recorded an operator cache-maintenance decision only; no cache action was executed."
+        ),
+        "seller_safe_message": (
+            "C6X7 does not refresh, evict, quarantine, schedule, call Grantex, or call merchant or provider systems."
+        ),
+        "operator_safe_message": "Decision recorded as label-only future intent. Execute nothing in C6X7.",
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "operator_decision_only": True,
+        "audit_safe_decision_record": True,
         "non_authoritative_for_transaction": True,
         "no_checkout_payment_enablement": True,
         "no_live_provider_enablement": True,
