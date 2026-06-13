@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
@@ -168,6 +168,19 @@ PersistentCacheEvaluationStatus = Literal[
     "mismatched",
     "unsafe",
     "unsupported",
+]
+OacpCacheMaintenanceOutcome = Literal[
+    "keep_usable",
+    "refresh_recommended",
+    "refresh_required_before_commitment",
+    "evict_expired",
+    "purge_revoked",
+    "quarantine_ambiguous_revocation",
+    "quarantine_scope_mismatch",
+    "quarantine_private_or_raw_ref",
+    "source_refresh_needed",
+    "human_review_required",
+    "blocked_unsafe",
 ]
 
 OACP_ARTIFACT_SIGNATURE_PROFILE: dict[str, Any] = {
@@ -4565,6 +4578,366 @@ class DurableOacpArtifactCacheRepository:
             grantex_available=grantex_available,
             expected_scope=expected_scope,
         )
+
+
+_C6X5_RISK_RANK: dict[RiskTier, int] = {
+    "informational": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
+_C6X5_COMMITMENT_REVOCATION_MAX_AGE_SECONDS = 2 * 60
+
+
+def _c6x5_safe_public_refs(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(value for value in values if _c6x2_refs_safe((value,)))
+
+
+def _c6x5_remaining_ttl_seconds(record: OacpPersistentArtifactCacheRecord, now: datetime | None) -> int | None:
+    expires_at = _parse_iso(record.expires_at)
+    if now is None or expires_at is None:
+        return None
+    return max(0, int((expires_at - now).total_seconds()))
+
+
+def _c6x5_refresh_recommended(record: OacpPersistentArtifactCacheRecord, now: datetime | None) -> bool:
+    remaining = _c6x5_remaining_ttl_seconds(record, now)
+    max_revocation_age = OACP_REVOCATION_SNAPSHOT_MAX_AGE_SECONDS[record.risk_tier]
+    ttl_refresh_window = max(60, int(record.ttl_policy_seconds * 0.2))
+    revocation_refresh_window = None if max_revocation_age is None else int(max_revocation_age * 0.8)
+    return (
+        record.freshness_status == "provisional"
+        or remaining is None
+        or remaining <= ttl_refresh_window
+        or (
+            revocation_refresh_window is not None
+            and record.revocation_snapshot_age_seconds is not None
+            and record.revocation_snapshot_age_seconds >= revocation_refresh_window
+        )
+    )
+
+
+def _c6x5_record_action(
+    *,
+    record: OacpPersistentArtifactCacheRecord,
+    outcome: OacpCacheMaintenanceOutcome,
+    reason_codes: tuple[str, ...],
+    action_intent: PersistentCacheActionIntent,
+    grantex_available: bool,
+    now: datetime | None,
+) -> dict[str, Any]:
+    return {
+        "cache_record_id": record.cache_record_id,
+        "artifact_id": record.artifact_id,
+        "artifact_type": record.artifact_type,
+        "scope_kind": record.scope_kind,
+        "tenant_id": record.tenant_id,
+        "merchant_id": record.merchant_id,
+        "seller_agent_id": record.seller_agent_id,
+        "buyer_agent_id": record.buyer_agent_id,
+        "maintenance_outcome": outcome,
+        "reason_codes": list(reason_codes),
+        "action_intent": action_intent,
+        "risk_tier": record.risk_tier,
+        "source_refs": list(_c6x5_safe_public_refs(record.source_refs)),
+        "evidence_refs": list(_c6x5_safe_public_refs(record.evidence_refs)),
+        "verifier_result_ref": (
+            None
+            if record.verifier_result_ref is None or not _c6x2_refs_safe((record.verifier_result_ref,))
+            else record.verifier_result_ref
+        ),
+        "expires_at": record.expires_at,
+        "remaining_ttl_seconds": _c6x5_remaining_ttl_seconds(record, now),
+        "freshness_status": record.freshness_status,
+        "revocation_snapshot_status": record.revocation_snapshot_status,
+        "revocation_snapshot_age_seconds": record.revocation_snapshot_age_seconds,
+        "blocked_capabilities": list(record.blocked_capabilities),
+        "unsupported_capabilities": list(record.unsupported_capabilities),
+        "grantex_available": grantex_available,
+        "allowed_to_execute": False,
+        "maintenance_plan_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+    }
+
+
+def _c6x5_classify_record(
+    *,
+    record: OacpPersistentArtifactCacheRecord,
+    now: datetime | None,
+    grantex_available: bool,
+    action_intent: PersistentCacheActionIntent,
+    risk_tier: RiskTier,
+    scope_filter: OacpArtifactCacheRepositoryQuery | None,
+) -> dict[str, Any]:
+    if not record.cache_record_id or not record.artifact_id or not record.authority or not record.issuer:
+        return _c6x5_record_action(
+            record=record,
+            outcome="blocked_unsafe",
+            reason_codes=("cache_record_identity_missing",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if not _c6x2_scope_present(record):
+        return _c6x5_record_action(
+            record=record,
+            outcome="blocked_unsafe",
+            reason_codes=("cache_scope_missing",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if scope_filter is not None and not _c6x3_query_matches(record, scope_filter):
+        return _c6x5_record_action(
+            record=record,
+            outcome="quarantine_scope_mismatch",
+            reason_codes=("cache_scope_mismatch",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if not _c6x2_non_enablement_flags_intact(record):
+        return _c6x5_record_action(
+            record=record,
+            outcome="blocked_unsafe",
+            reason_codes=("non_enablement_flags_missing",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+
+    refs_to_check = (
+        *record.source_refs,
+        *record.evidence_refs,
+        *(() if record.verifier_result_ref is None else (record.verifier_result_ref,)),
+    )
+    if not record.source_refs or not record.evidence_refs or not _c6x2_refs_safe(refs_to_check):
+        return _c6x5_record_action(
+            record=record,
+            outcome="quarantine_private_or_raw_ref",
+            reason_codes=("cache_refs_missing_or_private",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+
+    generated_at = _parse_iso(record.generated_at)
+    cached_at = _parse_iso(record.cached_at)
+    expires_at = _parse_iso(record.expires_at)
+    if now is None or generated_at is None or cached_at is None or expires_at is None or generated_at > cached_at:
+        return _c6x5_record_action(
+            record=record,
+            outcome="source_refresh_needed",
+            reason_codes=("cache_freshness_missing",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if now >= expires_at:
+        return _c6x5_record_action(
+            record=record,
+            outcome="evict_expired",
+            reason_codes=("cache_record_expired",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if record.ttl_policy_seconds <= 0 or record.ttl_policy_seconds > OACP_ARTIFACT_TTLS_SECONDS[record.artifact_type]:
+        return _c6x5_record_action(
+            record=record,
+            outcome="source_refresh_needed",
+            reason_codes=("cache_ttl_policy_invalid",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if record.freshness_status not in {"fresh", "provisional"}:
+        return _c6x5_record_action(
+            record=record,
+            outcome="source_refresh_needed",
+            reason_codes=("cache_freshness_stale",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+
+    if record.revocation_snapshot_status == "revoked":
+        return _c6x5_record_action(
+            record=record,
+            outcome="purge_revoked",
+            reason_codes=("cache_record_revoked",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    max_revocation_age = OACP_REVOCATION_SNAPSHOT_MAX_AGE_SECONDS[record.risk_tier]
+    if (
+        max_revocation_age is None
+        or record.revocation_snapshot_status != "fresh"
+        or record.revocation_snapshot_observed_at is None
+        or _parse_iso(record.revocation_snapshot_observed_at) is None
+        or record.revocation_snapshot_age_seconds is None
+        or record.revocation_snapshot_age_seconds > max_revocation_age
+    ):
+        return _c6x5_record_action(
+            record=record,
+            outcome="quarantine_ambiguous_revocation",
+            reason_codes=("cache_revocation_snapshot_ambiguous",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+
+    if _C6X5_RISK_RANK[risk_tier] >= _C6X5_RISK_RANK["critical"] or record.risk_tier == "critical":
+        return _c6x5_record_action(
+            record=record,
+            outcome="blocked_unsafe",
+            reason_codes=("critical_risk_cache_use_blocked",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+
+    if action_intent == "final_commitment":
+        if record.artifact_type in C6X2_ARTIFACTS_NOT_TRANSACTION_AUTHORITY:
+            return _c6x5_record_action(
+                record=record,
+                outcome="human_review_required",
+                reason_codes=("artifact_not_transaction_authority",),
+                action_intent=action_intent,
+                grantex_available=grantex_available,
+                now=now,
+            )
+        if (
+            record.freshness_status != "fresh"
+            or record.revocation_snapshot_age_seconds > _C6X5_COMMITMENT_REVOCATION_MAX_AGE_SECONDS
+            or _C6X5_RISK_RANK[record.risk_tier] < _C6X5_RISK_RANK[risk_tier]
+            or not grantex_available
+            or _c6x5_refresh_recommended(record, now)
+        ):
+            return _c6x5_record_action(
+                record=record,
+                outcome="refresh_required_before_commitment",
+                reason_codes=("final_commitment_requires_fresh_source_posture",),
+                action_intent=action_intent,
+                grantex_available=grantex_available,
+                now=now,
+            )
+
+    if action_intent == "prepare_only" and not grantex_available and record.freshness_status == "provisional":
+        return _c6x5_record_action(
+            record=record,
+            outcome="source_refresh_needed",
+            reason_codes=("prepared_flow_needs_source_refresh",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+    if _c6x5_refresh_recommended(record, now):
+        return _c6x5_record_action(
+            record=record,
+            outcome="refresh_recommended",
+            reason_codes=("ttl_or_revocation_refresh_window_reached",),
+            action_intent=action_intent,
+            grantex_available=grantex_available,
+            now=now,
+        )
+
+    return _c6x5_record_action(
+        record=record,
+        outcome="keep_usable",
+        reason_codes=("cache_record_usable_for_requested_intent",),
+        action_intent=action_intent,
+        grantex_available=grantex_available,
+        now=now,
+    )
+
+
+def _c6x5_ids_for_outcomes(actions: Sequence[dict[str, Any]], outcomes: set[str]) -> list[str]:
+    return [str(action["cache_record_id"]) for action in actions if action["maintenance_outcome"] in outcomes]
+
+
+def plan_oacp_artifact_cache_maintenance(
+    *,
+    records: Sequence[OacpPersistentArtifactCacheRecord],
+    now_iso: str,
+    grantex_available: bool,
+    action_intent: PersistentCacheActionIntent,
+    risk_tier: RiskTier,
+    max_batch_size: int | None = None,
+    scope_filter: OacpArtifactCacheRepositoryQuery | None = None,
+) -> dict[str, Any]:
+    selected_records = tuple(records[: max(0, max_batch_size)] if max_batch_size is not None else records)
+    now = _parse_iso(now_iso)
+    actions = tuple(
+        _c6x5_classify_record(
+            record=record,
+            now=now,
+            grantex_available=grantex_available,
+            action_intent=action_intent,
+            risk_tier=risk_tier,
+            scope_filter=scope_filter,
+        )
+        for record in selected_records
+    )
+    evidence_refs = sorted({ref for action in actions for ref in action["evidence_refs"]})
+    source_refs = sorted({ref for action in actions for ref in action["source_refs"]})
+    plan_payload = {
+        "generated_at": now_iso,
+        "action_intent": action_intent,
+        "risk_tier": risk_tier,
+        "grantex_available": grantex_available,
+        "records": [(action["cache_record_id"], action["maintenance_outcome"]) for action in actions],
+    }
+    digest = hashlib.sha256(canonicalize_oacp_payload(plan_payload).encode("utf-8")).hexdigest()
+    return {
+        "plan_id": f"oacp_c6x5_maintenance_plan_{digest[:20]}",
+        "generated_at": now_iso,
+        "action_intent": action_intent,
+        "risk_tier": risk_tier,
+        "grantex_available": grantex_available,
+        "records_seen": len(selected_records),
+        "records_kept": _c6x5_ids_for_outcomes(actions, {"keep_usable"}),
+        "records_to_refresh": _c6x5_ids_for_outcomes(
+            actions,
+            {"refresh_recommended", "refresh_required_before_commitment", "source_refresh_needed"},
+        ),
+        "records_to_evict": _c6x5_ids_for_outcomes(actions, {"evict_expired", "purge_revoked"}),
+        "records_to_quarantine": _c6x5_ids_for_outcomes(
+            actions,
+            {
+                "quarantine_ambiguous_revocation",
+                "quarantine_scope_mismatch",
+                "quarantine_private_or_raw_ref",
+                "blocked_unsafe",
+            },
+        ),
+        "records_requiring_human_review": _c6x5_ids_for_outcomes(actions, {"human_review_required"}),
+        "per_record_reason_codes": {
+            str(action["cache_record_id"]): list(action["reason_codes"]) for action in actions
+        },
+        "record_actions": list(actions),
+        "source_refs": source_refs,
+        "evidence_refs": evidence_refs,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "maintenance_plan_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+        "buyer_safe_message": (
+            "C6X5 planned cache maintenance only. Non-binding cache use may continue only for valid local records."
+        ),
+        "seller_safe_message": (
+            "C6X5 does not refresh, evict, schedule, call Grantex, or call merchant or provider systems."
+        ),
+    }
 
 
 class OacpArtifactCache:
