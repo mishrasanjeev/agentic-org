@@ -13,7 +13,10 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 RiskTier = Literal["informational", "low", "medium", "high", "critical"]
 ArtifactType = Literal[
@@ -4325,6 +4328,238 @@ class InMemoryOacpArtifactCacheRepository:
     ) -> dict[str, Any]:
         return evaluate_oacp_persistent_artifact_cache_record(
             record=self.get(cache_record_id),
+            action_intent=action_intent,
+            now_iso=now_iso,
+            grantex_available=grantex_available,
+            expected_scope=expected_scope,
+        )
+
+
+def _c6x4_durable_repository_refusal(
+    *,
+    status: PersistentCacheEvaluationStatus,
+    refusal_code: str,
+    message: str,
+    record: OacpPersistentArtifactCacheRecord | None = None,
+) -> dict[str, Any]:
+    return {
+        "stored": False,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "cache_record_id": None if record is None else record.cache_record_id,
+        "artifact_id": None if record is None else record.artifact_id,
+        "durable_repository": True,
+        "allowed_to_execute": False,
+        "repository_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x4_durable_record_safe_for_storage(record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
+    base_result = _c6x3_record_safe_for_repository(record)
+    if base_result["stored"] is not True:
+        result = dict(base_result)
+        result["durable_repository"] = True
+        return result
+
+    generated_at = _parse_iso(record.generated_at)
+    cached_at = _parse_iso(record.cached_at)
+    expires_at = _parse_iso(record.expires_at)
+    revocation_observed_at = _parse_iso(record.revocation_snapshot_observed_at)
+    if (
+        generated_at is None
+        or cached_at is None
+        or expires_at is None
+        or revocation_observed_at is None
+        or generated_at > cached_at
+        or cached_at >= expires_at
+    ):
+        return _c6x4_durable_repository_refusal(
+            status="stale",
+            refusal_code="cache_timestamps_invalid",
+            message="C6X4 durable cache records require ordered generated, cached, revocation, and expiry timestamps.",
+            record=record,
+        )
+
+    if record.ttl_policy_seconds <= 0 or record.ttl_policy_seconds > OACP_ARTIFACT_TTLS_SECONDS[record.artifact_type]:
+        return _c6x4_durable_repository_refusal(
+            status="stale",
+            refusal_code="cache_ttl_policy_invalid",
+            message="C6X4 durable cache records require a positive TTL not exceeding the artifact family default.",
+            record=record,
+        )
+    if record.freshness_status not in {"fresh", "provisional"}:
+        return _c6x4_durable_repository_refusal(
+            status="stale",
+            refusal_code="cache_freshness_stale",
+            message="C6X4 durable cache records must be fresh or provisional at storage time.",
+            record=record,
+        )
+    if record.revocation_snapshot_status != "fresh" or record.revocation_snapshot_age_seconds is None:
+        return _c6x4_durable_repository_refusal(
+            status="stale",
+            refusal_code="cache_revocation_snapshot_ambiguous",
+            message="C6X4 durable cache records require a fresh local revocation snapshot.",
+            record=record,
+        )
+
+    return {
+        **base_result,
+        "durable_repository": True,
+    }
+
+
+def _c6x4_record_ttl_policy(record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
+    return {
+        "ttl_policy_seconds": record.ttl_policy_seconds,
+        "artifact_family": record.artifact_type,
+        "source": "grantex_oacp_cached_artifact_verifier_result",
+    }
+
+
+def _c6x4_row_to_record(row: Any) -> OacpPersistentArtifactCacheRecord:
+    return OacpPersistentArtifactCacheRecord(
+        cache_record_id=str(row.cache_record_id),
+        artifact_id=str(row.artifact_id),
+        artifact_type=cast(ArtifactType, row.artifact_type),
+        authority=str(row.authority),
+        issuer=str(row.issuer),
+        scope_kind=cast(PersistentCacheScopeKind, row.scope_kind),
+        tenant_id=row.tenant_id,
+        merchant_id=row.merchant_id,
+        seller_agent_id=row.seller_agent_id,
+        buyer_agent_id=row.buyer_agent_id,
+        source_refs=tuple(row.source_refs or ()),
+        evidence_refs=tuple(row.evidence_refs or ()),
+        generated_at=row.generated_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        cached_at=row.cached_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        expires_at=row.expires_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        freshness_status=str(row.freshness_status),
+        revocation_snapshot_status=str(row.revocation_snapshot_status),
+        revocation_snapshot_observed_at=(
+            None
+            if row.revocation_snapshot_observed_at is None
+            else row.revocation_snapshot_observed_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        ),
+        ttl_policy_seconds=int(row.ttl_policy_seconds),
+        risk_tier=cast(RiskTier, row.risk_tier),
+        blocked_capabilities=tuple(row.blocked_capabilities or ()),
+        unsupported_capabilities=tuple(row.unsupported_capabilities or ()),
+        verifier_result_ref=row.verifier_result_ref,
+        revocation_snapshot_age_seconds=row.revocation_snapshot_age_seconds,
+        allowed_to_execute=bool(row.allowed_to_execute),
+        non_authoritative_for_transaction=bool(row.non_authoritative_for_transaction),
+        no_checkout_payment_enablement=bool(row.no_checkout_payment_enablement),
+        no_live_provider_enablement=bool(row.no_live_provider_enablement),
+        no_public_discovery_enablement=bool(row.no_public_discovery_enablement),
+    )
+
+
+def _c6x4_apply_record_to_row(row: Any, record: OacpPersistentArtifactCacheRecord) -> None:
+    row.artifact_id = record.artifact_id
+    row.artifact_type = record.artifact_type
+    row.artifact_family = record.artifact_type
+    row.authority = record.authority
+    row.issuer = record.issuer
+    row.scope_kind = record.scope_kind
+    row.tenant_id = record.tenant_id
+    row.merchant_id = record.merchant_id
+    row.seller_agent_id = record.seller_agent_id
+    row.buyer_agent_id = record.buyer_agent_id
+    row.source_refs = list(record.source_refs)
+    row.evidence_refs = list(record.evidence_refs)
+    row.generated_at = _parse_iso(record.generated_at)
+    row.issued_at = _parse_iso(record.generated_at)
+    row.cached_at = _parse_iso(record.cached_at)
+    row.expires_at = _parse_iso(record.expires_at)
+    row.freshness_status = record.freshness_status
+    row.revocation_snapshot_status = record.revocation_snapshot_status
+    row.revocation_snapshot_age_seconds = record.revocation_snapshot_age_seconds
+    row.revocation_snapshot_observed_at = _parse_iso(record.revocation_snapshot_observed_at)
+    row.ttl_policy = _c6x4_record_ttl_policy(record)
+    row.ttl_policy_seconds = record.ttl_policy_seconds
+    row.risk_tier = record.risk_tier
+    row.blocked_capabilities = list(record.blocked_capabilities)
+    row.unsupported_capabilities = list(record.unsupported_capabilities)
+    row.verifier_result_ref = record.verifier_result_ref
+    row.allowed_to_execute = False
+    row.non_authoritative_for_transaction = True
+    row.no_checkout_payment_enablement = True
+    row.no_live_provider_enablement = True
+    row.no_public_discovery_enablement = True
+
+
+class DurableOacpArtifactCacheRepository:
+    """Async SQLAlchemy-backed OACP cache repository; it performs no external calls."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def upsert(self, record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
+        from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow
+
+        store_result = _c6x4_durable_record_safe_for_storage(record)
+        if store_result["stored"] is not True:
+            return store_result
+
+        row = await self._session.get(OacpArtifactCacheRecordRow, record.cache_record_id)
+        if row is None:
+            row = OacpArtifactCacheRecordRow(cache_record_id=record.cache_record_id)
+            self._session.add(row)
+        _c6x4_apply_record_to_row(row, record)
+        await self._session.flush()
+        return store_result
+
+    async def get(self, cache_record_id: str) -> OacpPersistentArtifactCacheRecord | None:
+        from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow
+
+        row = await self._session.get(OacpArtifactCacheRecordRow, cache_record_id)
+        return None if row is None else _c6x4_row_to_record(row)
+
+    async def list_for_scope(
+        self,
+        query: OacpArtifactCacheRepositoryQuery,
+    ) -> tuple[OacpPersistentArtifactCacheRecord, ...]:
+        from sqlalchemy import select
+
+        from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow
+
+        statement = select(OacpArtifactCacheRecordRow)
+        if query.scope_kind is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.scope_kind == query.scope_kind)
+        if query.tenant_id is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.tenant_id == query.tenant_id)
+        if query.merchant_id is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.merchant_id == query.merchant_id)
+        if query.seller_agent_id is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.seller_agent_id == query.seller_agent_id)
+        if query.buyer_agent_id is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.buyer_agent_id == query.buyer_agent_id)
+        if query.artifact_type is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.artifact_type == query.artifact_type)
+        if query.authority is not None:
+            statement = statement.where(OacpArtifactCacheRecordRow.authority == query.authority)
+
+        rows = (await self._session.scalars(statement.order_by(OacpArtifactCacheRecordRow.cache_record_id))).all()
+        records = tuple(_c6x4_row_to_record(row) for row in rows)
+        return tuple(record for record in records if _c6x3_query_matches(record, query))
+
+    async def evaluate(
+        self,
+        *,
+        cache_record_id: str,
+        action_intent: PersistentCacheActionIntent,
+        now_iso: str,
+        grantex_available: bool,
+        expected_scope: dict[str, str | None] | None = None,
+    ) -> dict[str, Any]:
+        return evaluate_oacp_persistent_artifact_cache_record(
+            record=await self.get(cache_record_id),
             action_intent=action_intent,
             now_iso=now_iso,
             grantex_available=grantex_available,
