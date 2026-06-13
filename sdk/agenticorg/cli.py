@@ -2,7 +2,8 @@
 
 Usage:
     agenticorg agents list
-    agenticorg agents run commerce_sales_agent --action buyer_discovery_preview --input '{"merchant_id": "merchant_demo"}'
+    agenticorg agents run commerce_sales_agent --action buyer_discovery_preview \
+        --input '{"merchant_id": "merchant_demo"}'
     agenticorg agents generate "Create a contract intelligence agent using Confluence and Jira"
     agenticorg workflows generate "Review vendor renewal risk"
     agenticorg workflows run <workflow-id> --input '{"vendor_id": "V-100"}'

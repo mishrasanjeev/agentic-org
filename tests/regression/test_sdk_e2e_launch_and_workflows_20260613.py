@@ -242,7 +242,7 @@ def test_python_cli_launch_generation_knowledge_and_workflow_commands(
     from agenticorg import cli
 
     class FakeClient:
-        instances: list["FakeClient"] = []
+        instances: list[FakeClient] = []
 
         def __init__(self, **kwargs: Any) -> None:
             self.kwargs = kwargs
@@ -269,7 +269,9 @@ def test_python_cli_launch_generation_knowledge_and_workflow_commands(
             self.knowledge = SimpleNamespace(
                 search=lambda query, top_k=5: [{"document_name": "policy.md", "query": query, "top_k": top_k}],
             )
-            self.sop = SimpleNamespace(parse_text=lambda text, domain_hint="": {"text": text, "domain_hint": domain_hint})
+            self.sop = SimpleNamespace(
+                parse_text=lambda text, domain_hint="": {"text": text, "domain_hint": domain_hint}
+            )
             self.a2a = SimpleNamespace(agent_card=lambda: {"skills": []}, agents=lambda: [])
             self.mcp = SimpleNamespace(tools=lambda: [])
             FakeClient.instances.append(self)
@@ -282,7 +284,13 @@ def test_python_cli_launch_generation_knowledge_and_workflow_commands(
             self.calls.append(("agents.run", call))
             return call
 
-        def _agents_generate(self, description: str, *, deploy: bool = False, company_id: str | None = None) -> dict[str, Any]:
+        def _agents_generate(
+            self,
+            description: str,
+            *,
+            deploy: bool = False,
+            company_id: str | None = None,
+        ) -> dict[str, Any]:
             call = {"description": description, "deploy": deploy, "company_id": company_id}
             self.calls.append(("agents.generate", call))
             return call
@@ -362,8 +370,8 @@ async def test_runtime_catalogs_do_not_drift_between_generators_a2a_and_mcp(monk
 async def test_buyer_seller_commerce_discovery_and_prepared_handoff_are_non_executing() -> None:
     from core.commerce.buyer_session import start_buyer_discovery_session
     from core.commerce.oacp_artifacts import (
-        InMemoryOacpArtifactCacheRepository,
         OACP_C6W3_VALID_ARTIFACT_FIXTURES,
+        InMemoryOacpArtifactCacheRepository,
         OacpArtifactCacheRepositoryQuery,
         OacpPersistentArtifactCacheRecord,
         evaluate_agenticorg_c6w5_commitment_boundary,

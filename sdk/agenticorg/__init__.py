@@ -9,7 +9,7 @@ Quickstart:
     workflow = client.workflows.generate("Review vendor renewal risk")
 """
 
-from agenticorg.client import AgentRunResult, AgenticOrg
+from agenticorg.client import AgenticOrg, AgentRunResult
 
 __all__ = ["AgenticOrg", "AgentRunResult"]
 __version__ = "0.2.0"
