@@ -102,9 +102,23 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         else:
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
-                token = auth_header[7:]
+                token = auth_header[7:].strip()
+                if not token:
+                    await record_auth_failure(client_ip)
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Invalid or expired token"},
+                    )
+            elif auth_header:
+                await record_auth_failure(client_ip)
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unsupported Authorization scheme"},
+                )
         if not token:
-            await record_auth_failure(client_ip)
+            # Missing credentials are expected for session-discovery probes
+            # such as /auth/me on public pages. Only supplied-but-invalid
+            # credentials should poison the brute-force counter.
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Missing session cookie or Authorization header"},

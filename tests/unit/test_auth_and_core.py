@@ -674,6 +674,7 @@ class TestAuthMiddleware:
             request.headers = _FakeHeaders({"Authorization": auth_header})
         else:
             request.headers = _FakeHeaders({})
+        request.cookies.get.return_value = ""
         return request
 
     @pytest.mark.asyncio
@@ -714,6 +715,7 @@ class TestAuthMiddleware:
         call_next = AsyncMock()
         response = await middleware.dispatch(request, call_next)
         assert response.status_code == 401
+        assert "10.0.0.1" not in _mem_failures
         call_next.assert_not_called()
 
     @pytest.mark.asyncio
@@ -783,10 +785,18 @@ class TestAuthMiddleware:
         client_ip = "10.0.0.99"
 
         # Force in-memory path so the test does not depend on a live Redis.
-        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
-            # Simulate AUTH_MAX_FAILURES failures
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None), \
+             patch(
+                 "auth.middleware.validate_token",
+                 new_callable=AsyncMock,
+                 side_effect=ValueError("bad"),
+             ):
+            # Simulate AUTH_MAX_FAILURES supplied-but-invalid credentials.
             for _ in range(AUTH_MAX_FAILURES):
-                request = self._make_request(auth_header=None, client_ip=client_ip)
+                request = self._make_request(
+                    auth_header="Bearer bad-token",
+                    client_ip=client_ip,
+                )
                 await middleware.dispatch(request, AsyncMock())
 
             # Next request from same IP should be 429

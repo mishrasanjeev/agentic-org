@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api/v1`
@@ -54,6 +55,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+export function shouldHydrateSessionForPath(pathname: string) {
+  return (
+    pathname === "/onboarding" ||
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/")
+  );
+}
+
 const SESSION_FETCH_OPTS: RequestInit = {
   // Browser must send the agenticorg_session HttpOnly cookie on every
   // call. Without this, /auth/me returns 401 even when the cookie is
@@ -75,6 +84,7 @@ function _purgeLegacyTokenStorage() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
@@ -101,8 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     _purgeLegacyTokenStorage();
+    if (!shouldHydrateSessionForPath(location.pathname)) {
+      setIsHydrating(false);
+      return;
+    }
+    setIsHydrating(true);
     void _hydrateFromCookie().finally(() => setIsHydrating(false));
-  }, [_hydrateFromCookie]);
+  }, [_hydrateFromCookie, location.pathname]);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
