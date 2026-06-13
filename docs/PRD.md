@@ -3,6 +3,8 @@
 **Version**: 2.1.0 | **Date**: 2026-03-25 | **Status**: Live (Production)
 **URL**: https://agenticorg.ai | **App**: https://app.agenticorg.ai
 
+> **Latest posture (2026-06-13):** Production deployment is Cloud Run-first, with API/UI Cloud Run services, Cloud SQL, Redis, Secret Manager, and Artifact Registry images. Commerce work through C6X5 is an OACP-grounded preview/cache foundation only: it supports public-safe artifact evaluation, prepared handoffs, refusals, and cache maintenance planning, but it does not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness.
+
 ---
 
 ## 1. What Is AgenticOrg?
@@ -65,9 +67,9 @@ AgenticOrg is an **AI virtual employee platform** for enterprises. Instead of hi
                               Darwinbox, Slack...)
 ```
 
-**Infrastructure**: Google Cloud (GKE Autopilot, Cloud SQL, asia-south1)
+**Infrastructure**: Google Cloud (Cloud Run services in asia-southeast1, Artifact Registry in asia-south1, Cloud SQL, Redis, Secret Manager)
 **LLM**: Gemini 2.5 Flash (primary), with Claude/GPT-4o fallback
-**Cost**: ~$95/month
+**Cost**: Deployment-dependent; see `docs/deployment.md` for the current Cloud Run path and sizing assumptions.
 
 ---
 

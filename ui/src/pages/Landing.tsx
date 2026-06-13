@@ -138,6 +138,29 @@ const INDIA_CONNECTORS = [
   { name: "DigiLocker", desc: "Document verification" },
 ];
 
+const LATEST_PLATFORM_WORK = [
+  {
+    label: "C6X4",
+    title: "Durable OACP Artifact Cache",
+    desc: "SQL-backed cache records scoped by buyer agent, seller agent, tenant, and merchant. TTL, freshness, revocation snapshot, risk tier, and non-execution flags are evaluated fail-closed.",
+  },
+  {
+    label: "C6X5",
+    title: "Cache Maintenance Planner",
+    desc: "Deterministic keep, refresh, evict, purge, quarantine, and human-review recommendations over durable OACP records. Planner only: no scheduler, no live Grantex call, no provider call.",
+  },
+  {
+    label: "Security",
+    title: "Fail-Closed Release Gates",
+    desc: "Production dependencies were trimmed, JWT handling moved to PyJWT[crypto], Docker healthchecks no longer require curl, and CI security checks now fail on high-risk findings.",
+  },
+  {
+    label: "Deploy",
+    title: "Cloud Run Rollout Safety",
+    desc: "The manual deploy helper now separates Cloud Run and Artifact Registry regions, verifies platform image digests and commit metadata, runs migrations first, and refuses stale-health success.",
+  },
+];
+
 /* ------------------------------------------------------------------ */
 /*  Check icon reused across sections                                  */
 /* ------------------------------------------------------------------ */
@@ -345,8 +368,8 @@ export default function Landing() {
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
-        <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — pre-built agents across 6 domains, native connectors + 1000+ via Composio, CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
+        <title>AgenticOrg — Governed Enterprise AI Agents | Automate with Human Control</title>
+        <meta name="description" content="Enterprise AI agents for governed back-office automation, human approvals, audit trails, Grantex scope enforcement, OACP artifact cache controls, and Cloud Run release safety." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -366,6 +389,7 @@ export default function Landing() {
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
             <a href="#platform" className="text-slate-300 hover:text-white text-sm transition-colors">Platform</a>
+            <a href="#latest-work" className="text-slate-300 hover:text-white text-sm transition-colors">Latest</a>
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
             <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
             <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
@@ -402,6 +426,7 @@ export default function Landing() {
         {mobileMenuOpen && (
           <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3" role="navigation" aria-label="Mobile navigation">
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
+            <a href="#latest-work" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Latest</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
             <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
             <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
@@ -441,7 +466,7 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-slate-300 text-sm" data-testid="landing-version-badge">
-                {versionText ? `${versionText} — ` : ""}1000+ Integrations, {agentsText} AI Agents, Voice, Knowledge Base, Industry Packs
+                {versionText ? `${versionText} — ` : ""}Governed agents, OACP cache controls, Cloud Run release safety
               </span>
             </div>
 
@@ -500,7 +525,7 @@ export default function Landing() {
       <section className="relative bg-slate-900 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-5xl mx-auto">
           <Link
-            to="/pricing"
+            to="/#latest-work"
             className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
           >
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
@@ -512,16 +537,57 @@ export default function Landing() {
 
               {/* Description */}
               <p className="text-sm text-slate-300 text-center sm:text-left leading-snug">
-                <span className="font-semibold text-white">Project Apex</span>
-                {" "}&mdash; 1000+ Integrations, Voice Agents, Knowledge Base, Smart LLM Routing, and Industry Packs
+                <span className="font-semibold text-white">June hardening</span>
+                {" "}&mdash; durable OACP cache, fail-closed maintenance planning, security gates, and Cloud Run digest checks
               </p>
 
               {/* CTA */}
               <span className="shrink-0 text-sm font-semibold text-blue-400 group-hover:text-blue-300 transition-colors whitespace-nowrap">
-                See What&apos;s New&nbsp;&rarr;
+                Review latest foundation&nbsp;&rarr;
               </span>
             </div>
           </Link>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* 2c. LATEST PLATFORM WORK                                      */}
+      {/* ============================================================ */}
+      <section id="latest-work" className="py-20 bg-white border-b border-slate-100 scroll-mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="max-w-3xl mb-12">
+              <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-full px-4 py-1.5 text-sm font-medium mb-5">
+                Latest mainline work
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Latest shipped foundation, without overclaiming commerce readiness.</h2>
+              <p className="mt-4 text-lg text-slate-600 leading-relaxed">
+                Recent work focused on making agentic commerce and production rollout safer: durable OACP cache records, local maintenance planning, stronger dependency gates, and safer Cloud Run releases.
+              </p>
+            </div>
+          </FadeIn>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {LATEST_PLATFORM_WORK.map((item, i) => (
+              <FadeIn key={item.title} delay={i * 100}>
+                <div className="h-full rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-blue-200 hover:shadow-lg transition-all duration-300">
+                  <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white mb-4">
+                    {item.label}
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-3">{item.title}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+                </div>
+              </FadeIn>
+            ))}
+          </div>
+
+          <FadeIn>
+            <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5">
+              <p className="text-sm text-amber-900 leading-relaxed">
+                Commerce guardrail: these updates do not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness. Those remain blocked until separately approved and verified.
+              </p>
+            </div>
+          </FadeIn>
         </div>
       </section>
 
@@ -1051,7 +1117,7 @@ export default function Landing() {
                   </svg>
                 ),
                 title: "Secure Authentication",
-                desc: "Google OAuth, email/password login, secure password reset, org invitations with JWT tokens. Rate-limited, email-enumeration safe.",
+                desc: "Google OAuth, email/password login, secure password reset, org invitations, offline JWT/JWKS verification, and fail-closed dependency gates.",
               },
             ].map((f, i) => (
               <FadeIn key={f.title} delay={i * 100}>
@@ -1438,7 +1504,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">Grantex Scope Enforcement</h3>
-                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against {connectorsText} connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read. Now with 1000+ tool manifests, voice agent security, and PII redaction before LLM.</p>
+                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call is checked against connector manifests before execution. Commerce artifacts add a separate fail-closed OACP cache boundary for freshness, revocation, risk, and non-execution posture.</p>
                 <Link to="/how-grantex-works" className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 font-medium mt-2 transition-colors">
                   Learn how it works <span aria-hidden="true">&rarr;</span>
                 </Link>
@@ -1451,14 +1517,14 @@ $ agenticorg sop deploy \\
             <div className="bg-gradient-to-r from-slate-800 to-slate-800/50 border border-slate-700 rounded-2xl p-8 mb-12">
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-white mb-2">See It in Action: ChatGPT + Shopping Agent</h3>
-                  <p className="text-slate-400 text-sm">Full end-to-end workflow — user asks ChatGPT to buy earbuds, ChatGPT discovers AgenticOrg via MCP, launches a Shopping Agent, gets HITL approval, places the order. With sequence diagrams and architecture stack.</p>
+                  <h3 className="text-xl font-bold text-white mb-2">See It in Action: OACP-Grounded Shopping Preview</h3>
+                  <p className="text-slate-400 text-sm">Safe workflow preview: a buyer asks from ChatGPT, AgenticOrg uses MCP and cached OACP artifacts, checks freshness and revocation posture, then prepares a non-executing handoff or refuses unsafe paths. Live checkout and payment remain blocked until approved.</p>
                 </div>
                 <Link
                   to="/integration-workflow"
                   className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-emerald-600 transition-all shadow-lg whitespace-nowrap"
                 >
-                  View Full Workflow
+                  View Safe Workflow
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
                 </Link>
               </div>
@@ -1544,7 +1610,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              {agentsText} agents that act. 1000+ integrations. {toolsText} native tools. Free to start.
+              {agentsText} agents that act with human control, scoped tools, audit trails, and fail-closed release gates. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

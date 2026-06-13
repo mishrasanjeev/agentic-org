@@ -60,16 +60,20 @@ extension probe). No DDL.
 ### Deploy contract
 
 - CI/CD pipeline runs `alembic upgrade head` as a discrete
-  **migration job** BEFORE the app Deployment rolls. Helm chart gets
-  a `pre-install`/`pre-upgrade` hook that runs the migration image.
+  **migration job** BEFORE Cloud Run app services receive traffic.
+  The Cloud Run helper runs this path with
+  `scripts/deploy_cloud_run.sh --with-migrations`; no-traffic staging
+  and traffic promotion must not bypass the migration gate.
 - `init_db()` at app startup asserts the DB head matches the code's
-  expected head; otherwise pod refuses to become ready.
+  expected head; otherwise the Cloud Run revision refuses to become
+  ready.
 
 ### Rollback
 
 Keep `AGENTICORG_ALLOW_STARTUP_DDL=1` as a kill switch for one
 release so if the migration job is misconfigured in a customer's
-Helm values we can fall back. Remove the flag one release later.
+Cloud Run deployment configuration we can fall back. Remove the flag
+one release later.
 
 ## Tests
 

@@ -6,6 +6,8 @@
 **Status**: Draft  
 **Classification**: Confidential — Internal Use Only
 
+> **Archive note (2026-06-13):** This v4.0.0 draft is historical. The "Project Apex" codename and Helm/GKE deployment material in this file are retained only to preserve the original draft context. Current production guidance is Cloud Run-first; see `README.md`, `docs/deployment.md`, and the commerce C6X documentation for the latest OACP cache, security, and rollout posture.
+
 ---
 
 ## Executive Summary

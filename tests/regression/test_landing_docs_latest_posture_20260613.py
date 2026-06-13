@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _read(path: str) -> str:
+    return (REPO / path).read_text(encoding="utf-8")
+
+
+def test_landing_page_reflects_c6x_cache_security_and_deploy_work() -> None:
+    landing = _read("ui/src/pages/Landing.tsx")
+    index = _read("ui/index.html")
+
+    for expected in (
+        "Latest mainline work",
+        "Durable OACP Artifact Cache",
+        "Cache Maintenance Planner",
+        "Fail-Closed Release Gates",
+        "Cloud Run Rollout Safety",
+        "Commerce guardrail",
+    ):
+        assert expected in landing
+
+    for stale in (
+        "Project Apex",
+        "places the order",
+        "Shopping Agent",
+    ):
+        assert stale not in landing
+
+    assert "OACP artifact cache controls" in index
+    assert "Cloud Run release safety" in index
+    assert "Commerce guardrail" in index
+    assert "AI Virtual Employees for Enterprise | Create & Deploy AI Agents" not in index
+    assert "End-to-End MCP/A2A Demo" not in index
+
+
+def test_integration_workflow_is_non_executing_oacp_preview() -> None:
+    workflow = _read("ui/src/pages/IntegrationWorkflow.tsx")
+
+    for expected in (
+        "OACP-Grounded Commerce Preview",
+        "allowed_to_execute=false",
+        "Prepared handoff review",
+        "Fail-Closed Commerce Boundary",
+        "no execute()",
+        "checkout/payment blocked",
+    ):
+        assert expected in workflow
+
+    for stale in (
+        "shopping_agent",
+        "Shopping Agent",
+        "place_order",
+        "result: ordered",
+        "Ordered Sony",
+        "places the order",
+        "real order placement",
+    ):
+        assert stale not in workflow
+
+
+def test_readme_and_deploy_docs_describe_current_cloud_run_path() -> None:
+    readme = _read("README.md")
+    deploy = _read("docs/deployment.md")
+    backup = _read("docs/BACKUP_AND_DR.md")
+    product_prd = _read("docs/PRD.md")
+    archived_prd = _read("docs/PRD_v4.0.0.md")
+    user_guide = _read("docs/AgenticOrg_Complete_User_Guide_v5.0.html")
+    ddl_roadmap = _read("docs/roadmap/startup_ddl_removal.md")
+
+    assert "Latest Mainline Status (2026-06-13)" in readme
+    assert "C6X4 added the durable" in readme
+    assert "C6X5 added a deterministic maintenance planner" in readme
+    assert "Cloud Run manual helper" in readme
+    assert "GKE Production" not in readme
+
+    assert "2026-06-13 status" in deploy
+    assert "asia-southeast1" in deploy
+    assert "GAR_REGION=asia-south1" in deploy
+    assert "Legacy Kubernetes Lean" in deploy
+    assert "GKE Autopilot" not in deploy
+    assert "Cloud Run rewrite" not in deploy
+    assert "disabled GKE block" not in deploy
+
+    assert "Cloud Run services `agenticorg-api` and `agenticorg-ui`" in backup
+    assert "GKE cluster loss" not in backup
+    assert "agenticorg-prod-gke" not in backup
+
+    assert "Latest posture (2026-06-13)" in product_prd
+    assert "Cloud Run services in asia-southeast1" in product_prd
+    assert "GKE Autopilot, Cloud SQL" not in product_prd
+    assert "Archive note (2026-06-13)" in archived_prd
+
+    assert "Latest Platform Posture (2026-06-13)" in user_guide
+    assert "E.3 Cloud Run Production" in user_guide
+    assert "scripts/deploy_cloud_run.sh" in user_guide
+    assert "Kubernetes (Helm)" not in user_guide
+    assert "GKE Autopilot" not in user_guide
+
+    assert "Cloud Run app services receive traffic" in ddl_roadmap
+    assert "Helm values" not in ddl_roadmap
+
+
+def test_commerce_docs_capture_c6x4_c6x5_boundaries() -> None:
+    overview = _read("docs/commerce-agent-overview.md")
+    developer = _read("docs/commerce-agent-developer-guide.md")
+    prd = _read("docs/commerce-agent-agentic-commerce-implementation-prd.md")
+
+    for doc in (overview, developer, prd):
+        assert "C6X4" in doc
+        assert "C6X5" in doc
+        assert "OACP" in doc
+
+    assert "oacp_artifact_cache_records" in overview
+    assert "does not refresh, evict, purge, schedule, call Grantex live" in overview
+    assert "Maintenance planning may recommend refresh" in developer
+    assert "Current OACP Status Through C6X5" in prd
+    assert "persistent cache scoped by buyer agent" not in prd

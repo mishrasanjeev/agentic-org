@@ -7,8 +7,8 @@ const WORKFLOW_STEPS = [
   {
     id: 1,
     actor: "User",
-    action: "Asks ChatGPT to buy something",
-    detail: '"Hey ChatGPT, find me the best wireless earbuds under $50 on Amazon and order the top-rated one."',
+    action: "Asks ChatGPT to compare products",
+    detail: '"Hey ChatGPT, find wireless earbuds under $50, compare the safest options, and tell me whether checkout can be prepared."',
     color: "bg-blue-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -20,7 +20,7 @@ const WORKFLOW_STEPS = [
     id: 2,
     actor: "ChatGPT",
     action: "Discovers AgenticOrg via MCP",
-    detail: "ChatGPT detects the agenticorg MCP server in its config. Calls list_mcp_tools to discover available capabilities. Finds shopping_agent with product search and order tools.",
+    detail: "ChatGPT detects the agenticorg MCP server in its config. Calls list_mcp_tools to discover available capabilities. Finds commerce_sales_agent with read-only discovery and prepared-handoff capabilities.",
     color: "bg-emerald-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,8 +31,8 @@ const WORKFLOW_STEPS = [
   {
     id: 3,
     actor: "ChatGPT",
-    action: "Calls run_agent via MCP",
-    detail: 'MCP call: run_agent({ agent_type: "shopping_agent", inputs: { query: "wireless earbuds under $50", marketplace: "amazon", action: "search_and_order" } })',
+    action: "Calls commerce agent via MCP",
+    detail: 'MCP call: run_agent({ agent_type: "commerce_sales_agent", inputs: { query: "wireless earbuds under $50", action: "read_only_discovery_or_prepare" } })',
     color: "bg-purple-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,9 +54,9 @@ const WORKFLOW_STEPS = [
   },
   {
     id: 5,
-    actor: "Shopping Agent",
-    action: "Executes LangGraph workflow",
-    detail: "The Shopping Agent (LangGraph) runs a multi-step graph:\n1. Search products via Amazon connector tool\n2. Rank by ratings, price, reviews\n3. Select top match\n4. Prepare order payload\n5. Check confidence score (0.92 > 0.88 floor)\n6. Triggers HITL approval (order > $20 threshold)",
+    actor: "Commerce Sales Agent",
+    action: "Evaluates cached OACP artifacts",
+    detail: "The Commerce Sales Agent runs a fail-closed graph:\n1. Read valid cached OACP artifacts when TTL, freshness, and revocation posture allow\n2. Refuse stale, revoked, ambiguous, private/raw, or executable records\n3. Compare public-safe catalog facts and source refs\n4. Classify the buyer request as read-only discovery or prepared handoff\n5. Preserve allowed_to_execute=false for every path\n6. Never call direct provider, merchant-private, checkout, or payment rails",
     color: "bg-red-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,8 +67,8 @@ const WORKFLOW_STEPS = [
   {
     id: 6,
     actor: "AgenticOrg",
-    action: "HITL approval request",
-    detail: "Order exceeds auto-approve threshold. AgenticOrg sends an approval request:\n- Slack notification to the user\n- Dashboard approval card\n- Email with one-click Approve/Reject\n\nThe user sees: 'Shopping Agent wants to order Sony WF-C500 ($39.99) — Approve?'",
+    action: "Prepared handoff review",
+    detail: "Because the user asked whether checkout can be prepared, AgenticOrg shows a review card:\n- public-safe source refs\n- freshness and revocation posture\n- blocked capabilities\n- reason code when handoff is refused\n\nThe user sees: 'Agent can prepare a non-executing handoff only if Grantex policy and source freshness allow it.'",
     color: "bg-yellow-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,8 +79,8 @@ const WORKFLOW_STEPS = [
   {
     id: 7,
     actor: "User",
-    action: "Approves the order",
-    detail: "User clicks 'Approve' on Slack or in the dashboard. The HITL queue entry is marked as approved. The Shopping Agent resumes execution.",
+    action: "Reviews the prepared state",
+    detail: "User review records intent and acknowledges source/freshness limits. It does not place an order, create a payment, call a provider, or override a Grantex policy/refusal.",
     color: "bg-blue-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,9 +90,9 @@ const WORKFLOW_STEPS = [
   },
   {
     id: 8,
-    actor: "Shopping Agent",
-    action: "Places the order & returns result",
-    detail: "Agent calls the Amazon connector's place_order tool. Order confirmed: #AMZ-2026-78543.\n\nResult sent back through MCP → ChatGPT → User:\n'Ordered Sony WF-C500 Wireless Earbuds ($39.99) — 4.4 stars, 12K+ reviews. Order #AMZ-2026-78543. Arrives in 2 days.'",
+    actor: "Commerce Sales Agent",
+    action: "Returns safe result",
+    detail: "No order-execution call is made. Result sent back through MCP -> ChatGPT -> User:\n'Here are grounded product options with source refs. Checkout is not executed. This path can only prepare a handoff or refuse unsafe/stale claims until live checkout is separately approved.'",
     color: "bg-emerald-500",
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,9 +107,9 @@ const ARCHITECTURE_LAYERS = [
   { label: "MCP Client", desc: "Model Context Protocol transport (stdio/SSE)", color: "bg-emerald-100 border-emerald-300 text-emerald-800" },
   { label: "AgenticOrg MCP Server", desc: "agenticorg-mcp-server (npx)", color: "bg-purple-100 border-purple-300 text-purple-800" },
   { label: "Auth Layer", desc: "API Key (ao_sk_) / Grantex Token / JWT", color: "bg-orange-100 border-orange-300 text-orange-800" },
-  { label: "Agent Runtime", desc: "LangGraph executor + Gemini LLM", color: "bg-red-100 border-red-300 text-red-800" },
-  { label: "HITL Gateway", desc: "Human approval via Slack / Email / Dashboard", color: "bg-yellow-100 border-yellow-300 text-yellow-800" },
-  { label: "Connectors", desc: "Native connectors + Composio (Amazon, Jira, SAP...)", color: "bg-indigo-100 border-indigo-300 text-indigo-800" },
+  { label: "Agent Runtime", desc: "LangGraph + OACP cache evaluator; allowed_to_execute=false", color: "bg-red-100 border-red-300 text-red-800" },
+  { label: "HITL Gateway", desc: "Prepared handoff review, not execution", color: "bg-yellow-100 border-yellow-300 text-yellow-800" },
+  { label: "Connectors", desc: "Grantex-only commerce tools + native connectors", color: "bg-indigo-100 border-indigo-300 text-indigo-800" },
 ];
 
 export default function IntegrationWorkflow() {
@@ -118,8 +118,8 @@ export default function IntegrationWorkflow() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Integration Workflow — How ChatGPT Launches an AgenticOrg Shopping Agent</title>
-        <meta name="description" content="Step-by-step workflow: how a third-party app like ChatGPT launches a shopping agent on AgenticOrg via MCP, with HITL approval and real order placement." />
+        <title>Integration Workflow — OACP-Grounded Commerce Preview via MCP</title>
+        <meta name="description" content="Step-by-step workflow: how a third-party app like ChatGPT launches an AgenticOrg commerce preview via MCP using OACP artifacts, source checks, prepared handoff review, and fail-closed commerce guardrails." />
       </Helmet>
 
       {/* Nav */}
@@ -144,14 +144,14 @@ export default function IntegrationWorkflow() {
             <span className="text-slate-300 text-sm">End-to-End Integration Example</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-extrabold text-white leading-tight">
-            How ChatGPT Launches a{" "}
+            How ChatGPT Launches an{" "}
             <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 bg-clip-text text-transparent">
-              Shopping Agent
+              OACP-Grounded Commerce Preview
             </span>{" "}
             on AgenticOrg
           </h1>
           <p className="mt-6 text-lg text-slate-400 max-w-2xl mx-auto">
-            A user asks ChatGPT to buy earbuds. ChatGPT discovers AgenticOrg via MCP, launches a Shopping Agent, gets HITL approval, and places the order — all in one conversation.
+            A user asks ChatGPT to compare earbuds. ChatGPT discovers AgenticOrg via MCP, the Commerce Sales Agent evaluates cached OACP artifacts, and the flow returns a prepared handoff or refusal with allowed_to_execute=false, without executing checkout or payment.
           </p>
         </div>
       </section>
@@ -187,7 +187,7 @@ export default function IntegrationWorkflow() {
       <section className="py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-slate-900 text-center mb-4">Step-by-Step Workflow</h2>
-          <p className="text-slate-500 text-center mb-12 max-w-xl mx-auto">Click any step to see details. This is the exact flow that happens when a third-party app runs an agent on your behalf.</p>
+          <p className="text-slate-500 text-center mb-12 max-w-xl mx-auto">Click any step to see details. The flow is intentionally non-executing until separate Grantex and production approvals exist.</p>
 
           <div className="relative">
             {/* Timeline line */}
@@ -231,18 +231,18 @@ export default function IntegrationWorkflow() {
           <h2 className="text-2xl font-bold text-white text-center mb-8">Sequence Diagram</h2>
           <div className="bg-slate-800 rounded-2xl border border-slate-700 p-8 overflow-x-auto">
             <pre className="text-sm text-slate-300 font-mono leading-relaxed whitespace-pre">{`
-  User          ChatGPT         MCP Server       AgenticOrg API      Shopping Agent      HITL
+  User          ChatGPT         MCP Server       AgenticOrg API      Commerce Agent      Review
    |               |               |                  |                    |               |
-   |  "Buy earbuds |               |                  |                    |               |
-   |   under $50"  |               |                  |                    |               |
+   |  "Compare     |               |                  |                    |               |
+   |   earbuds"    |               |                  |                    |               |
    |──────────────>|               |                  |                    |               |
    |               |  list_tools() |                  |                    |               |
    |               |──────────────>|                  |                    |               |
-   |               |  [10 tools]   |                  |                    |               |
+   |               |  [safe tools] |                  |                    |               |
    |               |<──────────────|                  |                    |               |
    |               |               |                  |                    |               |
    |               |  run_agent(   |                  |                    |               |
-   |               |   shopping,   |                  |                    |               |
+   |               |   commerce,   |                  |                    |               |
    |               |   earbuds)    |                  |                    |               |
    |               |──────────────>|                  |                    |               |
    |               |               | POST /a2a/tasks  |                    |               |
@@ -253,31 +253,31 @@ export default function IntegrationWorkflow() {
    |               |               |                  |                    |               |
    |               |               |                  | invoke LangGraph   |               |
    |               |               |                  |───────────────────>|               |
-   |               |               |                  |                    |  search()     |
-   |               |               |                  |                    |  rank()       |
-   |               |               |                  |                    |  select()     |
+   |               |               |                  |                    |  read cache   |
+   |               |               |                  |                    |  check TTL    |
+   |               |               |                  |                    |  verify rev   |
    |               |               |                  |                    |               |
-   |               |               |                  |                    | conf=0.92     |
-   |               |               |                  |                    | order > $20   |
+   |               |               |                  |                    | source refs   |
+   |               |               |                  |                    | handoff?      |
    |               |               |                  |                    |──────────────>|
    |               |               |                  |                    |               |
-   |  Slack: "Approve Sony WF-C500 ($39.99)?"         |                    |               |
+   |  Review: "Prepared handoff only; no execution"   |                    |               |
    |<──────────────────────────────────────────────────────────────────────────────────────|
    |               |               |                  |                    |               |
-   |  [Approve]    |               |                  |                    |               |
+   |  [Review]     |               |                  |                    |               |
    |──────────────────────────────────────────────────────────────────────────────────────>|
    |               |               |                  |                    |               |
-   |               |               |                  |                    | place_order() |
+   |               |               |                  |                    | no execute()  |
    |               |               |                  |                    |<──────────────|
    |               |               |                  |                    |               |
-   |               |               |                  |  result: ordered   |               |
+   |               |               |                  |  safe result       |               |
    |               |               |                  |<───────────────────|               |
    |               |               | 200 OK           |                    |               |
    |               |               |<─────────────────|                    |               |
    |               |  result JSON  |                  |                    |               |
    |               |<──────────────|                  |                    |               |
-   |  "Ordered Sony WF-C500       |                  |                    |               |
-   |   $39.99 — arrives in 2d"    |                  |                    |               |
+   |  "Grounded options returned;                  |                    |               |
+   |   checkout/payment blocked"  |                  |                    |               |
    |<──────────────|               |                  |                    |               |
 `}</pre>
           </div>
@@ -290,10 +290,10 @@ export default function IntegrationWorkflow() {
           <h2 className="text-2xl font-bold text-slate-900 text-center mb-8">Key Takeaways</h2>
           <div className="grid md:grid-cols-2 gap-6">
             {[
-              { title: "Zero Custom Code Needed", desc: "ChatGPT discovers and uses AgenticOrg agents via MCP — no custom integration code required. Just configure the MCP server.", icon: "code" },
-              { title: "HITL on Every Critical Action", desc: "The user always approves high-stakes actions (orders, payments, data changes). Configurable thresholds per agent.", icon: "shield" },
-              { title: "Works with Any MCP Client", desc: "ChatGPT, Claude Desktop, Cursor, Windsurf, or any custom MCP client. The same server, same tools, same agents.", icon: "plug" },
-              { title: "Delegated Auth via API Keys", desc: "Third-party apps use scoped API keys. No password sharing, no OAuth dance. Generate keys from the dashboard, revoke anytime.", icon: "key" },
+              { title: "OACP-Grounded, Not Provider-Direct", desc: "Commerce answers come from valid cached artifacts or Grantex authority paths. The agent does not call direct provider, merchant-private, checkout, or payment rails.", icon: "code" },
+              { title: "HITL on Prepared Handoffs", desc: "Human review can acknowledge source/freshness limits, but it does not override revocation, stale evidence, or missing approval gates.", icon: "shield" },
+              { title: "Works with Any MCP Client", desc: "ChatGPT, Claude Desktop, Cursor, Windsurf, or any custom MCP client can use the same governed tool surface and refusal semantics.", icon: "plug" },
+              { title: "Fail-Closed Commerce Boundary", desc: "Live checkout, live payments, public discovery, provider rails, and merchant-private APIs stay blocked until separately approved and verified.", icon: "key" },
             ].map((item) => (
               <div key={item.title} className="border border-slate-200 rounded-xl p-6 hover:shadow-md transition-shadow">
                 <h3 className="font-bold text-slate-900 mb-2">{item.title}</h3>
@@ -307,8 +307,8 @@ export default function IntegrationWorkflow() {
       {/* CTA */}
       <section className="py-16 bg-slate-900">
         <div className="max-w-3xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Ready to Build Your Integration?</h2>
-          <p className="text-slate-400 mb-8">Get an API key and connect AgenticOrg to ChatGPT, Claude, or your own app in under 5 minutes.</p>
+          <h2 className="text-2xl font-bold text-white mb-4">Ready to Build a Governed Integration?</h2>
+          <p className="text-slate-400 mb-8">Get an API key and connect AgenticOrg to ChatGPT, Claude, or your own app with scoped tools, source checks, and fail-closed handoffs.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               to="/signup"

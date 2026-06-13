@@ -125,15 +125,16 @@ Regular transaction:
 
 | Area | Current evidence | Current state |
 | --- | --- | --- |
-| Grantex/OACP connector | `connectors/commerce/grantex_commerce.py` exposes `merchant_get_profile`, `catalog_search`, `catalog_get_item`, `inventory_check`, `cart_create`, `consent_request`, `consent_exchange`, `buyer_discovery_preview`, `payment_create_intent`, `checkout_create`, and `payment_get_status`. | Existing aliases remain useful, but OACP artifact cache and approved provider/connector verifiers must be added so AgenticOrg is not merely a thin Grantex client. |
+| Grantex/OACP connector | `connectors/commerce/grantex_commerce.py` exposes `merchant_get_profile`, `catalog_search`, `catalog_get_item`, `inventory_check`, `cart_create`, `consent_request`, `consent_exchange`, `buyer_discovery_preview`, `payment_create_intent`, `checkout_create`, and `payment_get_status`. | Existing aliases remain useful, but approved provider/connector verifiers and UX integration still need separate approved slices. |
 | Payment guardrails | `core/commerce/sales_guardrails.py` blocks missing consent/passport, amount-cap breach, disabled merchant/agent, policy denial, and non-mock provider choices. | Good local fail-closed behavior; must expand as Grantex adds order/refund/fulfillment. |
 | Demo and evals | `demos/commerce_sales_agent_demo.py`, golden commerce evals, no-provider-call regression tests, real-staging and hosted smoke tests. | Strong demo/smoke foundation. |
 | Public discovery gate | Commerce metadata is fail-closed behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`. | Safe posture. |
 | Docs-only CI guard | `.github/workflows/deploy.yml` classifies docs-only changes and skips cloud auth/build/push/deploy-adjacent jobs. | Correct for future planning docs merges. |
 | Merchant education docs | C5O-C5X docs cover self-onboarding, architecture, API/data model proposals, UI wireframes, validator, review workflow, rollout automation, demo merchant, and launch rehearsal. | Good planning foundation; runtime implementation still pending. |
 | OACP consumer foundation | C6W3-C6W9 helper/tests/docs consume artifact schemas, adapter previews, commitment boundaries, prepared envelopes, response reconciliations, eligibility packets, and dry-run verifier results. | Internal only; no execution, public protocol publication, certification, or production readiness. |
+| OACP cache foundation | C6X1-C6X5 add cache verifier/runtime planning, fail-closed cache evaluation, repository boundary, durable SQL-backed cache records, and local maintenance planning. | Internal only; planner/cache do not call Grantex live, providers, merchant private APIs, checkout, payments, schedulers, or queues. |
 
-### 2.1 Current OACP Status Through C6W9
+### 2.1 Current OACP Status Through C6X5
 
 AgenticOrg currently has local consumer behavior for:
 
@@ -144,13 +145,19 @@ AgenticOrg currently has local consumer behavior for:
 - prepared envelope consumption;
 - response evidence reconciliation;
 - eligibility packet handling;
-- execution-controller dry-run verifier consumption.
+- execution-controller dry-run verifier consumption;
+- fail-closed OACP cache evaluation;
+- repository port plus in-memory adapter;
+- durable cache records scoped by buyer agent, seller agent, tenant, and
+  merchant;
+- local maintenance planning over durable records.
 
 Still missing:
 
-- persistent cache scoped by buyer agent, seller agent, tenant, and merchant;
 - seller-agent onboarding UI/runtime for OACP;
 - real Shopify/WooCommerce/ERP connector sync initiation;
+- cache refresh/eviction scheduler, durable maintenance log, and refresh intent
+  queue;
 - provider-owned mandate capability verifier runtime;
 - channel bridges for ChatGPT-style, Claude/MCP-style, Gemini-style,
   Perplexity/search-style, web, and messaging surfaces;
@@ -321,7 +328,7 @@ compliance unless Grantex implementation and conformance evidence exist.
 | --- | --- | --- | --- |
 | Buyer-agent creation and launch | Real buyers should start from familiar chat interfaces without developer setup. | Channel adapter layer for ChatGPT-style, Claude/MCP-style, Gemini-style, Perplexity/search-style, WhatsApp, Telegram, web/mobile, and future agent surfaces. | Platform-specific app/bot/API approval plus Grantex capability approval. |
 | Seller Commerce Agent onboarding | Merchants should self-serve inside AgenticOrg. | Seller agent creates onboarding packet, connector plan, source/freshness evidence, and Grantex authority request. | Grantex authority APIs and product approval. |
-| Artifact cache persistence | Non-binding interactions should continue without Grantex in every turn. | Cache OACP artifacts per buyer agent, seller agent, tenant, and merchant with TTL, revocation snapshot, risk tier, and refresh/refusal UX. | Grantex artifact issuance/verification contract. |
+| Artifact cache productization | Non-binding interactions should continue without Grantex in every turn and operators need safe cache upkeep. | C6X4/C6X5 provide durable cache records and maintenance planning. Still needed: refresh/eviction runner, audit trail, operator UX, and refresh/refusal copy. | Grantex artifact issuance/verification contract plus separate AgenticOrg runner/UX approval. |
 | Buyer-facing commerce UX | Buyers need a safe, understandable flow. | Product comparison, grounded cart draft, consent handoff, checkout status, refusal copy. | Grantex catalog/consent/payment APIs. |
 | Merchant-facing demo UX | Merchants need to understand how publishing works. | Demo Home Goods Store walkthrough, launch rehearsal, status labels, blocked-path examples. | Grantex demo packet and self-serve docs. |
 | Order and fulfillment reads | Buyers ask "where is my order?" | Add OACP status artifact consumption, connector handoff, and buyer-safe UI copy after order/fulfillment sources exist. | Merchant OMS/logistics evidence and Grantex artifact policy. |
@@ -438,12 +445,13 @@ Detailed page and blog plan lives in
 | `docs/commerce-agent-overview.md` | Keep architecture, merchant journey, standards fit, and gap summary current. |
 | `docs/commerce-agent-end-to-end-agentic-commerce-flow.md` | Keep buyer one-time setup, seller one-time setup, regular transaction, exception paths, and source-of-truth rules current. |
 | `docs/commerce-agent-developer-guide.md` | Keep safe extension rules, direct-provider bans, and future alias requirements current. |
+| C6X reports | Keep `docs/reports/commerce-agent-c6x1-oacp-cache-verifier-runtime-planning.md` through `docs/reports/commerce-agent-c6x5-oacp-cache-maintenance.md` current when cache storage, evaluation, maintenance, or non-goals change. |
 | Channel adapter docs | Maintain per-channel setup/runbooks for ChatGPT, Claude, Gemini, WhatsApp, Telegram, web/mobile, and future agent surfaces. |
 | C5 planning reports | Continue using C5-series docs for implementation slices and evidence packets. |
 | Demo docs | Keep Demo Home Goods Store explicitly synthetic/demo-only. |
 | Evals and regressions | Add tests whenever new commerce aliases or refusal cases are added. |
 | `.github/workflows/deploy.yml` | Preserve docs-only guard so planning merges skip cloud build/push/deploy-adjacent jobs. |
-| Product landing page | Future copy must be reviewed before runtime/UI change and must not imply production readiness. |
+| Product landing page | Public copy must mention OACP cache/cache maintenance only as fail-closed internal foundation and must not imply production commerce readiness. |
 
 ## 12. Stop Conditions
 
