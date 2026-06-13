@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
@@ -181,6 +181,13 @@ OacpCacheMaintenanceOutcome = Literal[
     "source_refresh_needed",
     "human_review_required",
     "blocked_unsafe",
+]
+OacpCacheMaintenanceReportKind = Literal[
+    "cache_maintenance_dry_run_report",
+    "operator_review_packet",
+    "blocked_cache_action_report",
+    "stale_or_revoked_artifact_summary",
+    "source_refresh_request_preview",
 ]
 
 OACP_ARTIFACT_SIGNATURE_PROFILE: dict[str, Any] = {
@@ -4937,6 +4944,349 @@ def plan_oacp_artifact_cache_maintenance(
         "seller_safe_message": (
             "C6X5 does not refresh, evict, schedule, call Grantex, or call merchant or provider systems."
         ),
+    }
+
+
+_C6X6_REPORT_KINDS: frozenset[str] = frozenset(
+    {
+        "cache_maintenance_dry_run_report",
+        "operator_review_packet",
+        "blocked_cache_action_report",
+        "stale_or_revoked_artifact_summary",
+        "source_refresh_request_preview",
+    }
+)
+_C6X6_KNOWN_OUTCOMES: frozenset[str] = frozenset(
+    {
+        "keep_usable",
+        "refresh_recommended",
+        "refresh_required_before_commitment",
+        "evict_expired",
+        "purge_revoked",
+        "quarantine_ambiguous_revocation",
+        "quarantine_scope_mismatch",
+        "quarantine_private_or_raw_ref",
+        "source_refresh_needed",
+        "human_review_required",
+        "blocked_unsafe",
+    }
+)
+_C6X6_SAFE_FALLBACK_GENERATED_AT = "1970-01-01T00:00:00.000Z"
+
+
+def _c6x6_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _c6x6_string_list(value: Any) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _c6x6_report_id(payload: Mapping[str, Any]) -> str:
+    digest = hashlib.sha256(canonicalize_oacp_payload(dict(payload)).encode("utf-8")).hexdigest()
+    return f"oacp_c6x6_cache_report_{digest[:20]}"
+
+
+def _c6x6_count_by(actions: Sequence[Mapping[str, Any]], field_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for action in actions:
+        value = _c6x6_string(action.get(field_name))
+        if value is not None:
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _c6x6_scope_summary(actions: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int]]:
+    scope_fields = {
+        "buyer_agent": "buyer_agent_id",
+        "seller_agent": "seller_agent_id",
+        "tenant": "tenant_id",
+        "merchant": "merchant_id",
+    }
+    return {scope_name: _c6x6_count_by(actions, field_name) for scope_name, field_name in scope_fields.items()}
+
+
+def _c6x6_safe_reason_codes(value: Any) -> list[str]:
+    codes = _c6x6_string_list(value)
+    return [code for code in codes if all(char.isalnum() or char == "_" for char in code)]
+
+
+def _c6x6_plan_flags_safe(plan: Mapping[str, Any]) -> bool:
+    return (
+        plan.get("allowed_to_execute") is False
+        and plan.get("no_execution") is True
+        and plan.get("maintenance_plan_only") is True
+        and plan.get("non_authoritative_for_transaction") is True
+        and plan.get("no_checkout_payment_enablement") is True
+        and plan.get("no_live_provider_enablement") is True
+        and plan.get("no_public_discovery_enablement") is True
+    )
+
+
+def _c6x6_action_flags_safe(action: Mapping[str, Any]) -> bool:
+    return (
+        action.get("allowed_to_execute") is False
+        and action.get("maintenance_plan_only") is True
+        and action.get("non_authoritative_for_transaction") is True
+        and action.get("no_checkout_payment_enablement") is True
+        and action.get("no_live_provider_enablement") is True
+        and action.get("no_public_discovery_enablement") is True
+    )
+
+
+def _c6x6_refs_from_plan(plan: Mapping[str, Any], actions: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    refs: list[str] = []
+    refs.extend(_c6x6_string_list(plan.get("source_refs")))
+    refs.extend(_c6x6_string_list(plan.get("evidence_refs")))
+    for action in actions:
+        refs.extend(_c6x6_string_list(action.get("source_refs")))
+        refs.extend(_c6x6_string_list(action.get("evidence_refs")))
+        verifier_result_ref = _c6x6_string(action.get("verifier_result_ref"))
+        if verifier_result_ref is not None:
+            refs.append(verifier_result_ref)
+    return tuple(refs)
+
+
+def _c6x6_plan_refs_safe(plan: Mapping[str, Any], actions: Sequence[Mapping[str, Any]]) -> bool:
+    refs = _c6x6_refs_from_plan(plan, actions)
+    return not refs or _c6x2_refs_safe(refs)
+
+
+def _c6x6_actions_safe(actions: Sequence[Mapping[str, Any]]) -> bool:
+    for action in actions:
+        outcome = _c6x6_string(action.get("maintenance_outcome"))
+        if outcome not in _C6X6_KNOWN_OUTCOMES:
+            return False
+        if not _c6x6_string(action.get("cache_record_id")):
+            return False
+        if not _c6x6_action_flags_safe(action):
+            return False
+        if len(_c6x6_safe_reason_codes(action.get("reason_codes"))) != len(
+            _c6x6_string_list(action.get("reason_codes"))
+        ):
+            return False
+    return True
+
+
+def _c6x6_blocked_report(
+    *,
+    report_kind: str,
+    reason_code: str,
+    message: str,
+    maintenance_plan: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    generated_at = (
+        _c6x6_string(maintenance_plan.get("generated_at")) if maintenance_plan is not None else None
+    ) or _C6X6_SAFE_FALLBACK_GENERATED_AT
+    source_plan_id = _c6x6_string(maintenance_plan.get("plan_id")) if maintenance_plan is not None else None
+    payload = {
+        "report_kind": report_kind,
+        "reason_code": reason_code,
+        "source_plan_id": source_plan_id,
+        "generated_at": generated_at,
+    }
+    return {
+        "report_id": _c6x6_report_id(payload),
+        "report_kind": "blocked_cache_action_report",
+        "requested_report_kind": report_kind,
+        "source_plan_id": source_plan_id,
+        "generated_at": generated_at,
+        "status": "blocked",
+        "block_reason": reason_code,
+        "buyer_safe_message": message,
+        "operator_safe_message": message,
+        "scope_summary": {"buyer_agent": {}, "seller_agent": {}, "tenant": {}, "merchant": {}},
+        "artifact_family_counts": {},
+        "records_seen": 0,
+        "records_kept": [],
+        "records_to_refresh": [],
+        "records_to_evict": [],
+        "records_to_quarantine": [],
+        "records_requiring_human_review": [],
+        "per_record_reason_codes": {},
+        "source_refs": [],
+        "evidence_refs": [],
+        "freshness_summary": {},
+        "ttl_summary": {"records_with_ttl": 0, "minimum_remaining_ttl_seconds": None},
+        "revocation_snapshot_summary": {},
+        "risk_tier_summary": {},
+        "unsupported_capability_summary": {},
+        "blocked_capability_summary": {reason_code: 1},
+        "next_step_labels": ["operator_review_required_no_execution"],
+        "source_refresh_request_preview": {
+            "preview_only": True,
+            "next_system_step_label": "operator_review_required_no_api_call",
+            "records": [],
+        },
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "dry_run_report_only": True,
+        "operator_review_only": True,
+        "maintenance_report_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+    }
+
+
+def build_oacp_cache_maintenance_dry_run_report(
+    *,
+    maintenance_plan: Mapping[str, Any] | None,
+    report_kind: OacpCacheMaintenanceReportKind = "cache_maintenance_dry_run_report",
+) -> dict[str, Any]:
+    if report_kind not in _C6X6_REPORT_KINDS:
+        return _c6x6_blocked_report(
+            report_kind=str(report_kind),
+            reason_code="unsupported_report_kind",
+            message="C6X6 only prepares known internal maintenance dry-run reports.",
+            maintenance_plan=maintenance_plan,
+        )
+    if maintenance_plan is None:
+        return _c6x6_blocked_report(
+            report_kind=report_kind,
+            reason_code="maintenance_plan_missing",
+            message="C6X6 requires a C6X5 maintenance plan before preparing an operator report.",
+        )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(maintenance_plan)
+    except ValueError:
+        return _c6x6_blocked_report(
+            report_kind=report_kind,
+            reason_code="private_or_enabling_plan_field",
+            message="C6X6 refuses maintenance plans with private, raw, or enabling fields.",
+            maintenance_plan=maintenance_plan,
+        )
+
+    source_plan_id = _c6x6_string(maintenance_plan.get("plan_id"))
+    generated_at = _c6x6_string(maintenance_plan.get("generated_at"))
+    raw_actions = maintenance_plan.get("record_actions")
+    if source_plan_id is None or generated_at is None or not isinstance(raw_actions, list):
+        return _c6x6_blocked_report(
+            report_kind=report_kind,
+            reason_code="maintenance_plan_malformed",
+            message="C6X6 requires plan id, generated time, and record actions.",
+            maintenance_plan=maintenance_plan,
+        )
+    actions: list[Mapping[str, Any]] = []
+    for action in raw_actions:
+        if not isinstance(action, Mapping):
+            return _c6x6_blocked_report(
+                report_kind=report_kind,
+                reason_code="maintenance_plan_malformed",
+                message="C6X6 requires each record action to be a structured map.",
+                maintenance_plan=maintenance_plan,
+            )
+        actions.append(action)
+    if not _c6x6_plan_flags_safe(maintenance_plan):
+        return _c6x6_blocked_report(
+            report_kind=report_kind,
+            reason_code="maintenance_plan_executable_or_enabling",
+            message="C6X6 refuses executable or enabling maintenance plans.",
+            maintenance_plan=maintenance_plan,
+        )
+    if not _c6x6_actions_safe(actions) or not _c6x6_plan_refs_safe(maintenance_plan, actions):
+        return _c6x6_blocked_report(
+            report_kind=report_kind,
+            reason_code="maintenance_plan_private_or_unsafe",
+            message="C6X6 refuses unsafe maintenance actions or private/raw refs.",
+            maintenance_plan=maintenance_plan,
+        )
+
+    records_to_refresh = _c6x6_string_list(maintenance_plan.get("records_to_refresh"))
+    records_to_evict = _c6x6_string_list(maintenance_plan.get("records_to_evict"))
+    records_to_quarantine = _c6x6_string_list(maintenance_plan.get("records_to_quarantine"))
+    records_requiring_human_review = _c6x6_string_list(maintenance_plan.get("records_requiring_human_review"))
+    next_step_labels = ["review_report_no_execution"]
+    if records_to_refresh:
+        next_step_labels.append("prepare_source_refresh_request_preview")
+    if records_to_evict:
+        next_step_labels.append("operator_review_evict_or_purge_label")
+    if records_to_quarantine:
+        next_step_labels.append("operator_review_quarantine_label")
+    if records_requiring_human_review:
+        next_step_labels.append("human_review_required_label")
+    if len(next_step_labels) == 1:
+        next_step_labels.append("no_action_for_valid_cache_records")
+
+    ttl_values = [
+        action["remaining_ttl_seconds"]
+        for action in actions
+        if type(action.get("remaining_ttl_seconds")) is int
+    ]
+    per_record_reason_codes = {
+        str(action["cache_record_id"]): _c6x6_safe_reason_codes(action.get("reason_codes")) for action in actions
+    }
+    source_refs = sorted(set(_c6x6_string_list(maintenance_plan.get("source_refs"))))
+    evidence_refs = sorted(set(_c6x6_string_list(maintenance_plan.get("evidence_refs"))))
+    unsupported_capabilities = [
+        capability for action in actions for capability in _c6x6_string_list(action.get("unsupported_capabilities"))
+    ]
+    blocked_capabilities = [
+        capability for action in actions for capability in _c6x6_string_list(action.get("blocked_capabilities"))
+    ]
+    report_payload = {
+        "report_kind": report_kind,
+        "source_plan_id": source_plan_id,
+        "generated_at": generated_at,
+        "records": [(action["cache_record_id"], action["maintenance_outcome"]) for action in actions],
+    }
+    return {
+        "report_id": _c6x6_report_id(report_payload),
+        "report_kind": report_kind,
+        "source_plan_id": source_plan_id,
+        "generated_at": generated_at,
+        "status": "prepared_for_operator_review",
+        "scope_summary": _c6x6_scope_summary(actions),
+        "artifact_family_counts": _c6x6_count_by(actions, "artifact_type"),
+        "records_seen": maintenance_plan.get("records_seen", len(actions)),
+        "records_kept": _c6x6_string_list(maintenance_plan.get("records_kept")),
+        "records_to_refresh": records_to_refresh,
+        "records_to_evict": records_to_evict,
+        "records_to_quarantine": records_to_quarantine,
+        "records_requiring_human_review": records_requiring_human_review,
+        "per_record_reason_codes": per_record_reason_codes,
+        "source_refs": source_refs,
+        "evidence_refs": evidence_refs,
+        "freshness_summary": _c6x6_count_by(actions, "freshness_status"),
+        "ttl_summary": {
+            "records_with_ttl": len(ttl_values),
+            "minimum_remaining_ttl_seconds": min(ttl_values) if ttl_values else None,
+        },
+        "revocation_snapshot_summary": _c6x6_count_by(actions, "revocation_snapshot_status"),
+        "risk_tier_summary": _c6x6_count_by(actions, "risk_tier"),
+        "unsupported_capability_summary": dict(
+            sorted((item, unsupported_capabilities.count(item)) for item in set(unsupported_capabilities))
+        ),
+        "blocked_capability_summary": dict(
+            sorted((item, blocked_capabilities.count(item)) for item in set(blocked_capabilities))
+        ),
+        "next_step_labels": next_step_labels,
+        "source_refresh_request_preview": {
+            "preview_only": True,
+            "next_system_step_label": "source_refresh_request_label_only_no_api_call",
+            "records": records_to_refresh,
+            "source_refs": source_refs,
+            "evidence_refs": evidence_refs,
+        },
+        "buyer_safe_message": "C6X6 prepared a cache maintenance dry-run report only; no cache action was executed.",
+        "seller_safe_message": (
+            "C6X6 produced label-only review output and did not call source, provider, or merchant systems."
+        ),
+        "operator_safe_message": (
+            "Review the report labels and redacted refs before any separately approved maintenance action."
+        ),
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "dry_run_report_only": True,
+        "operator_review_only": True,
+        "maintenance_report_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
     }
 
 
