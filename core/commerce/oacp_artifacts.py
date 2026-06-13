@@ -966,6 +966,17 @@ class OacpArtifactCacheRepositoryQuery:
     authority: str | None = None
 
 
+@dataclass(frozen=True)
+class OacpOperatorDecisionRepositoryQuery:
+    tenant_id: str | None = None
+    merchant_id: str | None = None
+    seller_agent_id: str | None = None
+    buyer_agent_id: str | None = None
+    decision_kind: OacpCacheOperatorDecisionKind | None = None
+    review_packet_id: str | None = None
+    maintenance_plan_id: str | None = None
+
+
 class OacpArtifactCacheRepositoryPort(Protocol):
     def upsert(self, record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
         """Store or replace a local cache record without external calls."""
@@ -989,6 +1000,24 @@ class OacpArtifactCacheRepositoryPort(Protocol):
         expected_scope: dict[str, str | None] | None = None,
     ) -> dict[str, Any]:
         """Evaluate one stored record using the C6X2 fail-closed cache policy."""
+        ...
+
+
+class OacpOperatorDecisionRepositoryPort(Protocol):
+    def upsert_decision(self, decision_record: Mapping[str, Any]) -> dict[str, Any]:
+        """Store or replace one audit-safe operator decision record without external calls."""
+        ...
+
+    def get_decision(self, decision_id: str) -> dict[str, Any] | None:
+        """Read one operator decision record by deterministic decision id."""
+        ...
+
+    def list_decisions_for_scope(self, query: OacpOperatorDecisionRepositoryQuery) -> tuple[dict[str, Any], ...]:
+        """List local operator decision records for a tenant, merchant, seller, or buyer scope."""
+        ...
+
+    def evaluate_decision_for_future_action(self, decision_id: str) -> dict[str, Any]:
+        """Evaluate a decision record for a future action without approving execution."""
         ...
 
 
@@ -5603,6 +5632,372 @@ def build_oacp_cache_operator_decision_record(
         "raw_payloads_included": False,
         "grantex_runtime_required": False,
     }
+
+
+def _c6x8_decision_repository_refusal(
+    *,
+    status: str,
+    refusal_code: str,
+    message: str,
+    decision_record: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "stored": False,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "decision_id": None if decision_record is None else _c6x7_string(decision_record.get("decision_record_id")),
+        "review_packet_id": None if decision_record is None else _c6x7_string(decision_record.get("review_packet_id")),
+        "maintenance_plan_id": (
+            None if decision_record is None else _c6x7_string(decision_record.get("maintenance_plan_id"))
+        ),
+        "durable_repository": True,
+        "future_action_allowed": False,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "operator_decision_only": True,
+        "audit_safe_decision_record": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x8_mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _c6x8_scope_id(scope_summary: Mapping[str, Any], scope_kind: str) -> str | None:
+    values = scope_summary.get(scope_kind)
+    if not isinstance(values, Mapping) or not values:
+        return None
+    for key in sorted(str(candidate) for candidate in values if isinstance(candidate, str) and candidate):
+        return key
+    return None
+
+
+def _c6x8_list(value: Any) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _c6x8_flags_safe(decision_record: Mapping[str, Any]) -> bool:
+    return (
+        decision_record.get("allowed_to_execute") is False
+        and decision_record.get("no_execution") is True
+        and decision_record.get("operator_decision_only") is True
+        and decision_record.get("audit_safe_decision_record") is True
+        and decision_record.get("non_authoritative_for_transaction") is True
+        and decision_record.get("no_checkout_payment_enablement") is True
+        and decision_record.get("no_live_provider_enablement") is True
+        and decision_record.get("no_public_discovery_enablement") is True
+    )
+
+
+def _c6x8_labels_safe(values: tuple[str, ...]) -> bool:
+    if not values:
+        return False
+    unsafe_markers = (
+        "execute",
+        "payment",
+        "provider",
+        "public_discovery",
+        "live_rail",
+        "merchant_private_api",
+        "checkout",
+        "order",
+        "hold",
+        "refund",
+        "return",
+        "shipping",
+        "publish",
+        "certif",
+        "compliance",
+        "conformance",
+        "standard",
+        "readiness",
+    )
+    safe_markers = ("no_", "future_", "request_", "reject_", "defer_", "block_", "label_only", "review")
+    for value in values:
+        normalized = value.strip().lower()
+        if not normalized:
+            return False
+        if any(marker in normalized for marker in unsafe_markers) and not any(
+            marker in normalized for marker in safe_markers
+        ):
+            return False
+    return _c6x2_refs_safe(values)
+
+
+def _c6x8_decision_safe_for_storage(decision_record: Mapping[str, Any]) -> dict[str, Any]:
+    decision_id = _c6x7_string(decision_record.get("decision_record_id"))
+    review_packet_id = _c6x7_string(decision_record.get("review_packet_id"))
+    maintenance_plan_id = _c6x7_string(decision_record.get("maintenance_plan_id"))
+    generated_at = _c6x7_string(decision_record.get("generated_at"))
+    decided_at = _c6x7_string(decision_record.get("decided_at"))
+    decision_kind = _c6x7_string(decision_record.get("decision_kind"))
+    reviewer_ref = _c6x7_string(decision_record.get("reviewer_identity_ref"))
+    scope_summary = _c6x8_mapping(decision_record.get("scope_summary"))
+    tenant_id = _c6x8_scope_id(scope_summary, "tenant")
+    if not all((decision_id, review_packet_id, maintenance_plan_id, generated_at, decided_at, decision_kind)):
+        return _c6x8_decision_repository_refusal(
+            status="blocked",
+            refusal_code="decision_identity_missing",
+            message="C6X8 durable decisions require decision, packet, plan, timestamp, and kind identifiers.",
+            decision_record=decision_record,
+        )
+    if decision_kind not in _C6X7_DECISION_KINDS:
+        return _c6x8_decision_repository_refusal(
+            status="blocked",
+            refusal_code="decision_kind_unsupported",
+            message="C6X8 stores known C6X7 operator decision kinds only.",
+            decision_record=decision_record,
+        )
+    if not tenant_id:
+        return _c6x8_decision_repository_refusal(
+            status="blocked",
+            refusal_code="tenant_scope_missing",
+            message="C6X8 durable decisions require tenant-scoped audit storage.",
+            decision_record=decision_record,
+        )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(dict(decision_record))
+    except ValueError:
+        return _c6x8_decision_repository_refusal(
+            status="unsafe",
+            refusal_code="private_or_enabling_decision_field",
+            message="C6X8 refuses decision records with private, raw, or enabling fields.",
+            decision_record=decision_record,
+        )
+    if not _c6x8_flags_safe(decision_record):
+        return _c6x8_decision_repository_refusal(
+            status="unsafe",
+            refusal_code="non_enablement_flags_missing",
+            message="C6X8 refuses executable or enabling operator decision records.",
+            decision_record=decision_record,
+        )
+    refs = (*_c6x8_list(decision_record.get("source_refs")), *_c6x8_list(decision_record.get("evidence_refs")))
+    labels = tuple(_c6x8_list(decision_record.get("next_step_labels")))
+    if not refs or not _c6x2_refs_safe(refs):
+        return _c6x8_decision_repository_refusal(
+            status="unsafe",
+            refusal_code="decision_refs_missing_or_private",
+            message="C6X8 stores redacted source and evidence refs only.",
+            decision_record=decision_record,
+        )
+    if not _c6x8_labels_safe(labels):
+        return _c6x8_decision_repository_refusal(
+            status="unsafe",
+            refusal_code="decision_labels_executable_or_private",
+            message="C6X8 stores next-step labels only, not execution targets.",
+            decision_record=decision_record,
+        )
+    if not _c6x7_reviewer_ref_safe(reviewer_ref):
+        return _c6x8_decision_repository_refusal(
+            status="unsafe",
+            refusal_code="reviewer_identity_not_opaque",
+            message="C6X8 stores opaque reviewer references only.",
+            decision_record=decision_record,
+        )
+    parsed_generated_at = _parse_iso(generated_at)
+    parsed_decided_at = _parse_iso(decided_at)
+    if parsed_generated_at is None or parsed_decided_at is None or parsed_generated_at > parsed_decided_at:
+        return _c6x8_decision_repository_refusal(
+            status="stale",
+            refusal_code="decision_timestamps_invalid",
+            message="C6X8 durable decisions require ordered generated and decided timestamps.",
+            decision_record=decision_record,
+        )
+    return {
+        "stored": True,
+        "status": "stored",
+        "decision_id": decision_id,
+        "review_packet_id": review_packet_id,
+        "maintenance_plan_id": maintenance_plan_id,
+        "tenant_id": tenant_id,
+        "decision_kind": decision_kind,
+        "durable_repository": True,
+        "future_action_allowed": False,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "operator_decision_only": True,
+        "audit_safe_decision_record": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x8_apply_decision_to_row(row: Any, decision_record: Mapping[str, Any]) -> None:
+    scope_summary = _c6x8_mapping(decision_record.get("scope_summary"))
+    row.review_packet_id = cast(str, decision_record["review_packet_id"])
+    row.maintenance_plan_id = cast(str, decision_record["maintenance_plan_id"])
+    row.generated_at = _parse_iso(cast(str, decision_record["generated_at"]))
+    row.decided_at = _parse_iso(cast(str, decision_record["decided_at"]))
+    row.decision_kind = cast(str, decision_record["decision_kind"])
+    row.tenant_id = _c6x8_scope_id(scope_summary, "tenant")
+    row.merchant_id = _c6x8_scope_id(scope_summary, "merchant")
+    row.seller_agent_id = _c6x8_scope_id(scope_summary, "seller_agent")
+    row.buyer_agent_id = _c6x8_scope_id(scope_summary, "buyer_agent")
+    row.scope_summary = dict(scope_summary)
+    row.artifact_family_summary = dict(_c6x8_mapping(decision_record.get("artifact_family_counts")))
+    row.artifact_families_affected = _c6x8_list(decision_record.get("artifact_families_affected"))
+    row.redacted_reason_codes = dict(_c6x8_mapping(decision_record.get("redacted_reason_codes")))
+    row.source_refs = _c6x8_list(decision_record.get("source_refs"))
+    row.evidence_refs = _c6x8_list(decision_record.get("evidence_refs"))
+    row.reviewer_ref = cast(str, decision_record["reviewer_identity_ref"])
+    row.next_step_labels = _c6x8_list(decision_record.get("next_step_labels"))
+    row.allowed_to_execute = False
+    row.future_action_allowed = False
+    row.prepared_only = True
+    row.operator_decision_only = True
+    row.audit_safe_decision_record = True
+    row.non_authoritative_for_transaction = True
+    row.no_checkout_payment_enablement = True
+    row.no_live_provider_enablement = True
+    row.no_public_discovery_enablement = True
+
+
+def _c6x8_row_time(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return str(value)
+
+
+def _c6x8_row_to_decision(row: Any) -> dict[str, Any]:
+    return {
+        "decision_record_id": str(row.decision_id),
+        "review_packet_id": str(row.review_packet_id),
+        "maintenance_plan_id": str(row.maintenance_plan_id),
+        "generated_at": _c6x8_row_time(row.generated_at),
+        "decided_at": _c6x8_row_time(row.decided_at),
+        "decision_kind": str(row.decision_kind),
+        "scope_summary": dict(row.scope_summary or {}),
+        "artifact_family_counts": dict(row.artifact_family_summary or {}),
+        "artifact_families_affected": list(row.artifact_families_affected or []),
+        "redacted_reason_codes": dict(row.redacted_reason_codes or {}),
+        "source_refs": list(row.source_refs or []),
+        "evidence_refs": list(row.evidence_refs or []),
+        "reviewer_identity_ref": str(row.reviewer_ref),
+        "next_step_labels": list(row.next_step_labels or []),
+        "allowed_to_execute": bool(row.allowed_to_execute),
+        "future_action_allowed": bool(row.future_action_allowed),
+        "prepared_only": bool(row.prepared_only),
+        "no_execution": True,
+        "operator_decision_only": bool(row.operator_decision_only),
+        "audit_safe_decision_record": bool(row.audit_safe_decision_record),
+        "non_authoritative_for_transaction": bool(row.non_authoritative_for_transaction),
+        "no_checkout_payment_enablement": bool(row.no_checkout_payment_enablement),
+        "no_live_provider_enablement": bool(row.no_live_provider_enablement),
+        "no_public_discovery_enablement": bool(row.no_public_discovery_enablement),
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x8_query_matches(decision_record: Mapping[str, Any], query: OacpOperatorDecisionRepositoryQuery) -> bool:
+    scope_summary = _c6x8_mapping(decision_record.get("scope_summary"))
+    return (
+        (query.tenant_id is None or _c6x8_scope_id(scope_summary, "tenant") == query.tenant_id)
+        and (query.merchant_id is None or _c6x8_scope_id(scope_summary, "merchant") == query.merchant_id)
+        and (query.seller_agent_id is None or _c6x8_scope_id(scope_summary, "seller_agent") == query.seller_agent_id)
+        and (query.buyer_agent_id is None or _c6x8_scope_id(scope_summary, "buyer_agent") == query.buyer_agent_id)
+        and (query.decision_kind is None or decision_record.get("decision_kind") == query.decision_kind)
+        and (query.review_packet_id is None or decision_record.get("review_packet_id") == query.review_packet_id)
+        and (
+            query.maintenance_plan_id is None
+            or decision_record.get("maintenance_plan_id") == query.maintenance_plan_id
+        )
+    )
+
+
+class DurableOacpOperatorDecisionRepository:
+    """Async SQLAlchemy-backed operator decision repository; it performs no maintenance actions."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def upsert_decision(self, decision_record: Mapping[str, Any]) -> dict[str, Any]:
+        from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow
+
+        store_result = _c6x8_decision_safe_for_storage(decision_record)
+        if store_result["stored"] is not True:
+            return store_result
+
+        decision_id = cast(str, store_result["decision_id"])
+        row = await self._session.get(OacpOperatorDecisionRecordRow, decision_id)
+        if row is None:
+            row = OacpOperatorDecisionRecordRow(decision_id=decision_id)
+            self._session.add(row)
+        _c6x8_apply_decision_to_row(row, decision_record)
+        await self._session.flush()
+        return store_result
+
+    async def get_decision(self, decision_id: str) -> dict[str, Any] | None:
+        from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow
+
+        row = await self._session.get(OacpOperatorDecisionRecordRow, decision_id)
+        return None if row is None else _c6x8_row_to_decision(row)
+
+    async def list_decisions_for_scope(
+        self,
+        query: OacpOperatorDecisionRepositoryQuery,
+    ) -> tuple[dict[str, Any], ...]:
+        from sqlalchemy import select
+
+        from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow
+
+        statement = select(OacpOperatorDecisionRecordRow)
+        if query.tenant_id is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.tenant_id == query.tenant_id)
+        if query.merchant_id is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.merchant_id == query.merchant_id)
+        if query.seller_agent_id is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.seller_agent_id == query.seller_agent_id)
+        if query.buyer_agent_id is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.buyer_agent_id == query.buyer_agent_id)
+        if query.decision_kind is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.decision_kind == query.decision_kind)
+        if query.review_packet_id is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.review_packet_id == query.review_packet_id)
+        if query.maintenance_plan_id is not None:
+            statement = statement.where(OacpOperatorDecisionRecordRow.maintenance_plan_id == query.maintenance_plan_id)
+
+        rows = (await self._session.scalars(statement.order_by(OacpOperatorDecisionRecordRow.decision_id))).all()
+        decisions = tuple(_c6x8_row_to_decision(row) for row in rows)
+        return tuple(decision for decision in decisions if _c6x8_query_matches(decision, query))
+
+    async def evaluate_decision_for_future_action(self, decision_id: str) -> dict[str, Any]:
+        decision_record = await self.get_decision(decision_id)
+        if decision_record is None:
+            return _c6x8_decision_repository_refusal(
+                status="blocked",
+                refusal_code="decision_missing",
+                message="C6X8 requires a stored operator decision before future action review.",
+            )
+        store_result = _c6x8_decision_safe_for_storage(decision_record)
+        if store_result["stored"] is not True:
+            return store_result
+        return {
+            "evaluated": True,
+            "status": "future_action_requires_separate_approval",
+            "decision_id": decision_id,
+            "decision_kind": decision_record["decision_kind"],
+            "future_action_allowed": False,
+            "allowed_to_execute": False,
+            "prepared_only": True,
+            "operator_decision_only": True,
+            "audit_safe_decision_record": True,
+            "non_authoritative_for_transaction": True,
+            "no_checkout_payment_enablement": True,
+            "no_live_provider_enablement": True,
+            "no_public_discovery_enablement": True,
+            "grantex_runtime_required": False,
+            "message": "C6X8 stores an audit-safe decision only; it does not execute maintenance.",
+        }
 
 
 class OacpArtifactCache:
