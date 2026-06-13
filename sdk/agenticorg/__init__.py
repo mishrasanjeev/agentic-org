@@ -1,4 +1,4 @@
-"""AgenticOrg Python SDK — run AI agents, create from SOP, manage connectors.
+"""AgenticOrg Python SDK - run agents, generate agents/workflows, use KB and MCP.
 
 Quickstart:
     from agenticorg import AgenticOrg
@@ -6,6 +6,7 @@ Quickstart:
     client = AgenticOrg(api_key="your-key")
     agents = client.agents.list()
     result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
+    workflow = client.workflows.generate("Review vendor renewal risk")
 """
 
 from agenticorg.client import AgenticOrg, AgentRunResult

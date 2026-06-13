@@ -1,7 +1,7 @@
 {
   "name": "agenticorg-sdk",
   "version": "0.2.0",
-  "description": "TypeScript SDK for AgenticOrg — run AI agents, create from SOP, A2A/MCP access",
+  "description": "TypeScript SDK for AgenticOrg - run agents, generate agents/workflows, use KB, A2A, and MCP",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
@@ -24,6 +24,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node test/sdk-contract-smoke.mjs",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {

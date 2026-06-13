@@ -23,7 +23,7 @@ export default function Integrations() {
       <div>
         <h2 className="text-2xl font-bold">External Integrations</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Connect external AI systems to your agents via SDK, CLI, A2A, or MCP
+          Connect SDKs, external agents, MCP clients, connectors, workflows, and knowledge.
         </p>
       </div>
 
@@ -31,97 +31,128 @@ export default function Integrations() {
         <p className="text-muted-foreground">Loading...</p>
       ) : (
         <>
-          {/* SDK Quickstart */}
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-3">
                 <CardTitle>Python SDK</CardTitle>
                 <Badge>pip install agenticorg</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                The fastest way to run agents, create from SOP, and manage connectors programmatically.
-              </p>
-
               <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wide">Install</label>
-                <pre className="bg-muted rounded p-3 text-sm font-mono mt-1">pip install agenticorg</pre>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wide">Run an Agent (3 lines)</label>
+                <label className="text-xs text-muted-foreground uppercase tracking-wide">Launch agents, commerce, KB, and workflows</label>
                 <pre className="bg-muted rounded p-3 text-sm font-mono mt-1 whitespace-pre-wrap" data-testid="sdk-snippet-python">{`from agenticorg import AgenticOrg, AgentRunResult
 
 client = AgenticOrg(api_key="your-key")
+
 result: AgentRunResult = client.agents.run(
     "ap_processor",
     inputs={"invoice_id": "INV-001"},
 )
-print(result.status, result.confidence, result.output)`}</pre>
-              </div>
+print(result.status, result.confidence, result.output)
 
-              <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wide">Create Agent from SOP (5 lines)</label>
-                <pre className="bg-muted rounded p-3 text-sm font-mono mt-1 whitespace-pre-wrap">{`draft = client.sop.parse_text("""
-Step 1: Receive invoice from vendor
-Step 2: Validate GSTIN
-Step 3: 3-way match with PO
-Step 4: If amount > 5L, escalate to CFO
-""", domain_hint="finance")
+commerce: AgentRunResult = client.agents.run(
+    "commerce_sales_agent",
+    action="buyer_discovery_preview",
+    inputs={
+        "merchant_id": "merchant_demo",
+        "query": "Show available laptop stands under Rs 3000",
+    },
+)
 
-agent = client.sop.deploy(draft["config"])
-print(agent["agent_id"])  # deployed as shadow agent`}</pre>
+draft_agent = client.agents.generate(
+    "Create a contract intelligence agent that uses Confluence knowledge, "
+    "Jira issues, and vendor policy documents to review renewal risk.",
+)
+
+matches = client.knowledge.search("vendor renewal policy", top_k=3)
+workflow_draft = client.workflows.generate(
+    "Review vendor renewal risk using KB and Jira, then notify vendor_manager."
+)
+workflow = client.workflows.create(
+    name="Renewal Risk Review",
+    definition=workflow_draft["workflow"],
+    domain="ops",
+)
+run = client.workflows.run(workflow["id"], payload={"vendor_id": "V-100"})`}</pre>
               </div>
             </CardContent>
           </Card>
 
-          {/* CLI */}
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-3">
+                <CardTitle>TypeScript SDK</CardTitle>
+                <Badge variant="secondary">npm i agenticorg-sdk</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap" data-testid="sdk-snippet-typescript">{`import { AgenticOrg } from "agenticorg-sdk";
+
+const client = new AgenticOrg({ apiKey: "your-key" });
+
+const result = await client.agents.run("ap_processor", {
+  inputs: { invoice_id: "INV-001" },
+});
+
+const commerce = await client.agents.run("commerce_sales_agent", {
+  action: "buyer_discovery_preview",
+  inputs: {
+    merchant_id: "merchant_demo",
+    query: "Show available laptop stands under Rs 3000",
+  },
+});
+
+const draftAgent = await client.agents.generate(
+  "Create a contract intelligence agent using Confluence, Jira, and vendor policy KB.",
+);
+
+const kb = await client.knowledge.search("vendor renewal policy", { topK: 3 });
+const workflowDraft = await client.workflows.generate(
+  "Review vendor renewal risk using KB and Jira, then notify vendor_manager.",
+);
+const workflow = await client.workflows.create({
+  name: "Renewal Risk Review",
+  definition: workflowDraft.workflow,
+  domain: "ops",
+});
+const run = await client.workflows.run(workflow.id, {
+  payload: { vendor_id: "V-100" },
+});`}</pre>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center gap-3">
                 <CardTitle>CLI Tool</CardTitle>
                 <Badge variant="secondary">Terminal</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`# Set API key
-export AGENTICORG_API_KEY=your-key
+              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`export AGENTICORG_API_KEY=your-key
 
-# List agents
 agenticorg agents list --domain finance
-
-# Run an agent
 agenticorg agents run ap_processor --input '{"invoice_id": "INV-001"}'
-
-# Parse SOP document
 agenticorg sop parse --file invoice_sop.pdf --domain finance
-
-# View A2A agent card
 agenticorg a2a card
-
-# List MCP tools (for ChatGPT/Claude)
 agenticorg mcp tools`}</pre>
             </CardContent>
           </Card>
 
-          {/* A2A Protocol */}
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-3">
                 <CardTitle>Agent-to-Agent (A2A) Protocol</CardTitle>
                 <Badge>Grantex Auth</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Other AI agents discover and call your agents via A2A. Auth uses Grantex grant tokens.
+                External buyer agents discover launchable AgenticOrg seller agents through A2A.
               </p>
 
-              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`# Discover agents (SDK)
-agents = client.a2a.agents()
-
-# Or via A2A protocol directly
+              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`agents = client.a2a.agents()
 card = client.a2a.agent_card()  # ${agentCard?.skills?.length || 25} skills available`}</pre>
 
               {agentCard && (
@@ -137,25 +168,25 @@ card = client.a2a.agent_card()  # ${agentCard?.skills?.length || 25} skills avai
             </CardContent>
           </Card>
 
-          {/* MCP */}
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-3">
                 <CardTitle>Model Context Protocol (MCP)</CardTitle>
                 <Badge variant="secondary">ChatGPT / Claude</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                ChatGPT, Claude, and MCP-compatible interfaces use your agents as tools.
+                MCP-compatible clients can discover AgenticOrg agents and call them as tools.
               </p>
 
-              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`# List tools (SDK)
-tools = client.mcp.tools()  # ${mcpTools.length} tools
+              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`tools = client.mcp.tools()  # ${mcpTools.length} tools
 
-# Call a tool
-result = client.mcp.call("agenticorg_ap_processor", {
-    "inputs": {"invoice_id": "INV-001"}
+result = client.mcp.call("agenticorg_commerce_sales_agent", {
+    "inputs": {
+        "merchant_id": "merchant_demo",
+        "query": "Show available laptop stands under Rs 3000",
+    }
 })`}</pre>
 
               <div>
@@ -176,24 +207,23 @@ result = client.mcp.call("agenticorg_ap_processor", {
             </CardContent>
           </Card>
 
-          {/* Auth */}
           <Card>
             <CardHeader><CardTitle>Authentication</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="border rounded p-3">
                   <p className="font-medium">API Key</p>
-                  <p className="text-xs text-muted-foreground mt-1">For dashboard users. Get from Settings page.</p>
+                  <p className="text-xs text-muted-foreground mt-1">For dashboard users.</p>
                   <code className="text-xs bg-muted px-1 rounded mt-1 block">AgenticOrg(api_key="...")</code>
                 </div>
                 <div className="border rounded p-3">
                   <p className="font-medium">Grantex Token</p>
-                  <p className="text-xs text-muted-foreground mt-1">For external agents. RS256 JWT with scoped grants.</p>
+                  <p className="text-xs text-muted-foreground mt-1">For scoped external agents.</p>
                   <code className="text-xs bg-muted px-1 rounded mt-1 block">AgenticOrg(grantex_token="...")</code>
                 </div>
                 <div className="border rounded p-3">
                   <p className="font-medium">Environment</p>
-                  <p className="text-xs text-muted-foreground mt-1">Auto-detected from env vars.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Detected by SDKs and MCP server.</p>
                   <code className="text-xs bg-muted px-1 rounded mt-1 block">AGENTICORG_API_KEY=...</code>
                 </div>
               </div>

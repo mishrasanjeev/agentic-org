@@ -164,9 +164,13 @@ export const promptTemplatesApi = {
   delete: (id: string) => api.delete(`/prompt-templates/${id}`),
 };
 export const workflowsApi = {
-  list: () => api.get("/workflows"),
+  templates: (params?: Record<string, string>) => api.get("/workflows/templates", { params }),
+  list: (params?: Record<string, string>) => api.get("/workflows", { params }),
+  get: (id: string) => api.get(`/workflows/${id}`),
+  generate: (description: string, deploy = false) => api.post("/workflows/generate", { description, deploy }),
   create: (data: any) => api.post("/workflows", data),
-  run: (id: string, payload?: any) => api.post(`/workflows/${id}/run`, payload),
+  run: (id: string, payload?: any) => api.post(`/workflows/${id}/run`, { payload: payload || {} }),
+  getRun: (id: string) => api.get(`/workflows/runs/${id}`),
 };
 export const approvalsApi = {
   list: () => api.get("/approvals"),
