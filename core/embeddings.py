@@ -8,9 +8,10 @@ A second loader path —
 :func:`embed_bge_m3` — uses BAAI's official **FlagEmbedding** package
 because fastembed does not ship bge-m3 in any released version.
 FlagEmbedding loads the full PyTorch weights (~2.3 GB) lazily on
-first call. Only the backfill job (PR-A) and PR-B's flipped request
-path import it; request-path callers in PR-A still get the small
-ONNX model.
+first call, so it is not a base production dependency. Install the
+``bge-m3`` extra only for a dedicated backfill/runtime image, or use
+``AGENTICORG_TEI_URL`` so production API workers call the separate TEI
+service instead.
 
 Operators can flip the platform default via
 ``AGENTICORG_EMBEDDING_MODEL``. Known supported choices:
@@ -39,9 +40,9 @@ against ``vector(384)``.
 
 Both loaders are cached for the process lifetime. Set
 ``FASTEMBED_CACHE_DIR`` (fastembed) or ``HF_HOME``
-(FlagEmbedding/Hugging Face) to pin weights to a known directory —
-useful in CI and on Cloud Run revisions to skip the download on
-subsequent boots.
+(FlagEmbedding/Hugging Face, when the ``bge-m3`` extra is installed)
+to pin weights to a known directory — useful in CI and on dedicated
+backfill Cloud Run revisions to skip the download on subsequent boots.
 """
 
 from __future__ import annotations
@@ -191,7 +192,8 @@ def _get_bge_m3_model() -> Any:
         except ImportError as exc:
             raise RuntimeError(
                 "FlagEmbedding is required to load BAAI/bge-m3. "
-                "Install with `pip install FlagEmbedding>=1.2.0`."
+                "Install with `pip install 'agenticorg[bge-m3]'`, or set "
+                "AGENTICORG_TEI_URL to use the dedicated embeddings service."
             ) from exc
 
         cache_dir = os.getenv("HF_HOME") or None

@@ -25,8 +25,11 @@ set -euo pipefail
 
 # Defaults. Override via env or flags.
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-perfect-period-305406}"
-GCP_REGION="${GCP_REGION:-asia-south1}"
-GAR_REGISTRY="${GAR_REGISTRY:-${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg}"
+CLOUD_RUN_REGION="${CLOUD_RUN_REGION:-${GCP_REGION:-asia-southeast1}}"
+GAR_REGION="${GAR_REGION:-asia-south1}"
+GCP_REGION="$CLOUD_RUN_REGION"
+GAR_HOST="${GAR_HOST:-${GAR_REGION}-docker.pkg.dev}"
+GAR_REGISTRY="${GAR_REGISTRY:-${GAR_HOST}/${GCP_PROJECT_ID}/agenticorg}"
 API_SERVICE="${API_SERVICE:-agenticorg-api}"
 UI_SERVICE="${UI_SERVICE:-agenticorg-ui}"
 MIGRATE_JOB="${MIGRATE_JOB:-agenticorg-migrate}"
@@ -66,7 +69,8 @@ Options:
   -h, --help              Show this help.
 
 Environment overrides:
-  GCP_PROJECT_ID  GCP_REGION  GAR_REGISTRY
+  GCP_PROJECT_ID  CLOUD_RUN_REGION  GCP_REGION
+  GAR_REGION      GAR_HOST          GAR_REGISTRY
   API_SERVICE     UI_SERVICE  MIGRATE_JOB
   HEALTH_URL      API_HEALTH_PATH  PROD_BRANCH
 
@@ -583,7 +587,8 @@ SHORT_SHA="${DEPLOY_SHA:0:7}"
 
 echo "--- Deploy plan ------------------------------------------------"
 echo "  project     : $GCP_PROJECT_ID"
-echo "  region      : $GCP_REGION"
+echo "  run region  : $GCP_REGION"
+echo "  gar region  : $GAR_REGION"
 echo "  registry    : $GAR_REGISTRY"
 echo "  api svc     : $API_SERVICE"
 echo "  ui svc      : $UI_SERVICE"
@@ -630,7 +635,7 @@ UI_IMAGE="${GAR_REGISTRY}/agenticorg-ui-cloudrun:${DEPLOY_SHA}"
 
 # 3. Build + push images.
 if [[ $SKIP_BUILD -eq 0 ]]; then
-  run gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+  run gcloud auth configure-docker "$GAR_HOST" --quiet
 
   run docker build \
     -t "$API_IMAGE" \

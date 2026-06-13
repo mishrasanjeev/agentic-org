@@ -170,34 +170,35 @@ class TestREQ07ConnectorSecrets:
 
 
 class TestREQ01ComposioRuntime:
-    """Verify Composio SDK is installable and declared in runtime path."""
+    """Verify Composio is guarded while its SDK has unsafe Pillow pins."""
 
-    def test_composio_core_in_v4_extras(self):
-        """composio-core must be in [project.optional-dependencies].v4."""
+    def test_composio_core_not_in_production_extras(self):
+        """composio-core must stay out of production extras until patched."""
         from pathlib import Path
         content = Path("pyproject.toml").read_text()
-        assert "composio-core" in content, "composio-core must be a declared dep"
+        v4_block = content.split("v4 = [", 1)[1].split("]", 1)[0]
+        assert '"composio-core' not in v4_block
 
     def test_dockerfile_installs_v4_extras(self):
-        """Dockerfile must install the v4 extras so composio-core is in the image."""
+        """Dockerfile must still install production-safe v4 extras."""
         from pathlib import Path
         content = Path("Dockerfile").read_text()
         assert '".[v4]"' in content, "Dockerfile must install .[v4] extras"
 
     def test_dockerfile_runtime_has_libjpeg(self):
-        """Runtime stage must include libjpeg62-turbo for Pillow (composio dep)."""
+        """Runtime stage must include libjpeg62-turbo for patched Pillow."""
         from pathlib import Path
         content = Path("Dockerfile").read_text()
         # libjpeg62-turbo must be in the runtime apt-get (after the second FROM)
         runtime = content.split("FROM python")[-1]
         assert "libjpeg62-turbo" in runtime, "runtime stage must include libjpeg62-turbo"
 
-    def test_composio_sdk_importable(self):
-        """composio SDK must import cleanly in the test env (matches runtime)."""
-        try:
-            import composio  # noqa: F401
-        except ImportError:
-            raise  # composio-core is a declared dependency; missing import is a packaging error
+    def test_composio_api_is_guarded_when_sdk_missing(self):
+        """Marketplace API must fail closed when the SDK is not installed."""
+        from pathlib import Path
+        content = Path("api/v1/composio.py").read_text()
+        assert "_COMPOSIO_AVAILABLE = False" in content
+        assert 'HTTPException(503, "Composio SDK not installed' in content
 
     def test_health_diagnostics_exposes_composio(self):
         """Admin diagnostics endpoint must surface composio sdk/api_key state."""

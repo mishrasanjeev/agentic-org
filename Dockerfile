@@ -4,7 +4,7 @@
 # python:3.14-slim @ 2026-05-01
 FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fad06a2fb068e97 AS builder
 WORKDIR /app
-# Build deps for Pillow (required by presidio) and other C extensions
+# Build deps for patched Pillow (required by fastembed) and other C extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libjpeg-dev zlib1g-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -28,8 +28,9 @@ RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 RUN python -m spacy download en_core_web_sm
 
 FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fad06a2fb068e97
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl libjpeg62-turbo zlib1g \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    libjpeg62-turbo zlib1g \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg
 WORKDIR /app
@@ -39,5 +40,5 @@ COPY . .
 USER agenticorg
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -sf http://localhost:8000/api/v1/health/liveness || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/liveness', timeout=4).read()"
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "20"]

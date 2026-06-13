@@ -203,7 +203,13 @@ jobs:
           bandit -r core/ connectors/ api/ auth/ -ll
       - run: |
           . .audit-env/bin/activate
-          pip-audit --desc || echo "::warning::pip-audit found vulnerabilities in transitive dependencies"
+          pip-audit --desc --timeout 60 .
+      - run: |
+          . .audit-env/bin/activate
+          pip-audit --desc --timeout 60 -r requirements.txt
+      - run: |
+          . .audit-env/bin/activate
+          pip-audit --desc --timeout 60 -r requirements-v4.txt
 
   release-acceptance:
     needs: [classify-changes, unit-tests, integration-tests, security-scan]

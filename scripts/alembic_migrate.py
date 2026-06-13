@@ -4,7 +4,10 @@
 Handles three environment states safely:
 
 1. Fresh DB — no tables at all.
-   Runs ``alembic upgrade head`` from scratch.
+   Creates the ORM baseline schema, stamps the Alembic cutover revision,
+   then runs ``alembic upgrade head``. The Alembic chain starts after
+   the original raw-SQL baseline, so an empty DB cannot safely run the
+   first Alembic revision directly.
 
 2. Legacy DB — schema was created by ``init_db()`` with no
    ``alembic_version`` table.
@@ -25,12 +28,17 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 
-from core.config import settings
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.config import settings  # noqa: E402
 
 BASELINE_REVISION = "v480_baseline"
 # A table that exists after the full init_db() / v480 chain.
@@ -49,6 +57,22 @@ def _alembic_cfg() -> Config:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", _sync_url())
     return cfg
+
+
+def _ensure_bootstrap_extensions(engine) -> None:
+    """Install extensions required by the historical baseline schema."""
+    with engine.begin() as conn:
+        conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+
+
+def _create_orm_baseline(engine) -> None:
+    """Create the legacy baseline shape before stamping the cutover revision."""
+    import core.models  # noqa: F401, PLC0415 - register every ORM model
+    from core.models.base import BaseModel  # noqa: PLC0415
+
+    _ensure_bootstrap_extensions(engine)
+    BaseModel.metadata.create_all(engine)
 
 
 def main() -> int:
@@ -79,10 +103,23 @@ def main() -> int:
         logger.info("stamp + upgrade complete")
         return 0
 
-    logger.info("empty database — running full alembic upgrade head from base")
-    command.upgrade(cfg, "head")
-    logger.info("initial alembic upgrade complete")
-    return 0
+    if not tables:
+        logger.info(
+            "empty database — creating ORM baseline, stamping %s, then upgrading head",
+            BASELINE_REVISION,
+        )
+        _create_orm_baseline(engine)
+        command.stamp(cfg, BASELINE_REVISION)
+        command.upgrade(cfg, "head")
+        logger.info("empty database bootstrap + upgrade complete")
+        return 0
+
+    table_sample = ", ".join(sorted(tables)[:10])
+    raise RuntimeError(
+        "Database has existing tables but no alembic_version and no "
+        f"{BASELINE_PROBE_TABLE!r} baseline probe table. Refusing to guess "
+        f"migration state. Existing tables include: {table_sample}"
+    )
 
 
 if __name__ == "__main__":

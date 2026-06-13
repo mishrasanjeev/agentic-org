@@ -503,7 +503,7 @@ class TestValidateLocalToken:
     def test_expired_token_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -517,14 +517,14 @@ class TestValidateLocalToken:
                 "iat": now - 7200,
                 "exp": now - 600,
             }
-            token = jose_jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+            token = jwt.encode(payload, TEST_SECRET, algorithm="HS256")
             with pytest.raises(ValueError, match="Local token validation failed"):
                 validate_local_token(token)
 
     def test_wrong_secret_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -537,14 +537,14 @@ class TestValidateLocalToken:
                 "iat": now,
                 "exp": now + 3600,
             }
-            token = jose_jwt.encode(payload, "wrong-secret-key-12345", algorithm="HS256")
+            token = jwt.encode(payload, "wrong-secret-key-12345", algorithm="HS256")
             with pytest.raises(ValueError):
                 validate_local_token(token)
 
     def test_wrong_issuer_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -557,14 +557,14 @@ class TestValidateLocalToken:
                 "iat": now,
                 "exp": now + 3600,
             }
-            token = jose_jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+            token = jwt.encode(payload, TEST_SECRET, algorithm="HS256")
             with pytest.raises(ValueError):
                 validate_local_token(token)
 
     def test_wrong_audience_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -577,7 +577,7 @@ class TestValidateLocalToken:
                 "iat": now,
                 "exp": now + 3600,
             }
-            token = jose_jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+            token = jwt.encode(payload, TEST_SECRET, algorithm="HS256")
             with pytest.raises(ValueError):
                 validate_local_token(token)
 

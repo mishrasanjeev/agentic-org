@@ -28,8 +28,8 @@ def gen_auth():
     from typing import Any
 
     import httpx
-    from jose import JWTError, jwt
-    from jose.backends import RSAKey
+    import jwt
+    from jwt import PyJWK, PyJWTError
 
     from core.config import settings, external_keys
     from core.schemas.errors import ErrorCode, make_error
@@ -71,14 +71,15 @@ def gen_auth():
             if not rsa_key:
                 raise ValueError(f"No matching key found for kid={kid}")
 
+            signing_key = PyJWK.from_dict(rsa_key).key
             payload = jwt.decode(
                 token,
-                rsa_key,
+                signing_key,
                 algorithms=["RS256"],
                 audience="agenticorg-tool-gateway",
             )
             return payload
-        except JWTError as e:
+        except PyJWTError as e:
             raise ValueError(f"Token validation failed: {e}") from e
 
 
