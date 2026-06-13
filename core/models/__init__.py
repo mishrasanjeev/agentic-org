@@ -57,6 +57,7 @@ from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
 from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow as OacpArtifactCacheRecordRow
+from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as OacpOperatorDecisionRecordRow
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
