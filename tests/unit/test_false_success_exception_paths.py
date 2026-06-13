@@ -95,6 +95,47 @@ async def test_knowledge_search_exhausted_backends_raise_not_empty(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_knowledge_search_embedding_timeout_uses_keyword_fallback(monkeypatch):
+    import httpx
+
+    import core.database
+    import core.embeddings
+    from api.v1 import knowledge
+
+    class _Rows:
+        def fetchall(self):
+            return [("Smoke Doc", "AgenticOrg production smoke knowledge text")]
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _stmt, _params):
+            return _Rows()
+
+    monkeypatch.setattr(
+        core.embeddings,
+        "embed_one",
+        lambda _query: (_ for _ in ()).throw(httpx.ReadTimeout("TEI read timed out")),
+    )
+    monkeypatch.setattr(core.database, "get_tenant_session", lambda _tenant_id: _Session())
+
+    results = await knowledge._native_semantic_search(
+        str(uuid.uuid4()),
+        "AgenticOrg production smoke",
+        3,
+    )
+
+    assert len(results) == 1
+    assert results[0].document_name == "Smoke Doc"
+    assert results[0].chunk_text == "AgenticOrg production smoke knowledge text"
+    assert results[0].score == 0.0
+
+
+@pytest.mark.asyncio
 async def test_agent_connector_config_failure_does_not_return_partial_success(monkeypatch):
     import core.crypto
     import core.database
