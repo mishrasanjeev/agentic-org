@@ -1,10 +1,10 @@
 # Commerce Sales Agent Overview
 
-The AgenticOrg Commerce Sales Agent is the agent and workflow layer for
-Grantex-controlled commerce. It helps users inspect Grantex-grounded read-only
-buyer discovery previews, discover products, draft carts, request consent, use
-Commerce Passport fixtures during approved smoke runs, and follow Grantex
-payment-intent and checkout status flows.
+The AgenticOrg Commerce Sales Agent is the buyer and seller AI-agent runtime for
+OACP commerce. It helps merchants prepare seller agents and connector workflows,
+helps buyers inspect artifact-grounded discovery previews, and consumes
+Grantex-authorized OACP artifacts without becoming the merchant system of record
+or the payment execution rail.
 
 This page is documentation only. It does not deploy, change production config,
 enable production Commerce V1, enable live payments, enable live Plural, or
@@ -35,7 +35,8 @@ commerce transaction should work end to end.
 | C3 hosted API-only smoke | 14 passed, 0 failed for liveness, health, MCP tools, A2A agent card, and A2A agents discovery. |
 | Production discovery | Commerce metadata is gated by default behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`; it is not final production readiness. |
 | C6I buyer discovery session | Channel-neutral read-only session wrapper around Grantex buyer preview data; no checkout/payment, provider, fulfillment, or refund execution. |
-| Direct provider calls | Blocked for commerce. AgenticOrg commerce uses Grantex only. |
+| C6W3-C6W9 OACP consumer foundation | Internal artifact schema, adapter preview, commitment boundary, prepared envelope, reconciliation, eligibility, and dry-run verifier consumer behavior. |
+| Payment execution | Blocked. AgenticOrg may verify provider-owned mandate capability only through separately approved verifier flows. |
 | Live checkout/payments/Plural | Blocked. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
 
@@ -43,20 +44,19 @@ commerce transaction should work end to end.
 
 ```mermaid
 flowchart LR
-  user[User] --> agent[Commerce Sales Agent]
-  agent --> aliases[grantex_commerce:* aliases]
-  aliases --> grantex[Grantex Commerce REST/MCP]
-  grantex --> catalog[Catalog and inventory]
-  grantex --> consent[Consent request and passport]
-  grantex --> policy[Policy and amount caps]
-  grantex --> payment[Provider-neutral payment intent]
-  payment --> mock[Mock provider smoke evidence]
-  payment -. blocked .-> providers[Live providers / Plural]
+  user[User] --> buyer[AgenticOrg Buyer Agent]
+  merchant[Merchant] --> seller[AgenticOrg Seller Agent]
+  seller --> systems[Merchant systems]
+  seller --> grantex[Grantex OACP Authority]
+  grantex --> artifacts[Signed artifacts]
+  artifacts --> buyer
+  buyer -. approved capability verification .-> provider[Provider/fintech rail]
 ```
 
-AgenticOrg does not own catalog truth, consent grants, Commerce Passport
-issuance, merchant policy enforcement, provider credentials, provider webhooks,
-or payment reconciliation. Those controls stay in Grantex.
+AgenticOrg does not own catalog truth, provider payment execution, settlement,
+or merchant operational state. Grantex owns artifact authority, policy and
+refusal semantics, and evidence requirements. Merchant systems own operational
+facts. Provider and fintech rails own mandates and payments.
 
 ## Buyer Discovery Session
 
@@ -76,42 +76,43 @@ stock, delivery, refund, launch, or payment facts.
 
 For merchants, the intended product experience should be simple:
 
-1. The merchant signs up in Grantex Commerce.
+1. The merchant starts in AgenticOrg Seller Commerce Agent.
 2. The merchant connects an existing store, catalog, ERP, inventory, OMS,
-   payment provider, or support system.
-3. Grantex normalizes that data into safe merchant profile, catalog, inventory,
-   policy, consent, checkout, order, audit, and protocol-publishing records.
+   payment provider, or support system through approved connector custody.
+3. Grantex validates public-safe facts, source/freshness, policy, and evidence
+   references into OACP artifacts.
 4. The merchant previews exactly what an AI agent can see.
 5. The merchant chooses which actions agents may request, such as browse,
    cart draft, checkout request, order status, or support handoff.
 6. Grantex runs validation scans and review gates.
-7. AgenticOrg agents use only the approved Grantex tools.
+7. AgenticOrg agents use valid OACP artifacts, approved authority refresh, and
+   approved provider/connector verifier flows.
 8. Live discovery or checkout is enabled only after a separate approved rollout.
 
-AgenticOrg should feel like the buyer-facing assistant and merchant-facing demo
-layer, not the merchant system of record. If a merchant already uses Shopify,
-WooCommerce, Magento, a custom store, an ERP, an OMS, a WMS, a payment provider,
-or a support desk, those systems should connect to Grantex. AgenticOrg should
-receive only the Grantex-approved, public-safe, policy-checked view.
+AgenticOrg should feel like the seller-agent and buyer-agent product, not the
+merchant system of record. If a merchant already uses Shopify, WooCommerce,
+Magento, a custom store, an ERP, an OMS, a WMS, a payment provider, or a support
+desk, those systems should connect through approved connector custody and
+produce public-safe evidence for Grantex/OACP validation.
 
 ## End-To-End Flow
 
 The operational flow is:
 
-1. Seller completes one-time setup in Grantex: workspace, verification,
-   connected systems, catalog, inventory, policy, payment path, approvals,
-   smoke evidence, and rollback ownership.
+1. Seller completes one-time setup in AgenticOrg Seller Commerce Agent and
+   Grantex authority review: onboarding packet, connected systems, catalog,
+   inventory, policy, payment/mandate path, approvals, smoke evidence, and
+   rollback ownership.
 2. Buyer completes one-time setup in their preferred channel: account/session
    linking, safe preferences, and understanding that checkout requires Grantex
    consent.
 3. Buyer asks the agent to find, compare, or buy.
-4. AgenticOrg calls only Grantex aliases for merchant profile, catalog,
-   inventory, cart, consent, payment intent, checkout, and status.
-5. Grantex enforces source-of-truth, policy, consent, Commerce Passport,
-   provider handoff, audit, order/fulfillment state, support/refund handoff, and
-   rollback.
-6. AgenticOrg explains the result to the buyer and refuses anything Grantex has
-   not approved or cannot verify.
+4. AgenticOrg reads valid cached OACP artifacts when TTL, revocation, and risk
+   rules allow; otherwise it asks Grantex for authority refresh.
+5. Commitment-bound actions require C6W5-C6W9 boundary, prepared envelope,
+   reconciliation, eligibility, and dry-run checks.
+6. AgenticOrg explains the result to the buyer and refuses anything artifacts,
+   source evidence, provider capability, or policy cannot verify.
 
 ## Buyer Agent Launch Surfaces
 
@@ -121,17 +122,17 @@ tracked PRD gap.
 
 | Surface | Intended launch model | Current readiness posture |
 | --- | --- | --- |
-| ChatGPT | Custom app/remote MCP backed by Grantex-only tools. | Planned; must respect ChatGPT app approval, action controls, and current write-action limits. |
-| Claude | Remote MCP connector backed by Grantex-only tools. | Planned; must include auth, scopes, and smoke evidence. |
+| ChatGPT | Custom app/remote MCP backed by OACP artifacts and authority refresh. | Planned; must respect ChatGPT app approval, action controls, and current write-action limits. |
+| Claude | Remote MCP connector backed by OACP artifacts and authority refresh. | Planned; must include auth, scopes, and smoke evidence. |
 | Gemini | AgenticOrg-hosted Gemini API/function-calling wrapper or approved future native channel. | Planned; native consumer Gemini launch support must not be claimed until available and approved. |
 | WhatsApp | WhatsApp Business Platform bot/webhook adapter. | Planned; requires WABA, phone number, templates, opt-out, webhook, and consent-link handling. |
 | Telegram | Telegram Bot API webhook adapter. | Planned; requires bot token, webhook secret validation, chat identity mapping, and consent-link handling. |
 | Web/mobile | AgenticOrg-hosted buyer-agent session or embedded merchant widget. | Best first controllable channel after Grantex approval. |
 
-Every channel must create or resume a buyer-agent session, call only Grantex
-commerce aliases, show clear consent/checkout handoff, and fall back to
-read-only discovery when the platform or approval state does not allow write
-actions.
+Every channel must create or resume a buyer-agent session, use OACP artifacts or
+authority refresh, show clear source/freshness and consent/handoff copy, and
+fall back to read-only discovery when the platform or approval state does not
+allow write actions.
 
 ## Standards And Protocol Fit
 
@@ -140,11 +141,12 @@ unsupported certification:
 
 | Surface | How AgenticOrg should use it |
 | --- | --- |
-| Native Grantex tools | Primary integration path for merchant profile, catalog, inventory, cart, consent, payment intent, checkout, and payment status. |
-| MCP | Agent tool surface for safe commerce actions backed by Grantex policy and audit. |
+| OACP artifacts | Primary internal trust input for source/freshness, refusal, prepared handoff, and future controller checks. |
+| Native Grantex tools | Authority refresh path for merchant profile, catalog, inventory, policy, and artifact verification. |
+| MCP | Agent tool surface for safe commerce actions backed by OACP artifacts and Grantex authority. |
 | UCP | Future capability discovery and shopping capability mapping. AgenticOrg should consume Grantex-published UCP-style profiles only after Grantex approves them. |
-| ACP | Future checkout/session compatibility. AgenticOrg may render checkout state, but Grantex remains the seller/control-plane endpoint. |
-| AP2 | Future signed checkout/payment mandate evidence. AgenticOrg may present mandate status only when Grantex provides deterministic evidence. |
+| ACP | Future checkout/session compatibility. AgenticOrg may render prepared or blocked checkout state, but execution remains separately gated. |
+| AP2 | Future signed checkout/payment mandate evidence. AgenticOrg may present provider-owned mandate status only when deterministic evidence exists. |
 | schema.org | Public product, offer, shipping, and return-policy metadata generated from Grantex-approved merchant data. |
 
 Do not claim UCP, ACP, AP2, A2A, or live-provider compliance unless the
