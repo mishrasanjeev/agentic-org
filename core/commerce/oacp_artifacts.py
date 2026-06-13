@@ -153,6 +153,19 @@ OfflineAction = Literal[
     "emergency_disable",
 ]
 IssuerKeyState = Literal["active", "retired", "revoked"]
+PersistentCacheScopeKind = Literal["buyer_agent", "seller_agent", "tenant", "merchant"]
+PersistentCacheActionIntent = Literal["non_binding_preview", "prepare_only", "final_commitment"]
+PersistentCacheEvaluationStatus = Literal[
+    "usable_for_non_binding_cache",
+    "prepared_only_for_commitment_boundary",
+    "blocked",
+    "stale",
+    "expired",
+    "revoked",
+    "mismatched",
+    "unsafe",
+    "unsupported",
+]
 
 OACP_ARTIFACT_SIGNATURE_PROFILE: dict[str, Any] = {
     "payload_format": "canonical_json",
@@ -874,6 +887,39 @@ class OacpCachedArtifact:
     envelope: dict[str, Any]
     payload: Any
     verified_at: str
+
+
+@dataclass(frozen=True)
+class OacpPersistentArtifactCacheRecord:
+    cache_record_id: str
+    artifact_id: str
+    artifact_type: ArtifactType
+    authority: str
+    issuer: str
+    scope_kind: PersistentCacheScopeKind
+    tenant_id: str | None
+    merchant_id: str | None
+    seller_agent_id: str | None
+    buyer_agent_id: str | None
+    source_refs: tuple[str, ...]
+    evidence_refs: tuple[str, ...]
+    generated_at: str
+    cached_at: str
+    expires_at: str
+    freshness_status: str
+    revocation_snapshot_status: str
+    revocation_snapshot_observed_at: str | None
+    ttl_policy_seconds: int
+    risk_tier: RiskTier
+    blocked_capabilities: tuple[str, ...] = field(default_factory=tuple)
+    unsupported_capabilities: tuple[str, ...] = field(default_factory=tuple)
+    verifier_result_ref: str | None = None
+    revocation_snapshot_age_seconds: int | None = None
+    allowed_to_execute: bool = False
+    non_authoritative_for_transaction: bool = True
+    no_checkout_payment_enablement: bool = True
+    no_live_provider_enablement: bool = True
+    no_public_discovery_enablement: bool = True
 
 
 def canonicalize_oacp_payload(payload: Any) -> str:
@@ -3804,6 +3850,316 @@ def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str,
         "cache_key": cache_key,
         "payload_hash": payload_hash,
         "expires_at": _string_field(envelope, "expires_at"),
+    }
+
+
+C6X2_PRIVATE_REF_MARKERS = (
+    "raw_jwt",
+    "bearer ",
+    "private_key",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "password",
+    "secret",
+    "db_url",
+    "redis_url",
+    "merchant_private_api",
+    "raw_provider_payload",
+    "raw_connector_payload",
+    "production_allowlist",
+)
+C6X2_ENABLEMENT_REF_MARKERS = (
+    "checkout_payment_enabled",
+    "live_provider_enabled",
+    "public_discovery_enabled",
+    "order_created",
+    "payment_captured",
+    "provider_executed",
+    "shipping_created",
+    "hold_created",
+    "refund_created",
+    "return_created",
+)
+C6X2_ARTIFACTS_NOT_TRANSACTION_AUTHORITY = frozenset(
+    {"protocol_adapter", "seller_agent_capability", "public_discovery"}
+)
+
+
+def _c6x2_cache_refusal(
+    *,
+    status: PersistentCacheEvaluationStatus,
+    refusal_code: str,
+    message: str,
+    record: OacpPersistentArtifactCacheRecord | None = None,
+) -> dict[str, Any]:
+    return {
+        "evaluated": False,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "cache_record_id": None if record is None else record.cache_record_id,
+        "artifact_id": None if record is None else record.artifact_id,
+        "allowed_to_preview": False,
+        "allowed_to_prepare": False,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x2_scope_present(record: OacpPersistentArtifactCacheRecord) -> bool:
+    if not record.tenant_id:
+        return False
+    if record.scope_kind == "merchant":
+        return bool(record.merchant_id)
+    if record.scope_kind == "seller_agent":
+        return bool(record.merchant_id and record.seller_agent_id)
+    if record.scope_kind == "buyer_agent":
+        return bool(record.merchant_id and record.seller_agent_id and record.buyer_agent_id)
+    return record.scope_kind == "tenant"
+
+
+def _c6x2_scope_matches(
+    record: OacpPersistentArtifactCacheRecord,
+    expected_scope: dict[str, str | None] | None,
+) -> bool:
+    if expected_scope is None:
+        return True
+    actual: dict[str, str | None] = {
+        "tenant_id": record.tenant_id,
+        "merchant_id": record.merchant_id,
+        "seller_agent_id": record.seller_agent_id,
+        "buyer_agent_id": record.buyer_agent_id,
+    }
+    return all(value is None or actual.get(key) == value for key, value in expected_scope.items())
+
+
+def _c6x2_refs_safe(values: tuple[str, ...]) -> bool:
+    for value in values:
+        normalized = value.strip().lower()
+        if not normalized:
+            return False
+        if any(marker in normalized for marker in C6X2_PRIVATE_REF_MARKERS):
+            return False
+        if any(marker in normalized for marker in C6X2_ENABLEMENT_REF_MARKERS):
+            return False
+    return True
+
+
+def _c6x2_non_enablement_flags_intact(record: OacpPersistentArtifactCacheRecord) -> bool:
+    return (
+        record.allowed_to_execute is False
+        and record.non_authoritative_for_transaction is True
+        and record.no_checkout_payment_enablement is True
+        and record.no_live_provider_enablement is True
+        and record.no_public_discovery_enablement is True
+    )
+
+
+def evaluate_oacp_persistent_artifact_cache_record(
+    *,
+    record: OacpPersistentArtifactCacheRecord | None,
+    action_intent: PersistentCacheActionIntent,
+    now_iso: str,
+    grantex_available: bool,
+    expected_scope: dict[str, str | None] | None = None,
+) -> dict[str, Any]:
+    if record is None:
+        return _c6x2_cache_refusal(
+            status="blocked",
+            refusal_code="cache_record_missing",
+            message="C6X2 requires a local persistent OACP artifact cache record.",
+        )
+
+    if not record.cache_record_id or not record.artifact_id or not record.authority or not record.issuer:
+        return _c6x2_cache_refusal(
+            status="blocked",
+            refusal_code="cache_record_identity_missing",
+            message="C6X2 cache records require local id, artifact id, authority, and issuer.",
+            record=record,
+        )
+    if not _c6x2_scope_present(record):
+        return _c6x2_cache_refusal(
+            status="blocked",
+            refusal_code="cache_scope_missing",
+            message="C6X2 cache records require tenant, merchant, seller, or buyer scope as applicable.",
+            record=record,
+        )
+    if not _c6x2_scope_matches(record, expected_scope):
+        return _c6x2_cache_refusal(
+            status="mismatched",
+            refusal_code="cache_scope_mismatch",
+            message="C6X2 refuses cache records outside the requesting agent or tenant scope.",
+            record=record,
+        )
+    if not _c6x2_non_enablement_flags_intact(record):
+        return _c6x2_cache_refusal(
+            status="unsafe",
+            refusal_code="non_enablement_flags_missing",
+            message="C6X2 refuses cache records with missing or false non-enablement flags.",
+            record=record,
+        )
+
+    now = _parse_iso(now_iso)
+    generated_at = _parse_iso(record.generated_at)
+    cached_at = _parse_iso(record.cached_at)
+    expires_at = _parse_iso(record.expires_at)
+    if now is None or generated_at is None or cached_at is None or expires_at is None:
+        return _c6x2_cache_refusal(
+            status="stale",
+            refusal_code="cache_freshness_missing",
+            message="C6X2 cache records require generated, cached, and expiry timestamps.",
+            record=record,
+        )
+    if now >= expires_at:
+        return _c6x2_cache_refusal(
+            status="expired",
+            refusal_code="cache_record_expired",
+            message="C6X2 refuses expired persistent OACP artifact cache records.",
+            record=record,
+        )
+    if record.ttl_policy_seconds <= 0 or record.ttl_policy_seconds > OACP_ARTIFACT_TTLS_SECONDS[record.artifact_type]:
+        return _c6x2_cache_refusal(
+            status="stale",
+            refusal_code="cache_ttl_policy_invalid",
+            message="C6X2 refuses cache records with missing or excessive TTL policy.",
+            record=record,
+        )
+    if record.freshness_status not in {"fresh", "provisional"}:
+        return _c6x2_cache_refusal(
+            status="stale",
+            refusal_code="cache_freshness_stale",
+            message="C6X2 cache records must be fresh or provisional for preview and prepare use.",
+            record=record,
+        )
+
+    max_revocation_age = OACP_REVOCATION_SNAPSHOT_MAX_AGE_SECONDS[record.risk_tier]
+    if record.revocation_snapshot_status == "revoked":
+        return _c6x2_cache_refusal(
+            status="revoked",
+            refusal_code="cache_record_revoked",
+            message="C6X2 refuses revoked persistent OACP artifact cache records.",
+            record=record,
+        )
+    if (
+        max_revocation_age is None
+        or record.revocation_snapshot_status != "fresh"
+        or record.revocation_snapshot_observed_at is None
+        or _parse_iso(record.revocation_snapshot_observed_at) is None
+        or record.revocation_snapshot_age_seconds is None
+        or record.revocation_snapshot_age_seconds > max_revocation_age
+    ):
+        return _c6x2_cache_refusal(
+            status="stale",
+            refusal_code="cache_revocation_snapshot_ambiguous",
+            message="C6X2 requires a fresh local revocation snapshot before cached artifact use.",
+            record=record,
+        )
+
+    refs_to_check = (
+        *record.source_refs,
+        *record.evidence_refs,
+        *(() if record.verifier_result_ref is None else (record.verifier_result_ref,)),
+    )
+    if not record.source_refs or not record.evidence_refs or not _c6x2_refs_safe(refs_to_check):
+        return _c6x2_cache_refusal(
+            status="unsafe",
+            refusal_code="cache_refs_missing_or_private",
+            message="C6X2 refuses missing, private, raw, or enabling cache refs.",
+            record=record,
+        )
+
+    if record.risk_tier == "critical":
+        return _c6x2_cache_refusal(
+            status="unsupported",
+            refusal_code="critical_risk_cache_use_blocked",
+            message="C6X2 blocks critical-risk cache use in offline or prepared-only mode.",
+            record=record,
+        )
+
+    if action_intent == "final_commitment" and record.artifact_type in C6X2_ARTIFACTS_NOT_TRANSACTION_AUTHORITY:
+        return _c6x2_cache_refusal(
+            status="blocked",
+            refusal_code="artifact_not_transaction_authority",
+            message="C6X2 refuses adapter previews, seller cards, or discovery records as transaction authority.",
+            record=record,
+        )
+    if action_intent == "final_commitment" and record.verifier_result_ref is None:
+        return _c6x2_cache_refusal(
+            status="blocked",
+            refusal_code="stronger_commitment_evidence_missing",
+            message=(
+                "C6X2 final commitment requests require stronger cached verifier evidence "
+                "and remain non-executing."
+            ),
+            record=record,
+        )
+
+    status: PersistentCacheEvaluationStatus = (
+        "usable_for_non_binding_cache"
+        if action_intent == "non_binding_preview"
+        else "prepared_only_for_commitment_boundary"
+    )
+    allowed_to_prepare = action_intent != "non_binding_preview"
+    offline_mode_status = (
+        "grantex_available"
+        if grantex_available
+        else "grantex_unavailable_valid_cache_prepared_only"
+    )
+    buyer_safe_message = (
+        "Cached OACP artifact may support non-binding preview without routing this turn through Grantex."
+        if action_intent == "non_binding_preview"
+        else "C6X2 can prepare a source-aware handoff from valid cache only; no execution occurs."
+    )
+
+    return {
+        "evaluated": True,
+        "status": status,
+        "cache_record_id": record.cache_record_id,
+        "artifact_id": record.artifact_id,
+        "artifact_type": record.artifact_type,
+        "authority": record.authority,
+        "issuer": record.issuer,
+        "scope_kind": record.scope_kind,
+        "tenant_id": record.tenant_id,
+        "merchant_id": record.merchant_id,
+        "seller_agent_id": record.seller_agent_id,
+        "buyer_agent_id": record.buyer_agent_id,
+        "source_refs": list(record.source_refs),
+        "evidence_refs": list(record.evidence_refs),
+        "generated_at": record.generated_at,
+        "cached_at": record.cached_at,
+        "expires_at": record.expires_at,
+        "freshness_status": record.freshness_status,
+        "revocation_snapshot_status": record.revocation_snapshot_status,
+        "revocation_snapshot_observed_at": record.revocation_snapshot_observed_at,
+        "ttl_policy_seconds": record.ttl_policy_seconds,
+        "risk_tier": record.risk_tier,
+        "blocked_capabilities": list(record.blocked_capabilities),
+        "unsupported_capabilities": list(record.unsupported_capabilities),
+        "verifier_result_ref": record.verifier_result_ref,
+        "offline_mode_status": offline_mode_status,
+        "allowed_to_preview": True,
+        "allowed_to_prepare": allowed_to_prepare,
+        "allowed_to_execute": False,
+        "prepared_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "commerce_facts_invented": False,
+        "grantex_runtime_required": False,
+        "buyer_safe_message": buyer_safe_message,
+        "seller_safe_message": (
+            "Seller-side use remains source-aware and prepared-only; merchant systems remain the operational source of "
+            "record."
+        ),
     }
 
 
