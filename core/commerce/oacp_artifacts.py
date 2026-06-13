@@ -990,6 +990,13 @@ class OacpAuditReviewManifestRepositoryQuery:
     buyer_agent_id: str | None = None
     bundle_id: str | None = None
     retention_class: OacpAuditExportReviewRetentionClass | None = None
+    retain_until_before: str | None = None
+    retain_until_after: str | None = None
+    generated_at_before: str | None = None
+    generated_at_after: str | None = None
+    artifact_family: str | None = None
+    blocked_capability: str | None = None
+    unsupported_capability: str | None = None
 
 
 class OacpArtifactCacheRepositoryPort(Protocol):
@@ -1051,6 +1058,15 @@ class OacpAuditReviewManifestRepositoryPort(Protocol):
 
     def evaluate_manifest_for_internal_review(self, manifest_id: str) -> dict[str, Any]:
         """Evaluate a review manifest without writing export files or approving execution."""
+        ...
+
+    def build_redacted_manifest_summary(
+        self,
+        query: OacpAuditReviewManifestRepositoryQuery,
+        *,
+        generated_at: str,
+    ) -> dict[str, Any]:
+        """Build a redacted internal summary over stored manifests without writing export files."""
         ...
 
 
@@ -7316,7 +7332,23 @@ def _c6y2_row_to_manifest(row: Any) -> dict[str, Any]:
     }
 
 
+def _c6y3_summary_contains(value: Any, label: str | None) -> bool:
+    if label is None:
+        return True
+    if isinstance(value, Mapping):
+        return label in value
+    if isinstance(value, list):
+        return label in value
+    return False
+
+
 def _c6y2_query_matches(manifest: Mapping[str, Any], query: OacpAuditReviewManifestRepositoryQuery) -> bool:
+    retain_until = _parse_iso(_c6x7_string(_c6y2_retention_boundary(manifest).get("retain_until")))
+    generated_at = _parse_iso(_c6x7_string(manifest.get("generated_at")))
+    retain_until_before = _parse_iso(query.retain_until_before)
+    retain_until_after = _parse_iso(query.retain_until_after)
+    generated_at_before = _parse_iso(query.generated_at_before)
+    generated_at_after = _parse_iso(query.generated_at_after)
     return (
         (query.tenant_id is None or manifest.get("tenant_id") == query.tenant_id)
         and (query.merchant_id is None or manifest.get("merchant_id") == query.merchant_id)
@@ -7327,7 +7359,364 @@ def _c6y2_query_matches(manifest: Mapping[str, Any], query: OacpAuditReviewManif
             query.retention_class is None
             or _c6y2_retention_boundary(manifest).get("retention_class") == query.retention_class
         )
+        and (
+            query.retain_until_before is None
+            or (retain_until is not None and retain_until_before is not None and retain_until <= retain_until_before)
+        )
+        and (
+            query.retain_until_after is None
+            or (retain_until is not None and retain_until_after is not None and retain_until >= retain_until_after)
+        )
+        and (
+            query.generated_at_before is None
+            or (generated_at is not None and generated_at_before is not None and generated_at <= generated_at_before)
+        )
+        and (
+            query.generated_at_after is None
+            or (generated_at is not None and generated_at_after is not None and generated_at >= generated_at_after)
+        )
+        and _c6y3_summary_contains(manifest.get("artifact_family_counts"), query.artifact_family)
+        and _c6y3_summary_contains(manifest.get("blocked_capability_summary"), query.blocked_capability)
+        and _c6y3_summary_contains(manifest.get("unsupported_capability_summary"), query.unsupported_capability)
     )
+
+
+def _c6y3_manifest_summary_refusal(
+    *,
+    status: str,
+    refusal_code: str,
+    message: str,
+    generated_at: str | None = None,
+    tenant_id: str | None = None,
+    merchant_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "summary_built": False,
+        "summary_id": None,
+        "summary_kind": "oacp_audit_review_manifest_redacted_summary",
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "generated_at": generated_at,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "manifest_count": 0,
+        "retention_due_count": 0,
+        "legal_hold_candidate_count": 0,
+        "redacted_evidence_ref_count": 0,
+        "future_export_allowed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "review_manifest_summary_only": True,
+        "no_export_file_written": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6y3_filter_value_safe(value: str | None, *, allow_blocked_or_unsupported_label: bool = False) -> bool:
+    if value is None:
+        return True
+    normalized = value.strip().lower()
+    if not normalized:
+        return False
+    unsafe_markers = (
+        *C6X2_PRIVATE_REF_MARKERS,
+        "://",
+        "@",
+        "raw_email",
+        "raw_phone",
+        "action_target",
+        "endpoint_target",
+        "execute",
+        "execute_now",
+        "write_export",
+        "export_file_writer",
+        "publish",
+        "submission",
+        "certif",
+        "compliance",
+        "conformance",
+        "standardization",
+        "readiness",
+        "approval",
+        "approved",
+    )
+    if any(marker in normalized for marker in unsafe_markers):
+        return False
+    if allow_blocked_or_unsupported_label:
+        return True
+    return not any(marker in normalized for marker in C6X2_ENABLEMENT_REF_MARKERS)
+
+
+def _c6y3_query_safe(query: OacpAuditReviewManifestRepositoryQuery) -> bool:
+    if not query.tenant_id:
+        return False
+    for value in (
+        query.tenant_id,
+        query.merchant_id,
+        query.seller_agent_id,
+        query.buyer_agent_id,
+        query.bundle_id,
+        query.artifact_family,
+    ):
+        if not _c6y3_filter_value_safe(value):
+            return False
+    for value in (query.blocked_capability, query.unsupported_capability):
+        if not _c6y3_filter_value_safe(value, allow_blocked_or_unsupported_label=True):
+            return False
+    for value in (
+        query.retain_until_before,
+        query.retain_until_after,
+        query.generated_at_before,
+        query.generated_at_after,
+    ):
+        if value is not None and _parse_iso(value) is None:
+            return False
+    return True
+
+
+def _c6y3_count_mapping_values(values: Mapping[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for key, value in values.items():
+        if isinstance(value, int):
+            counts[str(key)] = counts.get(str(key), 0) + value
+        elif isinstance(value, str) and value:
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _c6y3_merge_counts(manifests: Sequence[Mapping[str, Any]], field_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for manifest in manifests:
+        for key, value in _c6y3_count_mapping_values(_c6x8_mapping(manifest.get(field_name))).items():
+            counts[key] = counts.get(key, 0) + value
+    return dict(sorted(counts.items()))
+
+
+def _c6y3_merge_nested_summary(manifests: Sequence[Mapping[str, Any]], field_name: str) -> dict[str, Any]:
+    merged_counts: dict[str, dict[str, int]] = {}
+    scalar_values: dict[str, set[str]] = {}
+    for manifest in manifests:
+        for key, value in _c6x8_mapping(manifest.get(field_name)).items():
+            key_text = str(key)
+            if isinstance(value, Mapping):
+                bucket = merged_counts.setdefault(key_text, {})
+                for child_key, child_value in _c6y3_count_mapping_values(value).items():
+                    bucket[child_key] = bucket.get(child_key, 0) + child_value
+            elif isinstance(value, int):
+                bucket = merged_counts.setdefault(key_text, {})
+                bucket[key_text] = bucket.get(key_text, 0) + value
+            elif isinstance(value, str) and value:
+                scalar_values.setdefault(key_text, set()).add(value)
+    result: dict[str, Any] = {
+        key: dict(sorted(value.items())) for key, value in sorted(merged_counts.items())
+    }
+    for key, values in sorted(scalar_values.items()):
+        result[key] = sorted(values)
+    return result
+
+
+def _c6y3_scope_summary(manifests: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int]]:
+    return {
+        "buyer_agent": _c6x9_count(
+            [
+                buyer_agent_id
+                for manifest in manifests
+                if (buyer_agent_id := _c6x7_string(manifest.get("buyer_agent_id"))) is not None
+            ]
+        ),
+        "seller_agent": _c6x9_count(
+            [
+                seller_agent_id
+                for manifest in manifests
+                if (seller_agent_id := _c6x7_string(manifest.get("seller_agent_id"))) is not None
+            ]
+        ),
+        "tenant": _c6x9_count(
+            [
+                tenant_id
+                for manifest in manifests
+                if (tenant_id := _c6x7_string(manifest.get("tenant_id"))) is not None
+            ]
+        ),
+        "merchant": _c6x9_count(
+            [
+                merchant_id
+                for manifest in manifests
+                if (merchant_id := _c6x7_string(manifest.get("merchant_id"))) is not None
+            ]
+        ),
+    }
+
+
+def _c6y3_manifest_count_due(manifests: Sequence[Mapping[str, Any]], generated_at: datetime) -> int:
+    count = 0
+    for manifest in manifests:
+        retain_until = _parse_iso(_c6x7_string(_c6y2_retention_boundary(manifest).get("retain_until")))
+        if retain_until is not None and retain_until <= generated_at:
+            count += 1
+    return count
+
+
+def _c6y3_manifest_summary_id(
+    *,
+    generated_at: str,
+    query: OacpAuditReviewManifestRepositoryQuery,
+    manifest_ids: Sequence[str],
+) -> str:
+    payload = {
+        "generated_at": generated_at,
+        "query": {
+            "tenant_id": query.tenant_id,
+            "merchant_id": query.merchant_id,
+            "seller_agent_id": query.seller_agent_id,
+            "buyer_agent_id": query.buyer_agent_id,
+            "bundle_id": query.bundle_id,
+            "retention_class": query.retention_class,
+            "retain_until_before": query.retain_until_before,
+            "retain_until_after": query.retain_until_after,
+            "generated_at_before": query.generated_at_before,
+            "generated_at_after": query.generated_at_after,
+            "artifact_family": query.artifact_family,
+            "blocked_capability": query.blocked_capability,
+            "unsupported_capability": query.unsupported_capability,
+        },
+        "manifest_ids": list(manifest_ids),
+    }
+    return f"oacp_c6y3_review_manifest_summary_{hash_oacp_payload(payload)[:20]}"
+
+
+def build_oacp_c6y3_audit_review_manifest_summary(
+    manifests: Sequence[Mapping[str, Any]],
+    *,
+    query: OacpAuditReviewManifestRepositoryQuery,
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build an internal redacted review-manifest summary without exporting or executing anything."""
+
+    if not _c6y3_query_safe(query):
+        return _c6y3_manifest_summary_refusal(
+            status="blocked",
+            refusal_code="query_scope_or_filter_unsafe",
+            message="C6Y3 summaries require a tenant-scoped, non-executable, non-private query.",
+            generated_at=generated_at,
+            tenant_id=query.tenant_id,
+            merchant_id=query.merchant_id,
+        )
+
+    parsed_generated_at = _parse_iso(generated_at)
+    if parsed_generated_at is None:
+        return _c6y3_manifest_summary_refusal(
+            status="blocked",
+            refusal_code="summary_generated_at_invalid",
+            message="C6Y3 summaries require a valid generated_at timestamp.",
+            generated_at=generated_at,
+            tenant_id=query.tenant_id,
+            merchant_id=query.merchant_id,
+        )
+
+    matched_manifests = tuple(
+        manifest for manifest in manifests if _c6y2_query_matches(manifest, query)
+    )
+    for manifest in matched_manifests:
+        safe_result = _c6y2_manifest_safe_for_storage(manifest)
+        if safe_result.get("stored") is not True:
+            return _c6y3_manifest_summary_refusal(
+                status="unsafe",
+                refusal_code="manifest_not_safe_for_summary",
+                message="C6Y3 refuses to summarize manifests that fail C6Y2 storage guardrails.",
+                generated_at=generated_at,
+                tenant_id=query.tenant_id,
+                merchant_id=query.merchant_id,
+            )
+        if manifest.get("tenant_id") != query.tenant_id:
+            return _c6y3_manifest_summary_refusal(
+                status="blocked",
+                refusal_code="cross_tenant_query_refused",
+                message="C6Y3 refuses cross-tenant audit review manifest summaries.",
+                generated_at=generated_at,
+                tenant_id=query.tenant_id,
+                merchant_id=query.merchant_id,
+            )
+
+    manifest_ids = sorted(_c6x7_string(manifest.get("manifest_id")) or "" for manifest in matched_manifests)
+    evidence_ref_counts = {
+        manifest_id: len(_c6x8_list(manifest.get("redacted_evidence_refs")))
+        for manifest_id, manifest in sorted(
+            (
+                (_c6x7_string(manifest.get("manifest_id")) or "", manifest)
+                for manifest in matched_manifests
+            ),
+            key=lambda item: item[0],
+        )
+        if manifest_id
+    }
+    next_step_labels = _c6x9_unique(
+        [
+            label
+            for manifest in matched_manifests
+            for label in _c6x8_list(manifest.get("next_step_labels"))
+        ]
+        + ["internal_review_summary_label_only"]
+    )
+    return {
+        "summary_built": True,
+        "summary_id": _c6y3_manifest_summary_id(
+            generated_at=generated_at,
+            query=query,
+            manifest_ids=manifest_ids,
+        ),
+        "summary_kind": "oacp_audit_review_manifest_redacted_summary",
+        "status": "ready_for_internal_review",
+        "generated_at": generated_at,
+        "tenant_id": query.tenant_id,
+        "merchant_id": query.merchant_id,
+        "scope_summary": _c6y3_scope_summary(matched_manifests),
+        "manifest_count": len(matched_manifests),
+        "retention_class_counts": _c6x9_count(
+            [
+                retention_class
+                for manifest in matched_manifests
+                if (retention_class := _c6y2_retention_class(manifest)) is not None
+            ]
+        ),
+        "retention_due_count": _c6y3_manifest_count_due(matched_manifests, parsed_generated_at),
+        "legal_hold_candidate_count": sum(
+            1 for manifest in matched_manifests if _c6y2_retention_class(manifest) == "legal_hold_candidate"
+        ),
+        "artifact_family_counts": _c6y3_merge_counts(matched_manifests, "artifact_family_counts"),
+        "risk_tier_counts": _c6y3_merge_counts(matched_manifests, "risk_tier_summary"),
+        "blocked_capability_summary": _c6y3_merge_counts(matched_manifests, "blocked_capability_summary"),
+        "unsupported_capability_summary": _c6y3_merge_counts(matched_manifests, "unsupported_capability_summary"),
+        "freshness_ttl_summary": _c6y3_merge_nested_summary(matched_manifests, "freshness_ttl_summary"),
+        "revocation_snapshot_summary": _c6y3_merge_counts(matched_manifests, "revocation_snapshot_summary"),
+        "redacted_evidence_ref_count": sum(evidence_ref_counts.values()),
+        "redacted_evidence_ref_counts": evidence_ref_counts,
+        "next_step_labels": next_step_labels,
+        "future_export_allowed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "review_manifest_summary_only": True,
+        "no_export_file_written": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+        "operator_safe_message": (
+            "C6Y3 summarizes stored audit review manifests with counts only; it does not write export files."
+        ),
+    }
 
 
 class DurableOacpAuditReviewManifestRepository:
@@ -7379,6 +7768,14 @@ class DurableOacpAuditReviewManifestRepository:
             statement = statement.where(OacpAuditReviewManifestRecordRow.bundle_id == query.bundle_id)
         if query.retention_class is not None:
             statement = statement.where(OacpAuditReviewManifestRecordRow.retention_class == query.retention_class)
+        if query.retain_until_before is not None and (parsed := _parse_iso(query.retain_until_before)) is not None:
+            statement = statement.where(OacpAuditReviewManifestRecordRow.retain_until <= parsed)
+        if query.retain_until_after is not None and (parsed := _parse_iso(query.retain_until_after)) is not None:
+            statement = statement.where(OacpAuditReviewManifestRecordRow.retain_until >= parsed)
+        if query.generated_at_before is not None and (parsed := _parse_iso(query.generated_at_before)) is not None:
+            statement = statement.where(OacpAuditReviewManifestRecordRow.generated_at <= parsed)
+        if query.generated_at_after is not None and (parsed := _parse_iso(query.generated_at_after)) is not None:
+            statement = statement.where(OacpAuditReviewManifestRecordRow.generated_at >= parsed)
 
         rows = (await self._session.scalars(statement.order_by(OacpAuditReviewManifestRecordRow.manifest_id))).all()
         manifests = tuple(_c6y2_row_to_manifest(row) for row in rows)
@@ -7417,6 +7814,19 @@ class DurableOacpAuditReviewManifestRepository:
             "grantex_runtime_required": False,
             "message": "C6Y2 stores an audit review manifest only; it does not write export files.",
         }
+
+    async def build_redacted_manifest_summary(
+        self,
+        query: OacpAuditReviewManifestRepositoryQuery,
+        *,
+        generated_at: str,
+    ) -> dict[str, Any]:
+        manifests = await self.list_manifests_for_scope(query)
+        return build_oacp_c6y3_audit_review_manifest_summary(
+            manifests,
+            query=query,
+            generated_at=generated_at,
+        )
 
 
 class OacpArtifactCache:
