@@ -6000,6 +6000,610 @@ class DurableOacpOperatorDecisionRepository:
         }
 
 
+_C6X9_SAFE_FALLBACK_GENERATED_AT = "2026-06-11T00:00:00.000Z"
+_C6X9_RISKY_REVOCATION_STATES = frozenset({"revoked", "ambiguous", "stale", "expired"})
+_C6X9_HIGH_RISK_TIERS = frozenset({"high", "critical"})
+_C6X9_OVERCLAIM_MARKERS = (
+    "certification",
+    "certified",
+    "compliance",
+    "compliant",
+    "conformance",
+    "standardization",
+    "standardized",
+    "production_ready",
+    "public_launch",
+    "execution_ready",
+    "merchant_approval",
+    "checkout_approval",
+    "payment_approval",
+    "mandate_approval",
+    "live_provider_readiness",
+    "oacp_approval",
+)
+
+
+def _c6x9_bundle_id(payload: Mapping[str, Any]) -> str:
+    digest = hashlib.sha256(canonicalize_oacp_payload(dict(payload)).encode("utf-8")).hexdigest()
+    return f"oacp_c6x9_audit_export_{digest[:20]}"
+
+
+def _c6x9_blocked_bundle(
+    *,
+    reason_code: str,
+    message: str,
+    generated_at: str | None = None,
+    tenant_id: str | None = None,
+    merchant_id: str | None = None,
+    seller_agent_id: str | None = None,
+    buyer_agent_id: str | None = None,
+) -> dict[str, Any]:
+    generated = generated_at or _C6X9_SAFE_FALLBACK_GENERATED_AT
+    return {
+        "bundle_id": _c6x9_bundle_id(
+            {
+                "status": "blocked",
+                "reason_code": reason_code,
+                "tenant_id": tenant_id,
+                "merchant_id": merchant_id,
+                "generated_at": generated,
+            }
+        ),
+        "bundle_kind": "blocked_oacp_cache_operator_audit_export_bundle",
+        "status": "blocked",
+        "block_reason": reason_code,
+        "message": message,
+        "generated_at": generated,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "scope_summary": {"buyer_agent": {}, "seller_agent": {}, "tenant": {}, "merchant": {}},
+        "artifact_family_counts": {},
+        "cache_record_references": [],
+        "maintenance_plan_references": [],
+        "review_packet_references": [],
+        "decision_record_references": [],
+        "redacted_reason_codes": {},
+        "redacted_source_refs": [],
+        "redacted_evidence_refs": [],
+        "freshness_ttl_summary": {"freshness": {}, "records_with_ttl": 0, "minimum_ttl_policy_seconds": None},
+        "revocation_snapshot_summary": {},
+        "risk_tier_summary": {},
+        "unsupported_capability_summary": {},
+        "blocked_capability_summary": {reason_code: 1},
+        "next_step_labels": ["operator_review_required_no_export_execution"],
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "audit_export_bundle_only": True,
+        "export_ready": False,
+        "generated_artifact_written": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x9_unique(values: Sequence[str]) -> list[str]:
+    return sorted({value for value in values if value})
+
+
+def _c6x9_count(values: Sequence[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _c6x9_scope_count(
+    records: Sequence[OacpPersistentArtifactCacheRecord],
+    field_name: str,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for record in records:
+        value = getattr(record, field_name)
+        if isinstance(value, str) and value:
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _c6x9_scope_summary(records: Sequence[OacpPersistentArtifactCacheRecord]) -> dict[str, dict[str, int]]:
+    return {
+        "buyer_agent": _c6x9_scope_count(records, "buyer_agent_id"),
+        "seller_agent": _c6x9_scope_count(records, "seller_agent_id"),
+        "tenant": _c6x9_scope_count(records, "tenant_id"),
+        "merchant": _c6x9_scope_count(records, "merchant_id"),
+    }
+
+
+def _c6x9_record_scope_matches(
+    record: OacpPersistentArtifactCacheRecord,
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    buyer_agent_id: str | None,
+) -> bool:
+    if record.tenant_id != tenant_id or record.merchant_id != merchant_id:
+        return False
+    if seller_agent_id is not None and record.seller_agent_id not in (None, seller_agent_id):
+        return False
+    if buyer_agent_id is not None and record.buyer_agent_id not in (None, buyer_agent_id):
+        return False
+    return True
+
+
+def _c6x9_mapping_scope_matches(
+    item: Mapping[str, Any],
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    buyer_agent_id: str | None,
+) -> bool:
+    direct_fields = {
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+    }
+    direct_scope_present = False
+    for field_name, expected in direct_fields.items():
+        value = item.get(field_name)
+        direct_scope_present = direct_scope_present or (field_name in item and isinstance(value, str) and bool(value))
+        if expected is not None and isinstance(value, str) and value and value != expected:
+            return False
+
+    scope_summary = _c6x8_mapping(item.get("scope_summary"))
+    if not scope_summary and direct_scope_present:
+        return True
+    scope_expectations = {
+        "tenant": (tenant_id, True),
+        "merchant": (merchant_id, True),
+        "seller_agent": (seller_agent_id, False),
+        "buyer_agent": (buyer_agent_id, False),
+    }
+    for scope_kind, (expected, required) in scope_expectations.items():
+        values = scope_summary.get(scope_kind)
+        if not isinstance(values, Mapping) or not values:
+            if required:
+                return False
+            continue
+        keys = {str(key) for key in values if isinstance(key, str) and key}
+        if expected is not None and expected not in keys:
+            return False
+    return True
+
+
+def _c6x9_components_scope_match(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    buyer_agent_id: str | None,
+    cache_records: Sequence[OacpPersistentArtifactCacheRecord],
+    maintenance_plans: Sequence[Mapping[str, Any]],
+    review_packets: Sequence[Mapping[str, Any]],
+    decision_records: Sequence[Mapping[str, Any]],
+) -> bool:
+    for record in cache_records:
+        if not _c6x9_record_scope_matches(
+            record,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        ):
+            return False
+    mapped_components: list[Mapping[str, Any]] = list(review_packets) + list(decision_records)
+    for plan in maintenance_plans:
+        for action in plan.get("record_actions", []):
+            if isinstance(action, Mapping):
+                mapped_components.append(action)
+    return all(
+        _c6x9_mapping_scope_matches(
+            component,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+        for component in mapped_components
+    )
+
+
+def _c6x9_private_or_overclaim_values(values: Sequence[str]) -> bool:
+    for value in values:
+        normalized = value.strip().lower()
+        if not normalized:
+            return True
+        if any(marker in normalized for marker in C6X2_PRIVATE_REF_MARKERS):
+            return True
+        if any(marker in normalized for marker in _C6X9_OVERCLAIM_MARKERS):
+            return True
+    return False
+
+
+def _c6x9_reason_code_values(value: Any) -> list[str]:
+    values: list[str] = []
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if isinstance(key, str):
+                values.append(key)
+            values.extend(_c6x9_reason_code_values(child))
+    elif isinstance(value, list):
+        for child in value:
+            values.extend(_c6x9_reason_code_values(child))
+    elif isinstance(value, str):
+        values.append(value)
+    return values
+
+
+def _c6x9_inputs_private_or_overclaim(
+    *,
+    maintenance_plans: Sequence[Mapping[str, Any]],
+    review_packets: Sequence[Mapping[str, Any]],
+    decision_records: Sequence[Mapping[str, Any]],
+) -> bool:
+    strings: list[str] = []
+    for plan in maintenance_plans:
+        strings.extend(_c6x6_string_list(plan.get("source_refs")))
+        strings.extend(_c6x6_string_list(plan.get("evidence_refs")))
+        strings.extend(_c6x9_reason_code_values(plan.get("per_record_reason_codes")))
+    for packet in review_packets:
+        strings.extend(_c6x7_string_list(packet.get("source_refs")))
+        strings.extend(_c6x7_string_list(packet.get("evidence_refs")))
+        strings.extend(_c6x7_string_list(packet.get("next_step_labels")))
+        strings.extend(_c6x9_reason_code_values(packet.get("per_record_reason_codes")))
+    for decision in decision_records:
+        strings.extend(_c6x8_list(decision.get("source_refs")))
+        strings.extend(_c6x8_list(decision.get("evidence_refs")))
+        strings.extend(_c6x8_list(decision.get("next_step_labels")))
+        strings.extend(_c6x9_reason_code_values(decision.get("redacted_reason_codes")))
+        reviewer_ref = _c6x7_string(decision.get("reviewer_identity_ref"))
+        if reviewer_ref is not None:
+            strings.append(reviewer_ref)
+    return _c6x9_private_or_overclaim_values(strings)
+
+
+def _c6x9_timestamps_valid(
+    *,
+    generated_at: str,
+    cache_records: Sequence[OacpPersistentArtifactCacheRecord],
+    maintenance_plans: Sequence[Mapping[str, Any]],
+    review_packets: Sequence[Mapping[str, Any]],
+    decision_records: Sequence[Mapping[str, Any]],
+) -> bool:
+    values: list[str | None] = [generated_at]
+    for record in cache_records:
+        values.extend(
+            [
+                record.generated_at,
+                record.cached_at,
+                record.expires_at,
+                record.revocation_snapshot_observed_at,
+            ]
+        )
+    for plan in maintenance_plans:
+        values.append(_c6x6_string(plan.get("generated_at")))
+    for packet in review_packets:
+        values.append(_c6x7_string(packet.get("generated_at")))
+    for decision in decision_records:
+        values.extend([_c6x7_string(decision.get("generated_at")), _c6x7_string(decision.get("decided_at"))])
+    return all(_parse_iso(value) is not None for value in values)
+
+
+def _c6x9_components_non_executing(
+    *,
+    maintenance_plans: Sequence[Mapping[str, Any]],
+    review_packets: Sequence[Mapping[str, Any]],
+    decision_records: Sequence[Mapping[str, Any]],
+) -> bool:
+    for plan in maintenance_plans:
+        if not _c6x6_plan_flags_safe(plan):
+            return False
+        actions = plan.get("record_actions")
+        if not isinstance(actions, list):
+            return False
+        mapped_actions = [action for action in actions if isinstance(action, Mapping)]
+        if len(mapped_actions) != len(actions) or not _c6x6_actions_safe(mapped_actions):
+            return False
+    for packet in review_packets:
+        if not _c6x7_packet_flags_safe(packet) or not _c6x7_refs_safe(packet):
+            return False
+    for decision in decision_records:
+        if _c6x8_decision_safe_for_storage(decision).get("stored") is not True:
+            return False
+    return True
+
+
+def _c6x9_approved_risky_state(
+    *,
+    cache_records: Sequence[OacpPersistentArtifactCacheRecord],
+    review_packets: Sequence[Mapping[str, Any]],
+    decision_records: Sequence[Mapping[str, Any]],
+) -> bool:
+    risky_cache = any(
+        record.risk_tier in _C6X9_HIGH_RISK_TIERS
+        or record.revocation_snapshot_status in _C6X9_RISKY_REVOCATION_STATES
+        or record.freshness_status in {"stale", "expired"}
+        for record in cache_records
+    )
+    risky_packet = False
+    for packet in review_packets:
+        revocation_summary = _c6x8_mapping(packet.get("revocation_snapshot_summary"))
+        risk_summary = _c6x8_mapping(packet.get("risk_tier_summary"))
+        freshness_summary = _c6x8_mapping(packet.get("freshness_summary"))
+        risky_packet = risky_packet or any(key in revocation_summary for key in _C6X9_RISKY_REVOCATION_STATES)
+        risky_packet = risky_packet or any(key in risk_summary for key in _C6X9_HIGH_RISK_TIERS)
+        risky_packet = risky_packet or any(key in freshness_summary for key in ("stale", "expired"))
+    approved = any(
+        str(decision.get("decision_kind", "")).startswith("approve_future_")
+        for decision in decision_records
+    )
+    return approved and (risky_cache or risky_packet)
+
+
+def _c6x9_merge_reason_codes(*items: Mapping[str, Any]) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    for item in items:
+        for key, value in _c6x8_mapping(item).items():
+            codes = [str(code) for code in value] if isinstance(value, list) else [str(value)]
+            merged[str(key)] = _c6x9_unique([*merged.get(str(key), []), *codes])
+    return dict(sorted(merged.items()))
+
+
+def _c6x9_capability_summary(records: Sequence[OacpPersistentArtifactCacheRecord], field_name: str) -> dict[str, int]:
+    values: list[str] = []
+    for record in records:
+        field_value = getattr(record, field_name)
+        if isinstance(field_value, tuple):
+            values.extend(str(value) for value in field_value)
+    return _c6x9_count(values)
+
+
+def build_oacp_c6x9_audit_export_bundle(
+    *,
+    cache_records: Sequence[OacpPersistentArtifactCacheRecord],
+    maintenance_plans: Sequence[Mapping[str, Any]],
+    review_packets: Sequence[Mapping[str, Any]],
+    operator_decision_records: Sequence[Mapping[str, Any]],
+    durable_decision_records: Sequence[Mapping[str, Any]] = (),
+    generated_at: str,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None = None,
+    buyer_agent_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a redacted C6X9 audit export bundle without writing, publishing, or executing it."""
+
+    all_decision_records = tuple(operator_decision_records) + tuple(durable_decision_records)
+    if not tenant_id or not merchant_id:
+        return _c6x9_blocked_bundle(
+            reason_code="tenant_or_merchant_scope_missing",
+            message="C6X9 audit export bundles require tenant and merchant scope.",
+            generated_at=generated_at,
+            tenant_id=tenant_id or None,
+            merchant_id=merchant_id or None,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not cache_records or not all_decision_records:
+        return _c6x9_blocked_bundle(
+            reason_code="audit_export_lineage_missing",
+            message="C6X9 requires local cache records and operator decision records before preparing an audit bundle.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not _c6x9_timestamps_valid(
+        generated_at=generated_at,
+        cache_records=cache_records,
+        maintenance_plans=maintenance_plans,
+        review_packets=review_packets,
+        decision_records=all_decision_records,
+    ):
+        return _c6x9_blocked_bundle(
+            reason_code="malformed_timestamp",
+            message="C6X9 refuses audit bundles with malformed cache, plan, report, or decision timestamps.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not all(_c6x3_record_safe_for_repository(record).get("stored") is True for record in cache_records):
+        return _c6x9_blocked_bundle(
+            reason_code="cache_record_private_or_unsafe",
+            message="C6X9 refuses cache records with missing scope, private refs, or executable posture.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not _c6x9_components_scope_match(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        buyer_agent_id=buyer_agent_id,
+        cache_records=cache_records,
+        maintenance_plans=maintenance_plans,
+        review_packets=review_packets,
+        decision_records=all_decision_records,
+    ):
+        return _c6x9_blocked_bundle(
+            reason_code="audit_export_scope_mismatch",
+            message="C6X9 refuses bundles whose cache, plan, report, or decision scopes do not match.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    try:
+        for component in [*maintenance_plans, *review_packets, *all_decision_records]:
+            assert_no_forbidden_oacp_artifact_fields(dict(component))
+    except ValueError:
+        return _c6x9_blocked_bundle(
+            reason_code="private_or_enabling_export_field",
+            message="C6X9 refuses private, raw, credential, or enabling export input fields.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not _c6x9_components_non_executing(
+        maintenance_plans=maintenance_plans,
+        review_packets=review_packets,
+        decision_records=all_decision_records,
+    ):
+        return _c6x9_blocked_bundle(
+            reason_code="export_component_executable_or_enabling",
+            message="C6X9 refuses executable or enabling maintenance, review, or decision records.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if _c6x9_inputs_private_or_overclaim(
+        maintenance_plans=maintenance_plans,
+        review_packets=review_packets,
+        decision_records=all_decision_records,
+    ):
+        return _c6x9_blocked_bundle(
+            reason_code="private_ref_or_overclaim_detected",
+            message="C6X9 refuses private refs, raw reviewer identity, or publication/readiness claims.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if _c6x9_approved_risky_state(
+        cache_records=cache_records,
+        review_packets=review_packets,
+        decision_records=all_decision_records,
+    ):
+        return _c6x9_blocked_bundle(
+            reason_code="risky_state_represented_as_approved",
+            message="C6X9 refuses to export stale, revoked, or high-risk states as approved.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+
+    sorted_records = tuple(sorted(cache_records, key=lambda record: record.cache_record_id))
+    sorted_plans = tuple(sorted(maintenance_plans, key=lambda plan: str(plan.get("plan_id", ""))))
+    sorted_packets = tuple(sorted(review_packets, key=lambda packet: str(packet.get("report_id", ""))))
+    sorted_decisions = tuple(
+        sorted(all_decision_records, key=lambda decision: str(decision.get("decision_record_id", "")))
+    )
+    source_refs = _c6x9_unique(
+        [
+            *(ref for record in sorted_records for ref in record.source_refs),
+            *(ref for plan in sorted_plans for ref in _c6x6_string_list(plan.get("source_refs"))),
+            *(ref for packet in sorted_packets for ref in _c6x7_string_list(packet.get("source_refs"))),
+            *(ref for decision in sorted_decisions for ref in _c6x8_list(decision.get("source_refs"))),
+        ]
+    )
+    evidence_refs = _c6x9_unique(
+        [
+            *(ref for record in sorted_records for ref in record.evidence_refs),
+            *(ref for plan in sorted_plans for ref in _c6x6_string_list(plan.get("evidence_refs"))),
+            *(ref for packet in sorted_packets for ref in _c6x7_string_list(packet.get("evidence_refs"))),
+            *(ref for decision in sorted_decisions for ref in _c6x8_list(decision.get("evidence_refs"))),
+        ]
+    )
+    if not evidence_refs or not _c6x2_refs_safe((*source_refs, *evidence_refs)):
+        return _c6x9_blocked_bundle(
+            reason_code="redacted_evidence_refs_missing_or_private",
+            message="C6X9 requires redacted source and evidence refs only.",
+            generated_at=generated_at,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+
+    plan_reason_maps = [_c6x8_mapping(plan.get("per_record_reason_codes")) for plan in sorted_plans]
+    packet_reason_maps = [_c6x8_mapping(packet.get("per_record_reason_codes")) for packet in sorted_packets]
+    decision_reason_maps = [_c6x8_mapping(decision.get("redacted_reason_codes")) for decision in sorted_decisions]
+    bundle_payload = {
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "generated_at": generated_at,
+        "cache_records": [record.cache_record_id for record in sorted_records],
+        "maintenance_plans": [str(plan.get("plan_id", "")) for plan in sorted_plans],
+        "review_packets": [str(packet.get("report_id", "")) for packet in sorted_packets],
+        "decision_records": [str(decision.get("decision_record_id", "")) for decision in sorted_decisions],
+    }
+    return {
+        "bundle_id": _c6x9_bundle_id(bundle_payload),
+        "bundle_kind": "oacp_cache_operator_decision_audit_export_bundle",
+        "status": "export_ready",
+        "generated_at": generated_at,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "scope_summary": _c6x9_scope_summary(sorted_records),
+        "artifact_family_counts": _c6x9_count([record.artifact_type for record in sorted_records]),
+        "cache_record_references": [record.cache_record_id for record in sorted_records],
+        "maintenance_plan_references": [str(plan.get("plan_id")) for plan in sorted_plans],
+        "review_packet_references": [str(packet.get("report_id")) for packet in sorted_packets],
+        "decision_record_references": [str(decision.get("decision_record_id")) for decision in sorted_decisions],
+        "redacted_reason_codes": _c6x9_merge_reason_codes(
+            *plan_reason_maps,
+            *packet_reason_maps,
+            *decision_reason_maps,
+        ),
+        "redacted_source_refs": source_refs,
+        "redacted_evidence_refs": evidence_refs,
+        "freshness_ttl_summary": {
+            "freshness": _c6x9_count([record.freshness_status for record in sorted_records]),
+            "records_with_ttl": len([record for record in sorted_records if record.ttl_policy_seconds > 0]),
+            "minimum_ttl_policy_seconds": min(record.ttl_policy_seconds for record in sorted_records),
+            "earliest_expires_at": min(record.expires_at for record in sorted_records),
+        },
+        "revocation_snapshot_summary": _c6x9_count([record.revocation_snapshot_status for record in sorted_records]),
+        "risk_tier_summary": _c6x9_count([record.risk_tier for record in sorted_records]),
+        "unsupported_capability_summary": _c6x9_capability_summary(sorted_records, "unsupported_capabilities"),
+        "blocked_capability_summary": _c6x9_capability_summary(sorted_records, "blocked_capabilities"),
+        "next_step_labels": _c6x9_unique(
+            [label for decision in sorted_decisions for label in _c6x8_list(decision.get("next_step_labels"))]
+        ),
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "audit_export_bundle_only": True,
+        "export_ready": True,
+        "generated_artifact_written": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+        "buyer_safe_message": "C6X9 prepared an internal redacted audit export bundle only; no commerce action ran.",
+        "seller_safe_message": "C6X9 does not call Grantex live, merchant systems, providers, or schedulers.",
+        "operator_safe_message": (
+            "Review this export-ready bundle as evidence only. It is not an execution instruction."
+        ),
+    }
+
+
 class OacpArtifactCache:
     def __init__(self) -> None:
         self._items: dict[str, OacpCachedArtifact] = {}
