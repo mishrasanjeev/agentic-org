@@ -25,8 +25,11 @@ set -euo pipefail
 
 # Defaults. Override via env or flags.
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-perfect-period-305406}"
-GCP_REGION="${GCP_REGION:-asia-south1}"
-GAR_REGISTRY="${GAR_REGISTRY:-${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg}"
+CLOUD_RUN_REGION="${CLOUD_RUN_REGION:-${GCP_REGION:-asia-southeast1}}"
+GCP_REGION="$CLOUD_RUN_REGION"
+GAR_REGION="${GAR_REGION:-asia-south1}"
+GAR_REGISTRY="${GAR_REGISTRY:-${GAR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg}"
+GAR_HOST="${GAR_REGISTRY%%/*}"
 API_SERVICE="${API_SERVICE:-agenticorg-api}"
 UI_SERVICE="${UI_SERVICE:-agenticorg-ui}"
 MIGRATE_JOB="${MIGRATE_JOB:-agenticorg-migrate}"
@@ -34,6 +37,7 @@ HEALTH_URL="${HEALTH_URL:-https://app.agenticorg.ai/api/v1/health}"
 API_HEALTH_PATH="${API_HEALTH_PATH:-/api/v1/health}"
 PROD_BRANCH="${PROD_BRANCH:-origin/main}"
 TRAFFIC_MODE="${TRAFFIC_MODE:-latest}"
+PYTHON_BIN="${PYTHON_BIN:-}"
 
 DEPLOY_SHA=""
 DRY_RUN=0
@@ -66,9 +70,11 @@ Options:
   -h, --help              Show this help.
 
 Environment overrides:
-  GCP_PROJECT_ID  GCP_REGION  GAR_REGISTRY
+  GCP_PROJECT_ID  CLOUD_RUN_REGION/GCP_REGION
+  GAR_REGION      GAR_REGISTRY
   API_SERVICE     UI_SERVICE  MIGRATE_JOB
   HEALTH_URL      API_HEALTH_PATH  PROD_BRANCH
+  PYTHON_BIN
 
 Examples:
   scripts/deploy_cloud_run.sh --sha abcd123 --skip-build
@@ -117,7 +123,26 @@ require_cmd gcloud
 require_cmd docker
 require_cmd git
 require_cmd curl
-require_cmd python3
+
+python_works() {
+  command -v "$1" >/dev/null 2>&1 && "$1" -c 'import json, sys' >/dev/null 2>&1
+}
+
+if [[ -n "$PYTHON_BIN" ]]; then
+  if ! python_works "$PYTHON_BIN"; then
+    echo "Missing or unusable Python interpreter: $PYTHON_BIN" >&2
+    exit 1
+  fi
+else
+  if python_works python3; then
+    PYTHON_BIN="python3"
+  elif python_works python; then
+    PYTHON_BIN="python"
+  else
+    echo "Missing: python3 or python. Override with PYTHON_BIN." >&2
+    exit 1
+  fi
+fi
 
 service_json() {
   gcloud run services describe "$1" \
@@ -134,7 +159,7 @@ service_value() {
 }
 
 traffic_summary() {
-  service_json "$1" | python3 -c '
+  service_json "$1" | "$PYTHON_BIN" -c '
 import json, sys
 svc = json.load(sys.stdin)
 traffic = svc.get("status", {}).get("traffic", []) or []
@@ -156,7 +181,7 @@ print(", ".join(items) if items else "none")
 }
 
 traffic_to_revisions() {
-  service_json "$1" | python3 -c '
+  service_json "$1" | "$PYTHON_BIN" -c '
 import json, sys
 svc = json.load(sys.stdin)
 traffic = svc.get("status", {}).get("traffic", []) or []
@@ -178,7 +203,7 @@ tagged_revision_url() {
   local svc="$1"
   local tag="$2"
   local revision="$3"
-  service_json "$svc" | python3 -c '
+  service_json "$svc" | "$PYTHON_BIN" -c '
 import json, sys
 
 wanted_tag = sys.argv[1]
@@ -237,7 +262,7 @@ revision_ready_state() {
   local expected_sha="$6"
   local svc="$7"
 
-  python3 -c '
+  "$PYTHON_BIN" -c "$(cat <<'PY'
 import json
 import sys
 
@@ -328,7 +353,8 @@ if ready_status == "False":
 
 print(f"{label} revision {revision} is still becoming ready ({details})")
 sys.exit(2)
-' "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc"
+PY
+)" "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc"
 }
 
 wait_for_staged_revision_ready() {
@@ -462,8 +488,8 @@ poll_health_url() {
   echo "Polling $label health at $url for commit=$SHORT_SHA ..."
   for attempt in $(seq 1 "$attempts"); do
     resp="$(curl -fsS "$url" 2>/dev/null || true)"
-    status="$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)"
-    commit="$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)"
+    status="$(echo "$resp" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)"
+    commit="$(echo "$resp" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)"
     if [[ "$status" == "healthy" && "${commit:0:7}" == "$SHORT_SHA" ]]; then
       echo "Verified $label health: status=healthy commit=$commit"
       return 0
@@ -499,6 +525,7 @@ echo "--- Deploy plan ------------------------------------------------"
 echo "  project     : $GCP_PROJECT_ID"
 echo "  region      : $GCP_REGION"
 echo "  registry    : $GAR_REGISTRY"
+echo "  registry host: $GAR_HOST"
 echo "  api svc     : $API_SERVICE"
 echo "  ui svc      : $UI_SERVICE"
 echo "  commit      : $DEPLOY_SHA ($SHORT_SHA)"
@@ -510,6 +537,7 @@ echo "----------------------------------------------------------------"
 
 if [[ $DRY_RUN -eq 0 ]]; then
   read -rp "Proceed? [y/N] " confirm
+  confirm="${confirm//$'\r'/}"
   case "$confirm" in
     y|Y|yes|YES) ;;
     *) echo "Aborted."; exit 0 ;;
@@ -522,7 +550,7 @@ for svc in "$API_SERVICE" "$UI_SERVICE"; do
         --project="$GCP_PROJECT_ID" --region="$GCP_REGION" \
         --format="value(status.url)" >/dev/null 2>&1; then
     echo "::error::Cloud Run service '$svc' not found in $GCP_REGION/$GCP_PROJECT_ID." >&2
-    echo "  Override with API_SERVICE/UI_SERVICE/GCP_REGION env vars." >&2
+    echo "  Override with API_SERVICE/UI_SERVICE/CLOUD_RUN_REGION env vars." >&2
     exit 1
   fi
 done
@@ -544,7 +572,7 @@ UI_IMAGE="${GAR_REGISTRY}/agenticorg-ui-cloudrun:${DEPLOY_SHA}"
 
 # 3. Build + push images.
 if [[ $SKIP_BUILD -eq 0 ]]; then
-  run gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+  run gcloud auth configure-docker "$GAR_HOST" --quiet
 
   run docker build \
     -t "$API_IMAGE" \
