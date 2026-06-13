@@ -40,6 +40,7 @@ TRAFFIC_MODE="${TRAFFIC_MODE:-latest}"
 
 DEPLOY_SHA=""
 DRY_RUN=0
+ASSUME_YES="${ASSUME_YES:-0}"
 RUN_MIGRATIONS=0
 CREATE_MIGRATE_JOB=0
 SKIP_BUILD=0
@@ -64,6 +65,7 @@ Options:
                                      report NOT DEPLOYED
                             manual   stage revisions with --no-traffic and
                                      print update-traffic commands
+  -y, --yes               Do not prompt for confirmation.
   --dry-run               Print the commands and planned traffic changes
                           without running them.
   -h, --help              Show this help.
@@ -88,6 +90,7 @@ while [[ $# -gt 0 ]]; do
     --create-migrate-job) CREATE_MIGRATE_JOB=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --traffic) TRAFFIC_MODE="$2"; shift 2 ;;
+    -y|--yes) ASSUME_YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1"; usage; exit 2 ;;
@@ -260,11 +263,49 @@ image_digest() {
     --format="value(image_summary.digest)" 2>/dev/null || true
 }
 
+image_acceptable_digests() {
+  local image="$1"
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  if docker buildx imagetools inspect "$image" --format '{{json .}}' > "$json_file" 2>/dev/null; then
+    "$PYTHON_BIN" - "$json_file" <<'PY' || rc=$?
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+digests = []
+
+def add(value):
+    if isinstance(value, str) and value.startswith("sha256:") and value not in digests:
+        digests.append(value)
+
+manifest = payload.get("manifest", {}) or {}
+add(manifest.get("digest"))
+for item in manifest.get("manifests", []) or []:
+    platform = item.get("platform", {}) or {}
+    if platform.get("os") == "unknown" and platform.get("architecture") == "unknown":
+        continue
+    add(item.get("digest"))
+
+print(",".join(digests))
+PY
+    rm -f "$json_file"
+    return "$rc"
+  fi
+
+  rm -f "$json_file"
+  image_digest "$image"
+}
+
 require_image_digest() {
   local image="$1"
   local label="$2"
   local digest
-  digest="$(image_digest "$image")"
+  digest="$(image_acceptable_digests "$image")"
   if [[ -z "$digest" ]]; then
     echo "::error::$label image not found in Artifact Registry: $image" >&2
     echo "  Build/push it first or remove --skip-build." >&2
@@ -312,6 +353,19 @@ json_file, label, revision, image, image_digest, env_name, expected_sha, svc = s
 with open(json_file, encoding="utf-8") as fh:
     rev = json.load(fh)
 
+image_digests = {
+    item.strip()
+    for item in image_digest.replace("\n", ",").split(",")
+    if item.strip()
+}
+
+def extract_digest(value: str) -> str:
+    if "@sha256:" in value:
+        return value.rsplit("@", 1)[1]
+    if value.startswith("sha256:"):
+        return value
+    return ""
+
 revision_service = rev.get("metadata", {}).get("labels", {}).get(
     "serving.knative.dev/service", ""
 )
@@ -332,18 +386,16 @@ containers = rev.get("spec", {}).get("containers", []) or []
 status_digest = rev.get("status", {}).get("imageDigest", "")
 single_container_status_digest_matches = (
     len(containers) == 1
-    and image_digest
-    and (status_digest.endswith("@" + image_digest) or status_digest.endswith(image_digest))
+    and extract_digest(status_digest) in image_digests
 )
 
 def image_matches(candidate: str) -> bool:
     if candidate == image:
         return True
-    if image_digest and (
-        candidate.endswith("@" + image_digest)
-        or candidate.endswith(image_digest)
-        or single_container_status_digest_matches
-    ):
+    candidate_digest = extract_digest(candidate)
+    if candidate_digest and candidate_digest in image_digests:
+        return True
+    if single_container_status_digest_matches:
         return True
     return False
 
@@ -356,7 +408,7 @@ if not matched_containers:
     ) or "<none>"
     print(
         f"{label} revision {revision} image mismatch: expected {image}"
-        f" or digest {image_digest or '<unknown>'}; saw {seen_images}"
+        f" or digest(s) {image_digest or '<unknown>'}; saw {seen_images}"
     )
     sys.exit(1)
 
@@ -599,8 +651,12 @@ echo "  traffic     : $TRAFFIC_MODE"
 echo "  dry-run     : $([[ $DRY_RUN -eq 1 ]] && echo yes || echo no)"
 echo "----------------------------------------------------------------"
 
-if [[ $DRY_RUN -eq 0 ]]; then
-  read -rp "Proceed? [y/N] " confirm
+if [[ $DRY_RUN -eq 0 && $ASSUME_YES -ne 1 ]]; then
+  if ! read -rp "Proceed? [y/N] " confirm; then
+    echo "Aborted."
+    exit 0
+  fi
+  confirm="${confirm//$'\r'/}"
   case "$confirm" in
     y|Y|yes|YES) ;;
     *) echo "Aborted."; exit 0 ;;
