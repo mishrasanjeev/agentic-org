@@ -3026,6 +3026,18 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         if not agent:
             raise HTTPException(404, "Agent not found")
 
+        if agent.status == "active":
+            version = agent.version or "1.0.0"
+            return {
+                "id": str(agent_id),
+                "promoted": False,
+                "already_active": True,
+                "from": "active",
+                "to": "active",
+                "from_version": version,
+                "to_version": version,
+            }
+
         new_status = _PROMOTE_MAP.get(agent.status)
         if new_status is None:
             raise HTTPException(

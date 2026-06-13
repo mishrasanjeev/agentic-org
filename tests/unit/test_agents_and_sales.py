@@ -810,11 +810,32 @@ class TestPromoteAgent:
         assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_promote_active_agent_rejected(self, mock_session, tenant_id):
+    async def test_promote_active_agent_is_idempotent(self, mock_session, tenant_id):
         from api.v1.agents import promote_agent
 
         aid = uuid.uuid4()
-        agent = make_mock_agent(id=aid, status="active")
+        agent = make_mock_agent(id=aid, status="active", version="2.1.0")
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = agent
+        mock_session.execute = AsyncMock(return_value=exec_result)
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            result = await promote_agent(agent_id=aid, tenant_id=tenant_id)
+
+        assert result["promoted"] is False
+        assert result["already_active"] is True
+        assert result["from"] == "active"
+        assert result["to"] == "active"
+        assert result["from_version"] == "2.1.0"
+        assert result["to_version"] == "2.1.0"
+
+    @pytest.mark.asyncio
+    async def test_promote_paused_agent_rejected(self, mock_session, tenant_id):
+        from api.v1.agents import promote_agent
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(id=aid, status="paused")
         exec_result = MagicMock()
         exec_result.scalar_one_or_none.return_value = agent
         mock_session.execute = AsyncMock(return_value=exec_result)

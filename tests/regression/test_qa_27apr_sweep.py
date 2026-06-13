@@ -184,18 +184,21 @@ def test_ramesh_agents_loads_connector_configs_for_shadow_runs() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
-# TC_002 — TEI httpx client caps wait at 25s
+# TC_002 — TEI httpx client caps wait below caller timeout
 # ──────────────────────────────────────────────────────────────────
 
 
 def test_tc_002_tei_client_caps_wait_under_gfe_timeout() -> None:
-    """Pin the 25s read timeout so the Google Frontend 30s gateway
-    timeout never fires on a TEI cold-start. The keyword fallback
-    in api/v1/knowledge.py:884 only fires if the embed call raises
-    BEFORE the GFE kills the upstream request."""
+    """Pin a short default read timeout so the Google Frontend 30s
+    gateway timeout and the production smoke/client timeout never fire
+    on a TEI cold-start. The keyword fallback only fires if the embed
+    call raises before the upstream client gives up."""
     src = (REPO / "core" / "embeddings.py").read_text(encoding="utf-8")
-    assert "httpx.Timeout(25.0, connect=5.0)" in src
+    assert "DEFAULT_TEI_READ_TIMEOUT_SECONDS = 5.0" in src
+    assert "MAX_TEI_READ_TIMEOUT_SECONDS = 25.0" in src
+    assert "AGENTICORG_TEI_TIMEOUT_SECONDS" in src
     # The comment must explain the budget so a future contributor
     # doesn't bump it past the GFE limit thinking it's just a
     # "client wait".
     assert "Google Frontend" in src or "GFE" in src
+    assert "production smoke" in src
