@@ -1,35 +1,38 @@
 # Deployment Guide
 
-> **2026-04-25 status:** the GKE Autopilot cluster was decommissioned to cut
-> costs. Production now runs on Cloud Run (`agenticorg-api` and
-> `agenticorg-ui` services in `asia-south1`). The CI deploy job in
-> `.github/workflows/deploy.yml` is still the disabled GKE block — it is
-> kept so the diff for the Cloud Run rewrite is reviewable, not because it
-> works.
+> **2026-06-13 status:** production runs on Cloud Run. The default production
+> Cloud Run services are `agenticorg-api` and `agenticorg-ui` in
+> `asia-southeast1`; Artifact Registry images live in `asia-south1` by
+> default. Use separate `CLOUD_RUN_REGION` and `GAR_REGION` overrides if that
+> split changes.
 >
-> Until that rewrite lands, ship a release with:
+> Ship a release with the manual Cloud Run helper:
 >
 > ```bash
-> # rebuild + roll out origin/main, then poll /health for the new commit
-> bash scripts/deploy_cloud_run.sh
+> # rebuild + roll out origin/main, then poll public health for the new commit
+> bash scripts/deploy_cloud_run.sh --yes
 >
-> # also run alembic migrations as part of the same rollout
-> bash scripts/deploy_cloud_run.sh --with-migrations
+> # deploy an existing commit image and run Alembic migrations before traffic moves
+> bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --with-migrations --yes
+>
+> # stage revisions only; production traffic remains pinned
+> bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --traffic preserve --yes
 > ```
 >
-> The script refuses to touch a service it can't `gcloud run services
-> describe` first, prints every command before running it, and supports
-> `--dry-run`. The legacy GKE/Helm sections below are preserved for
-> reference and for the air-gapped/on-prem install path; ignore them for
-> day-to-day production deploys.
+> The helper verifies both services exist before mutation, prints every command,
+> supports `--dry-run`, verifies platform image digests and commit metadata on
+> staged revisions, probes the API before UI traffic moves, and refuses to
+> report success if public health still returns an older commit. Legacy GKE/Helm
+> sections below are preserved for reference and non-default deployment shapes.
 
 ## Deployment Options
 
 | Option | Best For | Est. Cost/Month | Setup Time |
 |--------|----------|----------------|------------|
 | Docker Compose | Dev, POC | $0 (local) | <1 hour |
-| **GKE Autopilot Lean** | **Pre-customer, demo** | **~$50-70** | **1-2 hours** |
-| GKE Production | Enterprise with customers | ~$800-3,800 | 2-4 hours |
+| **Cloud Run** | **Current managed production** | Usage-based | <1 hour after images exist |
+| Legacy Kubernetes Lean | Reference demo shape only | ~$50-70 | 1-2 hours |
+| Legacy Kubernetes Production | Reference enterprise shape only | ~$800-3,800 | 2-4 hours |
 | Air-gapped | Defence, regulated banking | Varies | 1-2 days |
 
 ## Docker Compose (Development)
@@ -45,9 +48,51 @@ docker compose up -d
 # - MinIO (S3-compat): http://localhost:9000 (console: :9001)
 ```
 
-## GKE Autopilot Lean (~$50-70/month)
+## Cloud Run (Current Production)
 
-The cheapest viable GCP deployment. Single replica of everything, in-cluster Redis (skip Memorystore), db-f1-micro Cloud SQL. Scale up when you have customers.
+The manual helper is the current production rollout path:
+
+```bash
+# Defaults:
+#   GCP_PROJECT_ID=perfect-period-305406
+#   CLOUD_RUN_REGION=asia-southeast1
+#   GAR_REGION=asia-south1
+#   API_SERVICE=agenticorg-api
+#   UI_SERVICE=agenticorg-ui
+#   MIGRATE_JOB=agenticorg-migrate
+
+bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --with-migrations --yes
+```
+
+Important behavior:
+
+- `--with-migrations` updates and executes the Cloud Run migration job before
+  services are staged.
+- API and UI services are updated with `--no-traffic` first, then staged
+  revisions are checked by revision object.
+- API traffic moves first. Public API health must return the target commit
+  before the UI revision is staged or routed.
+- `--traffic preserve` stages revisions only and reports `NOT DEPLOYED`.
+- `--traffic manual` stages revisions only and prints exact traffic commands.
+- `--dry-run` prints planned service updates, migration behavior, and traffic
+  actions without touching Cloud Run.
+
+The helper accepts manifest-list and platform digests from Artifact Registry by
+inspecting image manifests, then verifies that Cloud Run revision containers
+match an acceptable digest and that the API/UI commit env vars match the target
+SHA.
+
+Focused regression:
+
+```bash
+python -m pytest tests/unit/test_deploy_cloud_run_script.py -q
+```
+
+## Legacy Kubernetes Lean (~$50-70/month)
+
+Legacy/reference GCP deployment. Single replica of everything, in-cluster Redis
+(skip Memorystore), db-f1-micro Cloud SQL. Use Cloud Run for current managed
+production unless a separate deployment decision approves GKE.
 
 ```bash
 # One-command setup
@@ -79,7 +124,7 @@ kubectl port-forward svc/agenticorg-api 8000:8000 -n agenticorg
 
 | Component | Spec | Cost/Month |
 |-----------|------|-----------|
-| GKE Autopilot | ~1 vCPU, ~2GB (pay per pod) | ~$30-50 |
+| Autopilot Kubernetes runtime | ~1 vCPU, ~2GB (pay per pod) | ~$30-50 |
 | Cloud SQL | db-f1-micro (shared, 0.6GB RAM, 10GB SSD) | ~$10 |
 | Redis | In-cluster pod (128MB) | $0 |
 | Cloud Storage | Minimal | ~$1 |
@@ -226,17 +271,27 @@ See [`.env.example`](../.env.example) for the complete reference.
 
 ## CI/CD Pipeline
 
-The 9-stage pipeline runs on every push to `main` and on tag pushes:
+CI runs lint, type checks, unit/integration tests, security scans, and image
+build checks. Production rollout is currently performed through
+`scripts/deploy_cloud_run.sh` after CI is green and the target commit/image is
+selected.
 
-1. **Lint** — ruff + mypy + eslint + tsc
-2. **Unit Tests** — pytest with 80% coverage gate
-3. **Integration Tests** — PostgreSQL + Redis service containers
-4. **Security Scan** — bandit (SAST) + pip-audit (dependency CVEs)
-5. **Build** — Docker images for API and UI
-6. **Staging Deploy** — Helm to staging namespace
-7. **Smoke Tests** — Playwright + API e2e tests
-8. **Approval Gate** — Manual approval via GitHub environment protection
-9. **Production Deploy** — Canary rollout (10% → verify → 100%)
+Current deploy gates:
+
+1. **Lint/type checks** — Python and TypeScript checks.
+2. **Unit/integration tests** — pytest and frontend tests.
+3. **Security scan** — `pip-audit`, Bandit, npm audit, and Trivy fail closed on
+   high-risk findings.
+4. **Image build** — API and UI images are built/pushed or verified.
+5. **Migration gate** — `--with-migrations` runs Alembic through Cloud Run job
+   before service traffic moves.
+6. **Revision verification** — staged revisions must match target image digest
+   and commit metadata.
+7. **Traffic shift** — API moves first, public health must return the target
+   commit, then UI moves.
+
+Legacy Helm/GKE staging and canary instructions in this document are reference
+material, not the default production path.
 
 ## Health Monitoring
 

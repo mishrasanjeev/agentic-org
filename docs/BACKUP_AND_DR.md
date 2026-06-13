@@ -11,7 +11,8 @@ Covered:
 - Cloud Storage buckets holding uploaded documents and agent artifacts.
 - Redis (Memorystore) session / cache state.
 - Application config (Secret Manager).
-- The GKE cluster `agenticorg-prod-gke` and all workloads.
+- Cloud Run services `agenticorg-api` and `agenticorg-ui`, plus the
+  `agenticorg-migrate` Cloud Run job.
 
 Not covered (customer-managed):
 - Credentials stored in the customer's own KMS (if they use BYOK).
@@ -44,8 +45,8 @@ RPO = max acceptable data loss. RTO = max acceptable downtime.
 - Dual-region buckets for any artifact larger than 1 MB.
 
 ### Secrets
-- Secret Manager replicates automatically across all `asia-south1`
-  zones. No additional backup needed.
+- Secret Manager replicates automatically across Google-managed replicas unless
+  a secret is explicitly configured otherwise. No additional backup needed.
 
 ## Restore procedure (runbook)
 
@@ -67,23 +68,29 @@ RPO = max acceptable data loss. RTO = max acceptable downtime.
    `gcloud sql instances promote-replica agenticorg-prod-replica`
 3. Update the `AGENTICORG_DB_URL` secret to point at the promoted
    instance.
-4. Rolling-restart API deployments so they pick up the new URL:
-   `kubectl rollout restart deployment/api -n agenticorg`
-5. Restart workers and the websocket feed pods.
+4. Re-run the Cloud Run deploy helper against the last known-good commit so the
+   API and UI pick up the updated secret:
+   `bash scripts/deploy_cloud_run.sh --sha <last-good-sha> --skip-build --with-migrations --yes`
+5. Restart any auxiliary worker or websocket services that are not part of the
+   Cloud Run API/UI pair.
 6. Verify health via `/api/v1/health` and the status page.
 
-### Scenario: GKE cluster loss
-1. Re-run the Terraform in `infra/terraform/gke/`. This takes ~20 min.
-2. Redeploy via ArgoCD sync.
-3. Secrets reattach from Secret Manager automatically.
-4. Reconnect the database (unchanged).
+### Scenario: Cloud Run service loss or bad revision
+1. Describe the affected service:
+   `gcloud run services describe agenticorg-api --region=asia-southeast1`
+2. If the service exists but the latest revision is bad, roll traffic back to
+   the previous healthy revision with `gcloud run services update-traffic`.
+3. If the service was deleted, redeploy the last known-good image with
+   `bash scripts/deploy_cloud_run.sh --sha <last-good-sha> --skip-build --with-migrations --yes`.
+4. Secrets reattach from Secret Manager automatically.
+5. Verify `/api/v1/health`, `/api/v1/health/liveness`, and UI reachability.
 
 ## DR testing
 
 We run a DR drill on the **first Saturday of every quarter**:
-1. Spin up a DR staging cluster from scratch.
+1. Spin up DR Cloud Run services from the last known-good images.
 2. Restore the latest prod backup into a fresh Cloud SQL instance.
-3. Point the DR staging cluster at the restored DB.
+3. Point the DR Cloud Run services at the restored DB.
 4. Run the E2E smoke suite against DR staging.
 5. Measure RTO and compare against the target.
 6. File any gaps as follow-up tickets.
