@@ -150,8 +150,33 @@ def test_staged_revision_image_digest_and_commit_metadata_are_verified() -> None
     assert "image mismatch" in ready_block
     assert "commit metadata mismatch" in ready_block
     assert "image_digest" in ready_block
+    assert "image_digests" in ready_block
+    assert "extract_digest" in ready_block
     assert "expected_sha" in ready_block
     assert "serving.knative.dev/service" in ready_block
+
+
+def test_deploy_script_accepts_cloud_run_platform_digest_from_manifest_list() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert "image_acceptable_digests()" in script
+    assert "docker buildx imagetools inspect" in script
+    assert "manifest.get(\"manifests\"" in script
+    assert "candidate_digest in image_digests" in ready_block
+    assert "digest(s)" in ready_block
+
+
+def test_deploy_script_supports_noninteractive_yes_confirmation() -> None:
+    script = _deploy_script()
+
+    assert "-y, --yes" in script
+    assert "ASSUME_YES" in script
+    assert "-y|--yes) ASSUME_YES=1" in script
+    assert "read -rp" in script
+    assert "confirm=\"${confirm//$'\\r'/}\"" in script
 
 
 def test_dry_run_reports_planned_traffic_changes() -> None:
