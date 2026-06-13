@@ -8,8 +8,9 @@ import time
 from typing import Any
 
 import httpx
+import jwt
 import redis.asyncio as aioredis
-from jose import JWTError, jwt
+from jwt import PyJWK, PyJWTError
 
 from core.config import is_strict_runtime_env, settings
 
@@ -239,7 +240,7 @@ def validate_local_token(token: str) -> dict:
             options={"verify_iss": True},
         )
         return payload
-    except JWTError as e:
+    except PyJWTError as e:
         raise ValueError(f"Local token validation failed: {e}") from e
 
 
@@ -281,9 +282,10 @@ async def _validate_jwks_token(token: str) -> dict[str, Any]:
     if not rsa_key:
         raise ValueError(f"No matching key found for kid={kid}")
 
+    signing_key = PyJWK.from_dict(rsa_key).key
     payload = jwt.decode(
         token,
-        rsa_key,
+        signing_key,
         algorithms=["RS256"],
         audience="agenticorg-tool-gateway",
         issuer=settings.jwt_issuer,

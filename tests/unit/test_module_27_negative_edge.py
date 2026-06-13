@@ -53,11 +53,11 @@ def test_tc_neg_001_validate_local_token_rejects_revoked() -> None:
 
 
 def test_tc_neg_001_validate_local_token_surfaces_jwt_error() -> None:
-    """Tampered/expired/wrong-issuer tokens raise JWTError, which
+    """Tampered/expired/wrong-issuer tokens raise PyJWTError, which
     we catch and re-raise as ValueError with a "Local token
     validation failed:" prefix. UI parses this prefix."""
     src = (REPO / "auth" / "jwt.py").read_text(encoding="utf-8")
-    assert "except JWTError as e:" in src
+    assert "except PyJWTError as e:" in src
     assert 'Local token validation failed:' in src
 
 

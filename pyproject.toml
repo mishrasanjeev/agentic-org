@@ -36,20 +36,7 @@ dependencies = [
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
-    # SEC-2026-05-P2-008 RESIDUAL (ecdsa CVE-2024-23342): python-jose
-    # transitively pulls ``ecdsa>=0.15`` regardless of the
-    # ``[cryptography]`` extra. ecdsa 0.19.2 (current latest) carries
-    # CVE-2024-23342 ("Minerva timing attack on P-256") and the
-    # upstream maintainers have explicitly stated it will NOT be
-    # patched in the ecdsa lib — they recommend switching to a
-    # cryptography-backed JWT. We do that already: every JWT
-    # signature/verify path in this codebase uses python-jose's
-    # cryptography backend, and ecdsa is only loaded for legacy
-    # algorithm fallbacks we never select. The CVE is therefore not
-    # exploitable in our request-path, but the audit will continue to
-    # flag it until upstream excises the dep. Tracked as a non-blocker
-    # residual — pyjwt[crypto] migration is the long-term close.
-    "python-jose[cryptography]>=3.3.0",
+    "PyJWT[crypto]>=2.13.0",
     "passlib[bcrypt]>=1.7.4",
     "httpx>=0.28.0",
     # Billing checkout is a production request path. Keep the Stripe SDK in
@@ -104,37 +91,29 @@ dependencies = [
     "authlib>=1.7.2",
     "reportlab>=4.5.1",
     "google-cloud-kms>=3.13.0",
-    "fastembed>=0.7.0",
-    # FlagEmbedding is BAAI's official loader for bge-m3 (8192 ctx,
-    # 1024 dim, multilingual). fastembed does not ship bge-m3.
-    # Loaded lazily — only the backfill job (PR-A) and PR-B's flipped
-    # request path import it. The default request-path embedder stays
-    # on fastembed/bge-small until PR-B cutover.
-    "FlagEmbedding>=1.4.0",
-    # SEC-2026-05-P2-008 RESIDUAL (docs/BRUTAL_SECURITY_SCAN_2026-05-01.md):
-    # Pillow 10.4.0 ships CVE-2026-25990 + CVE-2026-40192, fixed in 12.2.0.
-    # Direct pin attempted in PR-A but rejected by uv resolver because
-    # ``composio-core==0.7.21`` (the latest published version) requires
-    # ``pillow>=10.2.0,<11``. composio-core has no newer release.
-    #
-    # Compensating controls:
-    #   1. Image ingestion is not on the request hot path. The PR-D
-    #      file-streaming refactor (queued) will move all parsing off
-    #      the API workers anyway.
-    #   2. Untrusted images don't reach Pillow today: presidio's
-    #      ``image_ocr`` path is gated behind an opt-in flag that's off
-    #      in production.
-    #   3. The pip-audit residual will clear automatically when
-    #      composio-core publishes a Pillow>=12 compatible release;
-    #      Renovate / Dependabot will catch that.
+    "fastembed>=0.8.0",
+    # SECURITY 2026-06-13: Pillow is transitively required by fastembed.
+    # Keep the patched floor direct so dependency resolution cannot drift
+    # back to the vulnerable 10.x/11.x lines.
+    "pillow>=12.2.0",
 ]
 
 [project.optional-dependencies]
 v4 = [
-    "composio-core>=0.7.21",
-    "routellm>=0.2.0",
-    "presidio-analyzer>=2.2.0",
-    "presidio-anonymizer>=2.2.0",
+    # composio-core==0.7.21 is intentionally excluded from production
+    # extras until it supports Pillow>=12.2.0.
+    # Python 3.14 is the production container runtime. Presidio
+    # 2.2.360+ currently declares Python<3.14, so the production-safe
+    # floor is intentionally marker-scoped instead of pretending the
+    # latest package can install everywhere.
+    "presidio-analyzer>=2.2.359,<2.2.360; python_version >= '3.14'",
+    "presidio-analyzer>=2.2.362; python_version < '3.14'",
+    "presidio-anonymizer>=2.2.362",
+]
+bge-m3 = [
+    # Heavy in-process BGE-M3 loader. This pulls PyTorch, so it stays out
+    # of the production API image; production should use AGENTICORG_TEI_URL.
+    "FlagEmbedding>=1.4.0",
 ]
 dev = [
     "pytest>=8.4.2",
@@ -156,7 +135,6 @@ dev = [
     # so the wheel stays lean for downstream SDK consumers.
     "presidio-analyzer>=2.2.0",
     "presidio-anonymizer>=2.2.0",
-    "composio-core>=0.7.21",
 ]
 
 [project.scripts]

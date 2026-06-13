@@ -9,7 +9,7 @@ import uuid
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request
-from jose import JWTError
+from jwt import PyJWTError
 from pydantic import BaseModel
 from sqlalchemy import select, update
 
@@ -55,7 +55,7 @@ def _decode_invite_claims(token: str) -> dict:
     """Validate an invite token and return its claims."""
     try:
         claims = validate_local_token(token)
-    except (ValueError, JWTError) as e:
+    except (ValueError, PyJWTError) as e:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid or expired invite token: {e}",
