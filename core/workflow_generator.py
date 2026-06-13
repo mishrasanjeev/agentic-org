@@ -12,50 +12,18 @@ from typing import Any
 
 import structlog
 
+from core.agent_generator import _AGENT_TYPE_DEFAULT_TOOLS as CANONICAL_AGENT_DEFAULT_TOOLS
 from workflows.parser import WorkflowParser
 
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# Available agent types (from the 35 built-in agents)
+# Available agent types (canonical runtime launch catalog)
 # ---------------------------------------------------------------------------
-KNOWN_AGENT_TYPES: list[str] = [
-    "ap_processor",
-    "ar_collector",
-    "bank_reconciler",
-    "budget_analyst",
-    "expense_auditor",
-    "financial_reporter",
-    "gst_filer",
-    "invoice_processor",
-    "payroll_processor",
-    "tax_analyst",
-    "treasury_manager",
-    "leave_manager",
-    "onboarding_specialist",
-    "recruiter",
-    "timesheet_processor",
-    "campaign_manager",
-    "content_creator",
-    "lead_scorer",
-    "seo_optimizer",
-    "social_media_manager",
-    "compliance_monitor",
-    "data_migrator",
-    "fleet_ops_manager",
-    "incident_responder",
-    "it_helpdesk",
-    "procurement_manager",
-    "quality_inspector",
-    "scheduler",
-    "vendor_manager",
-    "customer_success",
-    "sales_forecaster",
-    "support_deflection",
-    "collections_agent",
-    "fraud_detector",
-    "report_generator",
-]
+# Keep NL workflow generation aligned with the agents that A2A/MCP/API can
+# actually execute. A stale independent list creates workflows that validate
+# locally but fail at runtime because the referenced agent type is not launchable.
+KNOWN_AGENT_TYPES: list[str] = sorted(CANONICAL_AGENT_DEFAULT_TOOLS)
 
 # ---------------------------------------------------------------------------
 # Available workflow step types

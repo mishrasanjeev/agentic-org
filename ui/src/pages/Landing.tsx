@@ -1382,7 +1382,7 @@ export default function Landing() {
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">Build With AgenticOrg</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Python SDK, TypeScript SDK, CLI, and MCP Server. Run AI agents from your code, ChatGPT, Claude, or any MCP-compatible client.
+                Python SDK, TypeScript SDK, CLI, and MCP Server. Launch agents, discover commerce tools, query knowledge, and run workflows from your code or any MCP-compatible client.
               </p>
             </div>
           </FadeIn>
@@ -1398,10 +1398,13 @@ export default function Landing() {
 
 client = AgenticOrg(api_key="ao_sk_...")
 result = client.agents.run(
-  "ap_processor",
-  inputs={"invoice_id": "INV-001"}
+  "commerce_sales_agent",
+  action="buyer_discovery_preview",
+  inputs={"merchant_id": "merchant_demo"}
 )
-print(result.output)`,
+workflow = client.workflows.generate(
+  "Review vendor renewal risk"
+)`,
                 link: "https://pypi.org/project/agenticorg/",
                 color: "from-yellow-500 to-yellow-600",
               },
@@ -1415,8 +1418,11 @@ const client = new AgenticOrg({
   apiKey: "ao_sk_..."
 })
 const result = await client.agents.run(
-  "recon_agent",
-  { inputs: { bank_id: "SBI-001" } }
+  "commerce_sales_agent",
+  { action: "buyer_discovery_preview" }
+)
+const kb = await client.knowledge.search(
+  "vendor renewal policy"
 )`,
                 link: "https://www.npmjs.com/package/agenticorg-sdk",
                 color: "from-blue-500 to-blue-600",

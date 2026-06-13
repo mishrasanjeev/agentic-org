@@ -119,6 +119,8 @@ class AgenticOrg:
         self.sop = _SOPResource(self._http)
         self.a2a = _A2AResource(self._http)
         self.mcp = _MCPResource(self._http)
+        self.workflows = _WorkflowsResource(self._http)
+        self.knowledge = _KnowledgeResource(self._http)
 
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -205,6 +207,25 @@ class _AgentsResource:
     def create(self, **kwargs: Any) -> dict[str, Any]:
         """Create a new agent."""
         resp = self._http.post("/api/v1/agents", json=kwargs)
+        resp.raise_for_status()
+        return resp.json()
+
+    def generate(
+        self,
+        description: str,
+        *,
+        deploy: bool = False,
+        company_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate an agent config from a plain-English description.
+
+        If ``deploy`` is true, the API creates the top suggestion as a shadow
+        agent. This mirrors ``POST /api/v1/agents/generate``.
+        """
+        payload: dict[str, Any] = {"description": description, "deploy": deploy}
+        if company_id:
+            payload["company_id"] = company_id
+        resp = self._http.post("/api/v1/agents/generate", json=payload)
         resp.raise_for_status()
         return resp.json()
 
@@ -305,3 +326,113 @@ class _MCPResource:
         })
         resp.raise_for_status()
         return resp.json()
+
+
+class _WorkflowsResource:
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def templates(self, domain: str | None = None) -> list[dict[str, Any]]:
+        """List workflow templates, optionally filtered by domain."""
+        params = {"domain": domain} if domain else {}
+        resp = self._http.get("/api/v1/workflows/templates", params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("items", data) if isinstance(data, dict) else data
+
+    def list(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 20,
+        company_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List deployed workflows."""
+        params: dict[str, Any] = {"page": page, "per_page": per_page}
+        if company_id:
+            params["company_id"] = company_id
+        resp = self._http.get("/api/v1/workflows", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def generate(self, description: str, *, deploy: bool = False) -> dict[str, Any]:
+        """Generate a workflow definition from a natural-language description."""
+        resp = self._http.post(
+            "/api/v1/workflows/generate",
+            json={"description": description, "deploy": deploy},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def create(
+        self,
+        *,
+        name: str,
+        definition: dict[str, Any],
+        version: str = "1.0",
+        description: str | None = None,
+        domain: str | None = None,
+        trigger_type: str | None = None,
+        trigger_config: dict[str, Any] | None = None,
+        replan_on_failure: bool = False,
+        company_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a workflow definition."""
+        payload: dict[str, Any] = {
+            "name": name,
+            "version": version,
+            "definition": definition,
+            "replan_on_failure": replan_on_failure,
+        }
+        optional = {
+            "description": description,
+            "domain": domain,
+            "trigger_type": trigger_type,
+            "trigger_config": trigger_config,
+            "company_id": company_id,
+        }
+        payload.update({key: value for key, value in optional.items() if value is not None})
+        resp = self._http.post("/api/v1/workflows", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get(self, workflow_id: str) -> dict[str, Any]:
+        """Get a workflow definition."""
+        resp = self._http.get(f"/api/v1/workflows/{workflow_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def run(
+        self,
+        workflow_id: str,
+        *,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Start a workflow run."""
+        resp = self._http.post(
+            f"/api/v1/workflows/{workflow_id}/run",
+            json={"payload": payload or {}},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_run(self, run_id: str) -> dict[str, Any]:
+        """Get workflow run status and step outputs."""
+        resp = self._http.get(f"/api/v1/workflows/runs/{run_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+
+class _KnowledgeResource:
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def search(self, query: str, *, top_k: int = 5) -> list[dict[str, Any]]:
+        """Search the tenant knowledge base."""
+        resp = self._http.post(
+            "/api/v1/knowledge/search",
+            json={"query": query, "top_k": top_k},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("results", data) if isinstance(data, dict) else data

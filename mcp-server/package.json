@@ -29,6 +29,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node test/mcp-server-smoke.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

@@ -41,7 +41,7 @@ def _make_valid_workflow_json(
                 "id": "extract_invoice",
                 "type": "agent",
                 "title": "Extract invoice data",
-                "agent_type": "invoice_processor",
+                "agent_type": "ap_processor",
             },
             {
                 "id": "check_amount",
@@ -97,7 +97,7 @@ def _make_parallel_workflow_json() -> str:
                 "id": "validate_employee",
                 "type": "agent",
                 "title": "Validate employee data",
-                "agent_type": "onboarding_specialist",
+                "agent_type": "onboarding_agent",
             },
             {
                 "id": "create_accounts_parallel",
@@ -114,21 +114,21 @@ def _make_parallel_workflow_json() -> str:
                 "id": "create_slack",
                 "type": "agent",
                 "title": "Create Slack account",
-                "agent_type": "it_helpdesk",
+                "agent_type": "it_operations",
                 "depends_on": ["validate_employee"],
             },
             {
                 "id": "create_gmail",
                 "type": "agent",
                 "title": "Create Gmail account",
-                "agent_type": "it_helpdesk",
+                "agent_type": "it_operations",
                 "depends_on": ["validate_employee"],
             },
             {
                 "id": "create_jira",
                 "type": "agent",
                 "title": "Create Jira account",
-                "agent_type": "it_helpdesk",
+                "agent_type": "it_operations",
                 "depends_on": ["validate_employee"],
             },
             {
@@ -586,7 +586,7 @@ class TestValidation:
     def test_defaults_filled_in(self) -> None:
         """Minimal valid workflow gets defaults filled in."""
         defn = {
-            "steps": [{"id": "s1", "type": "agent", "agent_type": "invoice_processor"}],
+            "steps": [{"id": "s1", "type": "agent", "agent_type": "ap_processor"}],
         }
         result = _validate_generated_workflow(defn)
         assert result["name"] == "Generated Workflow"

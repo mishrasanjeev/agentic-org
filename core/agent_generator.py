@@ -13,6 +13,7 @@ from typing import Any
 
 import structlog
 
+from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.llm.router import LLMRouter, llm_router
 
 logger = structlog.get_logger()
@@ -20,6 +21,14 @@ logger = structlog.get_logger()
 # ── Known agent types with domains (for prompt context + validation) ──────────
 
 AGENT_TYPE_CATALOG: dict[str, dict[str, str]] = {
+    # Commerce
+    "commerce_sales_agent": {
+        "domain": "commerce",
+        "desc": (
+            "Commerce buyer/seller runtime -- Grantex-grounded discovery, "
+            "catalog, consent, checkout handoff, and payment-status guardrails"
+        ),
+    },
     # Finance
     "ap_processor": {
         "domain": "finance",
@@ -174,6 +183,7 @@ AGENT_TYPE_CATALOG: dict[str, dict[str, str]] = {
 
 # ── Default tools by agent type (mirrors _AGENT_TYPE_DEFAULT_TOOLS in agents.py)
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
+    "commerce_sales_agent": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "ap_processor": [
         "fetch_bank_statement", "check_account_balance", "post_voucher",
         "get_ledger_balance", "get_trial_balance", "create_order",
@@ -326,7 +336,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "chat_agent": ["slack_send_message", "send_email", "read_inbox"],
 }
 
-VALID_DOMAINS = {"finance", "hr", "marketing", "ops", "backoffice", "comms"}
+VALID_DOMAINS = {"commerce", "finance", "hr", "marketing", "ops", "backoffice", "comms"}
 VALID_AGENT_TYPES = set(AGENT_TYPE_CATALOG.keys())
 
 # ── Prompt injection patterns ─────────────────────────────────────────────────

@@ -203,6 +203,40 @@ Creates a new agent in `shadow` status. Requires `agenticorg:agents:write` scope
 }
 ```
 
+### Generate Agent
+```
+POST /api/v1/agents/generate
+```
+Generates one or more launchable agent configurations from a plain-English
+description. If `deploy` is true, the top suggestion is created as a shadow
+agent. Generated `agent_type`, `domain`, and tool selections are validated
+against the same runtime catalog used by A2A, MCP, and workflow generation.
+
+**Request Body:**
+```json
+{
+  "description": "Create a contract intelligence agent that uses Confluence knowledge and Jira issues to review renewal risk.",
+  "deploy": false,
+  "company_id": "optional-company-uuid"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "suggestions": [
+    {
+      "employee_name": "Contract Intelligence Analyst",
+      "agent_type": "contract_intelligence",
+      "domain": "ops",
+      "suggested_tools": ["search_content_fulltext", "create_page", "search_issues"]
+    }
+  ],
+  "deployed": false,
+  "agent_id": null
+}
+```
+
 ### Agent CRUD Flow
 
 ```mermaid
@@ -2146,6 +2180,65 @@ hardcoded list. Add a template by editing `core/workflows/template_catalog.py`
 — no UI change required.
 
 Source: PR #207 (PR-C3 / Phase 7.2).
+
+### Generate workflow
+
+```
+POST /api/v1/workflows/generate
+```
+
+Generates a workflow definition from a plain-English process description.
+Generated workflow agent references are validated against the launchable
+agent-type catalog shared by A2A/MCP discovery and agent generation.
+
+**Request:**
+
+```json
+{
+  "description": "When a contract renewal is 30 days away, search knowledge, check Jira, ask contract_intelligence to summarize risk, then notify vendor_manager.",
+  "deploy": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "workflow": {
+    "name": "Renewal Risk Review",
+    "domain": "ops",
+    "trigger_type": "manual",
+    "steps": [
+      {"id": "search_policy", "type": "agent_task", "agent_type": "contract_intelligence"},
+      {"id": "notify_vendor", "type": "agent_task", "agent_type": "vendor_manager"}
+    ]
+  },
+  "deployed": false,
+  "workflow_id": null
+}
+```
+
+### Run workflow
+
+```
+POST /api/v1/workflows/{id}/run
+GET  /api/v1/workflows/runs/{run_id}
+```
+
+Starts a workflow run and then polls the run record, including step status,
+inputs, outputs, confidence, and errors.
+
+### SDK launch contract
+
+The Python SDK, TypeScript SDK, and MCP server are expected to cover this
+end-to-end path:
+
+1. Discover launchable agents through `GET /api/v1/a2a/agent-card`,
+   `GET /api/v1/a2a/agents`, and `GET /api/v1/mcp/tools`.
+2. Launch `commerce_sales_agent` through `POST /api/v1/a2a/tasks` or MCP for
+   buyer/seller discovery.
+3. List connectors, search knowledge, generate an agent, generate a workflow,
+   create the workflow, run it, and poll the run status.
 
 ### Knowledge search — native pgvector fallback
 
