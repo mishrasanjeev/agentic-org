@@ -13,7 +13,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from typing import Any, Literal, Protocol, cast
 
 RiskTier = Literal["informational", "low", "medium", "high", "critical"]
 ArtifactType = Literal[
@@ -920,6 +920,43 @@ class OacpPersistentArtifactCacheRecord:
     no_checkout_payment_enablement: bool = True
     no_live_provider_enablement: bool = True
     no_public_discovery_enablement: bool = True
+
+
+@dataclass(frozen=True)
+class OacpArtifactCacheRepositoryQuery:
+    scope_kind: PersistentCacheScopeKind | None = None
+    tenant_id: str | None = None
+    merchant_id: str | None = None
+    seller_agent_id: str | None = None
+    buyer_agent_id: str | None = None
+    artifact_type: ArtifactType | None = None
+    authority: str | None = None
+
+
+class OacpArtifactCacheRepositoryPort(Protocol):
+    def upsert(self, record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
+        """Store or replace a local cache record without external calls."""
+        ...
+
+    def get(self, cache_record_id: str) -> OacpPersistentArtifactCacheRecord | None:
+        """Read one local cache record by deterministic local id."""
+        ...
+
+    def list_for_scope(self, query: OacpArtifactCacheRepositoryQuery) -> tuple[OacpPersistentArtifactCacheRecord, ...]:
+        """List local cache records that match a tenant, merchant, seller, or buyer scope."""
+        ...
+
+    def evaluate(
+        self,
+        *,
+        cache_record_id: str,
+        action_intent: PersistentCacheActionIntent,
+        now_iso: str,
+        grantex_available: bool,
+        expected_scope: dict[str, str | None] | None = None,
+    ) -> dict[str, Any]:
+        """Evaluate one stored record using the C6X2 fail-closed cache policy."""
+        ...
 
 
 def canonicalize_oacp_payload(payload: Any) -> str:
@@ -4161,6 +4198,138 @@ def evaluate_oacp_persistent_artifact_cache_record(
             "record."
         ),
     }
+
+
+def _c6x3_repository_refusal(
+    *,
+    status: PersistentCacheEvaluationStatus,
+    refusal_code: str,
+    message: str,
+    record: OacpPersistentArtifactCacheRecord | None = None,
+) -> dict[str, Any]:
+    return {
+        "stored": False,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "cache_record_id": None if record is None else record.cache_record_id,
+        "artifact_id": None if record is None else record.artifact_id,
+        "allowed_to_execute": False,
+        "repository_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x3_record_safe_for_repository(record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
+    if not record.cache_record_id or not record.artifact_id or not record.authority or not record.issuer:
+        return _c6x3_repository_refusal(
+            status="blocked",
+            refusal_code="cache_record_identity_missing",
+            message="C6X3 repository records require local id, artifact id, authority, and issuer.",
+            record=record,
+        )
+    if not _c6x2_scope_present(record):
+        return _c6x3_repository_refusal(
+            status="blocked",
+            refusal_code="cache_scope_missing",
+            message="C6X3 repository records require the expected tenant, merchant, seller, or buyer scope.",
+            record=record,
+        )
+    if not _c6x2_non_enablement_flags_intact(record):
+        return _c6x3_repository_refusal(
+            status="unsafe",
+            refusal_code="non_enablement_flags_missing",
+            message="C6X3 repository refuses records with executable or enabling flags.",
+            record=record,
+        )
+    refs_to_check = (
+        *record.source_refs,
+        *record.evidence_refs,
+        *(() if record.verifier_result_ref is None else (record.verifier_result_ref,)),
+    )
+    if not record.source_refs or not record.evidence_refs or not _c6x2_refs_safe(refs_to_check):
+        return _c6x3_repository_refusal(
+            status="unsafe",
+            refusal_code="cache_refs_missing_or_private",
+            message="C6X3 repository refuses missing, private, raw, or enabling refs.",
+            record=record,
+        )
+    return {
+        "stored": True,
+        "status": "stored",
+        "cache_record_id": record.cache_record_id,
+        "artifact_id": record.artifact_id,
+        "artifact_type": record.artifact_type,
+        "scope_kind": record.scope_kind,
+        "allowed_to_execute": False,
+        "repository_only": True,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6x3_query_matches(
+    record: OacpPersistentArtifactCacheRecord,
+    query: OacpArtifactCacheRepositoryQuery,
+) -> bool:
+    return (
+        (query.scope_kind is None or record.scope_kind == query.scope_kind)
+        and (query.tenant_id is None or record.tenant_id == query.tenant_id)
+        and (query.merchant_id is None or record.merchant_id == query.merchant_id)
+        and (query.seller_agent_id is None or record.seller_agent_id == query.seller_agent_id)
+        and (query.buyer_agent_id is None or record.buyer_agent_id == query.buyer_agent_id)
+        and (query.artifact_type is None or record.artifact_type == query.artifact_type)
+        and (query.authority is None or record.authority == query.authority)
+    )
+
+
+class InMemoryOacpArtifactCacheRepository:
+    """Internal test adapter for the cache repository port; it is not durable storage."""
+
+    def __init__(self) -> None:
+        self._records: dict[str, OacpPersistentArtifactCacheRecord] = {}
+
+    def upsert(self, record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
+        store_result = _c6x3_record_safe_for_repository(record)
+        if store_result["stored"] is not True:
+            return store_result
+        self._records[record.cache_record_id] = record
+        return store_result
+
+    def get(self, cache_record_id: str) -> OacpPersistentArtifactCacheRecord | None:
+        return self._records.get(cache_record_id)
+
+    def list_for_scope(self, query: OacpArtifactCacheRepositoryQuery) -> tuple[OacpPersistentArtifactCacheRecord, ...]:
+        return tuple(
+            sorted(
+                (record for record in self._records.values() if _c6x3_query_matches(record, query)),
+                key=lambda record: record.cache_record_id,
+            )
+        )
+
+    def evaluate(
+        self,
+        *,
+        cache_record_id: str,
+        action_intent: PersistentCacheActionIntent,
+        now_iso: str,
+        grantex_available: bool,
+        expected_scope: dict[str, str | None] | None = None,
+    ) -> dict[str, Any]:
+        return evaluate_oacp_persistent_artifact_cache_record(
+            record=self.get(cache_record_id),
+            action_intent=action_intent,
+            now_iso=now_iso,
+            grantex_available=grantex_available,
+            expected_scope=expected_scope,
+        )
 
 
 class OacpArtifactCache:
