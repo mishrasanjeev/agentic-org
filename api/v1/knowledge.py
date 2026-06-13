@@ -39,6 +39,15 @@ _RAGFLOW_ERRORS = ((_httpx.HTTPError,) if _httpx else ()) + (
     TypeError,
     ValueError,
 )
+_NATIVE_VECTOR_ERRORS = (
+    ImportError,
+    RuntimeError,
+    SQLAlchemyError,
+    ConnectionError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+) + ((_httpx.HTTPError,) if _httpx else ())
 _DB_READ_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
 _DB_WRITE_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
 
@@ -1015,7 +1024,7 @@ async def _native_semantic_search(
                 )
                 for r in rows
             ]
-    except (ImportError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+    except _NATIVE_VECTOR_ERRORS as exc:
         logger.debug("native_semantic_search_skipped", error=str(exc))
 
     # Keyword fallback — surfaces something useful when embeddings are

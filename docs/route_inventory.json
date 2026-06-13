@@ -3453,7 +3453,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 825,
+    "source_line": 834,
     "tenant_required": true
   },
   {
@@ -3471,7 +3471,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 919,
+    "source_line": 928,
     "tenant_required": true
   },
   {
@@ -3489,7 +3489,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1182,
+    "source_line": 1191,
     "tenant_required": false
   },
   {
@@ -3507,7 +3507,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1124,
+    "source_line": 1133,
     "tenant_required": true
   },
   {
@@ -3525,7 +3525,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1299,
+    "source_line": 1308,
     "tenant_required": true
   },
   {
@@ -3543,7 +3543,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 479,
+    "source_line": 488,
     "tenant_required": true
   },
   {
