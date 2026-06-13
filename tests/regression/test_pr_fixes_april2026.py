@@ -300,8 +300,8 @@ class TestGrantexMiddlewareFailureClearing:
         assert client_ip not in _failed_attempts
 
     @pytest.mark.asyncio
-    async def test_missing_auth_header_records_failure(self):
-        """Missing Authorization header records a failure."""
+    async def test_missing_auth_header_does_not_record_failure(self):
+        """Missing credentials return 401 without poisoning the IP."""
         from auth.grantex_middleware import GrantexAuthMiddleware
         from core.auth_state import _mem_blocked as _blocked_ips
         from core.auth_state import _mem_failures as _failed_attempts
@@ -317,7 +317,7 @@ class TestGrantexMiddlewareFailureClearing:
         resp = await middleware.dispatch(request, call_next)
 
         assert resp.status_code == 401
-        assert client_ip in _failed_attempts
+        assert client_ip not in _failed_attempts
 
     @pytest.mark.asyncio
     async def test_clear_auth_failures_removes_ip(self):

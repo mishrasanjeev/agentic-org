@@ -64,9 +64,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
         else:
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
-                token = auth_header[7:]
+                token = auth_header[7:].strip()
+                if not token:
+                    await record_auth_failure(client_ip)
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Invalid or expired token"},
+                    )
+            elif auth_header:
+                await record_auth_failure(client_ip)
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unsupported Authorization scheme"},
+                )
         if not token:
-            await record_auth_failure(client_ip)
+            # Anonymous session probes are not credential failures. Public
+            # pages call /auth/me to discover session state; counting missing
+            # credentials here lets normal browsing block an IP.
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Missing session cookie or Authorization header"},
