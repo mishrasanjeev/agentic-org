@@ -60,6 +60,9 @@ logger = structlog.get_logger()
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 BGE_M3_MODEL = "BAAI/bge-m3"
+DEFAULT_TEI_READ_TIMEOUT_SECONDS = 5.0
+DEFAULT_TEI_CONNECT_TIMEOUT_SECONDS = 2.0
+MAX_TEI_READ_TIMEOUT_SECONDS = 25.0
 
 
 def rag_use_bge_m3() -> bool:
@@ -105,6 +108,42 @@ def _configured_model_name() -> str:
 
 EMBEDDING_MODEL_NAME = _configured_model_name()
 EMBEDDING_DIM = _MODEL_DIMS.get(EMBEDDING_MODEL_NAME, 384)
+
+
+def _bounded_float_env(
+    name: str,
+    *,
+    default: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _tei_read_timeout_seconds() -> float:
+    return _bounded_float_env(
+        "AGENTICORG_TEI_TIMEOUT_SECONDS",
+        default=DEFAULT_TEI_READ_TIMEOUT_SECONDS,
+        minimum=1.0,
+        maximum=MAX_TEI_READ_TIMEOUT_SECONDS,
+    )
+
+
+def _tei_connect_timeout_seconds(read_timeout: float) -> float:
+    configured = _bounded_float_env(
+        "AGENTICORG_TEI_CONNECT_TIMEOUT_SECONDS",
+        default=DEFAULT_TEI_CONNECT_TIMEOUT_SECONDS,
+        minimum=0.5,
+        maximum=read_timeout,
+    )
+    return min(configured, read_timeout)
 
 
 def model_dim(model_name: str) -> int:
@@ -279,17 +318,22 @@ def _embed_via_tei(texts: list[str]) -> list[list[float]]:
     # timeout is ~30s. The api was waiting indefinitely on the TEI
     # POST, GFE killed the upstream request, and the user saw 504.
     #
-    # Cap the per-request wait at 25s so:
+    # Cap the per-request wait well under the product smoke/client budget so:
     #   - on a WARM TEI (~50ms response), the call returns immediately
-    #   - on a COLD TEI (>25s), httpx raises TimeoutException, the
-    #     caller (api/v1/knowledge.py:884) falls through to keyword
-    #     search, and the user gets results (lower quality, never 504)
+    #   - on a COLD or unhealthy TEI, httpx raises TimeoutException, the
+    #     caller (api/v1/knowledge.py) falls through to keyword search,
+    #     and the user gets results quickly (lower quality, never 504)
     #   - the next call after the cold-start window will succeed
     #     because TEI is now warm
     #
-    # The previous default (60s) blew past the 30s GFE budget and
-    # surfaced as a 504 to the browser.
-    timeout = httpx.Timeout(25.0, connect=5.0)
+    # Operators can raise AGENTICORG_TEI_TIMEOUT_SECONDS up to 25s, but
+    # the default must stay short enough for production smoke and browser
+    # callers to observe the fallback before their own client timeout.
+    read_timeout = _tei_read_timeout_seconds()
+    timeout = httpx.Timeout(
+        read_timeout,
+        connect=_tei_connect_timeout_seconds(read_timeout),
+    )
     with httpx.Client(timeout=timeout) as client:
         response = client.post(f"{base}/embed", json=payload, headers=headers)
         response.raise_for_status()
