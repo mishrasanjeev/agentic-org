@@ -12,7 +12,7 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 if TYPE_CHECKING:
@@ -198,6 +198,11 @@ OacpCacheOperatorDecisionKind = Literal[
     "defer_until_freshness_update",
     "escalate_to_human_support",
     "block_unsafe_action",
+]
+OacpAuditExportReviewRetentionClass = Literal[
+    "short_lived_internal_review",
+    "standard_internal_review",
+    "legal_hold_candidate",
 ]
 
 OACP_ARTIFACT_SIGNATURE_PROFILE: dict[str, Any] = {
@@ -6600,6 +6605,351 @@ def build_oacp_c6x9_audit_export_bundle(
         "seller_safe_message": "C6X9 does not call Grantex live, merchant systems, providers, or schedulers.",
         "operator_safe_message": (
             "Review this export-ready bundle as evidence only. It is not an execution instruction."
+        ),
+    }
+
+
+_C6Y1_SAFE_FALLBACK_GENERATED_AT = "2026-06-12T00:00:00.000Z"
+_C6Y1_RETENTION_DAYS_BY_CLASS: dict[OacpAuditExportReviewRetentionClass, int] = {
+    "short_lived_internal_review": 30,
+    "standard_internal_review": 90,
+    "legal_hold_candidate": 365,
+}
+_C6Y1_BUNDLE_REF_FIELDS = (
+    "cache_record_references",
+    "maintenance_plan_references",
+    "review_packet_references",
+    "decision_record_references",
+    "redacted_source_refs",
+    "redacted_evidence_refs",
+    "next_step_labels",
+)
+
+
+def _c6y1_manifest_id(payload: Mapping[str, Any]) -> str:
+    digest = hashlib.sha256(canonicalize_oacp_payload(dict(payload)).encode("utf-8")).hexdigest()
+    return f"oacp_c6y1_review_manifest_{digest[:20]}"
+
+
+def _c6y1_iso(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _c6y1_blocked_manifest(
+    *,
+    reason_code: str,
+    message: str,
+    generated_at: str | None = None,
+    bundle_id: str | None = None,
+    tenant_id: str | None = None,
+    merchant_id: str | None = None,
+    seller_agent_id: str | None = None,
+    buyer_agent_id: str | None = None,
+) -> dict[str, Any]:
+    generated = generated_at or _C6Y1_SAFE_FALLBACK_GENERATED_AT
+    return {
+        "manifest_id": _c6y1_manifest_id(
+            {
+                "status": "blocked",
+                "reason_code": reason_code,
+                "bundle_id": bundle_id,
+                "tenant_id": tenant_id,
+                "merchant_id": merchant_id,
+                "generated_at": generated,
+            }
+        ),
+        "manifest_kind": "blocked_oacp_audit_export_review_manifest",
+        "status": "blocked",
+        "block_reason": reason_code,
+        "message": message,
+        "generated_at": generated,
+        "bundle_id": bundle_id,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "scope_summary": {"buyer_agent": {}, "seller_agent": {}, "tenant": {}, "merchant": {}},
+        "artifact_family_counts": {},
+        "cache_record_references": [],
+        "maintenance_plan_references": [],
+        "review_packet_references": [],
+        "decision_record_references": [],
+        "redacted_reason_codes": {},
+        "redacted_source_refs": [],
+        "redacted_evidence_refs": [],
+        "freshness_ttl_summary": {},
+        "revocation_snapshot_summary": {},
+        "risk_tier_summary": {},
+        "unsupported_capability_summary": {},
+        "blocked_capability_summary": {reason_code: 1},
+        "retention_boundary": {
+            "retention_class": "blocked_no_retention_action",
+            "retention_days": 0,
+            "retain_until": None,
+            "persistence_required": False,
+            "requires_separate_persistence_approval": True,
+            "export_file_writer_added": False,
+        },
+        "redaction_boundary": {
+            "redacted_refs_only": True,
+            "raw_payloads_included": False,
+            "private_values_blocked": True,
+            "non_sensitive_evidence_refs_only": True,
+        },
+        "next_step_labels": ["operator_review_required_no_export_execution"],
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "review_manifest_only": True,
+        "retention_boundary_only": True,
+        "audit_export_bundle_review_only": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "generated_artifact_written": False,
+        "migration_added": False,
+        "scheduler_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6y1_bundle_flags_safe(bundle: Mapping[str, Any]) -> bool:
+    return (
+        bundle.get("allowed_to_execute") is False
+        and bundle.get("no_execution") is True
+        and bundle.get("audit_export_bundle_only") is True
+        and bundle.get("export_ready") is True
+        and bundle.get("generated_artifact_written") is False
+        and bundle.get("export_file_written") is not True
+        and bundle.get("non_authoritative_for_transaction") is True
+        and bundle.get("no_checkout_payment_enablement") is True
+        and bundle.get("no_live_provider_enablement") is True
+        and bundle.get("no_public_discovery_enablement") is True
+        and bundle.get("raw_payloads_included") is False
+        and bundle.get("grantex_runtime_required") is False
+    )
+
+
+def _c6y1_bundle_strings(bundle: Mapping[str, Any]) -> list[str]:
+    values: list[str] = []
+    for field_name in _C6Y1_BUNDLE_REF_FIELDS:
+        values.extend(_c6x8_list(bundle.get(field_name)))
+    for field_name in ("buyer_safe_message", "seller_safe_message", "operator_safe_message", "message"):
+        value = _c6x7_string(bundle.get(field_name))
+        if value is not None:
+            values.append(value)
+    values.extend(_c6x9_reason_code_values(bundle.get("redacted_reason_codes")))
+    values.extend(_c6x9_reason_code_values(bundle.get("blocked_capability_summary")))
+    values.extend(_c6x9_reason_code_values(bundle.get("unsupported_capability_summary")))
+    return values
+
+
+def _c6y1_bundle_refs_safe(bundle: Mapping[str, Any]) -> bool:
+    refs = tuple(
+        ref
+        for field_name in _C6Y1_BUNDLE_REF_FIELDS
+        for ref in _c6x8_list(bundle.get(field_name))
+    )
+    return bool(_c6x8_list(bundle.get("redacted_evidence_refs"))) and _c6x2_refs_safe(refs)
+
+
+def _c6y1_values_private_or_overclaim(values: Sequence[str]) -> bool:
+    c6y1_overclaim_markers = ("readiness", "public launch", "approved")
+    return _c6x9_private_or_overclaim_values(values) or any(
+        any(marker in value.strip().lower() for marker in c6y1_overclaim_markers)
+        for value in values
+    )
+
+
+def build_oacp_c6y1_audit_export_review_manifest(
+    *,
+    audit_export_bundle: Mapping[str, Any],
+    generated_at: str,
+    retention_class: OacpAuditExportReviewRetentionClass = "standard_internal_review",
+) -> dict[str, Any]:
+    """Build an internal C6Y1 review manifest over a C6X9 bundle without writing or executing it."""
+
+    bundle_id = _c6x7_string(audit_export_bundle.get("bundle_id"))
+    tenant_id = _c6x7_string(audit_export_bundle.get("tenant_id"))
+    merchant_id = _c6x7_string(audit_export_bundle.get("merchant_id"))
+    seller_agent_id = _c6x7_string(audit_export_bundle.get("seller_agent_id"))
+    buyer_agent_id = _c6x7_string(audit_export_bundle.get("buyer_agent_id"))
+    generated = _parse_iso(generated_at)
+    bundle_generated = _parse_iso(_c6x7_string(audit_export_bundle.get("generated_at")))
+
+    if generated is None or bundle_generated is None:
+        return _c6y1_blocked_manifest(
+            reason_code="manifest_timestamp_malformed",
+            message="C6Y1 review manifests require ordered ISO timestamps.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if retention_class not in _C6Y1_RETENTION_DAYS_BY_CLASS:
+        return _c6y1_blocked_manifest(
+            reason_code="retention_class_unsupported",
+            message="C6Y1 accepts only internal retention review classes.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if (
+        audit_export_bundle.get("bundle_kind") != "oacp_cache_operator_decision_audit_export_bundle"
+        or audit_export_bundle.get("status") != "export_ready"
+        or not bundle_id
+    ):
+        return _c6y1_blocked_manifest(
+            reason_code="audit_export_bundle_not_ready",
+            message="C6Y1 review manifests consume C6X9 export-ready audit bundles only.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not tenant_id or not merchant_id:
+        return _c6y1_blocked_manifest(
+            reason_code="tenant_or_merchant_scope_missing",
+            message="C6Y1 review manifests require tenant and merchant scope.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(dict(audit_export_bundle))
+    except ValueError:
+        return _c6y1_blocked_manifest(
+            reason_code="private_or_enabling_manifest_input",
+            message="C6Y1 refuses audit bundle fields that contain private, raw, credential, or enabling data.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not _c6y1_bundle_flags_safe(audit_export_bundle):
+        return _c6y1_blocked_manifest(
+            reason_code="bundle_non_enablement_flags_invalid",
+            message="C6Y1 refuses executable audit bundles or bundles that imply export-file writing.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+    if not _c6y1_bundle_refs_safe(audit_export_bundle) or _c6y1_values_private_or_overclaim(
+        _c6y1_bundle_strings(audit_export_bundle)
+    ):
+        return _c6y1_blocked_manifest(
+            reason_code="private_ref_or_overclaim_detected",
+            message="C6Y1 refuses private refs, raw labels, publication wording, or approval/readiness claims.",
+            generated_at=generated_at,
+            bundle_id=bundle_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+        )
+
+    retention_days = _C6Y1_RETENTION_DAYS_BY_CLASS[retention_class]
+    retain_until = _c6y1_iso(generated + timedelta(days=retention_days))
+    manifest_payload = {
+        "bundle_id": bundle_id,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "generated_at": generated_at,
+        "retention_class": retention_class,
+    }
+    return {
+        "manifest_id": _c6y1_manifest_id(manifest_payload),
+        "manifest_kind": "oacp_audit_export_review_manifest",
+        "status": "ready_for_internal_review",
+        "generated_at": generated_at,
+        "bundle_id": bundle_id,
+        "bundle_kind": audit_export_bundle["bundle_kind"],
+        "bundle_status": audit_export_bundle["status"],
+        "bundle_generated_at": audit_export_bundle["generated_at"],
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "scope_summary": dict(_c6x8_mapping(audit_export_bundle.get("scope_summary"))),
+        "artifact_family_counts": dict(_c6x8_mapping(audit_export_bundle.get("artifact_family_counts"))),
+        "cache_record_references": _c6x8_list(audit_export_bundle.get("cache_record_references")),
+        "maintenance_plan_references": _c6x8_list(audit_export_bundle.get("maintenance_plan_references")),
+        "review_packet_references": _c6x8_list(audit_export_bundle.get("review_packet_references")),
+        "decision_record_references": _c6x8_list(audit_export_bundle.get("decision_record_references")),
+        "redacted_reason_codes": dict(_c6x8_mapping(audit_export_bundle.get("redacted_reason_codes"))),
+        "redacted_source_refs": _c6x8_list(audit_export_bundle.get("redacted_source_refs")),
+        "redacted_evidence_refs": _c6x8_list(audit_export_bundle.get("redacted_evidence_refs")),
+        "freshness_ttl_summary": dict(_c6x8_mapping(audit_export_bundle.get("freshness_ttl_summary"))),
+        "revocation_snapshot_summary": dict(_c6x8_mapping(audit_export_bundle.get("revocation_snapshot_summary"))),
+        "risk_tier_summary": dict(_c6x8_mapping(audit_export_bundle.get("risk_tier_summary"))),
+        "unsupported_capability_summary": dict(
+            _c6x8_mapping(audit_export_bundle.get("unsupported_capability_summary"))
+        ),
+        "blocked_capability_summary": dict(_c6x8_mapping(audit_export_bundle.get("blocked_capability_summary"))),
+        "retention_boundary": {
+            "retention_class": retention_class,
+            "retention_days": retention_days,
+            "retain_until": retain_until,
+            "retention_clock_source": "manifest_generated_at",
+            "persistence_required": False,
+            "requires_separate_persistence_approval": True,
+            "export_file_writer_added": False,
+            "generated_artifact_written": False,
+        },
+        "redaction_boundary": {
+            "redacted_refs_only": True,
+            "raw_payloads_included": False,
+            "private_values_blocked": True,
+            "raw_reviewer_identity_included": False,
+            "non_sensitive_evidence_refs_only": True,
+        },
+        "next_step_labels": _c6x9_unique(
+            [
+                *_c6x8_list(audit_export_bundle.get("next_step_labels")),
+                "operator_review_manifest_label_only",
+                "retention_boundary_review_label_only",
+            ]
+        ),
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "review_manifest_only": True,
+        "retention_boundary_only": True,
+        "audit_export_bundle_review_only": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "generated_artifact_written": False,
+        "migration_added": False,
+        "scheduler_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "raw_payloads_included": False,
+        "grantex_runtime_required": False,
+        "buyer_safe_message": "C6Y1 prepared an internal audit review manifest only; no commerce action ran.",
+        "seller_safe_message": "C6Y1 does not call Grantex live, merchant systems, providers, or schedulers.",
+        "operator_safe_message": (
+            "Review this manifest and retention boundary as label-only evidence; it is not an export writer."
         ),
     }
 
