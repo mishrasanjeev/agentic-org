@@ -419,14 +419,14 @@ Blog series plan:
 | ChatGPT, Claude, Gemini, And Search-Style Channels | GTM and engineering | Channel bridge matrix and supported action labels. |
 | What Is Still Missing Before Autonomous Commerce | Leadership | C6W9 complete vs runtime gaps. |
 
-Avoid these claims until separately approved:
+Avoid claims that imply:
 
-- "Production commerce enabled."
-- "Live payments ready."
-- "Certified UCP/ACP/AP2 compliant."
-- "Agents can refund customers."
-- "Agents can execute payments."
-- "Agents can call merchant systems without approved connector policy."
+- production commerce is already enabled;
+- live payments are ready;
+- UCP, ACP, or AP2 certification already exists;
+- agents can refund customers;
+- agents can execute payments;
+- agents can call merchant systems without approved connector policy.
 
 Detailed page and blog plan lives in
 `docs/reports/commerce-agent-oacp-landing-blog-plan.md`.
