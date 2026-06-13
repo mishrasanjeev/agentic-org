@@ -84,7 +84,7 @@ opentelemetry-instrumentation-fastapi==0.63b1
 prometheus-client==0.25.0
 
 # ─── Document Processing & Reporting ─────────────────────────────────────────
-pypdf==6.13.1
+pypdf==6.13.2
 # CVE-2026-41066: keep python-docx/transitive XML parsing on patched lxml.
 lxml==6.1.1
 pyyaml==6.0.3
