@@ -11,8 +11,9 @@ Tests cover:
 
 from __future__ import annotations
 
-import re
 import uuid
+
+from starlette.routing import Match
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -27,20 +28,14 @@ VALID_APPROVAL_STATUSES = {"pending", "approved", "rejected", "filed"}
 VALID_SUBSCRIPTION_STATUSES = {"trial", "active", "cancelled", "expired"}
 
 
-def _route_path(route) -> str:
-    path = getattr(route, "path_format", None) or getattr(route, "path", None)
-    if path:
-        return path
-    pattern = getattr(getattr(route, "path_regex", None), "pattern", "")
-    if not pattern:
-        return ""
-    raw = pattern.removeprefix("^").removesuffix("$")
-    raw = re.sub(r"\(\?P<([^>]+)>[^)]+\)", r"{\1}", raw)
-    return re.sub(r"\\(.)", r"\1", raw)
-
-
-def _route_paths(app) -> list[str]:
-    return [_route_path(route) for route in app.routes]
+def _assert_route_registered(app, path: str, method: str = "GET") -> None:
+    scope = {"type": "http", "path": path, "root_path": "", "method": method.upper()}
+    matched = [
+        route
+        for route in app.router.routes
+        if hasattr(route, "matches") and route.matches(scope)[0] == Match.FULL
+    ]
+    assert matched, f"{method} {path} is not registered"
 
 
 # ============================================================================
@@ -312,25 +307,18 @@ class TestFilingApprovalAPIRoutes:
         """The companies router must be registered in the app."""
         from api.main import app
 
-        route_paths = _route_paths(app)
-        assert any("/companies" in p for p in route_paths), (
-            f"No /companies route found. Routes: {[p for p in route_paths if 'compan' in p.lower()]}"
-        )
+        _assert_route_registered(app, "/api/v1/companies")
 
     def test_approvals_route_exists(self):
         """A general approvals router must be registered."""
         from api.main import app
 
-        route_paths = _route_paths(app)
-        assert any("approvals" in p for p in route_paths), (
-            f"No approvals route found. Routes: {route_paths}"
-        )
+        _assert_route_registered(app, "/api/v1/approvals")
 
     def test_onboard_route_exists(self):
         from api.main import app
 
-        route_paths = _route_paths(app)
-        assert any("onboard" in p for p in route_paths)
+        _assert_route_registered(app, "/api/v1/companies/onboard", method="POST")
 
 
 # ============================================================================
@@ -345,17 +333,13 @@ class TestCASubscriptionAPIRoutes:
         """Industry packs route (which includes CA subscription) must be registered."""
         from api.main import app
 
-        route_paths = _route_paths(app)
-        assert any("packs" in p for p in route_paths), (
-            f"No packs route found. Routes: {[p for p in route_paths if 'pack' in p.lower()]}"
-        )
+        _assert_route_registered(app, "/api/v1/packs")
 
     def test_billing_route_registered(self):
         """Billing route must be registered for subscription management."""
         from api.main import app
 
-        route_paths = _route_paths(app)
-        assert any("billing" in p for p in route_paths)
+        _assert_route_registered(app, "/api/v1/billing/plans")
 
 
 # ============================================================================
