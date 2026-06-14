@@ -105,11 +105,12 @@ async def test_workflow_agent_step_uses_stored_agent_config(monkeypatch: pytest.
     }
 
 
-def test_cloud_run_deploy_enables_commerce_public_discovery() -> None:
+def test_cloud_run_deploy_does_not_force_enable_commerce_public_discovery() -> None:
     src = (ROOT / "scripts" / "deploy_cloud_run.sh").read_text(encoding="utf-8")
 
     assert "API_UPDATE_ENV_VARS=" in src
-    assert "AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true" in src
+    assert "AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true" not in src
+    assert 'COMMERCE_PUBLIC_DISCOVERY_VALUE="${AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED:-false}"' in src
     assert 'update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "$API_UPDATE_ENV_VARS"' in src
 
 
