@@ -185,6 +185,7 @@ def test_ui_cost_tab_reads_legacy_cost_controls_shape() -> None:
         encoding="utf-8"
     )
     assert "cost_controls?.monthly_cap_usd" in src
+    assert "cost_controls?.monthly_cost_cap_usd" in src
     assert "cost_controls?.cost_current_usd" in src
     # Empty-state path must remain (TC-BUDGET-008 in Playwright).
     assert "No monthly cost cap configured" in src

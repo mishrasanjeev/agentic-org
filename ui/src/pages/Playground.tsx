@@ -410,7 +410,7 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
     async function fetchAgents() {
       const all: any[] = [];
       let page = 1;
-      let pages = 1;
+      let pages: number;
       do {
         const r = await fetch(`/api/v1/agents?page=${page}&per_page=100`, {
           credentials: "include",

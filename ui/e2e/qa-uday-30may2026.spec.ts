@@ -5,9 +5,9 @@
  * verified without touching live Zoho Books or HubSpot accounts.
  */
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { APP, setSessionToken } from "./helpers/auth";
 
 const AGENT_ID = "e2e-uday30-agent";
-const APP = process.env.BASE_URL || "http://127.0.0.1:5176";
 
 function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({
@@ -95,36 +95,7 @@ async function mockApi(page: Page) {
     return json(route, { items: [] });
   });
 
-  await setLocalSessionToken(page, "fake.e2e.session");
-}
-
-async function setLocalSessionToken(
-  page: Page,
-  token: string,
-  csrfToken: string = "e2e-csrf-token",
-) {
-  const host = APP.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  const isHttps = APP.startsWith("https://");
-  await page.context().addCookies([
-    {
-      name: "agenticorg_session",
-      value: token,
-      domain: host,
-      path: "/",
-      httpOnly: true,
-      secure: isHttps,
-      sameSite: "Lax",
-    },
-    {
-      name: "agenticorg_csrf",
-      value: csrfToken,
-      domain: host,
-      path: "/",
-      httpOnly: false,
-      secure: isHttps,
-      sameSite: "Lax",
-    },
-  ]);
+  await setSessionToken(page, "fake.e2e.session");
 }
 
 test.describe("Uday 30 May connector fixes", () => {

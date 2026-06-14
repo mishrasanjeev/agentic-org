@@ -112,7 +112,7 @@ async function listAllPages<T>(
 ): Promise<T[]> {
   const items: T[] = [];
   let page = 1;
-  let pages = 1;
+  let pages: number;
   const perPage = "100";
 
   do {

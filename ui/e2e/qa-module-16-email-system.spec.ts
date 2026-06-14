@@ -32,7 +32,7 @@ test.describe("Module 16: Email System @qa @email", () => {
     // valid here; the contract under test is "the request
     // doesn't 5xx".
     const ts = Date.now();
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -59,7 +59,7 @@ test.describe("Module 16: Email System @qa @email", () => {
     // records. The domain validation rejects; the server stays
     // up.
     const ts = Date.now();
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -80,7 +80,7 @@ test.describe("Module 16: Email System @qa @email", () => {
 
   test("TC-EMAIL-004 invite to .local TLD doesn't 5xx", async ({ request }) => {
     const ts = Date.now();
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -97,7 +97,7 @@ test.describe("Module 16: Email System @qa @email", () => {
 
   test("TC-EMAIL-004b invite to .test TLD doesn't 5xx", async ({ request }) => {
     const ts = Date.now();
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -143,7 +143,7 @@ test.describe("Module 16: Email System @qa @email", () => {
     request,
   }) => {
     // No email in body → 422.
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -157,7 +157,7 @@ test.describe("Module 16: Email System @qa @email", () => {
   test("TC-EMAIL-006b invite endpoint requires admin auth", async ({
     request,
   }) => {
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: { "Content-Type": "application/json" },
       data: { email: "x@example.com", role: "analyst" },
       failOnStatusCode: false,

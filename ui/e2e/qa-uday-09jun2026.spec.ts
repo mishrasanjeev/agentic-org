@@ -1,13 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const adminUser = {
-  email: "uday.chauhan@edumatica.io",
-  name: "Uday Chauhan",
-  role: "admin",
-  domain: "all",
-  tenant_id: "11111111-1111-1111-1111-111111111111",
-  onboarding_complete: true,
-};
+import { authenticate } from "./helpers/auth";
 
 const agentDetail = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -28,14 +20,6 @@ const agentDetail = {
 };
 
 test.beforeEach(async ({ page }) => {
-  await page.route("**/api/v1/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(adminUser),
-    });
-  });
-
   await page.route("**/api/v1/product-facts", async (route) => {
     await route.fulfill({
       status: 200,
@@ -43,12 +27,17 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify({ connector_count: 55, agent_count: 26 }),
     });
   });
+  await authenticate(page);
 });
 
 test.describe("Uday CA/Marketing 2026-06-09 regressions", () => {
   test("ConnectorCreate submits Custom auth type with custom JSON config", async ({ page }) => {
     let captured: Record<string, unknown> | null = null;
     await page.route("**/api/v1/connectors", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
       captured = JSON.parse(route.request().postData() || "{}");
       await route.fulfill({
         status: 201,

@@ -87,8 +87,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => { i18n.off("languageChanged", handler); };
   }, [i18n]);
 
-  const handleLogout = () => {
-    auth.logout();
+  const handleLogout = async () => {
+    await auth.logout();
     navigate("/login");
   };
 

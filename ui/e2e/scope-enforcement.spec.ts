@@ -10,6 +10,7 @@
  * Tests run against BASE_URL (default: https://app.agenticorg.ai)
  */
 import { test, expect, Page } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";

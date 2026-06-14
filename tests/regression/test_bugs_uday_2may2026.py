@@ -53,6 +53,10 @@ def csrf_app() -> FastAPI:
     def _login():
         return {"ok": True}
 
+    @a.post("/api/v1/org/accept-invite")
+    def _accept_invite():
+        return {"ok": True}
+
     @a.post("/api/v1/agents/x/run")
     def _agents_run():
         return {"ok": True}
@@ -67,6 +71,7 @@ def csrf_app() -> FastAPI:
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
         "/api/v1/auth/login",
+        "/api/v1/org/accept-invite",
     ],
 )
 def test_bug09_auth_bootstrap_routes_csrf_exempt_with_stale_session(

@@ -11,6 +11,7 @@
  *  2. The Templates tab renders exactly one card per backend item.
  */
 import { expect, test } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";

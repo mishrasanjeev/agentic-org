@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { authenticate } from "./helpers/auth";
 
 /**
  * Uday CA-Firms 2026-05-17, bug 1.
@@ -16,15 +17,6 @@ import { expect, test } from "@playwright/test";
  */
 
 const AGENT_ID = "05ca5ee1-8a00-4b48-9d25-68ceb9e232d4"; // TDS Compliance Agent
-
-const user = {
-  email: "uday.chauhan@edumatica.io",
-  name: "Uday Chauhan",
-  role: "admin",
-  domain: "finance",
-  tenant_id: "49ca24aa-c6e7-4124-91af-059023295da4",
-  onboarding_complete: true,
-};
 
 function caTdsAgent(status: string) {
   return {
@@ -51,13 +43,7 @@ function caTdsAgent(status: string) {
 }
 
 async function stubCommonRoutes(page: import("@playwright/test").Page) {
-  await page.route("**/api/v1/auth/me", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(user),
-    }),
-  );
+  await authenticate(page);
   // Permissive catch-all for the page's secondary GETs (feedback,
   // amendments, history, etc.) so the detail page hydrates cleanly.
   await page.route(

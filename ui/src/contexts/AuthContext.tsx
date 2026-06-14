@@ -70,6 +70,13 @@ const SESSION_FETCH_OPTS: RequestInit = {
   credentials: "include" as RequestCredentials,
 };
 
+function readCookie(name: string): string {
+  const match = document.cookie.match(
+    new RegExp("(?:^|; )" + name.replace(/[$()*+./?[\]\\^{|}]/g, "\\$&") + "=([^;]*)"),
+  );
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 function _purgeLegacyTokenStorage() {
   // First-render cleanup: any localStorage left behind from the
   // pre-PR-F build is dead and should be removed so the regression
@@ -187,8 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     try {
       // Backend clears the HttpOnly cookie + the paired CSRF cookie.
+      const csrf = readCookie("agenticorg_csrf");
       await fetch(`${API_BASE}/auth/logout`, {
         method: "POST",
+        headers: csrf ? { "X-CSRF-Token": csrf } : undefined,
         ...SESSION_FETCH_OPTS,
       });
     } catch {

@@ -237,15 +237,18 @@ test.describe("Module 27: Negative & Edge Cases @qa @negative", () => {
     request,
   }) => {
     const ts = Date.now();
+    const name = `qa-delete-${ts}`;
     const createResp = await request.post(`${APP}/api/v1/agents`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
       },
       data: {
-        name: `qa-delete-${ts}`,
-        agent_type: "test",
+        name,
+        agent_type: `qa_delete_${ts}`,
         domain: "test",
+        employee_name: name,
+        initial_status: "paused",
       },
       failOnStatusCode: false,
     });

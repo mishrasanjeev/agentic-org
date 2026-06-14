@@ -9,9 +9,14 @@
  * page.goto for UI flows (the conftest sets up a real session
  * via /auth/login fixture — see helpers/auth.ts).
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
+import { APP, E2E_TOKEN, requireAuth, setSessionToken } from "./helpers/auth";
+
+async function gotoAuditPage(page: Page): Promise<void> {
+  await setSessionToken(page, E2E_TOKEN);
+  await page.goto(`${APP}/dashboard/audit`, { waitUntil: "domcontentloaded" });
+}
 
 test.describe("Module 12: Audit Log @qa @audit @compliance", () => {
   test.beforeEach(() => {
@@ -40,7 +45,7 @@ test.describe("Module 12: Audit Log @qa @audit @compliance", () => {
   test("TC-AUDIT-001b Audit page renders with title + table headers", async ({
     page,
   }) => {
-    await page.goto(`${APP}/audit`);
+    await gotoAuditPage(page);
     await expect(page.getByRole("heading", { name: /audit log/i })).toBeVisible();
     // Whether the table renders or the empty-state message renders
     // depends on whether the test tenant has audit rows. Both paths
@@ -80,7 +85,7 @@ test.describe("Module 12: Audit Log @qa @audit @compliance", () => {
   });
 
   test("TC-AUDIT-002b UI filter input updates results", async ({ page }) => {
-    await page.goto(`${APP}/audit`);
+    await gotoAuditPage(page);
     const input = page.getByPlaceholder(/Filter by event type/i);
     await expect(input).toBeVisible();
     await input.fill("auth");
@@ -116,7 +121,7 @@ test.describe("Module 12: Audit Log @qa @audit @compliance", () => {
   test("TC-AUDIT-003c UI pagination buttons render with Previous disabled on page 1", async ({
     page,
   }) => {
-    await page.goto(`${APP}/audit`);
+    await gotoAuditPage(page);
     await expect(page.getByText(/Page 1/i)).toBeVisible();
     await expect(
       page.getByRole("button", { name: /previous/i }),
@@ -131,7 +136,7 @@ test.describe("Module 12: Audit Log @qa @audit @compliance", () => {
   test("TC-AUDIT-004 Download CSV button triggers a CSV download", async ({
     page,
   }) => {
-    await page.goto(`${APP}/audit`);
+    await gotoAuditPage(page);
     // Wait for the page to stop loading so filteredEntries is set.
     await page
       .getByText(/Loading audit entries|No audit entries|Event Type/i)
@@ -151,7 +156,7 @@ test.describe("Module 12: Audit Log @qa @audit @compliance", () => {
   test("TC-AUDIT-005 Export Evidence Package button triggers a JSON download", async ({
     page,
   }) => {
-    await page.goto(`${APP}/audit`);
+    await gotoAuditPage(page);
     await page
       .getByText(/Loading audit entries|No audit entries|Event Type/i)
       .first()

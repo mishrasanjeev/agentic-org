@@ -71,8 +71,11 @@ export async function authenticate(page: Page): Promise<void> {
 }
 
 function _appHost(): string {
-  // Strip protocol + path so Playwright's addCookies receives a bare host.
-  return APP.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  try {
+    return new URL(APP).hostname;
+  } catch {
+    return APP.replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
+  }
 }
 
 /**

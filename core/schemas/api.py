@@ -38,6 +38,7 @@ class ScalingConfig(BaseModel):
 class CostControlConfig(BaseModel):
     daily_token_budget: int = 500_000
     monthly_cost_cap_usd: float = 200.0
+    cost_current_usd: float = 0.0
     on_budget_exceeded: str = "pause_and_alert"
 
 
