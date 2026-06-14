@@ -14,6 +14,10 @@ from __future__ import annotations
 import pytest
 
 
+def _route_path(route) -> str:
+    return getattr(route, "path_format", None) or getattr(route, "path", "")
+
+
 @pytest.mark.asyncio
 async def test_traces_reconciliation_reports_missing_extra_and_amount_mismatch() -> None:
     import connectors  # noqa: F401
@@ -244,7 +248,7 @@ def test_ca_client_billing_calculates_invoice_totals() -> None:
 def test_ca_004_005_006_routes_are_registered() -> None:
     from api.main import app
 
-    route_paths = {getattr(route, "path", "") for route in app.routes}
+    route_paths = {_route_path(route) for route in app.routes}
 
     assert "/api/v1/professional-tax/states" in route_paths
     assert "/api/v1/professional-tax/returns/prepare" in route_paths

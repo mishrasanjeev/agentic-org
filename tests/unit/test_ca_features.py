@@ -26,6 +26,14 @@ VALID_APPROVAL_STATUSES = {"pending", "approved", "rejected", "filed"}
 VALID_SUBSCRIPTION_STATUSES = {"trial", "active", "cancelled", "expired"}
 
 
+def _route_path(route) -> str:
+    return getattr(route, "path_format", None) or getattr(route, "path", "")
+
+
+def _route_paths(app) -> list[str]:
+    return [_route_path(route) for route in app.routes]
+
+
 # ============================================================================
 # Database schema validation -- ca_subscriptions
 # ============================================================================
@@ -295,7 +303,7 @@ class TestFilingApprovalAPIRoutes:
         """The companies router must be registered in the app."""
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("/companies" in p for p in route_paths), (
             f"No /companies route found. Routes: {[p for p in route_paths if 'compan' in p.lower()]}"
         )
@@ -304,7 +312,7 @@ class TestFilingApprovalAPIRoutes:
         """A general approvals router must be registered."""
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("approvals" in p for p in route_paths), (
             f"No approvals route found. Routes: {route_paths}"
         )
@@ -312,7 +320,7 @@ class TestFilingApprovalAPIRoutes:
     def test_onboard_route_exists(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("onboard" in p for p in route_paths)
 
 
@@ -328,7 +336,7 @@ class TestCASubscriptionAPIRoutes:
         """Industry packs route (which includes CA subscription) must be registered."""
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("packs" in p for p in route_paths), (
             f"No packs route found. Routes: {[p for p in route_paths if 'pack' in p.lower()]}"
         )
@@ -337,7 +345,7 @@ class TestCASubscriptionAPIRoutes:
         """Billing route must be registered for subscription management."""
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("billing" in p for p in route_paths)
 
 

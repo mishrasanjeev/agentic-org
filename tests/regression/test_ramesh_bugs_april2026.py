@@ -21,6 +21,10 @@ TENANT_STR = "00000000-0000-0000-0000-000000000042"
 TENANT_UUID = uuid.UUID(TENANT_STR)
 
 
+def _route_path(route) -> str:
+    return getattr(route, "path_format", None) or getattr(route, "path", "")
+
+
 # ============================================================================
 # AGE_GEN_01: Custom agent test sample generation
 # An agent with system_prompt_text (no file) must have its prompt loadable.
@@ -162,7 +166,7 @@ class TestAGE_LIFECYCLE_04:
     def test_retire_route_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = [_route_path(route) for route in app.routes]
         # The route is mounted under /api/v1 prefix
         assert any(
             "retire" in p for p in route_paths
@@ -172,7 +176,7 @@ class TestAGE_LIFECYCLE_04:
         from api.main import app
 
         for route in app.routes:
-            path = getattr(route, "path", "")
+            path = _route_path(route)
             if "retire" in path:
                 methods = getattr(route, "methods", set())
                 assert "POST" in methods, f"Retire route should be POST, got {methods}"

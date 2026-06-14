@@ -87,6 +87,10 @@ def _normalise_route_path(raw: str) -> str:
     return out
 
 
+def _route_path(route) -> str | None:
+    return getattr(route, "path_format", None) or getattr(route, "path", None)
+
+
 def _collect_ui_calls() -> dict[str, list[Path]]:
     """Return ``{normalised_url: [files_that_call_it]}``."""
     calls: dict[str, list[Path]] = {}
@@ -114,7 +118,7 @@ def _collect_backend_routes() -> set[str]:
 
     paths: set[str] = set()
     for route in app.routes:
-        path = getattr(route, "path", None)
+        path = _route_path(route)
         if not path:
             continue
         # FastAPI mounts /api/v1/* under a prefix; the UI calls the

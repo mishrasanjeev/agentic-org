@@ -34,6 +34,14 @@ PAN_RE = re.compile(r"^[A-Z]{5}\d{4}[A-Z]{1}$")
 TAN_RE = re.compile(r"^[A-Z]{4}\d{5}[A-Z]{1}$")
 
 
+def _route_path(route) -> str:
+    return getattr(route, "path_format", None) or getattr(route, "path", "")
+
+
+def _route_paths(app) -> list[str]:
+    return [_route_path(route) for route in app.routes]
+
+
 # ============================================================================
 # Company model — field verification
 # ============================================================================
@@ -352,7 +360,7 @@ class TestCompanyAPIRoutes:
     def test_company_routes_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         # Must have company CRUD routes
         assert any("/companies" in p for p in route_paths), (
             f"No /companies route found. Routes with 'compan': "
@@ -362,7 +370,7 @@ class TestCompanyAPIRoutes:
     def test_onboard_route_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("onboard" in p for p in route_paths), (
             f"No onboard route found. Routes: {[p for p in route_paths if 'compan' in p.lower()]}"
         )
@@ -370,7 +378,7 @@ class TestCompanyAPIRoutes:
     def test_roles_route_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
+        route_paths = _route_paths(app)
         assert any("roles" in p for p in route_paths), (
             f"No roles route found. Routes: {[p for p in route_paths if 'compan' in p.lower()]}"
         )
