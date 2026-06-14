@@ -2,7 +2,7 @@
 
 **Status:** Mandatory for every bug fix, reopen analysis, and QA-driven PR.
 **Owner:** CLAUDE.md references this file directly.
-**Last updated:** 2026-04-22.
+**Last updated:** 2026-06-14.
 
 This file exists because reopens kept happening on the same bug IDs across three QA sweeps (Aishwarya 21-Apr, 22-Apr AM, 22-Apr PM). The diagnosis — documented in `~/.claude/projects/C--Users-mishr-agentic-org/memory/feedback_shallow_fix_autopsy.md` — was that I (the author) claimed "fixed" when the fix was hypothesis-grade. This skill codifies the process that must be followed so that "fixed" means the user will not see the bug again.
 
@@ -161,6 +161,7 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 - [ ] Connector discovery-to-action context is preserved: IDs returned by discovery tools are accepted by downstream tools, normalized without lossy type coercion, sent in the provider-required location, and kept out of request bodies when they are query/path context (Rule 13).
 - [ ] Connector catalog/tool-list claims are backed by executable native connector methods, endpoint-path tests, and a UI/Playwright check when the claim is operator-visible (Rule 13).
 - [ ] Capability claim backed by producer route/connector/UI/regression evidence; roadmap-scale items labeled as not shipped (Rule 15).
+- [ ] Persisted runtime flow checked against actual DB shape, not only `alembic_version`; production-shaped stamped DB drift simulated when fixing a migration-backed 500 (Rule 16).
 
 ---
 
@@ -440,6 +441,44 @@ Reference: `tests/regression/test_ramesh_12jun2026_ca_feedback.py`,
 `connectors/finance/professional_tax.py`, `api/v1/professional_tax.py`,
 `api/v1/client_portal.py`, `api/v1/ca_billing.py`,
 `api/v1/ca_operations.py`, `api/v1/companies.py`, `connectors/finance/gstn.py`.
+
+---
+
+## Rule 16 - Runtime schema drift is a product bug even when Alembic says "head"
+
+Added 2026-06-14 after production A2A commerce returned HTTP 500 from
+`POST /api/v1/a2a/tasks`: Cloud Run logs showed
+`relation "a2a_tasks" does not exist` even though the migration job had
+completed and the database was stamped beyond the original v4.4.0 creator.
+
+The shallow failure pattern was assuming `alembic_version == head` proves the
+runtime schema. It does not. Environments can be stamped past a historical
+creator during cutovers or emergency repairs, leaving a runtime-critical table
+missing while every migration job appears green.
+
+Discipline:
+
+1. **Treat missing-table 500s as schema drift until proven otherwise.** Read the
+   production stack trace and identify the exact table, route, and synchronous
+   write path before changing application code.
+2. **Repair at the current head, never by editing old migrations.** Add an
+   idempotent forward migration with `CREATE TABLE IF NOT EXISTS`, guarded
+   indexes, and the tenant RLS policy expected by the runtime.
+3. **Verify the production-shaped case locally.** Simulate a DB stamped at the
+   previous head with the runtime table absent, run `scripts/alembic_migrate.py`,
+   then query Postgres for table existence, indexes, RLS, policy, and final
+   `alembic_version`.
+4. **Migration success must assert runtime-critical tables.** The deploy wrapper
+   should fail after `upgrade head` if a table required by synchronous request
+   paths is still missing; a green migration job must not be a false positive.
+5. **Regression coverage must include both contracts.** Add a source-level
+   guard for the repair migration and a Docker/Postgres integration run for the
+   migration wrapper. Re-run the original production E2E probe after deploy.
+
+Reference: `migrations/versions/v6_y4_repair_a2a_tasks.py`,
+`scripts/alembic_migrate.py`,
+`tests/regression/test_prod_qa_e2e_20260614.py`,
+`tests/integration/test_alembic_e2e.py`.
 
 ---
 

@@ -44,6 +44,14 @@ BASELINE_REVISION = "v480_baseline"
 # A table that exists after the full init_db() / v480 chain.
 BASELINE_PROBE_TABLE = "connector_configs"
 ALEMBIC_VERSION_TABLE = "alembic_version"
+REQUIRED_RUNTIME_TABLES = frozenset(
+    {
+        # A2A task execution writes here synchronously before dispatch. A
+        # stamped-but-missing table caused prod A2A commerce to return 500
+        # on 2026-06-14; migration success must verify more than version_num.
+        "a2a_tasks",
+    }
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("alembic_migrate")
@@ -75,6 +83,24 @@ def _create_orm_baseline(engine) -> None:
     BaseModel.metadata.create_all(engine)
 
 
+def _assert_required_runtime_tables(engine) -> None:
+    with engine.connect() as conn:
+        tables = set(inspect(conn).get_table_names())
+    missing = sorted(REQUIRED_RUNTIME_TABLES - tables)
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(
+            "Alembic reported success but required runtime tables are missing: "
+            f"{joined}. Add or repair the forward migration before deploying."
+        )
+
+
+def _upgrade_head_and_verify(cfg: Config, engine, complete_message: str) -> None:
+    command.upgrade(cfg, "head")
+    _assert_required_runtime_tables(engine)
+    logger.info(complete_message)
+
+
 def main() -> int:
     url = _sync_url()
     logger.info("connecting to database for pre-rollout migration check")
@@ -87,8 +113,7 @@ def main() -> int:
 
     if ALEMBIC_VERSION_TABLE in tables:
         logger.info("alembic_version present — running upgrade head")
-        command.upgrade(cfg, "head")
-        logger.info("alembic upgrade head complete")
+        _upgrade_head_and_verify(cfg, engine, "alembic upgrade head complete")
         return 0
 
     if BASELINE_PROBE_TABLE in tables:
@@ -99,8 +124,7 @@ def main() -> int:
             BASELINE_REVISION,
         )
         command.stamp(cfg, BASELINE_REVISION)
-        command.upgrade(cfg, "head")
-        logger.info("stamp + upgrade complete")
+        _upgrade_head_and_verify(cfg, engine, "stamp + upgrade complete")
         return 0
 
     if not tables:
@@ -110,8 +134,7 @@ def main() -> int:
         )
         _create_orm_baseline(engine)
         command.stamp(cfg, BASELINE_REVISION)
-        command.upgrade(cfg, "head")
-        logger.info("empty database bootstrap + upgrade complete")
+        _upgrade_head_and_verify(cfg, engine, "empty database bootstrap + upgrade complete")
         return 0
 
     table_sample = ", ".join(sorted(tables)[:10])
