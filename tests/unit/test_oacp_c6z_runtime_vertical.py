@@ -3,12 +3,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
+from api.v1 import commerce_runtime as commerce_runtime_api
 from core.commerce.c6z_runtime_vertical import (
     C6ZRuntimeValidationError,
     answer_product_question_from_cache,
@@ -81,6 +84,30 @@ def _shopify_product() -> dict:
                     "inventoryItem": {"id": "gid://shopify/InventoryItem/1"},
                 }
             ]
+        },
+    }
+
+
+def _grantex_artifact() -> dict:
+    now = _now()
+    return {
+        "artifact_family": "catalog_snapshot",
+        "envelope": {
+            "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
+            "artifact_type": "catalog_snapshot",
+            "issuer": "grantex_internal_oacp_authority",
+            "issued_at": _iso(now),
+            "expires_at": _iso(now + timedelta(minutes=5)),
+        },
+        "payload": {
+            "artifact_family": "catalog_snapshot",
+            "tenant_id": "11111111-1111-1111-1111-111111111111",
+            "merchant_id": "merchant_1",
+            "seller_agent_id": "seller_agent_1",
+            "source_evidence_ref": "agenticorg:shopify:evidence:abc:redacted",
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+            "no_public_discovery_enablement": True,
         },
     }
 
@@ -197,26 +224,7 @@ def test_grantex_authority_payload_matches_issuer_contract() -> None:
 
 def test_cache_record_accepts_grantex_artifact_with_sibling_payload() -> None:
     now = _iso(_now())
-    artifact = {
-        "artifact_family": "catalog_snapshot",
-        "envelope": {
-            "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
-            "artifact_type": "catalog_snapshot",
-            "issuer": "grantex_internal_oacp_authority",
-            "issued_at": now,
-            "expires_at": _iso(_now() + timedelta(minutes=5)),
-        },
-        "payload": {
-            "artifact_family": "catalog_snapshot",
-            "tenant_id": "11111111-1111-1111-1111-111111111111",
-            "merchant_id": "merchant_1",
-            "seller_agent_id": "seller_agent_1",
-            "source_evidence_ref": "agenticorg:shopify:evidence:abc:redacted",
-            "allowed_to_execute": False,
-            "no_payment_execution": True,
-            "no_public_discovery_enablement": True,
-        },
-    }
+    artifact = _grantex_artifact()
 
     record = build_cache_record_from_grantex_artifact(artifact, cached_at=now)
 
@@ -224,6 +232,74 @@ def test_cache_record_accepts_grantex_artifact_with_sibling_payload() -> None:
     assert record.tenant_id == "11111111-1111-1111-1111-111111111111"
     assert record.allowed_to_execute is False
     assert record.non_authoritative_for_transaction is True
+
+
+@pytest.mark.asyncio
+async def test_cache_endpoint_reports_only_successfully_stored_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    @asynccontextmanager
+    async def fake_session(_tenant_id):
+        yield object()
+
+    class FakeRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def upsert(self, _record) -> dict:
+            return {
+                "stored": True,
+                "status": "stored",
+                "cache_record_id": "cache_c6z_catalog",
+                "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
+            }
+
+    monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
+    monkeypatch.setattr(commerce_runtime_api, "DurableOacpArtifactCacheRepository", FakeRepository)
+
+    result = await commerce_runtime_api.cache_grantex_artifacts(
+        commerce_runtime_api.CacheArtifactsRequest(artifacts=[_grantex_artifact()]),
+        tenant_id="11111111-1111-1111-1111-111111111111",
+    )
+
+    assert result["status"] == "cached"
+    assert result["records_stored"] == 1
+    assert result["records_rejected"] == 0
+    assert result["store_results"][0]["stored"] is True
+
+
+@pytest.mark.asyncio
+async def test_cache_endpoint_rejects_failed_repository_store_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    @asynccontextmanager
+    async def fake_session(_tenant_id):
+        yield object()
+
+    class FakeRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def upsert(self, _record) -> dict:
+            return {
+                "stored": False,
+                "status": "stale",
+                "refusal_code": "cache_timestamps_invalid",
+                "cache_record_id": "cache_c6z_catalog",
+                "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
+            }
+
+    monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
+    monkeypatch.setattr(commerce_runtime_api, "DurableOacpArtifactCacheRepository", FakeRepository)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await commerce_runtime_api.cache_grantex_artifacts(
+            commerce_runtime_api.CacheArtifactsRequest(artifacts=[_grantex_artifact()]),
+            tenant_id="11111111-1111-1111-1111-111111111111",
+        )
+
+    assert exc_info.value.status_code == 422
+    detail = exc_info.value.detail
+    assert detail["status"] == "artifact_cache_rejected"
+    assert detail["records_stored"] == 0
+    assert detail["records_rejected"] == 1
+    assert detail["store_results"][0]["refusal_code"] == "cache_timestamps_invalid"
 
 
 def test_shopify_webhook_hmac_verification_and_idempotency_are_deterministic() -> None:
