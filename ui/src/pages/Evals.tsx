@@ -568,7 +568,7 @@ export default function Evals() {
             </div>
             <span>AgenticOrg Evaluation Matrix</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} Edumatica Pvt Ltd. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} AgenticOrg. All rights reserved.</p>
         </div>
       </footer>
     </div>

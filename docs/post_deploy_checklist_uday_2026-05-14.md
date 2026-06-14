@@ -80,7 +80,7 @@ Playwright suites that exercise them end-to-end:
 ```
 cd ui
 BASE_URL=https://agenticorg.ai \
-UDAY_EMAIL=uday.chauhan@edumatica.io \
+UDAY_EMAIL=qa.uday@example.com \
 UDAY_PASSWORD='<from May-14 report>' \
 npx playwright test e2e/qa-uday-14may2026.spec.ts e2e/qa-uday-2may2026.spec.ts e2e/qa-cafirms-may03.spec.ts --project=chromium --workers=1
 ```

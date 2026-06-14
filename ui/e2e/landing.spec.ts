@@ -133,7 +133,7 @@ test.describe("Landing Page — Sections", () => {
     await expect(footer.getByText("Dashboard").first()).toBeVisible();
     await expect(footer.getByText("Agents").first()).toBeVisible();
     await expect(footer.getByText("Pricing").first()).toBeVisible();
-    await expect(footer.getByText("Edumatica").first()).toBeVisible();
+    await expect(footer.getByText("agenticorg.ai").first()).toBeVisible();
   });
 });
 
