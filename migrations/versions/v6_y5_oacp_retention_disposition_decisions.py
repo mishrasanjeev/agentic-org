@@ -1,7 +1,7 @@
 """C6Y5 durable OACP retention disposition decision records.
 
 Revision ID: v6y5_retention_decisions
-Revises: v6y3_industry_pack_uuid_default
+Revises: v6y4_repair_a2a_tasks
 Create Date: 2026-06-14
 
 This table is an AgenticOrg-owned internal retention disposition decision
@@ -20,7 +20,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "v6y5_retention_decisions"
-down_revision = "v6y3_industry_pack_uuid_default"
+down_revision = "v6y4_repair_a2a_tasks"
 branch_labels = None
 depends_on = None
 

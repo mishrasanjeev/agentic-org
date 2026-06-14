@@ -301,7 +301,7 @@ def test_c6y5_migration_has_tenant_safe_rls_and_non_execution_guards() -> None:
     for expected in (
         "revision = \"v6y5_retention_decisions\"",
         "CREATE TABLE IF NOT EXISTS oacp_retention_disposition_decision_records",
-        "down_revision = \"v6y3_industry_pack_uuid_default\"",
+        "down_revision = \"v6y4_repair_a2a_tasks\"",
         "ix_oacp_retention_disposition_decision_tenant_id",
         "ix_oacp_retention_disposition_decision_merchant_id",
         "ix_oacp_retention_disposition_decision_seller_agent_id",

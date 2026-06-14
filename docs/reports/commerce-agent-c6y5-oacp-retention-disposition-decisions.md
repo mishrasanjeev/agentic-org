@@ -24,7 +24,7 @@ C6Y5 implements persistence because AgenticOrg already has the same safe pattern
 - C6X8 durable operator decision records
 - C6Y2 durable audit review manifest records
 
-The new Alembic migration is `v6y5_retention_decisions` and depends on `v6y3_industry_pack_uuid_default`, the current migration head in this branch. It adds one narrow table, tenant-safe indexes, a uniqueness guard for packet/kind/reviewer scope, rollback, and RLS.
+The new Alembic migration is `v6y5_retention_decisions` and depends on `v6y4_repair_a2a_tasks`, the current migration head in this branch. It adds one narrow table, tenant-safe indexes, a uniqueness guard for packet/kind/reviewer scope, rollback, and RLS.
 
 ## Durable Repository Contract
 
