@@ -55,6 +55,21 @@ KB_MATCH_THRESHOLD = 0.85
 HITL_PRIORITIES = {"P1"}
 
 
+def _ticket_from_inputs(inputs: Any) -> dict[str, Any]:
+    """Normalize workflow/API ticket payloads into the dict shape this agent uses."""
+    if isinstance(inputs, str):
+        return {"description": inputs}
+    if not isinstance(inputs, dict):
+        return {"description": str(inputs or "")}
+
+    ticket = inputs.get("ticket", inputs)
+    if isinstance(ticket, dict):
+        return ticket
+    if isinstance(ticket, str):
+        return {"description": ticket}
+    return {"description": str(ticket or "")}
+
+
 @AgentRegistry.register
 class SupportTriageAgent(BaseAgent):
     agent_type = "support_triage"
@@ -70,12 +85,12 @@ class SupportTriageAgent(BaseAgent):
         msg_id = f"msg_{uuid.uuid4().hex[:12]}"
 
         try:
-            inputs = task.task.inputs if hasattr(task.task, "inputs") else task.task.get("inputs", {})
-            ticket = inputs.get("ticket", inputs)
+            raw_inputs = task.task.inputs if hasattr(task.task, "inputs") else task.task.get("inputs", {})
+            ticket = _ticket_from_inputs(raw_inputs)
             ticket_id = ticket.get("ticket_id", ticket.get("id", ""))
             subject = str(ticket.get("subject", "")).strip()
             description = str(ticket.get("description", ticket.get("body", ""))).strip()
-            customer_tier = ticket.get("customer_tier", ticket.get("tier", "business")).lower()
+            customer_tier = str(ticket.get("customer_tier", ticket.get("tier", "business"))).lower()
             trace.append(f"Triage ticket: id={ticket_id}, subject='{subject[:60]}', tier={customer_tier}")
 
             combined_text = f"{subject} {description}".lower()

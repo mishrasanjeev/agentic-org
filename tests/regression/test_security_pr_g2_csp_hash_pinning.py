@@ -29,6 +29,7 @@ NGINX_CONFIGS = (
     REPO_ROOT / "ui" / "nginx.conf",
     REPO_ROOT / "ui" / "nginx.cloudrun.conf.template",
 )
+ANALYTICS_COMPONENT = REPO_ROOT / "ui" / "src" / "components" / "Analytics.tsx"
 
 _INLINE_JSON_LD = re.compile(
     r'<script type="application/ld\+json">\n(.*?)\n  </script>',
@@ -141,3 +142,24 @@ def test_sec_009_csp_does_not_have_wildcard_in_script_src() -> None:
         assert " * " not in (" " + m.group(1) + " "), (
             f"{config.name}: script-src must not include a wildcard."
         )
+
+
+def test_sec_009_analytics_bootstrap_does_not_inject_inline_script() -> None:
+    """GA can run under strict CSP without runtime inline script tags.
+
+    The production CSP hashes only static JSON-LD blocks from index.html.
+    Adding a runtime ``script.textContent`` bootstrap creates unpinned inline
+    script and reopens the browser console CSP violation caught by Playwright.
+    """
+    text = ANALYTICS_COMPONENT.read_text(encoding="utf-8")
+    forbidden = (
+        ".textContent",
+        "innerHTML",
+        "appendChild(inline",
+    )
+    missing = [pattern for pattern in forbidden if pattern in text]
+    assert not missing, (
+        "Analytics bootstrap must not create runtime inline scripts under "
+        f"strict CSP; found {', '.join(missing)}"
+    )
+    assert "window.gtag" in text and "window.dataLayer" in text
