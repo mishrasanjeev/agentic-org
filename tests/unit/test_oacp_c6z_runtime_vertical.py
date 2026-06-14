@@ -480,6 +480,62 @@ async def test_plural_pine_capability_verifier_is_env_gated_and_redacted() -> No
     assert summary["no_payment_execution"] is True
 
 
+@pytest.mark.asyncio
+async def test_plural_pine_capability_verifier_uses_sandbox_token_check_without_execution() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/auth/v1/token")
+        body = json.loads(request.content.decode())
+        assert body["grant_type"] == "client_credentials"
+        return httpx.Response(200, json={"access_token": "opaque-fixture-value", "expires_in": 1800})
+
+    evidence = await verify_plural_pine_mandate_capability(
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        env={
+            "PLURAL_PINE_CLIENT_ID": "client-id",
+            "PLURAL_PINE_CLIENT_SECRET": "fixture-redacted-value",
+        },
+        transport=httpx.MockTransport(handler),
+        now=_now(),
+    )
+
+    assert evidence.result_status == "available"
+    assert evidence.provider_environment == "sandbox"
+    assert evidence.external_validation_performed is True
+    assert evidence.raw_payload_stored is False
+    assert evidence.allowed_to_execute is False
+    assert evidence.no_payment_execution is True
+    assert "opaque-fixture-value" not in str(evidence)
+    assert "fixture-redacted-value" not in str(evidence)
+
+
+@pytest.mark.asyncio
+async def test_plural_pine_capability_verifier_blocks_live_environment_without_network() -> None:
+    called = False
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(500)
+
+    evidence = await verify_plural_pine_mandate_capability(
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        env={
+            "PLURAL_PINE_CLIENT_ID": "client-id",
+            "PLURAL_PINE_CLIENT_SECRET": "fixture-redacted-value",
+            "PLURAL_PINE_ENVIRONMENT": "live",
+        },
+        transport=httpx.MockTransport(handler),
+        now=_now(),
+    )
+
+    assert called is False
+    assert evidence.result_status == "blocked_provider_error"
+    assert evidence.external_validation_performed is False
+    assert evidence.allowed_to_execute is False
+
+
 def test_c6z_migration_is_tenant_safe_and_non_executing() -> None:
     migration = Path("migrations/versions/v6_z_runtime_vertical_demo.py").read_text()
     assert 'down_revision = "v6y5_retention_decisions"' in migration

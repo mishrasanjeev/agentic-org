@@ -44,8 +44,9 @@ Plural/Pine capability check:
 
 - `PLURAL_PINE_CLIENT_ID`
 - `PLURAL_PINE_CLIENT_SECRET`
-- `PLURAL_PINE_ENVIRONMENT`
-- `PLURAL_PINE_CAPABILITY_URL`
+- `PLURAL_PINE_ENVIRONMENT` optional; defaults to `sandbox`
+- `PLURAL_PINE_BASE_URL` optional sandbox base override
+- `PLURAL_PINE_CAPABILITY_URL` optional explicit capability endpoint override
 
 Missing external credentials cause blocked or skipped results with exact env vars listed. The code does not claim external validation when credentials are absent.
 
