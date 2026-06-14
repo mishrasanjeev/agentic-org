@@ -9,30 +9,45 @@ def _read(path: str) -> str:
     return (REPO / path).read_text(encoding="utf-8")
 
 
-def test_landing_page_reflects_c6x_cache_security_and_deploy_work() -> None:
+def test_landing_page_reflects_oacp_protocol_without_milestone_section() -> None:
     landing = _read("ui/src/pages/Landing.tsx")
+    oacp_page = _read("ui/src/pages/OpenAgenticCommerceProtocol.tsx")
     index = _read("ui/index.html")
 
     for expected in (
-        "Latest mainline work",
-        "Durable OACP Artifact Cache",
-        "Cache Maintenance Planner",
-        "Fail-Closed Release Gates",
-        "Cloud Run Rollout Safety",
-        "Commerce guardrail",
+        "Open Agentic Commerce Protocol",
+        "A trust layer for seller and buyer agents.",
+        "source-backed merchant facts",
+        "Explore the full OACP model",
+        "No public protocol publication",
     ):
         assert expected in landing
 
+    for expected in (
+        "From merchant data to a buyer-agent answer.",
+        "Every buyer request resolves to one safe posture.",
+        "Provider-owned execution boundary",
+        "Non-goals this page does not claim",
+        "No live checkout or payment execution claim",
+    ):
+        assert expected in oacp_page
+
     for stale in (
+        "Latest shipped foundation",
+        "Latest mainline work",
+        "June hardening",
+        "Review latest foundation",
         "Project Apex",
         "places the order",
         "Shopping Agent",
     ):
         assert stale not in landing
 
-    assert "OACP artifact cache controls" in index
-    assert "Cloud Run release safety" in index
-    assert "Commerce guardrail" in index
+    assert "Open Agentic Commerce Protocol artifact boundaries" in index
+    assert "Open Agentic Commerce Protocol explains" in index
+    assert "Latest foundation:" not in index
+    assert "Commerce guardrail" not in index
+    assert "Cloud Run release safety" not in index
     assert "AI Virtual Employees for Enterprise | Create & Deploy AI Agents" not in index
     assert "End-to-End MCP/A2A Demo" not in index
 
