@@ -11,6 +11,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import re
 import uuid
 
 # ---------------------------------------------------------------------------
@@ -27,7 +28,15 @@ VALID_SUBSCRIPTION_STATUSES = {"trial", "active", "cancelled", "expired"}
 
 
 def _route_path(route) -> str:
-    return getattr(route, "path_format", None) or getattr(route, "path", "")
+    path = getattr(route, "path_format", None) or getattr(route, "path", None)
+    if path:
+        return path
+    pattern = getattr(getattr(route, "path_regex", None), "pattern", "")
+    if not pattern:
+        return ""
+    raw = pattern.removeprefix("^").removesuffix("$")
+    raw = re.sub(r"\(\?P<([^>]+)>[^)]+\)", r"{\1}", raw)
+    return re.sub(r"\\(.)", r"\1", raw)
 
 
 def _route_paths(app) -> list[str]:

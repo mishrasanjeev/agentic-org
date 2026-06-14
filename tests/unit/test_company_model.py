@@ -35,7 +35,15 @@ TAN_RE = re.compile(r"^[A-Z]{4}\d{5}[A-Z]{1}$")
 
 
 def _route_path(route) -> str:
-    return getattr(route, "path_format", None) or getattr(route, "path", "")
+    path = getattr(route, "path_format", None) or getattr(route, "path", None)
+    if path:
+        return path
+    pattern = getattr(getattr(route, "path_regex", None), "pattern", "")
+    if not pattern:
+        return ""
+    raw = pattern.removeprefix("^").removesuffix("$")
+    raw = re.sub(r"\(\?P<([^>]+)>[^)]+\)", r"{\1}", raw)
+    return re.sub(r"\\(.)", r"\1", raw)
 
 
 def _route_paths(app) -> list[str]:
