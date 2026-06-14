@@ -111,3 +111,28 @@ def test_cloud_run_deploy_enables_commerce_public_discovery() -> None:
     assert "API_UPDATE_ENV_VARS=" in src
     assert "AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true" in src
     assert 'update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "$API_UPDATE_ENV_VARS"' in src
+
+
+def test_a2a_tasks_repair_migration_is_idempotent_and_tenant_scoped() -> None:
+    migration = (ROOT / "migrations" / "versions" / "v6_y4_repair_a2a_tasks.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'revision = "v6y4_repair_a2a_tasks"' in migration
+    assert 'down_revision = "v6y3_industry_pack_uuid_default"' in migration
+    assert "CREATE TABLE IF NOT EXISTS a2a_tasks" in migration
+    assert "tenant_id UUID NOT NULL REFERENCES tenants(id)" in migration
+    assert "input_data JSONB DEFAULT '{}'::jsonb" in migration
+    assert "CREATE INDEX IF NOT EXISTS ix_a2a_tasks_tenant" in migration
+    assert "CREATE INDEX IF NOT EXISTS ix_a2a_tasks_task_id" in migration
+    assert "ALTER TABLE a2a_tasks FORCE ROW LEVEL SECURITY" in migration
+    assert "CREATE POLICY a2a_tasks_tenant_isolation" in migration
+
+
+def test_migration_wrapper_checks_required_runtime_tables_after_upgrade() -> None:
+    src = (ROOT / "scripts" / "alembic_migrate.py").read_text(encoding="utf-8")
+
+    assert '"a2a_tasks"' in src
+    assert "REQUIRED_RUNTIME_TABLES" in src
+    assert "_assert_required_runtime_tables(engine)" in src
+    assert "Alembic reported success but required runtime tables are missing" in src
