@@ -4,9 +4,10 @@
  * No page.route() mocking — all responses are real.
  */
 import { test, expect, Page } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const MARKETING = "https://agenticorg.ai";
+const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
@@ -180,7 +181,8 @@ test.describe("Full App — Dashboard (Auth Required)", () => {
       "/dashboard/settings",
     ];
     for (const path of paths) {
-      await page.goto(`${APP}${path}`, { waitUntil: "networkidle" });
+      await page.goto(`${APP}${path}`, { waitUntil: "domcontentloaded" });
+      await expect(page.locator("main")).toBeVisible({ timeout: 15_000 });
       const notFound = await page
         .locator("text=Page not found")
         .isVisible()

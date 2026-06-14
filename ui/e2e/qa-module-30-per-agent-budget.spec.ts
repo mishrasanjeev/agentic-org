@@ -17,7 +17,9 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
+import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
+
+const API = process.env.API_URL || APP;
 
 interface AgentResponse {
   id: string;
@@ -27,14 +29,18 @@ async function createAgent(
   request: import("@playwright/test").APIRequestContext,
   costControls: Record<string, unknown>,
 ): Promise<string> {
-  const ts = Date.now();
-  const resp = await request.post(`${APP}/api/v1/agents`, {
+  const suffix = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const resp = await request.post(`${API}/api/v1/agents`, {
     headers: {
       Authorization: `Bearer ${E2E_TOKEN}`,
       "Content-Type": "application/json",
     },
     data: {
-      name: `qa-module-30-${ts}`,
+      name: `qa-module-30-${suffix}`,
+      employee_name: `qa-module-30-${suffix}`,
+      agent_type: "qa_budget_agent",
+      domain: "finance",
+      initial_status: "active",
       role: "Test Agent",
       goal: "Verify Cost tab rendering",
       tools: [],
@@ -43,9 +49,10 @@ async function createAgent(
     failOnStatusCode: false,
   });
   expect(resp.status(), `agent create failed: ${resp.status()}`).toBeLessThan(300);
-  const body = (await resp.json()) as AgentResponse;
-  expect(body.id).toBeTruthy();
-  return body.id;
+  const body = (await resp.json()) as AgentResponse & { agent_id?: string };
+  const agentId = body.id || body.agent_id;
+  expect(agentId).toBeTruthy();
+  return agentId;
 }
 
 async function deleteAgent(
@@ -54,15 +61,16 @@ async function deleteAgent(
 ): Promise<void> {
   // Best-effort cleanup — don't fail the test if the agent is
   // already gone.
-  await request.delete(`${APP}/api/v1/agents/${agentId}`, {
+  await request.delete(`${API}/api/v1/agents/${agentId}`, {
     headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     failOnStatusCode: false,
   });
 }
 
 test.describe("Module 30: Per-Agent Budget Enforcement @qa @budget", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     requireAuth();
+    await authenticate(page);
   });
 
   // -------------------------------------------------------------------------
@@ -74,14 +82,14 @@ test.describe("Module 30: Per-Agent Budget Enforcement @qa @budget", () => {
     request,
   }) => {
     const agentId = await createAgent(request, {
-      monthly_cap_usd: 50,
+      monthly_cost_cap_usd: 50,
       cost_current_usd: 12.5, // 25% utilization → green bar
     });
     try {
-      await page.goto(`${APP}/agents/${agentId}`);
+      await page.goto(`${APP}/dashboard/agents/${agentId}`);
 
       // Switch to the Cost tab.
-      await page.getByRole("tab", { name: /cost/i }).click();
+      await page.getByRole("button", { name: /^cost$/i }).click();
 
       // Cap rendered as $50.00, current as $12.50.
       await expect(
@@ -111,12 +119,12 @@ test.describe("Module 30: Per-Agent Budget Enforcement @qa @budget", () => {
     request,
   }) => {
     const agentId = await createAgent(request, {
-      monthly_cap_usd: 100,
+      monthly_cost_cap_usd: 100,
       cost_current_usd: 85, // 85% → yellow / amber state
     });
     try {
-      await page.goto(`${APP}/agents/${agentId}`);
-      await page.getByRole("tab", { name: /cost/i }).click();
+      await page.goto(`${APP}/dashboard/agents/${agentId}`);
+      await page.getByRole("button", { name: /^cost$/i }).click();
       await expect(page.getByText(/Approaching budget limit/i)).toBeVisible();
     } finally {
       await deleteAgent(request, agentId);
@@ -128,12 +136,12 @@ test.describe("Module 30: Per-Agent Budget Enforcement @qa @budget", () => {
     request,
   }) => {
     const agentId = await createAgent(request, {
-      monthly_cap_usd: 20,
+      monthly_cost_cap_usd: 20,
       cost_current_usd: 25, // 125% → over budget
     });
     try {
-      await page.goto(`${APP}/agents/${agentId}`);
-      await page.getByRole("tab", { name: /cost/i }).click();
+      await page.goto(`${APP}/dashboard/agents/${agentId}`);
+      await page.getByRole("button", { name: /^cost$/i }).click();
       await expect(page.getByText(/Over budget/i)).toBeVisible();
     } finally {
       await deleteAgent(request, agentId);
@@ -149,12 +157,12 @@ test.describe("Module 30: Per-Agent Budget Enforcement @qa @budget", () => {
     request,
   }) => {
     const agentId = await createAgent(request, {
-      // No monthly_cap_usd → defaults to 0 in the schema.
+      monthly_cost_cap_usd: 0,
       cost_current_usd: 0,
     });
     try {
-      await page.goto(`${APP}/agents/${agentId}`);
-      await page.getByRole("tab", { name: /cost/i }).click();
+      await page.goto(`${APP}/dashboard/agents/${agentId}`);
+      await page.getByRole("button", { name: /^cost$/i }).click();
 
       // The empty-state copy is exact-text — pinning the wording
       // guards against silent UX regressions where the empty

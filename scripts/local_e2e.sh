@@ -18,7 +18,7 @@
 #   2. Wait for postgres health
 #   3. Launch `uvicorn api.main:app` on host via the repo's .venv
 #   4. Wait for the API /health endpoint
-#   5. POST /auth/login as the demo CEO to mint an E2E token
+#   5. POST /auth/login as the demo partner to mint an E2E token
 #   6. Seed demo agents via scripts/seed_e2e_demo_agents.py
 #   7. Start the UI dev server (vite, proxies /api to :8000)
 #   8. Wait for the UI to respond
@@ -28,16 +28,21 @@
 # Usage:
 #   bash scripts/local_e2e.sh                                # full suite
 #   bash scripts/local_e2e.sh ui/e2e/session5-bugs.spec.ts   # one spec
+#   bash scripts/local_e2e.sh ui/e2e/a.spec.ts ui/e2e/b.spec.ts
 #   SKIP_BUILD=1 bash scripts/local_e2e.sh                   # reuse ui/node_modules
 #   KEEP_UP=1   bash scripts/local_e2e.sh                    # leave services running
+#   LOCAL_UI_MODE=dev bash scripts/local_e2e.sh              # use Vite dev server
 #
 # Env:
 #   KEEP_UP=1       # do not docker compose down / kill api on exit
 #   RESET=1         # docker compose down -v first (nuke pgdata/redisdata)
 #                   # — useful if a prior compose run baked in bad creds
 #   SKIP_BUILD=1    # skip `npm install` / `playwright install`
-#   LOCAL_UI_PORT   # default 5173 (vite default)
+#   LOCAL_UI_PORT   # optional: force a specific UI port; otherwise auto-pick
 #   LOCAL_API_PORT  # default 8000
+#   LOCAL_E2E_WORKERS # default 1; raise only when the local stack is stable
+#   LOCAL_UI_MODE   # default preview; use dev only for frontend iteration
+#   SKIP_UI_BUILD   # preview mode only: set 1 to reuse ui/dist
 #   PYTHON_BIN      # default: $REPO/.venv/Scripts/python.exe (Windows)
 #                   #          or  $REPO/.venv/bin/python (Linux/macOS)
 
@@ -46,17 +51,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-LOCAL_UI_PORT="${LOCAL_UI_PORT:-5173}"
+REQUESTED_LOCAL_UI_PORT="${LOCAL_UI_PORT:-}"
 LOCAL_API_PORT="${LOCAL_API_PORT:-8000}"
-UI_URL="http://localhost:${LOCAL_UI_PORT}"
+LOCAL_E2E_WORKERS="${LOCAL_E2E_WORKERS:-1}"
+LOCAL_UI_MODE="${LOCAL_UI_MODE:-preview}"
 API_URL="http://localhost:${LOCAL_API_PORT}"
-SPEC_ARG="${1:-}"
+SPEC_ARGS=("$@")
 
 # Demo creds match core/seed_ca_demo.py DEMO_USER_EMAIL / DEMO_USER_PASSWORD.
-# The CA-firms seeder is what runs in our bootstrap step below, so these
-# are the only creds guaranteed to exist locally. CI uses a different
-# seed path that also creates ceo@agenticorg.local, which we don't
-# reproduce here.
+# The CA-firms seeder is what runs in our bootstrap step below. It creates
+# this primary demo partner plus the documented CxO role accounts used by
+# the wider regression suite.
 DEMO_EMAIL="demo@cafirm.agenticorg.ai"
 DEMO_PASSWORD="demo123!"
 
@@ -89,18 +94,38 @@ UI_PID=""
 # Declared here so the cleanup trap can reference it even on early exits.
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.local-e2e.yml)
 
+stop_pid() {
+  local pid="$1"
+  local label="$2"
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    return
+  fi
+
+  log "Stopping ${label} (pid=${pid})"
+  kill "$pid" 2>/dev/null || true
+  for _ in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      return
+    fi
+    sleep 0.25
+  done
+
+  warn "${label} did not exit after SIGTERM; forcing pid=${pid}"
+  if command -v taskkill >/dev/null 2>&1; then
+    taskkill //PID "$pid" //T //F >/dev/null 2>&1 || true
+  else
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    wait "$pid" 2>/dev/null || true
+  fi
+}
+
 cleanup() {
   local exit_code=$?
-  if [[ -n "$UI_PID" ]] && kill -0 "$UI_PID" 2>/dev/null; then
-    log "Stopping UI dev server (pid=$UI_PID)"
-    kill "$UI_PID" 2>/dev/null || true
-    wait "$UI_PID" 2>/dev/null || true
-  fi
-  if [[ -n "$API_PID" ]] && kill -0 "$API_PID" 2>/dev/null; then
-    log "Stopping API uvicorn (pid=$API_PID)"
-    kill "$API_PID" 2>/dev/null || true
-    wait "$API_PID" 2>/dev/null || true
-  fi
+  stop_pid "$UI_PID" "UI server"
+  stop_pid "$API_PID" "API uvicorn"
   if [[ "${KEEP_UP:-0}" != "1" ]]; then
     log "Tearing down docker compose (postgres/redis/minio)"
     docker compose "${COMPOSE_FILES[@]}" down --remove-orphans >/dev/null 2>&1 \
@@ -155,6 +180,32 @@ tcp_listening() {
   return $rc
 }
 
+choose_free_local_port() {
+  "$PYTHON_BIN" - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+if [[ -n "$REQUESTED_LOCAL_UI_PORT" ]]; then
+  LOCAL_UI_PORT="$REQUESTED_LOCAL_UI_PORT"
+  UI_URL="http://localhost:${LOCAL_UI_PORT}"
+  if tcp_listening localhost "$LOCAL_UI_PORT"; then
+    fail "LOCAL_UI_PORT=${LOCAL_UI_PORT} is already in use. Stop that process or unset LOCAL_UI_PORT so this script can choose a free port."
+    exit 2
+  fi
+else
+  LOCAL_UI_PORT="$(choose_free_local_port)"
+  UI_URL="http://localhost:${LOCAL_UI_PORT}"
+  log "LOCAL_UI_PORT unset; selected free UI port ${LOCAL_UI_PORT}"
+fi
+
+API_LOG="/tmp/local_e2e_api_${LOCAL_API_PORT}.log"
+UI_LOG="/tmp/local_e2e_ui_${LOCAL_UI_PORT}.log"
+
 # Read "0.0.0.0:NNNNN" from `docker compose port <svc> <container-port>`
 # and return just NNNNN. Windows prints CR so we strip it.
 compose_port() {
@@ -162,6 +213,20 @@ compose_port() {
   local cport="$2"
   docker compose "${COMPOSE_FILES[@]}" port "$svc" "$cport" 2>/dev/null \
     | awk -F: '{print $NF}' | tr -d '\r\n'
+}
+
+clear_e2e_redis_auth_state() {
+  log "Clearing volatile e2e auth/session state from Redis"
+  docker compose "${COMPOSE_FILES[@]}" exec -T redis sh -c '
+set -eu
+for pattern in "auth:blocked:*" "auth:failures:*" "auth:login_attempts:*" "auth:signup:*" "token_blacklist:*"; do
+  redis-cli --scan --pattern "$pattern" | while IFS= read -r key; do
+    if [ -n "$key" ]; then
+      redis-cli DEL "$key" >/dev/null
+    fi
+  done
+done
+' >/dev/null || warn "Could not clear e2e Redis auth/session keys; continuing"
 }
 
 if [[ "${RESET:-0}" == "1" ]]; then
@@ -181,6 +246,22 @@ if [[ -z "$PG_PORT" || -z "$REDIS_PORT" || -z "$MINIO_PORT" ]]; then
   exit 3
 fi
 ok "host ports assigned — pg=${PG_PORT}, redis=${REDIS_PORT}, minio=${MINIO_PORT}"
+
+log "Waiting for redis ready (PING, timeout 30s)"
+deadline=$(( $(date +%s) + 30 ))
+while :; do
+  if [[ "$(docker compose "${COMPOSE_FILES[@]}" exec -T redis redis-cli ping 2>/dev/null | tr -d '\r')" == "PONG" ]]; then
+    ok "redis is ready (PING)"
+    break
+  fi
+  if [[ $(date +%s) -ge $deadline ]]; then
+    fail "redis did not become ready in 30s"
+    docker compose "${COMPOSE_FILES[@]}" logs --tail=40 redis 2>/dev/null || true
+    exit 3
+  fi
+  sleep 1
+done
+clear_e2e_redis_auth_state
 
 log "Waiting for postgres ready (pg_isready, timeout 90s)"
 deadline=$(( $(date +%s) + 90 ))
@@ -266,7 +347,7 @@ print('ORM create_all complete')
 "$PYTHON_BIN" scripts/alembic_migrate.py || { fail "alembic_migrate.py failed"; exit 4; }
 ok "schema bootstrap complete"
 
-# Seed the CA demo tenant + demo user (ceo@agenticorg.local). In the
+# Seed the CA demo tenant + documented demo users. In the
 # normal API startup path can skip demo seed when schema verification is
 # the only startup action, so call the seeder directly here.
 log "Seeding CA demo tenant + users"
@@ -299,7 +380,7 @@ fi
 log "Starting API (uvicorn) on :${LOCAL_API_PORT}"
 "$PYTHON_BIN" -m uvicorn api.main:app \
   --host 127.0.0.1 --port "$LOCAL_API_PORT" \
-  >/tmp/local_e2e_api.log 2>&1 &
+  >"${API_LOG}" 2>&1 &
 API_PID=$!
 
 log "Waiting for API at ${API_URL}/api/v1/health (timeout 60s)"
@@ -311,12 +392,12 @@ while :; do
   fi
   if ! kill -0 "$API_PID" 2>/dev/null; then
     fail "API process died during startup. Last 40 lines:"
-    tail -n 40 /tmp/local_e2e_api.log || true
+    tail -n 40 "${API_LOG}" || true
     exit 4
   fi
   if [[ $(date +%s) -ge $deadline ]]; then
     fail "API did not become healthy in 60s. Last 40 lines:"
-    tail -n 40 /tmp/local_e2e_api.log || true
+    tail -n 40 "${API_LOG}" || true
     exit 4
   fi
   sleep 2
@@ -331,8 +412,8 @@ TOKEN=$(curl -fsS -X POST "${API_URL}/api/v1/auth/login" \
   -d "{\"email\":\"${DEMO_EMAIL}\",\"password\":\"${DEMO_PASSWORD}\"}" \
   | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
 if [[ -z "$TOKEN" ]]; then
-  fail "Could not obtain E2E_TOKEN — demo user likely not seeded. Check /tmp/local_e2e_api.log."
-  tail -n 20 /tmp/local_e2e_api.log || true
+  fail "Could not obtain E2E_TOKEN — demo user likely not seeded. Check ${API_LOG}."
+  tail -n 20 "${API_LOG}" || true
   exit 5
 fi
 ok "E2E_TOKEN obtained (${#TOKEN} chars)"
@@ -348,7 +429,7 @@ if [[ -f scripts/seed_e2e_demo_agents.py ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 5. UI dev server (proxy /api -> :8000, serves at :5173)
+# 5. UI server (production preview by default; dev mode available for iteration)
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   if [[ ! -d ui/node_modules ]]; then
@@ -361,25 +442,39 @@ if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   (cd ui && npx playwright install --with-deps chromium)
 fi
 
-log "Starting UI dev server on ${UI_URL}"
-(cd ui && npm run dev -- --port "${LOCAL_UI_PORT}" --strictPort) >/tmp/local_e2e_ui.log 2>&1 &
+if [[ "$LOCAL_UI_MODE" == "preview" ]]; then
+  if [[ "${SKIP_UI_BUILD:-0}" != "1" || ! -d ui/dist ]]; then
+    log "Building UI for preview"
+    (cd ui && npm run build)
+  else
+    log "SKIP_UI_BUILD=1 and ui/dist exists; reusing existing preview build"
+  fi
+  log "Starting UI preview server on ${UI_URL}"
+  (cd ui && npm run preview -- --host 127.0.0.1 --port "${LOCAL_UI_PORT}" --strictPort) >"${UI_LOG}" 2>&1 &
+elif [[ "$LOCAL_UI_MODE" == "dev" ]]; then
+  log "Starting UI dev server on ${UI_URL}"
+  (cd ui && npm run dev -- --host 127.0.0.1 --port "${LOCAL_UI_PORT}" --strictPort) >"${UI_LOG}" 2>&1 &
+else
+  fail "Unsupported LOCAL_UI_MODE='${LOCAL_UI_MODE}'. Use 'preview' or 'dev'."
+  exit 6
+fi
 UI_PID=$!
 
 log "Waiting for UI at ${UI_URL} (timeout 60s)"
 deadline=$(( $(date +%s) + 60 ))
 while :; do
+  if ! kill -0 "$UI_PID" 2>/dev/null; then
+    fail "UI process died during startup. Last 30 lines:"
+    tail -n 30 "${UI_LOG}" || true
+    exit 6
+  fi
   if curl -fsS "${UI_URL}" >/dev/null 2>&1; then
     ok "UI is serving"
     break
   fi
-  if ! kill -0 "$UI_PID" 2>/dev/null; then
-    fail "UI process died during startup. Last 30 lines:"
-    tail -n 30 /tmp/local_e2e_ui.log || true
-    exit 6
-  fi
   if [[ $(date +%s) -ge $deadline ]]; then
     fail "UI did not start in 60s. Last 30 lines:"
-    tail -n 30 /tmp/local_e2e_ui.log || true
+    tail -n 30 "${UI_LOG}" || true
     exit 6
   fi
   sleep 2
@@ -388,13 +483,19 @@ done
 # ---------------------------------------------------------------------------
 # 6. Playwright
 # ---------------------------------------------------------------------------
-log "Running Playwright (BASE_URL=${UI_URL}${SPEC_ARG:+ spec=${SPEC_ARG}})"
+log "Running Playwright (BASE_URL=${UI_URL}, workers=${LOCAL_E2E_WORKERS}${SPEC_ARGS[*]:+ specs=${SPEC_ARGS[*]}})"
 (
   cd ui
+  PLAYWRIGHT_ARGS=()
+  for spec in "${SPEC_ARGS[@]}"; do
+    PLAYWRIGHT_ARGS+=("../${spec}")
+  done
+  PLAYWRIGHT_ARGS+=("--workers=${LOCAL_E2E_WORKERS}")
   BASE_URL="${UI_URL}" \
+  API_URL="${API_URL}" \
   E2E_TOKEN="${TOKEN}" \
   MARKETING_URL="${UI_URL}" \
-  npx playwright test ${SPEC_ARG:+"../${SPEC_ARG}"}
+  npx playwright test "${PLAYWRIGHT_ARGS[@]}"
 )
 
 ok "Playwright run finished"

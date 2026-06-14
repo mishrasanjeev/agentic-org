@@ -1587,7 +1587,10 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
 
 /* ─── Cost Tab ─── */
 function CostTab({ agent }: { agent: Agent }) {
-  const monthlyCap = agent.cost_controls?.monthly_cap_usd ?? 0;
+  const monthlyCap =
+    agent.cost_controls?.monthly_cap_usd ??
+    agent.cost_controls?.monthly_cost_cap_usd ??
+    0;
   const costCurrent = agent.cost_controls?.cost_current_usd ?? 0;
   const utilizationPct = monthlyCap > 0 ? Math.min((costCurrent / monthlyCap) * 100, 100) : 0;
 

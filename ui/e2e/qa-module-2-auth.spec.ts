@@ -19,8 +19,10 @@
  * All other TCs use the demo accounts seeded by the platform.
  */
 import { expect, test } from "@playwright/test";
+import { clearSession, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
+const E2E_TOKEN = process.env.E2E_TOKEN || "";
 
 const DEMO = {
   ceo:     { email: "ceo@agenticorg.local",     password: "ceo123!"   },
@@ -229,12 +231,12 @@ test("TC-AUTH-010 logout clears session and redirects protected routes", async (
   await page.locator('input[type="password"]').fill(DEMO.ceo.password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL(/\/dashboard|\/onboarding/, { timeout: 30_000 });
-
-  await page.evaluate(() => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-  });
-  await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
+  if (page.url().includes("/onboarding")) {
+    await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
+  }
+  await page.getByRole("button", { name: /logout/i }).click();
+  await page.waitForURL(/\/login/, { timeout: 10_000 });
+  await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" }).catch(() => null);
   await page.waitForURL(/\/login/, { timeout: 10_000 });
 });
 
@@ -242,14 +244,11 @@ test("TC-AUTH-010 logout clears session and redirects protected routes", async (
 // TC-AUTH-011: Token expiry
 // ---------------------------------------------------------------------------
 
-test("TC-AUTH-011 manually deleting the token redirects protected routes to /login", async ({ page }) => {
-  await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  await page.locator('input[type="email"]').fill(DEMO.ceo.email);
-  await page.locator('input[type="password"]').fill(DEMO.ceo.password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL(/\/dashboard|\/onboarding/, { timeout: 30_000 });
-
-  await page.evaluate(() => localStorage.removeItem("token"));
+test("TC-AUTH-011 clearing the session cookie redirects protected routes to /login", async ({ page }) => {
+  await setSessionToken(page, E2E_TOKEN);
+  await page.goto(`${APP}/dashboard/agents`, { waitUntil: "domcontentloaded" });
+  await page.waitForURL(/\/dashboard\/agents/, { timeout: 10_000 });
+  await clearSession(page);
   await page.goto(`${APP}/dashboard/agents`, { waitUntil: "domcontentloaded" });
   await page.waitForURL(/\/login/, { timeout: 10_000 });
 });
@@ -272,7 +271,7 @@ for (const route of PROTECTED_ROUTES) {
     // Clean context — no cookies/localStorage. The SPA's
     // ProtectedRoute fires the redirect after mount, so wait for the
     // URL to change (don't check it synchronously after goto).
-    await page.goto(`${APP}${route}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${APP}${route}`, { waitUntil: "domcontentloaded" }).catch(() => null);
     await page.waitForURL(/\/login/, { timeout: 10_000 });
   });
 }

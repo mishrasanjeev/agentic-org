@@ -23,7 +23,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   test("TC-ORG-001 GET /profile returns documented org fields", async ({
     request,
   }) => {
-    const resp = await request.get(`${APP}/api/v1/profile`, {
+    const resp = await request.get(`${APP}/api/v1/org/profile`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });
@@ -35,7 +35,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   });
 
   test("TC-ORG-001b GET /profile without auth is 401/403", async ({ request }) => {
-    const resp = await request.get(`${APP}/api/v1/profile`, {
+    const resp = await request.get(`${APP}/api/v1/org/profile`, {
       failOnStatusCode: false,
     });
     expect([401, 403]).toContain(resp.status());
@@ -48,7 +48,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   test("TC-ORG-002 GET /members returns list of tenant users", async ({
     request,
   }) => {
-    const resp = await request.get(`${APP}/api/v1/members`, {
+    const resp = await request.get(`${APP}/api/v1/org/members`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });
@@ -72,7 +72,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   test("TC-ORG-003 POST /invite rejects non-allowlisted role", async ({
     request,
   }) => {
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -96,7 +96,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
     // Use a .invalid domain so no real mailbox is touched. The
     // server creates a pending user but the email never lands.
     const ts = Date.now();
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -121,7 +121,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   test("TC-ORG-004 POST /accept-invite with no token AND no code is 400", async ({
     request,
   }) => {
-    const resp = await request.post(`${APP}/api/v1/accept-invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/accept-invite`, {
       headers: { "Content-Type": "application/json" },
       data: { password: "SuperSecret123" },
       failOnStatusCode: false,
@@ -134,7 +134,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   test("TC-ORG-004b POST /accept-invite with invalid token is 400", async ({
     request,
   }) => {
-    const resp = await request.post(`${APP}/api/v1/accept-invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/accept-invite`, {
       headers: { "Content-Type": "application/json" },
       data: {
         token: "not-a-real-jwt",
@@ -151,7 +151,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
     // Even with an invalid token, the password validation may run
     // before token decode; either way a weak password (no upper,
     // no digit) must NOT be accepted.
-    const resp = await request.post(`${APP}/api/v1/accept-invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/accept-invite`, {
       headers: { "Content-Type": "application/json" },
       data: {
         token: "stub",
@@ -170,7 +170,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
     request,
   }) => {
     const resp = await request.delete(
-      `${APP}/api/v1/members/00000000-0000-0000-0000-000000000000`,
+      `${APP}/api/v1/org/members/00000000-0000-0000-0000-000000000000`,
       {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
@@ -186,7 +186,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   test("TC-ORG-006 PUT /onboarding accepts partial body + returns updated settings", async ({
     request,
   }) => {
-    const resp = await request.put(`${APP}/api/v1/onboarding`, {
+    const resp = await request.put(`${APP}/api/v1/org/onboarding`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -201,7 +201,7 @@ test.describe("Module 14: Organization Management @qa @org @tenancy", () => {
   });
 
   test("TC-ORG-006b PUT /onboarding without auth is 401/403", async ({ request }) => {
-    const resp = await request.put(`${APP}/api/v1/onboarding`, {
+    const resp = await request.put(`${APP}/api/v1/org/onboarding`, {
       headers: { "Content-Type": "application/json" },
       data: { onboarding_step: 1 },
       failOnStatusCode: false,

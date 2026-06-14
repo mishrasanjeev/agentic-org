@@ -6,7 +6,11 @@ export interface Agent {
   description?: string; hitl_condition?: string; authorized_tools?: string[];
   llm_model?: string; max_retries?: number; retry_backoff?: string;
   shadow_min_samples?: number; shadow_accuracy_floor?: number;
-  cost_controls?: { monthly_cap_usd?: number; cost_current_usd?: number };
+  cost_controls?: {
+    monthly_cap_usd?: number;
+    monthly_cost_cap_usd?: number;
+    cost_current_usd?: number;
+  };
   // Virtual employee persona fields
   employee_name?: string;
   avatar_url?: string;

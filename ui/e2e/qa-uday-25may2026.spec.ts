@@ -1,13 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const user = {
-  email: "qa-uday-25may2026@example.test",
-  name: "Uday Chauhan",
-  role: "admin",
-  domain: "marketing",
-  tenant_id: "11111111-1111-1111-1111-111111111111",
-  onboarding_complete: true,
-};
+import { authenticate } from "./helpers/auth";
 
 test("Uday 2026-05-25: CRM connector detail exposes operation tools", async ({
   page,
@@ -27,13 +19,7 @@ test("Uday 2026-05-25: CRM connector detail exposes operation tools", async ({
     "validate_crm_access",
   ];
 
-  await page.route("**/api/v1/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(user),
-    });
-  });
+  await authenticate(page);
   await page.route("**/api/v1/connectors/hubspot-test", async (route) => {
     await route.fulfill({
       status: 200,

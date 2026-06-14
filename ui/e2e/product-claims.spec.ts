@@ -7,6 +7,7 @@
  * spec — which is the entire point.
  */
 import { expect, test } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";

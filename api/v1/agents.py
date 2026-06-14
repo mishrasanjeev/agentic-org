@@ -1313,8 +1313,12 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
         )
 
     return {
+        "id": str(agent.id),
         "agent_id": str(agent.id),
         "company_id": str(agent.company_id) if agent.company_id else None,
+        "name": agent.name,
+        "agent_type": agent.agent_type,
+        "domain": agent.domain,
         "status": agent.status,
         "version": agent.version,
         "token_issued": True,

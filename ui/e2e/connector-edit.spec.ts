@@ -16,6 +16,7 @@
  * fail the assertions here instead of being discovered by a customer.
  */
 import { expect, test } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";

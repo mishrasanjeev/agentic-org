@@ -6,7 +6,7 @@
  */
 import { test, expect } from "@playwright/test";
 
-const MARKETING = "https://agenticorg.ai";
+const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
 
 test.describe("Evals Page -- Thorough", () => {
   test("Page loads without errors", async ({ page }) => {

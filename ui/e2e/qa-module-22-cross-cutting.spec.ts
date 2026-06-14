@@ -26,7 +26,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
   }) => {
     // /profile is admin-gated. Without a token the gate fires
     // before the handler runs.
-    const resp = await request.get(`${APP}/api/v1/profile`, {
+    const resp = await request.get(`${APP}/api/v1/org/profile`, {
       failOnStatusCode: false,
     });
     expect([401, 403]).toContain(resp.status());
@@ -35,7 +35,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
   test("TC-CC-002 admin token reaches admin route", async ({ request }) => {
     // The E2E session token has admin scope (it's the seeded
     // ceo@agenticorg.local user). Profile must return 2xx.
-    const resp = await request.get(`${APP}/api/v1/profile`, {
+    const resp = await request.get(`${APP}/api/v1/org/profile`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });
@@ -74,7 +74,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
     // be ``detail`` (FastAPI default) or ``error`` (our custom
     // handler) depending on which layer caught it. Both are
     // acceptable; we just need NOT 500.
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -90,7 +90,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
     // POST /invite with empty body — required field ``email`` is
     // missing. FastAPI/Pydantic returns 422 with a structured
     // detail array.
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -105,7 +105,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
     request,
   }) => {
     const resp = await request.delete(
-      `${APP}/api/v1/members/00000000-0000-0000-0000-000000000000`,
+      `${APP}/api/v1/org/members/00000000-0000-0000-0000-000000000000`,
       {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
@@ -178,7 +178,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
     // 400 (allowlist rejection) is expected because the role is
     // missing from the body. We're only verifying the API
     // doesn't 500 on payloads that contain HTML tags.
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",
@@ -222,7 +222,7 @@ test.describe("Module 22: Cross-Cutting Concerns @qa @cc @security", () => {
     // for length OR the body parser should clamp. Either way,
     // not a 500.
     const big = "x".repeat(1_000_000);
-    const resp = await request.post(`${APP}/api/v1/invite`, {
+    const resp = await request.post(`${APP}/api/v1/org/invite`, {
       headers: {
         Authorization: `Bearer ${E2E_TOKEN}`,
         "Content-Type": "application/json",

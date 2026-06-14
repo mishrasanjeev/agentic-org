@@ -9,11 +9,12 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { APP, requireAuth } from "./helpers/auth";
+import { APP, authenticate, requireAuth } from "./helpers/auth";
 
 test.describe("Module 3: Dashboard @qa @dashboard", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     requireAuth();
+    await authenticate(page);
   });
 
   // -------------------------------------------------------------------------

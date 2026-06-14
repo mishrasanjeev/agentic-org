@@ -12,9 +12,10 @@
  * All tests are read-only and production-safe.
  */
 import { test, expect, Page } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const MARKETING = "https://agenticorg.ai";
+const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
@@ -51,8 +52,10 @@ async function getCompanyId(page: Page): Promise<string> {
       return _cachedCompanyId;
     }
   }
-  // Fallback to a known production company
-  return "b3611f2b-9906-4ae5-b525-c034bb823282";
+  throw new Error(
+    "No company id returned by /api/v1/companies for the authenticated tenant. " +
+      "Seed the CA demo tenant before running ca-firms.spec.ts.",
+  );
 }
 
 // ==========================================================================
@@ -811,6 +814,9 @@ test.describe("Partner Dashboard", () => {
       waitUntil: "domcontentloaded",
     });
     await dashboardLoaded;
+    await expect(
+      page.getByText(/Loading partner dashboard/i),
+    ).toHaveCount(0, { timeout: 15000 });
 
     // Partner dashboard should show KPI cards with metrics
     const kpiLabels = ["Total Clients", "Active", "Filings Due", "Health Score", "Revenue"];

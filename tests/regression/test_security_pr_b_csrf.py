@@ -9,10 +9,10 @@ Tested behaviors:
 - Cookie-authed mutating request **with mismatched** ``X-CSRF-Token`` → 403.
 - Cookie-authed mutating request **with matching** token → bypasses CSRF
   middleware (still hits auth / route logic).
-- Bearer-token API client with no cookie → bypasses CSRF cleanly.
+- Bearer-token API client, with or without ambient cookies → bypasses CSRF cleanly.
 - Safe HTTP methods (GET, HEAD, OPTIONS) → bypass cleanly.
 - Webhook routes (``/api/v1/webhooks/...``) → bypass cleanly (HMAC).
-- Auth bootstrap routes (``/api/v1/auth/login``) → bypass (no prior session).
+- Auth bootstrap routes (``/api/v1/auth/login``, invite accept) → bypass (no prior session).
 - Login response sets the ``agenticorg_csrf`` cookie alongside the
   ``agenticorg_session`` cookie.
 - The CSRF cookie is **non-HttpOnly** (the SPA must read it).
@@ -79,6 +79,10 @@ def app() -> FastAPI:
     def _sso_callback():
         return {"sso": "ok"}
 
+    @a.post("/api/v1/org/accept-invite")
+    def _accept_invite():
+        return {"invite": "ok"}
+
     return a
 
 
@@ -105,6 +109,42 @@ def test_bearer_token_client_bypasses_csrf(client: TestClient) -> None:
     assert resp.status_code == 200
 
 
+def test_explicit_bearer_with_ambient_session_cookie_bypasses_csrf(
+    client: TestClient,
+) -> None:
+    """A bearer API client can run inside a browser-like context whose
+    cookie jar also has session cookies. The full app validates the
+    bearer before CSRF runs; CSRF must not downgrade explicit bearer
+    transport into cookie-auth just because cookies are present.
+    """
+    resp = client.post(
+        "/api/v1/some-resource",
+        cookies={
+            "agenticorg_session": "ambient-session-token",
+            CSRF_COOKIE_NAME: "ambient-csrf-token",
+        },
+        headers={"Authorization": "Bearer explicit-api-token"},
+    )
+    assert resp.status_code == 200
+
+
+def test_empty_bearer_with_session_cookie_still_requires_csrf(
+    client: TestClient,
+) -> None:
+    """Only a non-empty bearer value bypasses CSRF. Empty Authorization
+    headers must not become a bypass gadget in the bare middleware.
+    """
+    resp = client.post(
+        "/api/v1/some-resource",
+        cookies={
+            "agenticorg_session": "ambient-session-token",
+            CSRF_COOKIE_NAME: "ambient-csrf-token",
+        },
+        headers={"Authorization": "Bearer "},
+    )
+    assert resp.status_code == 403
+
+
 def test_webhook_routes_bypass_csrf(client: TestClient) -> None:
     """Webhook routes have HMAC signing — CSRF doesn't apply."""
     # Even with a session cookie + no CSRF token, webhook bypasses.
@@ -126,6 +166,24 @@ def test_sso_callback_bypasses_csrf(client: TestClient) -> None:
     """SSO callback can't carry a CSRF token (the OIDC redirect comes
     from the IdP, not from our SPA)."""
     resp = client.post("/api/v1/auth/sso/callback")
+    assert resp.status_code == 200
+
+
+def test_invite_accept_bypasses_csrf_with_ambient_session_cookie(
+    client: TestClient,
+) -> None:
+    """Invite acceptance is a public auth-bootstrap route. A returning
+    user may have stale session cookies, but accepting an invite cannot
+    depend on the logged-in SPA's CSRF header.
+    """
+    resp = client.post(
+        "/api/v1/org/accept-invite",
+        cookies={
+            "agenticorg_session": "stale-session-token",
+            CSRF_COOKIE_NAME: "stale-csrf-token",
+        },
+        json={"code": "invite-code", "password": "TestPass123"},
+    )
     assert resp.status_code == 200
 
 
