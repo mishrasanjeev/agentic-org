@@ -7719,6 +7719,492 @@ def build_oacp_c6y3_audit_review_manifest_summary(
     }
 
 
+def _c6y4_retention_refusal(
+    *,
+    packet_kind: str,
+    status: str,
+    refusal_code: str,
+    message: str,
+    generated_at: str | None = None,
+    summary_id: str | None = None,
+    tenant_id: str | None = None,
+    merchant_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "packet_built": False,
+        "packet_id": None,
+        "packet_kind": packet_kind,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "generated_at": generated_at,
+        "summary_id": summary_id,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "disposition_previews": [
+            {
+                "disposition": "blocked_unsafe",
+                "reason_code": refusal_code,
+                "next_step_label": "operator_review_required_label_only",
+            }
+        ],
+        "future_retention_action_allowed": False,
+        "records_deleted": False,
+        "retention_executed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "retention_disposition_dry_run_only": True,
+        "operator_review_packet_only": packet_kind == "oacp_retention_disposition_operator_review_packet",
+        "no_export_file_written": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "cli_added": False,
+        "migration_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6y4_summary_flags_safe(summary: Mapping[str, Any]) -> bool:
+    return (
+        summary.get("summary_built") is True
+        and summary.get("summary_kind") == "oacp_audit_review_manifest_redacted_summary"
+        and summary.get("status") == "ready_for_internal_review"
+        and summary.get("allowed_to_execute") is False
+        and summary.get("no_execution") is True
+        and summary.get("review_manifest_summary_only") is True
+        and summary.get("no_export_file_written") is True
+        and summary.get("export_file_written") is False
+        and summary.get("export_writer_added") is False
+        and summary.get("scheduler_added") is False
+        and summary.get("non_authoritative_for_transaction") is True
+        and summary.get("no_checkout_payment_enablement") is True
+        and summary.get("no_live_provider_enablement") is True
+        and summary.get("no_public_discovery_enablement") is True
+        and summary.get("grantex_runtime_required") is False
+    )
+
+
+def _c6y4_dry_run_flags_safe(dry_run: Mapping[str, Any]) -> bool:
+    return (
+        dry_run.get("packet_built") is True
+        and dry_run.get("packet_kind") == "oacp_retention_disposition_dry_run"
+        and dry_run.get("status") == "ready_for_operator_review"
+        and dry_run.get("allowed_to_execute") is False
+        and dry_run.get("no_execution") is True
+        and dry_run.get("retention_disposition_dry_run_only") is True
+        and dry_run.get("future_retention_action_allowed") is False
+        and dry_run.get("records_deleted") is False
+        and dry_run.get("retention_executed") is False
+        and dry_run.get("no_export_file_written") is True
+        and dry_run.get("export_file_written") is False
+        and dry_run.get("export_writer_added") is False
+        and dry_run.get("scheduler_added") is False
+        and dry_run.get("cli_added") is False
+        and dry_run.get("migration_added") is False
+        and dry_run.get("non_authoritative_for_transaction") is True
+        and dry_run.get("no_checkout_payment_enablement") is True
+        and dry_run.get("no_live_provider_enablement") is True
+        and dry_run.get("no_public_discovery_enablement") is True
+        and dry_run.get("grantex_runtime_required") is False
+    )
+
+
+def _c6y4_label_values(value: Any) -> list[str]:
+    if isinstance(value, Mapping):
+        return [str(key) for key in value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def _c6y4_summary_strings(summary: Mapping[str, Any]) -> list[str]:
+    values = [
+        _c6x7_string(summary.get("summary_id")),
+        _c6x7_string(summary.get("tenant_id")),
+        _c6x7_string(summary.get("merchant_id")),
+        _c6x7_string(summary.get("operator_safe_message")),
+    ]
+    values.extend(_c6x8_list(summary.get("next_step_labels")))
+    values.extend(_c6y4_label_values(summary.get("retention_class_counts")))
+    values.extend(_c6y4_label_values(summary.get("artifact_family_counts")))
+    values.extend(_c6y4_label_values(summary.get("risk_tier_counts")))
+    return [value for value in values if value is not None]
+
+
+def _c6y4_summary_safe(summary: Mapping[str, Any]) -> dict[str, Any]:
+    summary_id = _c6x7_string(summary.get("summary_id"))
+    tenant_id = _c6x7_string(summary.get("tenant_id"))
+    merchant_id = _c6x7_string(summary.get("merchant_id"))
+    generated_at = _c6x7_string(summary.get("generated_at"))
+    if not all((summary_id, tenant_id, merchant_id)):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="blocked",
+            refusal_code="summary_identity_or_scope_missing",
+            message="C6Y4 requires summary, tenant, and merchant identifiers.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    if not _c6y4_summary_flags_safe(summary):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="unsafe",
+            refusal_code="summary_non_enablement_flags_invalid",
+            message="C6Y4 refuses executable summaries or summaries with writer, scheduler, or enablement flags.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    if _parse_iso(generated_at) is None:
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="blocked",
+            refusal_code="summary_generated_at_invalid",
+            message="C6Y4 requires a valid C6Y3 summary generated_at timestamp.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    if not _c6x9_mapping_scope_matches(
+        summary,
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=_c6x7_string(summary.get("seller_agent_id")),
+        buyer_agent_id=_c6x7_string(summary.get("buyer_agent_id")),
+    ):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="blocked",
+            refusal_code="summary_scope_mismatch",
+            message="C6Y4 refuses summaries whose direct and summarized scopes do not match.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    if summary.get("redacted_evidence_refs") not in (None, [], ()):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="unsafe",
+            refusal_code="summary_contains_evidence_ref_values",
+            message="C6Y4 consumes evidence ref counts only, not evidence ref values.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    labels = tuple(_c6x8_list(summary.get("next_step_labels")))
+    if not labels or not _c6x8_labels_safe(labels):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="unsafe",
+            refusal_code="summary_labels_executable_or_private",
+            message="C6Y4 accepts label-only next steps, not executable targets.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    if _c6y1_values_private_or_overclaim(_c6y4_summary_strings(summary)):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="unsafe",
+            refusal_code="summary_private_or_overclaiming_values",
+            message="C6Y4 refuses private values, publication wording, or approval/readiness claims.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    return {
+        "packet_built": True,
+        "summary_id": summary_id,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "generated_at": generated_at,
+    }
+
+
+def _c6y4_positive_int(value: Any) -> int:
+    return value if isinstance(value, int) and value > 0 else 0
+
+
+def _c6y4_disposition_previews(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
+    manifest_count = _c6y4_positive_int(summary.get("manifest_count"))
+    retention_due_count = _c6y4_positive_int(summary.get("retention_due_count"))
+    legal_hold_candidate_count = _c6y4_positive_int(summary.get("legal_hold_candidate_count"))
+    evidence_ref_count = _c6y4_positive_int(summary.get("redacted_evidence_ref_count"))
+    previews: list[dict[str, Any]] = []
+    if manifest_count == 0:
+        previews.append(
+            {
+                "disposition": "review_later",
+                "reason_code": "no_manifests_matched_scope",
+                "record_count": 0,
+                "next_step_label": "operator_review_later_label_only",
+            }
+        )
+    if manifest_count > 0 and evidence_ref_count == 0:
+        previews.append(
+            {
+                "disposition": "redaction_review_required",
+                "reason_code": "redacted_evidence_ref_counts_missing",
+                "record_count": manifest_count,
+                "next_step_label": "operator_redaction_review_label_only",
+            }
+        )
+    if legal_hold_candidate_count > 0:
+        previews.append(
+            {
+                "disposition": "legal_hold_review",
+                "reason_code": "legal_hold_candidate_present",
+                "record_count": legal_hold_candidate_count,
+                "next_step_label": "operator_legal_hold_review_label_only",
+            }
+        )
+    if retention_due_count > 0:
+        previews.append(
+            {
+                "disposition": "retention_due_review",
+                "reason_code": "retention_boundary_due",
+                "record_count": retention_due_count,
+                "next_step_label": "operator_retention_due_review_label_only",
+            }
+        )
+    if not previews:
+        previews.append(
+            {
+                "disposition": "retain",
+                "reason_code": "retention_boundary_not_due",
+                "record_count": manifest_count,
+                "next_step_label": "operator_retain_review_label_only",
+            }
+        )
+    return previews
+
+
+def _c6y4_packet_id(
+    *,
+    packet_kind: str,
+    generated_at: str,
+    source_id: str,
+    dispositions: Sequence[Mapping[str, Any]],
+) -> str:
+    digest = hash_oacp_payload(
+        {
+            "packet_kind": packet_kind,
+            "generated_at": generated_at,
+            "source_id": source_id,
+            "dispositions": [
+                {
+                    "disposition": item.get("disposition"),
+                    "reason_code": item.get("reason_code"),
+                    "record_count": item.get("record_count"),
+                }
+                for item in dispositions
+            ],
+        }
+    )
+    return f"oacp_c6y4_{packet_kind}_{digest[:20]}"
+
+
+def build_oacp_c6y4_retention_disposition_dry_run(
+    *,
+    manifest_summary: Mapping[str, Any],
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build a C6Y4 retention disposition preview without executing retention or writing exports."""
+
+    summary_check = _c6y4_summary_safe(manifest_summary)
+    summary_id = _c6x7_string(manifest_summary.get("summary_id"))
+    tenant_id = _c6x7_string(manifest_summary.get("tenant_id"))
+    merchant_id = _c6x7_string(manifest_summary.get("merchant_id"))
+    if summary_check.get("packet_built") is not True:
+        return summary_check
+    if _parse_iso(generated_at) is None:
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_dry_run",
+            status="blocked",
+            refusal_code="disposition_generated_at_invalid",
+            message="C6Y4 requires a valid disposition generated_at timestamp.",
+            generated_at=generated_at,
+            summary_id=summary_id,
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    dispositions = _c6y4_disposition_previews(manifest_summary)
+    labels = _c6x9_unique(
+        [
+            *(_c6x8_list(manifest_summary.get("next_step_labels"))),
+            *(str(item["next_step_label"]) for item in dispositions),
+            "operator_retention_disposition_review_label_only",
+        ]
+    )
+    return {
+        "packet_built": True,
+        "packet_id": _c6y4_packet_id(
+            packet_kind="retention_disposition_dry_run",
+            generated_at=generated_at,
+            source_id=cast(str, summary_id),
+            dispositions=dispositions,
+        ),
+        "packet_kind": "oacp_retention_disposition_dry_run",
+        "status": "ready_for_operator_review",
+        "generated_at": generated_at,
+        "summary_id": summary_id,
+        "summary_generated_at": manifest_summary["generated_at"],
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "scope_summary": dict(_c6x8_mapping(manifest_summary.get("scope_summary"))),
+        "manifest_count": _c6y4_positive_int(manifest_summary.get("manifest_count")),
+        "retention_class_counts": dict(_c6x8_mapping(manifest_summary.get("retention_class_counts"))),
+        "retention_due_count": _c6y4_positive_int(manifest_summary.get("retention_due_count")),
+        "legal_hold_candidate_count": _c6y4_positive_int(manifest_summary.get("legal_hold_candidate_count")),
+        "artifact_family_counts": dict(_c6x8_mapping(manifest_summary.get("artifact_family_counts"))),
+        "risk_tier_counts": dict(_c6x8_mapping(manifest_summary.get("risk_tier_counts"))),
+        "blocked_capability_summary": dict(_c6x8_mapping(manifest_summary.get("blocked_capability_summary"))),
+        "unsupported_capability_summary": dict(
+            _c6x8_mapping(manifest_summary.get("unsupported_capability_summary"))
+        ),
+        "freshness_ttl_summary": dict(_c6x8_mapping(manifest_summary.get("freshness_ttl_summary"))),
+        "revocation_snapshot_summary": dict(_c6x8_mapping(manifest_summary.get("revocation_snapshot_summary"))),
+        "redacted_evidence_ref_count": _c6y4_positive_int(manifest_summary.get("redacted_evidence_ref_count")),
+        "disposition_previews": dispositions,
+        "next_step_labels": labels,
+        "future_retention_action_allowed": False,
+        "records_deleted": False,
+        "retention_executed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "retention_disposition_dry_run_only": True,
+        "operator_review_packet_only": False,
+        "no_export_file_written": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "cli_added": False,
+        "migration_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+        "operator_safe_message": (
+            "C6Y4 produced a retention disposition dry-run only; it does not delete records or write exports."
+        ),
+    }
+
+
+def build_oacp_c6y4_retention_operator_review_packet(
+    *,
+    retention_disposition_dry_run: Mapping[str, Any],
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build a C6Y4 operator packet over a retention dry-run without approving future action."""
+
+    dry_run_id = _c6x7_string(retention_disposition_dry_run.get("packet_id"))
+    tenant_id = _c6x7_string(retention_disposition_dry_run.get("tenant_id"))
+    merchant_id = _c6x7_string(retention_disposition_dry_run.get("merchant_id"))
+    if not dry_run_id or not _c6y4_dry_run_flags_safe(retention_disposition_dry_run):
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_operator_review_packet",
+            status="unsafe",
+            refusal_code="dry_run_missing_or_unsafe",
+            message="C6Y4 operator packets require a safe retention disposition dry-run.",
+            generated_at=generated_at,
+            summary_id=_c6x7_string(retention_disposition_dry_run.get("summary_id")),
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    if _parse_iso(generated_at) is None:
+        return _c6y4_retention_refusal(
+            packet_kind="oacp_retention_disposition_operator_review_packet",
+            status="blocked",
+            refusal_code="operator_packet_generated_at_invalid",
+            message="C6Y4 operator packets require a valid generated_at timestamp.",
+            generated_at=generated_at,
+            summary_id=_c6x7_string(retention_disposition_dry_run.get("summary_id")),
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+        )
+    dispositions = [
+        dict(item)
+        for item in retention_disposition_dry_run.get("disposition_previews", [])
+        if isinstance(item, Mapping)
+    ]
+    labels = _c6x9_unique(
+        [
+            *(_c6x8_list(retention_disposition_dry_run.get("next_step_labels"))),
+            "operator_review_packet_label_only",
+        ]
+    )
+    return {
+        "packet_built": True,
+        "packet_id": _c6y4_packet_id(
+            packet_kind="retention_disposition_operator_review_packet",
+            generated_at=generated_at,
+            source_id=dry_run_id,
+            dispositions=dispositions,
+        ),
+        "packet_kind": "oacp_retention_disposition_operator_review_packet",
+        "status": "ready_for_operator_review",
+        "generated_at": generated_at,
+        "retention_disposition_dry_run_id": dry_run_id,
+        "summary_id": retention_disposition_dry_run.get("summary_id"),
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "scope_summary": dict(_c6x8_mapping(retention_disposition_dry_run.get("scope_summary"))),
+        "manifest_count": _c6y4_positive_int(retention_disposition_dry_run.get("manifest_count")),
+        "retention_due_count": _c6y4_positive_int(retention_disposition_dry_run.get("retention_due_count")),
+        "legal_hold_candidate_count": _c6y4_positive_int(
+            retention_disposition_dry_run.get("legal_hold_candidate_count")
+        ),
+        "artifact_family_counts": dict(_c6x8_mapping(retention_disposition_dry_run.get("artifact_family_counts"))),
+        "risk_tier_counts": dict(_c6x8_mapping(retention_disposition_dry_run.get("risk_tier_counts"))),
+        "blocked_capability_summary": dict(
+            _c6x8_mapping(retention_disposition_dry_run.get("blocked_capability_summary"))
+        ),
+        "unsupported_capability_summary": dict(
+            _c6x8_mapping(retention_disposition_dry_run.get("unsupported_capability_summary"))
+        ),
+        "redacted_evidence_ref_count": _c6y4_positive_int(
+            retention_disposition_dry_run.get("redacted_evidence_ref_count")
+        ),
+        "disposition_previews": dispositions,
+        "next_step_labels": labels,
+        "future_retention_action_allowed": False,
+        "records_deleted": False,
+        "retention_executed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "retention_disposition_dry_run_only": True,
+        "operator_review_packet_only": True,
+        "no_export_file_written": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "cli_added": False,
+        "migration_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+        "operator_safe_message": (
+            "C6Y4 prepared an operator review packet only; it is not approval to delete, retain, or export."
+        ),
+    }
+
+
 class DurableOacpAuditReviewManifestRepository:
     """Async SQLAlchemy-backed review manifest repository; it writes no export files and executes nothing."""
 
