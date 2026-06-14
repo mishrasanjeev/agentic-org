@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[2]
 TEXT_SUFFIXES = {
@@ -24,8 +24,10 @@ TEXT_SUFFIXES = {
 
 def test_legacy_company_brand_is_not_reintroduced() -> None:
     forbidden = ("edu" + "matica").lower()
-    tracked = subprocess.run(
-        ["git", "ls-files"],
+    git = shutil.which("git")
+    assert git is not None
+    tracked = subprocess.run(  # noqa: S603 - git path is resolved; args are constants.
+        [git, "ls-files"],
         cwd=ROOT,
         text=True,
         capture_output=True,
