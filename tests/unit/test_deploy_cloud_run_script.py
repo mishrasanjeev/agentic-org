@@ -12,8 +12,11 @@ def _deploy_script() -> str:
 def test_cloud_run_deploy_stamps_api_and_ui_commit_metadata() -> None:
     script = _deploy_script()
 
-    assert '"AGENTICORG_GIT_SHA=${DEPLOY_SHA}"' in script
-    assert '"GIT_SHA=${DEPLOY_SHA}"' in script
+    assert (
+        'API_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA},'
+        'AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true"'
+    ) in script
+    assert 'UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"' in script
     assert '--update-env-vars="$env_vars"' in script
     assert '"$UI_IMAGE"' in script
 
@@ -30,7 +33,7 @@ def test_ui_metadata_is_set_on_ui_service_update() -> None:
     assert len(ui_update_calls) >= 3
     for ui_update_call in ui_update_calls:
         assert '"$UI_IMAGE"' in ui_update_call
-        assert '"GIT_SHA=${DEPLOY_SHA}"' in ui_update_call
+        assert '"$UI_UPDATE_ENV_VARS"' in ui_update_call
         assert '"$UI_IMAGE_DIGEST"' in ui_update_call
         assert '"GIT_SHA"' in ui_update_call
 
