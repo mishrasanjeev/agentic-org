@@ -14,11 +14,21 @@ def test_cloud_run_deploy_stamps_api_and_ui_commit_metadata() -> None:
 
     assert (
         'API_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA},'
-        'AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true"'
+        'AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=${COMMERCE_PUBLIC_DISCOVERY_VALUE}"'
     ) in script
+    assert 'COMMERCE_PUBLIC_DISCOVERY_VALUE="${AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED:-false}"' in script
     assert 'UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"' in script
     assert '--update-env-vars="$env_vars"' in script
     assert '"$UI_IMAGE"' in script
+
+
+def test_cloud_run_deploy_does_not_force_enable_public_discovery() -> None:
+    script = _deploy_script()
+
+    assert "AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true" not in script
+    assert '1|yes|on|enabled) COMMERCE_PUBLIC_DISCOVERY_VALUE="true"' in script
+    assert '0|no|off|disabled|"") COMMERCE_PUBLIC_DISCOVERY_VALUE="false"' in script
+    assert "must be true or false for deploys" in script
 
 
 def test_ui_metadata_is_set_on_ui_service_update() -> None:
