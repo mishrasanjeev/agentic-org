@@ -60,6 +60,12 @@ def test_mcp_server_release_metadata_is_lockstep_and_runtime_truthful() -> None:
         "list_mcp_tools",
         "discover_agents_a2a",
         "get_agent_card",
+        "seller.list_products",
+        "seller.search_products",
+        "seller.get_product_facts",
+        "seller.get_offer_snapshot",
+        "seller.get_inventory_snapshot",
+        "seller.ask_product_question",
     }
     assert {tool["name"] for tool in server_json["tools"]} == expected_tools
 
