@@ -578,13 +578,13 @@ export default function COOSolution() {
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Company</h4>
               <ul className="space-y-2">
                 <li><a href="mailto:sanjeev@agenticorg.ai" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
-                <li><span className="text-slate-400 text-sm">Edumatica Pvt Ltd</span></li>
+                <li><span className="text-slate-400 text-sm">AgenticOrg</span></li>
                 <li><span className="text-slate-400 text-sm">Bengaluru, India</span></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-slate-500">&copy; 2026 AgenticOrg &middot; Edumatica Pvt Ltd. All rights reserved.</p>
+            <p className="text-sm text-slate-500">&copy; 2026 AgenticOrg. All rights reserved.</p>
             <div className="flex items-center gap-6">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
               <a href="/terms" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>

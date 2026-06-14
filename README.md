@@ -843,4 +843,4 @@ Apache License 2.0 — free for commercial use. See [LICENSE](LICENSE).
 
 ---
 
-Built by [Edumatica Pvt Ltd](https://agenticorg.ai) | Bengaluru, India
+Built by [AgenticOrg](https://agenticorg.ai) | Bengaluru, India

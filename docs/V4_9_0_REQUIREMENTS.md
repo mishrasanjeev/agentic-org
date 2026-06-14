@@ -424,7 +424,7 @@ TC-05: Health check updates connector.health_check_at in DB
 - **No connectors have real credentials configured** → every query falls back to generic
 
 ### Requirements
-1. Configure Zoho Books connector with real credentials (OAuth2 token for financetest@edumatica.io)
+1. Configure Zoho Books connector with real credentials (OAuth2 token for finance.test@example.com)
 2. Configure at least one HR connector (Keka or Darwinbox) for CHRO queries
 3. Ensure the chat agent resolves to the correct domain connector
 4. Tool calls should execute real API operations (read-only for safety)

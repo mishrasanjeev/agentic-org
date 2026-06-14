@@ -59,7 +59,7 @@ import { expect, test } from "@playwright/test";
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
 // Credentials are env-only. No live value is ever committed; see the
 // beforeAll guard which fails fast with a directed message if unset.
-const UDAY_EMAIL = process.env.UDAY_EMAIL || "uday.chauhan@edumatica.io";
+const UDAY_EMAIL = process.env.UDAY_EMAIL || "qa.uday@example.com";
 const UDAY_PASSWORD = process.env.UDAY_PASSWORD || "";
 const ZOHO_CLIENT_ID = process.env.ZOHO_CLIENT_ID || "";
 const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || "";

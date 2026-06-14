@@ -2,7 +2,7 @@
 
 **Document Version:** 5.0.0
 **Date:** 2026-04-08
-**Author:** Sanjeev Kumar, CEO, Edumatica
+**Author:** Sanjeev Kumar, CEO, AgenticOrg
 **Status:** Draft for Engineering Review
 **Classification:** Internal - Confidential
 

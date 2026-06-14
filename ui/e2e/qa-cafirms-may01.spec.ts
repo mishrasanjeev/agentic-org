@@ -32,7 +32,7 @@ const IS_LOCAL_APP = /(^http:\/\/localhost[:/])|(^http:\/\/127\.0\.0\.1[:/])/.te
 // flake on a slow login redirect would obscure whether the BUG-01..04
 // fixes deployed. The login itself isn't what we're verifying.
 const TESTER_EMAIL =
-  process.env.RU_TESTER_EMAIL || "uday.chauhan@edumatica.io";
+  process.env.RU_TESTER_EMAIL || "qa.uday@example.com";
 const TESTER_PASSWORD = process.env.RU_TESTER_PASSWORD || "";
 
 async function getTesterToken(
@@ -42,7 +42,7 @@ async function getTesterToken(
   if (!TESTER_PASSWORD) {
     throw new Error(
       "Set E2E_TOKEN or RU_TESTER_PASSWORD env var so the spec can " +
-        "authenticate as uday.chauhan@edumatica.io.",
+        "authenticate as qa.uday@example.com.",
     );
   }
   const resp = await request.post(`${APP}/api/v1/auth/login`, {

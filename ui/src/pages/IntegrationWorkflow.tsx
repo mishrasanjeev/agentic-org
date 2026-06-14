@@ -329,7 +329,7 @@ export default function IntegrationWorkflow() {
       {/* Footer */}
       <footer className="bg-slate-950 border-t border-slate-800 py-8">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-sm text-slate-500">&copy; 2026 AgenticOrg &middot; Edumatica Pvt Ltd. All rights reserved.</p>
+          <p className="text-sm text-slate-500">&copy; 2026 AgenticOrg. All rights reserved.</p>
         </div>
       </footer>
     </div>
