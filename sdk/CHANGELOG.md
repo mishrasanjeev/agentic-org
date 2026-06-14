@@ -1,5 +1,21 @@
 # AgenticOrg Python SDK changelog
 
+## 0.3.0 - 2026-06-14
+
+Commerce, A2A/MCP, workflow, knowledge, and CLI release.
+
+### Added
+- `client.agents.run("commerce_sales_agent", action="buyer_discovery_preview", ...)`
+  coverage through the A2A task endpoint.
+- Agent generation, workflow generation/create/run, workflow template listing,
+  knowledge search, A2A discovery, and MCP tool calls in the public SDK surface.
+- CLI commands for agents, connectors, SOP parsing, workflows, knowledge, A2A,
+  and MCP discovery.
+
+### Fixed
+- Release metadata now matches the package contents so PyPI can publish the
+  previously-unpublished SDK/CLI capabilities without reusing version `0.2.0`.
+
 ## 0.2.0 — 2026-04-19
 
 Canonical `AgentRunResult` contract.

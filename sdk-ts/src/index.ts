@@ -3,7 +3,7 @@
  *
  * @example
  * ```typescript
- * import { AgenticOrg } from "@agenticorg/sdk";
+ * import { AgenticOrg } from "agenticorg-sdk";
  *
  * const client = new AgenticOrg({ apiKey: "your-key" });
  * const result = await client.agents.run("ap_processor", { inputs: { invoice_id: "INV-001" } });

@@ -1,45 +1,69 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mishrasanjeev/agenticorg",
-  "description": "AgenticOrg AI agents + native connectors + 1000+ via Composio. Finance/HR/Marketing/Ops.",
+  "description": "AgenticOrg MCP server for AI agents, A2A discovery, SOP deploy, and MCP tool listing.",
   "repository": {
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
   },
-  "version": "4.0.4",
+  "version": "4.0.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agenticorg-mcp-server",
-      "version": "4.0.4",
+      "version": "4.0.5",
       "transport": {
         "type": "stdio"
       }
     }
   ],
   "tools": [
-    { "name": "list_agents", "description": "List every AgenticOrg AI agent across Finance, HR, Marketing, Ops — filter by domain, status, type" },
-    { "name": "run_agent", "description": "Execute any AI agent (ap_processor, payroll_engine, campaign_pilot, support_triage, etc.) with real tool calls" },
-    { "name": "get_agent_details", "description": "Get agent config, scopes, tools, confidence floor, HITL conditions, shadow status" },
-    { "name": "create_agent", "description": "Create a new AI agent from natural language description or manual config" },
-    { "name": "create_agent_from_sop", "description": "Parse an SOP/policy document (PDF/Word) and auto-generate an AI agent" },
-    { "name": "list_connectors", "description": "List native connectors + 1000+ via Composio (SAP, Oracle, Jira, HubSpot, Salesforce, GSTN, Tally, Stripe, Gmail, Slack, Teams)" },
-    { "name": "call_connector_tool", "description": "Call any connector tool — create Jira tickets, send emails, query CRM, file GST returns, process payments" },
-    { "name": "list_workflows", "description": "List 20+ workflow templates — invoice_to_pay, month_end_close, campaign_launch, incident_response" },
-    { "name": "run_workflow", "description": "Trigger a multi-step workflow with parallel agents, HITL approval gates, and adaptive replanning" },
-    { "name": "search_knowledge_base", "description": "Search company documents (PDF, Word, Excel) via RAG — agents answer from your uploaded policies and SOPs" },
-    { "name": "list_mcp_tools", "description": "Discover all available MCP tools across native connectors and 1000+ Composio integrations" },
-    { "name": "get_agent_card", "description": "Get the A2A protocol Agent Card for cross-platform agent discovery" }
+    {
+      "name": "list_agents",
+      "description": "List AgenticOrg AI agents; optionally filter by domain."
+    },
+    {
+      "name": "run_agent",
+      "description": "Run an AI agent by type using the AgenticOrg A2A task endpoint."
+    },
+    {
+      "name": "get_agent_details",
+      "description": "Get agent config, scopes, tools, confidence floor, HITL conditions, and status."
+    },
+    {
+      "name": "create_agent_from_sop",
+      "description": "Parse SOP text and generate a draft AI agent configuration."
+    },
+    {
+      "name": "deploy_agent",
+      "description": "Deploy a reviewed agent configuration from SOP parsing or manual config."
+    },
+    {
+      "name": "list_connectors",
+      "description": "List AgenticOrg native connectors and their status for discovery."
+    },
+    {
+      "name": "list_mcp_tools",
+      "description": "List AgenticOrg agent tools exposed by the platform MCP API."
+    },
+    {
+      "name": "discover_agents_a2a",
+      "description": "Discover available agent skills through the A2A protocol."
+    },
+    {
+      "name": "get_agent_card",
+      "description": "Get the public A2A Agent Card for this AgenticOrg instance."
+    }
   ],
   "environmentVariables": [
     {
       "name": "AGENTICORG_API_KEY",
-      "description": "API key from your AgenticOrg dashboard (Settings > API Keys). Start free at agenticorg.ai",
+      "description": "API key from your AgenticOrg dashboard (Settings > API Keys).",
       "required": true
     },
     {
       "name": "AGENTICORG_BASE_URL",
-      "description": "Custom API base URL (default: https://app.agenticorg.ai). Set for self-hosted deployments.",
+      "description": "Custom API base URL (default: https://app.agenticorg.ai).",
       "required": false
     }
   ]
