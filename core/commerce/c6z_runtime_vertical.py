@@ -565,18 +565,22 @@ def build_grantex_authority_request_payload(
             "merchant_id": onboarding_packet["merchant_id"],
             "seller_agent_id": onboarding_packet["seller_agent_id"],
             "merchant_display_name": onboarding_packet["merchant_display_name"],
-            "public_brand_profile": onboarding_packet["public_brand_profile"],
             "commerce_categories": onboarding_packet["commerce_categories"],
             "connector_choice": "shopify",
             "connector_mode": "read_only",
-            "requested_grantex_authority_scope": onboarding_packet["requested_grantex_authority_scope"],
+            "requested_authority_scope": _authority_scope_list(
+                onboarding_packet["requested_grantex_authority_scope"]
+            ),
             "artifact_cache_scope": onboarding_packet["artifact_cache_scope"],
             "source_freshness_policy": onboarding_packet["source_freshness_policy"],
+            "source_evidence_ref": connector_evidence["source_evidence_ref"],
+            "source_observed_at": connector_evidence["source_observed_at"],
             "no_payment_execution": True,
             "no_public_discovery_enablement": True,
             "requested_at": _utc_now().isoformat().replace("+00:00", "Z"),
         },
         "connector_evidence": {
+            "evidence_id": connector_evidence["evidence_id"],
             "tenant_id": connector_evidence["tenant_id"],
             "merchant_id": connector_evidence["merchant_id"],
             "seller_agent_id": connector_evidence["seller_agent_id"],
@@ -585,23 +589,33 @@ def build_grantex_authority_request_payload(
             "source_observed_at": connector_evidence["source_observed_at"],
             "product_count": connector_evidence["product_count"],
             "variant_count": connector_evidence["variant_count"],
-            "catalog_refs": tuple(product["product_ref"] for product in source_products),
-            "price_refs": tuple(
+            "currency": connector_evidence.get("currency"),
+            "catalog_sample_refs": tuple(product["product_ref"] for product in source_products),
+            "price_snapshot_refs": tuple(
                 f"{product['product_ref']}:price_snapshot"
                 for product in source_products
                 if product.get("variants")
             ),
-            "inventory_refs": tuple(
+            "inventory_snapshot_refs": tuple(
                 f"{product['product_ref']}:inventory_snapshot"
                 for product in source_products
                 if product.get("variants")
             ),
-            "read_only": True,
-            "raw_payload_stored": False,
             "no_payment_execution": True,
             "no_public_discovery_enablement": True,
         },
     }
+
+
+def _authority_scope_list(value: Any) -> list[str]:
+    if isinstance(value, Mapping):
+        families = value.get("artifact_families")
+        if isinstance(families, Sequence) and not isinstance(families, (str, bytes)):
+            return [_require_text("requested_authority_scope", str(item)) for item in families]
+        return [_require_text("requested_authority_scope", str(key)) for key in value.keys()]
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [_require_text("requested_authority_scope", str(item)) for item in value]
+    return [_require_text("requested_authority_scope", str(value))]
 
 
 async def send_grantex_authority_request(
@@ -641,7 +655,10 @@ def build_cache_record_from_grantex_artifact(
     buyer_agent_id: str | None = None,
 ) -> OacpPersistentArtifactCacheRecord:
     envelope = cast(Mapping[str, Any], artifact.get("envelope") or artifact)
-    payload = cast(Mapping[str, Any], envelope.get("artifact_payload") or artifact.get("artifact_payload") or {})
+    payload = cast(
+        Mapping[str, Any],
+        envelope.get("artifact_payload") or artifact.get("artifact_payload") or artifact.get("payload") or {},
+    )
     artifact_id = _require_text("artifact_id", str(envelope.get("artifact_id") or artifact.get("artifact_id") or ""))
     artifact_family = str(payload.get("artifact_family") or envelope.get("artifact_type") or "")
     if artifact_family not in C6Z_ARTIFACT_FAMILIES:

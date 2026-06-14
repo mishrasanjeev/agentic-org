@@ -12,6 +12,8 @@ import pytest
 from core.commerce.c6z_runtime_vertical import (
     C6ZRuntimeValidationError,
     answer_product_question_from_cache,
+    build_cache_record_from_grantex_artifact,
+    build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
     build_shopify_connector_evidence,
     contains_private_or_executable_value,
@@ -164,6 +166,64 @@ def test_shopify_evidence_normalizes_products_without_raw_payloads() -> None:
     assert evidence["products"][0]["variants"][0]["sku"] == "TOTE-1"
     assert "shpat_" not in str(evidence)
     assert contains_private_or_executable_value(evidence) is False
+
+
+def test_grantex_authority_payload_matches_issuer_contract() -> None:
+    packet = _packet()
+    evidence = build_shopify_connector_evidence(
+        packet=packet,
+        products=[_shopify_product()],
+        synced_at=_iso(_now()),
+        source_observed_at=_iso(_now()),
+        currency="INR",
+    )
+
+    payload = build_grantex_authority_request_payload(
+        onboarding_packet=packet,
+        connector_evidence=evidence,
+    )
+
+    assert "requested_authority_scope" in payload["request"]
+    assert "requested_grantex_authority_scope" not in payload["request"]
+    assert payload["request"]["source_evidence_ref"] == evidence["source_evidence_ref"]
+    assert payload["connector_evidence"]["evidence_id"] == evidence["evidence_id"]
+    assert "catalog_sample_refs" in payload["connector_evidence"]
+    assert "price_snapshot_refs" in payload["connector_evidence"]
+    assert "inventory_snapshot_refs" in payload["connector_evidence"]
+    assert "catalog_refs" not in payload["connector_evidence"]
+    assert payload["request"]["no_payment_execution"] is True
+    assert payload["connector_evidence"]["no_public_discovery_enablement"] is True
+
+
+def test_cache_record_accepts_grantex_artifact_with_sibling_payload() -> None:
+    now = _iso(_now())
+    artifact = {
+        "artifact_family": "catalog_snapshot",
+        "envelope": {
+            "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
+            "artifact_type": "catalog_snapshot",
+            "issuer": "grantex_internal_oacp_authority",
+            "issued_at": now,
+            "expires_at": _iso(_now() + timedelta(minutes=5)),
+        },
+        "payload": {
+            "artifact_family": "catalog_snapshot",
+            "tenant_id": "11111111-1111-1111-1111-111111111111",
+            "merchant_id": "merchant_1",
+            "seller_agent_id": "seller_agent_1",
+            "source_evidence_ref": "agenticorg:shopify:evidence:abc:redacted",
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+            "no_public_discovery_enablement": True,
+        },
+    }
+
+    record = build_cache_record_from_grantex_artifact(artifact, cached_at=now)
+
+    assert record.artifact_id == "c6z:catalog_snapshot:tenant:merchant:seller"
+    assert record.tenant_id == "11111111-1111-1111-1111-111111111111"
+    assert record.allowed_to_execute is False
+    assert record.non_authoritative_for_transaction is True
 
 
 def test_shopify_webhook_hmac_verification_and_idempotency_are_deterministic() -> None:
