@@ -204,6 +204,15 @@ OacpAuditExportReviewRetentionClass = Literal[
     "standard_internal_review",
     "legal_hold_candidate",
 ]
+OacpRetentionDispositionDecisionKind = Literal[
+    "approve_future_retention_review",
+    "approve_future_redaction_review",
+    "approve_future_legal_hold_review",
+    "request_more_evidence",
+    "reject_disposition",
+    "defer_until_recheck",
+    "block_unsafe_disposition",
+]
 
 OACP_ARTIFACT_SIGNATURE_PROFILE: dict[str, Any] = {
     "payload_format": "canonical_json",
@@ -999,6 +1008,23 @@ class OacpAuditReviewManifestRepositoryQuery:
     unsupported_capability: str | None = None
 
 
+@dataclass(frozen=True)
+class OacpRetentionDispositionDecisionRepositoryQuery:
+    tenant_id: str | None = None
+    merchant_id: str | None = None
+    seller_agent_id: str | None = None
+    buyer_agent_id: str | None = None
+    decision_kind: OacpRetentionDispositionDecisionKind | None = None
+    source_summary_id: str | None = None
+    source_dry_run_id: str | None = None
+    source_operator_packet_id: str | None = None
+    retention_class: OacpAuditExportReviewRetentionClass | None = None
+    retain_until_before: str | None = None
+    retain_until_after: str | None = None
+    decided_at_before: str | None = None
+    decided_at_after: str | None = None
+
+
 class OacpArtifactCacheRepositoryPort(Protocol):
     def upsert(self, record: OacpPersistentArtifactCacheRecord) -> dict[str, Any]:
         """Store or replace a local cache record without external calls."""
@@ -1067,6 +1093,27 @@ class OacpAuditReviewManifestRepositoryPort(Protocol):
         generated_at: str,
     ) -> dict[str, Any]:
         """Build a redacted internal summary over stored manifests without writing export files."""
+        ...
+
+
+class OacpRetentionDispositionDecisionRepositoryPort(Protocol):
+    def upsert_disposition_decision(self, decision_record: Mapping[str, Any]) -> dict[str, Any]:
+        """Store or replace one audit-safe retention disposition decision without executing retention."""
+        ...
+
+    def get_disposition_decision(self, disposition_decision_id: str) -> dict[str, Any] | None:
+        """Read one retention disposition decision by deterministic local id."""
+        ...
+
+    def list_disposition_decisions_for_scope(
+        self,
+        query: OacpRetentionDispositionDecisionRepositoryQuery,
+    ) -> tuple[dict[str, Any], ...]:
+        """List local disposition decisions for a tenant, merchant, seller, buyer, or source scope."""
+        ...
+
+    def evaluate_disposition_decision_for_future_review(self, disposition_decision_id: str) -> dict[str, Any]:
+        """Evaluate a stored disposition decision without approving or executing retention."""
         ...
 
 
@@ -8203,6 +8250,808 @@ def build_oacp_c6y4_retention_operator_review_packet(
             "C6Y4 prepared an operator review packet only; it is not approval to delete, retain, or export."
         ),
     }
+
+
+_C6Y5_DECISION_KINDS = frozenset(
+    {
+        "approve_future_retention_review",
+        "approve_future_redaction_review",
+        "approve_future_legal_hold_review",
+        "request_more_evidence",
+        "reject_disposition",
+        "defer_until_recheck",
+        "block_unsafe_disposition",
+    }
+)
+_C6Y5_DECISION_NEXT_STEP_LABELS = {
+    "approve_future_retention_review": "operator_future_retention_review_label_only",
+    "approve_future_redaction_review": "operator_future_redaction_review_label_only",
+    "approve_future_legal_hold_review": "operator_future_legal_hold_review_label_only",
+    "request_more_evidence": "operator_request_more_evidence_label_only",
+    "reject_disposition": "operator_reject_disposition_label_only",
+    "defer_until_recheck": "operator_defer_until_recheck_label_only",
+    "block_unsafe_disposition": "operator_block_unsafe_disposition_label_only",
+}
+_C6Y5_SAFE_FALLBACK_DECIDED_AT = "1970-01-01T00:00:00.000Z"
+_C6Y5_FORBIDDEN_LABEL_MARKERS = (
+    "delete",
+    "purge",
+    "redact_persisted",
+    "retention_execute",
+    "execute_retention",
+    "retention_executed",
+    "export_file",
+    "write_export",
+    "scheduler",
+    "queue",
+    "worker",
+    "cli",
+    "endpoint",
+    "url",
+)
+
+
+def _c6y5_decision_id(payload: Mapping[str, Any]) -> str:
+    digest = hashlib.sha256(canonicalize_oacp_payload(dict(payload)).encode("utf-8")).hexdigest()
+    return f"oacp_c6y5_retention_disposition_{digest[:20]}"
+
+
+def _c6y5_disposition_refusal(
+    *,
+    status: str,
+    refusal_code: str,
+    message: str,
+    disposition_decision_id: str | None = None,
+    decision_record: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "stored": False,
+        "decision_record_built": False,
+        "status": status,
+        "refusal_code": refusal_code,
+        "message": message,
+        "disposition_decision_id": disposition_decision_id
+        or _c6x7_string(decision_record.get("disposition_decision_id") if decision_record is not None else None),
+        "future_retention_action_allowed": False,
+        "records_deleted": False,
+        "retention_executed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "retention_disposition_decision_only": True,
+        "durable_disposition_decision_only": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "cli_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6y5_operator_packet_flags_safe(packet: Mapping[str, Any]) -> bool:
+    return (
+        packet.get("packet_built") is True
+        and packet.get("packet_kind") == "oacp_retention_disposition_operator_review_packet"
+        and packet.get("status") == "ready_for_operator_review"
+        and packet.get("allowed_to_execute") is False
+        and packet.get("no_execution") is True
+        and packet.get("retention_disposition_dry_run_only") is True
+        and packet.get("operator_review_packet_only") is True
+        and packet.get("future_retention_action_allowed") is False
+        and packet.get("records_deleted") is False
+        and packet.get("retention_executed") is False
+        and packet.get("no_export_file_written") is True
+        and packet.get("export_file_written") is False
+        and packet.get("export_writer_added") is False
+        and packet.get("scheduler_added") is False
+        and packet.get("cli_added") is False
+        and packet.get("migration_added") is False
+        and packet.get("non_authoritative_for_transaction") is True
+        and packet.get("no_checkout_payment_enablement") is True
+        and packet.get("no_live_provider_enablement") is True
+        and packet.get("no_public_discovery_enablement") is True
+        and packet.get("grantex_runtime_required") is False
+    )
+
+
+def _c6y5_scope_value(source: Mapping[str, Any], scope_kind: str, field_name: str) -> str | None:
+    direct = _c6x7_string(source.get(field_name))
+    if direct is not None:
+        return direct
+    values = _c6x8_mapping(source.get("scope_summary")).get(scope_kind)
+    if isinstance(values, Mapping):
+        keys = sorted(str(key) for key in values if isinstance(key, str) and key)
+        return keys[0] if len(keys) == 1 else None
+    return None
+
+
+def _c6y5_retention_class(source: Mapping[str, Any]) -> OacpAuditExportReviewRetentionClass | None:
+    direct = _c6x7_string(source.get("retention_class"))
+    if direct in _C6Y1_RETENTION_DAYS_BY_CLASS:
+        return cast(OacpAuditExportReviewRetentionClass, direct)
+    counts = _c6x8_mapping(source.get("retention_class_counts"))
+    candidates = sorted(
+        key
+        for key, count in counts.items()
+        if isinstance(key, str)
+        and key in _C6Y1_RETENTION_DAYS_BY_CLASS
+        and isinstance(count, int)
+        and count > 0
+    )
+    return cast(OacpAuditExportReviewRetentionClass, candidates[0]) if len(candidates) == 1 else None
+
+
+def _c6y5_retain_until(source: Mapping[str, Any], retention_class: OacpAuditExportReviewRetentionClass) -> str | None:
+    direct = _c6x7_string(source.get("retain_until"))
+    if _parse_iso(direct) is not None:
+        return direct
+    boundary = source.get("retention_boundary")
+    if isinstance(boundary, Mapping):
+        boundary_retain_until = _c6x7_string(boundary.get("retain_until"))
+        if _parse_iso(boundary_retain_until) is not None:
+            return boundary_retain_until
+    base_time = _parse_iso(_c6x7_string(source.get("summary_generated_at")) or _c6x7_string(source.get("generated_at")))
+    if base_time is None:
+        return None
+    return _c6y2_row_time(base_time + timedelta(days=_C6Y1_RETENTION_DAYS_BY_CLASS[retention_class]))
+
+
+def _c6y5_reason_codes_from_previews(packet: Mapping[str, Any]) -> dict[str, int]:
+    return _c6x9_count(
+        [
+            str(item["reason_code"])
+            for item in packet.get("disposition_previews", [])
+            if isinstance(item, Mapping) and isinstance(item.get("reason_code"), str)
+        ]
+    )
+
+
+def _c6y5_labels_safe(labels: tuple[str, ...]) -> bool:
+    return _c6x8_labels_safe(labels) and not any(
+        any(marker in label.strip().lower() for marker in _C6Y5_FORBIDDEN_LABEL_MARKERS)
+        for label in labels
+    )
+
+
+def _c6y5_decision_scope_matches(decision_record: Mapping[str, Any]) -> bool:
+    tenant_id = _c6x7_string(decision_record.get("tenant_id"))
+    merchant_id = _c6x7_string(decision_record.get("merchant_id"))
+    if tenant_id is None or merchant_id is None:
+        return False
+    return _c6x9_mapping_scope_matches(
+        decision_record,
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=_c6x7_string(decision_record.get("seller_agent_id")),
+        buyer_agent_id=_c6x7_string(decision_record.get("buyer_agent_id")),
+    )
+
+
+def _c6y5_decision_flags_safe(decision_record: Mapping[str, Any]) -> bool:
+    return (
+        decision_record.get("decision_record_built") is True
+        and decision_record.get("status") == "recorded_for_future_review"
+        and decision_record.get("allowed_to_execute") is False
+        and decision_record.get("no_execution") is True
+        and decision_record.get("future_retention_action_allowed") is False
+        and decision_record.get("records_deleted") is False
+        and decision_record.get("retention_executed") is False
+        and decision_record.get("retention_disposition_decision_only") is True
+        and decision_record.get("durable_disposition_decision_only") is True
+        and decision_record.get("export_file_written") is False
+        and decision_record.get("export_writer_added") is False
+        and decision_record.get("scheduler_added") is False
+        and decision_record.get("cli_added") is False
+        and decision_record.get("non_authoritative_for_transaction") is True
+        and decision_record.get("no_checkout_payment_enablement") is True
+        and decision_record.get("no_live_provider_enablement") is True
+        and decision_record.get("no_public_discovery_enablement") is True
+        and decision_record.get("grantex_runtime_required") is False
+    )
+
+
+def _c6y5_decision_strings(decision_record: Mapping[str, Any]) -> list[str]:
+    values = [
+        _c6x7_string(decision_record.get("disposition_decision_id")),
+        _c6x7_string(decision_record.get("source_summary_id")),
+        _c6x7_string(decision_record.get("source_dry_run_id")),
+        _c6x7_string(decision_record.get("source_operator_packet_id")),
+        _c6x7_string(decision_record.get("tenant_id")),
+        _c6x7_string(decision_record.get("merchant_id")),
+        _c6x7_string(decision_record.get("reviewer_ref")),
+        _c6x7_string(decision_record.get("operator_safe_message")),
+    ]
+    values.extend(_c6x8_list(decision_record.get("next_step_labels")))
+    values.extend(_c6x9_reason_code_values(decision_record.get("redacted_reason_codes")))
+    values.extend(_c6x9_reason_code_values(decision_record.get("blocked_capability_summary")))
+    values.extend(_c6x9_reason_code_values(decision_record.get("unsupported_capability_summary")))
+    return [value for value in values if value is not None]
+
+
+def build_oacp_c6y5_retention_disposition_decision_record(
+    *,
+    retention_disposition_dry_run: Mapping[str, Any] | None,
+    operator_review_packet: Mapping[str, Any] | None,
+    decision_kind: OacpRetentionDispositionDecisionKind | str,
+    reviewer_identity_ref: str | None,
+    decided_at: str,
+) -> dict[str, Any]:
+    """Build a durable C6Y5 decision record without executing retention or writing exports."""
+
+    if decision_kind not in _C6Y5_DECISION_KINDS:
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="unsupported_or_executable_decision_kind",
+            message="C6Y5 records known future-review disposition decisions only.",
+        )
+    if retention_disposition_dry_run is None or operator_review_packet is None:
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="source_packets_missing",
+            message="C6Y5 requires C6Y4 dry-run and operator review packets before recording a decision.",
+        )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(dict(retention_disposition_dry_run))
+        assert_no_forbidden_oacp_artifact_fields(dict(operator_review_packet))
+    except ValueError:
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="private_or_enabling_source_packet_field",
+            message="C6Y5 refuses source packets with private, raw, or enabling fields.",
+        )
+
+    dry_run_id = _c6x7_string(retention_disposition_dry_run.get("packet_id"))
+    packet_id = _c6x7_string(operator_review_packet.get("packet_id"))
+    summary_id = _c6x7_string(retention_disposition_dry_run.get("summary_id"))
+    tenant_id = _c6x7_string(retention_disposition_dry_run.get("tenant_id"))
+    merchant_id = _c6x7_string(retention_disposition_dry_run.get("merchant_id"))
+    generated_at = _c6x7_string(operator_review_packet.get("generated_at"))
+    if not all((dry_run_id, packet_id, summary_id, tenant_id, merchant_id, generated_at)):
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="decision_source_identity_or_scope_missing",
+            message="C6Y5 requires source summary, dry-run, operator packet, tenant, and merchant identifiers.",
+        )
+    if (
+        operator_review_packet.get("retention_disposition_dry_run_id") != dry_run_id
+        or operator_review_packet.get("summary_id") != summary_id
+        or operator_review_packet.get("tenant_id") != tenant_id
+        or operator_review_packet.get("merchant_id") != merchant_id
+    ):
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="source_packet_scope_mismatch",
+            message="C6Y5 refuses decisions whose dry-run and operator packet source scopes do not match.",
+        )
+    if not _c6y4_dry_run_flags_safe(retention_disposition_dry_run) or not _c6y5_operator_packet_flags_safe(
+        operator_review_packet
+    ):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="source_packet_executable_or_enabling",
+            message="C6Y5 refuses executable or enabling source packets.",
+        )
+    if not _c6x7_reviewer_ref_safe(reviewer_identity_ref):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="reviewer_identity_not_opaque",
+            message="C6Y5 requires an opaque reviewer reference, not raw contact or credential data.",
+        )
+    generated = _parse_iso(generated_at)
+    decided = _parse_iso(decided_at)
+    retention_class = _c6y5_retention_class(retention_disposition_dry_run)
+    if retention_class is None:
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="retention_class_invalid",
+            message="C6Y5 stores only supported internal retention disposition classes.",
+        )
+    retain_until = _c6y5_retain_until(retention_disposition_dry_run, retention_class)
+    retained_until = _parse_iso(retain_until)
+    if (
+        generated is None
+        or decided is None
+        or retained_until is None
+        or generated > decided
+        or generated >= retained_until
+    ):
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="decision_timestamps_invalid",
+            message="C6Y5 requires ordered generated, decided, and retention timestamps.",
+        )
+    if retention_disposition_dry_run.get("redacted_evidence_refs") not in (None, [], ()):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="source_contains_evidence_ref_values",
+            message="C6Y5 stores redacted evidence reference counts only, not evidence ref values.",
+        )
+
+    labels = _c6x9_unique(
+        [
+            *(_c6x8_list(operator_review_packet.get("next_step_labels"))),
+            _C6Y5_DECISION_NEXT_STEP_LABELS[str(decision_kind)],
+            "operator_retention_disposition_decision_label_only",
+        ]
+    )
+    if not labels or not _c6y5_labels_safe(tuple(labels)):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="decision_labels_executable_or_private",
+            message="C6Y5 stores label-only next steps, not execution targets.",
+        )
+
+    payload = {
+        "decision_kind": decision_kind,
+        "source_summary_id": summary_id,
+        "source_dry_run_id": dry_run_id,
+        "source_operator_packet_id": packet_id,
+        "reviewer_identity_ref": reviewer_identity_ref,
+        "decided_at": decided_at,
+    }
+    seller_agent_id = _c6y5_scope_value(retention_disposition_dry_run, "seller_agent", "seller_agent_id")
+    buyer_agent_id = _c6y5_scope_value(retention_disposition_dry_run, "buyer_agent", "buyer_agent_id")
+    return {
+        "decision_record_built": True,
+        "disposition_decision_id": _c6y5_decision_id(payload),
+        "source_summary_id": summary_id,
+        "source_dry_run_id": dry_run_id,
+        "source_operator_packet_id": packet_id,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller_agent_id,
+        "buyer_agent_id": buyer_agent_id,
+        "generated_at": generated_at,
+        "decided_at": decided_at,
+        "decision_kind": decision_kind,
+        "retention_class": retention_class,
+        "retain_until": retain_until,
+        "manifest_count": _c6y4_positive_int(retention_disposition_dry_run.get("manifest_count")),
+        "retention_due_count": _c6y4_positive_int(retention_disposition_dry_run.get("retention_due_count")),
+        "legal_hold_candidate_count": _c6y4_positive_int(
+            retention_disposition_dry_run.get("legal_hold_candidate_count")
+        ),
+        "artifact_family_counts": dict(_c6x8_mapping(retention_disposition_dry_run.get("artifact_family_counts"))),
+        "risk_tier_counts": dict(_c6x8_mapping(retention_disposition_dry_run.get("risk_tier_counts"))),
+        "blocked_capability_summary": dict(
+            _c6x8_mapping(retention_disposition_dry_run.get("blocked_capability_summary"))
+        ),
+        "unsupported_capability_summary": dict(
+            _c6x8_mapping(retention_disposition_dry_run.get("unsupported_capability_summary"))
+        ),
+        "redacted_evidence_ref_count": _c6y4_positive_int(
+            retention_disposition_dry_run.get("redacted_evidence_ref_count")
+        ),
+        "redacted_reason_codes": _c6y5_reason_codes_from_previews(retention_disposition_dry_run),
+        "reviewer_ref": reviewer_identity_ref,
+        "scope_summary": dict(_c6x8_mapping(retention_disposition_dry_run.get("scope_summary"))),
+        "next_step_labels": labels,
+        "status": "recorded_for_future_review",
+        "future_retention_action_allowed": False,
+        "records_deleted": False,
+        "retention_executed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "retention_disposition_decision_only": True,
+        "durable_disposition_decision_only": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "cli_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+        "operator_safe_message": (
+            "C6Y5 stores a redacted retention disposition decision only; it does not delete records."
+        ),
+    }
+
+
+def _c6y5_disposition_decision_safe_for_storage(decision_record: Mapping[str, Any]) -> dict[str, Any]:
+    disposition_decision_id = _c6x7_string(decision_record.get("disposition_decision_id"))
+    source_summary_id = _c6x7_string(decision_record.get("source_summary_id"))
+    source_dry_run_id = _c6x7_string(decision_record.get("source_dry_run_id"))
+    source_operator_packet_id = _c6x7_string(decision_record.get("source_operator_packet_id"))
+    tenant_id = _c6x7_string(decision_record.get("tenant_id"))
+    merchant_id = _c6x7_string(decision_record.get("merchant_id"))
+    decision_kind = _c6x7_string(decision_record.get("decision_kind"))
+    retention_class = _c6x7_string(decision_record.get("retention_class"))
+    generated_at = _c6x7_string(decision_record.get("generated_at"))
+    decided_at = _c6x7_string(decision_record.get("decided_at"))
+    retain_until = _c6x7_string(decision_record.get("retain_until"))
+
+    if not all(
+        (
+            disposition_decision_id,
+            source_summary_id,
+            source_dry_run_id,
+            source_operator_packet_id,
+            tenant_id,
+            merchant_id,
+        )
+    ):
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="disposition_decision_identity_or_scope_missing",
+            message="C6Y5 durable decisions require decision, source, tenant, and merchant identifiers.",
+            decision_record=decision_record,
+        )
+    if decision_kind not in _C6Y5_DECISION_KINDS:
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="decision_kind_invalid",
+            message="C6Y5 stores known future-review disposition decision kinds only.",
+            decision_record=decision_record,
+        )
+    if retention_class not in _C6Y1_RETENTION_DAYS_BY_CLASS:
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="retention_class_invalid",
+            message="C6Y5 stores only supported internal retention classes.",
+            decision_record=decision_record,
+        )
+    parsed_generated_at = _parse_iso(generated_at)
+    parsed_decided_at = _parse_iso(decided_at)
+    parsed_retain_until = _parse_iso(retain_until)
+    if (
+        parsed_generated_at is None
+        or parsed_decided_at is None
+        or parsed_retain_until is None
+        or parsed_generated_at > parsed_decided_at
+        or parsed_generated_at >= parsed_retain_until
+    ):
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="decision_timestamps_invalid",
+            message="C6Y5 durable decisions require ordered generated, decided, and retention timestamps.",
+            decision_record=decision_record,
+        )
+    try:
+        assert_no_forbidden_oacp_artifact_fields(dict(decision_record))
+    except ValueError:
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="private_or_enabling_decision_field",
+            message="C6Y5 refuses disposition decisions with private, raw, credential, or enabling fields.",
+            decision_record=decision_record,
+        )
+    if not _c6y5_decision_scope_matches(decision_record):
+        return _c6y5_disposition_refusal(
+            status="blocked",
+            refusal_code="decision_scope_mismatch",
+            message="C6Y5 refuses disposition decisions whose direct and summary scopes do not match.",
+            decision_record=decision_record,
+        )
+    if not _c6y5_decision_flags_safe(decision_record):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="non_enablement_flags_missing",
+            message="C6Y5 refuses executable, deletion, scheduler, export-writer, or enabling flags.",
+            decision_record=decision_record,
+        )
+    if not _c6x7_reviewer_ref_safe(_c6x7_string(decision_record.get("reviewer_ref"))):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="reviewer_identity_not_opaque",
+            message="C6Y5 stores opaque reviewer references only.",
+            decision_record=decision_record,
+        )
+    if not isinstance(decision_record.get("redacted_evidence_ref_count"), int):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="redacted_evidence_count_invalid",
+            message="C6Y5 stores redacted evidence reference counts only.",
+            decision_record=decision_record,
+        )
+    labels = tuple(_c6x8_list(decision_record.get("next_step_labels")))
+    if not labels or not _c6y5_labels_safe(labels):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="decision_labels_executable_or_private",
+            message="C6Y5 stores label-only next steps, not execution targets.",
+            decision_record=decision_record,
+        )
+    if _c6y1_values_private_or_overclaim(_c6y5_decision_strings(decision_record)):
+        return _c6y5_disposition_refusal(
+            status="unsafe",
+            refusal_code="decision_private_or_overclaiming_values",
+            message="C6Y5 refuses private values, publication wording, or approval/readiness claims.",
+            decision_record=decision_record,
+        )
+    return {
+        "stored": True,
+        "status": "stored",
+        "disposition_decision_id": disposition_decision_id,
+        "source_summary_id": source_summary_id,
+        "source_dry_run_id": source_dry_run_id,
+        "source_operator_packet_id": source_operator_packet_id,
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "decision_kind": decision_kind,
+        "retention_class": retention_class,
+        "retain_until": retain_until,
+        "durable_repository": True,
+        "future_retention_action_allowed": False,
+        "records_deleted": False,
+        "retention_executed": False,
+        "allowed_to_execute": False,
+        "no_execution": True,
+        "retention_disposition_decision_only": True,
+        "durable_disposition_decision_only": True,
+        "export_file_written": False,
+        "export_writer_added": False,
+        "scheduler_added": False,
+        "cli_added": False,
+        "non_authoritative_for_transaction": True,
+        "no_checkout_payment_enablement": True,
+        "no_live_provider_enablement": True,
+        "no_public_discovery_enablement": True,
+        "grantex_runtime_required": False,
+    }
+
+
+def _c6y5_apply_decision_to_row(row: Any, decision_record: Mapping[str, Any]) -> None:
+    row.source_summary_id = cast(str, decision_record["source_summary_id"])
+    row.source_dry_run_id = cast(str, decision_record["source_dry_run_id"])
+    row.source_operator_packet_id = cast(str, decision_record["source_operator_packet_id"])
+    row.tenant_id = cast(str, decision_record["tenant_id"])
+    row.merchant_id = cast(str, decision_record["merchant_id"])
+    row.seller_agent_id = _c6x7_string(decision_record.get("seller_agent_id"))
+    row.buyer_agent_id = _c6x7_string(decision_record.get("buyer_agent_id"))
+    row.generated_at = _parse_iso(cast(str, decision_record["generated_at"]))
+    row.decided_at = _parse_iso(cast(str, decision_record["decided_at"]))
+    row.decision_kind = cast(str, decision_record["decision_kind"])
+    row.retention_class = cast(str, decision_record["retention_class"])
+    row.retain_until = _parse_iso(cast(str, decision_record["retain_until"]))
+    row.manifest_count = int(cast(int, decision_record["manifest_count"]))
+    row.retention_due_count = int(cast(int, decision_record["retention_due_count"]))
+    row.legal_hold_candidate_count = int(cast(int, decision_record["legal_hold_candidate_count"]))
+    row.artifact_family_counts = dict(_c6x8_mapping(decision_record.get("artifact_family_counts")))
+    row.risk_tier_counts = dict(_c6x8_mapping(decision_record.get("risk_tier_counts")))
+    row.blocked_capability_summary = dict(_c6x8_mapping(decision_record.get("blocked_capability_summary")))
+    row.unsupported_capability_summary = dict(_c6x8_mapping(decision_record.get("unsupported_capability_summary")))
+    row.redacted_evidence_ref_count = int(cast(int, decision_record["redacted_evidence_ref_count"]))
+    row.redacted_reason_codes = dict(_c6x8_mapping(decision_record.get("redacted_reason_codes")))
+    row.reviewer_ref = cast(str, decision_record["reviewer_ref"])
+    row.scope_summary = dict(_c6x8_mapping(decision_record.get("scope_summary")))
+    row.next_step_labels = _c6x8_list(decision_record.get("next_step_labels"))
+    row.future_retention_action_allowed = False
+    row.records_deleted = False
+    row.retention_executed = False
+    row.allowed_to_execute = False
+    row.no_execution = True
+    row.retention_disposition_decision_only = True
+    row.durable_disposition_decision_only = True
+    row.export_file_written = False
+    row.export_writer_added = False
+    row.scheduler_added = False
+    row.cli_added = False
+    row.non_authoritative_for_transaction = True
+    row.no_checkout_payment_enablement = True
+    row.no_live_provider_enablement = True
+    row.no_public_discovery_enablement = True
+
+
+def _c6y5_row_to_decision(row: Any) -> dict[str, Any]:
+    return {
+        "decision_record_built": True,
+        "disposition_decision_id": str(row.disposition_decision_id),
+        "source_summary_id": str(row.source_summary_id),
+        "source_dry_run_id": str(row.source_dry_run_id),
+        "source_operator_packet_id": str(row.source_operator_packet_id),
+        "tenant_id": str(row.tenant_id),
+        "merchant_id": str(row.merchant_id),
+        "seller_agent_id": None if row.seller_agent_id is None else str(row.seller_agent_id),
+        "buyer_agent_id": None if row.buyer_agent_id is None else str(row.buyer_agent_id),
+        "generated_at": _c6y2_row_time(row.generated_at),
+        "decided_at": _c6y2_row_time(row.decided_at),
+        "decision_kind": str(row.decision_kind),
+        "retention_class": str(row.retention_class),
+        "retain_until": _c6y2_row_time(row.retain_until),
+        "manifest_count": int(row.manifest_count),
+        "retention_due_count": int(row.retention_due_count),
+        "legal_hold_candidate_count": int(row.legal_hold_candidate_count),
+        "artifact_family_counts": dict(row.artifact_family_counts or {}),
+        "risk_tier_counts": dict(row.risk_tier_counts or {}),
+        "blocked_capability_summary": dict(row.blocked_capability_summary or {}),
+        "unsupported_capability_summary": dict(row.unsupported_capability_summary or {}),
+        "redacted_evidence_ref_count": int(row.redacted_evidence_ref_count),
+        "redacted_reason_codes": dict(row.redacted_reason_codes or {}),
+        "reviewer_ref": str(row.reviewer_ref),
+        "scope_summary": dict(row.scope_summary or {}),
+        "next_step_labels": list(row.next_step_labels or []),
+        "status": "recorded_for_future_review",
+        "future_retention_action_allowed": bool(row.future_retention_action_allowed),
+        "records_deleted": bool(row.records_deleted),
+        "retention_executed": bool(row.retention_executed),
+        "allowed_to_execute": bool(row.allowed_to_execute),
+        "no_execution": bool(row.no_execution),
+        "retention_disposition_decision_only": bool(row.retention_disposition_decision_only),
+        "durable_disposition_decision_only": bool(row.durable_disposition_decision_only),
+        "export_file_written": bool(row.export_file_written),
+        "export_writer_added": bool(row.export_writer_added),
+        "scheduler_added": bool(row.scheduler_added),
+        "cli_added": bool(row.cli_added),
+        "non_authoritative_for_transaction": bool(row.non_authoritative_for_transaction),
+        "no_checkout_payment_enablement": bool(row.no_checkout_payment_enablement),
+        "no_live_provider_enablement": bool(row.no_live_provider_enablement),
+        "no_public_discovery_enablement": bool(row.no_public_discovery_enablement),
+        "grantex_runtime_required": False,
+        "operator_safe_message": (
+            "C6Y5 stores a redacted retention disposition decision only; it does not delete records."
+        ),
+    }
+
+
+def _c6y5_query_matches(
+    decision_record: Mapping[str, Any],
+    query: OacpRetentionDispositionDecisionRepositoryQuery,
+) -> bool:
+    retain_until = _parse_iso(_c6x7_string(decision_record.get("retain_until")))
+    decided_at = _parse_iso(_c6x7_string(decision_record.get("decided_at")))
+    retain_until_before = _parse_iso(query.retain_until_before)
+    retain_until_after = _parse_iso(query.retain_until_after)
+    decided_at_before = _parse_iso(query.decided_at_before)
+    decided_at_after = _parse_iso(query.decided_at_after)
+    return (
+        (query.tenant_id is None or decision_record.get("tenant_id") == query.tenant_id)
+        and (query.merchant_id is None or decision_record.get("merchant_id") == query.merchant_id)
+        and (query.seller_agent_id is None or decision_record.get("seller_agent_id") == query.seller_agent_id)
+        and (query.buyer_agent_id is None or decision_record.get("buyer_agent_id") == query.buyer_agent_id)
+        and (query.decision_kind is None or decision_record.get("decision_kind") == query.decision_kind)
+        and (query.source_summary_id is None or decision_record.get("source_summary_id") == query.source_summary_id)
+        and (query.source_dry_run_id is None or decision_record.get("source_dry_run_id") == query.source_dry_run_id)
+        and (
+            query.source_operator_packet_id is None
+            or decision_record.get("source_operator_packet_id") == query.source_operator_packet_id
+        )
+        and (query.retention_class is None or decision_record.get("retention_class") == query.retention_class)
+        and (
+            query.retain_until_before is None
+            or (retain_until is not None and retain_until_before is not None and retain_until <= retain_until_before)
+        )
+        and (
+            query.retain_until_after is None
+            or (retain_until is not None and retain_until_after is not None and retain_until >= retain_until_after)
+        )
+        and (
+            query.decided_at_before is None
+            or (decided_at is not None and decided_at_before is not None and decided_at <= decided_at_before)
+        )
+        and (
+            query.decided_at_after is None
+            or (decided_at is not None and decided_at_after is not None and decided_at >= decided_at_after)
+        )
+    )
+
+
+class DurableOacpRetentionDispositionDecisionRepository:
+    """Async SQLAlchemy-backed retention disposition decision repository; it executes nothing."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def upsert_disposition_decision(self, decision_record: Mapping[str, Any]) -> dict[str, Any]:
+        from core.models.oacp_retention_disposition_decision import OacpRetentionDispositionDecisionRecordRow
+
+        store_result = _c6y5_disposition_decision_safe_for_storage(decision_record)
+        if store_result["stored"] is not True:
+            return store_result
+
+        disposition_decision_id = cast(str, store_result["disposition_decision_id"])
+        row = await self._session.get(OacpRetentionDispositionDecisionRecordRow, disposition_decision_id)
+        if row is None:
+            row = OacpRetentionDispositionDecisionRecordRow(disposition_decision_id=disposition_decision_id)
+            self._session.add(row)
+        _c6y5_apply_decision_to_row(row, decision_record)
+        await self._session.flush()
+        return store_result
+
+    async def get_disposition_decision(self, disposition_decision_id: str) -> dict[str, Any] | None:
+        from core.models.oacp_retention_disposition_decision import OacpRetentionDispositionDecisionRecordRow
+
+        row = await self._session.get(OacpRetentionDispositionDecisionRecordRow, disposition_decision_id)
+        return None if row is None else _c6y5_row_to_decision(row)
+
+    async def list_disposition_decisions_for_scope(
+        self,
+        query: OacpRetentionDispositionDecisionRepositoryQuery,
+    ) -> tuple[dict[str, Any], ...]:
+        from sqlalchemy import select
+
+        from core.models.oacp_retention_disposition_decision import OacpRetentionDispositionDecisionRecordRow
+
+        statement = select(OacpRetentionDispositionDecisionRecordRow)
+        if query.tenant_id is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.tenant_id == query.tenant_id)
+        if query.merchant_id is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.merchant_id == query.merchant_id)
+        if query.seller_agent_id is not None:
+            statement = statement.where(
+                OacpRetentionDispositionDecisionRecordRow.seller_agent_id == query.seller_agent_id
+            )
+        if query.buyer_agent_id is not None:
+            statement = statement.where(
+                OacpRetentionDispositionDecisionRecordRow.buyer_agent_id == query.buyer_agent_id
+            )
+        if query.decision_kind is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.decision_kind == query.decision_kind)
+        if query.source_summary_id is not None:
+            statement = statement.where(
+                OacpRetentionDispositionDecisionRecordRow.source_summary_id == query.source_summary_id
+            )
+        if query.source_dry_run_id is not None:
+            statement = statement.where(
+                OacpRetentionDispositionDecisionRecordRow.source_dry_run_id == query.source_dry_run_id
+            )
+        if query.source_operator_packet_id is not None:
+            statement = statement.where(
+                OacpRetentionDispositionDecisionRecordRow.source_operator_packet_id == query.source_operator_packet_id
+            )
+        if query.retention_class is not None:
+            statement = statement.where(
+                OacpRetentionDispositionDecisionRecordRow.retention_class == query.retention_class
+            )
+        if query.retain_until_before is not None and (parsed := _parse_iso(query.retain_until_before)) is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.retain_until <= parsed)
+        if query.retain_until_after is not None and (parsed := _parse_iso(query.retain_until_after)) is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.retain_until >= parsed)
+        if query.decided_at_before is not None and (parsed := _parse_iso(query.decided_at_before)) is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.decided_at <= parsed)
+        if query.decided_at_after is not None and (parsed := _parse_iso(query.decided_at_after)) is not None:
+            statement = statement.where(OacpRetentionDispositionDecisionRecordRow.decided_at >= parsed)
+
+        rows = (
+            await self._session.scalars(
+                statement.order_by(OacpRetentionDispositionDecisionRecordRow.disposition_decision_id)
+            )
+        ).all()
+        decisions = tuple(_c6y5_row_to_decision(row) for row in rows)
+        return tuple(decision for decision in decisions if _c6y5_query_matches(decision, query))
+
+    async def evaluate_disposition_decision_for_future_review(self, disposition_decision_id: str) -> dict[str, Any]:
+        decision_record = await self.get_disposition_decision(disposition_decision_id)
+        if decision_record is None:
+            return _c6y5_disposition_refusal(
+                status="blocked",
+                refusal_code="disposition_decision_missing",
+                message="C6Y5 requires a stored disposition decision before future review evaluation.",
+            )
+        store_result = _c6y5_disposition_decision_safe_for_storage(decision_record)
+        if store_result["stored"] is not True:
+            return store_result
+        return {
+            "evaluated": True,
+            "status": "future_retention_review_requires_separate_action",
+            "disposition_decision_id": disposition_decision_id,
+            "source_summary_id": decision_record["source_summary_id"],
+            "source_dry_run_id": decision_record["source_dry_run_id"],
+            "source_operator_packet_id": decision_record["source_operator_packet_id"],
+            "decision_kind": decision_record["decision_kind"],
+            "retention_class": decision_record["retention_class"],
+            "future_retention_action_allowed": False,
+            "records_deleted": False,
+            "retention_executed": False,
+            "allowed_to_execute": False,
+            "no_execution": True,
+            "retention_disposition_decision_only": True,
+            "durable_disposition_decision_only": True,
+            "export_file_written": False,
+            "export_writer_added": False,
+            "scheduler_added": False,
+            "cli_added": False,
+            "non_authoritative_for_transaction": True,
+            "no_checkout_payment_enablement": True,
+            "no_live_provider_enablement": True,
+            "no_public_discovery_enablement": True,
+            "grantex_runtime_required": False,
+            "message": "C6Y5 stores a disposition decision only; it does not execute retention or delete records.",
+        }
 
 
 class DurableOacpAuditReviewManifestRepository:

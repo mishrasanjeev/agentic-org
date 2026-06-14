@@ -61,6 +61,9 @@ from core.models.oacp_audit_review_manifest import (
     OacpAuditReviewManifestRecordRow as OacpAuditReviewManifestRecordRow,
 )
 from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as OacpOperatorDecisionRecordRow
+from core.models.oacp_retention_disposition_decision import (
+    OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
+)
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
