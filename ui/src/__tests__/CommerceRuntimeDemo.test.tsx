@@ -50,8 +50,42 @@ describe("CommerceRuntimeDemo", () => {
     expect(await screen.findByText("packet_1")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /ask/i }));
+    await waitFor(() => expect(apiMock.askBuyerQuestion).toHaveBeenCalledWith(expect.objectContaining({
+      buyer_agent_id: "buyer_agent_demo",
+    })));
     expect(await screen.findByText(/Source: Shopify via Grantex artifact/i)).toBeInTheDocument();
     expect(screen.getByText(/inventory snapshot/i)).toBeInTheDocument();
+  });
+
+  it("caches Grantex artifacts with the same buyer scope used by buyer questions", async () => {
+    apiMock.createOnboardingPacket.mockResolvedValueOnce({
+      data: { packet: { packet_id: "packet_3" } },
+    });
+    apiMock.syncShopify.mockResolvedValueOnce({
+      data: { evidence_id: "evidence_1", product_count: 1, variant_count: 1 },
+    });
+    apiMock.requestGrantexAuthority.mockResolvedValueOnce({
+      data: {
+        status: "artifact_issuance_ready",
+        artifacts: [{ artifact_family: "catalog_snapshot" }],
+      },
+    });
+    apiMock.cacheArtifacts.mockResolvedValueOnce({
+      data: { status: "cached", records_stored: 1 },
+    });
+    apiMock.listProducts.mockResolvedValue({ data: { products: [] } });
+
+    render(<CommerceRuntimeDemo />);
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+    await screen.findByText("packet_3");
+    fireEvent.click(screen.getByRole("button", { name: /sync/i }));
+    await screen.findByText(/1 products, 1 variants/i);
+    fireEvent.click(screen.getByRole("button", { name: /issue/i }));
+
+    await waitFor(() => expect(apiMock.cacheArtifacts).toHaveBeenCalledWith({
+      artifacts: [{ artifact_family: "catalog_snapshot" }],
+      buyer_agent_id: "buyer_agent_demo",
+    }));
   });
 
   it("surfaces blocked Shopify sync without exposing credentials", async () => {

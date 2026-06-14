@@ -40,9 +40,14 @@ GRANTEX_AUTHORITY_ENV_VARS: tuple[str, ...] = (
 PLURAL_PINE_ENV_VARS: tuple[str, ...] = (
     "PLURAL_PINE_CLIENT_ID",
     "PLURAL_PINE_CLIENT_SECRET",
+)
+PLURAL_PINE_OPTIONAL_ENV_VARS: tuple[str, ...] = (
     "PLURAL_PINE_ENVIRONMENT",
     "PLURAL_PINE_CAPABILITY_URL",
+    "PLURAL_PINE_BASE_URL",
+    "PLURAL_BASE_URL",
 )
+PLURAL_PINE_SANDBOX_BASE_URL = "https://pluraluat.v2.pinepg.in/api"
 
 
 C6Z_ARTIFACT_FAMILIES: tuple[str, ...] = (
@@ -812,6 +817,20 @@ async def verify_plural_pine_mandate_capability(
             external_validation_performed=False,
             missing_env_vars=resolution.missing,
         )
+    provider_environment = _plural_pine_environment(source)
+    if provider_environment != "sandbox":
+        return PluralPineCapabilityEvidence(
+            evidence_id=_stable_id("plural_pine_capability", tenant_id, merchant_id, capability_type, checked_at),
+            provider="plural_pine",
+            capability_type=capability_type,
+            result_status="blocked_provider_error",
+            checked_at=checked_at,
+            expires_at=expires_at,
+            redacted_evidence_ref="provider:plural_pine:capability:non-sandbox-blocked:redacted",
+            provider_environment=provider_environment,
+            external_validation_performed=False,
+            missing_env_vars=(),
+        )
     payload = {
         "jsonrpc": "2.0",
         "id": "c6z-capability-check",
@@ -823,11 +842,31 @@ async def verify_plural_pine_mandate_capability(
         "X-Client-Id": source["PLURAL_PINE_CLIENT_ID"],
         "X-Client-Secret": source["PLURAL_PINE_CLIENT_SECRET"],
     }
+    explicit_capability_url = str(source.get("PLURAL_PINE_CAPABILITY_URL", "") or "").strip()
     try:
         async with httpx.AsyncClient(timeout=20.0, transport=transport) as client:
-            response = await client.post(source["PLURAL_PINE_CAPABILITY_URL"], json=payload, headers=headers)
-            response.raise_for_status()
-            body = response.json()
+            if explicit_capability_url:
+                response = await client.post(explicit_capability_url, json=payload, headers=headers)
+                response.raise_for_status()
+                body = response.json()
+            else:
+                response = await client.post(
+                    f"{_plural_pine_base_url(source)}/auth/v1/token",
+                    json={
+                        "client_id": source["PLURAL_PINE_CLIENT_ID"],
+                        "client_secret": source["PLURAL_PINE_CLIENT_SECRET"],
+                        "grant_type": "client_credentials",
+                    },
+                    headers={"Content-Type": "application/json"},
+                )
+                response.raise_for_status()
+                token_body = response.json()
+                access_token = token_body.get("access_token") if isinstance(token_body, Mapping) else None
+                body = {
+                    "result": {
+                        "tools": [{"name": "mandate_capability.token_verification"}] if access_token else []
+                    }
+                }
     except (httpx.HTTPError, ValueError) as exc:
         return PluralPineCapabilityEvidence(
             evidence_id=_stable_id("plural_pine_capability", tenant_id, merchant_id, capability_type, checked_at),
@@ -837,7 +876,7 @@ async def verify_plural_pine_mandate_capability(
             checked_at=checked_at,
             expires_at=expires_at,
             redacted_evidence_ref=f"provider:plural_pine:capability:error:{_sha256(str(exc))[:16]}:redacted",
-            provider_environment=str(source["PLURAL_PINE_ENVIRONMENT"]),
+            provider_environment=provider_environment,
             external_validation_performed=True,
             missing_env_vars=(),
         )
@@ -859,10 +898,22 @@ async def verify_plural_pine_mandate_capability(
         checked_at=checked_at,
         expires_at=expires_at,
         redacted_evidence_ref=f"provider:plural_pine:capability:{_sha256(seed)[:24]}:redacted",
-        provider_environment=str(source["PLURAL_PINE_ENVIRONMENT"]),
+        provider_environment=provider_environment,
         external_validation_performed=True,
         missing_env_vars=(),
     )
+
+
+def _plural_pine_environment(source: Mapping[str, str]) -> str:
+    value = str(source.get("PLURAL_PINE_ENVIRONMENT", "sandbox") or "sandbox").strip().lower()
+    if value in {"uat", "test"}:
+        return "sandbox"
+    return value
+
+
+def _plural_pine_base_url(source: Mapping[str, str]) -> str:
+    configured = str(source.get("PLURAL_PINE_BASE_URL") or source.get("PLURAL_BASE_URL") or "").strip()
+    return configured.rstrip("/") or PLURAL_PINE_SANDBOX_BASE_URL
 
 
 def contains_private_or_executable_value(value: Any) -> bool:

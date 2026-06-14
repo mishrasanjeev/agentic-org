@@ -32,6 +32,7 @@ import re
 from pathlib import Path
 
 import pytest
+from starlette.routing import Match
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UI_SRC = REPO_ROOT / "ui" / "src"
@@ -45,11 +46,14 @@ ALLOWLIST: set[str] = {
     # Add entries here ONLY with a justification.
 }
 
+_HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+_SAMPLE_PATH_PARAM = "00000000-0000-0000-0000-000000000001"
+
 
 # Match either a plain string literal: api.get('/foo'), api.get("/foo")
 # or a template literal: api.get(`/foo/${bar}`)
 _API_CALL_RE = re.compile(
-    r"""api\.(?:get|post|put|patch|delete)\(\s*"""
+    r"""api\.(?P<method>get|post|put|patch|delete)\(\s*"""
     r"""(?P<quote>['"`])"""
     r"""(?P<url>/[^'"`]+)"""
     r"""(?P=quote)""",
@@ -79,17 +83,9 @@ def _normalise_ui_path(raw: str) -> str:
     return raw
 
 
-def _normalise_route_path(raw: str) -> str:
-    """Replace bracketed FastAPI path params with {X} for shape comparison."""
-    out = re.sub(r"\{[^}]+\}", "{X}", raw)
-    if out.endswith("/") and len(out) > 1:
-        out = out[:-1]
-    return out
-
-
-def _collect_ui_calls() -> dict[str, list[Path]]:
-    """Return ``{normalised_url: [files_that_call_it]}``."""
-    calls: dict[str, list[Path]] = {}
+def _collect_ui_calls() -> dict[tuple[str, str], list[Path]]:
+    """Return ``{(method, normalised_url): [files_that_call_it]}``."""
+    calls: dict[tuple[str, str], list[Path]] = {}
     if not UI_SRC.exists():
         return calls
     for ext in ("ts", "tsx"):
@@ -100,32 +96,48 @@ def _collect_ui_calls() -> dict[str, list[Path]]:
                 continue
             for m in _API_CALL_RE.finditer(src):
                 normalised = _normalise_ui_path(m.group("url"))
-                calls.setdefault(normalised, []).append(path)
+                method = m.group("method").upper()
+                calls.setdefault((method, normalised), []).append(path)
     return calls
 
 
-def _collect_backend_routes() -> set[str]:
-    """Return the set of normalised paths registered on the FastAPI app.
+def _sample_api_path(ui_path: str) -> str:
+    """Convert a normalised UI path into a concrete local API path."""
+    path = ui_path.replace("{X}", _SAMPLE_PATH_PARAM)
+    if path.startswith("/api/v1"):
+        return path
+    return f"/api/v1{path}"
 
-    Imported lazily so this test doesn't pay the API import cost when
-    only the UI call extractor is used.
-    """
-    from api.main import app  # noqa: PLC0415
 
-    paths: set[str] = set()
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        if not path:
-            continue
-        # FastAPI mounts /api/v1/* under a prefix; the UI calls the
-        # path WITHOUT the /api/v1 prefix because the shared Axios
-        # client adds it. Strip the prefix here so they compare.
-        if path.startswith("/api/v1/"):
-            path = path[len("/api/v1") :]
-        elif path.startswith("/api/v1"):
-            path = path[len("/api/v1") :] or "/"
-        paths.add(_normalise_route_path(path))
-    return paths
+def _backend_method_exists(app, method: str, ui_path: str) -> bool:
+    scope = {
+        "type": "http",
+        "path": _sample_api_path(ui_path),
+        "root_path": "",
+        "method": method.upper(),
+    }
+    return any(
+        route.matches(scope)[0] == Match.FULL
+        for route in app.router.routes
+        if hasattr(route, "matches")
+    )
+
+
+def _backend_path_exists(app, ui_path: str) -> bool:
+    for method in _HTTP_METHODS:
+        scope = {
+            "type": "http",
+            "path": _sample_api_path(ui_path),
+            "root_path": "",
+            "method": method,
+        }
+        if any(
+            route.matches(scope)[0] != Match.NONE
+            for route in app.router.routes
+            if hasattr(route, "matches")
+        ):
+            return True
+    return False
 
 
 def test_every_ui_api_call_has_a_matching_backend_route() -> None:
@@ -135,21 +147,21 @@ def test_every_ui_api_call_has_a_matching_backend_route() -> None:
     answer — exactly the silent 404 + empty-state pattern the
     2026-04-30 enterprise gap analysis flagged.
     """
-    ui_calls = _collect_ui_calls()
-    backend_routes = _collect_backend_routes()
+    from api.main import app  # noqa: PLC0415
 
-    missing: dict[str, list[Path]] = {}
-    for url, callers in ui_calls.items():
+    ui_calls = _collect_ui_calls()
+    missing: dict[tuple[str, str], list[Path]] = {}
+    for (method, url), callers in ui_calls.items():
         if url in ALLOWLIST:
             continue
-        if url not in backend_routes:
-            missing[url] = callers
+        if not _backend_method_exists(app, method, url):
+            missing[(method, url)] = callers
 
     if missing:
         lines = ["UI calls these URLs but the backend has no matching route:"]
-        for url, callers in sorted(missing.items()):
+        for (method, url), callers in sorted(missing.items()):
             rel_callers = sorted({str(p.relative_to(REPO_ROOT)) for p in callers})
-            lines.append(f"  {url}")
+            lines.append(f"  {method} {url}")
             for c in rel_callers:
                 lines.append(f"    ← {c}")
         lines.append("")
@@ -170,8 +182,9 @@ def test_ui_call_extractor_finds_known_calls() -> None:
     These are stable — we ship these URLs from the UI today.
     """
     ui_calls = _collect_ui_calls()
+    urls = {url for _method, url in ui_calls}
     for must_find in ("/audit", "/health", "/agents"):
-        assert must_find in ui_calls, (
+        assert must_find in urls, (
             f"UI URL extractor regression: {must_find!r} should have been "
             "found in ui/src — the regex broke or the call site moved."
         )
@@ -182,8 +195,9 @@ def test_allowlist_entries_are_not_actually_in_backend() -> None:
     drop it. This prevents the allow-list from masking real coverage."""
     if not ALLOWLIST:
         return
-    backend_routes = _collect_backend_routes()
-    stale = ALLOWLIST & backend_routes
+    from api.main import app  # noqa: PLC0415
+
+    stale = {path for path in ALLOWLIST if _backend_path_exists(app, path)}
     assert not stale, (
         f"These ALLOWLIST entries are now real backend routes — remove "
         f"them from the allow-list so drift detection re-engages: "
@@ -197,14 +211,19 @@ def test_phase_1_endpoints_are_now_registered() -> None:
     Even if the contract test above passes (e.g., because the UI call sites
     were edited away), these four MUST exist on the backend going forward.
     """
-    backend_routes = _collect_backend_routes()
     required = {
-        "/audit/enforce",
-        "/health/checks",
-        "/health/uptime",
-        "/workflows/runs/{X}/cancel",
+        ("GET", "/audit/enforce"),
+        ("GET", "/health/checks"),
+        ("GET", "/health/uptime"),
+        ("POST", "/workflows/runs/{X}/cancel"),
     }
-    missing = required - backend_routes
+    from api.main import app  # noqa: PLC0415
+
+    missing = {
+        (method, path)
+        for method, path in required
+        if not _backend_method_exists(app, method, path)
+    }
     assert not missing, (
         f"Routes from the 2026-04-30 enterprise gap analysis are not "
         f"registered on the FastAPI app: {sorted(missing)}"

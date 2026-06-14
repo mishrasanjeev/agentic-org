@@ -12,6 +12,17 @@ These tests pin real behavior, not just UI labels:
 from __future__ import annotations
 
 import pytest
+from starlette.routing import Match
+
+
+def _assert_route_registered(app, path: str, method: str = "GET") -> None:
+    scope = {"type": "http", "path": path, "root_path": "", "method": method.upper()}
+    matched = [
+        route
+        for route in app.router.routes
+        if hasattr(route, "matches") and route.matches(scope)[0] == Match.FULL
+    ]
+    assert matched, f"{method} {path} is not registered"
 
 
 @pytest.mark.asyncio
@@ -244,14 +255,16 @@ def test_ca_client_billing_calculates_invoice_totals() -> None:
 def test_ca_004_005_006_routes_are_registered() -> None:
     from api.main import app
 
-    route_paths = {getattr(route, "path", "") for route in app.routes}
-
-    assert "/api/v1/professional-tax/states" in route_paths
-    assert "/api/v1/professional-tax/returns/prepare" in route_paths
-    assert "/api/v1/client-portal/invites" in route_paths
-    assert "/api/v1/client-portal/public/accept" in route_paths
-    assert "/api/v1/ca-billing/invoices" in route_paths
-    assert "/api/v1/ca-billing/invoices/{invoice_id}/payments" in route_paths
+    _assert_route_registered(app, "/api/v1/professional-tax/states")
+    _assert_route_registered(app, "/api/v1/professional-tax/returns/prepare", method="POST")
+    _assert_route_registered(app, "/api/v1/client-portal/invites", method="POST")
+    _assert_route_registered(app, "/api/v1/client-portal/public/accept", method="POST")
+    _assert_route_registered(app, "/api/v1/ca-billing/invoices")
+    _assert_route_registered(
+        app,
+        "/api/v1/ca-billing/invoices/00000000-0000-0000-0000-000000000001/payments",
+        method="POST",
+    )
 
 
 @pytest.mark.asyncio

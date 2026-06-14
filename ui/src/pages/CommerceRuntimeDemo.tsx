@@ -11,6 +11,7 @@ type RuntimeLog = {
 export default function CommerceRuntimeDemo() {
   const [merchantId, setMerchantId] = useState("merchant_demo");
   const [sellerAgentId, setSellerAgentId] = useState("seller_agent_demo");
+  const [buyerAgentId, setBuyerAgentId] = useState("buyer_agent_demo");
   const [displayName, setDisplayName] = useState("Demo Shopify Store");
   const [categories, setCategories] = useState("apparel, accessories");
   const [packetId, setPacketId] = useState("");
@@ -40,7 +41,16 @@ export default function CommerceRuntimeDemo() {
         public_brand_profile: { display_name: displayName },
         commerce_categories: categoryList,
         requested_grantex_authority_scope: {
-          artifact_families: ["merchant_profile", "seller_agent_card", "catalog_snapshot"],
+          artifact_families: [
+            "merchant_profile",
+            "seller_agent_card",
+            "connector_evidence",
+            "catalog_snapshot",
+            "offer_price_snapshot",
+            "inventory_snapshot",
+            "policy_scope",
+            "authority_request_status",
+          ],
         },
         artifact_cache_scope: { merchant_id: merchantId, seller_agent_id: sellerAgentId },
         source_freshness_policy: { max_age_seconds: 900 },
@@ -84,7 +94,10 @@ export default function CommerceRuntimeDemo() {
       });
       pushLog("Grantex authority", data.status || "request returned", data.artifacts ? "ok" : "warn");
       if (Array.isArray(data.artifacts) && data.artifacts.length) {
-        await commerceRuntimeApi.cacheArtifacts({ artifacts: data.artifacts });
+        await commerceRuntimeApi.cacheArtifacts({
+          artifacts: data.artifacts,
+          buyer_agent_id: buyerAgentId || undefined,
+        });
         pushLog("Artifact cache", `${data.artifacts.length} artifacts cached`, "ok");
       }
     } catch (error) {
@@ -112,6 +125,7 @@ export default function CommerceRuntimeDemo() {
       const { data } = await commerceRuntimeApi.askBuyerQuestion({
         merchant_id: merchantId,
         seller_agent_id: sellerAgentId,
+        buyer_agent_id: buyerAgentId || undefined,
         question: buyerQuestion,
         action_intent: "non_binding_preview",
         grantex_available: false,
@@ -153,6 +167,7 @@ export default function CommerceRuntimeDemo() {
             <div className="grid gap-3">
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} aria-label="Merchant ID" />
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={sellerAgentId} onChange={(event) => setSellerAgentId(event.target.value)} aria-label="Seller agent ID" />
+              <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={buyerAgentId} onChange={(event) => setBuyerAgentId(event.target.value)} aria-label="Buyer agent ID" />
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={displayName} onChange={(event) => setDisplayName(event.target.value)} aria-label="Merchant display name" />
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={categories} onChange={(event) => setCategories(event.target.value)} aria-label="Commerce categories" />
             </div>

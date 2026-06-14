@@ -3,9 +3,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -172,7 +174,7 @@ def test_onboarding_packet_is_read_only_and_rejects_secret_metadata() -> None:
             requested_grantex_authority_scope={"artifact_families": ["catalog_snapshot"]},
             artifact_cache_scope={"merchant_id": "merchant_1"},
             source_freshness_policy={"max_age_seconds": 900},
-            connector_metadata={"shopify_admin_access_token": "shpat_secret"},
+            connector_metadata={"shopify_admin_access_token": "fixture-admin-access-secret"},
         )
 
 
@@ -220,6 +222,27 @@ def test_grantex_authority_payload_matches_issuer_contract() -> None:
     assert "catalog_refs" not in payload["connector_evidence"]
     assert payload["request"]["no_payment_execution"] is True
     assert payload["connector_evidence"]["no_public_discovery_enablement"] is True
+
+
+@pytest.mark.asyncio
+async def test_onboarding_packet_read_enforces_tenant_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    @asynccontextmanager
+    async def fake_session(_tenant_id):
+        class FakeSession:
+            async def get(self, _model, _packet_id):
+                return SimpleNamespace(tenant_id="22222222-2222-2222-2222-222222222222")
+
+        yield FakeSession()
+
+    monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await commerce_runtime_api.get_seller_onboarding_packet(
+            "packet_1",
+            tenant_id="11111111-1111-1111-1111-111111111111",
+        )
+
+    assert exc_info.value.status_code == 404
 
 
 def test_cache_record_accepts_grantex_artifact_with_sibling_payload() -> None:
@@ -442,7 +465,7 @@ async def test_plural_pine_capability_verifier_is_env_gated_and_redacted() -> No
         merchant_id="merchant_1",
         env={
             "PLURAL_PINE_CLIENT_ID": "client-id",
-            "PLURAL_PINE_CLIENT_SECRET": "client-secret",
+            "PLURAL_PINE_CLIENT_SECRET": "fixture-redacted-value",
             "PLURAL_PINE_ENVIRONMENT": "sandbox",
             "PLURAL_PINE_CAPABILITY_URL": "https://sandbox.example.test/mcp",
         },
@@ -451,10 +474,66 @@ async def test_plural_pine_capability_verifier_is_env_gated_and_redacted() -> No
     )
     assert evidence.result_status == "available"
     assert evidence.redacted_evidence_ref.endswith(":redacted")
-    assert "client-secret" not in str(evidence)
+    assert "fixture-redacted-value" not in str(evidence)
     summary = summarize_capability_evidence([evidence])
     assert summary["allowed_to_execute"] is False
     assert summary["no_payment_execution"] is True
+
+
+@pytest.mark.asyncio
+async def test_plural_pine_capability_verifier_uses_sandbox_token_check_without_execution() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/auth/v1/token")
+        body = json.loads(request.content.decode())
+        assert body["grant_type"] == "client_credentials"
+        return httpx.Response(200, json={"access_token": "opaque-fixture-value", "expires_in": 1800})
+
+    evidence = await verify_plural_pine_mandate_capability(
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        env={
+            "PLURAL_PINE_CLIENT_ID": "client-id",
+            "PLURAL_PINE_CLIENT_SECRET": "fixture-redacted-value",
+        },
+        transport=httpx.MockTransport(handler),
+        now=_now(),
+    )
+
+    assert evidence.result_status == "available"
+    assert evidence.provider_environment == "sandbox"
+    assert evidence.external_validation_performed is True
+    assert evidence.raw_payload_stored is False
+    assert evidence.allowed_to_execute is False
+    assert evidence.no_payment_execution is True
+    assert "opaque-fixture-value" not in str(evidence)
+    assert "fixture-redacted-value" not in str(evidence)
+
+
+@pytest.mark.asyncio
+async def test_plural_pine_capability_verifier_blocks_live_environment_without_network() -> None:
+    called = False
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(500)
+
+    evidence = await verify_plural_pine_mandate_capability(
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        env={
+            "PLURAL_PINE_CLIENT_ID": "client-id",
+            "PLURAL_PINE_CLIENT_SECRET": "fixture-redacted-value",
+            "PLURAL_PINE_ENVIRONMENT": "live",
+        },
+        transport=httpx.MockTransport(handler),
+        now=_now(),
+    )
+
+    assert called is False
+    assert evidence.result_status == "blocked_provider_error"
+    assert evidence.external_validation_performed is False
+    assert evidence.allowed_to_execute is False
 
 
 def test_c6z_migration_is_tenant_safe_and_non_executing() -> None:
@@ -481,3 +560,15 @@ def test_c6z_mcp_bridge_exposes_seller_tools_without_execution_tools() -> None:
     assert "payment.create" not in source
     assert "order.create" not in source
     assert "mandate.create" not in source
+
+    manifest = json.loads(Path("mcp-server/server.json").read_text())
+    manifest_tools = {tool["name"] for tool in manifest["tools"]}
+    for name in (
+        "seller.list_products",
+        "seller.search_products",
+        "seller.get_product_facts",
+        "seller.get_offer_snapshot",
+        "seller.get_inventory_snapshot",
+        "seller.ask_product_question",
+    ):
+        assert name in manifest_tools

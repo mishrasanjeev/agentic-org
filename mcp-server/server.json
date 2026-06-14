@@ -53,6 +53,30 @@
     {
       "name": "get_agent_card",
       "description": "Get the public A2A Agent Card for this AgenticOrg instance."
+    },
+    {
+      "name": "seller.list_products",
+      "description": "List cached Seller Commerce Agent product snapshots with source and freshness metadata."
+    },
+    {
+      "name": "seller.search_products",
+      "description": "Search cached Seller Commerce Agent product snapshots without transaction authority."
+    },
+    {
+      "name": "seller.get_product_facts",
+      "description": "Answer product fact questions from cached Shopify-backed OACP artifacts."
+    },
+    {
+      "name": "seller.get_offer_snapshot",
+      "description": "Return cached price and offer snapshot labels without creating price locks or checkout sessions."
+    },
+    {
+      "name": "seller.get_inventory_snapshot",
+      "description": "Return cached inventory snapshot labels; inventory is a snapshot, not a reservation."
+    },
+    {
+      "name": "seller.ask_product_question",
+      "description": "Ask buyer-safe product questions from cached artifacts; final commitments are refused."
     }
   ],
   "environmentVariables": [

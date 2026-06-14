@@ -71,6 +71,34 @@ const api = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/api/v1/a2a/agent-card") {
       return json({ name: "AgenticOrg Agent Platform", skills: [{ id: "commerce_sales_agent" }] });
     }
+    if (req.method === "GET" && req.url?.startsWith("/api/v1/commerce/runtime/products")) {
+      return json({
+        products: [
+          {
+            product_ref: "shopify_product:hash:redacted",
+            title: "Canvas Tote",
+            vendor: "Demo Brand",
+            product_type: "Bags",
+            variants: [{ sku: "TOTE-1", price: "1299.00", inventory_quantity_snapshot: 7 }],
+          },
+        ],
+        source_label: "Source: Shopify via Grantex artifact",
+        allowed_to_execute: false,
+        non_authoritative_for_transaction: true,
+      });
+    }
+    if (req.method === "POST" && req.url === "/api/v1/commerce/runtime/buyer-sessions/ask") {
+      return json({
+        status: body.question?.toLowerCase().includes("buy") ? "refused" : "answered",
+        answer: "Canvas Tote: price snapshot 1299.00; inventory snapshot 7.",
+        source_label: "Source: Shopify via Grantex artifact",
+        freshness_label: "Freshness: synced 1m ago",
+        refusal_reason: body.question?.toLowerCase().includes("buy") ? "final_commitment_refused" : null,
+        matched_products: [],
+        allowed_to_execute: false,
+        non_authoritative_for_transaction: true,
+      });
+    }
     return json({ error: `unhandled ${req.method} ${req.url}` }, 404);
   });
 });
@@ -102,6 +130,12 @@ try {
     "list_mcp_tools",
     "discover_agents_a2a",
     "get_agent_card",
+    "seller.list_products",
+    "seller.search_products",
+    "seller.get_product_facts",
+    "seller.get_offer_snapshot",
+    "seller.get_inventory_snapshot",
+    "seller.ask_product_question",
   ]) {
     assert.ok(names.has(expected), `missing MCP tool ${expected}`);
   }
@@ -118,6 +152,24 @@ try {
 
   const listed = await client.callTool({ name: "list_mcp_tools", arguments: {} });
   assert.match(listed.content[0].text, /agenticorg_commerce_sales_agent/);
+
+  const sellerProducts = await client.callTool({
+    name: "seller.list_products",
+    arguments: { merchant_id: "merchant_demo", seller_agent_id: "seller_agent_demo" },
+  });
+  assert.match(sellerProducts.content[0].text, /Canvas Tote/);
+  assert.match(sellerProducts.content[0].text, /allowed_to_execute/);
+
+  const sellerAsk = await client.callTool({
+    name: "seller.ask_product_question",
+    arguments: {
+      merchant_id: "merchant_demo",
+      seller_agent_id: "seller_agent_demo",
+      buyer_agent_id: "buyer_agent_demo",
+      question: "What is the price of Canvas Tote?",
+    },
+  });
+  assert.match(sellerAsk.content[0].text, /Source: Shopify via Grantex artifact/);
 } finally {
   await client.close();
   await new Promise((resolve) => api.close(resolve));
@@ -125,6 +177,8 @@ try {
 
 assert.ok(calls.some((call) => call.path === "/api/v1/a2a/tasks"));
 assert.ok(calls.some((call) => call.path === "/api/v1/mcp/tools"));
+assert.ok(calls.some((call) => call.path === "/api/v1/commerce/runtime/products"));
+assert.ok(calls.some((call) => call.path === "/api/v1/commerce/runtime/buyer-sessions/ask"));
 assert.equal(new Set(calls.map((call) => call.authorization)).size, 1);
 assert.equal(calls[0].authorization, "Bearer mcp-test-key");
 
