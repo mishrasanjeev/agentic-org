@@ -44,6 +44,7 @@ codex-pytest-temp/
 codex-pytest-artifacts/
 cover/
 .env
+.env.c6z.local
 .env.local
 .env.production
 .venv
@@ -109,7 +110,7 @@ test-results/
 cloudbuild-ui.yaml
 mcp-server/.mcpregistry_*
 
-# Marketing / sales content (confidential — keep local only)
+# Marketing / sales content (confidential - keep local only)
 docs/*Sales*
 docs/*sales*
 docs/*.pptx
@@ -127,7 +128,7 @@ scripts/marketing*
 mcp-server/mcp-publisher.exe
 mcp-server/mcp-publisher
 
-# uv (Astral package manager) lockfile — not a canonical repo tool.
+# uv (Astral package manager) lockfile - not a canonical repo tool.
 # pyproject.toml has no [tool.uv] section and no CI/Dockerfile uses uv sync.
 # If we ever adopt uv, delete this entry and commit the lockfile deliberately.
 uv.lock

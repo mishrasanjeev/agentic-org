@@ -15,7 +15,7 @@ const api = axios.create({
 
 // SEC-2026-05-P1-003 (PR-B): read the CSRF token from the
 // agenticorg_csrf cookie and echo it back via X-CSRF-Token on every
-// mutating request. The double-submit pattern relies on this — the
+// mutating request. The double-submit pattern relies on this - the
 // server compares the cookie value against the header value with a
 // constant-time check. ``document.cookie`` is the only JS-readable
 // store; the session cookie remains HttpOnly and stays unreadable.
@@ -30,7 +30,7 @@ api.interceptors.request.use((config) => {
   // SEC-002 (PR-F): browser auth is COOKIE-FIRST. The browser ships
   // the HttpOnly ``agenticorg_session`` cookie automatically because
   // ``withCredentials: true`` is set above. We DO NOT read a bearer
-  // token from localStorage anymore — that was the SEC-002 attack
+  // token from localStorage anymore - that was the SEC-002 attack
   // surface.
 
   // CSRF: only attach for mutating methods. The server-side middleware
@@ -77,7 +77,7 @@ api.interceptors.response.use(
         localStorage.removeItem("token");
         localStorage.removeItem("user");
       } catch {
-        // ignore — private browsing or storage disabled
+        // ignore - private browsing or storage disabled
       }
       window.location.href = "/login";
     }
@@ -195,6 +195,20 @@ export const companiesApi = {
   list: () => api.get("/companies"),
   create: (data: any) => api.post("/companies", data),
   get: (id: string) => api.get(`/companies/${id}`),
+};
+
+export const commerceRuntimeApi = {
+  createOnboardingPacket: (data: any) =>
+    api.post("/commerce/runtime/seller-agents/onboarding-packets", data),
+  getOnboardingPacket: (packetId: string) =>
+    api.get(`/commerce/runtime/seller-agents/onboarding-packets/${packetId}`),
+  syncShopify: (data: any) => api.post("/commerce/runtime/seller-agents/shopify/sync", data),
+  requestGrantexAuthority: (data: any) => api.post("/commerce/runtime/authority/grantex/request", data),
+  cacheArtifacts: (data: any) => api.post("/commerce/runtime/artifacts/cache", data),
+  askBuyerQuestion: (data: any) => api.post("/commerce/runtime/buyer-sessions/ask", data),
+  listProducts: (params: any) => api.get("/commerce/runtime/products", { params }),
+  verifyPluralPineCapability: (data: any) =>
+    api.post("/commerce/runtime/providers/plural-pine/mandate-capability/verify", data),
 };
 
 // ABM (Account-Based Marketing)
