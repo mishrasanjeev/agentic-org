@@ -460,7 +460,18 @@ def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) 
         public_brand_profile=body.public_brand_profile,
         commerce_categories=body.commerce_categories,
         requested_grantex_authority_scope=body.requested_grantex_authority_scope
-        or {"artifact_families": ["merchant_profile", "seller_agent_card", "catalog_snapshot"]},
+        or {
+            "artifact_families": [
+                "merchant_profile",
+                "seller_agent_card",
+                "connector_evidence",
+                "catalog_snapshot",
+                "offer_price_snapshot",
+                "inventory_snapshot",
+                "policy_scope",
+                "authority_request_status",
+            ]
+        },
         artifact_cache_scope=body.artifact_cache_scope
         or {"tenant_id": tenant_id, "merchant_id": body.merchant_id, "seller_agent_id": body.seller_agent_id},
         source_freshness_policy=body.source_freshness_policy or {"max_age_seconds": 900},

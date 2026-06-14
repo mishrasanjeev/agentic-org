@@ -54,8 +54,14 @@ Add to your MCP client configuration:
 | `list_mcp_tools` | Discover AgenticOrg agent tools exposed by the platform MCP API |
 | `discover_agents_a2a` | A2A protocol agent discovery |
 | `get_agent_card` | Get the public A2A Agent Card |
+| `seller.list_products` | List cached Seller Commerce Agent product snapshots |
+| `seller.search_products` | Search cached Seller Commerce Agent product snapshots |
+| `seller.get_product_facts` | Answer product fact questions from cached OACP artifacts |
+| `seller.get_offer_snapshot` | Return cached price/offer snapshot labels without creating checkout sessions |
+| `seller.get_inventory_snapshot` | Return cached inventory snapshot labels without reservations |
+| `seller.ask_product_question` | Ask buyer-safe product questions from cached artifacts |
 
-Connector tools are not exposed as direct MCP tools. Use `run_agent` for the agent that owns the connector workflow, or run `list_mcp_tools` to see platform agent tools such as `agenticorg_commerce_sales_agent`.
+Connector tools are not exposed as direct MCP tools. The `seller.*` tools read AgenticOrg cached OACP artifact evidence only and do not create checkout, payment, order, hold, refund, return, shipping, mandate, or live-provider actions. Use `run_agent` for agent workflows, or run `list_mcp_tools` to see platform agent tools such as `agenticorg_commerce_sales_agent`.
 
 ## Authentication
 

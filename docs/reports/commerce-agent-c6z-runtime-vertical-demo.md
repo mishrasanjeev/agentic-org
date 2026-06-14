@@ -32,7 +32,7 @@ Shopify read-only sync:
 
 - `SHOPIFY_SHOP_DOMAIN`
 - `SHOPIFY_ADMIN_ACCESS_TOKEN`
-- `SHOPIFY_API_VERSION`
+- `SHOPIFY_API_VERSION` (template default: `2026-04`)
 - `SHOPIFY_WEBHOOK_SECRET` for webhook HMAC verification
 
 Grantex internal authority request:
@@ -51,21 +51,24 @@ Missing external credentials cause blocked or skipped results with exact env var
 
 ## Demo Sequence
 
-1. Start Grantex auth-service and AgenticOrg API/UI locally after applying migrations.
-2. Open `/dashboard/commerce-runtime`.
-3. Create a Seller Commerce Agent onboarding packet with merchant and seller-agent scope.
-4. Run Shopify sync. If Shopify env vars are missing, the API returns `blocked_missing_shopify_env`.
-5. Request Grantex authority artifacts. If Grantex env vars are missing, the API returns the redacted authority payload and `blocked_missing_grantex_env`.
-6. Cache returned Grantex artifacts.
-7. Ask a buyer question such as `Show me available products with prices`.
-8. Connect MCP locally and call:
+1. Start Grantex auth-service locally.
+2. Start AgenticOrg API/UI locally after applying migrations.
+3. Open `/dashboard/commerce-runtime`.
+4. Create a Seller Commerce Agent onboarding packet with merchant, seller-agent, and optional buyer-agent scope.
+5. Run Shopify sync. If Shopify env vars are missing, the API returns `blocked_missing_shopify_env` with the exact missing names.
+6. Request Grantex authority artifacts. If Grantex env vars are missing, the API returns the redacted authority payload and `blocked_missing_grantex_env`.
+7. Cache returned Grantex artifacts with the same buyer-agent scope used by the buyer session.
+8. Ask a buyer question such as `Show me available products with prices`.
+9. Connect MCP locally and call:
    - `seller.list_products`
    - `seller.search_products`
    - `seller.get_product_facts`
    - `seller.get_offer_snapshot`
    - `seller.get_inventory_snapshot`
    - `seller.ask_product_question`
-9. Run the Plural/Pine capability check only with sandbox env vars present.
+10. Run the Plural/Pine capability check only with sandbox env vars present.
+
+The sequence proves non-binding product answers from cached internal artifacts. It does not create a payment, order, checkout session, mandate, inventory hold, refund, return, shipment, public discovery publication, or live-provider action.
 
 ## Local Commands
 
@@ -79,11 +82,19 @@ python -m mypy core/commerce/c6z_runtime_vertical.py api/v1/commerce_runtime.py 
 ```powershell
 cd ui
 npm test -- CommerceRuntimeDemo
+npm run test:e2e -- commerce-runtime-demo.spec.ts --project=chromium
 ```
 
 ```powershell
 cd mcp-server
+npm test
 npm run build
+```
+
+With real sandbox credentials supplied through environment variables only:
+
+```powershell
+python -m pytest tests/integration/test_c6z_external_integrations.py --no-cov
 ```
 
 ## Guardrails
