@@ -302,6 +302,56 @@ async def test_cache_endpoint_rejects_failed_repository_store_results(monkeypatc
     assert detail["store_results"][0]["refusal_code"] == "cache_timestamps_invalid"
 
 
+@pytest.mark.asyncio
+async def test_cache_endpoint_reports_zero_stored_records_for_rolled_back_mixed_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @asynccontextmanager
+    async def fake_session(_tenant_id):
+        yield object()
+
+    class FakeRepository:
+        def __init__(self, _session: object) -> None:
+            self._calls = 0
+
+        async def upsert(self, _record) -> dict:
+            self._calls += 1
+            if self._calls == 1:
+                return {
+                    "stored": True,
+                    "status": "stored",
+                    "cache_record_id": "cache_c6z_catalog_1",
+                    "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
+                }
+            return {
+                "stored": False,
+                "status": "stale",
+                "refusal_code": "cache_timestamps_invalid",
+                "cache_record_id": "cache_c6z_catalog_2",
+                "artifact_id": "c6z:catalog_snapshot:tenant:merchant:seller",
+            }
+
+    monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
+    monkeypatch.setattr(commerce_runtime_api, "DurableOacpArtifactCacheRepository", FakeRepository)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await commerce_runtime_api.cache_grantex_artifacts(
+            commerce_runtime_api.CacheArtifactsRequest(
+                artifacts=[
+                    _grantex_artifact(),
+                    _grantex_artifact(),
+                ]
+            ),
+            tenant_id="11111111-1111-1111-1111-111111111111",
+        )
+
+    detail = exc_info.value.detail
+    assert detail["status"] == "artifact_cache_rejected"
+    assert detail["records_stored"] == 0
+    assert detail["records_rejected"] == 1
+    assert [result["stored"] for result in detail["store_results"]] == [True, False]
+
+
 def test_shopify_webhook_hmac_verification_and_idempotency_are_deterministic() -> None:
     raw_body = b'{"id":1,"title":"Canvas Tote"}'
     secret = "webhook-secret"

@@ -312,7 +312,7 @@ async def cache_grantex_artifacts(
                 status_code=422,
                 detail={
                     "status": "artifact_cache_rejected",
-                    "records_stored": len(store_results) - len(rejected),
+                    "records_stored": 0,
                     "records_rejected": len(rejected),
                     "store_results": store_results,
                     "allowed_to_execute": False,

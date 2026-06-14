@@ -2013,7 +2013,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.buyer_sessions.ask",
-    "source_line": 327,
+    "source_line": 341,
     "tenant_required": true
   },
   {
@@ -2031,7 +2031,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.products.read",
-    "source_line": 414,
+    "source_line": 428,
     "tenant_required": true
   },
   {
@@ -2049,7 +2049,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.providers.plural_pine.verify",
-    "source_line": 380,
+    "source_line": 394,
     "tenant_required": true
   },
   {
