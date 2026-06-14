@@ -333,7 +333,7 @@ async def test_plural_pine_capability_verifier_is_env_gated_and_redacted() -> No
 
 def test_c6z_migration_is_tenant_safe_and_non_executing() -> None:
     migration = Path("migrations/versions/v6_z_runtime_vertical_demo.py").read_text()
-    assert 'down_revision = "v6y4_repair_a2a_tasks"' in migration
+    assert 'down_revision = "v6y5_retention_decisions"' in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
     assert "current_setting('agenticorg.tenant_id', true)" in migration
     assert "allowed_to_execute IS FALSE" in migration
