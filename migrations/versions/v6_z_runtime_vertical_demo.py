@@ -1,7 +1,7 @@
 """C6Z Seller Commerce Agent runtime vertical demo records.
 
 Revision ID: v6z_runtime_vertical_demo
-Revises: v6y3_industry_pack_uuid_default
+Revises: v6y4_repair_a2a_tasks
 Create Date: 2026-06-14
 
 This migration adds AgenticOrg-owned tenant-scoped runtime tables for read-only
@@ -20,7 +20,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "v6z_runtime_vertical_demo"
-down_revision = "v6y3_industry_pack_uuid_default"
+down_revision = "v6y4_repair_a2a_tasks"
 branch_labels = None
 depends_on = None
 
