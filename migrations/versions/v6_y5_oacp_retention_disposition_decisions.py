@@ -1,6 +1,6 @@
 """C6Y5 durable OACP retention disposition decision records.
 
-Revision ID: v6y5_oacp_retention_disposition_decisions
+Revision ID: v6y5_retention_decisions
 Revises: v6y3_industry_pack_uuid_default
 Create Date: 2026-06-14
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "v6y5_oacp_retention_disposition_decisions"
+revision = "v6y5_retention_decisions"
 down_revision = "v6y3_industry_pack_uuid_default"
 branch_labels = None
 depends_on = None

@@ -299,6 +299,7 @@ def test_c6y5_builder_fails_closed_for_bad_source_packets_and_raw_reviewer_ident
 def test_c6y5_migration_has_tenant_safe_rls_and_non_execution_guards() -> None:
     migration = _migration()
     for expected in (
+        "revision = \"v6y5_retention_decisions\"",
         "CREATE TABLE IF NOT EXISTS oacp_retention_disposition_decision_records",
         "down_revision = \"v6y3_industry_pack_uuid_default\"",
         "ix_oacp_retention_disposition_decision_tenant_id",
@@ -319,6 +320,8 @@ def test_c6y5_migration_has_tenant_safe_rls_and_non_execution_guards() -> None:
     ):
         assert expected in migration
 
+    assert len("v6y5_retention_decisions") <= 32
+
 
 def test_c6y5_docs_capture_durable_repository_scope_and_non_goals() -> None:
     doc = _doc()
@@ -337,7 +340,7 @@ def test_c6y5_docs_capture_durable_repository_scope_and_non_goals() -> None:
         assert f"## {heading}" in doc
 
     assert "AgenticOrg owns retention disposition review" in doc
-    assert "v6y5_oacp_retention_disposition_decisions" in doc
+    assert "v6y5_retention_decisions" in doc
     assert "RLS" in doc
     assert "allowed_to_execute = false" in doc
     assert "future_retention_action_allowed = false" in doc
