@@ -688,6 +688,8 @@ echo "Previous UI traffic        : $PREVIOUS_UI_TRAFFIC_SUMMARY"
 
 API_IMAGE="${GAR_REGISTRY}/agenticorg:${DEPLOY_SHA}"
 UI_IMAGE="${GAR_REGISTRY}/agenticorg-ui-cloudrun:${DEPLOY_SHA}"
+API_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA},AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true"
+UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"
 
 # 3. Build + push images.
 if [[ $SKIP_BUILD -eq 0 ]]; then
@@ -786,12 +788,12 @@ fi
 # API public health passes so an API failure cannot leave a new UI revision live.
 API_NEW_REVISION=""
 UI_NEW_REVISION=""
-update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "AGENTICORG_GIT_SHA=${DEPLOY_SHA}" "API" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"
+update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "$API_UPDATE_ENV_VARS" "API" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"
 
 echo "Staged API revision: $API_NEW_REVISION"
 
 if [[ "$TRAFFIC_MODE" == "preserve" ]]; then
-  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
+  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
   echo "Staged UI revision : $UI_NEW_REVISION"
   echo "NOT DEPLOYED: --traffic preserve staged revisions but left production traffic unchanged."
   echo "Current API traffic: $(traffic_summary "$API_SERVICE")"
@@ -800,7 +802,7 @@ if [[ "$TRAFFIC_MODE" == "preserve" ]]; then
 fi
 
 if [[ "$TRAFFIC_MODE" == "manual" ]]; then
-  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
+  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
   echo "Staged UI revision : $UI_NEW_REVISION"
   echo "NOT DEPLOYED: --traffic manual staged revisions but left production traffic unchanged."
   print_manual_traffic_commands "$API_NEW_REVISION" "$UI_NEW_REVISION"
@@ -843,7 +845,7 @@ if ! poll_health_url "$HEALTH_URL" "public API" 30; then
   exit 1
 fi
 
-if ! update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"; then
+if ! update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"; then
   remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
   echo "::error::Failed to stage UI revision after API verification; rolling back API/UI traffic." >&2
   rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"

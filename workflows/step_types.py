@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -125,6 +126,43 @@ def _missing_llm_result(step: dict, agent_type: str, action: str) -> dict[str, A
         step_type="agent",
         failure=MissingLLMProviderConfigError(agent=agent_type, step_id=step_id),
     )
+
+
+async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str, Any]:
+    """Load stored agent defaults for workflow steps that reference a DB agent."""
+    if not agent_id or not tenant_id:
+        return {}
+    try:
+        agent_uuid = uuid.UUID(str(agent_id))
+        tenant_uuid = uuid.UUID(str(tenant_id))
+    except (TypeError, ValueError):
+        return {}
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_uuid, Agent.tenant_id == tenant_uuid)
+        )
+        agent = result.scalar_one_or_none()
+    if agent is None or agent.status in {"deleted", "retired"}:
+        return {}
+
+    return {
+        "id": str(agent.id),
+        "tenant_id": str(agent.tenant_id),
+        "agent_type": agent.agent_type,
+        "authorized_tools": agent.authorized_tools or [],
+        "prompt_variables": agent.prompt_variables or {},
+        "hitl_condition": agent.hitl_condition or "",
+        "output_schema": agent.output_schema,
+        "llm_model": agent.llm_model,
+        "cost_controls": agent.cost_controls or {},
+        "system_prompt_text": agent.system_prompt_text or "",
+    }
 
 
 def _normalize_key(value: Any) -> str:
@@ -300,8 +338,10 @@ async def _execute_collaboration(step: dict, state: dict) -> dict[str, Any]:
 
 async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
     """Execute an agent step by instantiating and running the configured agent."""
-    agent_type = step.get("agent", step.get("agent_type", ""))
     agent_id = step.get("agent_id", "")
+    tenant_id = state.get("tenant_id", "")
+    stored_config = await _load_workflow_agent_config(agent_id, tenant_id)
+    agent_type = step.get("agent", step.get("agent_type", "")) or stored_config.get("agent_type", "")
     action = step.get("action", "process")
     inputs = step.get("inputs", state.get("trigger_payload", {}))
 
@@ -312,8 +352,6 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
         return _missing_llm_result(step, agent_type, action)
 
     try:
-        import uuid
-
         import core.agents  # noqa: F401 - triggers registration
         from core.agents.registry import AgentRegistry
         from core.schemas.messages import (
@@ -324,14 +362,41 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             TaskMetadata,
         )
 
-        tenant_id = state.get("tenant_id", "")
         config = {
-            "id": agent_id or f"wf_agent_{step['id']}",
-            "tenant_id": tenant_id,
+            "id": stored_config.get("id") or agent_id or f"wf_agent_{step['id']}",
+            "tenant_id": stored_config.get("tenant_id") or tenant_id,
             "agent_type": agent_type,
-            "authorized_tools": step.get("authorized_tools", []),
-            "system_prompt_text": step.get("system_prompt_text", ""),
-            "llm_model": step.get("llm_model"),
+            "authorized_tools": (
+                step["authorized_tools"]
+                if "authorized_tools" in step
+                else stored_config.get("authorized_tools", [])
+            ),
+            "prompt_variables": (
+                step["prompt_variables"]
+                if "prompt_variables" in step
+                else stored_config.get("prompt_variables", {})
+            ),
+            "hitl_condition": (
+                step["hitl_condition"]
+                if "hitl_condition" in step
+                else stored_config.get("hitl_condition", "")
+            ),
+            "output_schema": (
+                step["output_schema"]
+                if "output_schema" in step
+                else stored_config.get("output_schema")
+            ),
+            "system_prompt_text": (
+                step["system_prompt_text"]
+                if "system_prompt_text" in step
+                else stored_config.get("system_prompt_text", "")
+            ),
+            "llm_model": step.get("llm_model") or stored_config.get("llm_model"),
+            "cost_controls": (
+                step["cost_controls"]
+                if "cost_controls" in step
+                else stored_config.get("cost_controls")
+            ),
         }
 
         if _fake_llm_allowed() and not _real_llm_provider_configured():
