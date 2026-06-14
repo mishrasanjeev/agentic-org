@@ -38,7 +38,6 @@ from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
 from core.models.client_portal import ClientPortalDocument as ClientPortalDocument
 from core.models.client_portal import ClientPortalInvite as ClientPortalInvite
-from core.models.company import Company as Company
 from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow as C6ZConnectorEvidenceRow
 from core.models.commerce_c6z_runtime import (
     C6ZProviderCapabilityEvidenceRow as C6ZProviderCapabilityEvidenceRow,
@@ -46,6 +45,7 @@ from core.models.commerce_c6z_runtime import (
 from core.models.commerce_c6z_runtime import (
     C6ZSellerOnboardingPacketRow as C6ZSellerOnboardingPacketRow,
 )
+from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
 from core.models.connector_config import ConnectorConfig as ConnectorConfig
