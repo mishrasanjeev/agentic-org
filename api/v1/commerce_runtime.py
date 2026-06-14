@@ -296,7 +296,7 @@ async def cache_grantex_artifacts(
     now_iso = _now_iso()
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
-        stored: list[dict[str, Any]] = []
+        store_results: list[dict[str, Any]] = []
         for artifact in body.artifacts:
             record = build_cache_record_from_grantex_artifact(
                 artifact,
@@ -305,11 +305,25 @@ async def cache_grantex_artifacts(
             )
             if record.tenant_id != tenant_id:
                 raise HTTPException(403, "Artifact tenant scope mismatch")
-            stored.append(await repo.upsert(record))
+            store_results.append(await repo.upsert(record))
+        rejected = [result for result in store_results if result.get("stored") is not True]
+        if rejected:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "status": "artifact_cache_rejected",
+                    "records_stored": 0,
+                    "records_rejected": len(rejected),
+                    "store_results": store_results,
+                    "allowed_to_execute": False,
+                    "non_authoritative_for_transaction": True,
+                },
+            )
     return {
         "status": "cached",
-        "records_stored": len(stored),
-        "store_results": stored,
+        "records_stored": len(store_results),
+        "records_rejected": 0,
+        "store_results": store_results,
         "allowed_to_execute": False,
         "non_authoritative_for_transaction": True,
     }
