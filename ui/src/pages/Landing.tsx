@@ -138,26 +138,26 @@ const INDIA_CONNECTORS = [
   { name: "DigiLocker", desc: "Document verification" },
 ];
 
-const LATEST_PLATFORM_WORK = [
+const OACP_SECTION_POINTS = [
   {
-    label: "C6X4",
-    title: "Durable OACP Artifact Cache",
-    desc: "SQL-backed cache records scoped by buyer agent, seller agent, tenant, and merchant. TTL, freshness, revocation snapshot, risk tier, and non-execution flags are evaluated fail-closed.",
+    label: "Source",
+    title: "Facts Come From Merchant Systems",
+    desc: "Catalog, price, availability, policy, and support facts stay grounded in approved merchant sources and public-safe evidence references.",
   },
   {
-    label: "C6X5",
-    title: "Cache Maintenance Planner",
-    desc: "Deterministic keep, refresh, evict, purge, quarantine, and human-review recommendations over durable OACP records. Planner only: no scheduler, no live Grantex call, no provider call.",
+    label: "Authority",
+    title: "Grantex Signs The OACP Artifacts",
+    desc: "Grantex remains the protocol, policy, trust, and canonical artifact authority; AgenticOrg consumes those artifacts in buyer and seller agent flows.",
   },
   {
-    label: "Security",
-    title: "Fail-Closed Release Gates",
-    desc: "Production dependencies were trimmed, JWT handling moved to PyJWT[crypto], Docker healthchecks no longer require curl, and CI security checks now fail on high-risk findings.",
+    label: "Runtime",
+    title: "Agents Show Freshness Before Action",
+    desc: "Buyer agents use scoped OACP artifacts, source labels, freshness, revocation posture, and risk boundaries before answering or preparing a handoff.",
   },
   {
-    label: "Deploy",
-    title: "Cloud Run Rollout Safety",
-    desc: "The manual deploy helper now separates Cloud Run and Artifact Registry regions, verifies platform image digests and commit metadata, runs migrations first, and refuses stale-health success.",
+    label: "Boundary",
+    title: "Commitment Remains Gated",
+    desc: "Checkout, payment, provider rails, and merchant private APIs stay blocked unless a separate approved rollout verifies that exact path.",
   },
 ];
 
@@ -369,7 +369,7 @@ export default function Landing() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
         <title>AgenticOrg — Governed Enterprise AI Agents | Automate with Human Control</title>
-        <meta name="description" content="Enterprise AI agents for governed back-office automation, human approvals, audit trails, Grantex scope enforcement, OACP artifact cache controls, and Cloud Run release safety." />
+        <meta name="description" content="Enterprise AI agents for governed back-office automation, human approvals, audit trails, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -389,7 +389,7 @@ export default function Landing() {
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
             <a href="#platform" className="text-slate-300 hover:text-white text-sm transition-colors">Platform</a>
-            <a href="#latest-work" className="text-slate-300 hover:text-white text-sm transition-colors">Latest</a>
+            <a href="#open-commerce" className="text-slate-300 hover:text-white text-sm transition-colors">OACP</a>
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
             <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
             <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
@@ -426,7 +426,7 @@ export default function Landing() {
         {mobileMenuOpen && (
           <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3" role="navigation" aria-label="Mobile navigation">
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
-            <a href="#latest-work" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Latest</a>
+            <a href="#open-commerce" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">OACP</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
             <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
             <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
@@ -466,7 +466,7 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-slate-300 text-sm" data-testid="landing-version-badge">
-                {versionText ? `${versionText} — ` : ""}Governed agents, OACP cache controls, Cloud Run release safety
+                {versionText ? `${versionText} — ` : ""}Governed agents with OACP trust boundaries
               </span>
             </div>
 
@@ -520,30 +520,27 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 2b. VERSION RELEASE BANNER                                    */}
+      {/* 2b. OACP PROTOCOL STRIP                                       */}
       {/* ============================================================ */}
       <section className="relative bg-slate-900 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-5xl mx-auto">
           <Link
-            to="/#latest-work"
-            className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
+            to="/open-agentic-commerce-protocol"
+            className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-cyan-500 via-emerald-400 to-amber-400 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
           >
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
-              {/* Version badge */}
-              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse" data-testid="landing-version-pill">
+              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-cyan-500 to-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-cyan-500/20" data-testid="landing-version-pill">
                 <span className="w-1.5 h-1.5 bg-white rounded-full" />
                 {versionText || "v…"}
               </span>
 
-              {/* Description */}
               <p className="text-sm text-slate-300 text-center sm:text-left leading-snug">
-                <span className="font-semibold text-white">June hardening</span>
-                {" "}&mdash; durable OACP cache, fail-closed maintenance planning, security gates, and Cloud Run digest checks
+                <span className="font-semibold text-white">Open Agentic Commerce Protocol</span>
+                {" "}&mdash; source-backed artifacts, freshness labels, prepared handoffs, and fail-closed refusals.
               </p>
 
-              {/* CTA */}
-              <span className="shrink-0 text-sm font-semibold text-blue-400 group-hover:text-blue-300 transition-colors whitespace-nowrap">
-                Review latest foundation&nbsp;&rarr;
+              <span className="shrink-0 text-sm font-semibold text-cyan-300 group-hover:text-white transition-colors whitespace-nowrap">
+                See the protocol&nbsp;&rarr;
               </span>
             </div>
           </Link>
@@ -551,43 +548,93 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 2c. LATEST PLATFORM WORK                                      */}
+      {/* 2c. OPEN AGENTIC COMMERCE PROTOCOL                            */}
       {/* ============================================================ */}
-      <section id="latest-work" className="py-20 bg-white border-b border-slate-100 scroll-mt-16">
+      <section id="open-commerce" className="py-24 bg-white border-b border-slate-100 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <div className="max-w-3xl mb-12">
-              <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-700 rounded-full px-4 py-1.5 text-sm font-medium mb-5">
-                Latest mainline work
+            <div className="max-w-3xl mb-14">
+              <div className="inline-flex items-center gap-2 bg-cyan-50 border border-cyan-100 text-cyan-700 rounded-full px-4 py-1.5 text-sm font-medium mb-5">
+                Open Agentic Commerce Protocol
               </div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Latest shipped foundation, without overclaiming commerce readiness.</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">A trust layer for seller and buyer agents.</h2>
               <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-                Recent work focused on making agentic commerce and production rollout safer: durable OACP cache records, local maintenance planning, stronger dependency gates, and safer Cloud Run releases.
+                OACP gives commerce agents a common way to reason over source-backed merchant facts, artifact freshness, revocation posture, and commitment boundaries before they answer, prepare, or refuse a buyer request.
               </p>
             </div>
           </FadeIn>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {LATEST_PLATFORM_WORK.map((item, i) => (
-              <FadeIn key={item.title} delay={i * 100}>
-                <div className="h-full rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-blue-200 hover:shadow-lg transition-all duration-300">
-                  <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white mb-4">
-                    {item.label}
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-3">{item.title}</h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+          <div className="grid lg:grid-cols-[1fr_1.1fr] gap-10 items-start">
+            <FadeIn>
+              <div className="h-full flex flex-col justify-between gap-8">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {OACP_SECTION_POINTS.map((item) => (
+                    <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5 hover:border-cyan-200 hover:shadow-lg transition-all duration-300">
+                      <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white mb-4">
+                        {item.label}
+                      </div>
+                      <h3 className="text-base font-bold text-slate-900 mb-2">{item.title}</h3>
+                      <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+                    </div>
+                  ))}
                 </div>
-              </FadeIn>
-            ))}
-          </div>
 
-          <FadeIn>
-            <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5">
-              <p className="text-sm text-amber-900 leading-relaxed">
-                Commerce guardrail: these updates do not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness. Those remain blocked until separately approved and verified.
-              </p>
-            </div>
-          </FadeIn>
+                <div className="rounded-xl border border-slate-200 bg-slate-900 px-6 py-6 text-white">
+                  <p className="text-sm uppercase tracking-[0.18em] text-cyan-300 font-semibold mb-3">Protocol posture</p>
+                  <p className="text-slate-300 leading-relaxed">
+                    AgenticOrg uses OACP artifacts for grounded discovery and prepared handoff behavior. No public protocol publication, live checkout, payment execution, live provider rails, merchant private API execution, or commerce production readiness is claimed from this landing-page section.
+                  </p>
+                  <Link
+                    to="/open-agentic-commerce-protocol"
+                    className="mt-5 inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors"
+                  >
+                    Explore the full OACP model
+                  </Link>
+                </div>
+              </div>
+            </FadeIn>
+
+            <FadeIn delay={120}>
+              <div className="relative rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 sm:p-8 overflow-hidden">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300" />
+                <div className="mb-6">
+                  <p className="text-sm uppercase tracking-[0.18em] text-cyan-300 font-semibold">Custody map</p>
+                  <h3 className="mt-2 text-2xl font-bold text-white">Who owns what in an agentic commerce request</h3>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {[
+                    ["Merchant systems", "Catalog, inventory, policy, order truth"],
+                    ["Seller agent", "Connector setup and merchant preview"],
+                    ["Grantex authority", "Signed OACP artifacts and policy"],
+                    ["OACP cache", "Scoped refs, TTL, freshness, revocation"],
+                    ["Buyer agent", "Answers, compares, prepares, or refuses"],
+                    ["Channels", "ChatGPT, Claude, web, mobile, MCP"],
+                  ].map(([title, detail], i) => (
+                    <div key={title} className="relative rounded-xl border border-white/10 bg-white/10 p-4">
+                      <div className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-950">
+                        {i + 1}
+                      </div>
+                      <h4 className="text-sm font-bold text-white">{title}</h4>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 grid sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
+                  <div className="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Provider / fintech rail</p>
+                    <p className="mt-2 text-sm text-amber-50">Mandates and payment execution remain owned by approved provider rails.</p>
+                  </div>
+                  <div className="hidden sm:flex h-px w-12 bg-amber-300/50" />
+                  <div className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-200">Fail-closed line</p>
+                    <p className="mt-2 text-sm text-rose-50">Missing, stale, revoked, ambiguous, private, raw, or executable artifacts are refused.</p>
+                  </div>
+                </div>
+              </div>
+            </FadeIn>
+          </div>
         </div>
       </section>
 

@@ -104,6 +104,7 @@ const BlogPost = lazyRetry(() => import("./pages/blog/BlogPost"));
 
 /* ── Integration workflow page ── */
 const IntegrationWorkflow = lazyRetry(() => import("./pages/IntegrationWorkflow"));
+const OpenAgenticCommerceProtocol = lazyRetry(() => import("./pages/OpenAgenticCommerceProtocol"));
 
 /* ── Google Ads landing pages ── */
 const AdsLanding = lazyRetry(() => import("./pages/ads/AdsLanding"));
@@ -186,6 +187,7 @@ export default function App() {
 
       {/* Integration workflow */}
       <Route path="/integration-workflow" element={<IntegrationWorkflow />} />
+      <Route path="/open-agentic-commerce-protocol" element={<OpenAgenticCommerceProtocol />} />
 
       {/* Explainer pages */}
       <Route path="/how-grantex-works" element={<HowGrantexWorks />} />
