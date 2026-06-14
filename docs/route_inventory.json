@@ -1963,6 +1963,168 @@
     "tenant_required": false
   },
   {
+    "audit_event": "commerce.runtime.artifacts.cache",
+    "auth_required": true,
+    "function": "cache_grantex_artifacts",
+    "idempotency": "artifact-id-upsert",
+    "key": "POST /api/v1/commerce/runtime/artifacts/cache api/v1/commerce_runtime.py:cache_grantex_artifacts",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/artifacts/cache",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.artifacts.cache",
+    "source_line": 292,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.grantex.authority_request",
+    "auth_required": true,
+    "function": "request_grantex_authority_artifacts",
+    "idempotency": "packet-id-and-evidence-id",
+    "key": "POST /api/v1/commerce/runtime/authority/grantex/request api/v1/commerce_runtime.py:request_grantex_authority_artifacts",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/authority/grantex/request",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.grantex.authority_request",
+    "source_line": 255,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.buyer_session.ask",
+    "auth_required": true,
+    "function": "ask_buyer_product_question",
+    "idempotency": "read-only-non-binding-answer",
+    "key": "POST /api/v1/commerce/runtime/buyer-sessions/ask api/v1/commerce_runtime.py:ask_buyer_product_question",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/buyer-sessions/ask",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-buyer-session",
+    "scope": "commerce.runtime.buyer_sessions.ask",
+    "source_line": 327,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.products.list",
+    "auth_required": true,
+    "function": "list_cached_products",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/products api/v1/commerce_runtime.py:list_cached_products",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/products",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.products.read",
+    "source_line": 414,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.providers.plural_pine.verify",
+    "auth_required": true,
+    "function": "verify_plural_pine_capability",
+    "idempotency": "merchant-capability-check-window",
+    "key": "POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify api/v1/commerce_runtime.py:verify_plural_pine_capability",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.providers.plural_pine.verify",
+    "source_line": 380,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.seller_onboarding_packet.create",
+    "auth_required": true,
+    "function": "create_seller_onboarding_packet",
+    "idempotency": "deterministic-seller-onboarding-packet-id",
+    "key": "POST /api/v1/commerce/runtime/seller-agents/onboarding-packets api/v1/commerce_runtime.py:create_seller_onboarding_packet",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/onboarding-packets",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.seller_agents.write",
+    "source_line": 109,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.seller_onboarding_packet.read",
+    "auth_required": true,
+    "function": "get_seller_onboarding_packet",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/seller-agents/onboarding-packets/{packet_id} api/v1/commerce_runtime.py:get_seller_onboarding_packet",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/onboarding-packets/{packet_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.seller_agents.read",
+    "source_line": 132,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.sync",
+    "auth_required": true,
+    "function": "sync_shopify_read_only",
+    "idempotency": "packet-id-and-shopify-source-snapshot",
+    "key": "POST /api/v1/commerce/runtime/seller-agents/shopify/sync api/v1/commerce_runtime.py:sync_shopify_read_only",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/shopify/sync",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-bulk",
+    "scope": "commerce.runtime.shopify.sync",
+    "source_line": 152,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.product_update_webhook",
+    "auth_required": true,
+    "function": "receive_shopify_product_webhook",
+    "idempotency": "shopify-webhook-id-or-body-hash",
+    "key": "POST /api/v1/commerce/runtime/shopify/webhooks/product-update api/v1/commerce_runtime.py:receive_shopify_product_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/shopify/webhooks/product-update",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-webhook",
+    "scope": "commerce.runtime.shopify.webhook",
+    "source_line": 210,
+    "tenant_required": true
+  },
+  {
     "audit_event": "companies.list",
     "auth_required": true,
     "function": "list_companies",

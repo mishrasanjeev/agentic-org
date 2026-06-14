@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
+from api.route_metadata import route_meta
 from core.commerce.c6z_runtime_vertical import (
     GRANTEX_AUTHORITY_ENV_VARS,
     PLURAL_PINE_ENV_VARS,
@@ -97,6 +98,14 @@ class MandateCapabilityRequest(BaseModel):
 
 
 @router.post("/seller-agents/onboarding-packets")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.seller_agents.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="deterministic-seller-onboarding-packet-id",
+    audit_event="commerce.runtime.seller_onboarding_packet.create",
+)
 async def create_seller_onboarding_packet(
     body: SellerOnboardingPacketCreate,
     tenant_id: str = Depends(get_current_tenant),
@@ -112,6 +121,14 @@ async def create_seller_onboarding_packet(
 
 
 @router.get("/seller-agents/onboarding-packets/{packet_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.seller_agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.seller_onboarding_packet.read",
+)
 async def get_seller_onboarding_packet(
     packet_id: str,
     tenant_id: str = Depends(get_current_tenant),
@@ -124,6 +141,14 @@ async def get_seller_onboarding_packet(
 
 
 @router.post("/seller-agents/shopify/sync")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.shopify.sync",
+    rate_limit="connector-bulk",
+    idempotency="packet-id-and-shopify-source-snapshot",
+    audit_event="commerce.runtime.shopify.sync",
+)
 async def sync_shopify_read_only(
     body: ShopifySyncRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -174,6 +199,14 @@ async def sync_shopify_read_only(
 
 
 @router.post("/shopify/webhooks/product-update")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.shopify.webhook",
+    rate_limit="commerce-webhook",
+    idempotency="shopify-webhook-id-or-body-hash",
+    audit_event="commerce.runtime.shopify.product_update_webhook",
+)
 async def receive_shopify_product_webhook(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
@@ -211,6 +244,14 @@ async def receive_shopify_product_webhook(
 
 
 @router.post("/authority/grantex/request")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.grantex.authority_request",
+    rate_limit="commerce-runtime-external",
+    idempotency="packet-id-and-evidence-id",
+    audit_event="commerce.runtime.grantex.authority_request",
+)
 async def request_grantex_authority_artifacts(
     body: GrantexAuthorityRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -240,6 +281,14 @@ async def request_grantex_authority_artifacts(
 
 
 @router.post("/artifacts/cache")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.artifacts.cache",
+    rate_limit="commerce-runtime-write",
+    idempotency="artifact-id-upsert",
+    audit_event="commerce.runtime.artifacts.cache",
+)
 async def cache_grantex_artifacts(
     body: CacheArtifactsRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -267,6 +316,14 @@ async def cache_grantex_artifacts(
 
 
 @router.post("/buyer-sessions/ask")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.buyer_sessions.ask",
+    rate_limit="commerce-buyer-session",
+    idempotency="read-only-non-binding-answer",
+    audit_event="commerce.runtime.buyer_session.ask",
+)
 async def ask_buyer_product_question(
     body: BuyerQuestionRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -312,6 +369,14 @@ async def ask_buyer_product_question(
 
 
 @router.post("/providers/plural-pine/mandate-capability/verify")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.providers.plural_pine.verify",
+    rate_limit="commerce-runtime-external",
+    idempotency="merchant-capability-check-window",
+    audit_event="commerce.runtime.providers.plural_pine.verify",
+)
 async def verify_plural_pine_capability(
     body: MandateCapabilityRequest,
     tenant_id: str = Depends(get_current_tenant),
@@ -338,6 +403,14 @@ async def verify_plural_pine_capability(
 
 
 @router.get("/products")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.products.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.products.list",
+)
 async def list_cached_products(
     merchant_id: str,
     seller_agent_id: str | None = None,
