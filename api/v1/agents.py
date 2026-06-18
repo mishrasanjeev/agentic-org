@@ -472,6 +472,62 @@ def _is_shadow_accuracy_measurable(
     )
 
 
+def _shadow_metric_update_decision(
+    *,
+    agent_status: str,
+    incoming_action: str | None,
+    task_status: str,
+    task_confidence: float | None,
+    tool_calls: Any,
+) -> dict[str, Any]:
+    """Decide how a run should update shadow sample metrics."""
+    if agent_status not in ("shadow", "active"):
+        return {
+            "sample_counted": False,
+            "accuracy_updated": False,
+            "sample_count_delta": 0,
+            "reason": "agent_not_shadow_or_active",
+        }
+
+    if _is_shadow_accuracy_measurable(
+        task_status=task_status,
+        task_confidence=task_confidence,
+        tool_calls=tool_calls,
+    ):
+        return {
+            "sample_counted": True,
+            "accuracy_updated": True,
+            "sample_count_delta": 1,
+            "reason": "sample_counted_and_accuracy_scored",
+        }
+
+    tool_failed = _tool_calls_contain_failure(tool_calls)
+    if (
+        incoming_action == "shadow_sample"
+        and task_status in ("completed", "hitl_triggered")
+        and not tool_failed
+    ):
+        return {
+            "sample_counted": True,
+            "accuracy_updated": False,
+            "sample_count_delta": 1,
+            "reason": "sample_counted_accuracy_pending",
+        }
+
+    if tool_failed:
+        reason = "tool_failure_not_counted"
+    elif task_status not in ("completed", "hitl_triggered"):
+        reason = "task_status_not_countable"
+    else:
+        reason = "confidence_not_measurable"
+    return {
+        "sample_counted": False,
+        "accuracy_updated": False,
+        "sample_count_delta": 0,
+        "reason": reason,
+    }
+
+
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
@@ -2780,29 +2836,39 @@ async def run_agent(
     # actually scoring. The min-samples gate still prevents promotion
     # until enough real samples have accumulated.
     task_tool_calls = lg_result.get("tool_calls") or lg_result.get("tool_calls_log") or []
-    is_measurable = _is_shadow_accuracy_measurable(
+    shadow_metrics = _shadow_metric_update_decision(
+        agent_status=str(agent_config.get("status") or ""),
+        incoming_action=incoming_action,
         task_status=task_status,
         task_confidence=task_confidence,
         tool_calls=task_tool_calls,
     )
-    if (
-        agent_config.get("status") in ("shadow", "active")
-        and is_measurable
-    ):
+    if shadow_metrics["sample_counted"]:
         async with get_tenant_session(tid) as session:
             from sqlalchemy import text as sql_text
-            # Atomic increment to avoid race conditions between concurrent runs
-            await session.execute(
-                sql_text(
-                    "UPDATE agents SET "
-                    "shadow_sample_count = COALESCE(shadow_sample_count, 0) + 1, "
-                    "shadow_accuracy_current = ROUND(CAST("
-                    "  (COALESCE(shadow_accuracy_current, 0) * COALESCE(shadow_sample_count, 0) + :confidence)"
-                    "  / (COALESCE(shadow_sample_count, 0) + 1) AS NUMERIC), 3) "
-                    "WHERE id = :agent_id AND tenant_id = :tenant_id"
-                ),
-                {"confidence": task_confidence, "agent_id": str(agent_id), "tenant_id": tenant_id},
-            )
+
+            if shadow_metrics["accuracy_updated"]:
+                # Atomic increment to avoid race conditions between concurrent runs.
+                await session.execute(
+                    sql_text(
+                        "UPDATE agents SET "
+                        "shadow_sample_count = COALESCE(shadow_sample_count, 0) + 1, "
+                        "shadow_accuracy_current = ROUND(CAST("
+                        "  (COALESCE(shadow_accuracy_current, 0) * COALESCE(shadow_sample_count, 0) + :confidence)"
+                        "  / (COALESCE(shadow_sample_count, 0) + 1) AS NUMERIC), 3) "
+                        "WHERE id = :agent_id AND tenant_id = :tenant_id"
+                    ),
+                    {"confidence": task_confidence, "agent_id": str(agent_id), "tenant_id": tenant_id},
+                )
+            else:
+                await session.execute(
+                    sql_text(
+                        "UPDATE agents SET "
+                        "shadow_sample_count = COALESCE(shadow_sample_count, 0) + 1 "
+                        "WHERE id = :agent_id AND tenant_id = :tenant_id"
+                    ),
+                    {"agent_id": str(agent_id), "tenant_id": tenant_id},
+                )
             await session.commit()
 
     # 6d. Record cost in ledger (upsert — unique on tenant+agent+date)
@@ -2869,6 +2935,8 @@ async def run_agent(
         "hitl_trigger": hitl_trigger or None,
         "error": task_error or None,
     }
+    if incoming_action == "shadow_sample":
+        response["shadow_metrics"] = shadow_metrics
     return response
 
 

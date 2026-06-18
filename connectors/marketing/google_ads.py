@@ -1,7 +1,7 @@
 # ruff: noqa: S608 — GAQL is not SQL; query construction is safe (sent to Google Ads API)
 """Google Ads connector — marketing.
 
-Integrates with Google Ads API v17 via the REST interface.
+Integrates with Google Ads API via the REST interface.
 Google Ads uses GAQL (Google Ads Query Language) through a single
 searchStream endpoint rather than individual REST paths per resource.
 """
@@ -19,13 +19,19 @@ class GoogleAdsConnector(BaseConnector):
     name = "google_ads"
     category = "marketing"
     auth_type = "oauth2"
-    base_url = "https://googleads.googleapis.com/v17"
+    base_url = "https://googleads.googleapis.com/v24"
     rate_limit_rpm = 200
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        self._customer_id = self.config.get("customer_id", "")
+        self._customer_id = self._normalize_customer_id(
+            self.config.get("customer_id", "")
+        )
         self._developer_token = self.config.get("developer_token", "")
+
+    @staticmethod
+    def _normalize_customer_id(value: Any) -> str:
+        return str(value or "").replace("-", "").strip()
 
     def _register_tools(self):
         self._tool_registry["search_campaigns"] = self.search_campaigns
@@ -57,11 +63,13 @@ class GoogleAdsConnector(BaseConnector):
             "developer-token": self._developer_token,
         }
         if self.config.get("login_customer_id"):
-            self._auth_headers["login-customer-id"] = self.config["login_customer_id"]
+            self._auth_headers["login-customer-id"] = self._normalize_customer_id(
+                self.config["login_customer_id"]
+            )
 
     async def _gaql_search(self, query: str) -> list[dict[str, Any]]:
         """Execute a GAQL query via the searchStream endpoint."""
-        customer_id = self._customer_id.replace("-", "")
+        customer_id = self._customer_id
         resp = await self._post(
             f"/customers/{customer_id}/googleAds:searchStream",
             {"query": query},
@@ -75,9 +83,35 @@ class GoogleAdsConnector(BaseConnector):
 
     async def health_check(self) -> dict[str, Any]:
         try:
-            customer_id = self._customer_id.replace("-", "")
-            result = await self._get(f"/customers/{customer_id}")
-            return {"status": "healthy", "customer": result.get("resourceName", "")}
+            rows = await self._gaql_search(
+                "SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1"
+            )
+            customer = rows[0].get("customer", {}) if rows else {}
+            return {
+                "status": "healthy",
+                "customer_id": self._customer_id,
+                "customer": customer.get("resourceName", ""),
+                "customer_name": customer.get("descriptiveName", ""),
+            }
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            reason = (
+                "Google Ads health check failed through googleAds:searchStream. "
+                "Verify customer_id/login_customer_id, developer token approval, "
+                "OAuth scopes, and that the configured Google Ads API version is supported."
+            )
+            if status == 404:
+                reason = (
+                    "Google Ads returned HTTP 404 for the customer searchStream probe. "
+                    "This usually means the customer_id/login_customer_id is wrong for "
+                    "the authorized account or the configured Google Ads API version is retired."
+                )
+            return {
+                "status": "unhealthy",
+                "http_status": status,
+                "reason": reason,
+                "error": "google_ads_health_check_failed",
+            }
         # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
@@ -125,7 +159,7 @@ class GoogleAdsConnector(BaseConnector):
 
         Params: campaign_budget_id (required), amount_micros (required).
         """
-        customer_id = self._customer_id.replace("-", "")
+        customer_id = self._customer_id
         budget_id = params["campaign_budget_id"]
         amount = params["amount_micros"]
         return await self._post(
@@ -167,7 +201,7 @@ class GoogleAdsConnector(BaseConnector):
 
         Params: name (required), description, membership_life_span_days (30).
         """
-        customer_id = self._customer_id.replace("-", "")
+        customer_id = self._customer_id
         return await self._post(
             f"/customers/{customer_id}/userLists:mutate",
             {

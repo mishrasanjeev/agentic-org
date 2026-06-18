@@ -66,6 +66,12 @@ QUOTA_EXHAUSTED_MARKERS = ("quota_exhausted", "quota exhausted", "quota", "limit
 CONNECTOR_DISABLED_MARKERS = ("connector_disabled", "connector disabled", "disabled", "inactive")
 TEST_DOUBLE_PROOF_MARKERS = {"mock", "mock_only", "sample", "stub", "test", "test_double"}
 INTERNAL_ONLY_MODES = {"draft", "internal", "internal_only", "shadow"}
+HUBSPOT_CRM_READ_SCOPES = (
+    "crm.objects.contacts.read",
+    "crm.objects.deals.read",
+)
+HUBSPOT_OPTIONAL_SCOPES = ("automation",)
+HUBSPOT_CRM_READ_TOOLS = ("list_contacts", "search_contacts", "list_deals")
 
 
 @dataclass(frozen=True)
@@ -76,6 +82,38 @@ class MarketingConnectorContractSpec:
     required_read_scopes: tuple[str, ...] = ()
     required_write_scopes: tuple[str, ...] = ()
     ttl: timedelta = STALE_SYNC_AFTER
+
+
+@dataclass(frozen=True)
+class ConnectorContract:
+    key: str
+    provider: str
+    label: str
+    status: str
+    required_scopes: tuple[str, ...]
+    missing_scopes: tuple[str, ...]
+    optional_scopes: tuple[str, ...] = ()
+    non_blocking_scope_gaps: tuple[str, ...] = ()
+    required_tools: tuple[str, ...] = ()
+    missing_tools: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "provider": self.provider,
+            "label": self.label,
+            "status": self.status,
+            "required_scopes": list(self.required_scopes),
+            "missing_scopes": list(self.missing_scopes),
+            "optional_scopes": list(self.optional_scopes),
+            "non_blocking_scope_gaps": list(self.non_blocking_scope_gaps),
+            "required_tools": list(self.required_tools),
+            "missing_tools": list(self.missing_tools),
+            "evidence": list(self.evidence),
+            "reason": self.reason,
+        }
 
 
 CONTRACT_SPECS: dict[str, MarketingConnectorContractSpec] = {
@@ -425,6 +463,20 @@ def _build_contract_row(
     required_write_scopes = _tuple_from_payload(contract, "required_write_scopes", spec.required_write_scopes)
     missing_read_scopes = _missing_scopes(required_read_scopes, granted_scopes)
     missing_write_scopes = _missing_scopes(required_write_scopes, granted_scopes)
+    read_scope_evidence: list[str] = []
+    if _hubspot_private_app_read_scope_gap_is_non_blocking(
+        spec,
+        setup_row,
+        contract,
+        config_dict,
+        granted_scopes,
+        missing_read_scopes,
+        read_capabilities,
+    ):
+        read_scope_evidence.append(
+            "Healthy HubSpot connector state proves CRM read capability even without a persisted OAuth scope string."
+        )
+        missing_read_scopes = []
     last_sync_at = _last_sync_at(config, contract)
     ttl_seconds = _ttl_seconds(contract, spec.ttl)
     freshness_status = _freshness_status(last_sync_at, ttl_seconds, now)
@@ -513,6 +565,7 @@ def _build_contract_row(
         "missing_read_scopes": missing_read_scopes,
         "missing_write_scopes": missing_write_scopes,
         "missing_scopes": sorted(set(missing_read_scopes).union(missing_write_scopes)),
+        "read_scope_evidence": read_scope_evidence,
         "auth_status": auth_status,
         "health_status": setup_row.get("health_status"),
         "contract_state": contract_state,
@@ -1011,6 +1064,107 @@ def _missing_scopes(required: tuple[str, ...], granted: list[str]) -> list[str]:
     return [scope for scope in required if scope not in granted_set]
 
 
+def _normalise_scopes(*values: Any) -> set[str]:
+    scopes: set[str] = set()
+    for value in values:
+        for item in _list_from_value(value):
+            text = str(item).strip()
+            if text:
+                scopes.add(text)
+    return scopes
+
+
+def evaluate_hubspot_crm_read_contract(
+    *,
+    connector_status: str | None,
+    health_status: str | None,
+    tool_functions: list[Any] | tuple[Any, ...] | None,
+    credentials: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+) -> ConnectorContract:
+    """Evaluate the legacy HubSpot CRM read contract endpoint.
+
+    HubSpot private-app tokens and older OAuth connector configs do not always
+    persist a scope payload. When the connector is active, healthy, and its CRM
+    read tools are registered, absent scope strings are evidence gaps, not read
+    blockers.
+    """
+
+    tools = {_tool_name_from_value(tool) for tool in (tool_functions or [])}
+    tools.discard("")
+    missing_tools = tuple(tool for tool in HUBSPOT_CRM_READ_TOOLS if tool not in tools)
+    scopes = _normalise_scopes(
+        (credentials or {}).get("scope"),
+        (credentials or {}).get("scopes"),
+        (config or {}).get("scope"),
+        (config or {}).get("scopes"),
+        (config or {}).get("granted_scopes"),
+        (config or {}).get("validated_scopes"),
+    )
+    missing_required_scopes = tuple(scope for scope in HUBSPOT_CRM_READ_SCOPES if scope not in scopes)
+    missing_optional = tuple(scope for scope in HUBSPOT_OPTIONAL_SCOPES if scope not in scopes)
+    active = _normalize_key(connector_status) == "active"
+    healthy = _normalize_key(health_status) == "healthy"
+    evidence: list[str] = []
+    if active:
+        evidence.append("connector active")
+    if healthy:
+        evidence.append("health check healthy")
+    if not missing_tools:
+        evidence.append("HubSpot CRM read tools registered")
+    if scopes:
+        evidence.append("stored OAuth scope evidence")
+    else:
+        evidence.append("private app or legacy OAuth config without persisted scope string")
+
+    if not active or not healthy:
+        return ConnectorContract(
+            key="hubspot_crm_read",
+            provider="hubspot",
+            label="HubSpot CRM Read",
+            status="not_ready",
+            required_scopes=HUBSPOT_CRM_READ_SCOPES,
+            missing_scopes=missing_required_scopes,
+            optional_scopes=HUBSPOT_OPTIONAL_SCOPES,
+            non_blocking_scope_gaps=missing_optional,
+            required_tools=HUBSPOT_CRM_READ_TOOLS,
+            missing_tools=missing_tools,
+            evidence=tuple(evidence),
+            reason="HubSpot connector must be active and healthy.",
+        )
+
+    if missing_tools:
+        return ConnectorContract(
+            key="hubspot_crm_read",
+            provider="hubspot",
+            label="HubSpot CRM Read",
+            status="not_ready",
+            required_scopes=HUBSPOT_CRM_READ_SCOPES,
+            missing_scopes=missing_required_scopes,
+            optional_scopes=HUBSPOT_OPTIONAL_SCOPES,
+            non_blocking_scope_gaps=missing_optional,
+            required_tools=HUBSPOT_CRM_READ_TOOLS,
+            missing_tools=missing_tools,
+            evidence=tuple(evidence),
+            reason="HubSpot connector is missing required CRM read tools.",
+        )
+
+    return ConnectorContract(
+        key="hubspot_crm_read",
+        provider="hubspot",
+        label="HubSpot CRM Read",
+        status="ready",
+        required_scopes=HUBSPOT_CRM_READ_SCOPES,
+        missing_scopes=(),
+        optional_scopes=HUBSPOT_OPTIONAL_SCOPES,
+        non_blocking_scope_gaps=missing_optional,
+        required_tools=HUBSPOT_CRM_READ_TOOLS,
+        missing_tools=(),
+        evidence=tuple(evidence),
+        reason="CRM read capability is available from the healthy HubSpot connector and registered tools.",
+    )
+
+
 def _configs_by_key(connector_configs: Iterable[Any]) -> dict[str, Any]:
     return {
         str(getattr(config, "connector_name", "") or "").strip().lower(): config
@@ -1051,6 +1205,63 @@ def _workspace_id_from_config(config: dict[str, Any]) -> str | None:
 
 def _contains_any(value: str, markers: tuple[str, ...]) -> bool:
     return any(marker in value for marker in markers)
+
+
+def _hubspot_private_app_read_scope_gap_is_non_blocking(
+    spec: MarketingConnectorContractSpec,
+    setup_row: dict[str, Any],
+    contract: dict[str, Any],
+    config: dict[str, Any],
+    granted_scopes: list[str],
+    missing_read_scopes: list[str],
+    read_capabilities: tuple[str, ...],
+) -> bool:
+    if spec.connector_key != "hubspot" or not missing_read_scopes:
+        return False
+    if not set(missing_read_scopes).issubset(set(HUBSPOT_CRM_READ_SCOPES)):
+        return False
+    if not read_capabilities:
+        return False
+    if str(setup_row.get("configured_status") or "") == "unconfigured":
+        return False
+
+    explicit_blocker_text = " ".join(
+        str(part or "")
+        for part in (
+            contract.get("degraded_mode_reason"),
+            contract.get("blocking_reason"),
+            contract.get("last_error"),
+            config.get("last_error"),
+            setup_row.get("detail"),
+        )
+    ).lower()
+    if _contains_any(explicit_blocker_text, AUTH_EXPIRED_MARKERS) or _contains_any(
+        explicit_blocker_text,
+        MISSING_SCOPE_MARKERS,
+    ):
+        return False
+
+    health_values = {
+        _normalize_key(setup_row.get("health_status")),
+        _normalize_key(contract.get("health_status")),
+        _normalize_key(contract.get("status")),
+        _normalize_key(config.get("health_status")),
+    }
+    if health_values.isdisjoint({"healthy", "ok", "ready", "valid"}):
+        return False
+
+    # If a scope payload exists and proves some read scopes are actually
+    # missing, keep the stricter blocker. The override is only for private-app
+    # or legacy configs with no persisted read-scope evidence at all.
+    return not set(granted_scopes).intersection(set(HUBSPOT_CRM_READ_SCOPES))
+
+
+def _tool_name_from_value(tool: Any) -> str:
+    if isinstance(tool, dict):
+        nested = tool.get("function")
+        nested_name = nested.get("name") if isinstance(nested, dict) else None
+        return str(tool.get("name") or nested_name or "").strip()
+    return str(getattr(tool, "name", tool) or "").strip()
 
 
 def _list_from_value(value: Any) -> list[Any]:

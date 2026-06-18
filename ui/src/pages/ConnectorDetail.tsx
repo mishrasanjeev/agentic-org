@@ -263,11 +263,16 @@ export default function ConnectorDetailPage() {
         });
       } else if (status) {
         const reason: string = data?.health?.reason || data?.health?.error || "";
+        const remediation: string = data?.health?.remediation || "";
+        const scopes = Array.isArray(data?.health?.required_scopes)
+          ? ` Required scopes: ${data.health.required_scopes.join(", ")}.`
+          : "";
+        const detail = [reason, remediation].filter(Boolean).join(" ");
         const code = httpStatus ? ` (HTTP ${httpStatus})` : "";
         setFeedback({
           type: "error",
-          msg: reason
-            ? `Connection ${status}${code}: ${reason}`
+          msg: detail
+            ? `Connection ${status}${code}: ${detail}${scopes}`
             : `Connection ${status}${code}`,
         });
       } else {

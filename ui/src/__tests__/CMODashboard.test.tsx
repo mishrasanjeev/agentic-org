@@ -141,10 +141,13 @@ const MOCK_CONNECTOR_CONTRACTS = [
     read_capabilities: ["contacts", "deals", "campaigns"],
     write_capabilities: ["update_crm"],
     required_read_scopes: ["crm.objects.contacts.read", "crm.objects.deals.read"],
-    required_write_scopes: ["crm.objects.contacts.write"],
-    granted_scopes: ["crm.objects.contacts.read", "crm.objects.deals.read", "crm.objects.contacts.write"],
+    required_write_scopes: [],
+    granted_scopes: [],
     missing_read_scopes: [],
     missing_write_scopes: [],
+    read_scope_evidence: [
+      "Healthy HubSpot connector state proves CRM read capability even without a persisted OAuth scope string.",
+    ],
     auth_status: "valid",
     health_status: "healthy",
     contract_state: "healthy",
@@ -1117,6 +1120,8 @@ describe("CMODashboard", () => {
     expect(screen.getAllByText("Write Unconfirmed").length).toBeGreaterThan(0);
     expect(screen.getByText("2/3 left, 1 used")).toBeInTheDocument();
     expect(screen.getAllByText("Idempotency ready").length).toBeGreaterThan(0);
+    expect(screen.getByText("Healthy HubSpot connector state proves CRM read capability even without a persisted OAuth scope string.")).toBeInTheDocument();
+    expect(screen.queryByText("Missing: crm.objects.contacts.read, crm.objects.deals.read")).not.toBeInTheDocument();
     expect(screen.getByText("Missing write scopes: campaigns.write.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Add Scope" }).length).toBeGreaterThan(0);
   });

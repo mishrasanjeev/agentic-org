@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
+from core.marketing.connector_contracts import evaluate_hubspot_crm_read_contract
 from core.models.connector import Connector
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
 
@@ -546,6 +547,34 @@ def _connector_tool_functions(conn: Connector) -> list[str]:
     return []
 
 
+async def _connector_config_credentials(
+    config: Any,
+    tenant_id: _uuid.UUID,
+) -> dict[str, Any]:
+    encrypted = getattr(config, "credentials_encrypted", None)
+    if not encrypted:
+        return {}
+    try:
+        import json as _cjson
+
+        creds = encrypted
+        if isinstance(creds, str):
+            creds = _cjson.loads(creds)
+        if isinstance(creds, dict) and "_encrypted" in creds:
+            from core.crypto import decrypt_for_tenant
+
+            return _cjson.loads(decrypt_for_tenant(creds["_encrypted"]))
+        return creds if isinstance(creds, dict) else {}
+    # enterprise-gate: broad-except-ok reason=connector-contract-secret-decrypt-fails-closed-empty
+    except Exception:
+        _log.debug(
+            "connector_contract_credentials_decrypt_failed tenant_id=%s",
+            tenant_id,
+            exc_info=True,
+        )
+        return {}
+
+
 def _assert_public_base_url(base_url: str) -> None:
     """Reject connector base_urls that resolve to private/reserved ranges.
 
@@ -704,6 +733,61 @@ async def list_registry_connectors(category: str | None = None):
     items.sort(key=lambda x: x["display_name"].lower())
 
     return {"items": items, "total": len(items)}
+
+
+@router.get("/connectors/contracts/marketing")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.contracts.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.contracts.marketing.read",
+)
+async def marketing_connector_contracts(
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Return connector readiness contracts used by CMO workflows."""
+    from core.models.connector_config import ConnectorConfig
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        conn_result = await session.execute(
+            select(Connector).where(
+                Connector.tenant_id == tid,
+                Connector.name == "hubspot",
+                Connector.status != "deleted",
+            )
+        )
+        hubspot = conn_result.scalar_one_or_none()
+        cfg_result = await session.execute(
+            select(ConnectorConfig).where(
+                ConnectorConfig.tenant_id == tid,
+                ConnectorConfig.connector_name == "hubspot",
+            )
+        )
+        hubspot_config = cfg_result.scalar_one_or_none()
+
+    contracts = []
+    if hubspot is not None:
+        credentials = (
+            await _connector_config_credentials(hubspot_config, tid)
+            if hubspot_config is not None
+            else {}
+        )
+        contract = evaluate_hubspot_crm_read_contract(
+            connector_status=hubspot.status,
+            health_status=getattr(hubspot_config, "health_status", None),
+            tool_functions=_connector_tool_functions(hubspot),
+            credentials=credentials,
+            config=getattr(hubspot_config, "config", {}) if hubspot_config else {},
+        )
+        contracts.append(contract.to_dict())
+
+    return {
+        "contracts": contracts,
+        "ready": all(item.get("status") == "ready" for item in contracts),
+    }
 
 
 # ── GET /tools — Function-level tool names ─────────────────────────────────
@@ -1788,7 +1872,11 @@ async def test_connector(
                 cc.sync_error = (
                     None
                     if health.get("status") == "healthy"
-                    else str(health.get("error") or "health_check_failed")
+                    else str(
+                        health.get("reason")
+                        or health.get("error")
+                        or "health_check_failed"
+                    )
                 )
 
         return {

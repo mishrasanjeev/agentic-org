@@ -1361,6 +1361,9 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
       // (re-running a fully sampled agent is allowed but rare).
       const plannedRuns = gap > 0 ? Math.min(requested, gap) : requested;
       let successes = 0;
+      let counted = 0;
+      let accuracyPending = 0;
+      let lastMetricReason = "";
       let consecutiveFailures = 0;
       for (let i = 0; i < plannedRuns; i++) {
         if (stopRequestedRef.current) {
@@ -1377,7 +1380,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
           msg: `Generating sample ${i + 1}/${plannedRuns}…`,
         });
         try {
-          await api.post(
+          const response = await api.post(
             `/agents/${agent.id}/run`,
             {
               action: "shadow_sample",
@@ -1387,7 +1390,17 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
             // signal so clicking Stop cancels the in-flight POST.
             { signal: abortRef.current.signal },
           );
+          const metrics = response.data?.shadow_metrics;
           successes += 1;
+          if (metrics?.sample_counted === false) {
+            lastMetricReason = metrics?.reason || "sample_not_counted";
+          } else {
+            counted += 1;
+            if (metrics?.accuracy_updated === false) {
+              accuracyPending += 1;
+              lastMetricReason = metrics?.reason || "accuracy_pending";
+            }
+          }
           consecutiveFailures = 0;
           await onUpdated();
         } catch (err: any) {
@@ -1408,10 +1421,21 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
         }
       }
       setGenResult({
-        type: "success",
+        type: counted > 0 || successes === 0 ? "success" : "error",
         msg:
-          `Generated ${successes} shadow sample${successes === 1 ? "" : "s"} (of ${plannedRuns} attempted). ` +
-          "Updated count and accuracy.",
+          counted > 0
+            ? (
+              `Generated ${successes} shadow sample${successes === 1 ? "" : "s"} (of ${plannedRuns} attempted). ` +
+              (
+                accuracyPending > 0
+                  ? "Count updated; accuracy pending until a measurable result is available."
+                  : "Updated count and accuracy."
+              )
+            )
+            : (
+              `Generated ${successes} shadow sample${successes === 1 ? "" : "s"}, but metrics did not update` +
+              (lastMetricReason ? ` (${lastMetricReason}).` : ".")
+            ),
       });
     } catch (err: any) {
       setGenResult({ type: "error", msg: errorDetailToMessage(err, "Failed to generate sample. The agent may need to be configured first.") });

@@ -19,6 +19,10 @@ class GA4Connector(BaseConnector):
     auth_type = "oauth2"
     base_url = "https://analyticsdata.googleapis.com/v1beta"
     rate_limit_rpm = 200
+    required_scopes = (
+        "https://www.googleapis.com/auth/analytics.readonly",
+        "https://www.googleapis.com/auth/analytics",
+    )
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
@@ -56,6 +60,46 @@ class GA4Connector(BaseConnector):
         try:
             result = await self._get(f"/properties/{self._property_id}/metadata")
             return {"status": "healthy", "dimensions": len(result.get("dimensions", []))}
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status == 403:
+                return {
+                    "status": "unhealthy",
+                    "http_status": 403,
+                    "error": "ga4_permission_denied",
+                    "reason": (
+                        "GA4 permission denied for the property metadata endpoint. "
+                        "The Google account must have at least Viewer access to this "
+                        "GA4 property and the OAuth grant must include an Analytics "
+                        "read scope."
+                    ),
+                    "remediation": (
+                        "In Google Analytics Admin, grant the authorizing user Viewer "
+                        f"access to property {self._property_id}; in Google Cloud, "
+                        "enable the Google Analytics Data API; then reconnect the "
+                        "connector with an Analytics read scope."
+                    ),
+                    "required_scopes": list(self.required_scopes),
+                    "property_id": self._property_id,
+                }
+            if status == 404:
+                return {
+                    "status": "unhealthy",
+                    "http_status": 404,
+                    "error": "ga4_property_not_found",
+                    "reason": (
+                        "GA4 property metadata was not found. Verify the numeric "
+                        "property_id and that it belongs to the authorized account."
+                    ),
+                    "property_id": self._property_id,
+                }
+            return {
+                "status": "unhealthy",
+                "http_status": status,
+                "error": "ga4_health_check_failed",
+                "reason": "GA4 metadata health check failed.",
+                "property_id": self._property_id,
+            }
         # enterprise-gate: broad-except-ok reason=connector-health-boundary-reports-unhealthy
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
