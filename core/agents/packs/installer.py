@@ -996,8 +996,15 @@ async def _merge_install_assets(
 
     await session.execute(
         text("""
-            INSERT INTO industry_pack_installs (tenant_id, pack_name, agent_ids, workflow_ids)
+            INSERT INTO industry_pack_installs (
+                id,
+                tenant_id,
+                pack_name,
+                agent_ids,
+                workflow_ids
+            )
             VALUES (
+                :id,
                 :tenant_id,
                 :pack_name,
                 CAST(:agent_ids AS jsonb),
@@ -1005,6 +1012,7 @@ async def _merge_install_assets(
             )
         """),
         {
+            "id": uuid.uuid4(),
             "tenant_id": tid,
             "pack_name": pack_name,
             "agent_ids": json.dumps(merged_agent_ids),

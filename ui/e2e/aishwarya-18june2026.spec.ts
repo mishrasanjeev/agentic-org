@@ -144,26 +144,70 @@ test.describe("Aishwarya 18 June 2026 connector reopen regressions", () => {
           domain_breakdown: [
             { domain: "marketing", total: 10, completed: 9, failed: 1, avg_confidence: 0.9 },
           ],
-        },
-      });
-    });
-    await page.route("**/api/v1/connectors/contracts/marketing", async (route) => {
-      await route.fulfill({
-        json: {
-          ready: true,
-          contracts: [
+          connector_contracts: [
             {
-              key: "hubspot_crm_read",
-              provider: "hubspot",
-              label: "HubSpot CRM Read",
-              status: "ready",
-              required_scopes: ["crm.objects.contacts.read", "crm.objects.deals.read"],
-              missing_scopes: [],
-              non_blocking_scope_gaps: ["automation"],
-              evidence: ["health check healthy", "HubSpot CRM read tools registered"],
-              reason: "CRM read capability is available.",
+              connector_key: "hubspot",
+              name: "HubSpot CRM Read",
+              category: "CRM",
+              configured_status: "configured",
+              vendor_id: null,
+              account_id: "portal-123",
+              workspace_id: null,
+              read_capabilities: ["contacts.read", "deals.read", "lists.read"],
+              write_capabilities: [],
+              required_read_scopes: ["crm.objects.contacts.read", "crm.objects.deals.read"],
+              required_write_scopes: [],
+              granted_scopes: [],
+              missing_read_scopes: [],
+              missing_write_scopes: [],
+              read_scope_evidence: [
+                "Healthy HubSpot connector state proves CRM read capability even without a persisted OAuth scope string.",
+              ],
+              auth_status: "valid",
+              health_status: "healthy",
+              contract_state: "healthy",
+              read_status: "ready",
+              write_status: "read_only",
+              read_ready: true,
+              write_ready: false,
+              production_ready: true,
+              mock_or_test_double: false,
+              last_sync_at: "2026-06-18T00:00:00Z",
+              source_objects: [],
+              data_freshness: {
+                status: "fresh",
+                ttl_seconds: 86400,
+                last_sync_at: "2026-06-18T00:00:00Z",
+              },
+              retry_budget: {
+                max_attempts: 0,
+                attempts_used: 0,
+                remaining_attempts: 0,
+                reset_at: null,
+                next_retry_at: null,
+                idempotency_key: null,
+                idempotency_supported: false,
+              },
+              degraded_mode_reason: null,
+              idempotency_key_supported: false,
+              external_write_confirmation_status: "none",
+              external_write_confirmations: [],
+              next_action_cta: "none",
             },
           ],
+          connector_contract_summary: {
+            total: 1,
+            configured: 1,
+            read_ready: 1,
+            write_ready: 0,
+            blocked: 0,
+            degraded: 0,
+            missing_write_scope: 0,
+            write_unconfirmed: 0,
+            write_confirmed: 0,
+            mock_or_test_double: 0,
+            readiness: "ready",
+          },
         },
       });
     });
@@ -172,7 +216,8 @@ test.describe("Aishwarya 18 June 2026 connector reopen regressions", () => {
 
     await expect(page.locator("main")).toContainText("Marketing Connector Contracts");
     await expect(page.locator("main")).toContainText("HubSpot CRM Read");
-    await expect(page.locator("main")).toContainText("ready");
-    await expect(page.locator("main")).not.toContainText("crm.objects.contacts.read, crm.objects.deals.read");
+    await expect(page.locator("main")).toContainText("Ready");
+    await expect(page.locator("main")).toContainText("Healthy HubSpot connector state proves CRM read capability");
+    await expect(page.locator("main")).not.toContainText("Missing: crm.objects.contacts.read, crm.objects.deals.read");
   });
 });

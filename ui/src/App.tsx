@@ -6,11 +6,11 @@ import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-/* ── Critical path: Landing page loaded eagerly ── */
+/* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 
-/* ── Lazy import with auto-reload on chunk failure ── */
+/* -- Lazy import with auto-reload on chunk failure -- */
 function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
   return lazy(() =>
     factory().catch(() => {
@@ -25,7 +25,7 @@ function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
   );
 }
 
-/* ── Everything else lazy-loaded ── */
+/* -- Everything else lazy-loaded -- */
 const Login = lazyRetry(() => import("./pages/Login"));
 const Signup = lazyRetry(() => import("./pages/Signup"));
 const InviteAccept = lazyRetry(() => import("./pages/InviteAccept"));
@@ -52,6 +52,7 @@ const Approvals = lazyRetry(() => import("./pages/Approvals"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
 const ConnectorCreate = lazyRetry(() => import("./pages/ConnectorCreate"));
 const ConnectorDetail = lazyRetry(() => import("./pages/ConnectorDetail"));
+const CMOVendorSandboxConnectors = lazyRetry(() => import("./pages/CMOVendorSandboxConnectors"));
 const Schemas = lazyRetry(() => import("./pages/Schemas"));
 const Audit = lazyRetry(() => import("./pages/Audit"));
 const Observatory = lazyRetry(() => import("./pages/Observatory"));
@@ -62,8 +63,9 @@ const SLAMonitor = lazyRetry(() => import("./pages/SLAMonitor"));
 const PromptTemplates = lazyRetry(() => import("./pages/PromptTemplates"));
 const SalesPipeline = lazyRetry(() => import("./pages/SalesPipeline"));
 const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
+const CommerceRuntimeDemo = lazyRetry(() => import("./pages/CommerceRuntimeDemo"));
 
-/* ── Role-specific dashboards ── */
+/* -- Role-specific dashboards -- */
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
 const CostDashboard = lazyRetry(() => import("./pages/CostDashboard"));
 const StatusPage = lazyRetry(() => import("./pages/Status"));
@@ -74,61 +76,66 @@ const COODashboard = lazyRetry(() => import("./pages/COODashboard"));
 const CBODashboard = lazyRetry(() => import("./pages/CBODashboard"));
 const CEODashboard = lazyRetry(() => import("./pages/CEODashboard"));
 
-/* ── ABM Dashboard ── */
+/* -- ABM Dashboard -- */
 const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
 
-/* ── Report Schedules ── */
+/* -- Report Schedules -- */
 const ReportScheduler = lazyRetry(() => import("./pages/ReportScheduler"));
 const RPASchedules = lazyRetry(() => import("./pages/RPASchedules"));
 const AICredentials = lazyRetry(() => import("./pages/AICredentials"));
 const AIConfig = lazyRetry(() => import("./pages/AIConfig"));
 
-/* ── Knowledge Base, Voice, RPA, Industry Packs ── */
+/* -- Knowledge Base, Voice, RPA, Industry Packs -- */
 const KnowledgeBase = lazyRetry(() => import("./pages/KnowledgeBase"));
 const VoiceSetup = lazyRetry(() => import("./pages/VoiceSetup"));
 const RPAScripts = lazyRetry(() => import("./pages/RPAScripts"));
 const IndustryPacks = lazyRetry(() => import("./pages/IndustryPacks"));
 
-/* ── Billing ── */
+/* -- Billing -- */
 const Billing = lazyRetry(() => import("./pages/Billing"));
 const BillingCallback = lazyRetry(() => import("./pages/BillingCallback"));
 
-/* ── Scope Enforcement ── */
+/* -- Scope Enforcement -- */
 const ScopeDashboard = lazyRetry(() => import("./pages/ScopeDashboard"));
 const EnforceAuditLog = lazyRetry(() => import("./pages/EnforceAuditLog"));
 
-/* ── Blog / Content pages ── */
+/* -- Blog / Content pages -- */
 const Blog = lazyRetry(() => import("./pages/blog/Blog"));
 const BlogPost = lazyRetry(() => import("./pages/blog/BlogPost"));
 
-/* ── Integration workflow page ── */
+/* -- Integration workflow page -- */
 const IntegrationWorkflow = lazyRetry(() => import("./pages/IntegrationWorkflow"));
+const OpenAgenticCommerceProtocol = lazyRetry(() => import("./pages/OpenAgenticCommerceProtocol"));
 
-/* ── Google Ads landing pages ── */
+/* -- Google Ads landing pages -- */
 const AdsLanding = lazyRetry(() => import("./pages/ads/AdsLanding"));
 
-/* ── Resource / SEO content pages ── */
+/* -- Resource / SEO content pages -- */
 const Resources = lazyRetry(() => import("./pages/resources/Resources"));
 const ResourcePage = lazyRetry(() => import("./pages/resources/ResourcePage"));
 
-/* ── Explainer pages ── */
+/* -- Explainer pages -- */
 const HowGrantexWorks = lazyRetry(() => import("./pages/HowGrantexWorks"));
 
-/* ── CxO Solution pages ── */
+/* -- CxO Solution pages -- */
 const CFOSolution = lazyRetry(() => import("./pages/CFOSolution"));
 const CHROSolution = lazyRetry(() => import("./pages/CHROSolution"));
 const CMOSolution = lazyRetry(() => import("./pages/CMOSolution"));
 const COOSolution = lazyRetry(() => import("./pages/COOSolution"));
 const CBOSolution = lazyRetry(() => import("./pages/CBOSolution"));
 
-/* ── CA Firms / Company pages ── */
+/* -- CA Firms / Company pages -- */
 const CAFirmsSolution = lazyRetry(() => import("./pages/CAFirmsSolution"));
 const CompanyDashboard = lazyRetry(() => import("./pages/CompanyDashboard"));
 const CompanyOnboard = lazyRetry(() => import("./pages/CompanyOnboard"));
 const CompanyDetail = lazyRetry(() => import("./pages/CompanyDetail"));
 const PartnerDashboard = lazyRetry(() => import("./pages/PartnerDashboard"));
+const CAOperations = lazyRetry(() => import("./pages/CAOperations"));
+const ProfessionalTax = lazyRetry(() => import("./pages/ProfessionalTax"));
+const ClientPortal = lazyRetry(() => import("./pages/ClientPortal"));
+const CABilling = lazyRetry(() => import("./pages/CABilling"));
 
-/* ── Loading fallback ── */
+/* -- Loading fallback -- */
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -160,7 +167,7 @@ export default function App() {
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/playground" element={<Playground />} />
 
-      {/* Legal / policy pages — required for Stripe activation */}
+      {/* Legal / policy pages - required for Stripe activation */}
       <Route path="/support" element={<Support />} />
       <Route path="/contact" element={<Support />} />
       <Route path="/privacy" element={<Privacy />} />
@@ -181,6 +188,7 @@ export default function App() {
 
       {/* Integration workflow */}
       <Route path="/integration-workflow" element={<IntegrationWorkflow />} />
+      <Route path="/open-agentic-commerce-protocol" element={<OpenAgenticCommerceProtocol />} />
 
       {/* Explainer pages */}
       <Route path="/how-grantex-works" element={<HowGrantexWorks />} />
@@ -200,7 +208,7 @@ export default function App() {
       <Route path="/solutions/automated-bank-reconciliation" element={<AdsLanding />} />
       <Route path="/solutions/payroll-automation" element={<AdsLanding />} />
 
-      {/* Dashboard and all app routes — wrapped in Layout + ProtectedRoute */}
+      {/* Dashboard and all app routes - wrapped in Layout + ProtectedRoute */}
       <Route
         path="/dashboard"
         element={
@@ -237,6 +245,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cmo"]}>
             <Layout>
               <CMODashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/commerce-runtime"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <CommerceRuntimeDemo />
             </Layout>
           </ProtectedRoute>
         }
@@ -502,6 +520,16 @@ export default function App() {
         }
       />
       <Route
+        path="/dashboard/connectors/cmo-vendor-sandbox"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <CMOVendorSandboxConnectors />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/dashboard/connectors/:id"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
@@ -629,6 +657,46 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
             <Layout>
               <PartnerDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ca-operations"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <CAOperations />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/professional-tax"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <ProfessionalTax />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/client-portal"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <ClientPortal />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ca-billing"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
+            <Layout>
+              <CABilling />
             </Layout>
           </ProtectedRoute>
         }

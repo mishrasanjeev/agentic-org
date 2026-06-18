@@ -20,6 +20,7 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
+from starlette.routing import Match
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -32,6 +33,16 @@ TENANT_B = uuid.UUID("00000000-0000-0000-0000-000000000002")
 GSTIN_RE = re.compile(r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}\d{1}[A-Z]{1}\d{1}$")
 PAN_RE = re.compile(r"^[A-Z]{5}\d{4}[A-Z]{1}$")
 TAN_RE = re.compile(r"^[A-Z]{4}\d{5}[A-Z]{1}$")
+
+
+def _assert_route_registered(app, path: str, method: str = "GET") -> None:
+    scope = {"type": "http", "path": path, "root_path": "", "method": method.upper()}
+    matched = [
+        route
+        for route in app.router.routes
+        if hasattr(route, "matches") and route.matches(scope)[0] == Match.FULL
+    ]
+    assert matched, f"{method} {path} is not registered"
 
 
 # ============================================================================
@@ -352,27 +363,19 @@ class TestCompanyAPIRoutes:
     def test_company_routes_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
-        # Must have company CRUD routes
-        assert any("/companies" in p for p in route_paths), (
-            f"No /companies route found. Routes with 'compan': "
-            f"{[p for p in route_paths if 'compan' in p.lower()]}"
-        )
+        _assert_route_registered(app, "/api/v1/companies")
 
     def test_onboard_route_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
-        assert any("onboard" in p for p in route_paths), (
-            f"No onboard route found. Routes: {[p for p in route_paths if 'compan' in p.lower()]}"
-        )
+        _assert_route_registered(app, "/api/v1/companies/onboard", method="POST")
 
     def test_roles_route_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
-        assert any("roles" in p for p in route_paths), (
-            f"No roles route found. Routes: {[p for p in route_paths if 'compan' in p.lower()]}"
+        _assert_route_registered(
+            app,
+            "/api/v1/companies/00000000-0000-0000-0000-000000000001/roles",
         )
 
 

@@ -4,13 +4,27 @@ const zohoTools = [
   "create_invoice",
   "list_invoices",
   "list_overdue_invoices",
+  "list_vendors",
+  "create_vendor",
+  "create_item",
+  "create_bill",
+  "get_vendor_details",
   "record_expense",
+  "list_expense_transactions",
+  "get_expense_transactions",
+  "list_vendor_bills",
+  "get_purchase_invoices",
+  "get_bill_by_id",
+  "update_bill",
+  "get_vendor_payables",
   "get_balance_sheet",
   "get_profit_loss",
   "get_ledger_balance",
   "get_trial_balance",
   "generate_gst_report",
   "calculate_tds",
+  "create_tds_entry",
+  "create_journal_entry",
   "list_chartofaccounts",
   "fetch_bank_statement",
   "check_account_balance",
@@ -42,7 +56,34 @@ async function installRoutes(page: Page) {
 
     if (path.endsWith("/product-facts")) {
       await route.fulfill({
-        json: { version: "test", connector_count: 1, agent_count: 1, tool_count: 17 },
+        json: { version: "test", connector_count: 1, agent_count: 1, tool_count: 31 },
+      });
+      return;
+    }
+
+    if (path.endsWith("/agents")) {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "agent-low-shadow",
+              name: "CA GST Agent",
+              employee_name: "CA GST Agent",
+              agent_type: "gst_filing_agent",
+              domain: "finance",
+              status: "active",
+              version: "1.0.0",
+              confidence_floor: 0.8,
+              shadow_accuracy_current: 0.42,
+              shadow_accuracy_floor: 0.7,
+              shadow_sample_count: 12,
+              authorized_tools: ["zoho_books:list_invoices"],
+              connector_ids: ["registry-zoho_books"],
+            },
+          ],
+          total: 1,
+          pages: 1,
+        },
       });
       return;
     }
@@ -80,7 +121,7 @@ async function installRoutes(page: Page) {
           name: "zoho_books",
           category: "finance",
           description: "Zoho Books",
-          base_url: "https://books.zoho.in/api/v3",
+          base_url: "https://www.zohoapis.in/books/v3",
           auth_type: "oauth2",
           tool_functions: zohoTools,
           data_schema_ref: null,
@@ -130,10 +171,12 @@ test.describe("Ramesh 11 May 2026 CA/Zoho regressions", () => {
     await installRoutes(page);
 
     await page.goto(`${baseURL}/dashboard/connectors/zoho-1`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main")).toContainText("https://books.zoho.in/api/v3");
-    await expect(page.locator("main")).toContainText("Registered Tools (17)");
+    await expect(page.locator("main")).toContainText("https://www.zohoapis.in/books/v3");
+    await expect(page.locator("main")).toContainText("Registered Tools (31)");
     await expect(page.locator("main")).toContainText("get_trial_balance");
     await expect(page.locator("main")).toContainText("reconcile_transaction");
+    await expect(page.locator("main")).toContainText("create_tds_entry");
+    await expect(page.locator("main")).toContainText("list_vendor_bills");
 
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByPlaceholder("https://accounts.zoho.in/oauth/v2/token")).toBeVisible();
@@ -149,5 +192,15 @@ test.describe("Ramesh 11 May 2026 CA/Zoho regressions", () => {
     await expect(page.locator("main")).toContainText("Acme Manufacturing - Bank Recon Daily");
     await expect(page.locator("main")).toContainText("Trigger:");
     await expect(page.locator("main")).toContainText("schedule");
+  });
+
+  test("Agent fleet flags active agents whose shadow accuracy fell below floor", async ({ page, baseURL }) => {
+    await installRoutes(page);
+
+    await page.goto(`${baseURL}/dashboard/agents`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("main")).toContainText("CA GST Agent");
+    await expect(page.locator("main")).toContainText("Below Floor");
+    await expect(page.locator("main")).toContainText("Shadow Accuracy:");
+    await expect(page.locator("main")).toContainText("42.0%");
   });
 });

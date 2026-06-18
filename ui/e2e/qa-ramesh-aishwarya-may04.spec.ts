@@ -1,19 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const user = {
-  email: "aishwarya@agenticorg.ai",
-  name: "Aishwarya",
-  role: "admin",
-  domain: "finance",
-  tenant_id: "11111111-1111-1111-1111-111111111111",
-  onboarding_complete: true,
-};
-
-async function mockAuthenticatedApp(page: import("@playwright/test").Page) {
-  await page.route("**/api/v1/auth/me", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(user) });
-  });
-}
+import { authenticate } from "./helpers/auth";
 
 async function mockPartnerDashboard(page: import("@playwright/test").Page) {
   await page.route("**/api/v1/partner-dashboard", async (route) => {
@@ -56,7 +42,7 @@ async function mockPartnerDashboard(page: import("@playwright/test").Page) {
 }
 
 test("Partner dashboard labels overdue values as filings and reflects inactive clients", async ({ page }) => {
-  await mockAuthenticatedApp(page);
+  await authenticate(page);
   await mockPartnerDashboard(page);
 
   await page.goto("/dashboard/partner");
@@ -72,9 +58,9 @@ test("Partner dashboard labels overdue values as filings and reflects inactive c
 });
 
 test("Hindi language switch reaches partner dashboard metric labels", async ({ page }) => {
-  await mockAuthenticatedApp(page);
-  await mockPartnerDashboard(page);
   await page.addInitScript(() => localStorage.setItem("agenticorg_lang", "hi"));
+  await authenticate(page);
+  await mockPartnerDashboard(page);
 
   await page.goto("/dashboard/partner");
 
@@ -84,7 +70,7 @@ test("Hindi language switch reaches partner dashboard metric labels", async ({ p
 });
 
 test("OAuth2 connector setup registers internally without external authorization", async ({ page }) => {
-  await mockAuthenticatedApp(page);
+  await authenticate(page);
   let createBody: any = null;
   await page.route("**/api/v1/connectors", async (route) => {
     if (route.request().method() !== "POST") {

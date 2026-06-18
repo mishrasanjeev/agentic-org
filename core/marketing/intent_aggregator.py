@@ -149,6 +149,7 @@ class IntentAggregator:
         try:
             await connector.connect()
             return await connector.get_surge_scores(domains=domain)
+        # enterprise-gate: broad-except-ok reason=bombora-provider-failure-returns-explicit-provider-error
         except Exception as exc:
             logger.warning("bombora_fetch_error", domain=domain, error=str(exc))
             return {"error": str(exc)}
@@ -163,6 +164,7 @@ class IntentAggregator:
         try:
             await connector.connect()
             return await connector.get_intent_signals(domain=domain)
+        # enterprise-gate: broad-except-ok reason=g2-provider-failure-returns-explicit-provider-error
         except Exception as exc:
             logger.warning("g2_fetch_error", domain=domain, error=str(exc))
             return {"error": str(exc)}
@@ -177,6 +179,7 @@ class IntentAggregator:
         try:
             await connector.connect()
             return await connector.get_buyer_intent(vendor_id=domain)
+        # enterprise-gate: broad-except-ok reason=trustradius-provider-failure-returns-explicit-provider-error
         except Exception as exc:
             logger.warning("trustradius_fetch_error", domain=domain, error=str(exc))
             return {"error": str(exc)}

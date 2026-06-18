@@ -40,7 +40,7 @@ ZOHO_REGIONS: dict[str, dict[str, str]] = {
         "authorize_url": "https://accounts.zoho.in/oauth/v2/auth",
         "token_url": "https://accounts.zoho.in/oauth/v2/token",
         "revoke_url": "https://accounts.zoho.in/oauth/v2/token/revoke",
-        "api_base_url": "https://www.zohoapis.in/books/v3",
+        "api_base_url": "https://books.zoho.in/api/v3",
     },
     "eu": {
         "authorize_url": "https://accounts.zoho.eu/oauth/v2/auth",
@@ -530,24 +530,20 @@ def _bootstrap() -> None:
             api_base_url="https://gsp.adaequare.com/gsp",
             user_fields=(
                 ProviderField(
-                    key="api_key",
-                    label="GSP API Key (aspid)",
-                    placeholder="aspid value from your GSP",
+                    key="client_id",
+                    label="GSP App ID (gspappid)",
+                    placeholder="gspappid from Adaequare GSP",
+                ),
+                ProviderField(
+                    key="client_secret",
+                    label="GSP App Secret (gspappsecret)",
+                    placeholder="gspappsecret from Adaequare GSP",
                     secret=True,
                 ),
                 ProviderField(
                     key="gstin",
                     label="GSTIN",
                     placeholder="09AABCU9355J1ZS",
-                ),
-                ProviderField(
-                    key="username",
-                    label="GST Portal Username",
-                ),
-                ProviderField(
-                    key="password",
-                    label="GST Portal Password",
-                    secret=True,
                 ),
                 ProviderField(
                     key="dsc_path",

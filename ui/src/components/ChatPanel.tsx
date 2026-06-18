@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import api from "../lib/api";
+import api, { extractApiError } from "../lib/api";
+import { extractReadableAgentOutput } from "@/lib/agent-output";
 
 interface Message {
   id: string;
@@ -18,86 +19,6 @@ interface ChatQueryResponse {
   confidence: number;
   domain: string;
   hitl_trigger?: string | null;
-}
-
-// Some LangGraph agents return a JSON-shaped answer (e.g.
-// `{"answer":"...", "signature":"abc..."}`) as a raw string. The
-// backend tries to unwrap this but a few paths still slip through.
-// Unwrap defensively before rendering so users never see raw JSON.
-//
-// Aishwarya 2026-04-27 TC_005: shadow-mode chat displayed
-// `{'type': 'text', 'text': '...', 'extras': {...}}` (Python dict
-// repr after str() on a structured response object). Fix has to
-// handle:
-//   - JSON object with the "text" envelope key
-//   - Python repr (single quotes, True/False/None) — common when
-//     str() is called on a dict in the backend before serialising
-//   - Already-extracted plain strings
-const READABLE_KEYS = [
-  "text",      // 2026-04-27 TC_005 — LangGraph text envelope
-  "answer",
-  "response",
-  "message",
-  "summary",
-  "result",
-  "content",   // OpenAI-style chat completion shape
-] as const;
-
-function _pythonReprToJson(s: string): string | null {
-  // Best-effort convert "{'a': 'b', 'c': True}" → '{"a": "b", "c": true}'.
-  // Skips when the string contains escapes that would break naive
-  // single-to-double substitution.
-  if (s.includes('"') || s.includes("\\")) return null;
-  return s
-    .replace(/'/g, '"')
-    .replace(/\bTrue\b/g, "true")
-    .replace(/\bFalse\b/g, "false")
-    .replace(/\bNone\b/g, "null");
-}
-
-function extractReadableText(raw: unknown): string {
-  if (raw == null) return "";
-  if (typeof raw !== "string") {
-    // Already an object — try to pull a readable key directly.
-    if (typeof raw === "object" && !Array.isArray(raw)) {
-      for (const key of READABLE_KEYS) {
-        const v = (raw as Record<string, unknown>)[key];
-        if (typeof v === "string" && v.trim()) return v;
-      }
-    }
-    return String(raw);
-  }
-  const trimmed = raw.trim();
-  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return raw;
-
-  // Try JSON first. Definite-assignment is enforced by the early returns
-  // in the catch path — TS tracks that ``parsed`` is set on every fall-
-  // through to the post-try block.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    // Try Python-repr fallback.
-    const candidate = _pythonReprToJson(trimmed);
-    if (candidate != null) {
-      try {
-        parsed = JSON.parse(candidate);
-      } catch {
-        return raw;
-      }
-    } else {
-      return raw;
-    }
-  }
-
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    for (const key of READABLE_KEYS) {
-      const v = (parsed as Record<string, unknown>)[key];
-      if (typeof v === "string" && v.trim()) return v;
-    }
-  }
-  // Structured data without a readable key — fall back to the original.
-  return raw;
 }
 
 export default function ChatPanel({
@@ -188,7 +109,7 @@ export default function ChatPanel({
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        text: extractReadableText(res.data.answer),
+        text: extractReadableAgentOutput(res.data.answer, ""),
         agent: res.data.agent,
         confidence: res.data.confidence,
         domain: res.data.domain,
@@ -196,11 +117,11 @@ export default function ChatPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);
-    } catch {
+    } catch (err) {
       const errMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        text: "Sorry, something went wrong. Please try again.",
+        text: extractApiError(err, "Sorry, something went wrong. Please try again."),
         agent: "System",
         timestamp: new Date(),
       };
@@ -229,8 +150,13 @@ export default function ChatPanel({
 
       {/* Panel */}
       <div
+        role="dialog"
+        aria-label={agentName ? `Chat with ${agentName}` : agentId ? "Agent Chat" : "Ask Anything"}
+        aria-modal={open ? "true" : undefined}
+        aria-hidden={!open}
+        inert={open ? undefined : true}
         className={`fixed top-0 right-0 h-full w-full sm:w-[420px] bg-slate-900 border-l border-slate-700 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}
       >
         {/* Header */}
@@ -324,8 +250,8 @@ export default function ChatPanel({
         </div>
 
         {/* Input */}
-        <div className="border-t border-slate-700 p-3">
-          <div className="flex gap-2">
+        <div className="shrink-0 border-t border-slate-700 bg-slate-900 p-3">
+          <div className="flex min-w-0 items-center gap-2">
             <input
               ref={inputRef}
               type="text"
@@ -334,12 +260,12 @@ export default function ChatPanel({
               onKeyDown={handleKeyDown}
               placeholder="Type a message..."
               disabled={sending}
-              className="flex-1 h-9 rounded-lg border border-slate-700 bg-slate-800/50 px-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800/50 px-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
             />
             <button
               onClick={sendMessage}
               disabled={sending || !input.trim()}
-              className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="h-9 min-w-[56px] shrink-0 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Send
             </button>

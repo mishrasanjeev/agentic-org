@@ -213,7 +213,7 @@ class MailchimpConnector(BaseConnector):
         )
         resp.raise_for_status()
 
-        # Mailchimp returns 204 with empty body on success
+        # Mailchimp returns 204 No Content on success.
         if resp.status_code == 204:
             return {"status": "sent", "campaign_id": campaign_id}
         return resp.json()

@@ -227,46 +227,17 @@ def test_aa_callback_signatures_treat_tenant_as_string() -> None:
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_pillow_cve_residual_compensating_controls_documented() -> None:
-    """SEC-2026-05-P2-008 RESIDUAL: Pillow 10.4.0 has CVE-2026-25990 +
-    CVE-2026-40192 (fixed in 12.2.0), but ``composio-core==0.7.21``
-    (no newer release exists) requires ``pillow>=10.2.0,<11`` — direct
-    upgrade is blocked by the resolver.
+def test_pillow_cve_floor_is_enforced_in_production_dependencies() -> None:
+    """SEC-2026-05-P2-008: production deps must use patched Pillow.
 
-    The audit's recommendation is *"Upgrade Pillow to at least 12.2.0
-    if compatible"*. It isn't. The honest move is to document the
-    residual + compensating controls in pyproject.toml. This test
-    pins that documentation so a future contributor can't silently
-    delete the residual notice while the CVE is still unfixed.
-
-    When composio-core publishes a Pillow≥12 compatible release, this
-    test should be flipped back to enforce the lower bound (commit
-    history of this file shows the pin shape).
+    The previous residual accepted composio-core's Pillow<11 pin. The
+    June 2026 audit found additional active Pillow CVEs, so production
+    now de-scopes composio-core and directly pins Pillow>=12.2.0.
     """
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
-    # The residual notice MUST contain the audit ID so removing it is
-    # an obvious change in code review.
-    assert "SEC-2026-05-P2-008 RESIDUAL" in pyproject, (
-        "pyproject.toml is missing the SEC-2026-05-P2-008 residual notice "
-        "documenting why Pillow can't currently be upgraded past the "
-        "composio-core constraint. Either upgrade Pillow (and remove this "
-        "test in the same PR — the residual is gone), or restore the notice."
-    )
-    # The notice must reference both CVEs so a casual diff doesn't
-    # erase the awareness.
-    for cve in ("CVE-2026-25990", "CVE-2026-40192"):
-        assert cve in pyproject, (
-            f"Pillow CVE residual notice in pyproject.toml is missing {cve}. "
-            "Both CVEs from SEC-2026-05-P2-008 must remain referenced "
-            "until they're actually fixed."
-        )
-    # Compensating-control language must remain — without it, the
-    # residual would just be acknowledged exposure without mitigation.
-    assert "Compensating controls" in pyproject, (
-        "The Pillow CVE residual notice must include the 'Compensating "
-        "controls' section that explains why the unfixed CVE is not "
-        "actively exploitable in this codebase. SEC-2026-05-P2-008."
-    )
+    v4_block = pyproject.split("v4 = [", 1)[1].split("]", 1)[0]
+    assert '"pillow>=12.2.0"' in pyproject
+    assert '"composio-core' not in v4_block
 
 
 # ─────────────────────────────────────────────────────────────────

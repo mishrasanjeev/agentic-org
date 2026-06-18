@@ -53,6 +53,7 @@ async def test_alias_mapping_uses_safe_agenticorg_names() -> None:
         "cart_create",
         "consent_request",
         "consent_exchange",
+        "buyer_discovery_preview",
         "payment_create_intent",
         "checkout_create",
         "payment_get_status",
@@ -102,6 +103,45 @@ async def test_consent_exchange_uses_rest_endpoint() -> None:
     assert captured["path"] == "/v1/commerce/passports/exchange"
     assert captured["body"] == {"consent_request_id": "cons_req_1"}
     assert result["data"]["passport_jwt"] == "passport.jwt.value"
+
+
+async def test_buyer_discovery_preview_uses_read_only_rest_endpoint() -> None:
+    captured: dict[str, Any] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["path"] = request.url.raw_path.decode()
+        captured["authorization"] = request.headers.get("authorization")
+        return _json_response(
+            {
+                "data": {
+                    "merchant_reference": "sandbox-ref-1",
+                    "integration_status": "sandbox_handoff_requested",
+                    "sandbox_only": True,
+                    "public_discovery_enabled": False,
+                }
+            }
+        )
+
+    connector = await _connector(handler)
+    try:
+        result = await connector.buyer_discovery_preview(merchant_id="merchant sandbox/1")
+    finally:
+        await connector.disconnect()
+
+    assert captured["method"] == "GET"
+    assert captured["path"] == "/v1/commerce/merchants/merchant%20sandbox%2F1/agenticorg-buyer-discovery-preview"
+    assert captured["authorization"] == "Bearer gx_agent_test_token"
+    assert result["data"]["integration_status"] == "sandbox_handoff_requested"
+
+
+async def test_buyer_discovery_preview_requires_merchant_id() -> None:
+    connector = GrantexCommerceConnector({})
+
+    result = await connector.buyer_discovery_preview()
+
+    assert result["error"] == "merchant_id_required"
+    assert result["refusal"] is True
 
 
 async def test_idempotency_key_required_for_payment_affecting_tools() -> None:

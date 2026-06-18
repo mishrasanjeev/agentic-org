@@ -10,6 +10,8 @@ import { expect, test } from "@playwright/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 
+const API = process.env.API_URL || APP;
+
 test.describe("Module 19: Health & API @qa @health @api", () => {
   test.beforeEach(() => {
     requireAuth();
@@ -24,7 +26,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   }) => {
     // No Authorization header — liveness must work BEFORE auth
     // is even configured. K8s probes can't carry tokens.
-    const resp = await request.get(`${APP}/api/v1/health/liveness`, {
+    const resp = await request.get(`${API}/api/v1/health/liveness`, {
       failOnStatusCode: false,
     });
     expect(resp.status()).toBe(200);
@@ -39,7 +41,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
     // is generous; if it's slower than that something's wrong
     // with the lightweight contract.
     const t0 = Date.now();
-    const resp = await request.get(`${APP}/api/v1/health/liveness`, {
+    const resp = await request.get(`${API}/api/v1/health/liveness`, {
       failOnStatusCode: false,
     });
     const elapsed = Date.now() - t0;
@@ -54,7 +56,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   test("TC-API-002 GET /health includes db + redis check status", async ({
     request,
   }) => {
-    const resp = await request.get(`${APP}/api/v1/health`, {
+    const resp = await request.get(`${API}/api/v1/health`, {
       failOnStatusCode: false,
     });
     expect(resp.status()).toBe(200);
@@ -74,7 +76,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
     // No token → 401/403. The diagnostics endpoint leaks
     // operational topology (connector health, env), so it MUST
     // be admin-gated.
-    const resp = await request.get(`${APP}/api/v1/health/diagnostics`, {
+    const resp = await request.get(`${API}/api/v1/health/diagnostics`, {
       failOnStatusCode: false,
     });
     expect([401, 403]).toContain(resp.status());
@@ -83,7 +85,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   test("TC-API-002c GET /health/diagnostics with admin token returns connector roster", async ({
     request,
   }) => {
-    const resp = await request.get(`${APP}/api/v1/health/diagnostics`, {
+    const resp = await request.get(`${API}/api/v1/health/diagnostics`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });
@@ -104,7 +106,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   }) => {
     // SDK consumers parse OpenAPI to detect breaking changes.
     // /openapi.json must serve and must include info.version.
-    const resp = await request.get(`${APP}/openapi.json`, {
+    const resp = await request.get(`${API}/openapi.json`, {
       failOnStatusCode: false,
     });
     expect(resp.status()).toBeLessThan(300);
@@ -122,7 +124,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
     // versioned route. (404 confirms versioned routing is in
     // place; a 2xx here would mean a router is registered
     // without a prefix.)
-    const resp = await request.get(`${APP}/api/health`, {
+    const resp = await request.get(`${API}/api/health`, {
       failOnStatusCode: false,
     });
     expect(resp.status()).toBe(404);
@@ -135,7 +137,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   test("TC-API-004 OPTIONS preflight returns CORS headers", async ({
     request,
   }) => {
-    const resp = await request.fetch(`${APP}/api/v1/health/liveness`, {
+    const resp = await request.fetch(`${API}/api/v1/health/liveness`, {
       method: "OPTIONS",
       headers: {
         Origin: "https://app.agenticorg.ai",
@@ -162,7 +164,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
     // come back. Foundation #6 cross-pin: PaginatedResponse
     // defaults are part of the contract every paginated UI
     // depends on.
-    const resp = await request.get(`${APP}/api/v1/audit`, {
+    const resp = await request.get(`${API}/api/v1/audit`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });
@@ -183,7 +185,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   test("TC-API-006 GET /audit?per_page=10 honors the custom page size", async ({
     request,
   }) => {
-    const resp = await request.get(`${APP}/api/v1/audit?per_page=10`, {
+    const resp = await request.get(`${API}/api/v1/audit?per_page=10`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });
@@ -201,7 +203,7 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
     // The boundary defense: per_page is clamped at the handler.
     // Pin the cap so a future refactor can't lift it (would
     // OOM the worker on a single request).
-    const resp = await request.get(`${APP}/api/v1/audit?per_page=10000`, {
+    const resp = await request.get(`${API}/api/v1/audit?per_page=10000`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
       failOnStatusCode: false,
     });

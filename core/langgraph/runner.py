@@ -39,6 +39,35 @@ MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
 # In-memory checkpointer for now — will switch to PostgreSQL in production
 _checkpointer = MemorySaver()
 
+REFERENCE_RESOLUTION_GUIDANCE = """
+
+<tool_reference_resolution>
+Users often provide business-visible references, not internal API IDs.
+Never assume a user-provided value is an internal ID just because a tool
+argument is named id, bill_id, invoice_id, customer_id, deal_id, ticket_id,
+or similar. First classify whether the value looks like a provider internal
+ID or a reference number/name visible to the user.
+
+If a get_*_by_id tool needs an internal ID and the user supplied a reference
+number/name such as BILL-2025-789, INV-445, invoice no, bill no, ticket key,
+customer name, or Hinglish phrasing like "BILL-2025-789 ka details dikhao",
+use the matching search_* or list_* tool first. Extract the real internal ID
+from that result, then call the get_*_by_id tool with that internal ID.
+
+Preserve user context exactly when mapping fields: bill numbers stay bill
+references, invoice numbers stay invoice references, and names/search text
+stay search text. If search returns zero or multiple exact candidates, return
+that ambiguity instead of guessing.
+</tool_reference_resolution>
+""".strip()
+
+
+def _with_reference_resolution_guidance(system_prompt: str) -> str:
+    prompt = system_prompt or ""
+    if "<tool_reference_resolution>" in prompt:
+        return prompt
+    return f"{prompt.rstrip()}\n\n{REFERENCE_RESOLUTION_GUIDANCE}".strip()
+
 
 async def run_agent(
     agent_id: str,
@@ -117,6 +146,7 @@ async def run_agent(
         amendments_block = format_amendments_for_prompt(prompt_amendments)
         amended_prompt = amendments_block + system_prompt
         logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
+    amended_prompt = _with_reference_resolution_guidance(amended_prompt)
 
     # Build the graph
     graph = build_agent_graph(

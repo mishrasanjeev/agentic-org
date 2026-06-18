@@ -10,15 +10,15 @@ whose value equals the ``agenticorg_csrf`` cookie value. See
 Bypass conditions (request unaffected):
 
 - Safe HTTP methods (GET, HEAD, OPTIONS) — no state change, no CSRF risk.
-- Pure bearer-token API clients — they don't carry the
-  ``agenticorg_session`` cookie, so they're not browser sessions and
-  CSRF doesn't apply. SDKs, CI, the MCP server, and any other non-
-  browser caller works unchanged.
+- Explicit bearer-token API clients — bearer tokens require explicit
+  per-request transport, so CSRF doesn't apply even if the client also
+  has ambient browser cookies in its jar. SDKs, CI, browser automation,
+  the MCP server, and any other bearer caller works unchanged.
 - Webhook endpoints — they have provider HMAC signing (or the
   SEC-2026-05-P1-007 dev bypass guard for unsigned local dev). CSRF
   on webhooks is the wrong defense for the wrong threat model.
-- Auth bootstrap endpoints — login / signup / SSO callback — there's
-  no prior session cookie to enforce against.
+- Auth bootstrap endpoints — login / signup / SSO callback / invite
+  acceptance — there's no prior session cookie to enforce against.
 
 The middleware is positioned AFTER auth in the request chain (it runs
 on already-authenticated requests) so we don't waste cycles checking
@@ -69,12 +69,20 @@ _EXEMPT_PATHS: Final[frozenset[str]] = frozenset({
     "/api/v1/auth/sso/callback",
     "/api/v1/auth/sso/login",
     "/api/v1/auth/refresh",       # session refresh — verified by refresh-cookie + token
+    "/api/v1/org/accept-invite",  # public invite bootstrap — consumes one-time code/JWT
 })
 
 # The session cookie name MUST stay in sync with ``api/v1/auth.py:
 # _set_session_cookie``. Centralizing as a constant so a future rename
 # breaks loudly here instead of silently disabling CSRF.
 _SESSION_COOKIE_NAME: Final[str] = "agenticorg_session"
+
+
+def _has_explicit_bearer(request: Request) -> bool:
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    return bool(auth_header[7:].strip())
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -96,9 +104,15 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(prefix) for prefix in _EXEMPT_PREFIXES):
             return await call_next(request)
 
-        # Bearer-token API clients (no session cookie) bypass cleanly.
-        # CSRF is a browser-cookie defense; bearer tokens already
-        # require explicit per-request transport.
+        # Explicit bearer-token API clients bypass cleanly, even if a
+        # browser-style cookie jar also contains an ambient session
+        # cookie. Auth middleware runs before this middleware in the
+        # full app and validates the bearer; CSRF is only a cookie-auth
+        # browser defense.
+        if _has_explicit_bearer(request):
+            return await call_next(request)
+
+        # Cookie-free API clients bypass cleanly.
         session_cookie = request.cookies.get(_SESSION_COOKIE_NAME)
         if not session_cookie:
             return await call_next(request)

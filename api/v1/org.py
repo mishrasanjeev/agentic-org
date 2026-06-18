@@ -9,8 +9,8 @@ import uuid
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request
-from jose import JWTError
-from pydantic import BaseModel
+from jwt import PyJWTError
+from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 
 from api.deps import require_tenant_admin
@@ -55,7 +55,7 @@ def _decode_invite_claims(token: str) -> dict:
     """Validate an invite token and return its claims."""
     try:
         claims = validate_local_token(token)
-    except (ValueError, JWTError) as e:
+    except (ValueError, PyJWTError) as e:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid or expired invite token: {e}",
@@ -69,10 +69,10 @@ def _decode_invite_claims(token: str) -> dict:
 
 
 class InviteRequest(BaseModel):
-    email: str
-    name: str = ""
-    role: str = "analyst"
-    domain: str | None = None
+    email: str = Field(..., min_length=3, max_length=255)
+    name: str = Field(default="", max_length=255)
+    role: str = Field(default="analyst", max_length=50)
+    domain: str | None = Field(default=None, max_length=50)
 
 
 class AcceptInviteRequest(BaseModel):

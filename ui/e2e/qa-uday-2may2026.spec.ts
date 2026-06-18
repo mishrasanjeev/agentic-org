@@ -131,6 +131,7 @@ test.describe("Uday CA Firms 2026-05-02 — BUG-08, BUG-09, BUG-10", () => {
     await page.goto(`${APP}/dashboard/agents/${agentId}`, {
       waitUntil: "networkidle",
     });
+    await page.getByRole("button", { name: /^shadow$/i }).click();
 
     // Find the "Generate Test Sample" button. AgentDetail uses several
     // copy variants ("Generate Test Sample" / "Generate Test Samples"

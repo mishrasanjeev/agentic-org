@@ -2,7 +2,7 @@
 
 **Status:** Mandatory for every bug fix, reopen analysis, and QA-driven PR.
 **Owner:** CLAUDE.md references this file directly.
-**Last updated:** 2026-04-22.
+**Last updated:** 2026-06-14.
 
 This file exists because reopens kept happening on the same bug IDs across three QA sweeps (Aishwarya 21-Apr, 22-Apr AM, 22-Apr PM). The diagnosis — documented in `~/.claude/projects/C--Users-mishr-agentic-org/memory/feedback_shallow_fix_autopsy.md` — was that I (the author) claimed "fixed" when the fix was hypothesis-grade. This skill codifies the process that must be followed so that "fixed" means the user will not see the bug again.
 
@@ -158,6 +158,10 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 - [ ] Any list fed to a fail-closed gate has an explicit required/optional split defaulting to all-required; narrowing a gate names the second control that still enforces what was removed (Rule 12).
 - [ ] Coupled client error-path swept — a structured error body does not crash the UI (Rule 12).
 - [ ] Baseline / route-inventory re-keys proven debt-neutral (counts unchanged, only line churn); new broad excepts annotated, not rebaselined (Rule 12).
+- [ ] Connector discovery-to-action context is preserved: IDs returned by discovery tools are accepted by downstream tools, normalized without lossy type coercion, sent in the provider-required location, and kept out of request bodies when they are query/path context (Rule 13).
+- [ ] Connector catalog/tool-list claims are backed by executable native connector methods, endpoint-path tests, and a UI/Playwright check when the claim is operator-visible (Rule 13).
+- [ ] Capability claim backed by producer route/connector/UI/regression evidence; roadmap-scale items labeled as not shipped (Rule 15).
+- [ ] Persisted runtime flow checked against actual DB shape, not only `alembic_version`; production-shaped stamped DB drift simulated when fixing a migration-backed 500 (Rule 16).
 
 ---
 
@@ -301,6 +305,180 @@ Reference: `tests/regression/test_uday_17may_promotion_connector_gate.py`,
 `ui/e2e/qa-uday-17may2026.spec.ts`, `core/agents/packs/ca/__init__.py`,
 `core/agents/packs/installer.py`, `api/v1/agents.py`,
 `ui/src/pages/AgentDetail.tsx`.
+
+---
+
+## Rule 13 - Connector context must survive discovery-to-action hops
+
+Added 2026-05-25 after Uday's CA-Firms Zoho Books reopen and the
+CRM-TOOLS-002 connector-surface review. The shallow failure pattern was
+again a "green" local path that did not replay the tester's actual
+sequence:
+
+- `get_organization` returned real Zoho Books `organization_id` values.
+- The next tools (`list_vendors`, `list_vendor_bills`, etc.) accepted an
+  `organization_id` argument in the prompt, but the connector silently
+  ignored it and reused the stale configured/default org.
+- Mutating tools risked putting connector context fields into JSON
+  bodies instead of query/path context.
+- CRM catalog claims mentioned production CRM operations that did not
+  all exist as native HubSpot/Salesforce connector methods.
+
+The discipline this rule adds:
+
+1. **Discovery output is a contract for the next tool call.** If a tool
+   returns `organization_id`, `realm_id`, `account_id`, `property_id`,
+   or similar provider context, every downstream tool that needs that
+   context must accept it explicitly, normalize it as a string without
+   rejecting numeric-looking values, and let explicit call params win
+   over connector config.
+2. **Provider context belongs in the provider-required transport
+   location.** For Zoho Books, `organization_id` is query context even
+   for POST/PUT. It must not be copied into mutation JSON bodies.
+3. **Discovery endpoints must not be polluted by stale scoped context.**
+   A list/discovery call such as `GET /organizations` should not inject
+   an old configured org unless the caller explicitly supplies one.
+4. **Connector health is not action proof.** A health check that lists
+   organizations only proves auth; it does not prove downstream tools
+   will use the returned org correctly. Regression tests must replay the
+   discovery-to-action sequence.
+5. **Operator-visible tool claims require executable tools.** If the UI
+   or product copy claims CRM operations such as company/deal/contact
+   CRUD, associations, tasks, notes, or validation, native connector
+   registries must expose real provider-backed methods and endpoint-path
+   tests. Otherwise classify the item honestly as an enhancement, not a
+   fixed bug.
+6. **No raw credential or tenant identifiers in logs/summaries.** Secrets
+   are never printed; provider account/context identifiers should be
+   redacted in connector logs unless they are already safe public
+   metadata required for operator output.
+
+Reference: `tests/regression/test_ca_firms_uday25_zoho_crm_tools.py`,
+`ui/e2e/qa-uday-25may2026.spec.ts`,
+`connectors/finance/zoho_books.py`,
+`connectors/marketing/hubspot.py`, and
+`connectors/marketing/salesforce.py`.
+
+---
+
+## Rule 14 - Fix protocol drift and output-envelope leaks at the contract boundary, not one caller
+
+Added 2026-06-09 after the CA/Marketing reopen sweep. Three different
+symptoms had the same shallow-fix pattern: patching the visible page or the
+named file while leaving the shared contract wrong.
+
+1. **Provider connector auth must pin the current provider contract.** If a
+   connector auth bug cites a live provider flow, assert the endpoint, query
+   string, credential header names, response token field, and downstream auth
+   header in tests. For Adaequare GSTN this means
+   `/authenticate?grant_type=token`, `gspappid`/`gspappsecret`,
+   `access_token`, and `Authorization: Bearer ...` on normal and DSC-signed
+   calls. Do not keep a legacy flow alive just because an older test mocked it.
+2. **Final agent output must be sanitized at every render boundary.** Backend
+   chat formatting, explicit agent-run result cards, sales-agent result cards,
+   and playground traces must all use the same extraction rules: unwrap
+   `raw_output`, `answer`, `response`, `message`, `text`, `content`, and
+   `result`; parse JSON/Python-repr envelopes; suppress `status`, `signature`,
+   `extras`, `metadata`, tool outputs, trace IDs, and secrets. A
+   `JSON.stringify(output)` fallback is a bug unless the surface is explicitly
+   an operator debug export.
+3. **Dropdown additions belong in shared option contracts.** Adding a value
+   only to the page named in the ticket creates edit/create drift. Add it to
+   the shared constants, verify the API schema accepts it, and cover the
+   visible dropdown with Playwright.
+
+Reference: `tests/regression/test_uday_09jun2026_ca_marketing_bugs.py`,
+`tests/integration/test_gstn_sandbox.py`, `ui/src/lib/agent-output.ts`,
+`ui/src/__tests__/agent-output.test.ts`, `ui/e2e/qa-uday-09jun2026.spec.ts`,
+`connectors/finance/gstn.py`, `api/v1/chat.py`,
+`ui/src/pages/ConnectorCreate.tsx`, `ui/src/pages/AgentDetail.tsx`,
+`ui/src/pages/SalesPipeline.tsx`.
+
+---
+
+## Rule 15 - Product capability claims need producer evidence, not catalog text
+
+Added 2026-06-12 after the CA-firm feedback sheet from Ramesh. The failure
+pattern was broader than a missing button: docs and demos implied CA workflows
+were complete when the product only had adjacent pieces. Examples from the
+sheet:
+
+- TRACES reconciliation is not Income Tax 26AS. A 26AS connector does not
+  satisfy quarterly deductor-side TRACES matching.
+- "E-way bill integration" is not a raw POST wrapper. It must validate Part A,
+  Part B, bulk rows, and row-level failures before any provider call.
+- "CA billing" in platform subscription billing is not the same as a CA firm
+  billing its own clients.
+- Professional Tax, client portal, and CA-firm billing are roadmap-scale
+  modules unless they have real auth, routes, storage, UI, and tests.
+- Portal-scale features need a complete surface, not a connector stub. For
+  CAFEAT-004/005/006, the durable fix required models, Alembic migration,
+  tenant RLS, authenticated staff APIs, client-safe public token APIs where
+  applicable, operational UI, route metadata, and Playwright coverage. A status
+  card or connector registration alone would have reopened the same cases.
+
+Discipline:
+
+1. **A shipped capability needs four artifacts:** producer logic
+   (connector/service), API route, UI workflow, and regression coverage that
+   exercises the visible workflow. Catalog metadata or docs alone do not count.
+2. **Adjacent capability is not a substitute.** If the tester names a specific
+   government portal or user persona, verify that exact producer exists. Do not
+   map it to a nearby connector because the domain sounds similar.
+3. **Roadmap-scale items get an honest status surface.** If the correct fix is
+   multi-week schema/auth/portal work, expose `roadmap_not_shipped` or equivalent
+   instead of landing a dummy page that looks complete.
+4. **Batch workflows require row-level results.** CSV/XLSX uploads must report
+   row numbers, identifiers, created/validated/failed counts, and duplicate
+   handling. A whole-file failure on one bad row is not acceptable for CA firms
+   onboarding 50-200 clients or generating 50+ statutory artifacts.
+5. **Do not mark "Fixed" when the live provider path is not wired.** Use
+   "Partially closed" with residuals such as "offline reconciliation shipped;
+   live portal download still requires configured TRACES automation credentials."
+
+Reference: `tests/regression/test_ramesh_12jun2026_ca_feedback.py`,
+`ui/e2e/ramesh-12jun2026.spec.ts`, `connectors/finance/traces.py`,
+`connectors/finance/professional_tax.py`, `api/v1/professional_tax.py`,
+`api/v1/client_portal.py`, `api/v1/ca_billing.py`,
+`api/v1/ca_operations.py`, `api/v1/companies.py`, `connectors/finance/gstn.py`.
+
+---
+
+## Rule 16 - Runtime schema drift is a product bug even when Alembic says "head"
+
+Added 2026-06-14 after production A2A commerce returned HTTP 500 from
+`POST /api/v1/a2a/tasks`: Cloud Run logs showed
+`relation "a2a_tasks" does not exist` even though the migration job had
+completed and the database was stamped beyond the original v4.4.0 creator.
+
+The shallow failure pattern was assuming `alembic_version == head` proves the
+runtime schema. It does not. Environments can be stamped past a historical
+creator during cutovers or emergency repairs, leaving a runtime-critical table
+missing while every migration job appears green.
+
+Discipline:
+
+1. **Treat missing-table 500s as schema drift until proven otherwise.** Read the
+   production stack trace and identify the exact table, route, and synchronous
+   write path before changing application code.
+2. **Repair at the current head, never by editing old migrations.** Add an
+   idempotent forward migration with `CREATE TABLE IF NOT EXISTS`, guarded
+   indexes, and the tenant RLS policy expected by the runtime.
+3. **Verify the production-shaped case locally.** Simulate a DB stamped at the
+   previous head with the runtime table absent, run `scripts/alembic_migrate.py`,
+   then query Postgres for table existence, indexes, RLS, policy, and final
+   `alembic_version`.
+4. **Migration success must assert runtime-critical tables.** The deploy wrapper
+   should fail after `upgrade head` if a table required by synchronous request
+   paths is still missing; a green migration job must not be a false positive.
+5. **Regression coverage must include both contracts.** Add a source-level
+   guard for the repair migration and a Docker/Postgres integration run for the
+   migration wrapper. Re-run the original production E2E probe after deploy.
+
+Reference: `migrations/versions/v6_y4_repair_a2a_tasks.py`,
+`scripts/alembic_migrate.py`,
+`tests/regression/test_prod_qa_e2e_20260614.py`,
+`tests/integration/test_alembic_e2e.py`.
 
 ---
 

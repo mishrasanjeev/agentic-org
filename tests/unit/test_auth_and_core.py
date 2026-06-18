@@ -503,7 +503,7 @@ class TestValidateLocalToken:
     def test_expired_token_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -517,14 +517,14 @@ class TestValidateLocalToken:
                 "iat": now - 7200,
                 "exp": now - 600,
             }
-            token = jose_jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+            token = jwt.encode(payload, TEST_SECRET, algorithm="HS256")
             with pytest.raises(ValueError, match="Local token validation failed"):
                 validate_local_token(token)
 
     def test_wrong_secret_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -537,14 +537,14 @@ class TestValidateLocalToken:
                 "iat": now,
                 "exp": now + 3600,
             }
-            token = jose_jwt.encode(payload, "wrong-secret-key-12345", algorithm="HS256")
+            token = jwt.encode(payload, "wrong-secret-key-12345", algorithm="HS256")
             with pytest.raises(ValueError):
                 validate_local_token(token)
 
     def test_wrong_issuer_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -557,14 +557,14 @@ class TestValidateLocalToken:
                 "iat": now,
                 "exp": now + 3600,
             }
-            token = jose_jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+            token = jwt.encode(payload, TEST_SECRET, algorithm="HS256")
             with pytest.raises(ValueError):
                 validate_local_token(token)
 
     def test_wrong_audience_fails(self):
         with patch("auth.jwt.settings") as mock_settings:
             mock_settings.secret_key = TEST_SECRET
-            from jose import jwt as jose_jwt
+            import jwt
 
             from auth.jwt import _blacklisted_tokens, validate_local_token
             _blacklisted_tokens.clear()
@@ -577,7 +577,7 @@ class TestValidateLocalToken:
                 "iat": now,
                 "exp": now + 3600,
             }
-            token = jose_jwt.encode(payload, TEST_SECRET, algorithm="HS256")
+            token = jwt.encode(payload, TEST_SECRET, algorithm="HS256")
             with pytest.raises(ValueError):
                 validate_local_token(token)
 
@@ -674,6 +674,7 @@ class TestAuthMiddleware:
             request.headers = _FakeHeaders({"Authorization": auth_header})
         else:
             request.headers = _FakeHeaders({})
+        request.cookies.get.return_value = ""
         return request
 
     @pytest.mark.asyncio
@@ -714,6 +715,7 @@ class TestAuthMiddleware:
         call_next = AsyncMock()
         response = await middleware.dispatch(request, call_next)
         assert response.status_code == 401
+        assert "10.0.0.1" not in _mem_failures
         call_next.assert_not_called()
 
     @pytest.mark.asyncio
@@ -783,10 +785,18 @@ class TestAuthMiddleware:
         client_ip = "10.0.0.99"
 
         # Force in-memory path so the test does not depend on a live Redis.
-        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None):
-            # Simulate AUTH_MAX_FAILURES failures
+        with patch("core.auth_state._get_redis", new_callable=AsyncMock, return_value=None), \
+             patch(
+                 "auth.middleware.validate_token",
+                 new_callable=AsyncMock,
+                 side_effect=ValueError("bad"),
+             ):
+            # Simulate AUTH_MAX_FAILURES supplied-but-invalid credentials.
             for _ in range(AUTH_MAX_FAILURES):
-                request = self._make_request(auth_header=None, client_ip=client_ip)
+                request = self._make_request(
+                    auth_header="Bearer bad-token",
+                    client_ip=client_ip,
+                )
                 await middleware.dispatch(request, AsyncMock())
 
             # Next request from same IP should be 429
@@ -1695,8 +1705,9 @@ class TestGetTenantSession:
             # The first arg to execute is a text() clause; check its .text attribute
             text_clause = calls[0][0][0]
             sql_text = getattr(text_clause, "text", str(text_clause))
-            assert TENANT_ID in sql_text
-            assert "SET LOCAL" in sql_text
+            assert TENANT_ID not in sql_text
+            assert "set_config" in sql_text
+            assert calls[0][0][1] == {"tenant_id": TENANT_ID}
 
     @pytest.mark.asyncio
     async def test_rollback_on_exception(self):

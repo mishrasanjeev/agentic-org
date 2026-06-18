@@ -4,6 +4,14 @@ Version is bumped in-repo by the PR that ships the API change; the
 actual PyPI / npm publish is a separate manual step (needs
 credentials, should not live in CI without a release-gating flow).
 
+## Current release targets
+
+- Python SDK + CLI: `agenticorg==0.3.0` on PyPI.
+- TypeScript SDK: `agenticorg-sdk@0.3.0` on npm. The scoped package
+  `@agenticorg/sdk` is not currently published.
+- MCP server npm package: `agenticorg-mcp-server@4.0.5`.
+- MCP registry server: `io.github.mishrasanjeev/agenticorg@4.0.5`.
+
 ## Python SDK (PyPI)
 
 **Prereqs:** `pip install build twine`. PyPI token in `~/.pypirc`.
@@ -97,7 +105,7 @@ sweep fails if any drifts.
 - Patch bump for bugfix-only changes.
 
 SDK versions track the server's wire contract, not the app version.
-A main app at `4.8.0` is fine with SDKs at `0.2.0` — what matters is
+A main app at `4.8.0` is fine with SDKs at `0.3.0` — what matters is
 that the SDK can parse what the server emits.
 
 ## Drift guard

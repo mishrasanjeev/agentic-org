@@ -2,9 +2,9 @@
 # reproducible. Refresh via scripts/refresh_image_digests.sh after a
 # Renovate/Dependabot bump confirms upstream is safe.
 # python:3.14-slim @ 2026-05-01
-FROM python:3.14-slim@sha256:1697e8e8d39bf168e177ac6b5fdab6df86d81cfc24dae17dfb96cfc3ef76b4dd AS builder
+FROM python:3.14-slim@sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061 AS builder
 WORKDIR /app
-# Build deps for Pillow (required by presidio) and other C extensions
+# Build deps for patched Pillow (required by fastembed) and other C extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libjpeg-dev zlib1g-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -27,9 +27,10 @@ RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 # smallest English model into the image so PII redaction actually runs.
 RUN python -m spacy download en_core_web_sm
 
-FROM python:3.14-slim@sha256:1697e8e8d39bf168e177ac6b5fdab6df86d81cfc24dae17dfb96cfc3ef76b4dd
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl libjpeg62-turbo zlib1g \
+FROM python:3.14-slim@sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    libjpeg62-turbo zlib1g \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg
 WORKDIR /app
@@ -39,5 +40,5 @@ COPY . .
 USER agenticorg
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -sf http://localhost:8000/api/v1/health/liveness || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/liveness', timeout=4).read()"
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "20"]

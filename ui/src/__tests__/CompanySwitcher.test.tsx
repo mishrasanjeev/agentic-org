@@ -37,11 +37,11 @@ import CompanySwitcher from "@/components/CompanySwitcher";
 // ---------------------------------------------------------------------------
 
 const SINGLE_COMPANY = [
-  { id: "comp-001", name: "Edumatica Pvt Ltd", gstin: "29ABCDE1234F1Z5" },
+  { id: "comp-001", name: "AgenticOrg", gstin: "29ABCDE1234F1Z5" },
 ];
 
 const MULTI_COMPANIES = [
-  { id: "comp-001", name: "Edumatica Pvt Ltd", gstin: "29ABCDE1234F1Z5" },
+  { id: "comp-001", name: "AgenticOrg", gstin: "29ABCDE1234F1Z5" },
   { id: "comp-002", name: "Acme Corp", gstin: "07XYZAB5678C2D6" },
   { id: "comp-003", name: "TechVentures Inc" },
 ];
@@ -82,11 +82,11 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     // Should be a plain span, not a button
-    const companyText = screen.getByText("Edumatica Pvt Ltd");
+    const companyText = screen.getByText("AgenticOrg");
     expect(companyText.tagName.toLowerCase()).toBe("span");
   });
 
@@ -110,7 +110,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     // Should be a button (clickable to open dropdown)
@@ -125,7 +125,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     // Click the toggle button
@@ -135,9 +135,9 @@ describe("CompanySwitcher", () => {
     });
 
     // All companies should be visible in dropdown
-    // Note: "Edumatica Pvt Ltd" appears in both the button and dropdown
-    const edumaticaItems = screen.getAllByText("Edumatica Pvt Ltd");
-    expect(edumaticaItems.length).toBeGreaterThanOrEqual(2);
+    // Note: "AgenticOrg" appears in both the button and dropdown
+    const companyItems = screen.getAllByText("AgenticOrg");
+    expect(companyItems.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Acme Corp")).toBeInTheDocument();
     expect(screen.getByText("TechVentures Inc")).toBeInTheDocument();
   });
@@ -149,7 +149,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     const toggle = screen.getByRole("button");
@@ -168,7 +168,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     const toggle = screen.getByRole("button");
@@ -181,7 +181,7 @@ describe("CompanySwitcher", () => {
     // Find the one matching current company in dropdown
     const activeButton = dropdownButtons.find(
       (btn) =>
-        btn.textContent?.includes("Edumatica Pvt Ltd") &&
+        btn.textContent?.includes("AgenticOrg") &&
         btn.className.includes("primary"),
     );
     expect(activeButton).toBeDefined();
@@ -196,7 +196,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     const toggle = screen.getByRole("button");
@@ -222,7 +222,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     const toggle = screen.getByRole("button");
@@ -263,7 +263,7 @@ describe("CompanySwitcher", () => {
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
 
     await waitFor(() => {
-      expect(screen.getByText("Edumatica Pvt Ltd")).toBeInTheDocument();
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
     });
 
     const toggle = screen.getByRole("button");

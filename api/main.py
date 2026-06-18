@@ -1,4 +1,4 @@
-"""FastAPI application — AgenticOrg."""
+"""FastAPI application - AgenticOrg."""
 
 from __future__ import annotations
 
@@ -23,8 +23,12 @@ from api.v1 import (
     billing,
     branding,
     bridge,
+    ca_billing,
+    ca_operations,
     cdc_webhooks,
     chat,
+    client_portal,
+    commerce_runtime,
     companies,
     compliance,
     composio,
@@ -47,6 +51,7 @@ from api.v1 import (
     oauth_connector,
     packs,
     product_facts,
+    professional_tax,
     prompt_templates,
     push,
     report_schedules,
@@ -110,11 +115,11 @@ async def lifespan(app: FastAPI):
         from core.langgraph.grantex_auth import get_grantex_client
 
         grantex = get_grantex_client()
-        # Dummy enforce() — will fail on token validation but triggers JWKS fetch (~300ms)
+        # Dummy enforce() - will fail on token validation but triggers JWKS fetch (~300ms)
         grantex.enforce(grant_token="warmup", connector="salesforce", tool="get_contact")
     # enterprise-gate: broad-except-ok reason=grantex-warmup-expected-to-fail-validation
     except Exception:  # noqa: S110
-        pass  # Expected to fail — we only care about the JWKS fetch side effect
+        pass  # Expected to fail - we only care about the JWKS fetch side effect
 
     yield
     from core.database import close_db
@@ -139,12 +144,12 @@ app = FastAPI(
 
 # CORS: open in dev, explicit allowlist in production.
 # If the env var is unset in production, fall back to the app's own domains
-# and log a warning rather than crashing the process — a hard crash here
+# and log a warning rather than crashing the process - a hard crash here
 # would prevent rolling deploys from completing (discovered in prod deploy
 # of GAP-15 fix).
 if _is_strict_runtime and not settings.cors_allowed_origins:
     _logging.getLogger("agenticorg.cors").warning(
-        "CORS_ALLOWED_ORIGINS not set in %s — falling back to default allowlist. "
+        "CORS_ALLOWED_ORIGINS not set in %s - falling back to default allowlist. "
         "Set the env var to silence this warning.",
         settings.env,
     )
@@ -166,9 +171,9 @@ app.add_middleware(
 )
 # SEC-2026-05-P1-003: CSRF middleware sits BETWEEN CORS and the auth
 # middleware in the chain. Starlette runs ``add_middleware``-registered
-# middleware in reverse insertion order — the LAST add_middleware call
+# middleware in reverse insertion order - the LAST add_middleware call
 # is the outermost (runs first on the request). So with this ordering:
-#   request flow: Deprecation → GrantexAuth → CSRF → CORS → route
+#   request flow: Deprecation -> GrantexAuth -> CSRF -> CORS -> route
 # CSRF runs AFTER auth (so it only checks already-validated requests)
 # and BEFORE the route handler.
 app.add_middleware(CSRFMiddleware)
@@ -195,6 +200,7 @@ app.include_router(approval_policies.router, prefix="/api/v1", tags=["Approvals"
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
+app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
@@ -206,6 +212,10 @@ app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
+app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
+app.include_router(professional_tax.router, prefix="/api/v1", tags=["Professional Tax"])
+app.include_router(client_portal.router, prefix="/api/v1", tags=["Client Portal"])
+app.include_router(ca_billing.router, prefix="/api/v1", tags=["CA Client Billing"])
 app.include_router(cron.router, prefix="/api/v1", tags=["Cron"])
 app.include_router(aa_callback.router, prefix="/api/v1", tags=["Account Aggregator"])
 app.include_router(bridge.router, prefix="/api/v1", tags=["Bridge"])

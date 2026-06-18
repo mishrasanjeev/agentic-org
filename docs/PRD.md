@@ -3,6 +3,8 @@
 **Version**: 2.1.0 | **Date**: 2026-03-25 | **Status**: Live (Production)
 **URL**: https://agenticorg.ai | **App**: https://app.agenticorg.ai
 
+> **Latest posture (2026-06-13):** Production deployment is Cloud Run-first, with API/UI Cloud Run services, Cloud SQL, Redis, Secret Manager, and Artifact Registry images. Commerce work through C6X5 is an OACP-grounded preview/cache foundation only: it supports public-safe artifact evaluation, prepared handoffs, refusals, and cache maintenance planning, but it does not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness.
+
 ---
 
 ## 1. What Is AgenticOrg?
@@ -65,9 +67,9 @@ AgenticOrg is an **AI virtual employee platform** for enterprises. Instead of hi
                               Darwinbox, Slack...)
 ```
 
-**Infrastructure**: Google Cloud (GKE Autopilot, Cloud SQL, asia-south1)
+**Infrastructure**: Google Cloud (Cloud Run services in asia-southeast1, Artifact Registry in asia-south1, Cloud SQL, Redis, Secret Manager)
 **LLM**: Gemini 2.5 Flash (primary), with Claude/GPT-4o fallback
-**Cost**: ~$95/month
+**Cost**: Deployment-dependent; see `docs/deployment.md` for the current Cloud Run path and sizing assumptions.
 
 ---
 
@@ -81,11 +83,73 @@ AgenticOrg is an **AI virtual employee platform** for enterprises. Instead of hi
 |--------|--------|------------|
 | **Finance** (6) | AP Processor, AR Collections, Reconciliation, Tax Compliance, Month-End Close, FP&A | 99.7% recon match, ₹69,800/mo saved |
 | **HR** (6) | Onboarding, Payroll Engine, Talent Acquisition, Performance Coach, L&D, Offboarding | Zero payroll errors, 4-hour onboarding |
-| **Marketing** (5) | Campaign Pilot, Content Factory, SEO Strategist, CRM Intelligence, Brand Monitor | 3.2x campaign ROI |
+| **Marketing** (current: 9 core agents plus email path; target: 9 production CMO pillars) | Production-strength today: Campaign Pilot. Beta: Content Factory, Email Marketing, Social Media, ABM, Competitive Intel, Brand Monitor, SEO Strategist, and CRM Intelligence (deepened by CMO-4.3 with deterministic pipeline / funnel / scoring / churn / segments / SQL promotion / account health and policy/approval/audit/write-confirmation gates). Beta agents are not production-ready without real-vendor proof. | ROI claims must come from connected tenant data, not demo values |
 | **Operations** (5) | Support Triage, IT Operations, Compliance Guard, Contract Intelligence, Vendor Manager | 88% auto-classify, zero mis-routes |
 | **Backoffice** (3) | Legal Ops, Risk Sentinel, Facilities Agent | |
 | **Sales** (1) | Sales Agent (Aarav) — lead qualification, email outreach, pipeline management | |
 | **Custom** (user-created) | Any type — admin creates via wizard with custom prompt | |
+
+### 3.1a CMO Production Replan: Real Marketing Department Requirements
+
+The CMO product must be usable by real companies and their marketing teams, not just demo tenants. A CMO capability is not production-ready until it works against real tenant data, real connector configuration, real approvals, real audit trails, and a real operator UX.
+
+**Product rule:** mocks and stubs are allowed only inside automated tests and local development harnesses. They must never be used as proof that a customer-facing CMO feature is production-ready.
+
+| Area | Production requirement |
+|------|------------------------|
+| Data | KPIs must come from configured tenant systems such as Google Ads, Meta Ads, LinkedIn Ads, HubSpot, Salesforce, GA4, WordPress, Mailchimp, SendGrid, Buffer, Brandwatch, Ahrefs, Bombora, G2, and TrustRadius where enabled. Canonical CMO KPIs must use the unified KPI schema and return formula refs, source lineage, freshness, confidence, reconciliation status, and blocked/degraded status when required source facts are missing or cross-source totals do not reconcile. |
+| Connectors | Each connector needs setup UI, credential validation, read/write permission separation, health checks, last-sync metadata, data freshness/TTL, policy-backed retry/degraded-mode behavior, idempotency metadata, external write confirmation, audit evidence, and clear reconnect actions. The CMO KPI API exposes real-company `connector_setup` and `connector_contracts` projections so missing, stale, expired-auth, insufficient-scope, timeout, rate-limit, vendor-error, partial-data, malformed-payload, quota-exhausted, disabled, read-ready, write-safe, write-unconfirmed, healthy, and degraded states are visible before production readiness is claimed. |
+| Agents | Every marketing agent must have domain-specific execution logic, canonical input/output schemas, policy checks, confidence scoring, per-agent contract tests for happy path, invalid input, degraded connector input, HITL/policy behavior, audit refs, source refs, external-write safety, and truthful production/beta/stub/unavailable status. |
+| Governance | All spend, publishing, audience, pricing, claim-making, crisis, and externally visible actions require a machine-checkable marketing policy manifest, explicit approval policy, approval timeout outcomes, escalation matrix routes, per-workflow promotion, structured decision-audit packages, and audit logging. |
+| UX | The CMO dashboard must be a working marketing cockpit: KPI drill-downs, work queue, approvals, campaign timeline, data freshness, confidence, connector health, and next-best actions. |
+| Onboarding | A company must be able to connect systems, import historical data, configure brand/legal/budget policies, run agents in shadow mode, then promote workflows to production one workflow at a time. |
+| Reporting | Weekly and monthly reports must include formulas, data lineage, reconciliation status, freshness, exceptions, confidence, policy/audit/approval state, and a report quality gate. Missing critical fields or failed quality gates should block trusted report generation/delivery instead of silently producing weak output. |
+| Pilot proof | `/kpis/cmo` must expose a code-backed pilot proof package that distinguishes real-vendor, vendor-sandbox, demo, test-double, and unknown evidence. Demo or test-double proof must never count as production readiness. Social Media, ABM, Competitive Intel, and Brand Monitor beta capabilities must remain unproven for production without real-vendor or pilot proof. |
+
+#### Real-Company CMO Activation Journey
+
+1. Admin selects company size, region, primary CRM, ad platforms, email platform, web analytics, CMS, and social/listening stack.
+2. Admin connects each system through OAuth or approved API-key flow. The product validates scopes and runs a read-only health check.
+3. Marketing Ops maps source fields: lifecycle stage, campaign IDs, UTM conventions, opportunity stages, revenue fields, account ownership, and consent fields.
+4. CMO configures brand voice, blocked claims, legal review categories, budget thresholds, approval owners, SLA timers, and escalation paths.
+5. Agents run in shadow mode for at least one full reporting cycle. The product compares recommendations against actual historical decisions and records precision/recall where measurable.
+6. CMO promotes individual workflows from shadow to active. Promotion is per workflow, not a blanket switch for the whole marketing department.
+7. The dashboard shows only real connected data in production tenants. Demo data is allowed only in explicitly labeled demo tenants.
+
+#### CMO User Experience Bar
+
+The CMO experience should feel like an operations console for a serious marketing team:
+
+- One screen answers: what changed, what needs approval, what is at risk, what should we do next, and which data is stale.
+- Every KPI card has drill-down, source, formula, last sync, confidence, owner, and affected campaigns/accounts.
+- Approval screens show before/after previews, budget impact, audience impact, brand/legal/policy risk flags, source refs, agent rationale, policy/escalation/timeout/write/audit state, allowed reviewer actions, and rollback or stop plan.
+- No empty decorative cards. If a connector is missing, the UI shows the missing system, why it matters, and the exact setup path.
+- The dashboard supports saved views for Demand Gen, Content, ABM, Brand, and Executive Review.
+- Tables support sorting, filtering, export, and row-level action history.
+- Charts always have text equivalents and usable empty/error states.
+
+#### CMO Production Readiness Gate
+
+The CMO product is production-ready only when:
+
+- zero customer-facing endpoints return hardcoded or demo KPI values for production tenants;
+- CAC, MQL, SQL, MQL-to-SQL conversion, ROAS, pipeline contribution, conversion rates, LTV/CAC, experiment velocity, content, email, brand, and ABM KPI outputs use the unified CMO KPI schema and formula helpers before being treated as production-ready;
+- canonical CMO KPI drill-downs expose formula inputs, source refs, connector refs, mappings, backfills, reconciliation, freshness, confidence, work queue/report refs, audit refs, owner, blockers, and next action before KPI cards or reports can be treated as explainable production output;
+- paid spend, campaign conversions, GA4/web conversions, email engagement, content traffic, ABM account domains, currency, timezone, stale-sync, and partial-data reconciliation checks pass or visibly block/degrade affected KPI readiness before production reports trust those KPIs;
+- zero CMO capabilities are marked production while backed only by `super().execute()` or generic LLM behavior;
+- every CMO/marketing agent surface has deterministic contract tests proving stable output shape, truthful status, policy/HITL/audit/write-safety behavior, and production blocking for stub or unavailable agents;
+- every production CMO workflow can run against configured real connectors or clearly fail with an actionable setup/degraded-state message;
+- every marketing workflow passes lint for known agents, declared actions, capability state, connector readiness, shadow-mode read-only behavior, and safe external-write metadata before production promotion;
+- connector contracts distinguish read readiness from write readiness, block missing write scopes, expose retry/idempotency metadata, and require external write confirmation with explicit external object IDs and audit evidence before active write steps are considered complete;
+- required CMO field mappings and historical backfill states are present, valid, fresh, and visible before KPI confidence can be marked ready;
+- weekly, daily ad, monthly ROI, campaign ad-hoc, and executive summary report quality gates pass before reports are delivered as trusted production output; blocked or warning reports are labeled `draft_only` or `internal_only`;
+- the CMO dashboard and `/kpis/cmo` expose a prioritized work queue for approvals, escalations, connector issues, mapping/backfill blockers, workflow blockers, external-write failures, policy/audit gaps, KPI/reconciliation problems, and report gate blockers before those issues can be treated as resolved;
+- the CMO dashboard and `/kpis/cmo` expose approval review projections for approval-sensitive actions, including preview/diff, budget and audience impact, risk flags, source refs, rationale, policy/escalation/timeout/write/audit refs, rollback/stop plan, blocked reasons, allowed actions, and CTA; approval fails closed when policy, write readiness, timeout, or audit prerequisites are unsafe or missing;
+- `/kpis/cmo` exposes a CMO pilot proof package/summary with status, score, proven and unproven capabilities, blockers, risks, source/report/audit/test evidence refs, and next actions; demo and test-double environments cannot return production-passed proof, vendor-sandbox proof cannot be marketed as real-vendor proof, and Social Media, ABM, Competitive Intel, and Brand Monitor beta capabilities cannot be marketed as production without real-vendor/pilot proof;
+- every CMO workflow exposes a shadow, blocked, ready, active, degraded, paused, or unavailable activation state and remains read-only until that individual workflow is explicitly promoted;
+- every externally visible action has HITL policy, timeout outcome, escalation route, structured decision-audit package, audit record, and rollback or stop behavior;
+- dashboard and docs distinguish production, beta, shadow, unavailable, demo, and degraded states;
+- at least one pilot tenant completes onboarding with real connected marketing systems and generates a weekly report from real data.
 
 ### 3.2 Virtual Employee System
 
@@ -223,7 +287,7 @@ The sales agent sends **different emails based on role**:
 | CFO/Finance | "₹69,800/mo your AP team is leaving on the table" | Invoice processing in 11 seconds |
 | CHRO/HR | "Zero payroll errors, onboarding in hours not weeks" | 4-hour onboarding, zero PF/ESI errors |
 | COO/CTO/Ops | "88% of your support tickets auto-triaged" | War rooms in 30 seconds |
-| CMO/Marketing | "3.2x campaign ROI on autopilot" | Campaigns launch in minutes |
+| CMO/Marketing | "Connect your marketing stack before trusting ROI" | Real connected campaigns, approvals, and KPI lineage |
 | CEO/Unknown | "Your back office, fully automated" | 3 bullet metrics |
 
 All emails sign as **"Sanjeev Kumar, Founder, AgenticOrg"** — not as AI. Calendar link: https://calendar.app.google/p6P4DpRn85yxHua99

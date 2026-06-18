@@ -15,7 +15,8 @@ from connectors.framework.base_connector import BaseConnector
 class S3Connector(BaseConnector):
     name = "s3"
     category = "comms"
-    auth_type = "service_account"
+    # Literal auth-mode label, not a credential or service-account key.
+    auth_type = "service_account"  # nosemgrep
     base_url = "https://storage.googleapis.com"
     rate_limit_rpm = 1000
 

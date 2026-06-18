@@ -17,6 +17,16 @@
 
 ---
 
+## Latest Mainline Status (2026-06-13)
+
+- **OACP cache foundation**: C6X4 added the durable `oacp_artifact_cache_records` repository for public-safe artifact refs scoped by buyer agent, seller agent, tenant, and merchant. C6X5 added a deterministic maintenance planner over those records.
+- **Commerce boundary**: OACP cache work is internal and fail-closed. It does not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness.
+- **Security hardening**: production dependencies were trimmed, JWT runtime moved to `PyJWT[crypto]`, `python-jose`/`ecdsa` are blocked by regression gates, Docker runtime no longer needs `curl`, and security CI fails closed on high-risk findings.
+- **Deployment hardening**: production rollout uses the manual Cloud Run helper with split Cloud Run and Artifact Registry regions, image digest and commit metadata checks, migration-first rollout support, and explicit traffic modes.
+- **SDK launch coverage**: Python SDK, TypeScript SDK, and MCP server now cover A2A/MCP discovery, `commerce_sales_agent` launch, connector listing, knowledge search, agent generation, workflow generation, workflow creation, workflow runs, and run-status polling in regression tests.
+
+---
+
 ## Commerce Sales Agent
 
 AgenticOrg includes a Commerce Sales Agent that talks to Grantex Commerce V1 through Grantex-only tools. It is designed for consent-first product discovery, cart drafting, Commerce Passport handling, provider-neutral payment intent handoff, checkout handoff, and payment status polling without calling payment providers directly.
@@ -42,9 +52,12 @@ flowchart LR
 | Hosted discovery smoke | API-only C3 smoke verified liveness, health, MCP tools, and A2A discovery. |
 | Provider boundary | No direct Stripe, Plural, Pine, or provider credential commerce path. |
 | Production discovery caveat | AgenticOrg commerce metadata should stay gated or explicitly reviewed until Grantex read-only discovery is approved. |
+| OACP cache foundation | C6X1-C6X5 cover verifier planning, cache runtime, repository boundary, durable SQL-backed cache records, and maintenance planning. Internal only. |
+| Durable cache storage | C6X4 stores public-safe source/evidence refs with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, tenant-safe indexes, and RLS. |
+| Cache maintenance planner | C6X5 classifies records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. Planner only; no scheduler or side effects. |
 | Live checkout/payments | Blocked; do not imply production payment readiness. |
 
-Read more in `docs/commerce-agent-overview.md`, `docs/commerce-agent-developer-guide.md`, `docs/commerce-agent-hosted-staging-e2e.md`, `docs/reports/commerce-agent-real-staging-evidence.md`, `docs/reports/commerce-agent-hosted-smoke-evidence.md`, and `docs/reports/commerce-agent-production-discovery-readiness.md`.
+Read more in `docs/commerce-agent-overview.md`, `docs/commerce-agent-developer-guide.md`, `docs/commerce-agent-hosted-staging-e2e.md`, `docs/reports/commerce-agent-c6x4-durable-oacp-cache-repository.md`, `docs/reports/commerce-agent-c6x5-oacp-cache-maintenance.md`, `docs/reports/commerce-agent-real-staging-evidence.md`, `docs/reports/commerce-agent-hosted-smoke-evidence.md`, and `docs/reports/commerce-agent-production-discovery-readiness.md`.
 
 Key tool aliases: `grantex_commerce:merchant_get_profile`, `grantex_commerce:catalog_search`, `grantex_commerce:catalog_get_item`, `grantex_commerce:inventory_check`, `grantex_commerce:cart_create`, `grantex_commerce:consent_request`, `grantex_commerce:consent_exchange`, `grantex_commerce:payment_create_intent`, `grantex_commerce:checkout_create`, and `grantex_commerce:payment_get_status`.
 
@@ -69,7 +82,7 @@ AgenticOrg deploys **AI virtual employees** that automate enterprise back-office
 | CI E2E | Enabled against production on every push to `main` |
 | SDKs | Python (`pip install agenticorg`), TypeScript (`npm i agenticorg-sdk`), MCP Server, CLI |
 | LLM | Smart routing via RouteLLM: Gemini Flash (free) / Gemini Pro / Claude/GPT-4o. Air-gapped: Ollama/vLLM |
-| Deployment | GKE Autopilot, ~$95/month |
+| Deployment | Cloud Run manual helper (`scripts/deploy_cloud_run.sh`), Cloud Run in `asia-southeast1`, Artifact Registry in `asia-south1` by default |
 | Version | Sourced from `pyproject.toml` / `GET /api/v1/product-facts` |
 
 ### What It Does
@@ -137,6 +150,9 @@ FastAPI Backend
     ├── Workflow Engine (20+ templates) → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
     ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
+    ├── Commerce Sales Agent → Grantex-only tools → fail-closed discovery and handoff
+    ├── OACP Artifact Cache → durable public-safe refs → TTL/revocation/risk evaluation
+    ├── OACP Cache Maintenance → keep/refresh/evict/purge/quarantine planner
     ├── RAGFlow Engine → Document ingestion → Semantic search → Agent retrieval
     ├── LiveKit + Pipecat → Voice agents → STT/TTS → SIP telephony
     ├── RouteLLM → Smart model routing → 3-tier cost optimization
@@ -366,11 +382,21 @@ docker compose up -d
 # API: http://localhost:8000 | UI: http://localhost:3000
 ```
 
-### GKE Production
+### Cloud Run Production
 ```bash
-gcloud container clusters get-credentials agenticorg-lean --region=asia-south1
-helm upgrade --install agenticorg ./helm -n agenticorg -f helm/values-lean.yaml
+# Build/push and roll out origin/main with revision health checks.
+bash scripts/deploy_cloud_run.sh --yes
+
+# Deploy an already-built commit image and run migrations before traffic moves.
+bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --with-migrations --yes
+
+# Stage revisions without moving production traffic.
+bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --traffic preserve --yes
 ```
+
+Default production split: Cloud Run services run in `asia-southeast1`; Artifact
+Registry images live in `asia-south1`. Legacy GKE/Helm instructions remain in
+`docs/deployment.md` only for reference and non-default deployment shapes.
 
 ### Demo Credentials
 | Role | Email | Password |
@@ -399,6 +425,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | POST | /demo-request | No | Demo form → lead + sales agent |
 | GET | /agents | JWT | List agents (RBAC filtered) |
 | POST | /agents | JWT | Create agent (tools auto-populated by type/domain) |
+| POST | /agents/generate | JWT | Generate launchable agent config from plain English |
 | POST | /agents/{id}/run | JWT | Execute agent |
 | PATCH | /agents/{id} | JWT | Update (prompt lock on active) |
 | GET | /agents/org-tree | JWT | Org chart tree (department hierarchy) |
@@ -413,12 +440,18 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | POST | /sales/process-inbox | JWT | Process Gmail replies |
 | GET | /sales/metrics | JWT | Weekly digest data |
 | GET | /workflows | JWT | List workflows |
+| POST | /workflows/generate | JWT | Generate workflow definition from plain English |
+| GET | /workflows/templates | JWT | List workflow templates |
+| POST | /workflows | JWT | Create workflow |
+| POST | /workflows/{id}/run | JWT | Start workflow run |
+| GET | /workflows/runs/{id} | JWT | Get workflow run status and steps |
 | GET | /approvals | JWT | HITL approval queue |
 | GET | /audit | JWT | Audit log |
 | GET | /kpis/cfo | JWT | CFO dashboard KPIs |
 | GET | /kpis/cmo | JWT | CMO dashboard KPIs |
 | POST | /chat/query | JWT | NL Query (natural language question) |
 | GET | /chat/history | JWT | Chat history for current user |
+| POST | /knowledge/search | JWT | Search tenant knowledge base |
 | GET | /companies | JWT | List companies (multi-company) |
 | POST | /companies | JWT | Create company entity |
 | PATCH | /companies/{id} | JWT | Update company entity |
@@ -436,6 +469,7 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 | GET | /org/api-keys | Admin | List API keys |
 | DELETE | /org/api-keys/{id} | Admin | Revoke API key |
 | GET | /a2a/agent-card | No | A2A agent discovery card |
+| GET | /a2a/agents | No | A2A launchable agent catalog |
 | POST | /a2a/tasks | JWT/Grantex | Execute A2A task |
 | GET | /mcp/tools | No | List MCP tools (see /api/v1/product-facts.tool_count) |
 | POST | /mcp/call | JWT/Grantex | Call MCP tool |
@@ -458,6 +492,16 @@ from agenticorg import AgenticOrg
 client = AgenticOrg(api_key="ao_sk_your_key_here")
 result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
 agents = client.agents.list()
+commerce = client.agents.run(
+    "commerce_sales_agent",
+    action="buyer_discovery_preview",
+    inputs={"merchant_id": "merchant_demo", "query": "Show laptops under Rs 50000"},
+)
+draft_agent = client.agents.generate("Create a contract intelligence agent using Confluence and Jira")
+kb = client.knowledge.search("vendor renewal policy", top_k=3)
+workflow_draft = client.workflows.generate("Review vendor renewal risk using KB and Jira, then notify vendor_manager")
+workflow = client.workflows.create(name="Renewal Risk Review", definition=workflow_draft["workflow"], domain="ops")
+run = client.workflows.run(workflow["id"], payload={"vendor_id": "V-100"})
 sop = client.sop.parse_text("When invoice > 5L, require CFO approval")
 card = client.a2a.agent_card()
 ```
@@ -473,6 +517,13 @@ import { AgenticOrg } from "agenticorg-sdk";
 
 const client = new AgenticOrg({ apiKey: "ao_sk_your_key_here" });
 const result = await client.agents.run("ap_processor", { inputs: { invoice_id: "INV-001" } });
+const commerce = await client.agents.run("commerce_sales_agent", {
+  action: "buyer_discovery_preview",
+  inputs: { merchant_id: "merchant_demo", query: "Show laptops under Rs 50000" },
+});
+const draftAgent = await client.agents.generate("Create a contract intelligence agent using Confluence and Jira");
+const kb = await client.knowledge.search("vendor renewal policy", { topK: 3 });
+const workflowDraft = await client.workflows.generate("Review vendor renewal risk using KB and Jira, then notify vendor_manager");
 const agents = await client.agents.list();
 ```
 
@@ -504,6 +555,10 @@ pip install agenticorg
 
 agenticorg agents list
 agenticorg agents run ap_processor --input '{"invoice_id": "INV-001"}'
+agenticorg agents run commerce_sales_agent --action buyer_discovery_preview --input '{"merchant_id":"merchant_demo"}'
+agenticorg agents generate "Create a contract intelligence agent using Confluence and Jira"
+agenticorg knowledge search "vendor renewal policy" --top-k 3
+agenticorg workflows generate "Review vendor renewal risk using KB and Jira"
 agenticorg sop parse "When invoice > 5L, require CFO approval"
 agenticorg mcp tools
 ```
@@ -617,6 +672,9 @@ cd ui && npx vitest run
 # Playwright E2E — 17 spec files, CI runs against production
 npx playwright test
 
+# Latest commerce/deploy/security guards
+python -m pytest tests/unit/test_oacp_c6x4_durable_cache_repository.py tests/unit/test_oacp_c6x5_cache_maintenance.py tests/unit/test_deploy_cloud_run_script.py tests/regression/test_security_audit_20260613_dependency_gates.py -q
+
 # Production connector test — real Jira/HubSpot/GitHub API calls
 python tests/test_production_connectors.py
 ```
@@ -643,7 +701,8 @@ agenticorg/
 │   ├── langgraph/          # LangGraph agent graph, runner, Grantex auth, LLM factory
 │   ├── orchestrator/       # NEXUS: task routing, smart routing, state machine
 │   ├── llm/                # LLM router (Gemini primary, Claude/GPT-4o fallback)
-│   ├── models/             # SQLAlchemy ORM (agents, workflows, HITL, leads, templates, api_keys)
+│   ├── commerce/           # Commerce/OACP helpers, cache evaluator, maintenance planner
+│   ├── models/             # SQLAlchemy ORM (agents, workflows, HITL, leads, templates, api_keys, OACP cache)
 │   ├── tool_gateway/       # Scope enforcement, rate limiting, PII masking, audit
 │   ├── gmail_agent.py      # Gmail API integration (inbox monitor, send replies)
 │   └── email.py            # SMTP email sending
@@ -677,7 +736,7 @@ agenticorg/
 ├── migrations/             # PostgreSQL DDL files
 ├── helm/                   # Kubernetes Helm charts
 ├── docs/                   # PRD, architecture, QA test plan
-└── scripts/                # Seed data, deployment helpers
+└── scripts/                # Seed data, Cloud Run deploy helper, migration helper
 ```
 
 ---
@@ -738,6 +797,10 @@ Built for Indian enterprise — not retrofitted:
 | Auth failure tracking | IP-based failure tracking, auto-block on threshold, auth failure clearing on success |
 | Shadow limit enforcement | Agents must pass shadow quality gates before promotion to active |
 | Tool validation | Tool scope enforcement — agents cannot call tools outside their authorized scope |
+| Dependency security gates | `pip-audit`, Bandit, npm audit, and Trivy gates fail closed on high-risk findings |
+| JWT runtime | `PyJWT[crypto]` with regression gates blocking `python-jose` and `ecdsa` in production dependencies |
+| Cloud Run deploy safety | Split Cloud Run/GAR regions, image digest verification, commit metadata checks, migration-first rollout, rollback-aware traffic shifts |
+| OACP commerce cache | Durable public-safe refs only; no raw provider payloads, raw JWTs, credentials, card/bank data, private merchant payloads, or executable targets |
 
 ---
 
@@ -750,6 +813,12 @@ Built for Indian enterprise — not retrofitted:
 | [CFO Guide](docs/cfo_guide.md) | CFO user guide — dashboard, agents, NL query, reports |
 | [CMO Guide](docs/cmo_guide.md) | CMO user guide — dashboard, agents, NL query, campaigns |
 | [CA Firm Setup](docs/ca_firm_setup_guide.md) | End-to-end CA firm deployment guide |
+| [Commerce Agent Overview](docs/commerce-agent-overview.md) | Commerce posture, OACP cache foundation, launch surfaces, and guardrails |
+| [Commerce Developer Guide](docs/commerce-agent-developer-guide.md) | Safe commerce extension rules, OACP cache rules, and direct-provider bans |
+| [C6X4 Durable OACP Cache](docs/reports/commerce-agent-c6x4-durable-oacp-cache-repository.md) | Durable OACP cache repository contract and non-goals |
+| [C6X5 Cache Maintenance](docs/reports/commerce-agent-c6x5-oacp-cache-maintenance.md) | OACP cache maintenance planner outcomes and non-goals |
+| [Cloud Run Deployment](docs/deployment.md) | Production Cloud Run helper, migration-first rollout, traffic modes, and legacy GKE reference |
+| [Security Audit Plan](docs/BRUTAL_SECURITY_AUDIT_PLAN_2026-06-13.md) | Validated vulnerability fixes, permanent rules, and regression gates |
 | [QA Test Plan](tests/QA_MANUAL_TEST_PLAN.md) | 65 manual test cases with steps |
 | [QA Test Cases](tests/QA_TEST_CASES.md) | 70 automated test results |
 | [Architecture](docs/architecture.md) | 8-layer system design |
@@ -774,4 +843,4 @@ Apache License 2.0 — free for commercial use. See [LICENSE](LICENSE).
 
 ---
 
-Built by [Edumatica Pvt Ltd](https://agenticorg.ai) | Bengaluru, India
+Built by [AgenticOrg](https://agenticorg.ai) | Bengaluru, India

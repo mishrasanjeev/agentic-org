@@ -1,4 +1,4 @@
-export const AUTH_TYPES = ["oauth2", "api_key", "basic", "bolt_bot_token", "certificate", "none"] as const;
+export const AUTH_TYPES = ["oauth2", "api_key", "basic", "bolt_bot_token", "certificate", "custom", "none"] as const;
 
 export const AUTH_FIELD_HINTS: Record<string, string> = {
   oauth2: "Client ID and Client Secret; refresh token is created by the authorization flow",
@@ -6,6 +6,7 @@ export const AUTH_FIELD_HINTS: Record<string, string> = {
   basic: "Username and password",
   bolt_bot_token: "Slack Bot User OAuth Token (xoxb-...)",
   certificate: "Certificate path or PEM content",
+  custom: "Custom authentication: provide a secret reference and/or JSON config",
   none: "No authentication required",
 };
 
@@ -14,6 +15,7 @@ export function authTypeLabel(authType: string): string {
   if (authType === "api_key") return "API Key";
   if (authType === "oauth2") return "Client Secret";
   if (authType === "basic") return "Password";
+  if (authType === "custom") return "Custom Credential";
   return "Auth Credential";
 }
 

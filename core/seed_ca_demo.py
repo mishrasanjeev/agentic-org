@@ -33,6 +33,50 @@ DEMO_USER_EMAIL = "demo@cafirm.agenticorg.ai"
 DEMO_USER_PASSWORD = "demo123!"
 DEMO_USER_NAME = "Demo Partner"
 DEMO_USER_ROLE = "admin"  # platform role -- company-level role is "partner"
+DEMO_ROLE_USERS: list[dict[str, str]] = [
+    {
+        "email": "ceo@agenticorg.local",
+        "password": "ceo123!",
+        "name": "Demo CEO",
+        "role": "admin",
+        "domain": "all",
+    },
+    {
+        "email": "cfo@agenticorg.local",
+        "password": "cfo123!",
+        "name": "Demo CFO",
+        "role": "cfo",
+        "domain": "finance",
+    },
+    {
+        "email": "chro@agenticorg.local",
+        "password": "chro123!",
+        "name": "Demo CHRO",
+        "role": "chro",
+        "domain": "hr",
+    },
+    {
+        "email": "cmo@agenticorg.local",
+        "password": "cmo123!",
+        "name": "Demo CMO",
+        "role": "cmo",
+        "domain": "marketing",
+    },
+    {
+        "email": "coo@agenticorg.local",
+        "password": "coo123!",
+        "name": "Demo COO",
+        "role": "coo",
+        "domain": "ops",
+    },
+    {
+        "email": "auditor@agenticorg.local",
+        "password": "audit123!",
+        "name": "Demo Auditor",
+        "role": "auditor",
+        "domain": "all",
+    },
+]
 
 # ---------------------------------------------------------------------------
 # 7 realistic Indian companies
@@ -218,6 +262,36 @@ async def _ensure_demo_user(session: AsyncSession, tenant_id: uuid.UUID) -> None
     logger.info("Created demo user %s for tenant %s", DEMO_USER_EMAIL, tenant_id)
 
 
+async def _ensure_demo_role_users(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Create the documented role demo users if they do not exist."""
+    for data in DEMO_ROLE_USERS:
+        result = await session.execute(
+            select(User.id).where(
+                User.tenant_id == tenant_id,
+                User.email == data["email"],
+            )
+        )
+        if result.scalar_one_or_none():
+            continue
+
+        pw_hash = _bcrypt.hashpw(
+            data["password"].encode(), _bcrypt.gensalt(rounds=12)
+        ).decode()
+        user = User(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            email=data["email"],
+            name=data["name"],
+            role=data["role"],
+            domain=data["domain"],
+            password_hash=pw_hash,
+            status="active",
+        )
+        session.add(user)
+        logger.info("Created demo role user %s for tenant %s", data["email"], tenant_id)
+    await session.flush()
+
+
 async def _seed_companies(
     session: AsyncSession, tenant_id: uuid.UUID, demo_user_id: uuid.UUID | None = None
 ) -> int:
@@ -279,6 +353,7 @@ async def seed_ca_demo(session: AsyncSession, tenant_id: uuid.UUID | None = None
         tenant_id = await _ensure_demo_tenant(session)
 
     await _ensure_demo_user(session, tenant_id)
+    await _ensure_demo_role_users(session, tenant_id)
 
     # Fetch demo user id for role mapping
     result = await session.execute(

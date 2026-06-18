@@ -1,5 +1,21 @@
 # agenticorg-sdk changelog
 
+## 0.3.0 - 2026-06-14
+
+Commerce, A2A/MCP, workflow, and knowledge release.
+
+### Added
+- `client.agents.run("commerce_sales_agent", { action: "buyer_discovery_preview", ... })`
+  coverage through the A2A task endpoint.
+- Agent generation, workflow generation/create/run, workflow template listing,
+  knowledge search, A2A discovery, and MCP tool calls in the public SDK surface.
+
+### Fixed
+- Source examples now import the published npm package name `agenticorg-sdk`
+  instead of the unpublished scoped name `@agenticorg/sdk`.
+- Release metadata now matches the package contents so npm can publish the
+  previously-unpublished SDK capabilities without reusing version `0.2.0`.
+
 ## 0.2.0 — 2026-04-19
 
 Canonical `AgentRunResult` contract.

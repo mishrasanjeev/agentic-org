@@ -238,9 +238,11 @@ async def billing_health() -> dict[str, Any]:
     import os as _os
 
     stripe_secret_configured = bool(_os.getenv("STRIPE_SECRET_KEY"))
-    stripe_prices_configured = bool(
+    stripe_price_ids_configured = bool(
         _os.getenv("STRIPE_PRICE_PRO") and _os.getenv("STRIPE_PRICE_ENTERPRISE")
     )
+    stripe_dynamic_prices_configured = True
+    stripe_prices_configured = stripe_price_ids_configured or stripe_dynamic_prices_configured
     stripe_sdk_installed = _is_module_installed("stripe")
     stripe_configured = (
         stripe_secret_configured and stripe_prices_configured and stripe_sdk_installed
@@ -259,10 +261,10 @@ async def billing_health() -> dict[str, Any]:
             "stripe Python package. Add stripe to production dependencies "
             "and redeploy before enabling checkout."
         )
-    elif stripe_secret_configured and not stripe_prices_configured:
+    elif stripe_secret_configured and stripe_sdk_installed:
         recommended = (
-            "Stripe secret is configured but STRIPE_PRICE_PRO and/or "
-            "STRIPE_PRICE_ENTERPRISE are missing."
+            "Stripe is configured. Dashboard price IDs are optional; checkout "
+            "falls back to server-owned recurring price_data when they are absent."
         )
     elif pinelabs_configured:
         recommended = "Pine Labs — USD callers need Stripe config"
@@ -278,6 +280,8 @@ async def billing_health() -> dict[str, Any]:
         "stripe_configured": stripe_configured,
         "stripe_secret_configured": stripe_secret_configured,
         "stripe_prices_configured": stripe_prices_configured,
+        "stripe_price_ids_configured": stripe_price_ids_configured,
+        "stripe_dynamic_prices_configured": stripe_dynamic_prices_configured,
         "stripe_sdk_installed": stripe_sdk_installed,
         "pinelabs_configured": pinelabs_configured,
         "recommended_checkout_flow": recommended,
@@ -339,13 +343,6 @@ async def subscribe_stripe(
                 "redeploy before enabling checkout."
             ),
         )
-    if body.plan in {"pro", "enterprise"}:
-        price_env = "STRIPE_PRICE_PRO" if body.plan == "pro" else "STRIPE_PRICE_ENTERPRISE"
-        if not _os.getenv(price_env):
-            raise HTTPException(
-                status_code=503,
-                detail=f"{price_env} is not configured in this environment.",
-            )
     # Codex 2026-04-23 blocker F: Stripe SDK is synchronous. Run in
     # threadpool so the event loop is not parked for the whole round-trip.
     import asyncio

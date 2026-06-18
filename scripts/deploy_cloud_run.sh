@@ -26,10 +26,10 @@ set -euo pipefail
 # Defaults. Override via env or flags.
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-perfect-period-305406}"
 CLOUD_RUN_REGION="${CLOUD_RUN_REGION:-${GCP_REGION:-asia-southeast1}}"
-GCP_REGION="$CLOUD_RUN_REGION"
 GAR_REGION="${GAR_REGION:-asia-south1}"
-GAR_REGISTRY="${GAR_REGISTRY:-${GAR_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/agenticorg}"
-GAR_HOST="${GAR_REGISTRY%%/*}"
+GCP_REGION="$CLOUD_RUN_REGION"
+GAR_HOST="${GAR_HOST:-${GAR_REGION}-docker.pkg.dev}"
+GAR_REGISTRY="${GAR_REGISTRY:-${GAR_HOST}/${GCP_PROJECT_ID}/agenticorg}"
 API_SERVICE="${API_SERVICE:-agenticorg-api}"
 UI_SERVICE="${UI_SERVICE:-agenticorg-ui}"
 MIGRATE_JOB="${MIGRATE_JOB:-agenticorg-migrate}"
@@ -37,10 +37,10 @@ HEALTH_URL="${HEALTH_URL:-https://app.agenticorg.ai/api/v1/health}"
 API_HEALTH_PATH="${API_HEALTH_PATH:-/api/v1/health}"
 PROD_BRANCH="${PROD_BRANCH:-origin/main}"
 TRAFFIC_MODE="${TRAFFIC_MODE:-latest}"
-PYTHON_BIN="${PYTHON_BIN:-}"
 
 DEPLOY_SHA=""
 DRY_RUN=0
+ASSUME_YES="${ASSUME_YES:-0}"
 RUN_MIGRATIONS=0
 CREATE_MIGRATE_JOB=0
 SKIP_BUILD=0
@@ -65,16 +65,16 @@ Options:
                                      report NOT DEPLOYED
                             manual   stage revisions with --no-traffic and
                                      print update-traffic commands
+  -y, --yes               Do not prompt for confirmation.
   --dry-run               Print the commands and planned traffic changes
                           without running them.
   -h, --help              Show this help.
 
 Environment overrides:
-  GCP_PROJECT_ID  CLOUD_RUN_REGION/GCP_REGION
-  GAR_REGION      GAR_REGISTRY
+  GCP_PROJECT_ID  CLOUD_RUN_REGION  GCP_REGION
+  GAR_REGION      GAR_HOST          GAR_REGISTRY
   API_SERVICE     UI_SERVICE  MIGRATE_JOB
   HEALTH_URL      API_HEALTH_PATH  PROD_BRANCH
-  PYTHON_BIN
 
 Examples:
   scripts/deploy_cloud_run.sh --sha abcd123 --skip-build
@@ -90,6 +90,7 @@ while [[ $# -gt 0 ]]; do
     --create-migrate-job) CREATE_MIGRATE_JOB=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --traffic) TRAFFIC_MODE="$2"; shift 2 ;;
+    -y|--yes) ASSUME_YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1"; usage; exit 2 ;;
@@ -123,26 +124,40 @@ require_cmd gcloud
 require_cmd docker
 require_cmd git
 require_cmd curl
+require_cmd mktemp
 
-python_works() {
-  command -v "$1" >/dev/null 2>&1 && "$1" -c 'import json, sys' >/dev/null 2>&1
+resolve_python_bin() {
+  local candidate
+
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    if "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import json
+import sys
+PY
+    then
+      echo "$PYTHON_BIN"
+      return 0
+    fi
+    echo "::error::PYTHON_BIN is set but is not usable: $PYTHON_BIN" >&2
+    exit 1
+  fi
+
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" - <<'PY' >/dev/null 2>&1
+import json
+import sys
+PY
+    then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  echo "Missing: usable python3 or python" >&2
+  exit 1
 }
 
-if [[ -n "$PYTHON_BIN" ]]; then
-  if ! python_works "$PYTHON_BIN"; then
-    echo "Missing or unusable Python interpreter: $PYTHON_BIN" >&2
-    exit 1
-  fi
-else
-  if python_works python3; then
-    PYTHON_BIN="python3"
-  elif python_works python; then
-    PYTHON_BIN="python"
-  else
-    echo "Missing: python3 or python. Override with PYTHON_BIN." >&2
-    exit 1
-  fi
-fi
+PYTHON_BIN="$(resolve_python_bin)"
 
 service_json() {
   gcloud run services describe "$1" \
@@ -159,9 +174,16 @@ service_value() {
 }
 
 traffic_summary() {
-  service_json "$1" | "$PYTHON_BIN" -c '
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  service_json "$1" > "$json_file"
+  "$PYTHON_BIN" - "$json_file" <<'PY' || rc=$?
 import json, sys
-svc = json.load(sys.stdin)
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    svc = json.load(fh)
 traffic = svc.get("status", {}).get("traffic", []) or []
 items = []
 for item in traffic:
@@ -177,13 +199,22 @@ for item in traffic:
     extra = " (" + ", ".join(suffix) + ")" if suffix else ""
     items.append(f"{revision}={percent}%{extra}")
 print(", ".join(items) if items else "none")
-'
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 traffic_to_revisions() {
-  service_json "$1" | "$PYTHON_BIN" -c '
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  service_json "$1" > "$json_file"
+  "$PYTHON_BIN" - "$json_file" <<'PY' || rc=$?
 import json, sys
-svc = json.load(sys.stdin)
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    svc = json.load(fh)
 traffic = svc.get("status", {}).get("traffic", []) or []
 parts = []
 for item in traffic:
@@ -196,24 +227,34 @@ for item in traffic:
     if revision:
         parts.append(f"{revision}={percent}")
 print(",".join(parts))
-'
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 tagged_revision_url() {
   local svc="$1"
   local tag="$2"
   local revision="$3"
-  service_json "$svc" | "$PYTHON_BIN" -c '
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  service_json "$svc" > "$json_file"
+  "$PYTHON_BIN" - "$json_file" "$tag" "$revision" <<'PY' || rc=$?
 import json, sys
 
-wanted_tag = sys.argv[1]
-wanted_revision = sys.argv[2]
-svc = json.load(sys.stdin)
+wanted_tag = sys.argv[2]
+wanted_revision = sys.argv[3]
+with open(sys.argv[1], encoding="utf-8") as fh:
+    svc = json.load(fh)
 for item in svc.get("status", {}).get("traffic", []) or []:
     if item.get("tag") == wanted_tag and item.get("revisionName") == wanted_revision:
         print(item.get("url", ""))
         break
-' "$tag" "$revision"
+PY
+  rm -f "$json_file"
+  return "$rc"
 }
 
 image_digest() {
@@ -222,11 +263,49 @@ image_digest() {
     --format="value(image_summary.digest)" 2>/dev/null || true
 }
 
+image_acceptable_digests() {
+  local image="$1"
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  if docker buildx imagetools inspect "$image" --format '{{json .}}' > "$json_file" 2>/dev/null; then
+    "$PYTHON_BIN" - "$json_file" <<'PY' || rc=$?
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+digests = []
+
+def add(value):
+    if isinstance(value, str) and value.startswith("sha256:") and value not in digests:
+        digests.append(value)
+
+manifest = payload.get("manifest", {}) or {}
+add(manifest.get("digest"))
+for item in manifest.get("manifests", []) or []:
+    platform = item.get("platform", {}) or {}
+    if platform.get("os") == "unknown" and platform.get("architecture") == "unknown":
+        continue
+    add(item.get("digest"))
+
+print(",".join(digests))
+PY
+    rm -f "$json_file"
+    return "$rc"
+  fi
+
+  rm -f "$json_file"
+  image_digest "$image"
+}
+
 require_image_digest() {
   local image="$1"
   local label="$2"
   local digest
-  digest="$(image_digest "$image")"
+  digest="$(image_acceptable_digests "$image")"
   if [[ -z "$digest" ]]; then
     echo "::error::$label image not found in Artifact Registry: $image" >&2
     echo "  Build/push it first or remove --skip-build." >&2
@@ -261,13 +340,31 @@ revision_ready_state() {
   local env_name="$5"
   local expected_sha="$6"
   local svc="$7"
+  local json_file
+  local rc=0
 
-  "$PYTHON_BIN" -c "$(cat <<'PY'
+  json_file="$(mktemp)"
+  cat > "$json_file"
+  "$PYTHON_BIN" - "$json_file" "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc" <<'PY' || rc=$?
 import json
 import sys
 
-label, revision, image, image_digest, env_name, expected_sha, svc = sys.argv[1:]
-rev = json.load(sys.stdin)
+json_file, label, revision, image, image_digest, env_name, expected_sha, svc = sys.argv[1:]
+with open(json_file, encoding="utf-8") as fh:
+    rev = json.load(fh)
+
+image_digests = {
+    item.strip()
+    for item in image_digest.replace("\n", ",").split(",")
+    if item.strip()
+}
+
+def extract_digest(value: str) -> str:
+    if "@sha256:" in value:
+        return value.rsplit("@", 1)[1]
+    if value.startswith("sha256:"):
+        return value
+    return ""
 
 revision_service = rev.get("metadata", {}).get("labels", {}).get(
     "serving.knative.dev/service", ""
@@ -289,18 +386,16 @@ containers = rev.get("spec", {}).get("containers", []) or []
 status_digest = rev.get("status", {}).get("imageDigest", "")
 single_container_status_digest_matches = (
     len(containers) == 1
-    and image_digest
-    and (status_digest.endswith("@" + image_digest) or status_digest.endswith(image_digest))
+    and extract_digest(status_digest) in image_digests
 )
 
 def image_matches(candidate: str) -> bool:
     if candidate == image:
         return True
-    if image_digest and (
-        candidate.endswith("@" + image_digest)
-        or candidate.endswith(image_digest)
-        or single_container_status_digest_matches
-    ):
+    candidate_digest = extract_digest(candidate)
+    if candidate_digest and candidate_digest in image_digests:
+        return True
+    if single_container_status_digest_matches:
         return True
     return False
 
@@ -313,7 +408,7 @@ if not matched_containers:
     ) or "<none>"
     print(
         f"{label} revision {revision} image mismatch: expected {image}"
-        f" or digest {image_digest or '<unknown>'}; saw {seen_images}"
+        f" or digest(s) {image_digest or '<unknown>'}; saw {seen_images}"
     )
     sys.exit(1)
 
@@ -354,7 +449,8 @@ if ready_status == "False":
 print(f"{label} revision {revision} is still becoming ready ({details})")
 sys.exit(2)
 PY
-)" "$label" "$revision" "$image" "$image_digest" "$env_name" "$expected_sha" "$svc"
+  rm -f "$json_file"
+  return "$rc"
 }
 
 wait_for_staged_revision_ready() {
@@ -477,6 +573,26 @@ rollback_service_traffic() {
     --to-revisions="$traffic_spec"
 }
 
+json_field_from_stdin() {
+  local field="$1"
+  local json_file
+  local rc=0
+
+  json_file="$(mktemp)"
+  cat > "$json_file"
+  "$PYTHON_BIN" - "$json_file" "$field" <<'PY' || rc=$?
+import json
+import sys
+
+json_file, field = sys.argv[1:]
+with open(json_file, encoding="utf-8") as fh:
+    payload = json.load(fh)
+print(payload.get(field, ""))
+PY
+  rm -f "$json_file"
+  return "$rc"
+}
+
 poll_health_url() {
   local url="$1"
   local label="$2"
@@ -488,8 +604,8 @@ poll_health_url() {
   echo "Polling $label health at $url for commit=$SHORT_SHA ..."
   for attempt in $(seq 1 "$attempts"); do
     resp="$(curl -fsS "$url" 2>/dev/null || true)"
-    status="$(echo "$resp" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)"
-    commit="$(echo "$resp" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)"
+    status="$(printf '%s' "$resp" | json_field_from_stdin status 2>/dev/null || true)"
+    commit="$(printf '%s' "$resp" | json_field_from_stdin commit 2>/dev/null || true)"
     if [[ "$status" == "healthy" && "${commit:0:7}" == "$SHORT_SHA" ]]; then
       echo "Verified $label health: status=healthy commit=$commit"
       return 0
@@ -523,9 +639,9 @@ SHORT_SHA="${DEPLOY_SHA:0:7}"
 
 echo "--- Deploy plan ------------------------------------------------"
 echo "  project     : $GCP_PROJECT_ID"
-echo "  region      : $GCP_REGION"
+echo "  run region  : $GCP_REGION"
+echo "  gar region  : $GAR_REGION"
 echo "  registry    : $GAR_REGISTRY"
-echo "  registry host: $GAR_HOST"
 echo "  api svc     : $API_SERVICE"
 echo "  ui svc      : $UI_SERVICE"
 echo "  commit      : $DEPLOY_SHA ($SHORT_SHA)"
@@ -535,8 +651,11 @@ echo "  traffic     : $TRAFFIC_MODE"
 echo "  dry-run     : $([[ $DRY_RUN -eq 1 ]] && echo yes || echo no)"
 echo "----------------------------------------------------------------"
 
-if [[ $DRY_RUN -eq 0 ]]; then
-  read -rp "Proceed? [y/N] " confirm
+if [[ $DRY_RUN -eq 0 && $ASSUME_YES -ne 1 ]]; then
+  if ! read -rp "Proceed? [y/N] " confirm; then
+    echo "Aborted."
+    exit 0
+  fi
   confirm="${confirm//$'\r'/}"
   case "$confirm" in
     y|Y|yes|YES) ;;
@@ -550,7 +669,7 @@ for svc in "$API_SERVICE" "$UI_SERVICE"; do
         --project="$GCP_PROJECT_ID" --region="$GCP_REGION" \
         --format="value(status.url)" >/dev/null 2>&1; then
     echo "::error::Cloud Run service '$svc' not found in $GCP_REGION/$GCP_PROJECT_ID." >&2
-    echo "  Override with API_SERVICE/UI_SERVICE/CLOUD_RUN_REGION env vars." >&2
+    echo "  Override with API_SERVICE/UI_SERVICE/GCP_REGION env vars." >&2
     exit 1
   fi
 done
@@ -569,6 +688,18 @@ echo "Previous UI traffic        : $PREVIOUS_UI_TRAFFIC_SUMMARY"
 
 API_IMAGE="${GAR_REGISTRY}/agenticorg:${DEPLOY_SHA}"
 UI_IMAGE="${GAR_REGISTRY}/agenticorg-ui-cloudrun:${DEPLOY_SHA}"
+COMMERCE_PUBLIC_DISCOVERY_VALUE="${AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED:-false}"
+case "$COMMERCE_PUBLIC_DISCOVERY_VALUE" in
+  true|false) ;;
+  1|yes|on|enabled) COMMERCE_PUBLIC_DISCOVERY_VALUE="true" ;;
+  0|no|off|disabled|"") COMMERCE_PUBLIC_DISCOVERY_VALUE="false" ;;
+  *)
+    echo "::error::AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED must be true or false for deploys." >&2
+    exit 2
+    ;;
+esac
+API_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA},AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=${COMMERCE_PUBLIC_DISCOVERY_VALUE}"
+UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"
 
 # 3. Build + push images.
 if [[ $SKIP_BUILD -eq 0 ]]; then
@@ -667,12 +798,12 @@ fi
 # API public health passes so an API failure cannot leave a new UI revision live.
 API_NEW_REVISION=""
 UI_NEW_REVISION=""
-update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "AGENTICORG_GIT_SHA=${DEPLOY_SHA}" "API" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"
+update_service_no_traffic API_NEW_REVISION "$API_SERVICE" "$API_IMAGE" "$API_UPDATE_ENV_VARS" "API" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"
 
 echo "Staged API revision: $API_NEW_REVISION"
 
 if [[ "$TRAFFIC_MODE" == "preserve" ]]; then
-  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
+  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
   echo "Staged UI revision : $UI_NEW_REVISION"
   echo "NOT DEPLOYED: --traffic preserve staged revisions but left production traffic unchanged."
   echo "Current API traffic: $(traffic_summary "$API_SERVICE")"
@@ -681,7 +812,7 @@ if [[ "$TRAFFIC_MODE" == "preserve" ]]; then
 fi
 
 if [[ "$TRAFFIC_MODE" == "manual" ]]; then
-  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
+  update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"
   echo "Staged UI revision : $UI_NEW_REVISION"
   echo "NOT DEPLOYED: --traffic manual staged revisions but left production traffic unchanged."
   print_manual_traffic_commands "$API_NEW_REVISION" "$UI_NEW_REVISION"
@@ -724,7 +855,7 @@ if ! poll_health_url "$HEALTH_URL" "public API" 30; then
   exit 1
 fi
 
-if ! update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "GIT_SHA=${DEPLOY_SHA}" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"; then
+if ! update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"; then
   remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
   echo "::error::Failed to stage UI revision after API verification; rolling back API/UI traffic." >&2
   rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"

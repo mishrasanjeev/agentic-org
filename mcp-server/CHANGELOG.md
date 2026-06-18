@@ -1,5 +1,20 @@
 # agenticorg-mcp-server changelog
 
+## 4.0.5 - 2026-06-14
+
+MCP registry metadata alignment.
+
+### Fixed
+- `server.json` now advertises the same tools the MCP server actually exposes:
+  `list_agents`, `run_agent`, `get_agent_details`, `create_agent_from_sop`,
+  `deploy_agent`, `list_connectors`, `list_mcp_tools`,
+  `discover_agents_a2a`, and `get_agent_card`.
+- Removed stale registry/README claims for direct connector invocation and
+  nonexistent workflow/knowledge tools. Connector workflows are reached through
+  agents, not `call_connector_tool`.
+- `package.json`, `package-lock.json`, `server.json.version`, and
+  `server.json.packages[0].version` moved together to `4.0.5`.
+
 ## 4.0.4 — 2026-05-12
 
 Security republish — same runtime as 4.0.3, with patched transitive

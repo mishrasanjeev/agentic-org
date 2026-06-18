@@ -84,6 +84,7 @@ async def backfill() -> dict[str, int]:
                 connector_name=conn.name,
                 tenant_id=str(conn.tenant_id),
             )
+        # enterprise-gate: broad-except-ok reason=crypto-backfill-row-failure-records-error-count
         except Exception as e:
             errors += 1
             logger.error(

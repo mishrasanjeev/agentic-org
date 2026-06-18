@@ -484,7 +484,7 @@ class TestFTSCALE011:
         for i in range(total):
             request_id = f"req-{i}"
             # Hash-based deterministic split
-            h = int(hashlib.md5(request_id.encode()).hexdigest(), 16)
+            h = int(hashlib.md5(request_id.encode(), usedforsecurity=False).hexdigest(), 16)
             bucket = h % 100
             if bucket < variant_b_pct:
                 variant_b_count += 1

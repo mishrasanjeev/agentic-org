@@ -7,12 +7,12 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 
+import jwt
 import pytest
 import pytest_asyncio
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport, AsyncClient
-from jose import jwt
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,

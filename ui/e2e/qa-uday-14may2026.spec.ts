@@ -59,11 +59,19 @@ import { expect, test } from "@playwright/test";
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
 // Credentials are env-only. No live value is ever committed; see the
 // beforeAll guard which fails fast with a directed message if unset.
-const UDAY_EMAIL = process.env.UDAY_EMAIL || "uday.chauhan@edumatica.io";
+const UDAY_EMAIL = process.env.UDAY_EMAIL || "qa.uday@example.com";
 const UDAY_PASSWORD = process.env.UDAY_PASSWORD || "";
 const ZOHO_CLIENT_ID = process.env.ZOHO_CLIENT_ID || "";
 const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || "";
 const ZOHO_ORG_ID = process.env.ZOHO_ORG_ID || "";
+const MISSING_ENV = [
+  ["UDAY_PASSWORD", UDAY_PASSWORD],
+  ["ZOHO_CLIENT_ID", ZOHO_CLIENT_ID],
+  ["ZOHO_CLIENT_SECRET", ZOHO_CLIENT_SECRET],
+  ["ZOHO_ORG_ID", ZOHO_ORG_ID],
+]
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
 
 // We hit the same backend the UI calls — agenticorg.ai routes
 // /api/v1/* to the Cloud Run API. Tester report confirmed the path.
@@ -89,6 +97,11 @@ async function loginAsUday(
 }
 
 test.describe("Uday CA Firms 2026-05-14 — Zoho Books OAuth onboarding", () => {
+  test.skip(
+    MISSING_ENV.length > 0,
+    `Live Zoho OAuth credentials are not configured: ${MISSING_ENV.join(", ")}.`,
+  );
+
   test.beforeAll(() => {
     // Surface the absent env vars loudly so a misconfigured CI run
     // fails with the right diagnostic instead of a redirect-uri timeout.

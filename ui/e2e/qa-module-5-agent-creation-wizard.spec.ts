@@ -7,13 +7,14 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
+import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
 
 const createdAgents: string[] = [];
 
 test.describe("Module 5: Agent Creation Wizard @qa @wizard @agent-create", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     requireAuth();
+    await authenticate(page);
   });
 
   test.afterEach(async ({ request }) => {
@@ -73,7 +74,8 @@ test.describe("Module 5: Agent Creation Wizard @qa @wizard @agent-create", () =>
     expect([200, 201, 409]).toContain(resp.status());
     if (resp.status() < 300) {
       const body = await resp.json();
-      if (body.id) createdAgents.push(body.id);
+      const agentId = body.id || body.agent_id;
+      if (agentId) createdAgents.push(agentId);
       // The agent_type we sent must round-trip verbatim.
       expect(body.agent_type).toBe("qa_custom_type");
     }
@@ -130,7 +132,8 @@ test.describe("Module 5: Agent Creation Wizard @qa @wizard @agent-create", () =>
     }
     expect(first.status()).toBeLessThan(300);
     const firstBody = await first.json();
-    if (firstBody.id) createdAgents.push(firstBody.id);
+    const firstId = firstBody.id || firstBody.agent_id;
+    if (firstId) createdAgents.push(firstId);
 
     // Second create with the SAME payload — must NOT 2xx.
     // The DB UniqueConstraint fires; the API surfaces it as 409
@@ -148,7 +151,8 @@ test.describe("Module 5: Agent Creation Wizard @qa @wizard @agent-create", () =>
     expect(second.status()).toBeGreaterThanOrEqual(400);
     if (second.status() < 300) {
       const secondBody = await second.json();
-      if (secondBody.id) createdAgents.push(secondBody.id);
+      const secondId = secondBody.id || secondBody.agent_id;
+      if (secondId) createdAgents.push(secondId);
     }
   });
 });

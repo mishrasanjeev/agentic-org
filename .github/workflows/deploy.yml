@@ -11,6 +11,77 @@ env:
   HELM_CHART_PATH: ./helm
 
 jobs:
+  classify-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - name: Classify changed paths
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Docs-only main pushes should still run normal validation, but must
+          # not authenticate to Google Cloud or publish container images.
+          docs_only=false
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Version tag detected; cloud build remains eligible."
+            exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Unknown event $GITHUB_EVENT_NAME; cloud build remains eligible."
+            exit 0
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ || -z "$head" ]]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Missing or initial diff base; cloud build remains eligible."
+            exit 0
+          fi
+
+          git diff --name-only "$base" "$head" > changed-files.txt
+          if [[ ! -s changed-files.txt ]]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "No changed files detected; cloud build remains eligible."
+            exit 0
+          fi
+
+          is_docs_only_path() {
+            local path="$1"
+            [[ "$path" == docs/* ]] && return 0
+            [[ "$path" == "README.md" ]] && return 0
+            [[ "$path" == *.md && "$path" != */* ]] && return 0
+            return 1
+          }
+
+          docs_only=true
+          while IFS= read -r path; do
+            if ! is_docs_only_path "$path"; then
+              docs_only=false
+              break
+            fi
+          done < changed-files.txt
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "docs_only=$docs_only"
+          echo "Changed files:"
+          sed 's/^/- /' changed-files.txt
+
   lint:
     runs-on: ubuntu-latest
     permissions:
@@ -58,7 +129,7 @@ jobs:
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ tests/regression/ --cov=. --cov-report=xml --cov-fail-under=55
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
       # Foundation #9 release-acceptance gate runs in its own job
       # and needs the .coverage + coverage.xml from this run to
       # enforce per-module floors. Without artefact pass-through
@@ -132,11 +203,19 @@ jobs:
           bandit -r core/ connectors/ api/ auth/ -ll
       - run: |
           . .audit-env/bin/activate
-          pip-audit --desc || echo "::warning::pip-audit found vulnerabilities in transitive dependencies"
+          pip-audit --desc --timeout 60 .
+      - run: |
+          . .audit-env/bin/activate
+          pip-audit --desc --timeout 60 -r requirements.txt
+      - run: |
+          . .audit-env/bin/activate
+          pip-audit --desc --timeout 60 -r requirements-v4.txt
 
   release-acceptance:
-    needs: [unit-tests, integration-tests, security-scan]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: [classify-changes, unit-tests, integration-tests, security-scan]
+    if: |
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+      needs.classify-changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -173,8 +252,10 @@ jobs:
           retention-days: 30
 
   build:
-    needs: [unit-tests, integration-tests, security-scan, release-acceptance]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: [classify-changes, unit-tests, integration-tests, security-scan, release-acceptance]
+    if: |
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+      needs.classify-changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -214,8 +295,10 @@ jobs:
           docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:latest
 
   deploy-staging:
-    needs: build
-    if: false  # Staging namespace removed to cut costs. Re-enable when needed.
+    needs: [classify-changes, build]
+    # Staging namespace removed to cut costs. Re-enable only with the
+    # docs-only guard intact so planning/doc merges never deploy.
+    if: ${{ false && needs.classify-changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     environment: staging
     permissions:
@@ -278,13 +361,14 @@ jobs:
           exit 1
 
   e2e-tests:
-    needs: deploy-production
+    needs: [classify-changes, deploy-production]
     # deploy-production can still succeed when approval-gate is skipped on main
     # pushes, so gate these jobs on the actual deploy result instead of the
     # default implicit status chain.
     if: |
       always() &&
       github.ref == 'refs/heads/main' &&
+      needs.classify-changes.outputs.docs_only != 'true' &&
       needs.deploy-production.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -423,8 +507,10 @@ jobs:
           path: ui/playwright-report/
 
   approval-gate:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [classify-changes, build]
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.classify-changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -435,7 +521,7 @@ jobs:
         run: echo "Production deployment approved by reviewer"
 
   deploy-production:
-    needs: [build, integration-tests, security-scan, approval-gate]
+    needs: [classify-changes, build, integration-tests, security-scan, approval-gate]
     # GKE cluster removed in Stage 4 of the Cloud Run cost-cut migration
     # (2026-04-25). The helm-based deploy below targets a cluster that no
     # longer exists. A Cloud Run deploy CI rewrite is pending; until then,
@@ -443,7 +529,7 @@ jobs:
     # against the agenticorg-api/agenticorg-ui Cloud Run services in
     # asia-southeast1. Re-enable this job once the new deploy steps are
     # in place.
-    if: false
+    if: ${{ false && needs.classify-changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -625,10 +711,11 @@ jobs:
           exit 1
 
   submit-indexing:
-    needs: deploy-production
+    needs: [classify-changes, deploy-production]
     if: |
       always() &&
       github.ref == 'refs/heads/main' &&
+      needs.classify-changes.outputs.docs_only != 'true' &&
       needs.deploy-production.result == 'success'
     runs-on: ubuntu-latest
     permissions:

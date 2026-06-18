@@ -24,10 +24,12 @@ from connectors.finance import netsuite as _  # noqa: F401, F811
 # Finance connectors (10)
 from connectors.finance import oracle_fusion as _  # noqa: F401, F811
 from connectors.finance import pinelabs_plural as _  # noqa: F401, F811
+from connectors.finance import professional_tax as _  # noqa: F401, F811
 from connectors.finance import quickbooks as _  # noqa: F401, F811
 from connectors.finance import sap as _  # noqa: F401, F811
 from connectors.finance import stripe as _  # noqa: F401, F811
 from connectors.finance import tally as _  # noqa: F401, F811
+from connectors.finance import traces as _  # noqa: F401, F811
 from connectors.finance import zoho_books as _  # noqa: F401, F811
 from connectors.framework.base_connector import BaseConnector
 

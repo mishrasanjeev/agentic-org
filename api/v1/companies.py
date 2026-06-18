@@ -5,13 +5,17 @@ Database-backed CRUD with tenant-scoped RLS, role management, and onboarding.
 
 from __future__ import annotations
 
+import csv
 import enum
+import io
 import logging
+import re
 import uuid as _uuid
 from datetime import datetime
+from typing import Annotated
 
 from cryptography.fernet import InvalidToken
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -54,6 +58,66 @@ _STATE_CODES: dict[str, str] = {
     "TR": "Tripura", "UK": "Uttarakhand", "UP": "Uttar Pradesh", "WB": "West Bengal",
 }
 _STATE_NAME_TO_CODE: dict[str, str] = {v.lower(): k for k, v in _STATE_CODES.items()}
+_GSTIN_RE = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
+_PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+_TAN_RE = re.compile(r"^[A-Z]{4}[0-9]{5}[A-Z]$")
+_CIN_RE = re.compile(r"^[A-Z0-9]{21}$")
+_COMPANY_BULK_UPLOAD_COLUMNS = [
+    "name",
+    "gstin",
+    "pan",
+    "tan",
+    "cin",
+    "state_code",
+    "industry",
+    "registered_address",
+    "signatory_name",
+    "signatory_designation",
+    "signatory_email",
+    "compliance_email",
+    "pf_registration",
+    "esi_registration",
+    "pt_registration",
+    "bank_name",
+    "bank_account_number",
+    "bank_ifsc",
+    "bank_branch",
+]
+_COMPANY_BULK_HEADER_ALIASES = {
+    "companyname": "name",
+    "clientname": "name",
+    "name": "name",
+    "gstin": "gstin",
+    "gstnumber": "gstin",
+    "pan": "pan",
+    "pannumber": "pan",
+    "tan": "tan",
+    "tannumber": "tan",
+    "cin": "cin",
+    "cinnumber": "cin",
+    "state": "state_code",
+    "statecode": "state_code",
+    "industry": "industry",
+    "address": "registered_address",
+    "registeredaddress": "registered_address",
+    "signatoryname": "signatory_name",
+    "signatorydesignation": "signatory_designation",
+    "signatoryemail": "signatory_email",
+    "complianceemail": "compliance_email",
+    "pfregistration": "pf_registration",
+    "pfregistrationno": "pf_registration",
+    "esiregistration": "esi_registration",
+    "esiregistrationno": "esi_registration",
+    "ptregistration": "pt_registration",
+    "ptregistrationno": "pt_registration",
+    "bankname": "bank_name",
+    "bankaccountnumber": "bank_account_number",
+    "accountnumber": "bank_account_number",
+    "bankifsc": "bank_ifsc",
+    "ifsc": "bank_ifsc",
+    "bankbranch": "bank_branch",
+    "branch": "bank_branch",
+}
 
 
 def _normalize_state_code(value: str | None) -> str | None:
@@ -78,6 +142,107 @@ def _normalize_state_code(value: str | None) -> str | None:
     raise ValueError(
         f"state_code must be a 2-char code or known Indian state name, got {value!r}"
     )
+
+
+def _bulk_header_key(value: object) -> str:
+    key = re.sub(r"[^a-z0-9]", "", str(value or "").strip().lower())
+    return _COMPANY_BULK_HEADER_ALIASES.get(key, key)
+
+
+def _clean_upload_cell(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _normalise_company_upload_row(raw: dict[str, object], row_number: int) -> tuple[CompanyCreate | None, list[str]]:
+    normalized = {
+        _bulk_header_key(key): _clean_upload_cell(value)
+        for key, value in raw.items()
+        if _bulk_header_key(key) in _COMPANY_BULK_UPLOAD_COLUMNS
+    }
+    errors: list[str] = []
+
+    name = normalized.get("name", "")
+    pan = normalized.get("pan", "").upper()
+    gstin = normalized.get("gstin", "").upper()
+    tan = normalized.get("tan", "").upper()
+    cin = normalized.get("cin", "").upper()
+    state_raw = normalized.get("state_code", "")
+
+    if not name:
+        errors.append("name is required")
+    if not pan:
+        errors.append("pan is required")
+    elif not _PAN_RE.match(pan):
+        errors.append("pan format is invalid")
+    if gstin and not _GSTIN_RE.match(gstin):
+        errors.append("gstin format is invalid")
+    if tan and not _TAN_RE.match(tan):
+        errors.append("tan format is invalid")
+    if cin and not _CIN_RE.match(cin):
+        errors.append("cin format is invalid")
+    try:
+        state_code = _normalize_state_code(state_raw)
+    except ValueError as exc:
+        errors.append(str(exc))
+        state_code = None
+    if not state_code:
+        errors.append("state_code is required")
+
+    if errors:
+        return None, [f"row {row_number}: {error}" for error in errors]
+
+    return CompanyCreate(
+        name=name,
+        gstin=gstin or None,
+        pan=pan,
+        tan=tan or None,
+        cin=cin or None,
+        state_code=state_code,
+        industry=normalized.get("industry") or None,
+        registered_address=normalized.get("registered_address") or None,
+        signatory_name=normalized.get("signatory_name") or None,
+        signatory_designation=normalized.get("signatory_designation") or None,
+        signatory_email=normalized.get("signatory_email") or None,
+        compliance_email=normalized.get("compliance_email") or None,
+        pf_registration=normalized.get("pf_registration") or None,
+        esi_registration=normalized.get("esi_registration") or None,
+        pt_registration=normalized.get("pt_registration") or None,
+        bank_name=normalized.get("bank_name") or None,
+        bank_account_number=normalized.get("bank_account_number") or None,
+        bank_ifsc=(normalized.get("bank_ifsc") or "").upper() or None,
+        bank_branch=normalized.get("bank_branch") or None,
+        gst_auto_file=False,
+    ), []
+
+
+def _parse_company_upload(filename: str, content: bytes) -> list[tuple[int, dict[str, object]]]:
+    suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    if suffix == "csv":
+        text = content.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            raise HTTPException(422, "CSV upload must include a header row")
+        return [(index, dict(row)) for index, row in enumerate(reader, start=2)]
+    if suffix in {"xlsx", "xlsm"}:
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise HTTPException(500, "Excel parsing dependency is unavailable") from exc
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise HTTPException(422, "Excel upload is empty")
+        headers = [str(h or "").strip() for h in rows[0]]
+        if not any(headers):
+            raise HTTPException(422, "Excel upload must include a header row")
+        parsed: list[tuple[int, dict[str, object]]] = []
+        for row_number, values in enumerate(rows[1:], start=2):
+            if not any(_clean_upload_cell(value) for value in values):
+                continue
+            parsed.append((row_number, dict(zip(headers, values, strict=False))))
+        return parsed
+    raise HTTPException(415, "Bulk client upload supports .csv, .xlsx, and .xlsm files")
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +390,29 @@ class CompanyListOut(BaseModel):
     total: int
     page: int = 1
     per_page: int = 50
+
+
+class CompanyBulkUploadError(BaseModel):
+    row_number: int
+    identifier: str | None = None
+    errors: list[str]
+
+
+class CompanyBulkUploadCreated(BaseModel):
+    row_number: int
+    id: str
+    name: str
+    gstin: str | None = None
+
+
+class CompanyBulkUploadResponse(BaseModel):
+    created_count: int
+    validated_count: int
+    failed_count: int
+    dry_run: bool
+    created: list[CompanyBulkUploadCreated] = Field(default_factory=list)
+    errors: list[CompanyBulkUploadError] = Field(default_factory=list)
+    template_columns: list[str] = Field(default_factory=lambda: list(_COMPANY_BULK_UPLOAD_COLUMNS))
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +629,257 @@ async def create_company(
         out = _company_to_out(company)
 
     return out
+
+
+# ---------------------------------------------------------------------------
+# BULK UPLOAD TEMPLATE
+# ---------------------------------------------------------------------------
+
+
+@router.get("/companies/bulk-upload/template")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.bulk_upload.template",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="companies.bulk_upload.template",
+)
+async def download_company_bulk_upload_template(
+    template_format: Annotated[str, Query(alias="format", pattern="^(xlsx|csv)$")] = "xlsx",
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Download a bulk client upload template."""
+    rows = [
+        _COMPANY_BULK_UPLOAD_COLUMNS,
+        [
+            "Acme Manufacturing Pvt Ltd",
+            "29AABCU9603R1ZM",
+            "AABCU9603R",
+            "BLRA12345F",
+            "U12345KA2020PTC123456",
+            "KA",
+            "Manufacturing",
+            "12 Industrial Area, Bengaluru",
+            "Priya Rao",
+            "Director",
+            "priya@example.com",
+            "compliance@example.com",
+            "PF/KR/12345",
+            "ESI/1234567890",
+            "PT/KAR/12345",
+            "State Bank of India",
+            "1234567890",
+            "SBIN0001234",
+            "MG Road",
+        ],
+    ]
+    filename = f"Company_Upload_Template.{template_format}"
+    if template_format == "csv":
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerows(rows)
+        return Response(
+            content=buffer.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    try:
+        from openpyxl import Workbook
+    except ImportError as exc:
+        raise HTTPException(500, "Excel template dependency is unavailable") from exc
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Company Upload"
+    for row in rows:
+        ws.append(row)
+    ws.freeze_panes = "A2"
+    for cell in ws[1]:
+        cell.font = cell.font.copy(bold=True)
+    output = io.BytesIO()
+    wb.save(output)
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# BULK UPLOAD
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/companies/bulk-upload",
+    response_model=CompanyBulkUploadResponse,
+    dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="companies.bulk_upload",
+    rate_limit="company-bulk-write",
+    idempotency="unique-tenant-gstin-or-company-name-per-row",
+    audit_event="companies.bulk_upload",
+)
+async def bulk_upload_companies(
+    file: Annotated[UploadFile, File()],
+    dry_run: Annotated[bool, Query()] = False,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Create many client companies from a CSV/XLSX upload.
+
+    Invalid rows are reported with row numbers. Valid rows are created unless
+    dry_run=true, so a CA firm can validate the sheet before committing.
+    """
+    if not file.filename:
+        raise HTTPException(422, "Upload filename is required")
+    content = await file.read()
+    if not content:
+        raise HTTPException(422, "Bulk client upload file is empty")
+    if len(content) > 2_000_000:
+        raise HTTPException(413, "Bulk client upload file is too large; limit is 2 MB")
+
+    parsed_rows = _parse_company_upload(file.filename, content)
+    if not parsed_rows:
+        raise HTTPException(422, "Bulk client upload contains no data rows")
+    if len(parsed_rows) > 500:
+        raise HTTPException(413, "Bulk client upload supports up to 500 clients per file")
+
+    valid_rows: list[tuple[int, CompanyCreate]] = []
+    errors: list[CompanyBulkUploadError] = []
+    seen_gstins: dict[str, int] = {}
+    seen_names: dict[str, int] = {}
+
+    for row_number, raw in parsed_rows:
+        company_body, row_errors = _normalise_company_upload_row(raw, row_number)
+        if row_errors:
+            errors.append(CompanyBulkUploadError(
+                row_number=row_number,
+                identifier=str(raw.get("name") or raw.get("Company Name") or ""),
+                errors=row_errors,
+            ))
+            continue
+
+        assert company_body is not None
+        duplicate_errors: list[str] = []
+        if company_body.gstin:
+            if company_body.gstin in seen_gstins:
+                duplicate_errors.append(f"gstin duplicates row {seen_gstins[company_body.gstin]}")
+            seen_gstins[company_body.gstin] = row_number
+        name_key = company_body.name.strip().casefold()
+        if name_key in seen_names:
+            duplicate_errors.append(f"name duplicates row {seen_names[name_key]}")
+        seen_names[name_key] = row_number
+        if duplicate_errors:
+            errors.append(CompanyBulkUploadError(
+                row_number=row_number,
+                identifier=company_body.gstin or company_body.name,
+                errors=duplicate_errors,
+            ))
+            continue
+        valid_rows.append((row_number, company_body))
+
+    if dry_run:
+        return CompanyBulkUploadResponse(
+            created_count=0,
+            validated_count=len(valid_rows),
+            failed_count=len(errors),
+            dry_run=True,
+            created=[],
+            errors=errors,
+        )
+
+    tid = _uuid.UUID(tenant_id)
+    created: list[CompanyBulkUploadCreated] = []
+    async with get_tenant_session(tid) as session:
+        from core.agents.packs.installer import (
+            is_pack_installed_for_session,
+            sync_company_pack_assets_for_session,
+        )
+
+        ca_pack_installed = await is_pack_installed_for_session(session, tid, "ca-firm")
+        for row_number, body in valid_rows:
+            if body.gstin:
+                existing = await session.execute(
+                    select(Company.id).where(
+                        Company.tenant_id == tid,
+                        Company.gstin == body.gstin,
+                    ).limit(1)
+                )
+                if existing.scalar_one_or_none():
+                    errors.append(CompanyBulkUploadError(
+                        row_number=row_number,
+                        identifier=body.gstin,
+                        errors=[f"Company with GSTIN {body.gstin} already exists"],
+                    ))
+                    continue
+            existing_name = await session.execute(
+                select(Company.id).where(
+                    Company.tenant_id == tid,
+                    func.lower(Company.name) == body.name.strip().lower(),
+                ).limit(1)
+            )
+            if existing_name.scalar_one_or_none():
+                errors.append(CompanyBulkUploadError(
+                    row_number=row_number,
+                    identifier=body.name,
+                    errors=[f"Company named {body.name} already exists"],
+                ))
+                continue
+
+            company = Company(
+                tenant_id=tid,
+                name=body.name,
+                gstin=body.gstin,
+                pan=body.pan,
+                tan=body.tan,
+                cin=body.cin,
+                state_code=body.state_code,
+                industry=body.industry,
+                registered_address=body.registered_address,
+                signatory_name=body.signatory_name,
+                signatory_designation=body.signatory_designation,
+                signatory_email=body.signatory_email,
+                compliance_email=body.compliance_email,
+                pf_registration=body.pf_registration,
+                esi_registration=body.esi_registration,
+                pt_registration=body.pt_registration,
+                bank_name=body.bank_name,
+                bank_account_number=body.bank_account_number,
+                bank_ifsc=body.bank_ifsc,
+                bank_branch=body.bank_branch,
+                tally_config=body.tally_config,
+                gst_auto_file=False,
+            )
+            session.add(company)
+            await session.flush()
+            if ca_pack_installed:
+                await sync_company_pack_assets_for_session(
+                    session,
+                    tid,
+                    "ca-firm",
+                    company.id,
+                    company.name,
+                )
+            await session.refresh(company)
+            created.append(CompanyBulkUploadCreated(
+                row_number=row_number,
+                id=str(company.id),
+                name=company.name,
+                gstin=company.gstin,
+            ))
+
+    return CompanyBulkUploadResponse(
+        created_count=len(created),
+        validated_count=len(valid_rows),
+        failed_count=len(errors),
+        dry_run=False,
+        created=created,
+        errors=errors,
+    )
 
 
 # ---------------------------------------------------------------------------

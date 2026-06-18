@@ -210,30 +210,32 @@ test.describe("Aishwarya 12 May 2026 TDS regressions", () => {
     await page.goto(`${baseURL}/dashboard/agents/agent-tds`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Chat with Agent" }).click();
 
-    const input = page.getByPlaceholder("Type a message...").last();
+    const agentChat = page.getByRole("dialog", { name: "Chat with TDS Compliance Agent" });
+    await expect(agentChat).toBeVisible();
+    const input = agentChat.getByPlaceholder("Type a message...");
     await input.fill(
       "Calculate TDS for contractor payment of INR 12,50,000 under Section 194C for Q2 FY 2026-27.",
     );
     await input.press("Enter");
-    await expect(page.locator("body")).toContainText("gross transaction amount");
-    await expect(page.locator("body")).toContainText("HITL");
+    await expect(agentChat).toContainText("gross transaction amount");
+    await expect(agentChat).toContainText("HITL");
 
     await input.fill("Generate Challan 281 for April 2026 TDS payment of INR 1,25,000.");
     await input.press("Enter");
-    await expect(page.locator("body")).toContainText("TDS amount to pay: INR 125,000.00");
-    await expect(page.locator("body")).toContainText("draft prepared");
-    await expect(page.locator("body")).toContainText("Deferred for later compliance evidence");
-    await expect(page.locator("body")).not.toContainText("Missing: section, TAN, PAN");
-    await expect(page.locator("body")).not.toContainText("Amount of TDS to be paid");
+    await expect(agentChat).toContainText("TDS amount to pay: INR 125,000.00");
+    await expect(agentChat).toContainText("draft prepared");
+    await expect(agentChat).toContainText("Deferred for later compliance evidence");
+    await expect(agentChat).not.toContainText("Missing: section, TAN, PAN");
+    await expect(agentChat).not.toContainText("Amount of TDS to be paid");
 
     await input.fill("Compute late filing interest and penalty for delayed Form 26Q filing for Q4 FY 2025-26.");
     await input.press("Enter");
-    await expect(page.locator("body")).toContainText("Section 234E / 201(1A)");
-    await expect(page.locator("body")).toContainText("2026-05-31");
-    await expect(page.locator("body")).toContainText("Assumptions used");
-    await expect(page.locator("body")).toContainText("INR 6,000.00");
-    await expect(page.locator("body")).toContainText("INR 1,000.00");
-    await expect(page.locator("body")).toContainText("INR 1,500.00");
+    await expect(agentChat).toContainText("Section 234E / 201(1A)");
+    await expect(agentChat).toContainText("2026-05-31");
+    await expect(agentChat).toContainText("Assumptions used");
+    await expect(agentChat).toContainText("INR 6,000.00");
+    await expect(agentChat).toContainText("INR 1,000.00");
+    await expect(agentChat).toContainText("INR 1,500.00");
   });
 
   test("shadow sample generation refreshes persisted sample count and accuracy", async ({

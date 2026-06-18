@@ -17,6 +17,14 @@ export default function AgentCard({ agent, onClick }: Props) {
   const statusColor = { active: "success", shadow: "warning", paused: "destructive" }[agent.status] || "default";
   const displayName = agent.employee_name || agent.name;
   const initial = displayName.charAt(0).toUpperCase();
+  const shadowAccuracy =
+    typeof agent.shadow_accuracy_current === "number" ? agent.shadow_accuracy_current : null;
+  const shadowFloor =
+    typeof agent.shadow_accuracy_floor === "number" ? agent.shadow_accuracy_floor : agent.confidence_floor;
+  const shadowBelowFloor =
+    shadowAccuracy != null && typeof shadowFloor === "number" && shadowAccuracy < shadowFloor;
+  const shadowAccuracyLabel =
+    shadowAccuracy != null ? `${(shadowAccuracy * 100).toFixed(1)}%` : "N/A";
 
   return (
     <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={onClick}>
@@ -35,7 +43,10 @@ export default function AgentCard({ agent, onClick }: Props) {
               {agent.designation && <p className="text-xs text-muted-foreground">{agent.designation}</p>}
             </div>
           </div>
-          <Badge variant={statusColor as any}>{agent.status}</Badge>
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant={statusColor as any}>{agent.status}</Badge>
+            {shadowBelowFloor && <Badge variant="destructive">Below Floor</Badge>}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -48,6 +59,7 @@ export default function AgentCard({ agent, onClick }: Props) {
           ) : <span className="font-medium">—</span>}</div>
           <div>Confidence: <span className="font-medium">{agent.confidence_floor != null ? `${(agent.confidence_floor * 100).toFixed(0)}%` : "N/A"}</span></div>
           <div>Shadow: <span className="font-medium">{agent.shadow_sample_count ?? 0} samples</span></div>
+          <div>Shadow Accuracy: <span className={shadowBelowFloor ? "font-medium text-red-700" : "font-medium"}>{shadowAccuracyLabel}</span></div>
           {agent.specialization && (
             <div className="col-span-2 text-xs text-muted-foreground mt-1 truncate">
               Specialization: {agent.specialization}

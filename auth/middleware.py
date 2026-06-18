@@ -15,6 +15,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     EXEMPT_PATHS = {
         "/api/v1/health", "/api/v1/health/liveness", "/api/v1/auth/login",
+        "/api/health",
         "/api/v1/auth/google", "/api/v1/auth/config", "/api/v1/auth/signup",
         "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
         "/api/v1/org/accept-invite",
@@ -43,30 +44,56 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (no prior session)
     )
 
+    async def _credential_failure_response(
+        self,
+        client_ip: str,
+        detail: str = "Invalid or expired token",
+    ) -> JSONResponse:
+        if await is_ip_blocked(client_ip):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many failed attempts"},
+            )
+        blocked = await record_auth_failure(client_ip)
+        if blocked:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many failed attempts"},
+            )
+        return JSONResponse(status_code=401, content={"detail": detail})
+
     async def dispatch(self, request: Request, call_next) -> Response:
         # Skip auth for health, docs, and public eval endpoints
+        if request.method == "OPTIONS":
+            return await call_next(request)
         if request.url.path in self.EXEMPT_PATHS or request.url.path.startswith(self.EXEMPT_PREFIXES):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
 
-        # Check if IP is blocked (Redis-backed)
-        if await is_ip_blocked(client_ip):
-            return JSONResponse(status_code=429, content={"detail": "Too many failed attempts"})
-
-        # Extract token — prefer the HttpOnly session cookie (CRITICAL-01
-        # remediation). Fall back to Authorization: Bearer for API
-        # clients, CI, SDKs, and browsers that have not yet migrated.
+        # Extract token. Explicit Authorization wins over ambient cookies
+        # so API clients, CI, SDKs, and browser automation are not broken
+        # by a stale or unrelated browser cookie jar. Browser UI code no
+        # longer injects Authorization, so normal sessions still use the
+        # HttpOnly cookie path.
         token = ""
-        cookie_token = request.cookies.get("agenticorg_session") or ""
-        if cookie_token:
-            token = cookie_token
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header:
+            if not auth_header.startswith("Bearer "):
+                return await self._credential_failure_response(
+                    client_ip,
+                    "Unsupported Authorization scheme",
+                )
+            token = auth_header[7:].strip()
+            if not token:
+                return await self._credential_failure_response(client_ip)
         else:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header[7:]
+            token = request.cookies.get("agenticorg_session") or ""
         if not token:
-            await record_auth_failure(client_ip)
+            # Anonymous session probes are not credential failures. Public
+            # pages call /auth/me to discover session state; missing creds
+            # must stay 401 even if earlier malformed credentials blocked
+            # the source IP.
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Missing session cookie or Authorization header"},
@@ -74,10 +101,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             claims = await validate_token(token)
         except ValueError:
-            await record_auth_failure(client_ip)
-            return JSONResponse(
-                status_code=401, content={"detail": "Invalid or expired token"}
-            )
+            return await self._credential_failure_response(client_ip)
 
         # Set request state
         tenant_id = extract_tenant_id(claims)

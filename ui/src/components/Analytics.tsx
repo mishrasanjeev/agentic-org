@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 const GA_ID = import.meta.env.VITE_GA4_ID || "";
+let analyticsInitialized = false;
 
 /** Fire a GA4 custom event. Safe to call even if GA is not loaded. */
 export function trackEvent(
@@ -34,24 +35,26 @@ export default function Analytics() {
   const location = useLocation();
 
   useEffect(() => {
-    if (!GA_ID) return;
-    // Load gtag.js once
+    if (!GA_ID || analyticsInitialized) return;
+    analyticsInitialized = true;
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag =
+      window.gtag ||
+      function gtag(...args: Parameters<typeof window.gtag>) {
+        window.dataLayer.push(args);
+      };
+
     if (!document.getElementById("ga-script")) {
       const script = document.createElement("script");
       script.id = "ga-script";
       script.async = true;
       script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
       document.head.appendChild(script);
-
-      const inline = document.createElement("script");
-      inline.textContent = `
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', '${GA_ID}', { send_page_view: false });
-      `;
-      document.head.appendChild(inline);
     }
+
+    window.gtag("js", new Date());
+    window.gtag("config", GA_ID, { send_page_view: false });
   }, []);
 
   // Track page views on route change

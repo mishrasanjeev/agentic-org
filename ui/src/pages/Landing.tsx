@@ -138,6 +138,29 @@ const INDIA_CONNECTORS = [
   { name: "DigiLocker", desc: "Document verification" },
 ];
 
+const OACP_SECTION_POINTS = [
+  {
+    label: "Source",
+    title: "Facts Come From Merchant Systems",
+    desc: "Catalog, price, availability, policy, and support facts stay grounded in approved merchant sources and public-safe evidence references.",
+  },
+  {
+    label: "Authority",
+    title: "Grantex Signs The OACP Artifacts",
+    desc: "Grantex remains the protocol, policy, trust, and canonical artifact authority; AgenticOrg consumes those artifacts in buyer and seller agent flows.",
+  },
+  {
+    label: "Runtime",
+    title: "Agents Show Freshness Before Action",
+    desc: "Buyer agents use scoped OACP artifacts, source labels, freshness, revocation posture, and risk boundaries before answering or preparing a handoff.",
+  },
+  {
+    label: "Boundary",
+    title: "Commitment Remains Gated",
+    desc: "Checkout, payment, provider rails, and merchant private APIs stay blocked unless a separate approved rollout verifies that exact path.",
+  },
+];
+
 /* ------------------------------------------------------------------ */
 /*  Check icon reused across sections                                  */
 /* ------------------------------------------------------------------ */
@@ -345,8 +368,8 @@ export default function Landing() {
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
       <Helmet>
-        <title>AgenticOrg — AI Virtual Employees for Enterprise | Create & Deploy AI Agents</title>
-        <meta name="description" content="AI agents that reason AND act — pre-built agents across 6 domains, native connectors + 1000+ via Composio, CFO/CMO/ABM dashboards, A/B testing, email drip, NL Query (Cmd+K), scheduled reports. Create Jira tickets, read HubSpot CRM, file GST returns via real API calls. Human-in-the-loop governance. Start free." />
+        <title>AgenticOrg — Governed Enterprise AI Agents | Automate with Human Control</title>
+        <meta name="description" content="Enterprise AI agents for governed back-office automation, human approvals, audit trails, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries." />
         <link rel="canonical" href="https://agenticorg.ai/" />
       </Helmet>
 
@@ -366,6 +389,7 @@ export default function Landing() {
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
             <a href="#platform" className="text-slate-300 hover:text-white text-sm transition-colors">Platform</a>
+            <a href="#open-commerce" className="text-slate-300 hover:text-white text-sm transition-colors">OACP</a>
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
             <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
             <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
@@ -402,6 +426,7 @@ export default function Landing() {
         {mobileMenuOpen && (
           <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3" role="navigation" aria-label="Mobile navigation">
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
+            <a href="#open-commerce" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">OACP</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
             <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
             <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
@@ -441,7 +466,7 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-slate-300 text-sm" data-testid="landing-version-badge">
-                {versionText ? `${versionText} — ` : ""}1000+ Integrations, {agentsText} AI Agents, Voice, Knowledge Base, Industry Packs
+                {versionText ? `${versionText} — ` : ""}Governed agents with OACP trust boundaries
               </span>
             </div>
 
@@ -495,33 +520,121 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 2b. VERSION RELEASE BANNER                                    */}
+      {/* 2b. OACP PROTOCOL STRIP                                       */}
       {/* ============================================================ */}
       <section className="relative bg-slate-900 py-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-5xl mx-auto">
           <Link
-            to="/pricing"
-            className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
+            to="/open-agentic-commerce-protocol"
+            className="group relative block rounded-2xl p-[1px] bg-gradient-to-r from-cyan-500 via-emerald-400 to-amber-400 bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite] overflow-hidden"
           >
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
-              {/* Version badge */}
-              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-blue-500/30 animate-pulse" data-testid="landing-version-pill">
+              <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-cyan-500 to-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-cyan-500/20" data-testid="landing-version-pill">
                 <span className="w-1.5 h-1.5 bg-white rounded-full" />
                 {versionText || "v…"}
               </span>
 
-              {/* Description */}
               <p className="text-sm text-slate-300 text-center sm:text-left leading-snug">
-                <span className="font-semibold text-white">Project Apex</span>
-                {" "}&mdash; 1000+ Integrations, Voice Agents, Knowledge Base, Smart LLM Routing, and Industry Packs
+                <span className="font-semibold text-white">Open Agentic Commerce Protocol</span>
+                {" "}&mdash; source-backed artifacts, freshness labels, prepared handoffs, and fail-closed refusals.
               </p>
 
-              {/* CTA */}
-              <span className="shrink-0 text-sm font-semibold text-blue-400 group-hover:text-blue-300 transition-colors whitespace-nowrap">
-                See What&apos;s New&nbsp;&rarr;
+              <span className="shrink-0 text-sm font-semibold text-cyan-300 group-hover:text-white transition-colors whitespace-nowrap">
+                See the protocol&nbsp;&rarr;
               </span>
             </div>
           </Link>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* 2c. OPEN AGENTIC COMMERCE PROTOCOL                            */}
+      {/* ============================================================ */}
+      <section id="open-commerce" className="py-24 bg-white border-b border-slate-100 scroll-mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="max-w-3xl mb-14">
+              <div className="inline-flex items-center gap-2 bg-cyan-50 border border-cyan-100 text-cyan-700 rounded-full px-4 py-1.5 text-sm font-medium mb-5">
+                Open Agentic Commerce Protocol
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">A trust layer for seller and buyer agents.</h2>
+              <p className="mt-4 text-lg text-slate-600 leading-relaxed">
+                OACP gives commerce agents a common way to reason over source-backed merchant facts, artifact freshness, revocation posture, and commitment boundaries before they answer, prepare, or refuse a buyer request.
+              </p>
+            </div>
+          </FadeIn>
+
+          <div className="grid lg:grid-cols-[1fr_1.1fr] gap-10 items-start">
+            <FadeIn>
+              <div className="h-full flex flex-col justify-between gap-8">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {OACP_SECTION_POINTS.map((item) => (
+                    <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5 hover:border-cyan-200 hover:shadow-lg transition-all duration-300">
+                      <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white mb-4">
+                        {item.label}
+                      </div>
+                      <h3 className="text-base font-bold text-slate-900 mb-2">{item.title}</h3>
+                      <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-900 px-6 py-6 text-white">
+                  <p className="text-sm uppercase tracking-[0.18em] text-cyan-300 font-semibold mb-3">Protocol posture</p>
+                  <p className="text-slate-300 leading-relaxed">
+                    AgenticOrg uses OACP artifacts for grounded discovery and prepared handoff behavior. No public protocol publication, live checkout, payment execution, live provider rails, merchant private API execution, or commerce production readiness is claimed from this landing-page section.
+                  </p>
+                  <Link
+                    to="/open-agentic-commerce-protocol"
+                    className="mt-5 inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors"
+                  >
+                    Explore the full OACP model
+                  </Link>
+                </div>
+              </div>
+            </FadeIn>
+
+            <FadeIn delay={120}>
+              <div className="relative rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 sm:p-8 overflow-hidden">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300" />
+                <div className="mb-6">
+                  <p className="text-sm uppercase tracking-[0.18em] text-cyan-300 font-semibold">Custody map</p>
+                  <h3 className="mt-2 text-2xl font-bold text-white">Who owns what in an agentic commerce request</h3>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {[
+                    ["Merchant systems", "Catalog, inventory, policy, order truth"],
+                    ["Seller agent", "Connector setup and merchant preview"],
+                    ["Grantex authority", "Signed OACP artifacts and policy"],
+                    ["OACP cache", "Scoped refs, TTL, freshness, revocation"],
+                    ["Buyer agent", "Answers, compares, prepares, or refuses"],
+                    ["Channels", "ChatGPT, Claude, web, mobile, MCP"],
+                  ].map(([title, detail], i) => (
+                    <div key={title} className="relative rounded-xl border border-white/10 bg-white/10 p-4">
+                      <div className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-950">
+                        {i + 1}
+                      </div>
+                      <h4 className="text-sm font-bold text-white">{title}</h4>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 grid sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
+                  <div className="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Provider / fintech rail</p>
+                    <p className="mt-2 text-sm text-amber-50">Mandates and payment execution remain owned by approved provider rails.</p>
+                  </div>
+                  <div className="hidden sm:flex h-px w-12 bg-amber-300/50" />
+                  <div className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-200">Fail-closed line</p>
+                    <p className="mt-2 text-sm text-rose-50">Missing, stale, revoked, ambiguous, private, raw, or executable artifacts are refused.</p>
+                  </div>
+                </div>
+              </div>
+            </FadeIn>
+          </div>
         </div>
       </section>
 
@@ -944,7 +1057,7 @@ export default function Landing() {
                   <Link to="/signup" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Start Free →</Link>
                 </div>
                 <div className="border-x border-slate-200 px-6">
-                  <div className="text-2xl font-bold text-blue-600">Pro — $499/mo</div>
+                  <div className="text-2xl font-bold text-blue-600">Pro - $2/mo</div>
                   <p className="text-sm text-slate-500 mt-1">Unlimited agents, unlimited tasks, priority support</p>
                   <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Get Started →</button>
                 </div>
@@ -1051,7 +1164,7 @@ export default function Landing() {
                   </svg>
                 ),
                 title: "Secure Authentication",
-                desc: "Google OAuth, email/password login, secure password reset, org invitations with JWT tokens. Rate-limited, email-enumeration safe.",
+                desc: "Google OAuth, email/password login, secure password reset, org invitations, offline JWT/JWKS verification, and fail-closed dependency gates.",
               },
             ].map((f, i) => (
               <FadeIn key={f.title} delay={i * 100}>
@@ -1316,7 +1429,7 @@ export default function Landing() {
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">Build With AgenticOrg</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Python SDK, TypeScript SDK, CLI, and MCP Server. Run AI agents from your code, ChatGPT, Claude, or any MCP-compatible client.
+                Python SDK, TypeScript SDK, CLI, and MCP Server. Launch agents, discover commerce tools, query knowledge, and run workflows from your code or any MCP-compatible client.
               </p>
             </div>
           </FadeIn>
@@ -1332,10 +1445,13 @@ export default function Landing() {
 
 client = AgenticOrg(api_key="ao_sk_...")
 result = client.agents.run(
-  "ap_processor",
-  inputs={"invoice_id": "INV-001"}
+  "commerce_sales_agent",
+  action="buyer_discovery_preview",
+  inputs={"merchant_id": "merchant_demo"}
 )
-print(result.output)`,
+workflow = client.workflows.generate(
+  "Review vendor renewal risk"
+)`,
                 link: "https://pypi.org/project/agenticorg/",
                 color: "from-yellow-500 to-yellow-600",
               },
@@ -1349,8 +1465,11 @@ const client = new AgenticOrg({
   apiKey: "ao_sk_..."
 })
 const result = await client.agents.run(
-  "recon_agent",
-  { inputs: { bank_id: "SBI-001" } }
+  "commerce_sales_agent",
+  { action: "buyer_discovery_preview" }
+)
+const kb = await client.knowledge.search(
+  "vendor renewal policy"
 )`,
                 link: "https://www.npmjs.com/package/agenticorg-sdk",
                 color: "from-blue-500 to-blue-600",
@@ -1438,7 +1557,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">Grantex Scope Enforcement</h3>
-                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call checked against {connectorsText} connector manifests in &lt;1ms. Permission hierarchy: admin &gt; delete &gt; write &gt; read. Now with 1000+ tool manifests, voice agent security, and PII redaction before LLM.</p>
+                <p className="text-sm text-slate-400">Manifest-based permission enforcement with offline JWT verification. Every tool call is checked against connector manifests before execution. Commerce artifacts add a separate fail-closed OACP cache boundary for freshness, revocation, risk, and non-execution posture.</p>
                 <Link to="/how-grantex-works" className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 font-medium mt-2 transition-colors">
                   Learn how it works <span aria-hidden="true">&rarr;</span>
                 </Link>
@@ -1451,14 +1570,14 @@ $ agenticorg sop deploy \\
             <div className="bg-gradient-to-r from-slate-800 to-slate-800/50 border border-slate-700 rounded-2xl p-8 mb-12">
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-white mb-2">See It in Action: ChatGPT + Shopping Agent</h3>
-                  <p className="text-slate-400 text-sm">Full end-to-end workflow — user asks ChatGPT to buy earbuds, ChatGPT discovers AgenticOrg via MCP, launches a Shopping Agent, gets HITL approval, places the order. With sequence diagrams and architecture stack.</p>
+                  <h3 className="text-xl font-bold text-white mb-2">See It in Action: OACP-Grounded Shopping Preview</h3>
+                  <p className="text-slate-400 text-sm">Safe workflow preview: a buyer asks from ChatGPT, AgenticOrg uses MCP and cached OACP artifacts, checks freshness and revocation posture, then prepares a non-executing handoff or refuses unsafe paths. Live checkout and payment remain blocked until approved.</p>
                 </div>
                 <Link
                   to="/integration-workflow"
                   className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-emerald-600 transition-all shadow-lg whitespace-nowrap"
                 >
-                  View Full Workflow
+                  View Safe Workflow
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
                 </Link>
               </div>
@@ -1544,7 +1663,7 @@ $ agenticorg sop deploy \\
               Stop paying people to do what AI virtual employees can do better.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              {agentsText} agents that act. 1000+ integrations. {toolsText} native tools. Free to start.
+              {agentsText} agents that act with human control, scoped tools, audit trails, and fail-closed release gates. Free to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -1643,7 +1762,7 @@ $ agenticorg sop deploy \\
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Company</h4>
               <ul className="space-y-2">
                 <li><a href="mailto:sanjeev@agenticorg.ai" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
-                <li><span className="text-slate-400 text-sm">Edumatica Pvt Ltd</span></li>
+                <li><span className="text-slate-400 text-sm">AgenticOrg</span></li>
                 <li><span className="text-slate-400 text-sm">Bengaluru, India</span></li>
               </ul>
             </div>
@@ -1651,7 +1770,7 @@ $ agenticorg sop deploy \\
 
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
-              &copy; 2026 AgenticOrg &middot; Edumatica Pvt Ltd. All rights reserved.
+              &copy; 2026 AgenticOrg. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>

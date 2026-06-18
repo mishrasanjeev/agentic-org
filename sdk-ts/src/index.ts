@@ -3,7 +3,7 @@
  *
  * @example
  * ```typescript
- * import { AgenticOrg } from "@agenticorg/sdk";
+ * import { AgenticOrg } from "agenticorg-sdk";
  *
  * const client = new AgenticOrg({ apiKey: "your-key" });
  * const result = await client.agents.run("ap_processor", { inputs: { invoice_id: "INV-001" } });
@@ -21,6 +21,11 @@ export interface RunOptions {
   action?: string;
   inputs?: Record<string, unknown>;
   context?: Record<string, unknown>;
+}
+
+export interface GenerateAgentOptions {
+  deploy?: boolean;
+  companyId?: string;
 }
 
 /**
@@ -126,6 +131,28 @@ export interface SOPParseResult {
   document_length?: number;
 }
 
+export interface WorkflowCreateOptions {
+  name: string;
+  definition: Record<string, unknown>;
+  version?: string;
+  description?: string;
+  domain?: string;
+  triggerType?: string;
+  triggerConfig?: Record<string, unknown>;
+  replanOnFailure?: boolean;
+  companyId?: string;
+}
+
+export interface WorkflowRunOptions {
+  payload?: Record<string, unknown>;
+}
+
+export interface KnowledgeSearchResult {
+  chunk_text: string;
+  score: number;
+  document_name: string;
+}
+
 class HttpClient {
   private baseUrl: string;
   private headers: Record<string, string>;
@@ -200,6 +227,32 @@ class AgentsResource {
   async create(data: Record<string, unknown>): Promise<Record<string, unknown>> {
     return (await this.http.post("/api/v1/agents", data)) as Record<string, unknown>;
   }
+
+  async generate(
+    description: string,
+    options: GenerateAgentOptions = {},
+  ): Promise<Record<string, unknown>> {
+    const payload: Record<string, unknown> = {
+      description,
+      deploy: options.deploy ?? false,
+    };
+    if (options.companyId) payload.company_id = options.companyId;
+    return (await this.http.post("/api/v1/agents/generate", payload)) as Record<string, unknown>;
+  }
+}
+
+class ConnectorsResource {
+  constructor(private http: HttpClient) {}
+
+  async list(category?: string): Promise<Record<string, unknown>[]> {
+    const params = category ? { category } : undefined;
+    const data = (await this.http.get("/api/v1/connectors", params)) as any;
+    return data.items ?? data;
+  }
+
+  async get(connectorId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`/api/v1/connectors/${connectorId}`)) as Record<string, unknown>;
+  }
 }
 
 class SOPResource {
@@ -246,11 +299,81 @@ class MCPResource {
   }
 }
 
+class WorkflowsResource {
+  constructor(private http: HttpClient) {}
+
+  async templates(domain?: string): Promise<Record<string, unknown>[]> {
+    const params = domain ? { domain } : undefined;
+    const data = (await this.http.get("/api/v1/workflows/templates", params)) as any;
+    return data.items ?? data;
+  }
+
+  async list(options: { page?: number; perPage?: number; companyId?: string } = {}): Promise<Record<string, unknown>> {
+    const params: Record<string, string> = {
+      page: String(options.page ?? 1),
+      per_page: String(options.perPage ?? 20),
+    };
+    if (options.companyId) params.company_id = options.companyId;
+    return (await this.http.get("/api/v1/workflows", params)) as Record<string, unknown>;
+  }
+
+  async generate(description: string, options: { deploy?: boolean } = {}): Promise<Record<string, unknown>> {
+    return (await this.http.post("/api/v1/workflows/generate", {
+      description,
+      deploy: options.deploy ?? false,
+    })) as Record<string, unknown>;
+  }
+
+  async create(options: WorkflowCreateOptions): Promise<Record<string, unknown>> {
+    const payload: Record<string, unknown> = {
+      name: options.name,
+      version: options.version ?? "1.0",
+      definition: options.definition,
+      replan_on_failure: options.replanOnFailure ?? false,
+    };
+    if (options.description !== undefined) payload.description = options.description;
+    if (options.domain !== undefined) payload.domain = options.domain;
+    if (options.triggerType !== undefined) payload.trigger_type = options.triggerType;
+    if (options.triggerConfig !== undefined) payload.trigger_config = options.triggerConfig;
+    if (options.companyId !== undefined) payload.company_id = options.companyId;
+    return (await this.http.post("/api/v1/workflows", payload)) as Record<string, unknown>;
+  }
+
+  async get(workflowId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`/api/v1/workflows/${workflowId}`)) as Record<string, unknown>;
+  }
+
+  async run(workflowId: string, options: WorkflowRunOptions = {}): Promise<Record<string, unknown>> {
+    return (await this.http.post(`/api/v1/workflows/${workflowId}/run`, {
+      payload: options.payload ?? {},
+    })) as Record<string, unknown>;
+  }
+
+  async getRun(runId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`/api/v1/workflows/runs/${runId}`)) as Record<string, unknown>;
+  }
+}
+
+class KnowledgeResource {
+  constructor(private http: HttpClient) {}
+
+  async search(query: string, options: { topK?: number } = {}): Promise<KnowledgeSearchResult[]> {
+    const data = (await this.http.post("/api/v1/knowledge/search", {
+      query,
+      top_k: options.topK ?? 5,
+    })) as any;
+    return data.results ?? data;
+  }
+}
+
 export class AgenticOrg {
   public agents: AgentsResource;
+  public connectors: ConnectorsResource;
   public sop: SOPResource;
   public a2a: A2AResource;
   public mcp: MCPResource;
+  public workflows: WorkflowsResource;
+  public knowledge: KnowledgeResource;
 
   constructor(config: AgenticOrgConfig = {}) {
     const apiKey = config.apiKey ?? process.env.AGENTICORG_API_KEY ?? "";
@@ -273,8 +396,11 @@ export class AgenticOrg {
     const http = new HttpClient(baseUrl, headers, timeout);
 
     this.agents = new AgentsResource(http);
+    this.connectors = new ConnectorsResource(http);
     this.sop = new SOPResource(http);
     this.a2a = new A2AResource(http);
     this.mcp = new MCPResource(http);
+    this.workflows = new WorkflowsResource(http);
+    this.knowledge = new KnowledgeResource(http);
   }
 }

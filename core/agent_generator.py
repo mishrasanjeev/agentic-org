@@ -13,6 +13,7 @@ from typing import Any
 
 import structlog
 
+from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.llm.router import LLMRouter, llm_router
 
 logger = structlog.get_logger()
@@ -20,6 +21,14 @@ logger = structlog.get_logger()
 # ── Known agent types with domains (for prompt context + validation) ──────────
 
 AGENT_TYPE_CATALOG: dict[str, dict[str, str]] = {
+    # Commerce
+    "commerce_sales_agent": {
+        "domain": "commerce",
+        "desc": (
+            "Commerce buyer/seller runtime -- Grantex-grounded discovery, "
+            "catalog, consent, checkout handoff, and payment-status guardrails"
+        ),
+    },
     # Finance
     "ap_processor": {
         "domain": "finance",
@@ -174,14 +183,18 @@ AGENT_TYPE_CATALOG: dict[str, dict[str, str]] = {
 
 # ── Default tools by agent type (mirrors _AGENT_TYPE_DEFAULT_TOOLS in agents.py)
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
+    "commerce_sales_agent": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "ap_processor": [
         "fetch_bank_statement", "check_account_balance", "post_voucher",
         "get_ledger_balance", "get_trial_balance", "create_order",
-        "check_order_status",
+        "check_order_status", "list_vendors", "create_vendor",
+        "create_item", "create_bill", "list_vendor_bills", "list_bills",
+        "search_bills", "get_bill_by_id",
     ],
     "ar_collections": [
-        "create_invoice", "list_invoices", "create_payment_link",
-        "send_email", "check_account_balance",
+        "create_invoice", "list_invoices", "search_invoices",
+        "get_invoice_by_id", "create_payment_link", "send_email",
+        "check_account_balance",
     ],
     "recon_agent": [
         "fetch_bank_statement", "get_transaction_list",
@@ -208,8 +221,9 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_balance", "get_balance_sheet", "get_cash_position",
     ],
     "expense_manager": [
-        "record_expense", "create_ap_invoice", "check_order_status",
-        "list_invoices", "get_profit_loss",
+        "record_expense", "create_bill", "list_vendors", "create_vendor",
+        "create_ap_invoice", "check_order_status", "list_invoices",
+        "get_profit_loss",
     ],
     "rev_rec": [
         "query", "create_invoice", "post_journal_entry",
@@ -258,6 +272,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "crm_intelligence": [
         "list_contacts", "search_contacts", "list_deals",
         "get_deal", "get_campaign_analytics", "create_contact",
+        "update_contact", "delete_contact", "assign_contact_owner",
+        "associate_contact_to_company", "list_owners",
     ],
     "brand_monitor": [
         "get_post_analytics", "get_campaign_performance",
@@ -320,7 +336,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "chat_agent": ["slack_send_message", "send_email", "read_inbox"],
 }
 
-VALID_DOMAINS = {"finance", "hr", "marketing", "ops", "backoffice", "comms"}
+VALID_DOMAINS = {"commerce", "finance", "hr", "marketing", "ops", "backoffice", "comms"}
 VALID_AGENT_TYPES = set(AGENT_TYPE_CATALOG.keys())
 
 # ── Prompt injection patterns ─────────────────────────────────────────────────

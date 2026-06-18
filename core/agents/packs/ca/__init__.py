@@ -157,7 +157,22 @@ CA_PACK: dict[str, Any] = {
             "tools": [
                 "zoho_books:calculate_tds",
                 "zoho_books:get_ledger_balance",
+                "zoho_books:list_vendor_bills",
+                "zoho_books:get_bill_by_id",
+                "zoho_books:get_purchase_invoices",
+                "zoho_books:list_expense_transactions",
+                "zoho_books:get_vendor_payables",
+                "zoho_books:list_vendors",
+                "zoho_books:get_vendor_details",
+                "zoho_books:create_journal_entry",
+                "zoho_books:create_tds_entry",
+                "zoho_books:list_chartofaccounts",
+                "zoho_books:update_bill",
                 "income_tax_india:calculate_tds",
+                "income_tax_india:map_tds_section",
+                "income_tax_india:validate_pan",
+                "income_tax_india:detect_tds_applicability",
+                "income_tax_india:generate_tds_summary",
                 "income_tax_india:file_26q_return",
                 "income_tax_india:file_24q_return",
                 "income_tax_india:check_tds_credit_in_26as",
@@ -178,6 +193,13 @@ CA_PACK: dict[str, Any] = {
                 "genuinely needed for the filing step. Never ask the user to "
                 "repeat the amount, section, or period when they are already "
                 "in the prompt — that is the BUG-17 failure pattern.\n\n"
+                "TRANSACTION SOURCE: For batch or autonomous TDS work, first "
+                "fetch Zoho vendor bills, expense transactions, and vendor "
+                "master records with list_vendor_bills, "
+                "list_expense_transactions, list_vendors, and "
+                "get_vendor_details. Use structured pan_available=false from "
+                "missing or invalid PAN data so Section 206AA is applied by "
+                "the tool, not guessed from prose.\n\n"
                 "HIGH-VALUE HITL: Escalate when the gross transaction/"
                 "payment amount exceeds INR 5,00,000. This gate must use "
                 "the original payment amount, not the computed TDS amount.\n\n"

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 // ---------------------------------------------------------------------------
 // Production E2E — App Routes
@@ -7,7 +8,7 @@ import { test, expect } from "@playwright/test";
 // ---------------------------------------------------------------------------
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const MARKETING = "https://agenticorg.ai";
+const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
@@ -255,7 +256,7 @@ test.describe("Data Display Quality", () => {
 
 test.describe("Landing → Dashboard Flow", () => {
   test("Landing nav Sign In link navigates to login", async ({ page }) => {
-    await page.goto("https://agenticorg.ai/", { waitUntil: "domcontentloaded" });
+    await page.goto(`${MARKETING}/`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
     const signInLink = page.locator("nav").getByText("Sign In").first();
     if (await signInLink.isVisible({ timeout: 10000 }).catch(() => false)) {
@@ -266,7 +267,7 @@ test.describe("Landing → Dashboard Flow", () => {
   });
 
   test("Landing nav Platform link navigates correctly", async ({ page }) => {
-    await page.goto("https://agenticorg.ai/", { waitUntil: "domcontentloaded" });
+    await page.goto(`${MARKETING}/`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
     const platformLink = page.locator("nav").getByText("Platform").first();
     if (await platformLink.isVisible({ timeout: 10000 }).catch(() => false)) {
@@ -278,7 +279,7 @@ test.describe("Landing → Dashboard Flow", () => {
   });
 
   test("Footer links are present", async ({ page }) => {
-    await page.goto("https://agenticorg.ai/", { waitUntil: "domcontentloaded" });
+    await page.goto(`${MARKETING}/`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
     const footer = page.locator("footer");
     if (await footer.isVisible({ timeout: 10000 }).catch(() => false)) {

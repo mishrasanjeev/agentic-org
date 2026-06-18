@@ -156,9 +156,10 @@ test.describe("Module 27: Negative & Edge Cases @qa @negative", () => {
     expect(resp.status()).not.toBe(422);
     if (resp.status() < 300) {
       const body = await resp.json();
+      const agentId = body.agent_id || body.id;
       // Cleanup the agent we just created.
-      if (body.id) {
-        await request.delete(`${APP}/api/v1/agents/${body.id}`, {
+      if (agentId) {
+        await request.delete(`${APP}/api/v1/agents/${agentId}`, {
           headers: { Authorization: `Bearer ${E2E_TOKEN}` },
           failOnStatusCode: false,
         });
@@ -196,11 +197,19 @@ test.describe("Module 27: Negative & Edge Cases @qa @negative", () => {
     expect(resp.status()).toBeLessThan(500);
     if (resp.status() < 300) {
       const body = await resp.json();
+      const agentId = body.agent_id || body.id;
+      expect(agentId).toBeTruthy();
       // The name we sent must round-trip verbatim — no
       // server-side escaping/encoding.
-      expect(body.name).toBe(name);
+      const getResp = await request.get(`${APP}/api/v1/agents/${agentId}`, {
+        headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+        failOnStatusCode: false,
+      });
+      expect(getResp.status()).toBe(200);
+      const fetched = await getResp.json();
+      expect(fetched.name).toBe(name);
       // Cleanup.
-      await request.delete(`${APP}/api/v1/agents/${body.id}`, {
+      await request.delete(`${APP}/api/v1/agents/${agentId}`, {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
       });
@@ -224,25 +233,75 @@ test.describe("Module 27: Negative & Edge Cases @qa @negative", () => {
     expect(resp.status()).toBe(404);
   });
 
+  test("TC-NEG-009b DELETE /agents soft-deletes and hides from default list", async ({
+    request,
+  }) => {
+    const ts = Date.now();
+    const name = `qa-delete-${ts}`;
+    const createResp = await request.post(`${APP}/api/v1/agents`, {
+      headers: {
+        Authorization: `Bearer ${E2E_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      data: {
+        name,
+        agent_type: `qa_delete_${ts}`,
+        domain: "test",
+        employee_name: name,
+        initial_status: "paused",
+      },
+      failOnStatusCode: false,
+    });
+    expect(createResp.status()).toBeLessThan(300);
+    const created = await createResp.json();
+    const agentId = created.agent_id || created.id;
+    expect(agentId).toBeTruthy();
+
+    const deleteResp = await request.delete(`${APP}/api/v1/agents/${agentId}`, {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+      failOnStatusCode: false,
+    });
+    expect(deleteResp.status()).toBe(200);
+    const deleted = await deleteResp.json();
+    expect(deleted).toMatchObject({ id: agentId, deleted: true, status: "deleted" });
+
+    const listResp = await request.get(`${APP}/api/v1/agents?per_page=100`, {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+      failOnStatusCode: false,
+    });
+    expect(listResp.status()).toBe(200);
+    const listBody = await listResp.json();
+    const visibleIds = (listBody.items || []).map((agent: any) => agent.id);
+    expect(visibleIds).not.toContain(agentId);
+
+    const deletedListResp = await request.get(
+      `${APP}/api/v1/agents?status=deleted&per_page=100`,
+      {
+        headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+        failOnStatusCode: false,
+      },
+    );
+    expect(deletedListResp.status()).toBe(200);
+    const deletedListBody = await deletedListResp.json();
+    const deletedIds = (deletedListBody.items || []).map((agent: any) => agent.id);
+    expect(deletedIds).toContain(agentId);
+  });
+
   // -------------------------------------------------------------------------
   // TC-NEG-010 — Browser back button after logout
   // -------------------------------------------------------------------------
 
-  test("TC-NEG-010 unauthenticated UI route redirects to /login", async ({
+  test("TC-NEG-010 unauthenticated UI route shows login, not protected content", async ({
     page,
   }) => {
     // After logout, hitting an authenticated route directly
     // (simulating the back button) must NOT show authenticated
-    // content. The ProtectedRoute wrapper redirects to /login.
-    // Test by going to /agents WITHOUT establishing a session.
+    // content. The ProtectedRoute gate must render the login surface.
+    // Test by going to the actual protected agent route WITHOUT establishing a session.
     await page.context().clearCookies();
-    await page.goto(`${APP}/agents`);
-    // The router redirects to /login (or similar). We assert
-    // the URL ends up on a public page, NOT /agents.
+    await page.goto(`${APP}/dashboard/agents`);
     await page.waitForLoadState("domcontentloaded");
-    const url = page.url();
-    expect(url, `expected redirect away from /agents, got ${url}`).not.toContain(
-      "/agents",
-    );
+    await expect(page.getByRole("button", { name: /sign in with email/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /agent fleet/i })).toHaveCount(0);
   });
 });

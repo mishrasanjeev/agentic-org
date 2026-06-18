@@ -135,6 +135,7 @@ async def _call_llm_for_summary(
             bullets = parsed.get("bullets", [])
             if isinstance(bullets, list) and bullets:
                 return [str(b) for b in bullets[:5]]
+    # enterprise-gate: broad-except-ok reason=explainer-llm-summary-failure-degrades-to-heuristic
     except Exception as exc:
         logger.warning("explainer_llm_failed", error=str(exc))
 

@@ -26,12 +26,13 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const AGENT_ID = "02ca34a7-2835-43e5-992d-cda4817c1497";
+const IS_LOCAL_APP = /(^http:\/\/localhost[:/])|(^http:\/\/127\.0\.0\.1[:/])/.test(APP);
 
 // We log in directly via the API to keep the spec deterministic — UI
 // flake on a slow login redirect would obscure whether the BUG-01..04
 // fixes deployed. The login itself isn't what we're verifying.
 const TESTER_EMAIL =
-  process.env.RU_TESTER_EMAIL || "uday.chauhan@edumatica.io";
+  process.env.RU_TESTER_EMAIL || "qa.uday@example.com";
 const TESTER_PASSWORD = process.env.RU_TESTER_PASSWORD || "";
 
 async function getTesterToken(
@@ -41,7 +42,7 @@ async function getTesterToken(
   if (!TESTER_PASSWORD) {
     throw new Error(
       "Set E2E_TOKEN or RU_TESTER_PASSWORD env var so the spec can " +
-        "authenticate as uday.chauhan@edumatica.io.",
+        "authenticate as qa.uday@example.com.",
     );
   }
   const resp = await request.post(`${APP}/api/v1/auth/login`, {
@@ -55,9 +56,10 @@ async function getTesterToken(
 
 test.describe("CA Firms — RU-May01 agent runtime", () => {
   test.skip(
-    !E2E_TOKEN && !process.env.RU_TESTER_PASSWORD,
-    "Set E2E_TOKEN or RU_TESTER_PASSWORD to run the post-deploy " +
-      "verification spec.",
+    IS_LOCAL_APP || (!E2E_TOKEN && !process.env.RU_TESTER_PASSWORD),
+    IS_LOCAL_APP
+      ? "Production CA runtime probe uses hardcoded deployed agent/connector IDs; skipped for local Docker runs."
+      : "Set E2E_TOKEN or RU_TESTER_PASSWORD to run the post-deploy verification spec.",
   );
 
   test("agent run produces non-empty tool_calls + confidence > 0.5", async ({

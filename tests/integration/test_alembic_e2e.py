@@ -1,23 +1,19 @@
 """End-to-end Alembic migration verification.
 
-Runs against the CI Postgres service. Two scenarios exercise
+Runs against the CI Postgres service. Three scenarios exercise
 ``scripts/alembic_migrate.py`` against realistic DB shapes:
 
-1. Legacy-shaped DB (full schema from ``ORMBase.metadata.create_all``,
+1. Empty DB -> wrapper must create the ORM baseline, stamp
+   ``v480_baseline``, and upgrade to the current head. The Alembic
+   version chain starts after the historical raw-SQL baseline, so this
+   bootstrap belongs in the wrapper rather than in tribal local setup.
+
+2. Legacy-shaped DB (full schema from ``ORMBase.metadata.create_all``,
    no ``alembic_version`` row) -> wrapper must stamp v480_baseline
    and return cleanly.
 
-2. Already-managed DB (subsequent wrapper invocation) -> wrapper
+3. Already-managed DB (subsequent wrapper invocation) -> wrapper
    takes the ``upgrade head`` path, stays idempotent, and exits 0.
-
-We intentionally do NOT exercise the "empty DB" path here. The
-production baseline was historically bootstrapped by raw SQL files
-(see ``migrations/0*_*.sql``) before the Alembic chain took over.
-The Alembic versions chain assumes the base ``tenants`` / ``users``
-tables already exist, so ``alembic upgrade head`` against a
-truly-empty DB fails with a foreign-key reference error. That is
-a legitimate constraint of the cutover path — every environment we
-ship against already has at least the v4.0.0 schema.
 
 Skipped when Postgres is not reachable (e.g. local Windows machine
 without Docker). CI ``integration-tests`` always has Postgres.
@@ -107,6 +103,36 @@ def _table_names() -> set[str]:
     return names
 
 
+def _current_head() -> str:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config("alembic.ini")
+    expected_head = ScriptDirectory.from_config(cfg).get_current_head()
+    assert expected_head, "Alembic has no head revision"
+    return expected_head
+
+
+def test_empty_db_bootstraps_baseline_then_upgrades_to_head():
+    _reset_schema()
+    assert _table_names() == set()
+
+    result = _run_migrate_wrapper()
+    assert "empty database" in result.stderr
+    assert "creating ORM baseline" in result.stderr
+
+    tables = _table_names()
+    assert "tenants" in tables
+    assert "connector_configs" in tables
+    assert "alembic_version" in tables
+
+    with create_engine(_SYNC_URL).connect() as conn:
+        version = conn.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar()
+    assert version == _current_head()
+
+
 def test_legacy_db_gets_stamped_at_baseline():
     """A legacy-shaped DB (no alembic_version) must be stamped at the
     baseline and then upgraded to the current head.
@@ -116,12 +142,7 @@ def test_legacy_db_gets_stamped_at_baseline():
     head is today, not necessarily the baseline. Read the expected
     head dynamically so this test does not regress every time a new
     migration file is added."""
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    cfg = Config("alembic.ini")
-    expected_head = ScriptDirectory.from_config(cfg).get_current_head()
-    assert expected_head, "Alembic has no head revision"
+    expected_head = _current_head()
 
     _reset_schema()
     _build_legacy_schema()
@@ -142,7 +163,11 @@ def test_legacy_db_gets_stamped_at_baseline():
 def test_already_managed_db_is_noop():
     """A DB that already has alembic_version must take the ``upgrade
     head`` branch, complete cleanly, and exit 0."""
-    # Previous test has already stamped; exercise the wrapper again.
+    if "alembic_version" not in _table_names():
+        _reset_schema()
+        _build_legacy_schema()
+        _run_migrate_wrapper()
+
     result = _run_migrate_wrapper()
     assert result.returncode == 0
     assert "alembic_version present" in result.stderr

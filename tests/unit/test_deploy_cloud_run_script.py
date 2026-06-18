@@ -12,10 +12,23 @@ def _deploy_script() -> str:
 def test_cloud_run_deploy_stamps_api_and_ui_commit_metadata() -> None:
     script = _deploy_script()
 
-    assert '"AGENTICORG_GIT_SHA=${DEPLOY_SHA}"' in script
-    assert '"GIT_SHA=${DEPLOY_SHA}"' in script
+    assert (
+        'API_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA},'
+        'AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=${COMMERCE_PUBLIC_DISCOVERY_VALUE}"'
+    ) in script
+    assert 'COMMERCE_PUBLIC_DISCOVERY_VALUE="${AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED:-false}"' in script
+    assert 'UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"' in script
     assert '--update-env-vars="$env_vars"' in script
     assert '"$UI_IMAGE"' in script
+
+
+def test_cloud_run_deploy_does_not_force_enable_public_discovery() -> None:
+    script = _deploy_script()
+
+    assert "AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=true" not in script
+    assert '1|yes|on|enabled) COMMERCE_PUBLIC_DISCOVERY_VALUE="true"' in script
+    assert '0|no|off|disabled|"") COMMERCE_PUBLIC_DISCOVERY_VALUE="false"' in script
+    assert "must be true or false for deploys" in script
 
 
 def test_ui_metadata_is_set_on_ui_service_update() -> None:
@@ -30,7 +43,7 @@ def test_ui_metadata_is_set_on_ui_service_update() -> None:
     assert len(ui_update_calls) >= 3
     for ui_update_call in ui_update_calls:
         assert '"$UI_IMAGE"' in ui_update_call
-        assert '"GIT_SHA=${DEPLOY_SHA}"' in ui_update_call
+        assert '"$UI_UPDATE_ENV_VARS"' in ui_update_call
         assert '"$UI_IMAGE_DIGEST"' in ui_update_call
         assert '"GIT_SHA"' in ui_update_call
 
@@ -69,6 +82,54 @@ def test_staged_revision_readiness_uses_revision_object_not_latest_ready() -> No
     assert "staged revision object" in wait_block
 
 
+def test_deploy_script_uses_shell_safe_python_heredocs() -> None:
+    script = _deploy_script()
+
+    assert "python3 -c '" not in script
+    assert 'python3 -c "' not in script
+    assert "python -c '" not in script
+    assert 'python -c "' not in script
+    assert "<<'PY'" in script
+    assert '"$PYTHON_BIN" - "$json_file"' in script
+
+
+def test_revision_readiness_helper_is_safe_for_unknown_markers() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert '"$PYTHON_BIN" - "$json_file"' in ready_block
+    assert "<<'PY'" in ready_block
+    assert "python3 -c" not in ready_block
+    assert "python -c" not in ready_block
+    assert "'<unknown>'" in ready_block
+    assert '"<missing>"' in ready_block
+    assert '"<none>"' in ready_block
+
+
+def test_script_resolves_usable_python_for_git_bash_on_windows() -> None:
+    script = _deploy_script()
+
+    assert "resolve_python_bin()" in script
+    assert 'PYTHON_BIN="$(resolve_python_bin)"' in script
+    assert 'for candidate in python3 python; do' in script
+    assert "Missing: usable python3 or python" in script
+
+
+def test_health_poll_json_parsing_uses_shell_safe_helper() -> None:
+    script = _deploy_script()
+    poll_start = script.index("poll_health_url()")
+    poll_end = script.index("print_manual_traffic_commands()", poll_start)
+    poll_block = script[poll_start:poll_end]
+
+    assert "json_field_from_stdin" in script
+    assert "python3 -c" not in poll_block
+    assert "python -c" not in poll_block
+    assert 'json_field_from_stdin status' in poll_block
+    assert 'json_field_from_stdin commit' in poll_block
+
+
 def test_retired_ready_staged_revision_is_accepted_when_target_matches() -> None:
     script = _deploy_script()
     ready_start = script.index("revision_ready_state()")
@@ -102,8 +163,33 @@ def test_staged_revision_image_digest_and_commit_metadata_are_verified() -> None
     assert "image mismatch" in ready_block
     assert "commit metadata mismatch" in ready_block
     assert "image_digest" in ready_block
+    assert "image_digests" in ready_block
+    assert "extract_digest" in ready_block
     assert "expected_sha" in ready_block
     assert "serving.knative.dev/service" in ready_block
+
+
+def test_deploy_script_accepts_cloud_run_platform_digest_from_manifest_list() -> None:
+    script = _deploy_script()
+    ready_start = script.index("revision_ready_state()")
+    ready_end = script.index("wait_for_staged_revision_ready()", ready_start)
+    ready_block = script[ready_start:ready_end]
+
+    assert "image_acceptable_digests()" in script
+    assert "docker buildx imagetools inspect" in script
+    assert "manifest.get(\"manifests\"" in script
+    assert "candidate_digest in image_digests" in ready_block
+    assert "digest(s)" in ready_block
+
+
+def test_deploy_script_supports_noninteractive_yes_confirmation() -> None:
+    script = _deploy_script()
+
+    assert "-y, --yes" in script
+    assert "ASSUME_YES" in script
+    assert "-y|--yes) ASSUME_YES=1" in script
+    assert "read -rp" in script
+    assert "confirm=\"${confirm//$'\\r'/}\"" in script
 
 
 def test_dry_run_reports_planned_traffic_changes() -> None:

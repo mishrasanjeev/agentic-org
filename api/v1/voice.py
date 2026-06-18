@@ -333,7 +333,7 @@ async def test_connection(
             status="network_error",
             message=f"Could not reach SIP endpoint {host}:{port}: {type(exc).__name__}",
         )
-    except Exception as exc:  # noqa: BLE001 — user-facing probe response
+    except RuntimeError as exc:
         return VoiceTestResponse(
             status="network_error",
             message=f"SIP probe failed: {type(exc).__name__}",

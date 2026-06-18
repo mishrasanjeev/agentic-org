@@ -2,10 +2,25 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+const proxy = {
+  "/api": "http://localhost:8000",
+  "/ws": { target: "ws://localhost:8000", ws: true },
+};
+
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
-  server: { proxy: { "/api": "http://localhost:8000", "/ws": { target: "ws://localhost:8000", ws: true } } },
+  server: {
+    proxy,
+    watch: {
+      ignored: [
+        "**/test-results/**",
+        "**/playwright-report/**",
+        "**/coverage/**",
+      ],
+    },
+  },
+  preview: { proxy },
   build: {
     rollupOptions: {
       output: {

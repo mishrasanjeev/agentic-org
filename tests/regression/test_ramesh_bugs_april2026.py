@@ -11,7 +11,7 @@ import re
 import uuid
 from pathlib import Path
 
-import pytest
+from starlette.routing import Match
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -19,6 +19,16 @@ import pytest
 
 TENANT_STR = "00000000-0000-0000-0000-000000000042"
 TENANT_UUID = uuid.UUID(TENANT_STR)
+
+
+def _assert_route_registered(app, path: str, method: str = "GET") -> None:
+    scope = {"type": "http", "path": path, "root_path": "", "method": method.upper()}
+    matched = [
+        route
+        for route in app.router.routes
+        if hasattr(route, "matches") and route.matches(scope)[0] == Match.FULL
+    ]
+    assert matched, f"{method} {path} is not registered"
 
 
 # ============================================================================
@@ -162,22 +172,20 @@ class TestAGE_LIFECYCLE_04:
     def test_retire_route_registered(self):
         from api.main import app
 
-        route_paths = [getattr(r, "path", "") for r in app.routes]
-        # The route is mounted under /api/v1 prefix
-        assert any(
-            "retire" in p for p in route_paths
-        ), f"No retire route found. Routes: {[p for p in route_paths if 'agent' in p]}"
+        _assert_route_registered(
+            app,
+            "/api/v1/agents/00000000-0000-0000-0000-000000000001/retire",
+            method="POST",
+        )
 
     def test_retire_route_is_post(self):
         from api.main import app
 
-        for route in app.routes:
-            path = getattr(route, "path", "")
-            if "retire" in path:
-                methods = getattr(route, "methods", set())
-                assert "POST" in methods, f"Retire route should be POST, got {methods}"
-                return
-        pytest.fail("Retire route not found")
+        _assert_route_registered(
+            app,
+            "/api/v1/agents/00000000-0000-0000-0000-000000000001/retire",
+            method="POST",
+        )
 
 
 # ============================================================================

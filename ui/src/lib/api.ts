@@ -15,7 +15,7 @@ const api = axios.create({
 
 // SEC-2026-05-P1-003 (PR-B): read the CSRF token from the
 // agenticorg_csrf cookie and echo it back via X-CSRF-Token on every
-// mutating request. The double-submit pattern relies on this — the
+// mutating request. The double-submit pattern relies on this - the
 // server compares the cookie value against the header value with a
 // constant-time check. ``document.cookie`` is the only JS-readable
 // store; the session cookie remains HttpOnly and stays unreadable.
@@ -30,7 +30,7 @@ api.interceptors.request.use((config) => {
   // SEC-002 (PR-F): browser auth is COOKIE-FIRST. The browser ships
   // the HttpOnly ``agenticorg_session`` cookie automatically because
   // ``withCredentials: true`` is set above. We DO NOT read a bearer
-  // token from localStorage anymore — that was the SEC-002 attack
+  // token from localStorage anymore - that was the SEC-002 attack
   // surface.
 
   // CSRF: only attach for mutating methods. The server-side middleware
@@ -77,7 +77,7 @@ api.interceptors.response.use(
         localStorage.removeItem("token");
         localStorage.removeItem("user");
       } catch {
-        // ignore — private browsing or storage disabled
+        // ignore - private browsing or storage disabled
       }
       window.location.href = "/login";
     }
@@ -85,14 +85,23 @@ api.interceptors.response.use(
   }
 );
 export function extractApiError(e: unknown, fallback = "An error occurred"): string {
-  const detail = (e as any)?.response?.data?.detail;
+  const data = (e as any)?.response?.data;
+  const detail = data?.detail;
   if (typeof detail === "string") return detail;
   if (detail && typeof detail === "object") {
+    if (Array.isArray((detail as any).connectors)) {
+      const connectors = (detail as any).connectors
+        .map((c: any) => `${c.connector || "connector"} (${String(c.reason || "not ready").replace(/_/g, " ")})`)
+        .join(", ");
+      if (typeof (detail as any).message === "string") return `${(detail as any).message} Affected: ${connectors}.`;
+    }
     if (typeof detail.message === "string") return detail.message;
     if (typeof detail.error === "string") {
       return detail.message ? `${detail.error}: ${detail.message}` : detail.error;
     }
   }
+  if (typeof data?.message === "string") return data.message;
+  if (typeof data?.error === "string") return data.error;
   return fallback;
 }
 export default api;
@@ -103,7 +112,7 @@ async function listAllPages<T>(
 ): Promise<T[]> {
   const items: T[] = [];
   let page = 1;
-  let pages = 1;
+  let pages: number;
   const perPage = "100";
 
   do {
@@ -144,7 +153,7 @@ export const agentsApi = {
   clone: (id: string, data: any) => api.post(`/agents/${id}/clone`, data),
   promptHistory: (id: string) => api.get(`/agents/${id}/prompt-history`),
   orgTree: (params?: Record<string, string>) => api.get("/agents/org-tree", { params }),
-  importCsv: (file: File) => { const fd = new FormData(); fd.append("file", file); return api.post("/agents/import-csv", fd); },
+  importCsv: (file: File, params?: Record<string, string>) => { const fd = new FormData(); fd.append("file", file); return api.post("/agents/import-csv", fd, { params }); },
   generate: (description: string, deploy = false) => api.post("/agents/generate", { description, deploy }),
 };
 export const promptTemplatesApi = {
@@ -155,9 +164,13 @@ export const promptTemplatesApi = {
   delete: (id: string) => api.delete(`/prompt-templates/${id}`),
 };
 export const workflowsApi = {
-  list: () => api.get("/workflows"),
+  templates: (params?: Record<string, string>) => api.get("/workflows/templates", { params }),
+  list: (params?: Record<string, string>) => api.get("/workflows", { params }),
+  get: (id: string) => api.get(`/workflows/${id}`),
+  generate: (description: string, deploy = false) => api.post("/workflows/generate", { description, deploy }),
   create: (data: any) => api.post("/workflows", data),
-  run: (id: string, payload?: any) => api.post(`/workflows/${id}/run`, payload),
+  run: (id: string, payload?: any) => api.post(`/workflows/${id}/run`, { payload: payload || {} }),
+  getRun: (id: string) => api.get(`/workflows/runs/${id}`),
 };
 export const approvalsApi = {
   list: () => api.get("/approvals"),
@@ -182,6 +195,24 @@ export const companiesApi = {
   list: () => api.get("/companies"),
   create: (data: any) => api.post("/companies", data),
   get: (id: string) => api.get(`/companies/${id}`),
+};
+
+export const commerceRuntimeApi = {
+  createOnboardingPacket: (data: any) =>
+    api.post("/commerce/runtime/seller-agents/onboarding-packets", data),
+  getOnboardingPacket: (packetId: string) =>
+    api.get(`/commerce/runtime/seller-agents/onboarding-packets/${packetId}`),
+  upsertShopifyCredentials: (data: any) =>
+    api.post("/commerce/runtime/seller-agents/connectors/shopify/credentials", data),
+  getShopifyStatus: (params: any) =>
+    api.get("/commerce/runtime/seller-agents/connectors/shopify/status", { params }),
+  syncShopify: (data: any) => api.post("/commerce/runtime/seller-agents/shopify/sync", data),
+  requestGrantexAuthority: (data: any) => api.post("/commerce/runtime/authority/grantex/request", data),
+  cacheArtifacts: (data: any) => api.post("/commerce/runtime/artifacts/cache", data),
+  askBuyerQuestion: (data: any) => api.post("/commerce/runtime/buyer-sessions/ask", data),
+  listProducts: (params: any) => api.get("/commerce/runtime/products", { params }),
+  verifyPluralPineCapability: (data: any) =>
+    api.post("/commerce/runtime/providers/plural-pine/mandate-capability/verify", data),
 };
 
 // ABM (Account-Based Marketing)

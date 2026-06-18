@@ -13,10 +13,14 @@
  *     user what was blocked and why.
  */
 import { expect, test } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+const ROLE_CREDS: Record<string, { email: string; password: string }> = {
+  cfo: { email: "cfo@agenticorg.local", password: "cfo123!" },
+};
 
 function requireAuth(): void {
   if (!canAuth) {
@@ -30,8 +34,20 @@ async function seedSession(
   page: import("@playwright/test").Page,
   role: string,
 ): Promise<void> {
+  let token = E2E_TOKEN;
+  if (role !== "admin") {
+    const creds = ROLE_CREDS[role];
+    if (!creds) throw new Error(`No demo credentials configured for role ${role}`);
+    const resp = await page.request.post(`${APP}/api/v1/auth/login`, {
+      data: creds,
+      failOnStatusCode: false,
+    });
+    expect(resp.status(), `login for ${role}`).toBe(200);
+    const body = await resp.json();
+    token = body.access_token || body.token || "";
+  }
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
-  await setSessionToken(page, E2E_TOKEN);
+  await setSessionToken(page, token);
 }
 
 test.describe("Dashboard metrics — no hardcoded KPIs", () => {
@@ -67,7 +83,7 @@ test.describe("Dashboard metrics — no hardcoded KPIs", () => {
 });
 
 test.describe("403 Access Denied page @tenancy", () => {
-  test("Non-auditor role hitting /dashboard/audit lands on /dashboard/access-denied", async ({
+  test("Non-admin role hitting /dashboard/settings lands on /dashboard/access-denied", async ({
     page,
   }) => {
     requireAuth();

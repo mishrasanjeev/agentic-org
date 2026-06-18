@@ -86,7 +86,7 @@
     "public_exempt_reason": null,
     "rate_limit": "a2a-task-read",
     "scope": "a2a.task.sensitive.read",
-    "source_line": 349,
+    "source_line": 374,
     "tenant_required": true
   },
   {
@@ -410,7 +410,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.list",
-    "source_line": 1301,
+    "source_line": 1340,
     "tenant_required": true
   },
   {
@@ -428,7 +428,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 1046,
+    "source_line": 1081,
     "tenant_required": true
   },
   {
@@ -446,7 +446,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.tools.sensitive.read",
-    "source_line": 1000,
+    "source_line": 1035,
     "tenant_required": true
   },
   {
@@ -464,7 +464,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "agents.generate",
-    "source_line": 1715,
+    "source_line": 1765,
     "tenant_required": true
   },
   {
@@ -482,7 +482,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "agents.import",
-    "source_line": 1558,
+    "source_line": 1597,
     "tenant_required": true
   },
   {
@@ -500,7 +500,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.org_tree",
-    "source_line": 1421,
+    "source_line": 1460,
     "tenant_required": true
   },
   {
@@ -518,7 +518,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 3790,
+    "source_line": 3872,
     "tenant_required": true
   },
   {
@@ -536,7 +536,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.read",
-    "source_line": 1837,
+    "source_line": 1897,
     "tenant_required": true
   },
   {
@@ -554,7 +554,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2007,
+    "source_line": 2067,
     "tenant_required": true
   },
   {
@@ -572,7 +572,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 1867,
+    "source_line": 1927,
     "tenant_required": true
   },
   {
@@ -590,7 +590,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.amendments.read",
-    "source_line": 3749,
+    "source_line": 3831,
     "tenant_required": true
   },
   {
@@ -608,7 +608,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.budget.read",
-    "source_line": 3463,
+    "source_line": 3545,
     "tenant_required": true
   },
   {
@@ -626,7 +626,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 3308,
+    "source_line": 3390,
     "tenant_required": true
   },
   {
@@ -644,7 +644,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.delegate",
-    "source_line": 1482,
+    "source_line": 1521,
     "tenant_required": true
   },
   {
@@ -662,7 +662,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.explanation.read",
-    "source_line": 3609,
+    "source_line": 3691,
     "tenant_required": true
   },
   {
@@ -680,7 +680,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.feedback.list",
-    "source_line": 3581,
+    "source_line": 3663,
     "tenant_required": true
   },
   {
@@ -698,7 +698,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-feedback",
     "scope": "agents.feedback.write",
-    "source_line": 3535,
+    "source_line": 3617,
     "tenant_required": true
   },
   {
@@ -716,7 +716,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.feedback.analyze",
-    "source_line": 3725,
+    "source_line": 3807,
     "tenant_required": true
   },
   {
@@ -734,7 +734,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 2818,
+    "source_line": 2888,
     "tenant_required": true
   },
   {
@@ -752,7 +752,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 2953,
+    "source_line": 3023,
     "tenant_required": true
   },
   {
@@ -770,7 +770,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.prompt_history",
-    "source_line": 3421,
+    "source_line": 3503,
     "tenant_required": true
   },
   {
@@ -788,7 +788,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 2866,
+    "source_line": 2936,
     "tenant_required": true
   },
   {
@@ -806,7 +806,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 3123,
+    "source_line": 3205,
     "tenant_required": true
   },
   {
@@ -824,7 +824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 3072,
+    "source_line": 3154,
     "tenant_required": true
   },
   {
@@ -842,7 +842,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 3184,
+    "source_line": 3266,
     "tenant_required": true
   },
   {
@@ -860,7 +860,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents.execute",
-    "source_line": 2168,
+    "source_line": 2228,
     "tenant_required": true
   },
   {
@@ -1004,7 +1004,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 728,
+    "source_line": 752,
     "tenant_required": false
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 530,
+    "source_line": 554,
     "tenant_required": false
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 412,
+    "source_line": 436,
     "tenant_required": false
   },
   {
@@ -1058,7 +1058,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
     "rate_limit": "auth-login",
     "scope": "public:auth.login",
-    "source_line": 335,
+    "source_line": 358,
     "tenant_required": false
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 632,
+    "source_line": 656,
     "tenant_required": true
   },
   {
@@ -1094,7 +1094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 657,
+    "source_line": 681,
     "tenant_required": true
   },
   {
@@ -1112,7 +1112,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 581,
+    "source_line": 605,
     "tenant_required": false
   },
   {
@@ -1203,7 +1203,7 @@
     "public_exempt_reason": "gateway-redirect-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.plural",
-    "source_line": 463,
+    "source_line": 460,
     "tenant_required": true
   },
   {
@@ -1221,7 +1221,7 @@
     "public_exempt_reason": "stripe-hosted-checkout-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.stripe",
-    "source_line": 577,
+    "source_line": 574,
     "tenant_required": true
   },
   {
@@ -1239,7 +1239,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscription.cancel",
-    "source_line": 714,
+    "source_line": 711,
     "tenant_required": true
   },
   {
@@ -1329,7 +1329,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-status",
     "scope": "billing.order_status.read",
-    "source_line": 681,
+    "source_line": 678,
     "tenant_required": true
   },
   {
@@ -1365,7 +1365,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.portal.create",
-    "source_line": 644,
+    "source_line": 641,
     "tenant_required": true
   },
   {
@@ -1383,7 +1383,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscribe.stripe",
-    "source_line": 306,
+    "source_line": 310,
     "tenant_required": true
   },
   {
@@ -1401,7 +1401,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscribe.plural",
-    "source_line": 407,
+    "source_line": 404,
     "tenant_required": true
   },
   {
@@ -1455,7 +1455,7 @@
     "public_exempt_reason": "plural-hmac-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.plural",
-    "source_line": 813,
+    "source_line": 810,
     "tenant_required": true
   },
   {
@@ -1473,7 +1473,7 @@
     "public_exempt_reason": "stripe-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.stripe",
-    "source_line": 781,
+    "source_line": 778,
     "tenant_required": true
   },
   {
@@ -1585,6 +1585,150 @@
     "tenant_required": true
   },
   {
+    "audit_event": "ca_billing.invoices.list",
+    "auth_required": true,
+    "function": "list_ca_client_invoices",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/ca-billing/invoices api/v1/ca_billing.py:list_ca_client_invoices",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/invoices",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "ca_billing.invoices.read",
+    "source_line": 281,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_billing.invoices.create",
+    "auth_required": true,
+    "function": "create_ca_client_invoice",
+    "idempotency": "tenant-client-invoice-create",
+    "key": "POST /api/v1/ca-billing/invoices api/v1/ca_billing.py:create_ca_client_invoice",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/invoices",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "ca_billing.invoices.write",
+    "source_line": 306,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_billing.payments.record",
+    "auth_required": true,
+    "function": "record_ca_client_payment",
+    "idempotency": "invoice-payment-record",
+    "key": "POST /api/v1/ca-billing/invoices/{invoice_id}/payments api/v1/ca_billing.py:record_ca_client_payment",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/invoices/{invoice_id}/payments",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "ca_billing.payments.write",
+    "source_line": 457,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_billing.invoices.send",
+    "auth_required": true,
+    "function": "send_ca_client_invoice",
+    "idempotency": "invoice-send-once",
+    "key": "POST /api/v1/ca-billing/invoices/{invoice_id}/send api/v1/ca_billing.py:send_ca_client_invoice",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/invoices/{invoice_id}/send",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "ca_billing.invoices.send",
+    "source_line": 431,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_billing.invoices.status",
+    "auth_required": true,
+    "function": "update_ca_client_invoice_status",
+    "idempotency": "invoice-status-patch",
+    "key": "PATCH /api/v1/ca-billing/invoices/{invoice_id}/status api/v1/ca_billing.py:update_ca_client_invoice_status",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/invoices/{invoice_id}/status",
+    "public_exempt_reason": null,
+    "rate_limit": "billing-mutating",
+    "scope": "ca_billing.invoices.status.write",
+    "source_line": 502,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_billing.service_plans.list",
+    "auth_required": true,
+    "function": "list_service_plans",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/ca-billing/service-plans api/v1/ca_billing.py:list_service_plans",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/service-plans",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "ca_billing.service_plans.read",
+    "source_line": 225,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_billing.service_plans.create",
+    "auth_required": true,
+    "function": "create_service_plan",
+    "idempotency": "tenant-service-plan-create",
+    "key": "POST /api/v1/ca-billing/service-plans api/v1/ca_billing.py:create_service_plan",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ca_billing.py",
+    "path": "/api/v1/ca-billing/service-plans",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "ca_billing.service_plans.write",
+    "source_line": 247,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "ca_capabilities.status.read",
+    "auth_required": true,
+    "function": "ca_capabilities_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/ca-capabilities/status api/v1/ca_operations.py:ca_capabilities_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/ca_operations.py",
+    "path": "/api/v1/ca-capabilities/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "ca_capabilities.read",
+    "source_line": 120,
+    "tenant_required": true
+  },
+  {
     "audit_event": "companies.ca_subscription.read",
     "auth_required": true,
     "function": "get_ca_subscription",
@@ -1599,7 +1743,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.subscription.sensitive.read",
-    "source_line": 1538,
+    "source_line": 1977,
     "tenant_required": true
   },
   {
@@ -1617,7 +1761,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.subscription.write",
-    "source_line": 1574,
+    "source_line": 2013,
     "tenant_required": true
   },
   {
@@ -1671,7 +1815,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 850,
+    "source_line": 860,
     "tenant_required": true
   },
   {
@@ -1689,7 +1833,331 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 511,
+    "source_line": 517,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "client_portal.documents.list",
+    "auth_required": true,
+    "function": "list_client_portal_documents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/client-portal/documents api/v1/client_portal.py:list_client_portal_documents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/documents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "client_portal.documents.read",
+    "source_line": 371,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "client_portal.documents.create",
+    "auth_required": true,
+    "function": "publish_client_portal_document",
+    "idempotency": "client-document-create",
+    "key": "POST /api/v1/client-portal/documents api/v1/client_portal.py:publish_client_portal_document",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/documents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "client_portal.documents.write",
+    "source_line": 335,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "client_portal.invites.list",
+    "auth_required": true,
+    "function": "list_client_portal_invites",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/client-portal/invites api/v1/client_portal.py:list_client_portal_invites",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/invites",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "client_portal.invites.read",
+    "source_line": 282,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "client_portal.invites.create",
+    "auth_required": true,
+    "function": "create_client_portal_invite",
+    "idempotency": "invite-create-random-token",
+    "key": "POST /api/v1/client-portal/invites api/v1/client_portal.py:create_client_portal_invite",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/invites",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "client_portal.invites.write",
+    "source_line": 240,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "client_portal.invites.revoke",
+    "auth_required": true,
+    "function": "revoke_client_portal_invite",
+    "idempotency": "invite-terminal-revoke",
+    "key": "POST /api/v1/client-portal/invites/{invite_id}/revoke api/v1/client_portal.py:revoke_client_portal_invite",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/invites/{invite_id}/revoke",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "client_portal.invites.revoke",
+    "source_line": 304,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "client_portal.public.accept",
+    "auth_required": false,
+    "function": "accept_client_portal_invite",
+    "idempotency": "invite-token-accept",
+    "key": "POST /api/v1/client-portal/public/accept api/v1/client_portal.py:accept_client_portal_invite",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/public/accept",
+    "public_exempt_reason": "signed-client-invite-token-authenticates-company-context",
+    "rate_limit": "client-portal-public",
+    "scope": "public:client_portal.accept",
+    "source_line": 422,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "client_portal.public.dashboard",
+    "auth_required": false,
+    "function": "get_client_portal_dashboard",
+    "idempotency": "read-only-token-scoped",
+    "key": "POST /api/v1/client-portal/public/dashboard api/v1/client_portal.py:get_client_portal_dashboard",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/client_portal.py",
+    "path": "/api/v1/client-portal/public/dashboard",
+    "public_exempt_reason": "signed-client-access-token-scopes-dashboard-to-one-company",
+    "rate_limit": "client-portal-public",
+    "scope": "public:client_portal.dashboard",
+    "source_line": 469,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "commerce.runtime.artifacts.cache",
+    "auth_required": true,
+    "function": "cache_grantex_artifacts",
+    "idempotency": "artifact-id-upsert",
+    "key": "POST /api/v1/commerce/runtime/artifacts/cache api/v1/commerce_runtime.py:cache_grantex_artifacts",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/artifacts/cache",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.artifacts.cache",
+    "source_line": 436,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.grantex.authority_request",
+    "auth_required": true,
+    "function": "request_grantex_authority_artifacts",
+    "idempotency": "packet-id-and-evidence-id",
+    "key": "POST /api/v1/commerce/runtime/authority/grantex/request api/v1/commerce_runtime.py:request_grantex_authority_artifacts",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/authority/grantex/request",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.grantex.authority_request",
+    "source_line": 399,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.buyer_session.ask",
+    "auth_required": true,
+    "function": "ask_buyer_product_question",
+    "idempotency": "read-only-non-binding-answer",
+    "key": "POST /api/v1/commerce/runtime/buyer-sessions/ask api/v1/commerce_runtime.py:ask_buyer_product_question",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/buyer-sessions/ask",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-buyer-session",
+    "scope": "commerce.runtime.buyer_sessions.ask",
+    "source_line": 485,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.products.list",
+    "auth_required": true,
+    "function": "list_cached_products",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/products api/v1/commerce_runtime.py:list_cached_products",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/products",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.products.read",
+    "source_line": 572,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.providers.plural_pine.verify",
+    "auth_required": true,
+    "function": "verify_plural_pine_capability",
+    "idempotency": "merchant-capability-check-window",
+    "key": "POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify api/v1/commerce_runtime.py:verify_plural_pine_capability",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.providers.plural_pine.verify",
+    "source_line": 538,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.credentials.upsert",
+    "auth_required": true,
+    "function": "upsert_shopify_connector_credentials",
+    "idempotency": "merchant-shopify-credential-upsert",
+    "key": "POST /api/v1/commerce/runtime/seller-agents/connectors/shopify/credentials api/v1/commerce_runtime.py:upsert_shopify_connector_credentials",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/connectors/shopify/credentials",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.shopify.credentials.write",
+    "source_line": 170,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.credentials.read",
+    "auth_required": true,
+    "function": "get_shopify_connector_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/seller-agents/connectors/shopify/status api/v1/commerce_runtime.py:get_shopify_connector_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/connectors/shopify/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.shopify.credentials.read",
+    "source_line": 259,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.seller_onboarding_packet.create",
+    "auth_required": true,
+    "function": "create_seller_onboarding_packet",
+    "idempotency": "deterministic-seller-onboarding-packet-id",
+    "key": "POST /api/v1/commerce/runtime/seller-agents/onboarding-packets api/v1/commerce_runtime.py:create_seller_onboarding_packet",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/onboarding-packets",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.seller_agents.write",
+    "source_line": 127,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.seller_onboarding_packet.read",
+    "auth_required": true,
+    "function": "get_seller_onboarding_packet",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/seller-agents/onboarding-packets/{packet_id} api/v1/commerce_runtime.py:get_seller_onboarding_packet",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/onboarding-packets/{packet_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.seller_agents.read",
+    "source_line": 150,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.sync",
+    "auth_required": true,
+    "function": "sync_shopify_read_only",
+    "idempotency": "packet-id-and-shopify-source-snapshot",
+    "key": "POST /api/v1/commerce/runtime/seller-agents/shopify/sync api/v1/commerce_runtime.py:sync_shopify_read_only",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/seller-agents/shopify/sync",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-bulk",
+    "scope": "commerce.runtime.shopify.sync",
+    "source_line": 301,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.product_update_webhook",
+    "auth_required": true,
+    "function": "receive_shopify_product_webhook",
+    "idempotency": "shopify-webhook-id-or-body-hash",
+    "key": "POST /api/v1/commerce/runtime/shopify/webhooks/product-update api/v1/commerce_runtime.py:receive_shopify_product_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/shopify/webhooks/product-update",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-webhook",
+    "scope": "commerce.runtime.shopify.webhook",
+    "source_line": 354,
     "tenant_required": true
   },
   {
@@ -1707,7 +2175,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.list",
-    "source_line": 307,
+    "source_line": 495,
     "tenant_required": true
   },
   {
@@ -1725,7 +2193,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.write",
-    "source_line": 373,
+    "source_line": 561,
     "tenant_required": true
   },
   {
@@ -1743,7 +2211,43 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "companies.approvals.decide",
-    "source_line": 1935,
+    "source_line": 2374,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.bulk_upload",
+    "auth_required": true,
+    "function": "bulk_upload_companies",
+    "idempotency": "unique-tenant-gstin-or-company-name-per-row",
+    "key": "POST /api/v1/companies/bulk-upload api/v1/companies.py:bulk_upload_companies",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/bulk-upload",
+    "public_exempt_reason": null,
+    "rate_limit": "company-bulk-write",
+    "scope": "companies.bulk_upload",
+    "source_line": 727,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "companies.bulk_upload.template",
+    "auth_required": true,
+    "function": "download_company_bulk_upload_template",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/companies/bulk-upload/template api/v1/companies.py:download_company_bulk_upload_template",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/companies.py",
+    "path": "/api/v1/companies/bulk-upload/template",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "companies.bulk_upload.template",
+    "source_line": 648,
     "tenant_required": true
   },
   {
@@ -1761,7 +2265,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.onboard",
-    "source_line": 728,
+    "source_line": 1167,
     "tenant_required": true
   },
   {
@@ -1779,7 +2283,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-bridge",
     "scope": "companies.tally.detect",
-    "source_line": 2335,
+    "source_line": 2774,
     "tenant_required": true
   },
   {
@@ -1797,7 +2301,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-bridge",
     "scope": "companies.tally.test",
-    "source_line": 2458,
+    "source_line": 2897,
     "tenant_required": true
   },
   {
@@ -1815,7 +2319,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.write",
-    "source_line": 578,
+    "source_line": 1017,
     "tenant_required": true
   },
   {
@@ -1833,7 +2337,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.read",
-    "source_line": 460,
+    "source_line": 899,
     "tenant_required": true
   },
   {
@@ -1851,7 +2355,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.write",
-    "source_line": 500,
+    "source_line": 939,
     "tenant_required": true
   },
   {
@@ -1869,7 +2373,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.approvals.list",
-    "source_line": 1032,
+    "source_line": 1471,
     "tenant_required": true
   },
   {
@@ -1887,7 +2391,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-write",
     "scope": "companies.approvals.write",
-    "source_line": 1097,
+    "source_line": 1536,
     "tenant_required": true
   },
   {
@@ -1905,7 +2409,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "companies.approvals.decide",
-    "source_line": 1165,
+    "source_line": 1604,
     "tenant_required": true
   },
   {
@@ -1923,7 +2427,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "companies.approvals.decide",
-    "source_line": 1256,
+    "source_line": 1695,
     "tenant_required": true
   },
   {
@@ -1941,7 +2445,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "companies.bridge.write",
-    "source_line": 2546,
+    "source_line": 2985,
     "tenant_required": true
   },
   {
@@ -1959,7 +2463,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.credentials.sensitive.list",
-    "source_line": 1694,
+    "source_line": 2133,
     "tenant_required": true
   },
   {
@@ -1977,7 +2481,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "companies.credentials.write",
-    "source_line": 1749,
+    "source_line": 2188,
     "tenant_required": true
   },
   {
@@ -1995,7 +2499,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "companies.credentials.write",
-    "source_line": 1806,
+    "source_line": 2245,
     "tenant_required": true
   },
   {
@@ -2013,7 +2517,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-credential-check",
     "scope": "companies.credentials.verify",
-    "source_line": 1858,
+    "source_line": 2297,
     "tenant_required": true
   },
   {
@@ -2031,7 +2535,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.deadlines.list",
-    "source_line": 2072,
+    "source_line": 2511,
     "tenant_required": true
   },
   {
@@ -2049,7 +2553,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.deadlines.write",
-    "source_line": 2149,
+    "source_line": 2588,
     "tenant_required": true
   },
   {
@@ -2067,7 +2571,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.deadlines.write",
-    "source_line": 2241,
+    "source_line": 2680,
     "tenant_required": true
   },
   {
@@ -2085,7 +2589,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.gstn_uploads.list",
-    "source_line": 1342,
+    "source_line": 1781,
     "tenant_required": true
   },
   {
@@ -2103,7 +2607,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.gstn_uploads.write",
-    "source_line": 1402,
+    "source_line": 1841,
     "tenant_required": true
   },
   {
@@ -2121,7 +2625,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.gstn_uploads.write",
-    "source_line": 1465,
+    "source_line": 1904,
     "tenant_required": true
   },
   {
@@ -2139,7 +2643,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.roles.read",
-    "source_line": 619,
+    "source_line": 1058,
     "tenant_required": true
   },
   {
@@ -2157,7 +2661,7 @@
     "public_exempt_reason": null,
     "rate_limit": "company-write",
     "scope": "companies.roles.write",
-    "source_line": 667,
+    "source_line": 1106,
     "tenant_required": true
   },
   {
@@ -2283,7 +2787,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 568,
+    "source_line": 796,
     "tenant_required": true
   },
   {
@@ -2301,7 +2805,61 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.create",
-    "source_line": 637,
+    "source_line": 865,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.cmo_vendor_sandbox.read",
+    "auth_required": true,
+    "function": "get_cmo_vendor_sandbox_connectors",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors/cmo-vendor-sandbox api/v1/connectors.py:get_cmo_vendor_sandbox_connectors",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/cmo-vendor-sandbox",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "connectors.read",
+    "source_line": 1028,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.cmo_vendor_sandbox.upsert",
+    "auth_required": true,
+    "function": "upsert_cmo_vendor_sandbox_connectors",
+    "idempotency": "tenant-cmo-vendor-sandbox-upsert",
+    "key": "POST /api/v1/connectors/cmo-vendor-sandbox api/v1/connectors.py:upsert_cmo_vendor_sandbox_connectors",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/connectors.py",
+    "path": "/api/v1/connectors/cmo-vendor-sandbox",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.create",
+    "source_line": 1089,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.gstn.eway.bulk_generate",
+    "auth_required": true,
+    "function": "bulk_generate_eway_bills",
+    "idempotency": "deterministic-bulk-payload-generation",
+    "key": "POST /api/v1/connectors/gstn/eway-bills/bulk-generate api/v1/ca_operations.py:bulk_generate_eway_bills",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ca_operations.py",
+    "path": "/api/v1/connectors/gstn/eway-bills/bulk-generate",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-bulk",
+    "scope": "connectors.gstn.eway.bulk_generate",
+    "source_line": 78,
     "tenant_required": true
   },
   {
@@ -2373,8 +2931,26 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.registry.read",
-    "source_line": 430,
+    "source_line": 658,
     "tenant_required": false
+  },
+  {
+    "audit_event": "connectors.traces.reconcile",
+    "auth_required": true,
+    "function": "reconcile_traces",
+    "idempotency": "deterministic-upload-reconciliation",
+    "key": "POST /api/v1/connectors/traces/reconcile api/v1/ca_operations.py:reconcile_traces",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ca_operations.py",
+    "path": "/api/v1/connectors/traces/reconcile",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-bulk",
+    "scope": "connectors.traces.reconcile",
+    "source_line": 48,
+    "tenant_required": true
   },
   {
     "audit_event": "connectors.delete",
@@ -2391,7 +2967,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1055,
+    "source_line": 1524,
     "tenant_required": true
   },
   {
@@ -2409,7 +2985,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 801,
+    "source_line": 1270,
     "tenant_required": true
   },
   {
@@ -2427,7 +3003,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 840,
+    "source_line": 1309,
     "tenant_required": true
   },
   {
@@ -2445,7 +3021,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1088,
+    "source_line": 1557,
     "tenant_required": true
   },
   {
@@ -2463,7 +3039,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1143,
+    "source_line": 1612,
     "tenant_required": true
   },
   {
@@ -3075,7 +3651,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 825,
+    "source_line": 834,
     "tenant_required": true
   },
   {
@@ -3093,7 +3669,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 919,
+    "source_line": 928,
     "tenant_required": true
   },
   {
@@ -3111,7 +3687,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1182,
+    "source_line": 1191,
     "tenant_required": false
   },
   {
@@ -3129,7 +3705,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1124,
+    "source_line": 1133,
     "tenant_required": true
   },
   {
@@ -3147,7 +3723,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1299,
+    "source_line": 1308,
     "tenant_required": true
   },
   {
@@ -3165,7 +3741,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 479,
+    "source_line": 488,
     "tenant_required": true
   },
   {
@@ -3183,7 +3759,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cbo",
-    "source_line": 593,
+    "source_line": 996,
     "tenant_required": true
   },
   {
@@ -3201,7 +3777,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.ceo",
-    "source_line": 473,
+    "source_line": 876,
     "tenant_required": true
   },
   {
@@ -3219,7 +3795,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cfo",
-    "source_line": 502,
+    "source_line": 905,
     "tenant_required": true
   },
   {
@@ -3237,7 +3813,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.chro",
-    "source_line": 536,
+    "source_line": 939,
     "tenant_required": true
   },
   {
@@ -3255,7 +3831,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cmo",
-    "source_line": 555,
+    "source_line": 958,
     "tenant_required": true
   },
   {
@@ -3273,7 +3849,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.coo",
-    "source_line": 574,
+    "source_line": 977,
     "tenant_required": true
   },
   {
@@ -3291,7 +3867,7 @@
     "public_exempt_reason": null,
     "rate_limit": "mcp-tool-call",
     "scope": "mcp.external_agent_execution.sensitive.write",
-    "source_line": 109,
+    "source_line": 110,
     "tenant_required": true
   },
   {
@@ -3309,7 +3885,7 @@
     "public_exempt_reason": "public-tool-discovery-no-tenant-data",
     "rate_limit": "mcp-discovery",
     "scope": "public:mcp.tool_discovery.read",
-    "source_line": 43,
+    "source_line": 44,
     "tenant_required": false
   },
   {
@@ -3615,7 +4191,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.partner_dashboard",
-    "source_line": 2703,
+    "source_line": 3142,
     "tenant_required": true
   },
   {
@@ -3635,6 +4211,114 @@
     "scope": "public:product_facts.read",
     "source_line": 86,
     "tenant_required": false
+  },
+  {
+    "audit_event": "professional_tax.registrations.upsert",
+    "auth_required": true,
+    "function": "upsert_pt_registration",
+    "idempotency": "tenant-company-state-upsert",
+    "key": "PUT /api/v1/professional-tax/companies/{company_id}/registrations/{state_code} api/v1/professional_tax.py:upsert_pt_registration",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/professional_tax.py",
+    "path": "/api/v1/professional-tax/companies/{company_id}/registrations/{state_code}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "professional_tax.registrations.write",
+    "source_line": 191,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "professional_tax.registrations.list",
+    "auth_required": true,
+    "function": "list_pt_registrations",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/professional-tax/registrations api/v1/professional_tax.py:list_pt_registrations",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/professional_tax.py",
+    "path": "/api/v1/professional-tax/registrations",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "professional_tax.registrations.read",
+    "source_line": 163,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "professional_tax.returns.list",
+    "auth_required": true,
+    "function": "list_pt_returns",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/professional-tax/returns api/v1/professional_tax.py:list_pt_returns",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/professional_tax.py",
+    "path": "/api/v1/professional-tax/returns",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "professional_tax.returns.read",
+    "source_line": 345,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "professional_tax.returns.prepare",
+    "auth_required": true,
+    "function": "prepare_pt_return",
+    "idempotency": "tenant-company-state-period-upsert",
+    "key": "POST /api/v1/professional-tax/returns/prepare api/v1/professional_tax.py:prepare_pt_return",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/professional_tax.py",
+    "path": "/api/v1/professional-tax/returns/prepare",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "professional_tax.returns.prepare",
+    "source_line": 253,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "professional_tax.returns.submit",
+    "auth_required": true,
+    "function": "submit_pt_return",
+    "idempotency": "pt-return-submit-or-ack",
+    "key": "POST /api/v1/professional-tax/returns/{return_id}/submit api/v1/professional_tax.py:submit_pt_return",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/professional_tax.py",
+    "path": "/api/v1/professional-tax/returns/{return_id}/submit",
+    "public_exempt_reason": null,
+    "rate_limit": "compliance-mutating",
+    "scope": "professional_tax.returns.submit",
+    "source_line": 374,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "professional_tax.states.read",
+    "auth_required": true,
+    "function": "list_professional_tax_states",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/professional-tax/states api/v1/professional_tax.py:list_professional_tax_states",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/professional_tax.py",
+    "path": "/api/v1/professional-tax/states",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "professional_tax.states.read",
+    "source_line": 147,
+    "tenant_required": true
   },
   {
     "audit_event": "prompt_templates.list",
@@ -4695,7 +5379,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.tools.read",
-    "source_line": 491,
+    "source_line": 719,
     "tenant_required": false
   },
   {

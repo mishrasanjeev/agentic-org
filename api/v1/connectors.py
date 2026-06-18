@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -25,7 +26,116 @@ from core.schemas.api import ConnectorCreate, ConnectorUpdate
 
 _log = logging.getLogger(__name__)
 
-_ZOHO_IN_BASE = "https://books.zoho.in/api/v3"
+_CMO_SANDBOX_CATEGORIES = ("CRM", "Ads", "Analytics", "Email")
+_CMO_SECRET_KEY_MARKERS = (
+    "secret",
+    "token",
+    "password",
+    "credential",
+    "api_key",
+    "authorization",
+)
+_CMO_PLACEHOLDER_MARKERS = (
+    "REAL_",
+    "PLACEHOLDER",
+    "TODO",
+    "CHANGEME",
+    "REPLACE_ME",
+    "example.com",
+)
+_CMO_VENDOR_SANDBOX_PROVIDERS: dict[str, dict[str, dict[str, Any]]] = {
+    "CRM": {
+        "hubspot": {
+            "aliases": ("hubspot", "hubspot_sandbox"),
+            "display_name": "HubSpot Sandbox",
+            "auth_type": "oauth2",
+            "required_credentials": ("access_token",),
+        },
+        "salesforce": {
+            "aliases": ("salesforce", "salesforce_sandbox"),
+            "display_name": "Salesforce Sandbox",
+            "auth_type": "oauth2",
+            "required_credentials": (
+                "instance_url",
+                "refresh_token",
+                "client_id",
+                "client_secret",
+            ),
+        },
+    },
+    "Ads": {
+        "google_ads": {
+            "aliases": ("google_ads", "google_ads_sandbox"),
+            "display_name": "Google Ads Test Customer",
+            "auth_type": "oauth2",
+            "required_credentials": (
+                "developer_token",
+                "refresh_token",
+                "customer_id",
+                "client_id",
+                "client_secret",
+            ),
+        },
+        "meta_ads": {
+            "aliases": ("meta_ads", "meta_ads_sandbox"),
+            "display_name": "Meta Ads Sandbox",
+            "auth_type": "oauth2",
+            "required_credentials": ("access_token", "ad_account_id"),
+        },
+        "linkedin_ads": {
+            "aliases": ("linkedin_ads", "linkedin_ads_sandbox"),
+            "display_name": "LinkedIn Ads Sandbox",
+            "auth_type": "oauth2",
+            "required_credentials": (
+                "refresh_token",
+                "account_id",
+                "client_id",
+                "client_secret",
+            ),
+        },
+    },
+    "Analytics": {
+        "ga4": {
+            "aliases": ("ga4", "ga4_sandbox"),
+            "display_name": "GA4 Sandbox Property",
+            "auth_type": "oauth2",
+            "required_credentials": (
+                "property_id",
+                "refresh_token",
+                "client_id",
+                "client_secret",
+            ),
+        },
+    },
+    "Email": {
+        "sendgrid": {
+            "aliases": ("sendgrid", "sendgrid_sandbox"),
+            "display_name": "SendGrid Sandbox",
+            "auth_type": "api_key",
+            "required_credentials": ("api_key", "sender_identity"),
+        },
+        "mailchimp": {
+            "aliases": ("mailchimp", "mailchimp_sandbox"),
+            "display_name": "Mailchimp Test Account",
+            "auth_type": "api_key",
+            "required_credentials": ("api_key", "server_prefix", "audience_id"),
+        },
+    },
+}
+
+
+class CMOVendorSandboxConnectorInput(BaseModel):
+    connector_name: str
+    display_name: str | None = None
+    auth_type: str | None = None
+    credentials: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class CMOVendorSandboxConnectorsRequest(BaseModel):
+    connectors: dict[str, CMOVendorSandboxConnectorInput] = Field(default_factory=dict)
+
+_ZOHO_IN_BASE = "https://www.zohoapis.in/books/v3"
 _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
 _ZOHO_API_BASE_URLS = {
     "in": _ZOHO_IN_BASE,
@@ -131,6 +241,124 @@ def _clean_auth_config(auth_config: dict[str, Any] | None) -> dict[str, Any]:
         else:
             cleaned[str(key)] = value
     return cleaned
+
+
+def _normalise_cmo_sandbox_category(value: Any) -> str | None:
+    text = str(value or "").strip().lower().replace("_", " ")
+    for category in _CMO_SANDBOX_CATEGORIES:
+        if text == category.lower():
+            return category
+    return None
+
+
+def _cmo_provider_for(category: str, connector_name: str) -> tuple[str, dict[str, Any]] | None:
+    normalized = str(connector_name or "").strip().lower().replace("-", "_")
+    for canonical, provider in _CMO_VENDOR_SANDBOX_PROVIDERS[category].items():
+        aliases = {str(alias).lower().replace("-", "_") for alias in provider["aliases"]}
+        if normalized in aliases or normalized == canonical:
+            return canonical, provider
+    return None
+
+
+def _cmo_safe_non_secret_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for key, value in (config or {}).items():
+        if _cmo_is_secret_key(str(key)):
+            continue
+        if isinstance(value, dict | list):
+            continue
+        if value is None:
+            continue
+        safe[str(key)] = value
+    return safe
+
+
+def _cmo_is_secret_key(key: str) -> bool:
+    normalized = key.lower().replace("-", "_")
+    return any(marker in normalized for marker in _CMO_SECRET_KEY_MARKERS)
+
+
+def _cmo_looks_placeholder(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text:
+        return True
+    upper = text.upper()
+    return any(marker.upper() in upper for marker in _CMO_PLACEHOLDER_MARKERS)
+
+
+def _cmo_vendor_sandbox_config(
+    category: str,
+    connector_name: str,
+    raw_config: dict[str, Any],
+    credentials: dict[str, Any],
+) -> dict[str, Any]:
+    public_identifiers = {
+        key: credentials[key]
+        for key in (
+            "account_id",
+            "ad_account_id",
+            "audience_id",
+            "customer_id",
+            "instance_url",
+            "property_id",
+            "sender_identity",
+            "server_prefix",
+        )
+        if credentials.get(key)
+    }
+    return {
+        **public_identifiers,
+        **_cmo_safe_non_secret_config(raw_config),
+        "cmo_category": category,
+        "connector_provider": connector_name,
+        "proof_scope": "vendor_sandbox",
+        "environment_type": "vendor_sandbox",
+        "local_test_only": False,
+        "mock_or_test_double": False,
+        "sandbox_preflight_ready": True,
+        "configured_by": "ui:cmo_vendor_sandbox_connectors",
+        "configured_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _cmo_connector_readiness(row: Any) -> tuple[str, str | None]:
+    config = row.config or {}
+    status = str(row.status or "").lower()
+    health = str(row.health_status or "").lower()
+    if status not in {"active", "configured", "connected", "healthy", "ok", "ready"}:
+        return "blocked", "status_not_ready"
+    if health not in {"", "active", "configured", "connected", "healthy", "ok", "ready", "unknown"}:
+        return "blocked", "health_not_ready"
+    if config.get("local_test_only") is True:
+        return "blocked", "local_test_only"
+    if config.get("mock_or_test_double") is True:
+        return "blocked", "mock_or_test_double"
+    if config.get("proof_scope") != "vendor_sandbox":
+        return "blocked", "not_vendor_sandbox"
+    if config.get("environment_type") != "vendor_sandbox":
+        return "blocked", "not_vendor_sandbox"
+    return "ready", None
+
+
+def _cmo_connector_summary(category: str, row: Any) -> dict[str, Any]:
+    readiness, reason = _cmo_connector_readiness(row)
+    return {
+        "category": category,
+        "connector_name": str(row.connector_name or ""),
+        "display_name": str(row.display_name or row.connector_name or ""),
+        "source": "db",
+        "readiness_state": readiness,
+        "missing_reason": reason,
+        "status": str(row.status or ""),
+        "health_status": str(row.health_status or "unknown"),
+        "proof_scope": (row.config or {}).get("proof_scope"),
+        "environment_type": (row.config or {}).get("environment_type"),
+        "local_test_only": bool((row.config or {}).get("local_test_only")),
+        "mock_or_test_double": bool((row.config or {}).get("mock_or_test_double")),
+        "credential_values_redacted": True,
+    }
 
 
 def _prepare_zoho_books_registration(
@@ -870,6 +1098,247 @@ async def register_connector(
             await session.flush()
 
     return _connector_to_dict(connector, bool(secret_fields))
+
+
+@router.get("/connectors/cmo-vendor-sandbox")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="connectors.cmo_vendor_sandbox.read",
+)
+async def get_cmo_vendor_sandbox_connectors(
+    tenant_id: str = Depends(get_current_tenant),
+):
+    from core.models.connector_config import ConnectorConfig
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(ConnectorConfig).where(ConnectorConfig.tenant_id == tid)
+        )
+        rows = result.scalars().all()
+
+    by_category: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        category = _normalise_cmo_sandbox_category((row.config or {}).get("cmo_category"))
+        if category is None:
+            continue
+        summary = _cmo_connector_summary(category, row)
+        existing = by_category.get(category)
+        if existing is None or (
+            summary["readiness_state"] == "ready"
+            and existing.get("readiness_state") != "ready"
+        ):
+            by_category[category] = summary
+
+    return {
+        "status": "ready"
+        if all(category in by_category for category in _CMO_SANDBOX_CATEGORIES)
+        else "blocked",
+        "categories": [
+            by_category[category]
+            for category in _CMO_SANDBOX_CATEGORIES
+            if category in by_category
+        ],
+        "missing_categories": [
+            category for category in _CMO_SANDBOX_CATEGORIES if category not in by_category
+        ],
+        "providers": {
+            category: [
+                {
+                    "connector_name": canonical,
+                    "display_name": str(provider["display_name"]),
+                    "auth_type": str(provider["auth_type"]),
+                    "required_credentials": list(provider["required_credentials"]),
+                }
+                for canonical, provider in providers.items()
+            ]
+            for category, providers in _CMO_VENDOR_SANDBOX_PROVIDERS.items()
+        },
+    }
+
+
+@router.post("/connectors/cmo-vendor-sandbox")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="connectors.create",
+    rate_limit="admin-mutating",
+    idempotency="tenant-cmo-vendor-sandbox-upsert",
+    audit_event="connectors.cmo_vendor_sandbox.upsert",
+)
+async def upsert_cmo_vendor_sandbox_connectors(
+    body: CMOVendorSandboxConnectorsRequest,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    from core.crypto import encrypt_for_tenant
+    from core.models.connector_config import ConnectorConfig
+
+    tid = _uuid.UUID(tenant_id)
+    inputs_by_category: dict[str, CMOVendorSandboxConnectorInput] = {}
+    for raw_category, connector_input in body.connectors.items():
+        category = _normalise_cmo_sandbox_category(raw_category)
+        if category is None:
+            raise HTTPException(400, f"Unsupported CMO connector category: {raw_category}")
+        inputs_by_category[category] = connector_input
+
+    missing_categories = [
+        category for category in _CMO_SANDBOX_CATEGORIES if category not in inputs_by_category
+    ]
+    if missing_categories:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "missing_cmo_vendor_sandbox_categories",
+                "missing_categories": missing_categories,
+                "message": "Configure exactly one CRM, Ads, Analytics, and Email sandbox connector.",
+            },
+        )
+
+    prepared: dict[str, dict[str, Any]] = {}
+    for category in _CMO_SANDBOX_CATEGORIES:
+        connector_input = inputs_by_category[category]
+        provider_match = _cmo_provider_for(category, connector_input.connector_name)
+        if provider_match is None:
+            allowed = sorted(_CMO_VENDOR_SANDBOX_PROVIDERS[category])
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "unsupported_cmo_vendor_sandbox_provider",
+                    "category": category,
+                    "allowed": allowed,
+                    "message": f"Unsupported {category} provider.",
+                },
+            )
+        connector_name, provider = provider_match
+        credentials = _clean_auth_config(connector_input.credentials)
+        missing_credentials = [
+            name
+            for name in provider["required_credentials"]
+            if not credentials.get(name)
+        ]
+        placeholder_credentials = [
+            name
+            for name in provider["required_credentials"]
+            if _cmo_looks_placeholder(credentials.get(name))
+        ]
+        if missing_credentials or placeholder_credentials:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_cmo_vendor_sandbox_credentials",
+                    "category": category,
+                    "connector_name": connector_name,
+                    "missing_credentials": missing_credentials,
+                    "placeholder_credentials": placeholder_credentials,
+                    "message": "Real vendor-sandbox credential values are required.",
+                },
+            )
+        auth_type = connector_input.auth_type or str(provider["auth_type"])
+        prepared[category] = {
+            "connector_name": connector_name,
+            "display_name": connector_input.display_name or str(provider["display_name"]),
+            "auth_type": auth_type,
+            "credentials": credentials,
+            "config": _cmo_vendor_sandbox_config(
+                category,
+                connector_name,
+                connector_input.config,
+                credentials,
+            ),
+        }
+
+    summaries: list[dict[str, Any]] = []
+    async with get_tenant_session(tid) as session:
+        for category in _CMO_SANDBOX_CATEGORIES:
+            row = prepared[category]
+            encrypted = await encrypt_for_tenant(
+                json.dumps(row["credentials"], sort_keys=True),
+                tid,
+            )
+
+            connector_result = await session.execute(
+                select(Connector).where(
+                    Connector.tenant_id == tid,
+                    Connector.name == row["connector_name"],
+                )
+            )
+            connector = connector_result.scalar_one_or_none()
+            if connector is None:
+                session.add(
+                    Connector(
+                        tenant_id=tid,
+                        name=row["connector_name"],
+                        category="marketing",
+                        auth_type=row["auth_type"],
+                        auth_config={},
+                        status="active",
+                        description=row["display_name"],
+                    )
+                )
+            else:
+                connector.category = "marketing"
+                connector.auth_type = row["auth_type"]
+                connector.auth_config = {}
+                connector.status = "active"
+                connector.description = row["display_name"]
+
+            config_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == row["connector_name"],
+                )
+            )
+            existing = config_result.scalar_one_or_none()
+            action = "updated" if existing is not None else "inserted"
+            if existing is None:
+                session.add(
+                    ConnectorConfig(
+                        tenant_id=tid,
+                        connector_name=row["connector_name"],
+                        display_name=row["display_name"],
+                        auth_type=row["auth_type"],
+                        credentials_encrypted={"_encrypted": encrypted},
+                        config=row["config"],
+                        status="configured",
+                        health_status="healthy",
+                    )
+                )
+            else:
+                existing.display_name = row["display_name"]
+                existing.auth_type = row["auth_type"]
+                existing.credentials_encrypted = {"_encrypted": encrypted}
+                existing.config = row["config"]
+                existing.status = "configured"
+                existing.health_status = "healthy"
+                existing.sync_error = None
+            summaries.append(
+                {
+                    "category": category,
+                    "connector_name": row["connector_name"],
+                    "display_name": row["display_name"],
+                    "action": action,
+                    "source": "db",
+                    "readiness_state": "ready",
+                    "credential_keys_present": sorted(row["credentials"]),
+                    "credential_values_redacted": True,
+                    "proof_scope": "vendor_sandbox",
+                    "environment_type": "vendor_sandbox",
+                    "local_test_only": False,
+                    "mock_or_test_double": False,
+                }
+            )
+        await session.commit()
+
+    return {
+        "status": "ready",
+        "message": "CMO vendor-sandbox ConnectorConfig rows configured.",
+        "categories": summaries,
+        "missing_categories": [],
+    }
 
 
 # ── GET /connectors/{conn_id} ────────────────────────────────────────────────

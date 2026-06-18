@@ -10,7 +10,7 @@
  *   - List the native tool catalogue for informational use
  *
  * Connector tools are NOT exposed as direct MCP tools. Agents call
- * connector tools internally via the AgenticOrg runtime — see
+ * connector tools internally via the AgenticOrg runtime - see
  * docs/mcp-product-model.md. Live counts (agents, connectors, tools,
  * version) come from `GET /api/v1/product-facts`.
  *
@@ -64,7 +64,7 @@ async function apiPost(path: string, body: unknown): Promise<unknown> {
   return resp.json();
 }
 
-// ── MCP Server ──────────────────────────────────────────────────────────
+// MCP Server
 
 // Version is read from package.json at runtime so the advertised
 // server.version can't drift from the published package identifier.
@@ -81,11 +81,11 @@ const server = new McpServer({
   name: "agenticorg",
   version: pkg.version,
   description:
-    "AgenticOrg MCP server — run AI agents as MCP tools. Live counts from " +
+    "AgenticOrg MCP server - run AI agents as MCP tools. Live counts from " +
     "GET /api/v1/product-facts (agents, connectors, tools, version).",
 });
 
-// ── Tool: list_agents ───────────────────────────────────────────────────
+// Tool: list_agents
 
 server.tool(
   "list_agents",
@@ -106,7 +106,7 @@ server.tool(
   },
 );
 
-// ── Tool: run_agent ─────────────────────────────────────────────────────
+// Tool: run_agent
 
 server.tool(
   "run_agent",
@@ -127,7 +127,7 @@ server.tool(
   },
 );
 
-// ── Tool: get_agent_details ─────────────────────────────────────────────
+// Tool: get_agent_details
 
 server.tool(
   "get_agent_details",
@@ -141,7 +141,7 @@ server.tool(
   },
 );
 
-// ── Tool: create_agent_from_sop ─────────────────────────────────────────
+// Tool: create_agent_from_sop
 
 server.tool(
   "create_agent_from_sop",
@@ -159,7 +159,7 @@ server.tool(
   },
 );
 
-// ── Tool: deploy_agent ──────────────────────────────────────────────────
+// Tool: deploy_agent
 
 server.tool(
   "deploy_agent",
@@ -173,11 +173,11 @@ server.tool(
   },
 );
 
-// ── Tool: list_connectors ───────────────────────────────────────────────
+// Tool: list_connectors
 
 server.tool(
   "list_connectors",
-  "List the AgenticOrg native connectors and their status. Note: connectors are NOT directly callable as MCP tools — see docs/mcp-product-model.md (we ship agents-as-tools, not connectors-as-tools). Use this for discovery only.",
+  "List the AgenticOrg native connectors and their status. Note: connectors are NOT directly callable as MCP tools - see docs/mcp-product-model.md (we ship agents-as-tools, not connectors-as-tools). Use this for discovery only.",
   async () => {
     const data = await apiGet("/api/v1/connectors");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -186,12 +186,12 @@ server.tool(
 
 // NOTE: `call_connector_tool` was removed in PR-A (Enterprise Readiness P3).
 // The backend /api/v1/mcp/call only accepts agent tool names prefixed
-// `agenticorg_<agent_type>` — direct connector invocation was never
+// `agenticorg_<agent_type>` - direct connector invocation was never
 // supported. See docs/mcp-product-model.md for the product decision.
 // External callers should invoke the agent that wraps the connector action
 // via `run_agent` instead.
 
-// ── Tool: list_mcp_tools ────────────────────────────────────────────────
+// Tool: list_mcp_tools
 
 server.tool(
   "list_mcp_tools",
@@ -202,7 +202,7 @@ server.tool(
   },
 );
 
-// ── Tool: discover_agents_a2a ───────────────────────────────────────────
+// Tool: discover_agents_a2a
 
 server.tool(
   "discover_agents_a2a",
@@ -213,18 +213,133 @@ server.tool(
   },
 );
 
-// ── Tool: get_agent_card ────────────────────────────────────────────────
+// Tool: get_agent_card
 
 server.tool(
   "get_agent_card",
-  "Get the A2A Agent Card — the public discovery document describing this AgenticOrg instance's capabilities.",
+  "Get the A2A Agent Card - the public discovery document describing this AgenticOrg instance's capabilities.",
   async () => {
     const data = await apiGet("/api/v1/a2a/agent-card");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
   },
 );
 
-// ── Start ───────────────────────────────────────────────────────────────
+// Start
+
+// C6Z internal seller commerce tools read AgenticOrg cached OACP artifacts only.
+// They never create checkout, payment, order, hold, refund, return, shipping, or mandate actions.
+
+const sellerScopeSchema = {
+  merchant_id: z.string().describe("Merchant scope id"),
+  seller_agent_id: z.string().optional().describe("Seller Commerce Agent scope id"),
+};
+
+server.tool(
+  "seller.list_products",
+  "List cached Seller Commerce Agent product snapshots with source and freshness metadata.",
+  sellerScopeSchema,
+  async ({ merchant_id, seller_agent_id }) => {
+    const params = new URLSearchParams({ merchant_id });
+    if (seller_agent_id) params.set("seller_agent_id", seller_agent_id);
+    const data = await apiGet(`/api/v1/commerce/runtime/products?${params.toString()}`);
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "seller.search_products",
+  "Search cached Seller Commerce Agent product snapshots. Results are not transaction authority.",
+  {
+    ...sellerScopeSchema,
+    query: z.string().describe("Product search query"),
+  },
+  async ({ merchant_id, seller_agent_id, query }) => {
+    const params = new URLSearchParams({ merchant_id, q: query });
+    if (seller_agent_id) params.set("seller_agent_id", seller_agent_id);
+    const data = await apiGet(`/api/v1/commerce/runtime/products?${params.toString()}`);
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "seller.get_product_facts",
+  "Answer product fact questions from cached Shopify-backed OACP artifacts.",
+  {
+    ...sellerScopeSchema,
+    question: z.string().describe("Product fact question"),
+    buyer_agent_id: z.string().optional().describe("Buyer agent scope id"),
+  },
+  async ({ merchant_id, seller_agent_id, question, buyer_agent_id }) => {
+    const data = await apiPost("/api/v1/commerce/runtime/buyer-sessions/ask", {
+      merchant_id,
+      seller_agent_id,
+      buyer_agent_id,
+      question,
+      action_intent: "non_binding_preview",
+      grantex_available: false,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "seller.get_offer_snapshot",
+  "Return cached price/offer snapshot labels. It does not create price locks or checkout sessions.",
+  {
+    ...sellerScopeSchema,
+    product_query: z.string().describe("Product or SKU query"),
+  },
+  async ({ merchant_id, seller_agent_id, product_query }) => {
+    const data = await apiPost("/api/v1/commerce/runtime/buyer-sessions/ask", {
+      merchant_id,
+      seller_agent_id,
+      question: `Show price snapshot for ${product_query}`,
+      action_intent: "non_binding_preview",
+      grantex_available: false,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "seller.get_inventory_snapshot",
+  "Return cached inventory snapshot labels. Inventory is a snapshot, not a reservation.",
+  {
+    ...sellerScopeSchema,
+    product_query: z.string().describe("Product or SKU query"),
+  },
+  async ({ merchant_id, seller_agent_id, product_query }) => {
+    const data = await apiPost("/api/v1/commerce/runtime/buyer-sessions/ask", {
+      merchant_id,
+      seller_agent_id,
+      question: `Show inventory snapshot for ${product_query}`,
+      action_intent: "non_binding_preview",
+      grantex_available: false,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "seller.ask_product_question",
+  "Ask a buyer-safe product question from cached artifacts. Final commitments are refused.",
+  {
+    ...sellerScopeSchema,
+    question: z.string().describe("Buyer-safe product question"),
+    buyer_agent_id: z.string().optional().describe("Buyer agent scope id"),
+  },
+  async ({ merchant_id, seller_agent_id, question, buyer_agent_id }) => {
+    const data = await apiPost("/api/v1/commerce/runtime/buyer-sessions/ask", {
+      merchant_id,
+      seller_agent_id,
+      buyer_agent_id,
+      question,
+      action_intent: "non_binding_preview",
+      grantex_available: false,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
 
 async function main() {
   const transport = new StdioServerTransport();

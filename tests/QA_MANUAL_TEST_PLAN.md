@@ -85,7 +85,7 @@ FLOW 4: CFO Logs In → Sees Only Finance
 | A8 | Mobile responsiveness | Open on phone or resize browser to 375px | Hamburger menu appears. All sections stack vertically. No horizontal scroll. | | |
 | A9 | Blog page | Click "Blog" in navbar | /blog page with 5 articles listed. Each shows title, category badge, date | | |
 | A10 | Blog article | Click any article | Full article with headings, paragraphs, keyword tags, related posts, CTA at bottom | | |
-| A11 | Pricing page | Navigate to /pricing | 3 tiers: Free ($0), Pro ($499/mo), Enterprise (Contact). Feature comparison | | |
+| A11 | Pricing page | Navigate to /pricing | 3 tiers: Free ($0), Pro ($2/mo), Enterprise (Contact). Feature comparison | | |
 | A12 | Playground page | Navigate to /playground | 8 use cases listed. No login required. | | |
 | A13 | Evals page | Navigate to /evals | Agent evaluation scores across 6 dimensions | | |
 

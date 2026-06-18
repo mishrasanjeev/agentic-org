@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import KillSwitch from "@/components/KillSwitch";
 import api, { agentsApi } from "@/lib/api";
+import { extractReadableAgentOutput } from "@/lib/agent-output";
 import type { Agent, PromptEditHistoryEntry } from "@/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -71,19 +72,77 @@ function isMeaningfulRunTask(value: string): boolean {
   return task.length >= 3 && /\p{L}/u.test(task);
 }
 
-function formatRunOutput(output: unknown): string {
-  if (output == null || output === "") return "No output returned.";
-  if (typeof output === "string") return output;
-  if (typeof output === "object") {
-    const record = output as Record<string, unknown>;
-    const preferred = record.answer || record.response || record.summary || record.message;
+function normalizeResultText(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return normalizeResultText(parsed) || trimmed;
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferred = record.message || record.error || record.detail || record.reason;
     if (preferred) return String(preferred);
   }
   try {
-    return JSON.stringify(output, null, 2);
+    return JSON.stringify(value, null, 2);
   } catch {
-    return String(output);
+    return String(value);
   }
+}
+
+function firstToolFailureMessage(run: unknown): string {
+  const toolCalls = (run as { tool_calls?: unknown })?.tool_calls;
+  if (!Array.isArray(toolCalls)) return "";
+  for (const call of toolCalls) {
+    if (!call || typeof call !== "object") continue;
+    const record = call as Record<string, unknown>;
+    const status = String(record.status || "").toLowerCase();
+    const result = record.result;
+    const parsedResult =
+      typeof result === "string" && result.trim().startsWith("{")
+        ? (() => {
+            try {
+              return JSON.parse(result);
+            } catch {
+              return result;
+            }
+          })()
+        : result;
+    const hasError =
+      status === "error" ||
+      status === "failed" ||
+      Boolean(record.error) ||
+      Boolean(parsedResult && typeof parsedResult === "object" && (parsedResult as Record<string, unknown>).error);
+    if (!hasError) continue;
+    const tool = String(record.tool || "tool");
+    const message = normalizeResultText(record.error || parsedResult || result);
+    return message ? `${tool}: ${message}` : `${tool} failed.`;
+  }
+  return "";
+}
+
+export function formatRunResult(run: unknown): string {
+  const record = (run || {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (record.error) parts.push(`Error: ${normalizeResultText(record.error)}`);
+  const toolFailure = firstToolFailureMessage(run);
+  if (toolFailure) parts.push(`Tool failure: ${toolFailure}`);
+  if (record.output != null && record.output !== "") {
+    parts.push(formatRunOutput(record.output));
+  }
+  return parts.filter(Boolean).join("\n\n") || "No output returned.";
+}
+
+function formatRunOutput(output: unknown): string {
+  return extractReadableAgentOutput(output, "No output returned.");
 }
 
 export default function AgentDetail() {
@@ -205,7 +264,13 @@ export default function AgentDetail() {
         inputs: { task },
       });
       setRunResult(data);
-      setActionNotice(`Agent run ${data?.status || "completed"}.`);
+      const runStatus = data?.status || "completed";
+      const failureMessage = runStatus === "failed" ? (data?.error || firstToolFailureMessage(data)) : "";
+      if (failureMessage) {
+        setActionError(`Agent run failed: ${failureMessage}`);
+      } else {
+        setActionNotice(`Agent run ${runStatus}.`);
+      }
       void fetchAgent(true);
     } catch (err: any) {
       setActionError(errorDetailToMessage(err, "Run failed"));
@@ -344,7 +409,7 @@ export default function AgentDetail() {
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-sm font-semibold">Run Result</CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant={runResult.status === "completed" ? "success" : "secondary"}>
+                <Badge variant={runResult.status === "completed" ? "success" : runResult.status === "failed" ? "destructive" : "secondary"}>
                   {runResult.status || "completed"}
                 </Badge>
                 {runResult.confidence != null && (
@@ -356,9 +421,9 @@ export default function AgentDetail() {
             </div>
           </CardHeader>
           <CardContent>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
-              {formatRunOutput(runResult.output)}
-            </pre>
+            <div className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-sm leading-relaxed">
+              {formatRunResult(runResult)}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -440,11 +505,16 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
 
   useEffect(() => {
     if (editingParent) {
-      agentsApi.listAll({ domain: agent.domain, status: "active" })
+      const params: Record<string, string> = {
+        domain: agent.domain,
+        status: "active",
+      };
+      if (agent.company_id) params.company_id = agent.company_id;
+      agentsApi.listAll(params)
         .then((items) => setParentCandidates(items.filter((a: Agent) => a.id !== agent.id)))
         .catch(() => setParentCandidates([]));
     }
-  }, [editingParent, agent.domain, agent.id]);
+  }, [editingParent, agent.company_id, agent.domain, agent.id]);
 
   async function saveParent() {
     setSavingParent(true);
@@ -887,7 +957,9 @@ function LearningTab({ agent }: { agent: Agent }) {
                   <div className="flex-1">
                     {entry.text && <p className="text-sm">{entry.text}</p>}
                     {entry.corrected_output && (
-                      <p className="text-xs text-muted-foreground mt-1">Corrected: {typeof entry.corrected_output === "string" ? entry.corrected_output : JSON.stringify(entry.corrected_output)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Corrected: {extractReadableAgentOutput(entry.corrected_output, "")}
+                      </p>
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -1539,7 +1611,10 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
 
 /* ─── Cost Tab ─── */
 function CostTab({ agent }: { agent: Agent }) {
-  const monthlyCap = agent.cost_controls?.monthly_cap_usd ?? 0;
+  const monthlyCap =
+    agent.cost_controls?.monthly_cap_usd ??
+    agent.cost_controls?.monthly_cost_cap_usd ??
+    0;
   const costCurrent = agent.cost_controls?.cost_current_usd ?? 0;
   const utilizationPct = monthlyCap > 0 ? Math.min((costCurrent / monthlyCap) * 100, 100) : 0;
 
@@ -1630,6 +1705,8 @@ const TOOL_CONNECTOR_FALLBACK: Record<string, string> = {
   calculate_tds: "zoho_books",
   check_account_balance: "zoho_books",
   check_tds_credit_in_26as: "income_tax_india",
+  create_journal_entry: "zoho_books",
+  create_tds_entry: "zoho_books",
   download_form_16a: "income_tax_india",
   fetch_bank_statement: "zoho_books",
   file_24q_return: "income_tax_india",
@@ -1637,15 +1714,24 @@ const TOOL_CONNECTOR_FALLBACK: Record<string, string> = {
   file_form_26q: "income_tax_india",
   generate_gst_report: "zoho_books",
   get_balance_sheet: "zoho_books",
+  get_bill_by_id: "zoho_books",
+  get_expense_transactions: "zoho_books",
   get_ledger_balance: "zoho_books",
+  get_purchase_invoices: "zoho_books",
   get_profit_loss: "zoho_books",
   get_transaction_list: "zoho_books",
   get_trial_balance: "zoho_books",
+  get_vendor_details: "zoho_books",
+  get_vendor_payables: "zoho_books",
+  list_expense_transactions: "zoho_books",
   list_invoices: "zoho_books",
   list_overdue_invoices: "zoho_books",
+  list_vendor_bills: "zoho_books",
+  list_vendors: "zoho_books",
   pay_tax_challan: "income_tax_india",
   reconcile_bank: "zoho_books",
   send_email: "sendgrid",
+  update_bill: "zoho_books",
 };
 
 type EnforcementEntry = {

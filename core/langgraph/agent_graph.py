@@ -369,6 +369,14 @@ def build_agent_graph(
             tool_success_rate = 1.0 - (tool_error_count / tool_msg_count)
             # Weight: 60% LLM confidence, 40% tool success rate
             confidence = (confidence * 0.6) + (tool_success_rate * 0.4)
+            try:
+                from observability.metrics import tool_success_rate as tool_success_rate_metric
+
+                tool_success_rate_metric.labels(
+                    agent_type=str(state.get("agent_type") or "unknown")
+                ).set(tool_success_rate)
+            except (RuntimeError, ValueError, TypeError):
+                logger.debug("tool_success_rate_metric_update_failed")
 
         # Hard caps for failures
         if any_tool_failed:
@@ -379,6 +387,14 @@ def build_agent_graph(
             trace.append("Confidence capped to 0.5 (output_incomplete)")
 
         trace.append(f"Confidence: {confidence:.3f}")
+        try:
+            from observability.metrics import confidence_avg
+
+            confidence_avg.labels(
+                agent_type=str(state.get("agent_type") or "unknown")
+            ).set(confidence)
+        except (RuntimeError, ValueError, TypeError):
+            logger.debug("confidence_metric_update_failed")
 
         return {
             "output": output,
@@ -604,7 +620,7 @@ def _check_hitl_trigger(
                 op_fn = ops.get(type(tree.body.ops[0]))
                 if op_fn and op_fn(float(left_val), float(right_val)):
                     return f"condition matched: {hitl_condition}"
-        except Exception:  # noqa: S110
+        except (AttributeError, KeyError, SyntaxError, TypeError, ValueError):  # noqa: S110
             pass  # HITL condition eval is best-effort; silent failure is intentional
 
     return ""

@@ -20,6 +20,10 @@ const ALL_NAV = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
+  { path: "/dashboard/ca-operations", labelKey: "nav.caOperations", label: "CA Operations", roles: ["admin", "cfo", "coo", "auditor"] },
+  { path: "/dashboard/professional-tax", labelKey: "nav.professionalTax", label: "Professional Tax", roles: ["admin", "cfo", "coo", "auditor"] },
+  { path: "/dashboard/client-portal", labelKey: "nav.clientPortal", label: "Client Portal", roles: ["admin", "cfo", "coo", "auditor"] },
+  { path: "/dashboard/ca-billing", labelKey: "nav.caBilling", label: "CA Billing", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/ceo", labelKey: "nav.ceo", label: "CEO Dashboard", roles: ["admin"] },
   { path: "/dashboard/cfo", labelKey: "nav.cfo", label: "Finance Dashboard", roles: ["admin", "cfo"] },
   { path: "/dashboard/cmo", labelKey: "nav.cmo", label: "Marketing Dashboard", roles: ["admin", "cmo"] },
@@ -83,8 +87,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => { i18n.off("languageChanged", handler); };
   }, [i18n]);
 
-  const handleLogout = () => {
-    auth.logout();
+  const handleLogout = async () => {
+    await auth.logout();
     navigate("/login");
   };
 

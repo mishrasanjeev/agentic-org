@@ -14,6 +14,12 @@ zero ambiguity.
 
 ## REQ-01: Composio Marketplace — Fix Runtime Dependencies
 
+> Security update 2026-06-13: `composio-core==0.7.21` is no longer
+> installed in the production Docker image. It requires `Pillow<11`,
+> while the current audited floor is `Pillow>=12.2.0`. The Composio API
+> import guard is the supported production behavior until Composio
+> publishes a patched Pillow-compatible release.
+
 ### Current State
 - SDK: `composio-core==0.7.21` installed in Docker image
 - API key: `ak_SVwqxI0nGPoA...` set via `COMPOSIO_API_KEY` env var
@@ -418,7 +424,7 @@ TC-05: Health check updates connector.health_check_at in DB
 - **No connectors have real credentials configured** → every query falls back to generic
 
 ### Requirements
-1. Configure Zoho Books connector with real credentials (OAuth2 token for financetest@edumatica.io)
+1. Configure Zoho Books connector with real credentials (OAuth2 token for finance.test@example.com)
 2. Configure at least one HR connector (Keka or Darwinbox) for CHRO queries
 3. Ensure the chat agent resolves to the correct domain connector
 4. Tool calls should execute real API operations (read-only for safety)

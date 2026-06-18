@@ -1,13 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const user = {
-  email: "uday.chauhan@edumatica.io",
-  name: "Uday Chauhan",
-  role: "admin",
-  domain: "finance",
-  tenant_id: "11111111-1111-1111-1111-111111111111",
-  onboarding_complete: true,
-};
+import { authenticate } from "./helpers/auth";
 
 test("Uday 2026-05-15: Zoho Books registers through generic form without OAuth redirect", async ({
   page,
@@ -16,13 +8,7 @@ test("Uday 2026-05-15: Zoho Books registers through generic form without OAuth r
   let oauthInitiateCalled = false;
   let externalZohoOpened = false;
 
-  await page.route("**/api/v1/auth/me", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(user),
-    });
-  });
+  await authenticate(page);
   await page.route("**/api/v1/connectors/oauth/initiate", async (route) => {
     oauthInitiateCalled = true;
     await route.fulfill({

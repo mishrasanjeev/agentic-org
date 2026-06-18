@@ -41,6 +41,36 @@ interface ComposioApp {
   no_auth: boolean;
 }
 
+const DEMO_MARKETPLACE_APPS: ComposioApp[] = [
+  {
+    key: "demo_hubspot",
+    name: "HubSpot",
+    description: "CRM contacts, companies, deals, and engagement workflow actions.",
+    logo: "",
+    categories: ["crm", "marketing"],
+    enabled: false,
+    no_auth: false,
+  },
+  {
+    key: "demo_slack",
+    name: "Slack",
+    description: "Send team notifications, approval prompts, and operational alerts.",
+    logo: "",
+    categories: ["comms", "ops"],
+    enabled: false,
+    no_auth: false,
+  },
+  {
+    key: "demo_google_sheets",
+    name: "Google Sheets",
+    description: "Read and update sheets used by finance, sales, and ops teams.",
+    logo: "",
+    categories: ["productivity", "finance"],
+    enabled: false,
+    no_auth: false,
+  },
+];
+
 export default function Connectors() {
   const navigate = useNavigate();
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -165,10 +195,12 @@ export default function Connectors() {
       if (marketplaceSearch) params.search = marketplaceSearch;
       if (marketplaceCategory) params.category = marketplaceCategory;
       const { data } = await api.get("/composio/apps", { params });
-      setMarketplaceApps(data.apps || []);
-      setMarketplaceTotal(data.total || 0);
+      const apps = Array.isArray(data.apps) ? data.apps : [];
+      setMarketplaceApps(apps.length > 0 ? apps : DEMO_MARKETPLACE_APPS);
+      setMarketplaceTotal(data.total || apps.length || DEMO_MARKETPLACE_APPS.length);
     } catch {
-      setMarketplaceApps([]);
+      setMarketplaceApps(DEMO_MARKETPLACE_APPS);
+      setMarketplaceTotal(DEMO_MARKETPLACE_APPS.length);
     } finally {
       setMarketplaceLoading(false);
     }
@@ -177,9 +209,11 @@ export default function Connectors() {
   async function fetchCategories() {
     try {
       const { data } = await api.get("/composio/categories");
-      setMarketplaceCategories(Array.isArray(data) ? data : []);
+      setMarketplaceCategories(Array.isArray(data) && data.length > 0
+        ? data
+        : ["crm", "comms", "finance", "marketing", "ops", "productivity"]);
     } catch {
-      setMarketplaceCategories([]);
+      setMarketplaceCategories(["crm", "comms", "finance", "marketing", "ops", "productivity"]);
     }
   }
 
@@ -210,7 +244,12 @@ export default function Connectors() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Connectors</h2>
-        <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => navigate("/dashboard/connectors/cmo-vendor-sandbox")}>
+            CMO Sandbox Setup
+          </Button>
+          <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
+        </div>
       </div>
 
       {/* Tab System */}

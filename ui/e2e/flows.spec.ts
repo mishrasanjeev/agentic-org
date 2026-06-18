@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 // ---------------------------------------------------------------------------
 // Production E2E — User Flows
@@ -7,7 +8,7 @@ import { test, expect } from "@playwright/test";
 // ---------------------------------------------------------------------------
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const MARKETING = "https://agenticorg.ai";
+const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {

@@ -544,7 +544,7 @@ tr:hover td {
     <strong>Version:</strong> 5.0<br>
     <strong>Date:</strong> April 2026<br>
     <strong>Classification:</strong> Customer Documentation<br>
-    <strong>Publisher:</strong> Edumatica Private Limited<br>
+    <strong>Publisher:</strong> AgenticOrg<br>
     <strong>Website:</strong> agenticorg.ai
   </div>
 </div>
@@ -648,10 +648,19 @@ tr:hover td {
   <h2>1.5 Deployment Options</h2>
   <table>
     <tr><th>Option</th><th>Description</th><th>Best For</th></tr>
-    <tr><td>Cloud (GCP)</td><td>Fully managed SaaS at agenticorg.ai</td><td>Most customers</td></tr>
+    <tr><td>Cloud (GCP)</td><td>Fully managed SaaS at agenticorg.ai, currently deployed on Cloud Run with Cloud SQL, Redis, Secret Manager, and Artifact Registry</td><td>Most customers</td></tr>
     <tr><td>Self-Hosted (Docker)</td><td>Single <code>docker-compose.yml</code> with all services</td><td>On-premises compliance</td></tr>
-    <tr><td>Kubernetes (Helm)</td><td>Production Helm charts with autoscaling</td><td>Enterprise at scale</td></tr>
+    <tr><td>Cloud Run (Customer GCP)</td><td><code>scripts/deploy_cloud_run.sh</code> with digest verification, optional migrations, no-traffic staging, and controlled traffic promotion</td><td>Enterprise GCP tenants</td></tr>
     <tr><td>Air-Gapped</td><td>Fully offline deployment with local LLM support</td><td>Regulated industries</td></tr>
+  </table>
+
+  <h2>1.6 Latest Platform Posture (2026-06-13)</h2>
+  <table>
+    <tr><th>Area</th><th>Current Status</th></tr>
+    <tr><td>OACP Commerce</td><td>C6X4 added a durable public-safe OACP artifact cache; C6X5 added deterministic cache maintenance planning. The commerce path remains a non-executing preview and prepared handoff/refusal flow.</td></tr>
+    <tr><td>Commerce Guardrail</td><td>No public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness is enabled by the cache foundation.</td></tr>
+    <tr><td>Security</td><td>Fail-closed gates cover dependency posture, offline JWT/JWKS validation, and scoped agent permissions.</td></tr>
+    <tr><td>Deployment</td><td>Cloud Run is the current production path; legacy Kubernetes/Helm material is no longer the default operating guide.</td></tr>
   </table>
 </div>
 
@@ -2248,7 +2257,7 @@ await client.approvals.decide('approval_id', {
   <p>Grantex is the authorization framework that controls what each agent can do. It uses fine-grained scopes (e.g., <code>finance:invoice:write</code>) to ensure agents only access resources they are authorized for.</p>
 
   <h3>Q19: Can I self-host AgenticOrg?</h3>
-  <p>Yes. Docker Compose for single-server deployments, Helm charts for Kubernetes clusters, and air-gapped deployment guides are all provided.</p>
+  <p>Yes. Docker Compose is provided for single-server deployments, and <code>scripts/deploy_cloud_run.sh</code> is the current production helper for Cloud Run deployments. Air-gapped deployment material remains available for regulated offline environments.</p>
 
   <h3>Q20: How do I get support?</h3>
   <p>Free plan: Community support via GitHub. Pro plan: Email support. Enterprise plan: Dedicated support with SLA. Contact: sanjeev@agenticorg.ai.</p>
@@ -2359,7 +2368,7 @@ await client.approvals.decide('approval_id', {
   <h2>29.5 Company Information</h2>
   <table>
     <tr><th>Detail</th><th>Value</th></tr>
-    <tr><td>Legal Entity</td><td>Edumatica Private Limited</td></tr>
+    <tr><td>Legal Entity</td><td>AgenticOrg</td></tr>
     <tr><td>Product</td><td>AgenticOrg</td></tr>
     <tr><td>Founder</td><td>Sanjeev Kumar</td></tr>
     <tr><td>Country</td><td>India</td></tr>
@@ -2757,13 +2766,14 @@ docker compose up -d</pre>
     <tr><td><code>COMPOSIO_API_KEY</code></td><td>Composio key for marketplace integrations</td><td>From Composio dashboard</td></tr>
   </table>
 
-  <h2>E.3 Kubernetes (Helm)</h2>
-  <pre>helm repo add agenticorg https://charts.agenticorg.ai
-helm install agenticorg agenticorg/agenticorg \
-  --namespace agenticorg \
-  --create-namespace \
-  --values values.yaml</pre>
-  <p>The Helm chart includes horizontal pod autoscaling, persistent volumes, and service mesh integration. Customize <code>values.yaml</code> for your cluster.</p>
+  <h2>E.3 Cloud Run Production</h2>
+  <pre>export PROJECT_ID=agenticorg-prod
+export REGION=asia-southeast1
+export GAR_REGION=asia-south1
+
+bash scripts/deploy_cloud_run.sh --yes --with-migrations
+bash scripts/deploy_cloud_run.sh --yes --skip-build --traffic preserve</pre>
+  <p>The Cloud Run helper builds and verifies immutable image digests, can run the Alembic migration job before traffic promotion, supports no-traffic staging, and verifies service health through API-first checks. Use <code>--dry-run</code> to inspect planned actions before deploying.</p>
 
   <h2>E.4 Air-Gapped Deployment</h2>
   <p>For environments without internet access:</p>
@@ -2782,7 +2792,7 @@ helm install agenticorg agenticorg/agenticorg \
     <tr><td>Database</td><td>Cloud SQL (PostgreSQL 15)</td><td>db-n1-standard-4, 100 GB SSD, automatic backups</td></tr>
     <tr><td>Cache</td><td>Memorystore (Redis)</td><td>Standard tier, 1 GB, HA enabled</td></tr>
     <tr><td>UI</td><td>Cloud CDN + Cloud Storage</td><td>Static hosting with global CDN distribution</td></tr>
-    <tr><td>Agent Runtime</td><td>GKE Autopilot</td><td>Spot instances for cost optimization</td></tr>
+    <tr><td>Agent Runtime</td><td>Cloud Run services</td><td>API and UI revisions with controlled traffic promotion and rollback</td></tr>
     <tr><td>Monitoring</td><td>Cloud Monitoring + Logging</td><td>Custom dashboards, alert policies</td></tr>
     <tr><td>Secrets</td><td>Secret Manager</td><td>Encrypted storage for all API keys and credentials</td></tr>
     <tr><td>Load Balancer</td><td>Cloud Load Balancing</td><td>Global HTTPS LB with SSL certificates</td></tr>
@@ -3105,7 +3115,7 @@ GET /api/v1/health/detailed -> { "db": "ok", "redis": "ok", "agents": 35 }</pre>
     <p><strong>Grantex</strong> &mdash; 21.6, 22.6</p>
     <p><strong>GST Filing</strong> &mdash; 9.6, D.2</p>
     <p><strong>Health Score</strong> &mdash; 3.1</p>
-    <p><strong>Helm Charts</strong> &mdash; E.3</p>
+    <p><strong>Cloud Run</strong> &mdash; E.3</p>
     <p><strong>HITL</strong> &mdash; 13</p>
     <p><strong>HMAC</strong> &mdash; 21.5</p>
     <p><strong>Incident Response</strong> &mdash; G.3</p>
@@ -3169,7 +3179,7 @@ GET /api/v1/health/detailed -> { "db": "ok", "redis": "ok", "agents": 35 }</pre>
 <div class="doc-footer">
   <div class="cover-bar"></div>
   <p><strong>AgenticOrg</strong> &mdash; Complete Product User Guide v5.0</p>
-  <p>&copy; 2025-2026 Edumatica Private Limited. All rights reserved.</p>
+  <p>&copy; 2025-2026 AgenticOrg. All rights reserved.</p>
   <p>agenticorg.ai | sanjeev@agenticorg.ai | github.com/mishrasanjeev/agentic-org</p>
   <p style="margin-top:6px; font-size:7.5pt; color:#94a3b8;">
     This document was generated for internal use and customer distribution. For the latest version, visit the platform documentation at agenticorg.ai/docs.

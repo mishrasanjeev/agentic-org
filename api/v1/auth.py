@@ -322,6 +322,29 @@ async def _check_rate_limit(client_ip: str) -> bool:
     return False
 
 
+async def _clear_rate_limit(client_ip: str) -> None:
+    """Clear login throttle state after a successful credential check."""
+    strict = _auth_state_strict()
+    redis = await _get_throttle_redis()
+    if redis:
+        try:
+            await redis.delete(f"auth:login_attempts:{client_ip}")
+            return
+        # enterprise-gate: broad-except-ok reason=login-throttle-clear-strict-runtime-reraises-redis-errors
+        except Exception as exc:
+            if strict:
+                raise RuntimeError(
+                    f"Login throttle Redis clear failed in strict mode: {exc}"
+                ) from exc
+            logger.warning("Redis throttle clear unavailable, using in-memory fallback (%s)", exc)
+    elif strict:
+        raise RuntimeError(
+            "Login throttle requires Redis in strict mode "
+            "(AGENTICORG_AUTH_STATE_STRICT=1)"
+        )
+    _login_attempts.pop(client_ip, None)
+
+
 @router.post("/login", response_model=LoginResponse)
 @route_meta(
     auth_required=False,
@@ -347,6 +370,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
             raise HTTPException(status_code=401, detail="Invalid email or password")
+        await _clear_rate_limit(client_ip)
         # Fetch tenant for onboarding status
         tenant_result = await session.execute(
             select(Tenant).where(Tenant.id == user.tenant_id)

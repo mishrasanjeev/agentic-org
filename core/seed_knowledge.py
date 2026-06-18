@@ -270,6 +270,7 @@ async def seed_knowledge_base(tenant_id_str: str) -> dict:
             f"{d['title']}\n\n{d['content'][:1500]}" for d in _KNOWLEDGE_DOCUMENTS
         ]
         vectors: list[list[float]] | None = _embed(payloads)
+    # enterprise-gate: broad-except-ok reason=seed-knowledge-embedding-failure-degrades-to-text-only-seed
     except Exception as exc:
         logger.warning("seed_knowledge_embedding_skipped", error=str(exc))
         vectors = None

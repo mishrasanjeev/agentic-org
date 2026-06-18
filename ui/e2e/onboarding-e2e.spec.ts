@@ -5,6 +5,7 @@
  * NO page.route() mocking -- all responses are real.
  */
 import { test, expect, Page } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
@@ -281,7 +282,7 @@ test.describe("Evidence Export", () => {
 // 6. PLAYGROUND (public page)
 // ===========================================================================
 
-const MARKETING = "https://agenticorg.ai";
+const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
 
 test.describe("Playground", () => {
   test("Playground loads and shows use cases", async ({ page }) => {

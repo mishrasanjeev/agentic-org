@@ -30,9 +30,21 @@ from core.models.bridge import BridgeRegistration as BridgeRegistration
 from core.models.bridge import BridgeRequest as BridgeRequest
 from core.models.bridge import BridgeSession as BridgeSession
 from core.models.budget_alert import BudgetAlert as BudgetAlert
+from core.models.ca_client_billing import CAClientInvoice as CAClientInvoice
+from core.models.ca_client_billing import CAClientPayment as CAClientPayment
+from core.models.ca_client_billing import CAServicePlan as CAServicePlan
 from core.models.ca_subscription import CASubscription as CASubscription
 from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
+from core.models.client_portal import ClientPortalDocument as ClientPortalDocument
+from core.models.client_portal import ClientPortalInvite as ClientPortalInvite
+from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow as C6ZConnectorEvidenceRow
+from core.models.commerce_c6z_runtime import (
+    C6ZProviderCapabilityEvidenceRow as C6ZProviderCapabilityEvidenceRow,
+)
+from core.models.commerce_c6z_runtime import (
+    C6ZSellerOnboardingPacketRow as C6ZSellerOnboardingPacketRow,
+)
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
@@ -51,8 +63,18 @@ from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
+from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow as OacpArtifactCacheRecordRow
+from core.models.oacp_audit_review_manifest import (
+    OacpAuditReviewManifestRecordRow as OacpAuditReviewManifestRecordRow,
+)
+from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as OacpOperatorDecisionRecordRow
+from core.models.oacp_retention_disposition_decision import (
+    OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
+)
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
+from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
+from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
 from core.models.report_schedule import ReportSchedule as ReportSchedule
@@ -64,6 +86,9 @@ from core.models.tenant_ai_credential import TenantAICredential as TenantAICrede
 from core.models.tenant_ai_setting import TenantAISetting as TenantAISetting
 from core.models.tool_call import ToolCall as ToolCall
 from core.models.user import User as User
+from core.models.weekly_report_pilot_proof import (
+    WeeklyReportPilotProof as WeeklyReportPilotProof,
+)
 from core.models.workflow import StepExecution as StepExecution
 from core.models.workflow import WorkflowDefinition as WorkflowDefinition
 from core.models.workflow import WorkflowEventWait as WorkflowEventWait

@@ -10,6 +10,7 @@ Each connector tool becomes a LangChain @tool function that:
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 
@@ -49,6 +50,136 @@ _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     httpx.WriteError,
     httpx.PoolTimeout,
 )
+
+_SECRETISH_RE = re.compile(
+    r"(?i)\b(authorization|bearer|api[_-]?key|client[_-]?secret|access[_-]?token|refresh[_-]?token)"
+    r"\b\s*[:=]\s*['\"]?([A-Za-z0-9._\-]{8,})"
+)
+
+
+def _sanitize_error_text(value: Any) -> str:
+    text = str(value or "").strip()
+    text = _SECRETISH_RE.sub(r"\1=[redacted]", text)
+    return text[:300]
+
+
+def _safe_response_json(response: httpx.Response | None) -> Any:
+    if response is None:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _provider_error_message(payload: Any) -> str:
+    if isinstance(payload, dict):
+        for key in ("message", "error_description", "detail", "reason"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return _sanitize_error_text(value)
+        error = payload.get("error")
+        if isinstance(error, str) and error.strip():
+            return _sanitize_error_text(error)
+        if isinstance(error, dict):
+            nested = _provider_error_message(error)
+            if nested:
+                return nested
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors:
+            for item in errors:
+                nested = _provider_error_message(item)
+                if nested:
+                    return nested
+        code = payload.get("code")
+        if code not in (None, ""):
+            return _sanitize_error_text(code)
+    if isinstance(payload, list):
+        for item in payload:
+            nested = _provider_error_message(item)
+            if nested:
+                return nested
+    return ""
+
+
+def _classify_http_error(status_code: int, provider_message: str) -> str:
+    lowered = provider_message.lower()
+    if status_code == 401:
+        if "expired" in lowered:
+            return "expired_token"
+        if "invalid" in lowered or "malformed" in lowered:
+            return "invalid_access_token"
+        return "authentication_failed"
+    if status_code == 403:
+        return "missing_permissions"
+    if status_code == 400:
+        if "payload" in lowered or "validation" in lowered or "required" in lowered:
+            return "invalid_payload"
+        return "api_validation_failed"
+    if status_code == 404:
+        return "invalid_endpoint_or_resource"
+    if status_code == 429:
+        return "rate_limited"
+    if 500 <= status_code:
+        return "upstream_server_error"
+    return "upstream_http_error"
+
+
+def _connector_exception_payload(
+    exc: BaseException,
+    *,
+    connector_name: str,
+    tool_name: str,
+) -> dict[str, Any]:
+    if isinstance(exc, httpx.HTTPStatusError):
+        response = exc.response
+        status_code = response.status_code
+        payload = _safe_response_json(response)
+        provider_message = _provider_error_message(payload)
+        if not provider_message:
+            provider_message = _sanitize_error_text(response.reason_phrase)
+        code = _classify_http_error(status_code, provider_message)
+        return {
+            "error": code,
+            "message": (
+                f"Upstream {connector_name} API returned HTTP {status_code}"
+                + (f": {provider_message}" if provider_message else ".")
+            ),
+            "http_status": status_code,
+            "connector": connector_name,
+            "tool": tool_name,
+            "error_class": type(exc).__name__,
+        }
+    if isinstance(exc, httpx.TimeoutException):
+        return {
+            "error": "upstream_timeout",
+            "message": f"{connector_name}.{tool_name} timed out while calling the upstream API.",
+            "connector": connector_name,
+            "tool": tool_name,
+            "error_class": type(exc).__name__,
+        }
+    if isinstance(exc, httpx.RequestError):
+        return {
+            "error": "upstream_connection_error",
+            "message": (
+                f"{connector_name}.{tool_name} could not reach the upstream API "
+                f"({type(exc).__name__})."
+            ),
+            "connector": connector_name,
+            "tool": tool_name,
+            "error_class": type(exc).__name__,
+        }
+    detail = _sanitize_error_text(exc)
+    return {
+        "error": "connector_tool_execution_failed",
+        "message": (
+            f"{connector_name}.{tool_name} failed: {type(exc).__name__}"
+            + (f": {detail}" if detail else "")
+        ),
+        "connector": connector_name,
+        "tool": tool_name,
+        "error_class": type(exc).__name__,
+    }
 
 
 def _canonical_connector_name(connector_name: str) -> str:
@@ -176,6 +307,22 @@ async def _execute_connector_tool(
             status="success",
         )
         return result
+    except httpx.HTTPStatusError as exc:
+        latency = int((time.monotonic() - start) * 1000)
+        payload = _connector_exception_payload(
+            exc,
+            connector_name=connector_name,
+            tool_name=tool_name,
+        )
+        logger.error(
+            "tool_execution_http_failed",
+            connector=connector_name,
+            tool=tool_name,
+            latency_ms=latency,
+            status_code=payload.get("http_status"),
+            error=payload.get("error"),
+        )
+        return payload
     except _TRANSPORT_ERRORS as transport_exc:
         # RU-May01-BUG-01: cached client is dead. Evict, rebuild, retry
         # once. If the retry still fails, return a clear error rather
@@ -215,28 +362,37 @@ async def _execute_connector_tool(
             return result
         # enterprise-gate: broad-except-ok reason=connector-retry-boundary-returns-explicit-error
         except Exception as retry_exc:  # noqa: BLE001
+            payload = _connector_exception_payload(
+                retry_exc,
+                connector_name=connector_name,
+                tool_name=tool_name,
+            )
             logger.error(
                 "tool_execution_failed_after_reconnect",
                 connector=connector_name,
                 tool=tool_name,
-                error=str(retry_exc),
+                error=payload.get("error"),
                 error_type=type(retry_exc).__name__,
             )
-            return {
-                "error": f"Tool execution failed after reconnect: {type(retry_exc).__name__}",
-                "error_class": "retry_failed",
-            }
+            payload.setdefault("error_class", "retry_failed")
+            return payload
     # enterprise-gate: broad-except-ok reason=connector-tool-boundary-returns-explicit-error
     except Exception as e:
         latency = int((time.monotonic() - start) * 1000)
+        payload = _connector_exception_payload(
+            e,
+            connector_name=connector_name,
+            tool_name=tool_name,
+        )
         logger.error(
             "tool_execution_failed",
             connector=connector_name,
             tool=tool_name,
             latency_ms=latency,
-            error=str(e),
+            error=payload.get("error"),
+            error_type=type(e).__name__,
         )
-        return {"error": f"Tool execution failed: {type(e).__name__}"}
+        return payload
 
 
 def build_tools_for_agent(

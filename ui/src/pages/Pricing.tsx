@@ -144,7 +144,7 @@ function buildTiers(agentsText: string, connectorsText: string) {
     },
     {
       name: "Pro",
-      price: "$499",
+      price: "$2",
       period: "/month",
       description: "Scale your operations with advanced agents and priority support.",
       highlight: true,
@@ -527,7 +527,7 @@ export default function Pricing() {
             <Link to="/login" className="text-slate-400 hover:text-white text-sm transition-colors">Sign In</Link>
           </div>
           <p className="text-slate-500 text-xs">
-            &copy; {new Date().getFullYear()} AgenticOrg by Edumatica. All rights reserved.
+            &copy; {new Date().getFullYear()} AgenticOrg. All rights reserved.
           </p>
         </div>
       </footer>

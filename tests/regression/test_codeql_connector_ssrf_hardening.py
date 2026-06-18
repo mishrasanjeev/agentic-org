@@ -208,21 +208,26 @@ async def test_fixed_provider_connectors_ignore_base_url_in_auth(
     from connectors.finance.gstn import GstnConnector
     from connectors.marketing.brandwatch import BrandwatchConnector
 
-    gstn_client = _RecordingAsyncClient({"auth-token": "gstn-token"})
+    gstn_client = _RecordingAsyncClient({"access_token": "gstn-token"})
     monkeypatch.setattr(gstn_module.httpx, "AsyncClient", _client_factory(gstn_client))
     gstn = GstnConnector(
         {
-            "api_key": "api",
+            "client_id": "gsp-app-id",
+            "client_secret": "gsp-app-secret",
             "gstin": "29ABCDE1234F1Z5",
-            "username": "user",
-            "password": "pass",
             "base_url": "https://169.254.169.254",
         }
     )
     assert gstn.base_url == gstn_module.GSTN_API_BASE_URL
 
     await gstn._authenticate()
-    assert gstn_client.posts[0][0] == f"{gstn_module.GSTN_API_BASE_URL}/authenticate"
+    assert (
+        gstn_client.posts[0][0]
+        == f"{gstn_module.GSTN_API_BASE_URL}/authenticate?grant_type=token"
+    )
+    assert gstn_client.posts[0][1]["headers"]["gspappid"] == "gsp-app-id"
+    assert gstn_client.posts[0][1]["headers"]["gspappsecret"] == "gsp-app-secret"
+    assert gstn._auth_headers["Authorization"] == "Bearer gstn-token"
 
     brandwatch_client = _RecordingAsyncClient({"access_token": "brandwatch-token"})
     monkeypatch.setattr(

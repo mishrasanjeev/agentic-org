@@ -161,7 +161,7 @@ class TestSECAUTH003:
 
             with patch("auth.jwt.jwt") as mock_jwt:
                 mock_jwt.get_unverified_header.return_value = {"alg": "RS256", "kid": "k1"}
-                from jose import ExpiredSignatureError
+                from jwt import ExpiredSignatureError
 
                 mock_jwt.decode.side_effect = ExpiredSignatureError("Token expired")
 
@@ -191,14 +191,14 @@ class TestSECAUTH004:
         """SEC-AUTH-004: A JWT header with alg='none' must be rejected during
         token validation, preventing the alg:none bypass attack.
         """
-        from jose import JWTError
+        from jwt import PyJWTError
 
         with patch("auth.jwt._fetch_jwks", new_callable=AsyncMock) as mock_jwks:
             mock_jwks.return_value = {"keys": []}
 
             with patch("auth.jwt.jwt") as mock_jwt:
                 # Local HS256 validation must fail so the JWKS path is reached
-                mock_jwt.decode.side_effect = JWTError("invalid token")
+                mock_jwt.decode.side_effect = PyJWTError("invalid token")
                 mock_jwt.get_unverified_header.return_value = {"alg": "none", "kid": "k1"}
 
                 # JWKS fallback requires a configured URL

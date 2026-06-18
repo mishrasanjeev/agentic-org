@@ -272,6 +272,7 @@ ${pricingLines}
 - Playground (try live): ${SITE}/playground
 - Pricing: ${SITE}/pricing
 - Evaluation Matrix: ${SITE}/evals
+- Open Agentic Commerce Protocol: ${SITE}/open-agentic-commerce-protocol
 - Integration Workflow: ${SITE}/integration-workflow
 - Blog: ${SITE}/blog
 ${blogs.map((b) => `  - ${b.title}: ${SITE}/blog/${b.slug}`).join("\n")}
@@ -335,6 +336,7 @@ Website: ${SITE}
 Playground (try live): ${SITE}/playground
 Pricing: ${SITE}/pricing
 Evaluation Matrix: ${SITE}/evals
+Open Agentic Commerce Protocol: ${SITE}/open-agentic-commerce-protocol
 GitHub: https://github.com/mishrasanjeev/agentic-org
 
 ---
@@ -532,6 +534,7 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 
 - Website: ${SITE}
 - Book a demo: ${SITE} (click "Book a Demo")
+- Open Agentic Commerce Protocol: ${SITE}/open-agentic-commerce-protocol
 - Integration Workflow: ${SITE}/integration-workflow
 - GitHub: https://github.com/mishrasanjeev/agentic-org
 - Python SDK: https://pypi.org/project/agenticorg/

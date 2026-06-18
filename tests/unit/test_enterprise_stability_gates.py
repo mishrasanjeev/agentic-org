@@ -197,6 +197,37 @@ def test_gate_detects_stub_reference_without_annotation(tmp_path: Path) -> None:
     assert [finding.category for finding in findings] == ["stub_path"]
 
 
+def test_gate_allows_stub_reference_with_precise_local_reason(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "workflows/example.py",
+        "# enterprise-gate: stub-ok reason=relaxed-env-only-not-production\n"
+        "def execute_stub():\n"
+        "    return {'status': 'stubbed'}  # enterprise-gate: stub-ok reason=relaxed-env-only-not-production\n",
+    )
+
+    assert gates.scan_stub_success([path], tmp_path) == []
+
+
+def test_scorecard_exposes_stub_and_false_success_counts() -> None:
+    allowed = [
+        gates.Finding("stub_path", "workflows/example.py", 1, "stub", "message", "key-1"),
+        gates.Finding(
+            "stub_success_status",
+            "connectors/example.py",
+            2,
+            "status sent",
+            "message",
+            "key-2",
+        ),
+    ]
+    counts = gates.scorecard([], allowed, [], [], [])
+
+    assert counts["stub_path_allowed"] == 1
+    assert counts["stub_false_success_allowed"] == 1
+    assert counts["stub_paths_allowed"] == 2
+
+
 def test_parse_alembic_multiple_heads() -> None:
     output = "v4913_cdc (head)\nv4914_feed (head)\n"
 
@@ -469,6 +500,21 @@ def test_broad_exception_baseline_reduced_by_near_final_slice() -> None:
     assert len(broad_entries) <= 25
 
 
+def test_broad_exception_baseline_is_zero_after_final_cleanup() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    broad_entries = baseline.get("allowed_findings", {}).get("broad_exception", [])
+
+    assert broad_entries == []
+
+
+def test_stub_false_success_baseline_is_zero_after_burndown() -> None:
+    baseline = gates.load_baseline(gates.DEFAULT_BASELINE)
+    allowed = baseline.get("allowed_findings", {})
+
+    assert allowed.get("stub_path", []) == []
+    assert allowed.get("stub_success_status", []) == []
+
+
 def test_docs_tests_and_migrations_are_ignored(tmp_path: Path) -> None:
     paths = [
         _write(tmp_path, "tests/test_example.py", "try:\n    risky()\nexcept Exception:\n    pass\n"),
@@ -541,7 +587,7 @@ def test_auth_billing_connector_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 41
+    assert len(routes) == 43
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -605,7 +651,7 @@ def test_core_execution_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 74
+    assert len(routes) == 76
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)

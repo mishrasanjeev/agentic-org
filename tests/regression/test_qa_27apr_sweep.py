@@ -109,8 +109,8 @@ def test_tc_004_stop_button_uses_abort_controller() -> None:
 
 def test_tc_005_chat_extractor_handles_text_envelope() -> None:
     """Pin the readable-keys list + Python-repr fallback in
-    ChatPanel's extractReadableText."""
-    src = (REPO / "ui" / "src" / "components" / "ChatPanel.tsx").read_text(
+    the shared agent output sanitizer used by ChatPanel."""
+    src = (REPO / "ui" / "src" / "lib" / "agent-output.ts").read_text(
         encoding="utf-8"
     )
     # `text` must be in the readable-keys list (the LangGraph envelope).
@@ -119,9 +119,13 @@ def test_tc_005_chat_extractor_handles_text_envelope() -> None:
     for key in ("answer", "response", "message", "summary", "result", "content"):
         assert f'"{key}"' in src, f"readable key {key!r} must be present"
     # Python repr fallback helper.
-    assert "_pythonReprToJson" in src
+    assert "pythonReprToJson" in src
     # CSS bubble overflow fix on both user + agent bubbles.
-    assert "whitespace-pre-wrap break-words" in src
+    chat_src = (REPO / "ui" / "src" / "components" / "ChatPanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "extractReadableAgentOutput" in chat_src
+    assert "whitespace-pre-wrap break-words" in chat_src
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -180,18 +184,21 @@ def test_ramesh_agents_loads_connector_configs_for_shadow_runs() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
-# TC_002 — TEI httpx client caps wait at 25s
+# TC_002 — TEI httpx client caps wait below caller timeout
 # ──────────────────────────────────────────────────────────────────
 
 
 def test_tc_002_tei_client_caps_wait_under_gfe_timeout() -> None:
-    """Pin the 25s read timeout so the Google Frontend 30s gateway
-    timeout never fires on a TEI cold-start. The keyword fallback
-    in api/v1/knowledge.py:884 only fires if the embed call raises
-    BEFORE the GFE kills the upstream request."""
+    """Pin a short default read timeout so the Google Frontend 30s
+    gateway timeout and the production smoke/client timeout never fire
+    on a TEI cold-start. The keyword fallback only fires if the embed
+    call raises before the upstream client gives up."""
     src = (REPO / "core" / "embeddings.py").read_text(encoding="utf-8")
-    assert "httpx.Timeout(25.0, connect=5.0)" in src
+    assert "DEFAULT_TEI_READ_TIMEOUT_SECONDS = 5.0" in src
+    assert "MAX_TEI_READ_TIMEOUT_SECONDS = 25.0" in src
+    assert "AGENTICORG_TEI_TIMEOUT_SECONDS" in src
     # The comment must explain the budget so a future contributor
     # doesn't bump it past the GFE limit thinking it's just a
     # "client wait".
     assert "Google Frontend" in src or "GFE" in src
+    assert "production smoke" in src

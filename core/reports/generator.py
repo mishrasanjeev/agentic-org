@@ -112,6 +112,57 @@ def _inr(amount: int | float) -> str:
     return f"INR {s}"
 
 
+def _with_cmo_report_quality_gate(
+    data: dict[str, Any],
+    report_type: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach CMO report quality gate metadata to report data."""
+
+    payload = dict(data)
+    allow_demo_report = bool(params.get("allow_demo_report") or params.get("demo"))
+    try:
+        from core.marketing.report_quality import cmo_report_gate_for_type
+
+        gate = cmo_report_gate_for_type(
+            report_type,
+            payload,
+            production_tenant=not allow_demo_report,
+        )
+    # enterprise-gate: broad-except-ok reason=report-quality-gate-failure-marks-cmo-report-draft-only
+    except Exception as exc:
+        gate = {
+            "report_key": report_type,
+            "status": "blocked",
+            "severity": "high",
+            "safe_report_mode": "draft_only",
+            "trusted_delivery_allowed": False,
+            "next_action_cta": "repair_report_quality_gate",
+            "blocked_reasons": [f"Report quality gate evaluation failed: {exc!s}"],
+        }
+    if gate is not None:
+        payload["report_quality_gate"] = gate
+        payload["safe_report_mode"] = gate.get("safe_report_mode")
+        payload["trusted_delivery_allowed"] = bool(gate.get("trusted_delivery_allowed"))
+    return payload
+
+
+def _quality_gate_banner(data: dict[str, Any]) -> str:
+    gate = data.get("report_quality_gate")
+    if not isinstance(gate, dict) or gate.get("status") == "pass":
+        return ""
+    status = html.escape(str(gate.get("status") or "blocked"))
+    mode = html.escape(str(gate.get("safe_report_mode") or "draft_only"))
+    action = html.escape(str(gate.get("next_action_cta") or "review_report_quality"))
+    reasons = gate.get("blocked_reasons") or gate.get("warning_reasons") or []
+    reason_text = "; ".join(str(item) for item in reasons[:3]) if isinstance(reasons, list) else str(reasons)
+    return (
+        "<p><strong>Report quality gate:</strong> "
+        f"{status}. Safe mode: {mode}. Next action: {action}. "
+        f"{html.escape(reason_text)}</p>"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Generator class
 # ---------------------------------------------------------------------------
@@ -214,6 +265,7 @@ class ReportGenerator:
         tenant_id: str = "default",
     ) -> ReportOutput:
         data = self._fetch_cmo_kpis(company_id)
+        data = _with_cmo_report_quality_gate(data, "cmo_weekly", params)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         kpis = "".join([
@@ -239,6 +291,7 @@ class ReportGenerator:
         ) if domain_rows else "<p>No marketing activity in the last 30 days.</p>"
 
         body = (
+            f"{_quality_gate_banner(data)}"
             f"{kpis}"
             f"<h3>Domain Breakdown</h3>{domain_table}"
         )
@@ -379,6 +432,7 @@ class ReportGenerator:
         tenant_id: str = "default",
     ) -> ReportOutput:
         data = self._fetch_cmo_kpis(company_id)
+        data = _with_cmo_report_quality_gate(data, "campaign_report", params)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         kpis = "".join([
@@ -404,6 +458,7 @@ class ReportGenerator:
         ) if domain_rows else "<p>No campaign data available. Connect marketing integrations to populate metrics.</p>"
 
         body = (
+            f"{_quality_gate_banner(data)}"
             f"{kpis}"
             f"<h3>Domain Breakdown</h3>{domain_table}"
         )

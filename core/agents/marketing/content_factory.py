@@ -46,6 +46,17 @@ BRAND_VOICE_CHECKS = {
 }
 
 
+def _external_write_confirmation_status(result: dict[str, Any] | None) -> str:
+    if not result:
+        return "write_unconfirmed"
+    return str(
+        result.get("external_write_confirmation_status")
+        or result.get("write_confirmation_status")
+        or result.get("status")
+        or "write_unconfirmed"
+    )
+
+
 @AgentRegistry.register
 class ContentFactoryAgent(BaseAgent):
     agent_type = "content_factory"
@@ -188,6 +199,8 @@ class ContentFactoryAgent(BaseAgent):
             # --- Step 6: Schedule publication ---
             scheduled = False
             schedule_result_data: dict[str, Any] = {}
+            schedule_write_status = "not_required"
+            schedule_blocker: str | None = None
             if publish_date and not compliance_issues:
                 publish_channel = channel or (type_config["channels"][0] if type_config["channels"] else "")
 
@@ -204,12 +217,17 @@ class ContentFactoryAgent(BaseAgent):
                         trace, tool_calls,
                     )
                     if sched_result and "error" not in sched_result:
+                        schedule_write_status = _external_write_confirmation_status(sched_result)
                         scheduled = True
                         schedule_result_data = {
                             "platform": "wordpress",
                             "post_id": sched_result.get("id", ""),
                             "url": sched_result.get("url", ""),
+                            "external_write_confirmation_status": schedule_write_status,
                         }
+                    else:
+                        schedule_write_status = "write_unconfirmed"
+                        schedule_blocker = "WordPress draft was not created or confirmed."
                 elif publish_channel in ("linkedin", "twitter", "facebook"):
                     sched_result = await self._safe_tool_call(
                         "buffer", "create_post",
@@ -221,11 +239,16 @@ class ContentFactoryAgent(BaseAgent):
                         trace, tool_calls,
                     )
                     if sched_result and "error" not in sched_result:
+                        schedule_write_status = _external_write_confirmation_status(sched_result)
                         scheduled = True
                         schedule_result_data = {
                             "platform": "buffer",
                             "post_id": sched_result.get("id", ""),
+                            "external_write_confirmation_status": schedule_write_status,
                         }
+                    else:
+                        schedule_write_status = "write_unconfirmed"
+                        schedule_blocker = "Social scheduling was not confirmed by the connector."
                 elif publish_channel == "email":
                     sched_result = await self._safe_tool_call(
                         "sendgrid", "create_campaign",
@@ -238,11 +261,16 @@ class ContentFactoryAgent(BaseAgent):
                         trace, tool_calls,
                     )
                     if sched_result and "error" not in sched_result:
+                        schedule_write_status = _external_write_confirmation_status(sched_result)
                         scheduled = True
                         schedule_result_data = {
                             "platform": "sendgrid",
                             "campaign_id": sched_result.get("id", ""),
+                            "external_write_confirmation_status": schedule_write_status,
                         }
+                    else:
+                        schedule_write_status = "write_unconfirmed"
+                        schedule_blocker = "Email campaign draft was not confirmed by the connector."
 
                 if scheduled:
                     trace.append(f"Content scheduled on {publish_channel} for {publish_date}")
@@ -272,6 +300,22 @@ class ContentFactoryAgent(BaseAgent):
                 hitl_reasons.append(f"low keyword coverage ({keyword_coverage:.0f}%)")
             if confidence < self.confidence_floor:
                 hitl_reasons.append(f"confidence {confidence:.3f} < floor")
+            if publish_date:
+                hitl_reasons.append("publish approval required before external delivery")
+
+            source_refs = [
+                {"kind": "tool_call", "tool_name": call.tool_name, "status": call.status}
+                for call in tool_calls
+            ]
+            blocked_reasons = [schedule_blocker] if schedule_blocker else []
+            degraded_reasons = []
+            if publish_date and not scheduled and not compliance_issues:
+                degraded_reasons.append("Publish connector did not create a confirmed draft.")
+            publish_state = (
+                "draft_created_pending_approval"
+                if scheduled and schedule_write_status in {"draft_created", "write_confirmed", "created"}
+                else "not_scheduled"
+            )
 
             output = {
                 "status": "generated",
@@ -286,6 +330,33 @@ class ContentFactoryAgent(BaseAgent):
                 "schedule_details": schedule_result_data,
                 "confidence": confidence,
                 "hitl_required": len(hitl_reasons) > 0,
+                "approval_required": len(hitl_reasons) > 0,
+                "rationale": (
+                    f"Generated {content_type} draft for {target_audience or 'unspecified audience'} "
+                    f"with {word_count} words and {keyword_coverage:.0f}% keyword coverage."
+                ),
+                "recommended_actions": [
+                    {
+                        "action": "review_content",
+                        "reason": "; ".join(hitl_reasons) if hitl_reasons else "Content meets baseline checks.",
+                    }
+                ],
+                "source_refs": source_refs,
+                "policy_result": {
+                    "decision": "requires_approval" if publish_date or compliance_issues else "allowed",
+                    "reason": (
+                        "Content has publish/compliance review requirements."
+                        if publish_date or compliance_issues
+                        else "Draft-only content generation is allowed."
+                    ),
+                },
+                "audit_ref": f"content_factory:{task.correlation_id}:{task.step_id}",
+                "degraded_reasons": degraded_reasons,
+                "blocked_reasons": blocked_reasons,
+                "external_write_confirmation_status": schedule_write_status,
+                "external_writes_completed": schedule_write_status == "write_confirmed",
+                "publish_state": publish_state,
+                "production_status": "beta",
             }
 
             if hitl_reasons:

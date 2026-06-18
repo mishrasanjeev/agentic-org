@@ -31,7 +31,7 @@ DOMAINS = ["finance", "hr", "marketing", "ops", "commerce"]
 
 def _deterministic_seed(case_id: str) -> int:
     """Produce a stable integer seed from a case id (no randomness)."""
-    return int(hashlib.md5(case_id.encode()).hexdigest()[:8], 16)  # noqa: S324
+    return int(hashlib.md5(case_id.encode(), usedforsecurity=False).hexdigest()[:8], 16)
 
 
 def _perturb_value(value: Any, seed: int) -> Any:

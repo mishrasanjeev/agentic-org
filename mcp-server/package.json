@@ -1,6 +1,6 @@
 {
   "name": "agenticorg-mcp-server",
-  "version": "4.0.4",
+  "version": "4.0.5",
   "mcpName": "io.github.mishrasanjeev/agenticorg",
   "description": "MCP server for AgenticOrg — expose every AgenticOrg AI agent and native tool to ChatGPT, Claude, and any MCP client",
   "main": "dist/index.js",
@@ -11,7 +11,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mishrasanjeev/agentic-org"
+    "url": "git+https://github.com/mishrasanjeev/agentic-org.git"
   },
   "keywords": [
     "mcp",
@@ -29,6 +29,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node test/mcp-server-smoke.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
@@ -40,7 +41,8 @@
     "typescript": "^5.7.0"
   },
   "overrides": {
-    "hono": ">=4.12.18",
+    "hono": ">=4.12.21",
+    "qs": ">=6.15.2",
     "fast-uri": ">=3.1.2",
     "ip-address": ">=10.1.1"
   }

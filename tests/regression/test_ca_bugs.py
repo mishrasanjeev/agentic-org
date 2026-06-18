@@ -179,6 +179,26 @@ class TestDemoUser:
 
         assert DEMO_TENANT_SLUG == "demo-ca-firm"
 
+    def test_role_demo_users_match_documented_accounts(self):
+        from core.seed_ca_demo import DEMO_ROLE_USERS
+
+        credentials = {(u["email"], u["password"], u["role"], u["domain"]) for u in DEMO_ROLE_USERS}
+        assert credentials == {
+            ("ceo@agenticorg.local", "ceo123!", "admin", "all"),
+            ("cfo@agenticorg.local", "cfo123!", "cfo", "finance"),
+            ("chro@agenticorg.local", "chro123!", "chro", "hr"),
+            ("cmo@agenticorg.local", "cmo123!", "cmo", "marketing"),
+            ("coo@agenticorg.local", "coo123!", "coo", "ops"),
+            ("auditor@agenticorg.local", "audit123!", "auditor", "all"),
+        }
+
+    def test_role_demo_users_are_backed_by_rbac_roles(self):
+        from core.rbac import ROLE_SCOPES
+        from core.seed_ca_demo import DEMO_ROLE_USERS
+
+        unknown = {u["role"] for u in DEMO_ROLE_USERS} - set(ROLE_SCOPES)
+        assert not unknown, f"Demo role users reference unknown RBAC roles: {unknown}"
+
 
 # ============================================================================
 # BUG: Company model missing fields (gstin, pan, tan, cin, etc.)

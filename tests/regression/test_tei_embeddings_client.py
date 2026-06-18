@@ -38,6 +38,8 @@ def test_empty_input_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_routes_via_tei_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """Setting ``AGENTICORG_TEI_URL`` switches to the HTTP path."""
     monkeypatch.setenv("AGENTICORG_TEI_URL", "http://example/tei")
+    monkeypatch.delenv("AGENTICORG_TEI_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("AGENTICORG_TEI_CONNECT_TIMEOUT_SECONDS", raising=False)
     from core import embeddings as emb
 
     expected = [[0.5] * 1024, [0.25] * 1024]
@@ -50,7 +52,7 @@ def test_routes_via_tei_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_client.__enter__.return_value.post.return_value = mock_response
 
     with (
-        patch("httpx.Client", return_value=mock_client),
+        patch("httpx.Client", return_value=mock_client) as client,
         # Mocking out auth so the test runs without GCP creds.
         patch("google.oauth2.id_token.fetch_id_token", return_value="fake-id-token"),
     ):
@@ -63,6 +65,32 @@ def test_routes_via_tei_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
     assert kwargs["json"]["inputs"] == ["hello", "world"]
     assert kwargs["json"]["normalize"] is True
     assert kwargs["headers"]["Authorization"].startswith("Bearer ")
+    timeout = client.call_args.kwargs["timeout"]
+    assert timeout.read == 5.0
+    assert timeout.connect == 2.0
+
+
+def test_tei_timeout_is_configurable_but_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTICORG_TEI_URL", "http://example/tei")
+    monkeypatch.setenv("AGENTICORG_TEI_TIMEOUT_SECONDS", "99")
+    monkeypatch.setenv("AGENTICORG_TEI_CONNECT_TIMEOUT_SECONDS", "40")
+    from core import embeddings as emb
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = [[0.0] * 1024]
+    mock_response.raise_for_status.return_value = None
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value.post.return_value = mock_response
+
+    with (
+        patch("httpx.Client", return_value=mock_client) as client,
+        patch("google.oauth2.id_token.fetch_id_token", return_value="fake-id-token"),
+    ):
+        emb.embed_bge_m3(["hello"])
+
+    timeout = client.call_args.kwargs["timeout"]
+    assert timeout.read == 25.0
+    assert timeout.connect == 25.0
 
 
 def test_falls_back_to_flagembedding_without_env(

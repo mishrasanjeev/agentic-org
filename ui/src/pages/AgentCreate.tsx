@@ -125,13 +125,18 @@ export default function AgentCreate() {
   }
   const [availableConnectors, setAvailableConnectors] = useState<ConnectorOption[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
+  const [selectedCompanyId] = useState(
+    () => localStorage.getItem("company_id") || "",
+  );
 
   // Load available parent agents when domain changes
   useEffect(() => {
-    agentsApi.listAll({ domain, status: "active" })
+    const params: Record<string, string> = { domain, status: "active" };
+    if (selectedCompanyId) params.company_id = selectedCompanyId;
+    agentsApi.listAll(params)
       .then((items) => setAvailableParents(items))
       .catch(() => setAvailableParents([]));
-  }, [domain]);
+  }, [domain, selectedCompanyId]);
 
   // Load available connectors for the picker (UR-Bug-1).
   useEffect(() => {
@@ -265,6 +270,7 @@ export default function AgentCreate() {
       const { data } = await api.post("/agents/generate", {
         description: nlDescription.trim(),
         deploy: false,
+        company_id: selectedCompanyId || undefined,
       });
       const suggs: GeneratedSuggestion[] = data.suggestions || [];
       setSuggestions(suggs);
@@ -321,6 +327,7 @@ export default function AgentCreate() {
         designation: designation.trim() || undefined,
         avatar_url: avatarUrl.trim() || undefined,
         domain,
+        company_id: selectedCompanyId || undefined,
         agent_type: finalType,
         specialization: specialization.trim() || undefined,
         routing_filter: Object.keys(routingFilter).length > 0 ? routingFilter : {},

@@ -21,6 +21,8 @@ import { expect, test } from "@playwright/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 
+const API = process.env.API_URL || APP;
+
 interface AgentResponse {
   id: string;
   parent_agent_id: string | null;
@@ -31,14 +33,18 @@ async function createAgent(
   request: import("@playwright/test").APIRequestContext,
   body: Record<string, unknown>,
 ): Promise<string> {
-  const ts = Date.now() + Math.floor(Math.random() * 1000);
-  const resp = await request.post(`${APP}/api/v1/agents`, {
+  const suffix = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const resp = await request.post(`${API}/api/v1/agents`, {
     headers: {
       Authorization: `Bearer ${E2E_TOKEN}`,
       "Content-Type": "application/json",
     },
     data: {
-      name: `qa-module-28-${ts}`,
+      name: `qa-module-28-${suffix}`,
+      employee_name: `qa-module-28-${suffix}`,
+      agent_type: "qa_org_chart",
+      domain: "finance",
+      initial_status: "active",
       role: "Test Agent",
       goal: "Verify org chart contract",
       tools: [],
@@ -47,16 +53,17 @@ async function createAgent(
     failOnStatusCode: false,
   });
   expect(resp.status(), `agent create failed: ${resp.status()}`).toBeLessThan(300);
-  const json = (await resp.json()) as AgentResponse;
-  expect(json.id).toBeTruthy();
-  return json.id;
+  const json = (await resp.json()) as AgentResponse & { agent_id?: string };
+  const agentId = json.id || json.agent_id;
+  expect(agentId).toBeTruthy();
+  return agentId;
 }
 
 async function deleteAgent(
   request: import("@playwright/test").APIRequestContext,
   agentId: string,
 ): Promise<void> {
-  await request.delete(`${APP}/api/v1/agents/${agentId}`, {
+  await request.delete(`${API}/api/v1/agents/${agentId}`, {
     headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     failOnStatusCode: false,
   });
@@ -78,7 +85,7 @@ test.describe("Module 28: Org Chart Hierarchy @qa @org-chart @escalation", () =>
     // be present (as null) in the response.
     const childId = await createAgent(request, {});
     try {
-      const resp = await request.get(`${APP}/api/v1/agents/${childId}`, {
+      const resp = await request.get(`${API}/api/v1/agents/${childId}`, {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
       });
@@ -104,7 +111,7 @@ test.describe("Module 28: Org Chart Hierarchy @qa @org-chart @escalation", () =>
       reporting_to: "Test Manager",
     });
     try {
-      const resp = await request.get(`${APP}/api/v1/agents/${childId}`, {
+      const resp = await request.get(`${API}/api/v1/agents/${childId}`, {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
       });
@@ -126,7 +133,7 @@ test.describe("Module 28: Org Chart Hierarchy @qa @org-chart @escalation", () =>
     const parentId = await createAgent(request, {});
     const childId = await createAgent(request, {});
     try {
-      const resp = await request.patch(`${APP}/api/v1/agents/${childId}`, {
+      const resp = await request.patch(`${API}/api/v1/agents/${childId}`, {
         headers: {
           Authorization: `Bearer ${E2E_TOKEN}`,
           "Content-Type": "application/json",
@@ -137,7 +144,7 @@ test.describe("Module 28: Org Chart Hierarchy @qa @org-chart @escalation", () =>
       expect(resp.status()).toBeLessThan(300);
 
       // Read back to confirm the link took.
-      const verify = await request.get(`${APP}/api/v1/agents/${childId}`, {
+      const verify = await request.get(`${API}/api/v1/agents/${childId}`, {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
       });
@@ -161,7 +168,7 @@ test.describe("Module 28: Org Chart Hierarchy @qa @org-chart @escalation", () =>
     const childId = await createAgent(request, { parent_agent_id: parentId });
     try {
       // Set parent_agent_id back to null (remove from chart).
-      const resp = await request.patch(`${APP}/api/v1/agents/${childId}`, {
+      const resp = await request.patch(`${API}/api/v1/agents/${childId}`, {
         headers: {
           Authorization: `Bearer ${E2E_TOKEN}`,
           "Content-Type": "application/json",
@@ -171,7 +178,7 @@ test.describe("Module 28: Org Chart Hierarchy @qa @org-chart @escalation", () =>
       });
       expect(resp.status()).toBeLessThan(300);
 
-      const verify = await request.get(`${APP}/api/v1/agents/${childId}`, {
+      const verify = await request.get(`${API}/api/v1/agents/${childId}`, {
         headers: { Authorization: `Bearer ${E2E_TOKEN}` },
         failOnStatusCode: false,
       });
