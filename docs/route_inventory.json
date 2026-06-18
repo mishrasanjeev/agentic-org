@@ -1725,7 +1725,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "ca_capabilities.read",
-    "source_line": 120,
+    "source_line": 162,
     "tenant_required": true
   },
   {
@@ -2877,7 +2877,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "connectors.gstn.eway.bulk_generate",
-    "source_line": 78,
+    "source_line": 119,
     "tenant_required": true
   },
   {
@@ -2967,7 +2967,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "connectors.traces.reconcile",
-    "source_line": 48,
+    "source_line": 88,
     "tenant_required": true
   },
   {

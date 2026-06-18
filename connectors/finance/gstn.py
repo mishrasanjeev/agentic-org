@@ -62,6 +62,12 @@ EWAY_NUMERIC_FIELDS = {
 }
 
 
+class EwayBillValidationError(ValueError):
+    def __init__(self, public_message: str):
+        super().__init__(public_message)
+        self.public_message = public_message
+
+
 def _provider_base_url(connector_cls: type[GstnConnector]) -> str:
     base_url = getattr(connector_cls, "base_url", GSTN_API_BASE_URL)
     if base_url not in GSTN_ALLOWED_BASE_URLS:
@@ -81,6 +87,12 @@ def _to_number(value: Any) -> int | float:
     if dec == dec.to_integral_value():
         return int(dec)
     return float(dec)
+
+
+def _public_eway_bill_validation_error(exc: Exception) -> str:
+    if isinstance(exc, EwayBillValidationError):
+        return exc.public_message
+    return "E-way bill row failed validation."
 
 
 def _collect_part(params: dict[str, Any], section: str, fields: tuple[str, ...]) -> dict[str, Any]:
@@ -268,7 +280,8 @@ class GstnConnector(BaseConnector):
         if not _present(part_b.get("vehicle_number")) and not _present(part_b.get("transporter_id")):
             missing.append("vehicle_number_or_transporter_id")
         if missing:
-            raise ValueError("Missing required e-way bill fields: " + ", ".join(sorted(set(missing))))
+            fields = ", ".join(sorted(set(missing)))
+            raise EwayBillValidationError(f"Missing required e-way bill fields: {fields}")
 
         payload = {
             "part_a": dict(part_a),
@@ -282,7 +295,12 @@ class GstnConnector(BaseConnector):
         for container in (payload["part_a"], payload["part_b"]):
             for key, value in list(container.items()):
                 if key in EWAY_NUMERIC_FIELDS and _present(value):
-                    container[key] = _to_number(value)
+                    try:
+                        container[key] = _to_number(value)
+                    except ValueError as exc:
+                        raise EwayBillValidationError(
+                            "One or more numeric e-way bill fields are invalid."
+                        ) from exc
                 elif isinstance(value, str):
                     container[key] = value.strip()
 
@@ -328,7 +346,7 @@ class GstnConnector(BaseConnector):
                 failed.append({
                     "row_number": index,
                     "client_reference": invoice.get("client_reference") or invoice.get("document_number"),
-                    "error": str(exc),
+                    "error": _public_eway_bill_validation_error(exc),
                 })
 
         return {
