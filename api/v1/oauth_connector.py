@@ -344,6 +344,83 @@ async def _pop_reconnect_payload(
         return None
 
 
+async def _payload_from_existing_connector_config(
+    *,
+    tenant_id: _uuid.UUID,
+    tenant_id_text: str,
+    spec: ProviderSpec,
+) -> tuple[dict[str, Any], str] | None:
+    """Rebuild a reconnect payload from encrypted connector config."""
+    async with get_tenant_session(tenant_id) as session:
+        conn_result = await session.execute(
+            select(Connector).where(
+                Connector.tenant_id == tenant_id,
+                Connector.name == spec.connector_name,
+            )
+        )
+        connector = conn_result.scalar_one_or_none()
+        cc_result = await session.execute(
+            select(ConnectorConfig).where(
+                ConnectorConfig.tenant_id == tenant_id,
+                ConnectorConfig.connector_name == spec.connector_name,
+            )
+        )
+        config = cc_result.scalar_one_or_none()
+
+    if not config or not config.credentials_encrypted:
+        return None
+
+    creds: dict[str, Any] = {}
+    try:
+        blob = config.credentials_encrypted
+        if isinstance(blob, str):
+            blob = json.loads(blob)
+        if isinstance(blob, dict) and "_encrypted" in blob:
+            creds = json.loads(decrypt_for_tenant(blob["_encrypted"]))
+        elif isinstance(blob, dict):
+            creds = dict(blob)
+    # enterprise-gate: broad-except-ok reason=oauth-reconnect-existing-config-decrypt-fails-closed
+    except Exception:  # noqa: BLE001
+        logger.info("oauth_reconnect_existing_config_decrypt_failed", exc_info=True)
+        return None
+
+    user_fields = {
+        field_spec.key: creds.get(field_spec.key)
+        for field_spec in spec.user_fields
+        if creds.get(field_spec.key)
+    }
+    if any(
+        field.required and not str(user_fields.get(field.key) or "").strip()
+        for field in spec.user_fields
+    ):
+        return None
+
+    extra_config = dict(getattr(config, "config", {}) or {})
+    for key in ("region", "organization_id", "base_url"):
+        if creds.get(key) and key not in user_fields:
+            extra_config.setdefault(key, creds[key])
+    base_url = (
+        extra_config.get("base_url")
+        or getattr(connector, "base_url", None)
+        or spec.urls_for({**user_fields, **extra_config}).get("api_base_url")
+    )
+    if base_url:
+        extra_config.setdefault("base_url", base_url)
+
+    payload = {
+        "tenant_id": tenant_id_text,
+        "connector_name": spec.connector_name,
+        "user_fields": user_fields,
+        "redirect_uri": "",
+        "base_url": base_url,
+        "category": getattr(connector, "category", None) or spec.category,
+        "extra_config": extra_config,
+        "region_urls": spec.urls_for({**user_fields, **extra_config}),
+    }
+    token = str(creds.get("refresh_token") or creds.get("access_token") or "")
+    return payload, token
+
+
 # ── Token exchange + revoke ──────────────────────────────────────────────────
 
 
@@ -732,35 +809,45 @@ async def revoke_and_retry(
     spec = _provider_for(body.connector_name)
     tid = _uuid.UUID(tenant_id)
     stash = await _pop_reconnect_payload(tid, spec.connector_name)
-    if not stash:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No prior authorization attempt found for this connector. "
-                "Start a fresh connector authorization flow instead."
-            ),
-        )
-    # Best-effort revoke using whatever token material we have.
     existing_refresh = None
-    async with get_tenant_session(tid) as session:
-        cc_result = await session.execute(
-            select(ConnectorConfig).where(
-                ConnectorConfig.tenant_id == tid,
-                ConnectorConfig.connector_name == spec.connector_name,
-            )
+    if not stash:
+        existing_payload = await _payload_from_existing_connector_config(
+            tenant_id=tid,
+            tenant_id_text=tenant_id,
+            spec=spec,
         )
-        config = cc_result.scalar_one_or_none()
-        if config and config.credentials_encrypted:
-            blob = config.credentials_encrypted.get("_encrypted")
-            if blob:
-                try:
-                    creds = json.loads(decrypt_for_tenant(blob))
-                    existing_refresh = creds.get("refresh_token")
-                # enterprise-gate: broad-except-ok reason=oauth-reconnect-existing-token-decrypt-skip-revoke-only
-                except Exception:  # noqa: BLE001
-                    logger.info(
-                        "oauth_reconnect_decrypt_skipped", exc_info=True
-                    )
+        if existing_payload:
+            stash, existing_refresh = existing_payload
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No prior authorization attempt or encrypted OAuth "
+                    "configuration was found for this connector. Start a "
+                    "fresh connector authorization flow instead."
+                ),
+            )
+    # Best-effort revoke using whatever token material we have.
+    if not existing_refresh:
+        async with get_tenant_session(tid) as session:
+            cc_result = await session.execute(
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.connector_name == spec.connector_name,
+                )
+            )
+            config = cc_result.scalar_one_or_none()
+            if config and config.credentials_encrypted:
+                blob = config.credentials_encrypted.get("_encrypted")
+                if blob:
+                    try:
+                        creds = json.loads(decrypt_for_tenant(blob))
+                        existing_refresh = creds.get("refresh_token")
+                    # enterprise-gate: broad-except-ok reason=oauth-reconnect-existing-token-decrypt-skip-revoke-only
+                    except Exception:  # noqa: BLE001
+                        logger.info(
+                            "oauth_reconnect_decrypt_skipped", exc_info=True
+                        )
     await _revoke_existing_grant(
         spec,
         token_or_secret=existing_refresh or "",
@@ -870,6 +957,7 @@ __all__ = [
     "_build_authorization_url",
     "_canonical_redirect_uri",
     "_coerce_user_fields",
+    "_payload_from_existing_connector_config",
     "_provider_for",
     "_public_api_base",
     "router",

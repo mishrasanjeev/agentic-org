@@ -135,6 +135,37 @@ describe("CMODashboard", () => {
     expect(screen.getByText("marketing")).toBeInTheDocument();
   });
 
+  it("renders ready HubSpot marketing connector contract without blocking scope gaps", async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path === "/connectors/contracts/marketing") {
+        return Promise.resolve({
+          data: {
+            ready: true,
+            contracts: [
+              {
+                key: "hubspot_crm_read",
+                provider: "hubspot",
+                label: "HubSpot CRM Read",
+                status: "ready",
+                required_scopes: ["crm.objects.contacts.read", "crm.objects.deals.read"],
+                missing_scopes: [],
+                non_blocking_scope_gaps: ["automation"],
+              },
+            ],
+          },
+        });
+      }
+      return Promise.resolve({ data: MOCK_CMO_DATA });
+    });
+    renderCMO();
+    await waitFor(() => {
+      expect(screen.getByText("Marketing Connector Contracts")).toBeInTheDocument();
+    });
+    expect(screen.getByText("HubSpot CRM Read")).toBeInTheDocument();
+    expect(screen.getByText("ready")).toBeInTheDocument();
+    expect(screen.queryByText("crm.objects.contacts.read")).not.toBeInTheDocument();
+  });
+
   it("shows error message when API fails", async () => {
     mockGet.mockRejectedValue(new Error("Internal Server Error"));
     renderCMO();

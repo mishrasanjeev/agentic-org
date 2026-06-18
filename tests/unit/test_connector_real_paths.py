@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -789,7 +790,7 @@ class TestSlackRealPaths:
 
 
 class TestGoogleAdsRealPaths:
-    """Verify Google Ads connector hits correct Google Ads API v17 paths."""
+    """Verify Google Ads connector hits correct Google Ads API paths."""
 
     def _make_connector(self):
         from connectors.marketing.google_ads import GoogleAdsConnector
@@ -819,6 +820,18 @@ class TestGoogleAdsRealPaths:
         args = c._client.post.call_args
         path = args[0][0]
         assert "/customers/1234567890/googleAds:searchStream" == path
+
+    @pytest.mark.asyncio
+    async def test_health_check_uses_search_stream_not_customer_get(self):
+        c = self._make_connector()
+        c._client.post = _async_response(
+            [{"results": [{"customer": {"resourceName": "customers/1234567890"}}]}]
+        )
+        c._client.get = AsyncMock(side_effect=AssertionError("GET must not run"))
+        health = await c.health_check()
+        args = c._client.post.call_args
+        assert args[0][0] == "/customers/1234567890/googleAds:searchStream"
+        assert health["status"] == "healthy"
 
     @pytest.mark.asyncio
     async def test_mutate_campaign_budget_path(self):
@@ -917,6 +930,25 @@ class TestGA4RealPaths:
         await c.get_metadata()
         args = c._client.get.call_args
         assert args[0][0] == "/properties/987654321/metadata"
+
+    @pytest.mark.asyncio
+    async def test_health_check_403_returns_actionable_scope_guidance(self):
+        c = self._make_connector()
+        request = httpx.Request("GET", "https://analyticsdata.googleapis.com/v1beta/properties/987654321/metadata")
+        response = httpx.Response(403, request=request)
+        c._client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "Forbidden",
+                request=request,
+                response=response,
+            )
+        )
+        health = await c.health_check()
+        assert health["status"] == "unhealthy"
+        assert health["http_status"] == 403
+        assert health["error"] == "ga4_permission_denied"
+        assert "Viewer access" in health["remediation"]
+        assert "https://www.googleapis.com/auth/analytics.readonly" in health["required_scopes"]
 
     @pytest.mark.asyncio
     async def test_get_conversions_uses_run_report(self):

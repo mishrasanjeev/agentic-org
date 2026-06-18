@@ -37,6 +37,18 @@ interface CMOKPIData {
   domain_breakdown: DomainBreakdown[];
 }
 
+interface MarketingConnectorContract {
+  key: string;
+  provider: string;
+  label: string;
+  status: string;
+  required_scopes: string[];
+  missing_scopes: string[];
+  non_blocking_scope_gaps?: string[];
+  evidence?: string[];
+  reason?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -69,6 +81,7 @@ const MARKETING_DOMAINS = new Set([
 export default function CMODashboard() {
   const { t } = useTranslation();
   const [data, setData] = useState<CMOKPIData | null>(null);
+  const [contracts, setContracts] = useState<MarketingConnectorContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,8 +98,12 @@ export default function CMODashboard() {
       // switcher because it didn't thread company_id through.
       const companyId = localStorage.getItem("company_id") || "";
       const params = companyId ? { company_id: companyId } : {};
-      const resp = await api.get("/kpis/cmo", { params });
+      const [resp, contractResp] = await Promise.all([
+        api.get("/kpis/cmo", { params }),
+        api.get("/connectors/contracts/marketing").catch(() => null),
+      ]);
       setData(resp.data);
+      setContracts(contractResp?.data?.contracts ?? []);
     } catch {
       setError(t("errors.failedToLoadKpis", "Failed to load CMO KPIs"));
     } finally {
@@ -151,6 +168,48 @@ export default function CMODashboard() {
           </Card>
         ))}
       </div>
+
+      {contracts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Marketing Connector Contracts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 pr-4">Contract</th>
+                    <th className="pb-2 pr-4">Provider</th>
+                    <th className="pb-2 pr-4">Status</th>
+                    <th className="pb-2">Scope Gaps</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contracts.map((contract) => (
+                    <tr key={contract.key} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-medium">{contract.label}</td>
+                      <td className="py-2 pr-4">{contract.provider}</td>
+                      <td className="py-2 pr-4">
+                        <Badge variant={contract.status === "ready" ? "default" : "destructive"}>
+                          {contract.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2 text-muted-foreground">
+                        {contract.missing_scopes?.length
+                          ? contract.missing_scopes.join(", ")
+                          : (contract.non_blocking_scope_gaps?.length
+                              ? `Optional: ${contract.non_blocking_scope_gaps.join(", ")}`
+                              : "None")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Domain Breakdown ── */}
       {displayDomains.length === 0 ? (
