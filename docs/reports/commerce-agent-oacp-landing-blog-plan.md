@@ -23,7 +23,12 @@ rails own mandate and payment execution.
 
 ## Current Implementation Summary
 
-AgenticOrg has internal C6W3-C6W9 consumer behavior:
+AgenticOrg has internal C6W3-C6Z consumer behavior, but the production C6Z
+vertical is currently blocked. The June 18, 2026 production run found
+Shopify `401 Unauthorized` for the mounted C6Z Shopify token and Grantex
+`422 tenant_not_provisioned` for the AgenticOrg-configured internal token.
+
+Implementation status:
 
 | Slice | AgenticOrg behavior | Public posture |
 | --- | --- | --- |
@@ -34,6 +39,7 @@ AgenticOrg has internal C6W3-C6W9 consumer behavior:
 | C6W7 | Reconciles local/cached response evidence. | Reconciled only. |
 | C6W8 | Consumes eligibility/audit packets. | Eligibility only. |
 | C6W9 | Consumes dry-run verifier results. | Dry-run only. |
+| C6Z | Seller onboarding, Shopify sync path, Grantex authority handoff, artifact cache, buyer answer, MCP seller tools, and Plural/Pine capability verifier. | Implemented locally; full production vertical blocked. |
 
 ## Landing Page Plan
 
@@ -173,3 +179,5 @@ sequenceDiagram
 - No claim implies production readiness, public discovery, live checkout/payment,
   live provider rails, certification, compliance, conformance, or merchant
   approval.
+- Grantex Commerce payment-control pilot wording remains separate from OACP
+  runtime artifact protocol wording.
