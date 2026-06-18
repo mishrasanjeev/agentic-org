@@ -131,12 +131,12 @@ Regular transaction:
 | Public discovery gate | Commerce metadata is fail-closed behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`. | Safe posture. |
 | Docs-only CI guard | `.github/workflows/deploy.yml` classifies docs-only changes and skips cloud auth/build/push/deploy-adjacent jobs. | Correct for future planning docs merges. |
 | Merchant education docs | C5O-C5X docs cover self-onboarding, architecture, API/data model proposals, UI wireframes, validator, review workflow, rollout automation, demo merchant, and launch rehearsal. | Good planning foundation; runtime implementation still pending. |
-| OACP consumer foundation | C6W3-C6W9 helper/tests/docs consume artifact schemas, adapter previews, commitment boundaries, prepared envelopes, response reconciliations, eligibility packets, and dry-run verifier results. | Internal only; no execution, public protocol publication, certification, or production readiness. |
+| OACP consumer foundation | C6W3-C6Z helper/tests/docs and runtime paths consume artifact schemas, adapter previews, commitment boundaries, prepared envelopes, response reconciliations, eligibility packets, dry-run verifier results, C6Z authority responses, cached seller facts, buyer answer sources, MCP bridge facts, and Plural/Pine capability metadata. | Internal only; the 2026-06-18 production vertical is blocked by Shopify token and Grantex tenant-token provisioning issues; no execution, public protocol publication, certification, or production readiness. |
 | OACP cache foundation | C6X1-C6X5 add cache verifier/runtime planning, fail-closed cache evaluation, repository boundary, durable SQL-backed cache records, and local maintenance planning. | Internal only; planner/cache do not call Grantex live, providers, merchant private APIs, checkout, payments, schedulers, or queues. |
 
-### 2.1 Current OACP Status Through C6X5
+### 2.1 Current OACP Status Through C6Z
 
-AgenticOrg currently has local consumer behavior for:
+AgenticOrg currently has local consumer and runtime behavior for:
 
 - public-safe OACP artifact family validation;
 - adapter preview consumption for schema.org, UCP-style, ACP-style,
@@ -150,15 +150,29 @@ AgenticOrg currently has local consumer behavior for:
 - repository port plus in-memory adapter;
 - durable cache records scoped by buyer agent, seller agent, tenant, and
   merchant;
-- local maintenance planning over durable records.
+- local maintenance planning over durable records;
+- Seller Commerce Agent packet creation for the C6Z vertical;
+- Shopify read-only sync initiation and normalized connector evidence handling;
+- Grantex internal authority request handoff;
+- artifact cache records consumed by buyer answer generation;
+- MCP seller fact bridge over cached artifacts;
+- Plural/Pine capability verifier metadata checks that do not execute mandates
+  or payments.
+
+The 2026-06-18 production closure run is blocked: the mounted Shopify Admin
+token returns `401 Unauthorized`, and the AgenticOrg-configured Grantex token
+returns `422 tenant_not_provisioned`. Local C6Z unit tests and MCP smoke pass,
+but the real production vertical is not complete.
 
 Still missing:
 
-- seller-agent onboarding UI/runtime for OACP;
-- real Shopify/WooCommerce/ERP connector sync initiation;
+- successful production Shopify sync with a valid merchant-approved token;
+- Grantex commerce tenant/developer mapping for the AgenticOrg production
+  internal token;
+- self-serve seller-agent onboarding UX beyond the current runtime/API path;
 - cache refresh/eviction scheduler, durable maintenance log, and refresh intent
   queue;
-- provider-owned mandate capability verifier runtime;
+- provider-owned mandate capability verification for live provider approval;
 - channel bridges for ChatGPT-style, Claude/MCP-style, Gemini-style,
   Perplexity/search-style, web, and messaging surfaces;
 - public seller cards and third-party agent cards with risk controls;
@@ -411,8 +425,8 @@ AgenticOrg landing page planning blocks:
   logistics, support, CSV/API.
 - Section 5: Provider Mandate Boundary - provider-owned setup and execution,
   approved capability verification, non-sensitive evidence refs only.
-- Section 6: OACP Status - internal C6W9 foundation, no public standard or live
-  execution claim.
+- Section 6: OACP Status - internal C6Z foundation with blocked production
+  vertical, no public standard or live execution claim.
 
 Blog series plan:
 
@@ -424,7 +438,7 @@ Blog series plan:
 | Shopify And WooCommerce In Agentic Commerce | Integrators | Connector custody and sync evidence flow. |
 | Provider-Owned Mandates Without Payment Execution In The Agent | Fintech and risk teams | Provider mandate setup -> capability verification -> evidence ref. |
 | ChatGPT, Claude, Gemini, And Search-Style Channels | GTM and engineering | Channel bridge matrix and supported action labels. |
-| What Is Still Missing Before Autonomous Commerce | Leadership | C6W9 complete vs runtime gaps. |
+| What Is Still Missing Before Autonomous Commerce | Leadership | C6Z blocked production vertical vs pilot gaps. |
 
 Avoid claims that imply:
 

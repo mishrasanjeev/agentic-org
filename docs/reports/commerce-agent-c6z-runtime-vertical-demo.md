@@ -14,7 +14,21 @@ C6Z adds a real internal runtime path for a Seller Commerce Agent:
 8. MCP tools expose the same cached product facts to local agent clients.
 9. Plural/Pine mandate capability can be checked only when sandbox env vars are present.
 
-The vertical is internal, non-publication, non-certifying, non-production, and non-executing. It does not create checkout sessions, payments, mandates, orders, holds, refunds, returns, shipments, public discovery entries, or live-provider actions.
+The vertical is internal, non-publication, non-certifying, and non-executing. It does not create checkout sessions, payments, mandates, orders, holds, refunds, returns, shipments, public discovery entries, or live-provider actions.
+
+## Production Closure Status
+
+The June 18, 2026 production closure run did not complete the real vertical:
+
+- AgenticOrg production health was healthy at commit `2fdccc7ca1337b3b2caa20a2e9ac1d03c7bfbc9c`.
+- Grantex production health was healthy at commit `7fd4dd3c865fbd8187d92aec792cff249c9c01c3`.
+- Authenticated Seller Commerce Agent onboarding packet creation succeeded.
+- Shopify Admin GraphQL read-only sync failed with `401 Unauthorized`.
+- A direct status-only Shopify GraphQL probe using the mounted AgenticOrg C6Z Shopify token also returned `401`.
+- Grantex C6Z authority called with AgenticOrg's configured internal token returned `422 tenant_not_provisioned`.
+- Grantex C6Z authority called by a platform-admin operator issued 8 verifier-valid, non-executing artifacts. That proves the Grantex route, not the configured AgenticOrg-to-Grantex path.
+
+Do not use this document to claim internal runtime demo completion, closed merchant pilot readiness, public OACP preview readiness, certification, conformance, standardization, payment approval, mandate approval, or live-provider readiness.
 
 ## Runtime Boundaries
 
@@ -70,6 +84,8 @@ Missing external credentials cause blocked or skipped results with exact env var
 10. Run the Plural/Pine capability check only with sandbox env vars present.
 
 The sequence proves non-binding product answers from cached internal artifacts. It does not create a payment, order, checkout session, mandate, inventory hold, refund, return, shipment, public discovery publication, or live-provider action.
+
+In production, this sequence must not be marked complete until the Shopify token and Grantex tenant-mapping blockers above are fixed and the complete path is re-run.
 
 ## Local Commands
 
