@@ -39,7 +39,7 @@ Implementation status:
 | C6W7 | Reconciles local/cached response evidence. | Reconciled only. |
 | C6W8 | Consumes eligibility/audit packets. | Eligibility only. |
 | C6W9 | Consumes dry-run verifier results. | Dry-run only. |
-| C6Z | Seller onboarding, Shopify sync path, Grantex authority handoff, artifact cache, buyer answer, MCP seller tools, and Plural/Pine capability verifier. | Implemented locally; full production vertical blocked. |
+| C6Z | Seller onboarding, Shopify sync path, Grantex authority handoff, 11-family artifact cache, buyer answer, web/OpenAPI/A2A/MCP bridge contracts, WhatsApp/Telegram blocked-missing-credential routes, and Plural/Pine capability verifier. | Implemented locally in the launch-closure branch; full production vertical blocked until valid Shopify and Grantex tenant-token mapping are present. |
 
 ## Landing Page Plan
 
@@ -106,6 +106,19 @@ flowchart LR
   buyer --> channel
   buyer -. "verify capability when approved" .-> provider
 ```
+
+## Required Blog Drafts
+
+Each draft must stay non-executing and must include the stated Mermaid diagram.
+None may claim certification, conformance, standardization, public discovery,
+merchant approval, payment approval, or live-provider readiness.
+
+| Draft | Core message | Required diagram |
+| --- | --- | --- |
+| How OACP Connects Seller Agents, Buyer Agents, Grantex, Shopify, and Plural/Pine | AgenticOrg runs agents, Grantex issues authority artifacts, Shopify remains source of record, and providers own execution. | Four-party architecture. |
+| Why Grantex Is A Trust Authority, Not A Transaction Toll Booth | Valid cached artifacts can support non-binding answers until TTL, revocation, risk, freshness, or commitment boundaries require refresh. | Buyer question through cache. |
+| From Shopify To ChatGPT/Claude/Gemini: Buyer-Safe Commerce Through OACP | Shopify read-only sync becomes OACP artifacts consumed through MCP/OpenAPI/channel bridges. | Shopify sync to OACP artifacts plus channel bridge flow. |
+| Mandates And Payments In Agentic Commerce: Provider-Owned Execution, Agent-Owned Context | AgenticOrg verifies capability metadata only where approved; providers own mandates and payments. | Mandate capability evidence flow plus refusal/fail-closed flow. |
 
 ## Blog Series
 

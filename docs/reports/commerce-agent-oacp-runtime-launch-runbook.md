@@ -25,8 +25,9 @@ Last updated: 2026-06-18.
 7. Send the AgenticOrg authority request to Grantex.
 8. Cache Grantex artifacts in AgenticOrg.
 9. Ask a buyer product question from cached artifacts and record source/freshness labels.
-10. Smoke MCP seller facts against the cached products.
-11. Run Plural/Pine capability metadata verification only.
+10. Smoke web, MCP, OpenAPI/function, and A2A bridge contracts against the cached products.
+11. Confirm WhatsApp and Telegram adapters either answer through the same bridge contract or return `blocked_missing_credentials` with no outbound send.
+12. Run Plural/Pine capability metadata verification only.
 
 ## Hard Stops
 
@@ -45,4 +46,4 @@ The 2026-06-18 production run is blocked:
 
 Do not report internal runtime demo, closed merchant pilot, or public OACP preview as complete until both blockers are fixed and the full vertical is re-run.
 
-Follow-up implementation in this PR adds the encrypted merchant Shopify connector setup route and Commerce Runtime UI controls. After merge/deploy, the Shopify blocker should be handled through that AgenticOrg path instead of a single global Shopify token. Grantex tenant-token provisioning remains separate.
+Follow-up implementation in this PR adds the encrypted merchant Shopify connector setup route, the expanded onboarding lifecycle, 11-family Grantex artifact cache acceptance, web/OpenAPI/A2A/WhatsApp/Telegram bridge endpoints, and a local launch evidence harness. After merge/deploy, the Shopify blocker should be handled through the AgenticOrg merchant connector path instead of a single global Shopify token. Grantex tenant-token provisioning remains separate.

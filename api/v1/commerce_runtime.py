@@ -26,6 +26,7 @@ from core.commerce.c6z_runtime_vertical import (
     ShopifyAdminGraphQLClient,
     ShopifyCredentials,
     answer_product_question_from_cache,
+    build_bridge_contract_response,
     build_cache_record_from_grantex_artifact,
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
@@ -56,6 +57,13 @@ router = APIRouter(
     tags=["Commerce Runtime"],
     dependencies=[require_tenant_admin],
 )
+
+WHATSAPP_BRIDGE_ENV_VARS: tuple[str, ...] = (
+    "WHATSAPP_BUSINESS_ACCESS_TOKEN",
+    "WHATSAPP_BUSINESS_PHONE_NUMBER_ID",
+    "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+)
+TELEGRAM_BRIDGE_ENV_VARS: tuple[str, ...] = ("TELEGRAM_BOT_TOKEN",)
 
 
 class SellerOnboardingPacketCreate(BaseModel):
@@ -108,6 +116,16 @@ class BuyerQuestionRequest(BaseModel):
     grantex_available: bool = True
 
 
+class BridgeAskRequest(BaseModel):
+    merchant_id: str
+    seller_agent_id: str
+    buyer_agent_id: str | None = None
+    question: str = Field(min_length=1)
+    channel: str = "web"
+    action_intent: str = "non_binding_preview"
+    grantex_available: bool = False
+
+
 class MandateCapabilityRequest(BaseModel):
     merchant_id: str
     seller_agent_id: str | None = None
@@ -131,10 +149,21 @@ async def create_seller_onboarding_packet(
     packet = _build_packet_from_body(body, tenant_id)
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         row = await session.get(C6ZSellerOnboardingPacketRow, packet["packet_id"])
+        previous_status = None if row is None else row.status
         if row is None:
             row = C6ZSellerOnboardingPacketRow(packet_id=packet["packet_id"])
             session.add(row)
         _apply_packet(row, packet)
+        if previous_status in {
+            "sync_ready",
+            "synced",
+            "authority_requested",
+            "artifacts_cached",
+            "cache_refresh_needed",
+            "blocked_missing_credentials",
+            "blocked_grantex_unavailable",
+        }:
+            row.status = previous_status
     return {"packet": packet, "stored": True}
 
 
@@ -230,6 +259,24 @@ async def upsert_shopify_connector_credentials(
             row.health_status = "healthy" if body.validate_read else "unknown"
             row.last_health_check = datetime.now(tz=UTC) if body.validate_read else row.last_health_check
             row.sync_error = None
+        packets = (
+            await session.scalars(
+                select(C6ZSellerOnboardingPacketRow).where(
+                    C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
+                    C6ZSellerOnboardingPacketRow.merchant_id == body.merchant_id,
+                    C6ZSellerOnboardingPacketRow.status.in_(
+                        (
+                            "draft",
+                            "received",
+                            "blocked_missing_credentials",
+                            "cache_refresh_needed",
+                        )
+                    ),
+                )
+            )
+        ).all()
+        for packet in packets:
+            packet.status = "sync_ready"
     return {
         "status": "shopify_connector_configured",
         "merchant_id": body.merchant_id,
@@ -302,35 +349,50 @@ async def sync_shopify_read_only(
     body: ShopifySyncRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    blocked_exc: HTTPException | None = None
+    evidence: dict[str, Any] | None = None
+    credentials: ShopifyCredentials | None = None
+    credential_source = "unknown"
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         packet_row = await session.get(C6ZSellerOnboardingPacketRow, body.packet_id)
         if packet_row is None or packet_row.tenant_id != tenant_id:
             raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
         packet = _row_to_packet(packet_row)
-        credentials, credential_source = await _resolve_shopify_credentials_for_packet(
-            session=session,
-            tenant_id=_tenant_uuid(tenant_id),
-            packet=packet,
-        )
-        client = ShopifyAdminGraphQLClient(credentials)
         try:
-            products = await client.fetch_products(page_size=body.page_size, max_pages=body.max_pages)
-        except (httpx.HTTPError, C6ZRuntimeValidationError) as exc:
-            raise HTTPException(status_code=502, detail=f"Shopify read-only sync failed: {exc}") from exc
-        now_iso = _now_iso()
-        evidence = build_shopify_connector_evidence(
-            packet=packet,
-            products=products,
-            synced_at=now_iso,
-            source_observed_at=now_iso,
-            currency=body.currency,
-        )
-        row = await session.get(C6ZConnectorEvidenceRow, evidence["evidence_id"])
-        if row is None:
-            row = C6ZConnectorEvidenceRow(evidence_id=evidence["evidence_id"])
-            session.add(row)
-        _apply_evidence(row, evidence, hmac_verified=False)
-        packet_row.status = "artifact_issuance_ready"
+            credentials, credential_source = await _resolve_shopify_credentials_for_packet(
+                session=session,
+                tenant_id=_tenant_uuid(tenant_id),
+                packet=packet,
+            )
+        except HTTPException as exc:
+            packet_row.status = "blocked_missing_credentials"
+            blocked_exc = exc
+        if blocked_exc is None:
+            if credentials is None:
+                raise HTTPException(status_code=500, detail="Shopify credentials were not resolved")
+            client = ShopifyAdminGraphQLClient(credentials)
+            try:
+                products = await client.fetch_products(page_size=body.page_size, max_pages=body.max_pages)
+            except (httpx.HTTPError, C6ZRuntimeValidationError) as exc:
+                raise HTTPException(status_code=502, detail=f"Shopify read-only sync failed: {exc}") from exc
+            now_iso = _now_iso()
+            evidence = build_shopify_connector_evidence(
+                packet=packet,
+                products=products,
+                synced_at=now_iso,
+                source_observed_at=now_iso,
+                currency=body.currency,
+            )
+            row = await session.get(C6ZConnectorEvidenceRow, evidence["evidence_id"])
+            if row is None:
+                row = C6ZConnectorEvidenceRow(evidence_id=evidence["evidence_id"])
+                session.add(row)
+            _apply_evidence(row, evidence, hmac_verified=False)
+            packet_row.status = "synced"
+    if blocked_exc is not None:
+        raise blocked_exc
+    if evidence is None:
+        raise HTTPException(status_code=500, detail="Shopify sync did not produce evidence")
     return {
         "status": "shopify_sync_stored",
         "credential_source": credential_source,
@@ -411,16 +473,18 @@ async def request_grantex_authority_artifacts(
             onboarding_packet=packet,
             connector_evidence=evidence,
         )
-    env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
-    if not env_resolution.ready:
-        return {
-            "status": "blocked_missing_grantex_env",
-            "missing_env_vars": list(env_resolution.missing),
-            "authority_request_payload": payload,
-            "artifact_issuance_attempted": False,
-            "allowed_to_execute": False,
-            "non_authoritative_for_transaction": True,
-        }
+        env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
+        if not env_resolution.ready:
+            packet_row.status = "blocked_grantex_unavailable"
+            return {
+                "status": "blocked_missing_grantex_env",
+                "missing_env_vars": list(env_resolution.missing),
+                "authority_request_payload": payload,
+                "artifact_issuance_attempted": False,
+                "allowed_to_execute": False,
+                "non_authoritative_for_transaction": True,
+            }
+        packet_row.status = "authority_requested"
     return await send_grantex_authority_request(payload=payload)
 
 
@@ -441,6 +505,7 @@ async def cache_grantex_artifacts(
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
         store_results: list[dict[str, Any]] = []
+        cache_records = []
         for artifact in body.artifacts:
             record = build_cache_record_from_grantex_artifact(
                 artifact,
@@ -449,6 +514,7 @@ async def cache_grantex_artifacts(
             )
             if record.tenant_id != tenant_id:
                 raise HTTPException(403, "Artifact tenant scope mismatch")
+            cache_records.append(record)
             store_results.append(await repo.upsert(record))
         rejected = [result for result in store_results if result.get("stored") is not True]
         if rejected:
@@ -463,6 +529,19 @@ async def cache_grantex_artifacts(
                     "non_authoritative_for_transaction": True,
                 },
             )
+        if hasattr(session, "scalars"):
+            for record in cache_records:
+                packets = (
+                    await session.scalars(
+                        select(C6ZSellerOnboardingPacketRow).where(
+                            C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
+                            C6ZSellerOnboardingPacketRow.merchant_id == record.merchant_id,
+                            C6ZSellerOnboardingPacketRow.seller_agent_id == record.seller_agent_id,
+                        )
+                    )
+                ).all()
+                for packet in packets:
+                    packet.status = "artifacts_cached"
     return {
         "status": "cached",
         "records_stored": len(store_results),
@@ -486,44 +565,114 @@ async def ask_buyer_product_question(
     body: BuyerQuestionRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
-        repo = DurableOacpArtifactCacheRepository(session)
-        cache_records = await repo.list_for_scope(
-            OacpArtifactCacheRepositoryQuery(
-                tenant_id=tenant_id,
-                merchant_id=body.merchant_id,
-                seller_agent_id=body.seller_agent_id,
-                buyer_agent_id=body.buyer_agent_id,
-            )
-        )
-        evidence_query = select(C6ZConnectorEvidenceRow).where(
-            C6ZConnectorEvidenceRow.tenant_id == tenant_id,
-            C6ZConnectorEvidenceRow.merchant_id == body.merchant_id,
-        )
-        if body.seller_agent_id:
-            evidence_query = evidence_query.where(C6ZConnectorEvidenceRow.seller_agent_id == body.seller_agent_id)
-        evidence_rows = (await session.scalars(evidence_query.order_by(C6ZConnectorEvidenceRow.synced_at.desc()))).all()
-        products: list[dict[str, Any]] = []
-        for evidence_row in evidence_rows:
-            products.extend(list(evidence_row.products or []))
-        answer = answer_product_question_from_cache(
-            cache_records=cache_records,
-            products=products,
-            question=body.question,
-            now_iso=_now_iso(),
-            grantex_available=body.grantex_available,
-            action_intent=cast(Any, body.action_intent),
-        )
-    return {
-        "status": answer.status,
-        "answer": answer.answer,
-        "source_label": answer.source_label,
-        "freshness_label": answer.freshness_label,
-        "refusal_reason": answer.refusal_reason,
-        "matched_products": list(answer.matched_products),
-        "allowed_to_execute": False,
-        "non_authoritative_for_transaction": True,
-    }
+    payload, _, _ = await _answer_buyer_question_for_scope(
+        tenant_id=tenant_id,
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+        question=body.question,
+        action_intent=body.action_intent,
+        grantex_available=body.grantex_available,
+    )
+    return payload
+
+
+@router.post("/bridges/web/ask")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.web.ask",
+    rate_limit="commerce-buyer-session",
+    idempotency="read-only-non-binding-bridge-answer",
+    audit_event="commerce.runtime.bridge.web.ask",
+)
+async def ask_web_bridge(
+    body: BridgeAskRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    return await _bridge_answer(body, tenant_id, default_channel="web")
+
+
+@router.post("/bridges/openapi/ask")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.openapi.ask",
+    rate_limit="commerce-buyer-session",
+    idempotency="read-only-non-binding-bridge-answer",
+    audit_event="commerce.runtime.bridge.openapi.ask",
+)
+async def ask_openapi_bridge(
+    body: BridgeAskRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    return await _bridge_answer(body, tenant_id, default_channel="openapi")
+
+
+@router.get("/bridges/openapi/schema")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.openapi.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.bridge.openapi.schema",
+)
+async def get_openapi_bridge_schema() -> dict[str, Any]:
+    return _openapi_bridge_schema()
+
+
+@router.get("/bridges/a2a/agent-card")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.a2a.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.bridge.a2a.agent_card",
+)
+async def get_commerce_a2a_agent_card() -> dict[str, Any]:
+    return _commerce_a2a_agent_card()
+
+
+@router.post("/bridges/whatsapp/webhook")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.whatsapp.webhook",
+    rate_limit="commerce-webhook",
+    idempotency="whatsapp-message-id-or-body-hash",
+    audit_event="commerce.runtime.bridge.whatsapp.webhook",
+)
+async def receive_whatsapp_bridge_webhook(
+    payload: dict[str, Any],
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    env_resolution = resolve_env(WHATSAPP_BRIDGE_ENV_VARS)
+    if not env_resolution.ready:
+        return _blocked_bridge("whatsapp", env_resolution.missing)
+    body = _bridge_body_from_webhook_payload(payload, channel="whatsapp")
+    return await _bridge_answer(body, tenant_id, default_channel="whatsapp")
+
+
+@router.post("/bridges/telegram/webhook")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.telegram.webhook",
+    rate_limit="commerce-webhook",
+    idempotency="telegram-update-id-or-body-hash",
+    audit_event="commerce.runtime.bridge.telegram.webhook",
+)
+async def receive_telegram_bridge_webhook(
+    payload: dict[str, Any],
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    env_resolution = resolve_env(TELEGRAM_BRIDGE_ENV_VARS)
+    if not env_resolution.ready:
+        return _blocked_bridge("telegram", env_resolution.missing)
+    body = _bridge_body_from_webhook_payload(payload, channel="telegram")
+    return await _bridge_answer(body, tenant_id, default_channel="telegram")
 
 
 @router.post("/providers/plural-pine/mandate-capability/verify")
@@ -595,6 +744,182 @@ async def list_cached_products(
     }
 
 
+async def _answer_buyer_question_for_scope(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    buyer_agent_id: str | None,
+    question: str,
+    action_intent: str,
+    grantex_available: bool,
+) -> tuple[dict[str, Any], Any, list[Any]]:
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        repo = DurableOacpArtifactCacheRepository(session)
+        cache_records = await repo.list_for_scope(
+            OacpArtifactCacheRepositoryQuery(
+                tenant_id=tenant_id,
+                merchant_id=merchant_id,
+                seller_agent_id=seller_agent_id,
+                buyer_agent_id=buyer_agent_id,
+            )
+        )
+        evidence_query = select(C6ZConnectorEvidenceRow).where(
+            C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+            C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+        )
+        if seller_agent_id:
+            evidence_query = evidence_query.where(C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id)
+        evidence_rows = (await session.scalars(evidence_query.order_by(C6ZConnectorEvidenceRow.synced_at.desc()))).all()
+        products: list[dict[str, Any]] = []
+        for evidence_row in evidence_rows:
+            products.extend(list(evidence_row.products or []))
+        answer = answer_product_question_from_cache(
+            cache_records=cache_records,
+            products=products,
+            question=question,
+            now_iso=_now_iso(),
+            grantex_available=grantex_available,
+            action_intent=cast(Any, action_intent),
+        )
+    return (
+        {
+            "status": answer.status,
+            "answer": answer.answer,
+            "source_label": answer.source_label,
+            "freshness_label": answer.freshness_label,
+            "refusal_reason": answer.refusal_reason,
+            "matched_products": list(answer.matched_products),
+            "allowed_to_execute": False,
+            "non_authoritative_for_transaction": True,
+        },
+        answer,
+        list(cache_records),
+    )
+
+
+async def _bridge_answer(
+    body: BridgeAskRequest,
+    tenant_id: str,
+    *,
+    default_channel: str,
+) -> dict[str, Any]:
+    channel = body.channel or default_channel
+    payload, answer, cache_records = await _answer_buyer_question_for_scope(
+        tenant_id=tenant_id,
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+        question=body.question,
+        action_intent=body.action_intent,
+        grantex_available=body.grantex_available,
+    )
+    contract = build_bridge_contract_response(
+        channel=channel,
+        answer=answer,
+        cache_records=cache_records,
+    )
+    return {
+        "status": payload["status"],
+        "channel": contract.channel,
+        "answer": contract.answer,
+        "source_label": contract.source_label,
+        "freshness_label": contract.freshness_label,
+        "artifact_refs": list(contract.artifact_refs),
+        "refusal_reason": contract.refusal_reason,
+        "suggested_next_safe_action": contract.suggested_next_safe_action,
+        "matched_products": payload["matched_products"],
+        "allowed_to_execute": False,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+def _blocked_bridge(channel: str, missing_env_vars: tuple[str, ...]) -> dict[str, Any]:
+    return {
+        "status": "blocked_missing_credentials",
+        "channel": channel,
+        "missing_env_vars": list(missing_env_vars),
+        "credential_values_redacted": True,
+        "external_message_sent": False,
+        "allowed_to_execute": False,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+def _bridge_body_from_webhook_payload(payload: Mapping[str, Any], *, channel: str) -> BridgeAskRequest:
+    message = payload.get("message") if isinstance(payload.get("message"), Mapping) else {}
+    return BridgeAskRequest(
+        merchant_id=str(payload.get("merchant_id") or message.get("merchant_id") or ""),
+        seller_agent_id=str(payload.get("seller_agent_id") or message.get("seller_agent_id") or ""),
+        buyer_agent_id=(
+            None
+            if not str(payload.get("buyer_agent_id") or message.get("buyer_agent_id") or "").strip()
+            else str(payload.get("buyer_agent_id") or message.get("buyer_agent_id"))
+        ),
+        question=str(payload.get("question") or payload.get("text") or message.get("text") or ""),
+        channel=channel,
+        action_intent=str(payload.get("action_intent") or "non_binding_preview"),
+        grantex_available=False,
+    )
+
+
+def _openapi_bridge_schema() -> dict[str, Any]:
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "AgenticOrg OACP Buyer-Safe Bridge",
+            "version": "2026-06-18",
+            "description": (
+                "Non-binding cached OACP product question bridge. No checkout, payment, order, hold, "
+                "refund, return, shipping, mandate, or public discovery execution."
+            ),
+        },
+        "paths": {
+            "/api/v1/commerce/runtime/bridges/openapi/ask": {
+                "post": {
+                    "operationId": "askSellerCommerceAgent",
+                    "summary": "Ask a buyer-safe product question from cached OACP artifacts.",
+                    "x-oacp-non-enablement": {
+                        "allowed_to_execute": False,
+                        "non_authoritative_for_transaction": True,
+                        "no_payment_execution": True,
+                        "no_public_discovery_enablement": True,
+                    },
+                }
+            }
+        },
+        "allowed_to_execute": False,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+def _commerce_a2a_agent_card() -> dict[str, Any]:
+    return {
+        "name": "AgenticOrg Seller Commerce Agent Bridge",
+        "protocol": "a2a-compatible-metadata",
+        "capabilities": [
+            "seller_product_question_answering_from_cached_oacp_artifacts",
+            "seller_product_snapshot_listing",
+            "source_freshness_labeling",
+            "final_commitment_refusal",
+        ],
+        "unsupported_capabilities": [
+            "checkout",
+            "payment",
+            "order",
+            "inventory_hold",
+            "refund",
+            "return_authorization",
+            "shipping_label",
+            "mandate_creation",
+            "public_discovery_publish",
+        ],
+        "allowed_to_execute": False,
+        "non_authoritative_for_transaction": True,
+        "public_discovery_enabled": False,
+    }
+
+
 def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) -> dict[str, Any]:
     return build_seller_onboarding_packet(
         tenant_id=tenant_id,
@@ -613,6 +938,9 @@ def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) 
                 "offer_price_snapshot",
                 "inventory_snapshot",
                 "policy_scope",
+                "public_discovery_state",
+                "mandate_capability",
+                "protocol_adapter",
                 "authority_request_status",
             ]
         },

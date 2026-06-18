@@ -13,12 +13,14 @@ Last updated: 2026-06-18.
 | `commerce-agent-oacp-final-launch-evidence.md` | Final launch evidence packet. | Current. |
 | `commerce-agent-oacp-landing-blog-plan.md` | Landing/blog plan. | Updated for C6Z blocker and payment-control separation. |
 | `commerce-agent-c6z-runtime-vertical-demo.md` | C6Z implementation/demo notes. | Updated with production blocker. |
+| `docs/oacp-end-user-flow.md` | End-user seller and buyer runtime flow. | Current runtime guide. |
 | `docs/commerce-agent-overview.md` | Product overview and architecture. | Updated with current C6Z launch status. |
+| `docs/commerce-agent-developer-guide.md` | Runtime developer guide. | Updated for corrected AgenticOrg/Grantex/provider ownership. |
 | `mcp-server/README.md` | MCP bridge usage. | Updated to clarify cached-artifact, non-executing seller tools. |
 
 ## Historical Or Adjacent Docs
 
-Older C6W/C6X/C6Y implementation reports remain trace history. They must not be used to claim public discovery, certification, conformance, standardization, payment readiness, live-provider readiness, or production launch readiness.
+Older C6W/C6X/C6Y implementation reports remain trace history. They are superseded by this inventory, `docs/oacp-end-user-flow.md`, and the runtime launch runbook for launch interpretation. They must not be used to claim public discovery, certification, conformance, standardization, payment readiness, live-provider readiness, production launch readiness, or an all-through-Grantex runtime path.
 
 ## Required Scan Terms
 

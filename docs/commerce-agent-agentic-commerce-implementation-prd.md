@@ -18,6 +18,17 @@ This document is planning and documentation only. It does not deploy, change
 production configuration, enable public commerce discovery, approve a merchant,
 enable checkout/payment creation, enable live payments, or enable live Plural.
 
+## Current OACP Runtime Closure Boundary
+
+The launch-closure branch implements a non-executing OACP runtime vertical:
+Seller Commerce Agent packet creation, merchant connector credential setup,
+read-only Shopify Admin GraphQL sync, Grantex authority handoff, 11-family OACP
+artifact cache consumption, buyer-safe answers, bridge adapters, and
+provider-owned capability metadata checks. It does not enable checkout,
+payment, order, mandate, refund, return, shipment, inventory hold, public
+discovery publication, live provider execution, or merchant-private API
+mutation.
+
 ## 1. Product Boundary
 
 ```mermaid

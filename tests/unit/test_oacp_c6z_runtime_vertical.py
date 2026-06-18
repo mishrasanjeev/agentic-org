@@ -15,8 +15,11 @@ from fastapi import HTTPException
 
 from api.v1 import commerce_runtime as commerce_runtime_api
 from core.commerce.c6z_runtime_vertical import (
+    C6Z_ARTIFACT_FAMILIES,
+    C6Z_ONBOARDING_STATUSES,
     C6ZRuntimeValidationError,
     answer_product_question_from_cache,
+    build_bridge_contract_response,
     build_cache_record_from_grantex_artifact,
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
@@ -176,6 +179,34 @@ def test_onboarding_packet_is_read_only_and_rejects_secret_metadata() -> None:
             source_freshness_policy={"max_age_seconds": 900},
             connector_metadata={"shopify_admin_access_token": "fixture-admin-access-secret"},
         )
+
+
+def test_launch_closure_contract_includes_required_statuses_and_artifact_families() -> None:
+    assert set(C6Z_ONBOARDING_STATUSES) == {
+        "draft",
+        "received",
+        "sync_ready",
+        "synced",
+        "authority_requested",
+        "artifacts_cached",
+        "cache_refresh_needed",
+        "blocked_missing_credentials",
+        "blocked_grantex_unavailable",
+        "rejected",
+    }
+    assert set(C6Z_ARTIFACT_FAMILIES) == {
+        "merchant_profile",
+        "seller_agent_card",
+        "connector_evidence",
+        "catalog_snapshot",
+        "offer_price_snapshot",
+        "inventory_snapshot",
+        "policy_scope",
+        "public_discovery_state",
+        "mandate_capability",
+        "protocol_adapter",
+        "authority_request_status",
+    }
 
 
 def test_shopify_connector_config_name_is_deterministic_and_bounded() -> None:
@@ -490,6 +521,36 @@ def test_buyer_answer_uses_valid_cache_and_refuses_commitment() -> None:
     assert refusal.refusal_reason == "final_commitment_refused"
 
 
+def test_bridge_contract_wraps_buyer_answer_without_execution_authority() -> None:
+    evidence = build_shopify_connector_evidence(
+        packet=_packet(),
+        products=[_shopify_product()],
+        synced_at=_iso(_now() - timedelta(minutes=1)),
+        source_observed_at=_iso(_now() - timedelta(minutes=1)),
+        currency="INR",
+    )
+    cache_record = _cache_record()
+    answer = answer_product_question_from_cache(
+        cache_records=[cache_record],
+        products=evidence["products"],
+        question="What is the price of Canvas Tote?",
+        now_iso=_iso(_now()),
+        grantex_available=False,
+    )
+
+    bridge = build_bridge_contract_response(
+        channel="openapi",
+        answer=answer,
+        cache_records=[cache_record],
+    )
+
+    assert bridge.channel == "openapi"
+    assert bridge.allowed_to_execute is False
+    assert bridge.non_authoritative_for_transaction is True
+    assert bridge.artifact_refs == ("artifact_c6z_catalog",)
+    assert bridge.suggested_next_safe_action == "continue_buyer_safe_product_questions"
+
+
 def test_buyer_answer_fails_closed_for_expired_or_revoked_cache() -> None:
     evidence = build_shopify_connector_evidence(
         packet=_packet(),
@@ -612,12 +673,16 @@ async def test_plural_pine_capability_verifier_blocks_live_environment_without_n
 
 def test_c6z_migration_is_tenant_safe_and_non_executing() -> None:
     migration = Path("migrations/versions/v6_z_runtime_vertical_demo.py").read_text()
+    launch_migration = Path("migrations/versions/v6_z1_oacp_runtime_launch_closure.py").read_text()
     assert 'down_revision = "v6y5_retention_decisions"' in migration
+    assert 'down_revision = "v6z_runtime_vertical_demo"' in launch_migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
     assert "current_setting('agenticorg.tenant_id', true)" in migration
     assert "allowed_to_execute IS FALSE" in migration
     assert "raw_payload_stored IS FALSE" in migration
     assert "CREATE TABLE IF NOT EXISTS commerce_c6z_seller_onboarding_packets" in migration
+    assert "blocked_grantex_unavailable" in launch_migration
+    assert "artifacts_cached" in launch_migration
 
 
 def test_c6z_mcp_bridge_exposes_seller_tools_without_execution_tools() -> None:
@@ -646,3 +711,18 @@ def test_c6z_mcp_bridge_exposes_seller_tools_without_execution_tools() -> None:
         "seller.ask_product_question",
     ):
         assert name in manifest_tools
+
+
+def test_c6z_buyer_surface_bridge_routes_are_non_executing() -> None:
+    source = Path("api/v1/commerce_runtime.py").read_text()
+    for route in (
+        "/bridges/web/ask",
+        "/bridges/openapi/ask",
+        "/bridges/openapi/schema",
+        "/bridges/a2a/agent-card",
+        "/bridges/whatsapp/webhook",
+        "/bridges/telegram/webhook",
+    ):
+        assert route in source
+    assert '"allowed_to_execute": True' not in source
+    assert '"public_discovery_enabled": True' not in source
