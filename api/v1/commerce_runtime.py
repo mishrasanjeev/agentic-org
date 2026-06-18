@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -22,6 +24,7 @@ from core.commerce.c6z_runtime_vertical import (
     SHOPIFY_WEBHOOK_ENV_VARS,
     C6ZRuntimeValidationError,
     ShopifyAdminGraphQLClient,
+    ShopifyCredentials,
     answer_product_question_from_cache,
     build_cache_record_from_grantex_artifact,
     build_grantex_authority_request_payload,
@@ -38,12 +41,15 @@ from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
 )
+from core.crypto import encrypt_for_tenant
+from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
 from core.models.commerce_c6z_runtime import (
     C6ZConnectorEvidenceRow,
     C6ZProviderCapabilityEvidenceRow,
     C6ZSellerOnboardingPacketRow,
 )
+from core.models.connector_config import ConnectorConfig
 
 router = APIRouter(
     prefix="/commerce/runtime",
@@ -69,6 +75,18 @@ class ShopifySyncRequest(BaseModel):
     page_size: int = Field(default=50, ge=1, le=100)
     max_pages: int = Field(default=10, ge=1, le=20)
     currency: str | None = None
+
+
+class ShopifyConnectorCredentialRequest(BaseModel):
+    merchant_id: str = Field(min_length=1)
+    shop_domain: str = Field(min_length=1)
+    api_version: str = "2026-04"
+    admin_access_token: str | None = None
+    oauth_code: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    redirect_uri: str | None = None
+    validate_read: bool = True
 
 
 class GrantexAuthorityRequest(BaseModel):
@@ -140,6 +158,137 @@ async def get_seller_onboarding_packet(
         return {"packet": _row_to_packet(row)}
 
 
+@router.post("/seller-agents/connectors/shopify/credentials")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.shopify.credentials.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="merchant-shopify-credential-upsert",
+    audit_event="commerce.runtime.shopify.credentials.upsert",
+)
+async def upsert_shopify_connector_credentials(
+    body: ShopifyConnectorCredentialRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    tid = _tenant_uuid(tenant_id)
+    credentials, credential_source, granted_scopes = await _resolve_submitted_shopify_credentials(body)
+    if body.validate_read:
+        await _validate_shopify_read_credentials(credentials)
+
+    secret_fields = {
+        "admin_access_token": credentials.admin_access_token,
+        "shop_domain": credentials.shop_domain,
+        "api_version": credentials.api_version,
+        "credential_source": credential_source,
+    }
+    encrypted = await encrypt_for_tenant(json.dumps(secret_fields), tid)
+    config = {
+        "merchant_id": body.merchant_id,
+        "shop_domain": credentials.shop_domain,
+        "api_version": credentials.api_version,
+        "connector_type": "shopify",
+        "connector_mode": "read_only",
+        "credential_source": credential_source,
+        "granted_scopes": granted_scopes,
+        "raw_payload_stored": False,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "no_public_discovery_enablement": True,
+        "non_authoritative_for_transaction": True,
+        "configured_by": "commerce_runtime",
+        "configured_at": _now_iso(),
+    }
+    connector_name = _shopify_connector_config_name(body.merchant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(ConnectorConfig).where(
+                ConnectorConfig.tenant_id == tid,
+                ConnectorConfig.connector_name == connector_name,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            row = ConnectorConfig(
+                tenant_id=tid,
+                connector_name=connector_name,
+                display_name=f"Shopify read-only - {body.merchant_id}",
+                auth_type="shopify_admin_api",
+                credentials_encrypted={"_encrypted": encrypted},
+                config=config,
+                status="configured",
+                health_status="healthy" if body.validate_read else "unknown",
+                last_health_check=datetime.now(tz=UTC) if body.validate_read else None,
+            )
+            session.add(row)
+        else:
+            row.display_name = f"Shopify read-only - {body.merchant_id}"
+            row.auth_type = "shopify_admin_api"
+            row.credentials_encrypted = {"_encrypted": encrypted}
+            row.config = config
+            row.status = "configured"
+            row.health_status = "healthy" if body.validate_read else "unknown"
+            row.last_health_check = datetime.now(tz=UTC) if body.validate_read else row.last_health_check
+            row.sync_error = None
+    return {
+        "status": "shopify_connector_configured",
+        "merchant_id": body.merchant_id,
+        "connector_name": connector_name,
+        "shop_domain": credentials.shop_domain,
+        "api_version": credentials.api_version,
+        "credential_source": credential_source,
+        "validated": body.validate_read,
+        "credential_values_redacted": True,
+        "raw_payload_stored": False,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "no_public_discovery_enablement": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+@router.get("/seller-agents/connectors/shopify/status")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.shopify.credentials.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.shopify.credentials.read",
+)
+async def get_shopify_connector_status(
+    merchant_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    tid = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tid) as session:
+        row = await _load_shopify_connector_config_row(session, tid, merchant_id)
+    if row is None:
+        return {
+            "status": "not_configured",
+            "merchant_id": merchant_id,
+            "credential_values_redacted": True,
+            "allowed_to_execute": False,
+            "non_authoritative_for_transaction": True,
+        }
+    config = row.config or {}
+    return {
+        "status": row.status,
+        "health_status": row.health_status or "unknown",
+        "merchant_id": merchant_id,
+        "connector_name": row.connector_name,
+        "shop_domain": config.get("shop_domain"),
+        "api_version": config.get("api_version"),
+        "connector_mode": config.get("connector_mode", "read_only"),
+        "credential_values_redacted": True,
+        "raw_payload_stored": False,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "no_public_discovery_enablement": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
 @router.post("/seller-agents/shopify/sync")
 @route_meta(
     auth_required=True,
@@ -153,22 +302,16 @@ async def sync_shopify_read_only(
     body: ShopifySyncRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    env_resolution = resolve_env(SHOPIFY_ENV_VARS)
-    if not env_resolution.ready:
-        raise HTTPException(
-            status_code=424,
-            detail={
-                "status": "blocked_missing_shopify_env",
-                "missing_env_vars": list(env_resolution.missing),
-                "external_validation_performed": False,
-            },
-        )
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         packet_row = await session.get(C6ZSellerOnboardingPacketRow, body.packet_id)
         if packet_row is None or packet_row.tenant_id != tenant_id:
             raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
         packet = _row_to_packet(packet_row)
-        credentials = resolve_shopify_credentials()
+        credentials, credential_source = await _resolve_shopify_credentials_for_packet(
+            session=session,
+            tenant_id=_tenant_uuid(tenant_id),
+            packet=packet,
+        )
         client = ShopifyAdminGraphQLClient(credentials)
         try:
             products = await client.fetch_products(page_size=body.page_size, max_pages=body.max_pages)
@@ -190,6 +333,7 @@ async def sync_shopify_read_only(
         packet_row.status = "artifact_issuance_ready"
     return {
         "status": "shopify_sync_stored",
+        "credential_source": credential_source,
         "evidence_id": evidence["evidence_id"],
         "product_count": evidence["product_count"],
         "variant_count": evidence["variant_count"],
@@ -477,6 +621,248 @@ def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) 
         source_freshness_policy=body.source_freshness_policy or {"max_age_seconds": 900},
         connector_metadata=body.connector_metadata,
     )
+
+
+async def _resolve_submitted_shopify_credentials(
+    body: ShopifyConnectorCredentialRequest,
+) -> tuple[ShopifyCredentials, str, list[str]]:
+    token = (body.admin_access_token or "").strip()
+    granted_scopes: list[str] = []
+    credential_source = "admin_access_token"
+    if token and any((body.oauth_code, body.client_id, body.client_secret)):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_credential_mode_ambiguous",
+                "message": "Send either admin_access_token or OAuth code material, not both.",
+            },
+        )
+    if not token:
+        token_data = await _exchange_shopify_oauth_code(body)
+        token = str(token_data.get("access_token") or "").strip()
+        granted_scopes = _scope_list(token_data.get("scope"))
+        credential_source = "oauth_code_exchange"
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_token_required",
+                "message": "Shopify setup requires an Admin API token or OAuth code exchange material.",
+            },
+        )
+    return (
+        ShopifyCredentials(
+            shop_domain=_normalize_shopify_domain_for_api(body.shop_domain),
+            admin_access_token=token,
+            api_version=_validate_shopify_api_version(body.api_version),
+        ),
+        credential_source,
+        granted_scopes,
+    )
+
+
+async def _exchange_shopify_oauth_code(body: ShopifyConnectorCredentialRequest) -> dict[str, Any]:
+    missing = [
+        label
+        for value, label in (
+            (body.oauth_code, "oauth_code"),
+            (body.client_id, "client_id"),
+            (body.client_secret, "client_secret"),
+        )
+        if not str(value or "").strip()
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_oauth_material_required",
+                "missing": missing,
+                "message": "OAuth setup requires oauth_code, client_id, and client_secret.",
+            },
+        )
+    form = {
+        "client_id": str(body.client_id).strip(),
+        "client_secret": str(body.client_secret).strip(),
+        "code": str(body.oauth_code).strip(),
+    }
+    if body.redirect_uri:
+        form["redirect_uri"] = body.redirect_uri.strip()
+    shop_domain = _normalize_shopify_domain_for_api(body.shop_domain)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(
+            f"https://{shop_domain}/admin/oauth/access_token",
+            data=form,
+            headers={"Accept": "application/json"},
+        )
+    body_json: dict[str, Any]
+    try:
+        body_json = cast(dict[str, Any], response.json())
+    except ValueError:
+        body_json = {"message": response.text[:200]}
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_oauth_code_rejected",
+                "status_code": response.status_code,
+                "message": _safe_external_error(body_json),
+            },
+        )
+    if "access_token" not in body_json:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_oauth_token_missing",
+                "message": "Shopify accepted the OAuth request but did not return an access token.",
+            },
+        )
+    return body_json
+
+
+async def _validate_shopify_read_credentials(credentials: ShopifyCredentials) -> None:
+    client = ShopifyAdminGraphQLClient(credentials)
+    try:
+        await client.fetch_products(page_size=1, max_pages=1)
+    except (httpx.HTTPError, C6ZRuntimeValidationError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_read_validation_failed",
+                "message": "Shopify rejected the read-only product sync validation.",
+                "external_validation_performed": True,
+                "credential_values_redacted": True,
+            },
+        ) from exc
+
+
+async def _resolve_shopify_credentials_for_packet(
+    *,
+    session: Any,
+    tenant_id: UUID,
+    packet: Mapping[str, Any],
+) -> tuple[ShopifyCredentials, str]:
+    row = await _load_shopify_connector_config_row(session, tenant_id, str(packet["merchant_id"]))
+    if row is not None and row.credentials_encrypted:
+        enc = row.credentials_encrypted.get("_encrypted") if isinstance(row.credentials_encrypted, dict) else None
+        if not isinstance(enc, str) or not enc:
+            raise HTTPException(status_code=424, detail="Shopify connector credential vault is empty")
+        try:
+            credential_data = json.loads(decrypt_for_tenant(enc))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=424,
+                detail={
+                    "status": "blocked_shopify_credential_decrypt_failed",
+                    "credential_values_redacted": True,
+                    "allowed_to_execute": False,
+                },
+            ) from exc
+        token = str(
+            credential_data.get("admin_access_token")
+            or credential_data.get("access_token")
+            or "",
+        ).strip()
+        if not token:
+            raise HTTPException(status_code=424, detail="Shopify connector token is missing")
+        return (
+            ShopifyCredentials(
+                shop_domain=_normalize_shopify_domain_for_api(
+                    credential_data.get("shop_domain")
+                    or (row.config or {}).get("shop_domain")
+                    or ((packet.get("connector_metadata_redacted") or {}).get("shop_domain"))
+                    or "",
+                ),
+                admin_access_token=token,
+                api_version=_validate_shopify_api_version(
+                    str(credential_data.get("api_version") or (row.config or {}).get("api_version") or "2026-04")
+                ),
+            ),
+            "tenant_connector_config",
+        )
+
+    env_resolution = resolve_env(SHOPIFY_ENV_VARS)
+    if not env_resolution.ready:
+        raise HTTPException(
+            status_code=424,
+            detail={
+                "status": "blocked_missing_shopify_credentials",
+                "missing_env_vars": list(env_resolution.missing),
+                "expected_connector_config": _shopify_connector_config_name(str(packet["merchant_id"])),
+                "external_validation_performed": False,
+            },
+        )
+    return resolve_shopify_credentials(), "environment"
+
+
+async def _load_shopify_connector_config_row(
+    session: Any,
+    tenant_id: UUID,
+    merchant_id: str,
+) -> ConnectorConfig | None:
+    names = (_shopify_connector_config_name(merchant_id), "shopify")
+    result = await session.execute(
+        select(ConnectorConfig).where(
+            ConnectorConfig.tenant_id == tenant_id,
+            ConnectorConfig.connector_name.in_(names),
+        )
+    )
+    rows = list(result.scalars().all())
+    if not rows:
+        return None
+    merchant_specific = _shopify_connector_config_name(merchant_id)
+    for row in rows:
+        if row.connector_name == merchant_specific:
+            return row
+    for row in rows:
+        config = row.config or {}
+        if not config.get("merchant_id") or config.get("merchant_id") == merchant_id:
+            return row
+    return None
+
+
+def _shopify_connector_config_name(merchant_id: str) -> str:
+    suffix = re.sub(r"[^a-zA-Z0-9_]+", "_", merchant_id.strip()).strip("_").lower()
+    if not suffix:
+        suffix = "merchant"
+    return f"commerce_shopify_{suffix[:72]}"
+
+
+def _normalize_shopify_domain_for_api(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    text = text.removeprefix("https://").removeprefix("http://").strip("/")
+    if not text or "/" in text or "." not in text:
+        raise HTTPException(status_code=400, detail="Shopify shop_domain must be a host name")
+    return text
+
+
+def _validate_shopify_api_version(value: str) -> str:
+    text = str(value or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}", text):
+        raise HTTPException(status_code=400, detail="Shopify api_version must look like YYYY-MM")
+    return text
+
+
+def _scope_list(value: Any) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def _safe_external_error(value: Any) -> str:
+    text = json.dumps(value, sort_keys=True) if not isinstance(value, str) else value
+    lowered = text.lower()
+    sensitive_markers = (
+        "access_token",
+        "authorization",
+        "bearer ",
+        "client_secret",
+        "password",
+        "secret",
+        "shpat_",
+    )
+    if any(marker in lowered for marker in sensitive_markers):
+        return "<redacted external error body contained sensitive marker>"
+    return text[:500]
 
 
 def _apply_packet(row: C6ZSellerOnboardingPacketRow, packet: Mapping[str, Any]) -> None:

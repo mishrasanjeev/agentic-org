@@ -202,6 +202,10 @@ export const commerceRuntimeApi = {
     api.post("/commerce/runtime/seller-agents/onboarding-packets", data),
   getOnboardingPacket: (packetId: string) =>
     api.get(`/commerce/runtime/seller-agents/onboarding-packets/${packetId}`),
+  upsertShopifyCredentials: (data: any) =>
+    api.post("/commerce/runtime/seller-agents/connectors/shopify/credentials", data),
+  getShopifyStatus: (params: any) =>
+    api.get("/commerce/runtime/seller-agents/connectors/shopify/status", { params }),
   syncShopify: (data: any) => api.post("/commerce/runtime/seller-agents/shopify/sync", data),
   requestGrantexAuthority: (data: any) => api.post("/commerce/runtime/authority/grantex/request", data),
   cacheArtifacts: (data: any) => api.post("/commerce/runtime/artifacts/cache", data),
