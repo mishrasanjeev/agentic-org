@@ -63,6 +63,14 @@ Add to your MCP client configuration:
 
 Connector tools are not exposed as direct MCP tools. The `seller.*` tools read AgenticOrg cached OACP artifact evidence only and do not create checkout, payment, order, hold, refund, return, shipping, mandate, or live-provider actions. Use `run_agent` for agent workflows, or run `list_mcp_tools` to see platform agent tools such as `agenticorg_commerce_sales_agent`.
 
+Current production C6Z note, June 18, 2026: the MCP seller tools are implemented
+and the local MCP build/smoke passes, but production seller facts for the
+approved Shopify pilot are blocked until AgenticOrg's Shopify token returns
+read-only GraphQL data and the AgenticOrg-to-Grantex internal token is mapped in
+Grantex. Do not treat MCP tool presence as public discovery, checkout/payment
+approval, mandate execution, certification, conformance, or production launch
+readiness.
+
 ## Authentication
 
 Set one of these environment variables:

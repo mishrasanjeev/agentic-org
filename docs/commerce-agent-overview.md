@@ -39,6 +39,7 @@ commerce transaction should work end to end.
 | C6X1-C6X3 OACP cache foundation | Verifier/runtime planning, fail-closed cache evaluator, repository port, and in-memory adapter for non-binding preview/prepare behavior. |
 | C6X4 durable OACP cache | SQL-backed durable cache records scoped by buyer agent, seller agent, tenant, and merchant with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, RLS, and tenant-safe indexes. |
 | C6X5 cache maintenance planner | Deterministic local planner that classifies durable cache records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. No scheduler and no side effects. |
+| C6Z runtime vertical | Implemented, but production closure is blocked by Shopify token `401 Unauthorized` and Grantex `tenant_not_provisioned` for the configured AgenticOrg token. |
 | Payment execution | Blocked. AgenticOrg may verify provider-owned mandate capability only through separately approved verifier flows. |
 | Live checkout/payments/Plural | Blocked. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
@@ -115,8 +116,10 @@ For merchants, the intended product experience should be simple:
 3. Grantex validates public-safe facts, source/freshness, policy, and evidence
    references into OACP artifacts.
 4. The merchant previews exactly what an AI agent can see.
-5. The merchant chooses which actions agents may request, such as browse,
-   cart draft, checkout request, order status, or support handoff.
+5. The merchant chooses which non-executing actions agents may request, such as
+   browse, compare, product explanation, or support handoff. Checkout, order,
+   payment, mandate, refund, return, shipment, and inventory hold execution
+   require a separate future rollout and are not enabled by C6Z.
 6. Grantex runs validation scans and review gates.
 7. AgenticOrg agents use valid OACP artifacts, approved authority refresh, and
    approved provider/connector verifier flows.
@@ -134,12 +137,12 @@ The operational flow is:
 
 1. Seller completes one-time setup in AgenticOrg Seller Commerce Agent and
    Grantex authority review: onboarding packet, connected systems, catalog,
-   inventory, policy, payment/mandate path, approvals, smoke evidence, and
+   inventory, policy, capability metadata, approvals, smoke evidence, and
    rollback ownership.
 2. Buyer completes one-time setup in their preferred channel: account/session
-   linking, safe preferences, and understanding that checkout requires Grantex
-   consent.
-3. Buyer asks the agent to find, compare, or buy.
+   linking, safe preferences, and understanding that current C6Z behavior is
+   non-executing. Any future checkout path requires separate approval.
+3. Buyer asks the agent to find, compare, or request a non-executing handoff.
 4. AgenticOrg reads valid durable OACP cache records when TTL, freshness,
    revocation, scope, source, and risk rules allow; otherwise it blocks or
    asks Grantex for authority refresh in a separately approved path.
@@ -214,21 +217,30 @@ payment status.
 
 ## Tool Aliases
 
+The aliases below describe historical or adjacent Grantex commerce connector
+surfaces. They are not proof that the C6Z OACP runtime artifact vertical has
+completed, and they are not enabled by OACP C6Z launch evidence.
+
 | Alias | Purpose |
 | --- | --- |
 | `grantex_commerce:merchant_get_profile` | Read merchant and policy status. |
 | `grantex_commerce:catalog_search` | Search grounded product data. |
 | `grantex_commerce:catalog_get_item` | Fetch exact product or variant details. |
 | `grantex_commerce:inventory_check` | Check availability, using a browse passport when required. |
-| `grantex_commerce:cart_create` | Create a cart draft from grounded items. |
-| `grantex_commerce:consent_request` | Request user consent with supported checkout scopes. |
-| `grantex_commerce:consent_exchange` | Exchange granted consent only when granted consent fixture material exists. |
+| `grantex_commerce:cart_create` | Historical payment-control pilot alias; not enabled by OACP C6Z runtime artifact proof. |
+| `grantex_commerce:consent_request` | Historical payment-control pilot alias; not enabled by OACP C6Z runtime artifact proof. |
+| `grantex_commerce:consent_exchange` | Historical fixture-backed alias; not enabled by OACP C6Z runtime artifact proof. |
 | `grantex_commerce:buyer_discovery_preview` | Read Grantex C6G sandbox buyer discovery handoff preview data. |
-| `grantex_commerce:payment_create_intent` | Create Grantex provider-neutral payment intent with supported fields only. |
-| `grantex_commerce:checkout_create` | Create Grantex checkout handoff. |
-| `grantex_commerce:payment_get_status` | Poll Grantex payment status. |
+| `grantex_commerce:payment_create_intent` | Historical Grantex payment-control pilot alias; not enabled by OACP C6Z runtime artifact proof. |
+| `grantex_commerce:checkout_create` | Historical Grantex checkout handoff alias; not enabled by OACP C6Z runtime artifact proof. |
+| `grantex_commerce:payment_get_status` | Historical Grantex payment-status alias; not enabled by OACP C6Z runtime artifact proof. |
 
-## Consent And Fixture Behavior
+## Historical Consent And Fixture Behavior
+
+This section describes earlier fixture-backed Grantex payment-control pilot
+behavior. It is not proof that the AgenticOrg C6Z OACP runtime artifact vertical
+has completed, and it does not enable checkout, payment, mandate, order, refund,
+return, shipment, public discovery, or live-provider execution.
 
 ```mermaid
 sequenceDiagram
