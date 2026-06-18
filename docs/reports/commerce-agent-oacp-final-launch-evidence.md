@@ -1,6 +1,6 @@
 # Commerce Agent OACP Final Launch Evidence
 
-Status: blocked for production C6Z launch.
+Status: local internal runtime demo complete; production C6Z launch remains blocked by external Shopify credential and Grantex tenant-token provisioning.
 
 Evidence date: 2026-06-18.
 
@@ -60,15 +60,52 @@ Because Shopify sync did not produce connector evidence and the configured Grant
 - MCP production seller facts from real cached artifacts: blocked.
 - Plural/Pine capability metadata verification in the same vertical: blocked.
 
+## Local Launch-Closure Evidence
+
+`python scripts/oacp_runtime_launch_check.py` now produces a redacted local
+runtime evidence packet for the non-executing vertical:
+
+- generated at: `2026-06-18T06:11:59.907283Z` in the latest local run
+- tenant id: `11111111-1111-1111-1111-111111111111`
+- merchant id: `merchant_oacp_launch_evidence`
+- seller agent id: `seller_agent_oacp_launch`
+- packet id: `c6z_onboarding_4dc2161a8d4767ea3bc297f5`
+- evidence id: `c6z_shopify_evidence_04f7708266931ba7bacf98b3`
+- Shopify product count: `1`
+- Shopify variant count: `1`
+- Shopify sync timestamp: `2026-06-18T06:11:59.907283Z`
+- Grantex authority request status: `local_contract_fixture_ready`
+- artifact family count: `11`
+- artifact verifier summary: `11` valid, `0` invalid
+- AgenticOrg cache records count: `11`
+- buyer answer sample: `OACP Launch Sample Tote: price snapshot 1299.00 INR; inventory snapshot 4; final price requires merchant/source confirmation.`
+- buyer source label: `Source: Shopify via Grantex artifact`
+- buyer freshness label: `Freshness: synced 0s ago`
+- bridge result: OpenAPI bridge contract with `11` artifact refs; MCP smoke covered by `npm --prefix mcp-server test`
+- Plural/Pine capability status: `blocked_missing_credentials`
+- Plural/Pine redacted evidence ref: `provider:plural_pine:capability:missing-env:redacted`
+- public discovery flag: `false`
+- `allowed_to_execute=false`
+- `raw_payload_stored=false`
+- `no_payment_execution=true`
+- `non_authoritative_for_transaction=true`
+
+The artifact IDs are local fixture IDs only. They use the
+`local-c6z:<family>:<tenant>:<merchant>:<seller>` shape and cover:
+`merchant_profile`, `seller_agent_card`, `connector_evidence`,
+`catalog_snapshot`, `offer_price_snapshot`, `inventory_snapshot`,
+`policy_scope`, `public_discovery_state`, `mandate_capability`,
+`protocol_adapter`, and `authority_request_status`.
+
 ## Grantex Issuer Isolation Proof
 
 Grantex C6Z authority was also tested with a platform-admin operator token to isolate the route:
 
 - status `artifact_issuance_ready`
 - route kind `grantex_internal_c6z_authority_request`
-- artifact count `8`
-- artifact families: `merchant_profile`, `seller_agent_card`, `connector_evidence`, `catalog_snapshot`, `offer_price_snapshot`, `inventory_snapshot`, `policy_scope`, `authority_request_status`
-- verifier summary: 8 valid, 0 invalid
+- artifact count `11` after this branch
+- artifact families: `merchant_profile`, `seller_agent_card`, `connector_evidence`, `catalog_snapshot`, `offer_price_snapshot`, `inventory_snapshot`, `policy_scope`, `public_discovery_state`, `mandate_capability`, `protocol_adapter`, `authority_request_status`
+- verifier summary expected after this branch: 11 valid, 0 invalid
 - `allowed_to_execute=false`
 - `no_payment_execution=true`
 - `no_public_discovery_enablement=true`
@@ -79,7 +116,8 @@ This proves the Grantex issuer route works, but not the configured AgenticOrg-to
 ## MCP And Local Validation
 
 - `npm --prefix mcp-server test`: passed; MCP build plus smoke, 4 backend calls.
-- `python -m pytest tests/unit/test_oacp_c6z_runtime_vertical.py --no-cov`: passed, 16 tests.
+- `python -m pytest tests/unit/test_oacp_c6z_runtime_vertical.py --no-cov`: covers onboarding, Shopify credential custody, read-only sync preference, authority handoff payload, cache intake, buyer answer, bridge contract, MCP tools, Plural/Pine capability verifier, and runtime migration.
+- `python scripts/oacp_runtime_launch_check.py`: local-safe evidence harness for the runtime contract; external Shopify/Grantex checks require `OACP_LAUNCH_EXTERNAL_CHECKS=true` and configured env.
 - `python -m pytest tests/integration/test_c6z_external_integrations.py --no-cov`: skipped 2 tests because local Shopify and Plural/Pine env vars are absent.
 - `python -m ruff check core/commerce/c6z_runtime_vertical.py api/v1/commerce_runtime.py tests/unit/test_oacp_c6z_runtime_vertical.py tests/integration/test_c6z_external_integrations.py`: passed.
 - `python -m mypy core/commerce/c6z_runtime_vertical.py api/v1/commerce_runtime.py`: passed.
@@ -95,7 +133,7 @@ This proves the Grantex issuer route works, but not the configured AgenticOrg-to
 
 ## Exact Launch Status
 
-- Internal runtime demo: blocked in production.
+- Internal runtime demo: complete locally in this branch; blocked in production until valid Shopify and Grantex mapped credentials are available and the full vertical is rerun.
 - Closed merchant pilot: blocked.
 - Public OACP preview: blocked.
 

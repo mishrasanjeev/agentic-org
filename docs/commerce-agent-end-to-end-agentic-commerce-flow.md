@@ -5,6 +5,22 @@ commerce journey in plain English. It is documentation only. It does not enable
 public discovery, production Commerce V1, checkout/payment creation, live
 payments, live Plural, merchant approval, or any production allowlist.
 
+## Current OACP Runtime Closure Boundary
+
+The launch-closure runtime path is non-executing. AgenticOrg creates Seller
+Commerce Agent onboarding packets, initiates merchant-approved read-only
+Shopify Admin GraphQL sync, sends Grantex authority requests, caches internal
+OACP artifacts, answers buyer product questions from cache with source and
+freshness labels, exposes bridge adapters, and verifies provider-owned
+capability metadata where approved. It does not create checkout, payment,
+order, mandate, refund, return, shipment, inventory hold, public discovery
+publication, live provider execution, or merchant-private API mutation.
+
+Any cart, checkout, consent, Commerce Passport, order, return, refund, support,
+fulfillment, or payment-control sections below describe separate future or
+Grantex Commerce payment-control scope. They are not OACP runtime artifact
+launch proof.
+
 The consolidated cross-repo PRD is maintained in the Grantex repo at
 `docs/guides/commerce-v1-agentic-commerce-prd.md`. This document is the
 AgenticOrg buyer-agent companion view of that PRD.
@@ -64,8 +80,8 @@ consent, and audit evidence.
 ## One-Time Seller Setup
 
 Seller setup begins in AgenticOrg Seller Commerce Agent and flows into Grantex
-authority review. AgenticOrg must not approve the seller or bypass connector
-custody rules.
+authority review. AgenticOrg must not approve the seller, bypass connector
+custody rules, or treat cached artifacts as transaction authority.
 
 | Step | Seller action | AgenticOrg responsibility |
 | --- | --- | --- |

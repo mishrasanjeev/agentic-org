@@ -13,7 +13,7 @@ approve production discovery.
 For the full implementation gap plan, read
 `docs/commerce-agent-agentic-commerce-implementation-prd.md`. That companion
 PRD maps the current AgenticOrg implementation to the merchant self-serve gaps
-that Grantex must close before real merchant launch.
+that the cross-repo OACP runtime must close before real merchant launch.
 
 The consolidated cross-repo PRD is maintained in the Grantex repo at
 `docs/guides/commerce-v1-agentic-commerce-prd.md`. AgenticOrg docs should treat
@@ -21,9 +21,9 @@ that file as the product source of truth and this repo's docs as the buyer-agent
 execution companion.
 
 For a plain-language buyer and seller walkthrough, read
-`docs/commerce-agent-end-to-end-agentic-commerce-flow.md`. It explains what a
-buyer does once, what a seller does once in Grantex, and how a normal agentic
-commerce transaction should work end to end.
+`docs/oacp-end-user-flow.md`. It explains what a buyer does, what a seller does
+in AgenticOrg, and how Grantex-issued artifacts support non-binding commerce
+answers.
 
 ## Current Posture
 
@@ -39,7 +39,7 @@ commerce transaction should work end to end.
 | C6X1-C6X3 OACP cache foundation | Verifier/runtime planning, fail-closed cache evaluator, repository port, and in-memory adapter for non-binding preview/prepare behavior. |
 | C6X4 durable OACP cache | SQL-backed durable cache records scoped by buyer agent, seller agent, tenant, and merchant with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, RLS, and tenant-safe indexes. |
 | C6X5 cache maintenance planner | Deterministic local planner that classifies durable cache records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. No scheduler and no side effects. |
-| C6Z runtime vertical | Implemented, but production closure is blocked by Shopify token `401 Unauthorized` and Grantex `tenant_not_provisioned` for the configured AgenticOrg token. |
+| C6Z runtime vertical | Implemented in this branch: onboarding, encrypted Shopify connector setup, read-only sync, Grantex authority handoff, 11-family artifact cache, buyer answer, bridges, and Plural/Pine capability metadata. Production closure remains blocked by Shopify token `401 Unauthorized`/credential availability and Grantex tenant-token mapping/`tenant_not_provisioned` until the vertical is rerun with valid external credentials. |
 | Payment execution | Blocked. AgenticOrg may verify provider-owned mandate capability only through separately approved verifier flows. |
 | Live checkout/payments/Plural | Blocked. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
@@ -113,14 +113,15 @@ For merchants, the intended product experience should be simple:
 1. The merchant starts in AgenticOrg Seller Commerce Agent.
 2. The merchant connects an existing store, catalog, ERP, inventory, OMS,
    payment provider, or support system through approved connector custody.
-3. Grantex validates public-safe facts, source/freshness, policy, and evidence
-   references into OACP artifacts.
+3. AgenticOrg sends redacted connector evidence to Grantex, which validates
+   public-safe facts, source/freshness, policy, and evidence references into
+   OACP artifacts.
 4. The merchant previews exactly what an AI agent can see.
 5. The merchant chooses which non-executing actions agents may request, such as
    browse, compare, product explanation, or support handoff. Checkout, order,
    payment, mandate, refund, return, shipment, and inventory hold execution
    require a separate future rollout and are not enabled by C6Z.
-6. Grantex runs validation scans and review gates.
+6. Grantex runs authority validation, artifact issuance, validation scans, and review gates.
 7. AgenticOrg agents use valid OACP artifacts, approved authority refresh, and
    approved provider/connector verifier flows.
 8. Live discovery or checkout is enabled only after a separate approved rollout.
@@ -159,12 +160,13 @@ tracked PRD gap.
 
 | Surface | Intended launch model | Current readiness posture |
 | --- | --- | --- |
-| ChatGPT | Custom app/remote MCP backed by OACP artifacts and authority refresh. | Planned; must respect ChatGPT app approval, action controls, and current write-action limits. |
-| Claude | Remote MCP connector backed by OACP artifacts and authority refresh. | Planned; must include auth, scopes, and smoke evidence. |
-| Gemini | AgenticOrg-hosted Gemini API/function-calling wrapper or approved future native channel. | Planned; native consumer Gemini launch support must not be claimed until available and approved. |
-| WhatsApp | WhatsApp Business Platform bot/webhook adapter. | Planned; requires WABA, phone number, templates, opt-out, webhook, and consent-link handling. |
-| Telegram | Telegram Bot API webhook adapter. | Planned; requires bot token, webhook secret validation, chat identity mapping, and consent-link handling. |
-| Web/mobile | AgenticOrg-hosted buyer-agent session or embedded merchant widget. | Best first controllable channel after Grantex approval. |
+| ChatGPT | MCP seller tools backed by cached OACP artifacts. | MCP tools exist; marketplace/app approval is not claimed. |
+| Claude | MCP seller tools backed by cached OACP artifacts. | MCP tools exist; client approval is not claimed. |
+| Gemini | AgenticOrg OpenAPI/function bridge. | Runtime route/schema exists; native channel approval is not claimed. |
+| Perplexity/OpenAI Actions-style clients | AgenticOrg OpenAPI/function bridge. | Runtime route/schema exists; external marketplace approval is not claimed. |
+| WhatsApp | WhatsApp Business Platform webhook adapter. | Route and config checklist exist; live sending is blocked without credentials. |
+| Telegram | Telegram Bot API webhook adapter. | Route and config checklist exist; live sending is blocked without credentials. |
+| Web/mobile | AgenticOrg-hosted buyer-agent session or embedded merchant widget. | Runtime route exists. |
 
 Every channel must create or resume a buyer-agent session, use OACP artifacts or
 authority refresh, show clear source/freshness and consent/handoff copy, and
@@ -193,11 +195,10 @@ evidence exist.
 ## Pending Gaps Before Real Merchant Launch
 
 AgenticOrg can demo the buyer-agent journey, but real merchant launch depends on
-Grantex closing these gaps first:
+the cross-repo OACP runtime closing these gaps:
 
-- Self-serve merchant onboarding and approval workflow.
-- Existing-system connectors for catalog, inventory, orders, fulfillment,
-  payment status, and support.
+- Merchant approval workflow and external evidence recapture.
+- Existing-system connectors beyond Shopify read-only catalog evidence.
 - Hardened large catalog import jobs.
 - Fresh inventory, stock holds, and delivery/pickup promise handling.
 - Production order, fulfillment, shipment, cancellation, and return status APIs.

@@ -1,7 +1,7 @@
 # Commerce Sales Agent Developer Guide
 
 This guide explains how to run, inspect, and extend the AgenticOrg Commerce
-Sales Agent without weakening the Grantex-only commerce boundary.
+Sales Agent without weakening the OACP runtime boundary.
 
 ## Quick Rules
 
@@ -9,15 +9,20 @@ Sales Agent without weakening the Grantex-only commerce boundary.
   development.
 - Use `--mode=real-staging` only with explicit approval and an approved Grantex
   staging or exact temporary smoke URL.
-- Use only `grantex_commerce:*` commerce tools.
-- Do not call Stripe, Plural, Pine, or provider credential paths for commerce.
+- AgenticOrg may own Seller Commerce Agent onboarding, Shopify Admin GraphQL
+  read-only sync, OACP artifact cache consumption, buyer sessions, bridge
+  adapters, and provider-owned mandate capability verification.
+- Use Grantex for trust, policy, and canonical OACP artifact authority. Do not
+  make Grantex a toll booth for valid cached non-binding buyer/seller answers.
+- Do not call Stripe, Plural, Pine, or provider payment execution paths for
+  commerce. Provider-owned capability verification is allowed only through the
+  non-executing verifier and must store redacted evidence refs only.
 - Treat `grantex_commerce:buyer_discovery_preview` as read-only sandbox preview
   data. It is not public discovery, production approval, checkout/payment,
   fulfillment, returns, refunds, or live provider access.
-- Use `core.commerce.buyer_session.start_buyer_discovery_session(...)` for
-  buyer-facing discovery. It returns the channel-neutral C6I response contract
-  for ChatGPT, Claude, Gemini, WhatsApp, Telegram, web chat, and future channel
-  wrappers.
+- Use `api/v1/commerce_runtime.py` bridge endpoints for buyer-facing OACP
+  runtime questions. Web, MCP, OpenAPI/function, A2A, WhatsApp, and Telegram
+  adapters must call the same cache-backed answer path.
 - Use the OACP cache helpers only for public-safe, non-binding preview,
   prepared-only handoff, or maintenance planning. Cache records and maintenance
   plans must keep `allowed_to_execute=false`.
@@ -81,7 +86,7 @@ network work.
 | HTTP localhost or non-HTTPS real-staging URL | Refused before auth/network. |
 | Fixture path outside `.tmp/` | Refused. |
 | Fake connector/provider path | Refused by regression tests and runtime guardrails. |
-| Direct provider imports/calls in commerce code | Blocked by static regression. |
+| Provider payment/order/mandate execution imports/calls in commerce code | Blocked by static regression. |
 | OACP cache record with missing scope, stale freshness, revoked or ambiguous revocation, private/raw refs, executable flags, or false non-enablement flags | Refused or quarantined by cache evaluation/maintenance planning. |
 | Buyer discovery asks for checkout/payment/live provider/fulfillment/refund work | Refused by the C6I buyer discovery session wrapper before any non-read-only path. |
 | Buyer discovery asks for unrelated unsupported work | Refused by the C6I buyer discovery session wrapper. |
@@ -126,7 +131,7 @@ work.
 ## Hosted Smoke
 
 C3 hosted smoke is API-only. It verifies liveness, health, MCP tools, A2A agent
-card, A2A agent listing, Grantex-only commerce tools, refusal checks, and cleanup
+card, A2A agent listing, commerce runtime tools, refusal checks, and cleanup
 of temporary resources. It does not certify the full UI/worker/beat staging shape
 and it does not approve production discovery or live payments.
 
@@ -141,12 +146,11 @@ Public MCP/A2A commerce discovery is fail-closed behind the non-secret setting
 | Value | Result |
 | --- | --- |
 | absent, empty, invalid, or any non-true value | `/api/v1/mcp/tools`, `/api/v1/a2a/.well-known/agent.json`, and `/api/v1/a2a/agents` hide `commerce_sales_agent` and `grantex_commerce:*` metadata. |
-| `true`, `1`, `yes`, `on`, or `enabled` | Local/test or explicitly approved environments may expose existing Grantex-only commerce metadata. |
+| `true`, `1`, `yes`, `on`, or `enabled` | Local/test or explicitly approved environments may expose existing gated commerce metadata. |
 
 This gate does not remove Commerce Sales Agent code, demos, evals, or Grantex
 connector behavior. It only prevents public discovery from implying production
-commerce readiness before Grantex read-only production Commerce V1 discovery is
-approved.
+commerce readiness before the runtime and authority evidence is approved.
 
 ## OACP Artifact Cache Development
 
@@ -186,10 +190,11 @@ When adding commerce behavior:
 2. Add tests for refusal and redaction behavior.
 3. Update `tests/regression/test_commerce_sales_agent_no_provider_calls.py` if
    new commerce files are added.
-4. Keep all payment-affecting work on Grantex tools.
+4. Keep all payment-affecting work out of OACP runtime artifacts unless a
+   separate execution controller is approved.
 5. Update evidence docs only with scrubbed, non-secret summaries.
-6. For buyer discovery, consume only Grantex C6G read-only preview payloads and
-   do not expose the Grantex operator handoff request or withdrawal endpoints.
+6. For buyer discovery, consume only cached OACP artifacts or read-only preview
+   payloads and do not expose operator handoff or withdrawal endpoints.
 7. For OACP cache behavior, update the C6X report docs and preserve the
    no-publication, no-certification, no-production-readiness, and no-execution
    boundaries.
@@ -201,19 +206,35 @@ by reverting the buyer session wrapper usage. No production config, public
 discovery setting, allowlist, provider credential, checkout/payment state,
 fulfillment state, refund state, or merchant private API integration is changed.
 
-## Future Commerce Alias Requirements
+## Commerce Runtime Requirements
 
-Do not add new AgenticOrg commerce aliases until the corresponding Grantex
-runtime API, policy gate, audit event, and tests exist. Planned future aliases
-must remain Grantex-only:
+The C6Z runtime closure adds these AgenticOrg-owned paths:
 
-| Future area | AgenticOrg behavior before Grantex ships it | Required behavior after Grantex ships it |
+| Area | Runtime surface | Boundary |
 | --- | --- | --- |
-| Order status | Refuse or explain that order status is unavailable. | Read order status through Grantex only. |
-| Fulfillment and shipment | Refuse delivery promises unless Grantex provides verified data. | Read fulfillment, tracking, pickup, and delivery fields through Grantex only. |
-| Returns and refunds | Refuse refund execution and route to merchant support/manual handoff. | Request/read return or refund status through Grantex only, with policy and audit. |
-| Offers, discounts, EMI, rewards | Do not invent promotions or affordability. | Show only Grantex-provided offer metadata and eligibility. |
-| UCP/ACP/schema.org/AP2 readiness | Do not claim compliance or certification. | Display only Grantex-published capability and evidence states. |
+| Seller onboarding | `POST /api/v1/commerce/runtime/seller-agents/onboarding-packets` | Tenant/merchant/seller-agent scoped, non-executing. |
+| Shopify connector credentials | `POST /api/v1/commerce/runtime/seller-agents/connectors/shopify/credentials` | Tenant-aware encrypted `ConnectorConfig`; response redacts values. |
+| Shopify sync | `POST /api/v1/commerce/runtime/seller-agents/shopify/sync` | Admin GraphQL reads only; stores normalized public-safe snapshots. |
+| Grantex authority | `POST /api/v1/commerce/runtime/authority/grantex/request` | Sends redacted evidence for artifact issuance. |
+| Artifact cache | `POST /api/v1/commerce/runtime/artifacts/cache` | Validates artifacts before storing cache records. |
+| Buyer answer | `POST /api/v1/commerce/runtime/buyer-sessions/ask` | Answers from cache with source/freshness labels. |
+| Bridge adapters | `/bridges/web`, `/bridges/openapi`, `/bridges/a2a`, `/bridges/whatsapp`, `/bridges/telegram` | One common non-executing bridge contract. |
+| Plural/Pine capability | `POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify` | Capability metadata only; no mandate or payment execution. |
+
+## Historical Commerce Alias Requirements
+
+The aliases below describe older Grantex Commerce payment-control pilot
+surfaces. They are not the OACP runtime artifact path. Do not use them to claim
+checkout, payment, order, mandate, refund, return, shipment, live-provider, or
+public discovery readiness.
+
+| Future area | AgenticOrg behavior before approved execution support exists | Required behavior after approved support exists |
+| --- | --- | --- |
+| Order status | Refuse or explain that order status is unavailable. | Future merchant/provider confirmed status; not enabled by OACP runtime artifacts. |
+| Fulfillment and shipment | Refuse delivery promises. | Future merchant/carrier confirmed status; not enabled by OACP runtime artifacts. |
+| Returns and refunds | Refuse refund execution and route to merchant support/manual handoff. | Future merchant/provider workflow; not enabled by OACP runtime artifacts. |
+| Offers, discounts, EMI, rewards | Do not invent promotions or affordability. | Show only sourced metadata when a future approved artifact or connector supports it. |
+| UCP/ACP/schema.org/AP2 readiness | Do not claim compliance or certification. | Display compatibility-adapter metadata only with no certification or standardization claim. |
 
 See `docs/commerce-agent-agentic-commerce-implementation-prd.md` for the full
 gap register and fast-track plan.
@@ -223,7 +244,7 @@ gap register and fast-track plan.
 Buyer channels such as ChatGPT, Claude, Gemini, WhatsApp, Telegram, web/mobile,
 and future agent marketplaces must be implemented as thin AgenticOrg channel
 adapters. They may translate message formats and session identity, but they must
-not implement commerce execution outside Grantex.
+not implement commerce execution inside the bridge adapter.
 
 Each channel adapter must define:
 
@@ -232,7 +253,7 @@ Each channel adapter must define:
 - buyer session creation and resume behavior;
 - message, attachment, locale, currency, and identity normalization;
 - which actions are read-only, consent-required, checkout-capable, or blocked;
-- Grantex-only tool mapping;
+- OACP artifact and bridge mapping;
 - consent and checkout handoff copy;
 - redacted evidence fields;
 - rate-limit, retry, and human escalation behavior;

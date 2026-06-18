@@ -18,6 +18,17 @@ This document is planning and documentation only. It does not deploy, change
 production configuration, enable public commerce discovery, approve a merchant,
 enable checkout/payment creation, enable live payments, or enable live Plural.
 
+## Current OACP Runtime Closure Boundary
+
+The launch-closure branch implements a non-executing OACP runtime vertical:
+Seller Commerce Agent packet creation, merchant connector credential setup,
+read-only Shopify Admin GraphQL sync, Grantex authority handoff, 11-family OACP
+artifact cache consumption, buyer-safe answers, bridge adapters, and
+provider-owned capability metadata checks. It does not enable checkout,
+payment, order, mandate, refund, return, shipment, inventory hold, public
+discovery publication, live provider execution, or merchant-private API
+mutation.
+
 ## 1. Product Boundary
 
 ```mermaid
@@ -135,6 +146,15 @@ Regular transaction:
 | OACP cache foundation | C6X1-C6X5 add cache verifier/runtime planning, fail-closed cache evaluation, repository boundary, durable SQL-backed cache records, and local maintenance planning. | Internal only; planner/cache do not call Grantex live, providers, merchant private APIs, checkout, payments, schedulers, or queues. |
 
 ### 2.1 Current OACP Status Through C6X5 And C6Z Runtime Extension
+
+Through C6X5, AgenticOrg had an internal cache foundation only: verifier and
+runtime planning, fail-closed cache evaluation, repository boundaries,
+durable SQL-backed cache records, and deterministic maintenance planning. C6X5
+does not refresh, evict, purge, schedule, call Grantex live, call providers,
+call merchant private APIs, create checkout/payment/order/mandate objects, or
+claim public discovery readiness.
+
+### 2.2 Current OACP Status Through C6Z
 
 AgenticOrg currently has local consumer and runtime behavior for:
 

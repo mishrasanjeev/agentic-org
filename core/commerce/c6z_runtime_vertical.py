@@ -58,13 +58,22 @@ C6Z_ARTIFACT_FAMILIES: tuple[str, ...] = (
     "offer_price_snapshot",
     "inventory_snapshot",
     "policy_scope",
+    "public_discovery_state",
+    "mandate_capability",
+    "protocol_adapter",
     "authority_request_status",
 )
 C6Z_ONBOARDING_STATUSES: tuple[str, ...] = (
+    "draft",
     "received",
-    "pending_sandbox_review",
+    "sync_ready",
+    "synced",
+    "authority_requested",
+    "artifacts_cached",
+    "cache_refresh_needed",
+    "blocked_missing_credentials",
+    "blocked_grantex_unavailable",
     "rejected",
-    "artifact_issuance_ready",
 )
 C6Z_CAPABILITY_STATUSES: tuple[str, ...] = (
     "available",
@@ -156,6 +165,19 @@ class C6ZBuyerAnswer:
     freshness_label: str
     refusal_reason: str | None
     matched_products: tuple[Mapping[str, Any], ...]
+    allowed_to_execute: bool = False
+    non_authoritative_for_transaction: bool = True
+
+
+@dataclass(frozen=True)
+class C6ZBridgeContractResponse:
+    channel: str
+    answer: str
+    source_label: str
+    freshness_label: str
+    artifact_refs: tuple[str, ...]
+    refusal_reason: str | None
+    suggested_next_safe_action: str
     allowed_to_execute: bool = False
     non_authoritative_for_transaction: bool = True
 
@@ -785,6 +807,33 @@ def answer_product_question_from_cache(
         freshness_label=_freshness_label(usable_records, now_iso),
         refusal_reason=None,
         matched_products=tuple(matches[:5]),
+    )
+
+
+def build_bridge_contract_response(
+    *,
+    channel: str,
+    answer: C6ZBuyerAnswer,
+    cache_records: Sequence[OacpPersistentArtifactCacheRecord],
+) -> C6ZBridgeContractResponse:
+    clean_channel = _require_text("channel", channel)
+    if answer.status == "answered":
+        suggested_next = "continue_buyer_safe_product_questions"
+    elif answer.status == "refused":
+        suggested_next = "ask_non_binding_product_question_or_request_human_confirmation"
+    else:
+        suggested_next = "refresh_shopify_sync_and_grantex_artifacts"
+    artifact_refs = tuple(sorted({record.artifact_id for record in cache_records if record.artifact_id}))
+    return C6ZBridgeContractResponse(
+        channel=clean_channel,
+        answer=answer.answer,
+        source_label=answer.source_label,
+        freshness_label=answer.freshness_label,
+        artifact_refs=artifact_refs,
+        refusal_reason=answer.refusal_reason,
+        suggested_next_safe_action=suggested_next,
+        allowed_to_execute=False,
+        non_authoritative_for_transaction=True,
     )
 
 
