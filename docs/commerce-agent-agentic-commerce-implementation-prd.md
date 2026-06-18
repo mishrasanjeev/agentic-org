@@ -145,7 +145,16 @@ Regular transaction:
 | OACP consumer foundation | C6W3-C6Z helper/tests/docs and runtime paths consume artifact schemas, adapter previews, commitment boundaries, prepared envelopes, response reconciliations, eligibility packets, dry-run verifier results, C6Z authority responses, cached seller facts, buyer answer sources, MCP bridge facts, and Plural/Pine capability metadata. | Internal only; the 2026-06-18 production vertical is blocked by Shopify token and Grantex tenant-token provisioning issues; no execution, public protocol publication, certification, or production readiness. |
 | OACP cache foundation | C6X1-C6X5 add cache verifier/runtime planning, fail-closed cache evaluation, repository boundary, durable SQL-backed cache records, and local maintenance planning. | Internal only; planner/cache do not call Grantex live, providers, merchant private APIs, checkout, payments, schedulers, or queues. |
 
-### 2.1 Current OACP Status Through C6Z
+### 2.1 Current OACP Status Through C6X5
+
+Through C6X5, AgenticOrg had an internal cache foundation only: verifier and
+runtime planning, fail-closed cache evaluation, repository boundaries,
+durable SQL-backed cache records, and deterministic maintenance planning. C6X5
+does not refresh, evict, purge, schedule, call Grantex live, call providers,
+call merchant private APIs, create checkout/payment/order/mandate objects, or
+claim public discovery readiness.
+
+### 2.2 Current OACP Status Through C6Z
 
 AgenticOrg currently has local consumer and runtime behavior for:
 
