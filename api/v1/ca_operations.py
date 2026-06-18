@@ -33,6 +33,46 @@ class EwayBillBulkRequest(BaseModel):
     submit_to_gstn: bool = False
 
 
+def _safe_ca_row_error_message(value: Any) -> str:
+    if not isinstance(value, str):
+        return "Row failed validation."
+
+    allowed_prefixes = (
+        "Missing required e-way bill fields:",
+        "Row is missing or has invalid required fields:",
+    )
+    allowed_messages = {
+        "E-way bill row failed validation.",
+        "One or more numeric e-way bill fields are invalid.",
+        "Row failed validation.",
+        "Row has an invalid numeric amount.",
+        "rows must be a list of objects",
+    }
+    if value in allowed_messages or value.startswith(allowed_prefixes):
+        return value
+    return "Row failed validation."
+
+
+def _sanitize_ca_error_item(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return {"error": "Row failed validation.", "error_code": "row_validation_failed"}
+
+    sanitized = dict(item)
+    if "error" in sanitized:
+        sanitized["error"] = _safe_ca_row_error_message(sanitized["error"])
+        sanitized.setdefault("error_code", "row_validation_failed")
+    return sanitized
+
+
+def _sanitize_ca_operation_result(result: dict[str, Any]) -> dict[str, Any]:
+    sanitized = dict(result)
+    for bucket in ("errors", "failed", "row_errors"):
+        entries = sanitized.get(bucket)
+        if isinstance(entries, list):
+            sanitized[bucket] = [_sanitize_ca_error_item(item) for item in entries]
+    return sanitized
+
+
 @router.post(
     "/connectors/traces/reconcile",
     dependencies=[require_tenant_admin],
@@ -56,11 +96,12 @@ async def reconcile_traces(
         raise HTTPException(422, "traces_statement must contain at least one row")
 
     connector = TracesConnector({})
-    return await connector.reconcile_tds_with_traces(
+    result = await connector.reconcile_tds_with_traces(
         expected_deductions=body.expected_deductions,
         traces_statement=body.traces_statement,
         tolerance_rupees=body.tolerance_rupees,
     )
+    return _sanitize_ca_operation_result(result)
 
 
 @router.post(
@@ -101,11 +142,12 @@ async def bulk_generate_eway_bills(
         )
 
     connector = GstnConnector({})
-    return await connector.bulk_generate_eway_bills(
+    result = await connector.bulk_generate_eway_bills(
         invoices=body.invoices,
         source="bulk_upload",
         submit=False,
     )
+    return _sanitize_ca_operation_result(result)
 
 
 @router.get("/ca-capabilities/status")
