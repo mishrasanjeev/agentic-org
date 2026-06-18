@@ -1076,6 +1076,7 @@ async def _resolve_shopify_credentials_for_packet(
             raise HTTPException(status_code=424, detail="Shopify connector credential vault is empty")
         try:
             credential_data = json.loads(decrypt_for_tenant(enc))
+        # enterprise-gate: broad-except-ok reason=shopify-credential-decrypt-failure-fails-closed-redacted
         except Exception as exc:
             raise HTTPException(
                 status_code=424,
