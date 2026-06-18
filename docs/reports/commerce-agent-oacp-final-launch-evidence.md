@@ -42,6 +42,15 @@ Blocking evidence:
 - Direct status-only Shopify GraphQL probe with the mounted AgenticOrg C6Z Shopify token also returned `401`.
 - Grantex C6Z authority called with AgenticOrg's configured internal token returned `422 tenant_not_provisioned`.
 
+Follow-up implementation in this PR adds the AgenticOrg-owned merchant connector path that was missing from the original closure run:
+
+- `POST /commerce/runtime/seller-agents/connectors/shopify/credentials` stores a merchant-scoped Shopify credential in tenant-aware encrypted `ConnectorConfig` storage.
+- The endpoint accepts either a direct Admin API token or Shopify OAuth code exchange material, validates read-only product access, and returns only redacted status.
+- Shopify sync now prefers the encrypted merchant connector config before falling back to legacy process environment variables.
+- The Commerce Runtime UI exposes the connector setup and status path without rendering credential values.
+
+This removes the single global Shopify token dependency after merge/deploy, but does not by itself make the production vertical complete. The merchant credential still has to be valid in Shopify, and Grantex tenant-token provisioning must still be fixed.
+
 Because Shopify sync did not produce connector evidence and the configured Grantex token is not mapped, the run did not complete:
 
 - Shopify product count and variant count from a real sync: blocked.

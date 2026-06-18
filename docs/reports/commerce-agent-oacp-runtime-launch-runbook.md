@@ -18,12 +18,15 @@ Last updated: 2026-06-18.
 2. Confirm Grantex health and deployed SHA.
 3. Confirm public discovery remains disabled.
 4. Create or reuse a Seller Commerce Agent onboarding packet for the approved Shopify pilot merchant.
-5. Run Shopify Admin GraphQL read-only sync.
-6. Send the AgenticOrg authority request to Grantex.
-7. Cache Grantex artifacts in AgenticOrg.
-8. Ask a buyer product question from cached artifacts and record source/freshness labels.
-9. Smoke MCP seller facts against the cached products.
-10. Run Plural/Pine capability metadata verification only.
+5. Configure or verify the merchant Shopify connector through AgenticOrg:
+   preferred route `POST /commerce/runtime/seller-agents/connectors/shopify/credentials`;
+   storage target tenant-aware encrypted `ConnectorConfig`; response values redacted.
+6. Run Shopify Admin GraphQL read-only sync. It must prefer the merchant connector config and only fall back to legacy environment credentials when no merchant config exists.
+7. Send the AgenticOrg authority request to Grantex.
+8. Cache Grantex artifacts in AgenticOrg.
+9. Ask a buyer product question from cached artifacts and record source/freshness labels.
+10. Smoke MCP seller facts against the cached products.
+11. Run Plural/Pine capability metadata verification only.
 
 ## Hard Stops
 
@@ -41,3 +44,5 @@ The 2026-06-18 production run is blocked:
 - Grantex C6Z authority called with AgenticOrg's configured internal token returns `422 tenant_not_provisioned`.
 
 Do not report internal runtime demo, closed merchant pilot, or public OACP preview as complete until both blockers are fixed and the full vertical is re-run.
+
+Follow-up implementation in this PR adds the encrypted merchant Shopify connector setup route and Commerce Runtime UI controls. After merge/deploy, the Shopify blocker should be handled through that AgenticOrg path instead of a single global Shopify token. Grantex tenant-token provisioning remains separate.

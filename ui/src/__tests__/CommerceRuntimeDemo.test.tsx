@@ -4,6 +4,8 @@ import CommerceRuntimeDemo from "../pages/CommerceRuntimeDemo";
 
 const apiMock = vi.hoisted(() => ({
   createOnboardingPacket: vi.fn(),
+  upsertShopifyCredentials: vi.fn(),
+  getShopifyStatus: vi.fn(),
   syncShopify: vi.fn(),
   requestGrantexAuthority: vi.fn(),
   cacheArtifacts: vi.fn(),
@@ -18,6 +20,30 @@ vi.mock("../lib/api", () => ({
 }));
 
 describe("CommerceRuntimeDemo", () => {
+  it("stores Shopify connector credentials through the runtime API without rendering secrets", async () => {
+    apiMock.upsertShopifyCredentials.mockResolvedValueOnce({
+      data: {
+        status: "shopify_connector_configured",
+        shop_domain: "mgx0n6-22.myshopify.com",
+        credential_values_redacted: true,
+      },
+    });
+
+    render(<CommerceRuntimeDemo />);
+    fireEvent.change(screen.getByLabelText("Shopify Admin API token"), {
+      target: { value: "fixture-admin-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(apiMock.upsertShopifyCredentials).toHaveBeenCalledWith(expect.objectContaining({
+      admin_access_token: "fixture-admin-token",
+      merchant_id: "merchant_demo",
+      shop_domain: "mgx0n6-22.myshopify.com",
+    })));
+    await waitFor(() => expect(screen.getAllByText("shopify_connector_configured").length).toBeGreaterThan(0));
+    expect(screen.queryByText("fixture-admin-token")).not.toBeInTheDocument();
+  });
+
   it("creates an onboarding packet and answers from cached artifact labels", async () => {
     apiMock.createOnboardingPacket.mockResolvedValueOnce({
       data: { packet: { packet_id: "packet_1" } },

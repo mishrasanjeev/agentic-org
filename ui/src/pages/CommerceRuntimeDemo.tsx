@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bot, Box, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { Bot, Box, KeyRound, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { commerceRuntimeApi, extractApiError } from "../lib/api";
 
 type RuntimeLog = {
@@ -14,6 +14,13 @@ export default function CommerceRuntimeDemo() {
   const [buyerAgentId, setBuyerAgentId] = useState("buyer_agent_demo");
   const [displayName, setDisplayName] = useState("Demo Shopify Store");
   const [categories, setCategories] = useState("apparel, accessories");
+  const [shopDomain, setShopDomain] = useState("mgx0n6-22.myshopify.com");
+  const [shopifyToken, setShopifyToken] = useState("");
+  const [shopifyOauthCode, setShopifyOauthCode] = useState("");
+  const [shopifyClientId, setShopifyClientId] = useState("");
+  const [shopifyClientSecret, setShopifyClientSecret] = useState("");
+  const [shopifyRedirectUri, setShopifyRedirectUri] = useState("https://app.agenticorg.ai/callback");
+  const [shopifyStatus, setShopifyStatus] = useState<any>(null);
   const [packetId, setPacketId] = useState("");
   const [evidenceId, setEvidenceId] = useState("");
   const [buyerQuestion, setBuyerQuestion] = useState("Show me available products with prices");
@@ -54,12 +61,57 @@ export default function CommerceRuntimeDemo() {
         },
         artifact_cache_scope: { merchant_id: merchantId, seller_agent_id: sellerAgentId },
         source_freshness_policy: { max_age_seconds: 900 },
-        connector_metadata: { credential_ref: "env", mode: "read_only" },
+        connector_metadata: { credential_ref: "tenant_connector_config", mode: "read_only", shop_domain: shopDomain },
       });
       setPacketId(data.packet.packet_id);
       pushLog("Onboarding packet", data.packet.packet_id, "ok");
     } catch (error) {
       pushLog("Onboarding blocked", extractApiError(error), "warn");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveShopifyConnector() {
+    setBusy("credentials");
+    try {
+      const payload: any = {
+        merchant_id: merchantId,
+        shop_domain: shopDomain,
+        api_version: "2026-04",
+        validate_read: true,
+      };
+      if (shopifyToken.trim()) {
+        payload.admin_access_token = shopifyToken.trim();
+      } else {
+        payload.oauth_code = shopifyOauthCode.trim();
+        payload.client_id = shopifyClientId.trim();
+        payload.client_secret = shopifyClientSecret.trim();
+        payload.redirect_uri = shopifyRedirectUri.trim();
+      }
+      const { data } = await commerceRuntimeApi.upsertShopifyCredentials(payload);
+      setShopifyToken("");
+      setShopifyOauthCode("");
+      setShopifyClientSecret("");
+      setShopifyStatus(data);
+      pushLog("Shopify connector", data.status, "ok");
+    } catch (error) {
+      setShopifyToken("");
+      setShopifyClientSecret("");
+      pushLog("Shopify connector blocked", extractApiError(error), "warn");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function loadShopifyStatus() {
+    setBusy("credential-status");
+    try {
+      const { data } = await commerceRuntimeApi.getShopifyStatus({ merchant_id: merchantId });
+      setShopifyStatus(data);
+      pushLog("Shopify connector status", data.health_status || data.status, data.status === "not_configured" ? "warn" : "ok");
+    } catch (error) {
+      pushLog("Shopify status blocked", extractApiError(error), "warn");
     } finally {
       setBusy(null);
     }
@@ -170,6 +222,37 @@ export default function CommerceRuntimeDemo() {
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={buyerAgentId} onChange={(event) => setBuyerAgentId(event.target.value)} aria-label="Buyer agent ID" />
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={displayName} onChange={(event) => setDisplayName(event.target.value)} aria-label="Merchant display name" />
               <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={categories} onChange={(event) => setCategories(event.target.value)} aria-label="Commerce categories" />
+            </div>
+            <div className="mt-4 grid gap-3 border-t border-slate-800 pt-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <KeyRound className="h-4 w-4" />
+                Shopify Connector
+              </div>
+              <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={shopDomain} onChange={(event) => setShopDomain(event.target.value)} aria-label="Shopify shop domain" />
+              <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="password" value={shopifyToken} onChange={(event) => setShopifyToken(event.target.value)} aria-label="Shopify Admin API token" autoComplete="off" />
+              <div className="grid gap-2 md:grid-cols-2">
+                <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={shopifyOauthCode} onChange={(event) => setShopifyOauthCode(event.target.value)} aria-label="Shopify OAuth code" autoComplete="off" />
+                <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={shopifyClientId} onChange={(event) => setShopifyClientId(event.target.value)} aria-label="Shopify client ID" autoComplete="off" />
+                <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="password" value={shopifyClientSecret} onChange={(event) => setShopifyClientSecret(event.target.value)} aria-label="Shopify client secret" autoComplete="off" />
+                <input className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={shopifyRedirectUri} onChange={(event) => setShopifyRedirectUri(event.target.value)} aria-label="Shopify redirect URI" autoComplete="off" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50" onClick={saveShopifyConnector} disabled={busy !== null}>
+                  <KeyRound className="h-4 w-4" />
+                  Save
+                </button>
+                <button className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={loadShopifyStatus} disabled={busy !== null}>
+                  <ShieldCheck className="h-4 w-4" />
+                  Status
+                </button>
+              </div>
+              {shopifyStatus && (
+                <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+                  <div>{shopifyStatus.status}</div>
+                  <div>{shopifyStatus.shop_domain}</div>
+                  <div>{shopifyStatus.credential_values_redacted ? "credentials redacted" : ""}</div>
+                </div>
+              )}
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button className="inline-flex items-center justify-center gap-2 rounded-md bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50" onClick={createPacket} disabled={busy !== null}>

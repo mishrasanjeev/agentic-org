@@ -178,6 +178,80 @@ def test_onboarding_packet_is_read_only_and_rejects_secret_metadata() -> None:
         )
 
 
+def test_shopify_connector_config_name_is_deterministic_and_bounded() -> None:
+    name = commerce_runtime_api._shopify_connector_config_name("Merchant / Demo Store #1")
+
+    assert name == "commerce_shopify_merchant_demo_store_1"
+    assert len(name) <= 100
+
+
+@pytest.mark.asyncio
+async def test_shopify_credential_submission_requires_one_mode() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await commerce_runtime_api._resolve_submitted_shopify_credentials(
+            commerce_runtime_api.ShopifyConnectorCredentialRequest(
+                merchant_id="merchant_1",
+                shop_domain="demo.myshopify.com",
+                admin_access_token="token",
+                oauth_code="code",
+                client_id="client-id",
+                client_secret="client-secret",
+            )
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["error"] == "shopify_credential_mode_ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_shopify_sync_prefers_encrypted_tenant_connector_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResult:
+        def __init__(self, row):
+            self._row = row
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [self._row]
+
+    class FakeSession:
+        async def execute(self, _statement):
+            return FakeResult(
+                SimpleNamespace(
+                    connector_name="commerce_shopify_merchant_1",
+                    config={
+                        "merchant_id": "merchant_1",
+                        "shop_domain": "demo.myshopify.com",
+                        "api_version": "2026-04",
+                    },
+                    credentials_encrypted={"_encrypted": "encrypted-fixture"},
+                )
+            )
+
+    monkeypatch.setattr(
+        commerce_runtime_api,
+        "decrypt_for_tenant",
+        lambda _value: json.dumps(
+            {
+                "admin_access_token": "fixture-admin-token",
+                "shop_domain": "demo.myshopify.com",
+                "api_version": "2026-04",
+            }
+        ),
+    )
+
+    credentials, source = await commerce_runtime_api._resolve_shopify_credentials_for_packet(
+        session=FakeSession(),
+        tenant_id=commerce_runtime_api._tenant_uuid("11111111-1111-1111-1111-111111111111"),
+        packet=_packet(),
+    )
+
+    assert source == "tenant_connector_config"
+    assert credentials.shop_domain == "demo.myshopify.com"
+    assert credentials.admin_access_token == "fixture-admin-token"
+
+
 def test_shopify_evidence_normalizes_products_without_raw_payloads() -> None:
     evidence = build_shopify_connector_evidence(
         packet=_packet(),
