@@ -241,6 +241,22 @@ def test_read_only_connector_is_not_write_ready() -> None:
     assert hubspot["source_objects"][0]["source_object_id"] == "crm-list-7"
 
 
+def test_hubspot_private_app_without_persisted_scopes_is_read_ready() -> None:
+    configs = _base_configs()
+    configs[0].config.pop("granted_scopes")
+
+    hubspot = _contract_row(_contracts(configs), "hubspot")
+
+    assert hubspot["read_ready"] is True
+    assert hubspot["read_status"] == "ready"
+    assert hubspot["missing_read_scopes"] == []
+    assert hubspot["missing_write_scopes"] == ["automation"]
+    assert hubspot["write_status"] == "missing_scope"
+    assert hubspot["read_scope_evidence"] == [
+        "Healthy HubSpot connector state proves CRM read capability even without a persisted OAuth scope string."
+    ]
+
+
 def test_missing_write_scope_blocks_write_workflow_readiness() -> None:
     configs = _base_configs()
     configs[1].config["marketing_connector_contract"] = _contract(

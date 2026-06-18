@@ -39,7 +39,7 @@ answers.
 | C6X1-C6X3 OACP cache foundation | Verifier/runtime planning, fail-closed cache evaluator, repository port, and in-memory adapter for non-binding preview/prepare behavior. |
 | C6X4 durable OACP cache | SQL-backed durable cache records scoped by buyer agent, seller agent, tenant, and merchant with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, RLS, and tenant-safe indexes. |
 | C6X5 cache maintenance planner | Deterministic local planner that classifies durable cache records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. No scheduler and no side effects. |
-| C6Z runtime vertical | Implemented in this branch: onboarding, encrypted Shopify connector setup, read-only sync, Grantex authority handoff, 11-family artifact cache, buyer answer, bridges, and Plural/Pine capability metadata. Production proof still requires valid external credentials and Grantex tenant-token mapping. |
+| C6Z runtime vertical | Implemented in this branch: onboarding, encrypted Shopify connector setup, read-only sync, Grantex authority handoff, 11-family artifact cache, buyer answer, bridges, and Plural/Pine capability metadata. Production closure remains blocked by Shopify token `401 Unauthorized`/credential availability and Grantex tenant-token mapping/`tenant_not_provisioned` until the vertical is rerun with valid external credentials. |
 | Payment execution | Blocked. AgenticOrg may verify provider-owned mandate capability only through separately approved verifier flows. |
 | Live checkout/payments/Plural | Blocked. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
@@ -121,7 +121,7 @@ For merchants, the intended product experience should be simple:
    browse, compare, product explanation, or support handoff. Checkout, order,
    payment, mandate, refund, return, shipment, and inventory hold execution
    require a separate future rollout and are not enabled by C6Z.
-6. Grantex runs authority validation and artifact issuance.
+6. Grantex runs authority validation, artifact issuance, validation scans, and review gates.
 7. AgenticOrg agents use valid OACP artifacts, approved authority refresh, and
    approved provider/connector verifier flows.
 8. Live discovery or checkout is enabled only after a separate approved rollout.

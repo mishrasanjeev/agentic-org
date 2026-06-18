@@ -1,6 +1,6 @@
 # Commerce Agent OACP Final Launch Evidence
 
-Status: local internal runtime demo complete; production C6Z vertical blocked by external credentials/provisioning.
+Status: local internal runtime demo complete; production C6Z launch remains blocked by external Shopify credential and Grantex tenant-token provisioning.
 
 Evidence date: 2026-06-18.
 
@@ -133,7 +133,7 @@ This proves the Grantex issuer route works, but not the configured AgenticOrg-to
 
 ## Exact Launch Status
 
-- Internal runtime demo: complete locally in this branch; production external proof remains blocked until valid Shopify and Grantex mapped credentials are available.
+- Internal runtime demo: complete locally in this branch; blocked in production until valid Shopify and Grantex mapped credentials are available and the full vertical is rerun.
 - Closed merchant pilot: blocked.
 - Public OACP preview: blocked.
 

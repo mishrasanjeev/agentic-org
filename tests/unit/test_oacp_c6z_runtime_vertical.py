@@ -180,7 +180,6 @@ def test_onboarding_packet_is_read_only_and_rejects_secret_metadata() -> None:
             connector_metadata={"shopify_admin_access_token": "fixture-admin-access-secret"},
         )
 
-
 def test_launch_closure_contract_includes_required_statuses_and_artifact_families() -> None:
     assert set(C6Z_ONBOARDING_STATUSES) == {
         "draft",

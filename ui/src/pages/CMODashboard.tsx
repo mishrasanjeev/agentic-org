@@ -209,6 +209,7 @@ interface MarketingConnectorContractItem {
   granted_scopes: string[];
   missing_read_scopes: string[];
   missing_write_scopes: string[];
+  read_scope_evidence?: string[];
   auth_status: string;
   health_status: string;
   contract_state: ConnectorContractState | string;
@@ -1762,6 +1763,11 @@ export default function CMODashboard() {
                           <div className="mt-1 max-w-[220px] text-xs text-muted-foreground">
                             {row.read_capabilities.join(", ")}
                           </div>
+                          {row.read_scope_evidence && row.read_scope_evidence.length > 0 && (
+                            <div className="mt-1 max-w-[260px] text-xs text-emerald-700">
+                              {row.read_scope_evidence.join(" ")}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 pr-4">
                           <Badge variant={contractStatusVariant(row.write_status)}>

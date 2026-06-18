@@ -379,6 +379,44 @@ def _bootstrap() -> None:
 
     register_provider(
         ProviderSpec(
+            connector_name="hubspot",
+            display_name="HubSpot",
+            category="marketing",
+            auth_flow="oauth2_authorization_code",
+            scopes=(
+                "oauth",
+                "crm.objects.contacts.read",
+                "crm.objects.deals.read",
+                "crm.objects.companies.read",
+            ),
+            authorization_params={"optional_scope": "automation"},
+            authorize_url="https://app.hubspot.com/oauth/authorize",
+            token_url="https://api.hubapi.com/oauth/v1/token",
+            api_base_url="https://api.hubapi.com",
+            documentation_url=(
+                "https://developers.hubspot.com/docs/apps/legacy-apps/"
+                "authentication/oauth-quickstart-guide"
+            ),
+            user_fields=(
+                ProviderField(
+                    key="client_id",
+                    label="Client ID",
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                    help_text="HubSpot developer app Client ID.",
+                ),
+                ProviderField(
+                    key="client_secret",
+                    label="Client Secret",
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                    secret=True,
+                    help_text="HubSpot developer app Client Secret.",
+                ),
+            ),
+        )
+    )
+
+    register_provider(
+        ProviderSpec(
             connector_name="zoho_books",
             display_name="Zoho Books",
             category="finance",

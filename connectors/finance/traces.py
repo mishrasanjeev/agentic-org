@@ -16,6 +16,12 @@ from typing import Any
 from connectors.framework.base_connector import BaseConnector
 
 
+class RowValidationError(ValueError):
+    def __init__(self, public_message: str):
+        super().__init__(public_message)
+        self.public_message = public_message
+
+
 def _clean(value: Any) -> str:
     return str(value or "").strip()
 
@@ -47,7 +53,10 @@ def _first(row: dict[str, Any], *keys: str) -> Any:
 def _normalize_entry(row: dict[str, Any], index: int, source: str) -> dict[str, Any]:
     pan = _upper(_first(row, "deductee_pan", "pan", "vendor_pan", "party_pan"))
     section = _upper(_first(row, "section", "tds_section", "section_code")).replace("SECTION", "").strip()
-    amount = _decimal(_first(row, "tds_amount", "tds", "tax_deducted", "amount"))
+    try:
+        amount = _decimal(_first(row, "tds_amount", "tds", "tax_deducted", "amount"))
+    except ValueError as exc:
+        raise RowValidationError("Row has an invalid numeric amount.") from exc
     date_value = _clean(_first(row, "transaction_date", "payment_date", "deduction_date", "date"))
     challan = _upper(_first(row, "challan_serial", "challan_no", "challan_number", "csi_number"))
     bsr = _upper(_first(row, "bsr_code", "bank_bsr_code", "bsr"))
@@ -61,7 +70,8 @@ def _normalize_entry(row: dict[str, Any], index: int, source: str) -> dict[str, 
     if amount <= 0:
         missing.append("tds_amount")
     if missing:
-        raise ValueError(f"{source} row {index} missing/invalid: {', '.join(missing)}")
+        fields = ", ".join(missing)
+        raise RowValidationError(f"Row is missing or has invalid required fields: {fields}")
 
     return {
         "id": _clean(_first(row, "id", "reference", "invoice_number")) or f"{source}-{index}",
@@ -76,6 +86,12 @@ def _normalize_entry(row: dict[str, Any], index: int, source: str) -> dict[str, 
         "vendor_name": _clean(_first(row, "vendor_name", "deductee_name", "party_name")),
         "raw": row,
     }
+
+
+def _public_validation_error(exc: Exception) -> str:
+    if isinstance(exc, RowValidationError):
+        return exc.public_message
+    return "Row failed validation."
 
 
 def _entry_key(entry: dict[str, Any]) -> tuple[str, str, str, str, str]:
@@ -151,7 +167,11 @@ class TracesConnector(BaseConnector):
             try:
                 normalized.append(_normalize_entry(dict(row), idx, source))
             except (TypeError, ValueError) as exc:
-                row_errors.append({"source": source, "row_number": idx, "error": str(exc)})
+                row_errors.append({
+                    "source": source,
+                    "row_number": idx,
+                    "error": _public_validation_error(exc),
+                })
 
         return {
             "status": "valid" if not row_errors else "invalid",
@@ -176,13 +196,21 @@ class TracesConnector(BaseConnector):
         for idx, row in enumerate(expected_rows, start=1):
             try:
                 expected.append(_normalize_entry(dict(row), idx, "books"))
-            except ValueError as exc:
-                row_errors.append({"source": "books", "row_number": idx, "error": str(exc)})
+            except (TypeError, ValueError) as exc:
+                row_errors.append({
+                    "source": "books",
+                    "row_number": idx,
+                    "error": _public_validation_error(exc),
+                })
         for idx, row in enumerate(traces_rows, start=1):
             try:
                 traces.append(_normalize_entry(dict(row), idx, "traces"))
-            except ValueError as exc:
-                row_errors.append({"source": "traces", "row_number": idx, "error": str(exc)})
+            except (TypeError, ValueError) as exc:
+                row_errors.append({
+                    "source": "traces",
+                    "row_number": idx,
+                    "error": _public_validation_error(exc),
+                })
 
         unmatched_traces = set(range(len(traces)))
         matched: list[dict[str, Any]] = []

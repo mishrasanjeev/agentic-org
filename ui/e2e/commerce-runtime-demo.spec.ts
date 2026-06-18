@@ -8,6 +8,9 @@ const ARTIFACT_FAMILIES = [
   "offer_price_snapshot",
   "inventory_snapshot",
   "policy_scope",
+  "public_discovery_state",
+  "mandate_capability",
+  "protocol_adapter",
   "authority_request_status",
 ];
 
@@ -174,7 +177,7 @@ test.describe("C6Z commerce runtime demo", () => {
     await expect(page.getByText("Demo Product")).toBeVisible();
 
     await page.getByRole("button", { name: "Issue" }).click();
-    await expect(page.getByText("8 artifacts cached")).toBeVisible();
+    await expect(page.getByText("11 artifacts cached")).toBeVisible();
 
     await page.getByRole("button", { name: "Ask" }).click();
     await expect(page.getByText("Source: Shopify via Grantex artifact")).toBeVisible();
@@ -191,7 +194,7 @@ test.describe("C6Z commerce runtime demo", () => {
     expect(createCall?.body.requested_grantex_authority_scope.artifact_families).toEqual(
       ARTIFACT_FAMILIES,
     );
-    expect(createCall?.body.connector_metadata.credential_ref).toBe("env");
+    expect(createCall?.body.connector_metadata.credential_ref).toBe("tenant_connector_config");
 
     const cacheCall = calls.find((call) =>
       call.path.endsWith("/api/v1/commerce/runtime/artifacts/cache"),
