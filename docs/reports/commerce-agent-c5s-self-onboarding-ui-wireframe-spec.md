@@ -1,6 +1,6 @@
 # Commerce Agent C5S Self-Onboarding UI Wireframe Spec
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: local-only AgenticOrg UI wireframe/spec for future merchant
 self-onboarding dependency review
@@ -26,7 +26,7 @@ credentials, real merchant approval, or rollout approval.
 
 ## Local-Only UI Scope
 
-- Planning/spec only; this file is not runtime UI implementation.
+- Historical UI wireframe; the current runtime UI is implemented in ui/src/pages/CommerceRuntimeDemo.tsx.
 - Screens show redacted Grantex signals and AgenticOrg dependency state only.
 - The default AgenticOrg posture is gated/no-commerce.
 - No merchant is approved by this UI spec.
@@ -117,7 +117,7 @@ Fields:
 Wireframe notes:
 
 - Dashboard defaults to dependency-gated and missing-signal filters.
-- Rows expose view, validate local dependency, open review, and open audit only.
+- Rows expose view, validate local dependency, open review, and open audit-log only.
 - No row action enables public discovery.
 
 ### Grantex Intake Summary Panel

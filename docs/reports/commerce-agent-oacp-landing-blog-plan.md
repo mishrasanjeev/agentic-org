@@ -1,6 +1,6 @@
 # AgenticOrg OACP Landing Page And Blog Plan
 
-Status: internal planning only.
+Status: historical internal planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 
 This document plans how AgenticOrg should explain Open Agentic Commerce Protocol
 work without publishing a protocol, enabling public discovery, enabling

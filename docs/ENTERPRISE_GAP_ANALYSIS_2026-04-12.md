@@ -88,7 +88,7 @@ Real business actions can execute with corrupted values such as redacted emails,
 
 **Recommended remediation**
 
-- Use raw params for execution and a separately masked copy for logs and audit only.
+- Use raw params for execution and a separately masked copy for logs and audit logging only.
 - Add regression tests that verify audit redaction never mutates execution payloads.
 
 ### 5) Application startup performs schema mutation instead of enforcing migration discipline (**High, open**)

@@ -17,10 +17,11 @@
 
 ---
 
-## Latest Mainline Status (2026-06-13)
+## Latest Mainline Status (2026-06-19)
 
-- **OACP cache foundation**: C6X4 added the durable `oacp_artifact_cache_records` repository for public-safe artifact refs scoped by buyer agent, seller agent, tenant, and merchant. C6X5 added a deterministic maintenance planner over those records.
-- **Commerce boundary**: OACP cache work is internal and fail-closed. It does not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness.
+- **OACP Shopify runtime vertical**: Seller Commerce Agent onboarding, encrypted merchant-scoped Shopify credential setup, read-only Shopify Admin GraphQL product/variant/price/inventory sync, Shopify webhook HMAC verification, Grantex C6Z authority request, 11-family OACP artifact cache intake, buyer Q&A from cache, protocol adapter payload generation, and bridge readiness endpoints are implemented.
+- **Buyer and channel bridges**: Web/API answers, MCP seller tools, OpenAPI/A2A metadata, and WhatsApp/Telegram webhook routes share the same artifact-backed answer path and source/freshness labels. WhatsApp and Telegram require configured webhook secrets before accepting inbound messages.
+- **Mandate/payment boundary**: AgenticOrg verifies Pine Labs Plural/P3P mandate capability metadata and can prepare a non-executing purchase/mandate handoff. It does not fake payment success, create orders, create checkout sessions, reserve stock, or execute provider payment rails.
 - **Security hardening**: production dependencies were trimmed, JWT runtime moved to `PyJWT[crypto]`, `python-jose`/`ecdsa` are blocked by regression gates, Docker runtime no longer needs `curl`, and security CI fails closed on high-risk findings.
 - **Deployment hardening**: production rollout uses the manual Cloud Run helper with split Cloud Run and Artifact Registry regions, image digest and commit metadata checks, migration-first rollout support, and explicit traffic modes.
 - **SDK launch coverage**: Python SDK, TypeScript SDK, and MCP server now cover A2A/MCP discovery, `commerce_sales_agent` launch, connector listing, knowledge search, agent generation, workflow generation, workflow creation, workflow runs, and run-status polling in regression tests.
@@ -52,12 +53,13 @@ flowchart LR
 | Hosted discovery smoke | API-only C3 smoke verified liveness, health, MCP tools, and A2A discovery. |
 | Provider boundary | No direct Stripe, Plural, Pine, or provider credential commerce path. |
 | Production discovery caveat | AgenticOrg commerce metadata should stay gated or explicitly reviewed until Grantex read-only discovery is approved. |
-| OACP cache foundation | C6X1-C6X5 cover verifier planning, cache runtime, repository boundary, durable SQL-backed cache records, and maintenance planning. Internal only. |
+| OACP runtime vertical | Seller onboarding, Shopify read-only sync, Grantex authority request/cache, protocol adapters, buyer bridges, and Plural/Pine capability verification. |
 | Durable cache storage | C6X4 stores public-safe source/evidence refs with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, tenant-safe indexes, and RLS. |
-| Cache maintenance planner | C6X5 classifies records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. Planner only; no scheduler or side effects. |
-| Live checkout/payments | Blocked; do not imply production payment readiness. |
+| Protocol adapters | Runtime endpoints generate Schema.org JSON-LD, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads from cached OACP artifacts. Compatibility mapping only; no external certification claim. |
+| Buyer channels | Web, MCP/OpenAPI/A2A contracts, WhatsApp, and Telegram route to the same cache-backed answer/refusal logic. |
+| Live checkout/payments | Blocked unless separate merchant, provider, legal, security, ops, and production flag approvals exist; current AgenticOrg runtime prepares handoff or safe blocker only. |
 
-Read more in `docs/commerce-agent-overview.md`, `docs/commerce-agent-developer-guide.md`, `docs/commerce-agent-hosted-staging-e2e.md`, `docs/reports/commerce-agent-c6x4-durable-oacp-cache-repository.md`, `docs/reports/commerce-agent-c6x5-oacp-cache-maintenance.md`, `docs/reports/commerce-agent-real-staging-evidence.md`, `docs/reports/commerce-agent-hosted-smoke-evidence.md`, and `docs/reports/commerce-agent-production-discovery-readiness.md`.
+Read more in `docs/oacp-end-to-end-flow.md`, `docs/runbooks/oacp-shopify-merchant-onboarding.md`, `docs/commerce-agent-bridges-guide.md`, `docs/commerce-agent-overview.md`, and `docs/commerce-agent-developer-guide.md`.
 
 Key tool aliases: `grantex_commerce:merchant_get_profile`, `grantex_commerce:catalog_search`, `grantex_commerce:catalog_get_item`, `grantex_commerce:inventory_check`, `grantex_commerce:cart_create`, `grantex_commerce:consent_request`, `grantex_commerce:consent_exchange`, `grantex_commerce:payment_create_intent`, `grantex_commerce:checkout_create`, and `grantex_commerce:payment_get_status`.
 
@@ -813,7 +815,8 @@ Built for Indian enterprise — not retrofitted:
 | [CFO Guide](docs/cfo_guide.md) | CFO user guide — dashboard, agents, NL query, reports |
 | [CMO Guide](docs/cmo_guide.md) | CMO user guide — dashboard, agents, NL query, campaigns |
 | [CA Firm Setup](docs/ca_firm_setup_guide.md) | End-to-end CA firm deployment guide |
-| [Commerce Agent Overview](docs/commerce-agent-overview.md) | Commerce posture, OACP cache foundation, launch surfaces, and guardrails |
+| [OACP End-To-End Flow](docs/oacp-end-to-end-flow.md) | Shopify onboarding, Grantex artifacts, buyer bridges, and purchase handoff blockers |
+| [Commerce Agent Overview](docs/commerce-agent-overview.md) | Commerce runtime posture, OACP cache, launch surfaces, and guardrails |
 | [Commerce Developer Guide](docs/commerce-agent-developer-guide.md) | Safe commerce extension rules, OACP cache rules, and direct-provider bans |
 | [C6X4 Durable OACP Cache](docs/reports/commerce-agent-c6x4-durable-oacp-cache-repository.md) | Durable OACP cache repository contract and non-goals |
 | [C6X5 Cache Maintenance](docs/reports/commerce-agent-c6x5-oacp-cache-maintenance.md) | OACP cache maintenance planner outcomes and non-goals |

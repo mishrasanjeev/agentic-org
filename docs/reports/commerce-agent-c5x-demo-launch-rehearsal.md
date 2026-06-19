@@ -77,7 +77,7 @@ allowlist candidate.
 | Approved display name | `Demo Home Goods Store`, demo-only |
 | Category | `Home and Kitchen`, demo-only |
 | Discovery description | Synthetic read-only preview wording |
-| Public payload preview | Demo packet preview only |
+| Public payload preview | Demo packet historical preview state |
 | Legal/compliance approval | Demo reference only |
 | Product wording approval | Demo reference only |
 | Security approval | Demo reference only |

@@ -1,6 +1,6 @@
 # Commerce Agent C5O Merchant Self-Onboarding Plan
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: synthetic demo packet and AgenticOrg dependency self-onboarding plan
 before any future public commerce discovery proposal
@@ -59,7 +59,7 @@ The demo packet contains:
    - Merchant enters proposed public merchant ID, display name, category, and
      discovery description for Grantex review.
    - UI labels each value as review input, not approval.
-   - AgenticOrg can preview only synthetic or reviewed Grantex-controlled
+   - AgenticOrg can historical preview state synthetic or reviewed Grantex-controlled
      metadata.
 
 3. Merchant uploads private artifacts outside repos.

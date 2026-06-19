@@ -1,6 +1,6 @@
 # Commerce Agent C5M Real Merchant Artifact Intake Status
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: current repo-safe AgenticOrg dependency status for real merchant
 artifact collection

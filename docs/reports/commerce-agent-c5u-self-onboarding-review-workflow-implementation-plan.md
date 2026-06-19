@@ -1,6 +1,6 @@
 # Commerce Agent C5U Self-Onboarding Review Workflow Implementation Plan
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: future AgenticOrg review workflow implementation plan for merchant
 self-onboarding dependency review

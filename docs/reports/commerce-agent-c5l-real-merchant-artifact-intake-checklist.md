@@ -1,6 +1,6 @@
 # Commerce Agent C5L Real Merchant Artifact Intake Checklist
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: AgenticOrg real merchant dependency artifact intake before any future
 public commerce discovery proposal

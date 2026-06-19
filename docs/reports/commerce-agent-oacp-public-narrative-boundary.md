@@ -2,7 +2,7 @@
 
 Status: canonical public-claims boundary.
 
-Last updated: 2026-06-18.
+Last updated: 2026-06-19.
 
 ## Allowed Wording
 
@@ -10,8 +10,8 @@ Last updated: 2026-06-18.
 - "Grantex is the trust, protocol, policy, and canonical OACP artifact authority."
 - "Shopify remains the operational source of record for catalog facts."
 - "Plural/Pine owns mandate and payment execution; AgenticOrg only verifies capability metadata where approved."
-- "Cached OACP artifacts support non-binding answers only when freshness, scope, revocation, and safety checks pass."
-- "The production C6Z vertical is currently blocked by Shopify credential and Grantex tenant-mapping issues."
+- "Cached OACP artifacts support buyer answers and prepared handoffs only when freshness, scope, revocation, and safety checks pass."
+- "AgenticOrg has a Shopify read-only OACP runtime path, protocol adapter payloads, bridge contracts, and purchase-preparation blockers; a real merchant launch still requires valid Shopify access, Grantex tenant allowlisting, and provider approvals."
 
 ## Disallowed Wording
 

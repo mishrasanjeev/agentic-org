@@ -86,9 +86,10 @@ def test_readme_and_deploy_docs_describe_current_cloud_run_path() -> None:
     user_guide = _read("docs/AgenticOrg_Complete_User_Guide_v5.0.html")
     ddl_roadmap = _read("docs/roadmap/startup_ddl_removal.md")
 
-    assert "Latest Mainline Status (2026-06-13)" in readme
-    assert "C6X4 added the durable" in readme
-    assert "C6X5 added a deterministic maintenance planner" in readme
+    assert "Latest Mainline Status (2026-06-19)" in readme
+    assert "OACP Shopify runtime vertical" in readme
+    assert "Durable cache storage" in readme
+    assert "maintenance planner" in readme
     assert "Cloud Run manual helper" in readme
     assert "GKE Production" not in readme
 

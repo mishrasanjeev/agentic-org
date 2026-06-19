@@ -1,6 +1,6 @@
 # Commerce Agent C5V Self-Onboarding Rollout Automation Proposal
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: future AgenticOrg rollout automation proposal for merchant
 self-onboarding dependency review

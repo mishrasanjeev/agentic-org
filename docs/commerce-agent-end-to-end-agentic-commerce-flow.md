@@ -1,9 +1,12 @@
 # End-To-End Agentic Commerce Flow
 
 This document explains the AgenticOrg side of the OACP-powered agentic
-commerce journey in plain English. It is documentation only. It does not enable
-public discovery, production Commerce V1, checkout/payment creation, live
-payments, live Plural, merchant approval, or any production allowlist.
+commerce journey in plain English. The runtime path now exists for Seller
+Commerce Agent onboarding, Shopify read-only sync, Grantex OACP artifact cache
+intake, buyer Q&A, bridge contracts, protocol adapter payloads, and
+prepared purchase handoff/blocker behavior. This document does not itself
+enable public discovery, checkout/payment creation, live payments, live Plural,
+merchant approval, or any production allowlist.
 
 ## Current OACP Runtime Closure Boundary
 
@@ -11,10 +14,12 @@ The launch-closure runtime path is non-executing. AgenticOrg creates Seller
 Commerce Agent onboarding packets, initiates merchant-approved read-only
 Shopify Admin GraphQL sync, sends Grantex authority requests, caches internal
 OACP artifacts, answers buyer product questions from cache with source and
-freshness labels, exposes bridge adapters, and verifies provider-owned
-capability metadata where approved. It does not create checkout, payment,
-order, mandate, refund, return, shipment, inventory hold, public discovery
-publication, live provider execution, or merchant-private API mutation.
+freshness labels, exposes bridge adapters, generates protocol adapter payloads
+from cached artifacts, prepares purchase/mandate handoffs where evidence is
+fresh, and verifies provider-owned capability metadata where approved. It does
+not create checkout, payment, order, mandate, refund, return, shipment,
+inventory hold, public discovery publication, live provider execution, or
+merchant-private API mutation.
 
 Any cart, checkout, consent, Commerce Passport, order, return, refund, support,
 fulfillment, or payment-control sections below describe separate future or

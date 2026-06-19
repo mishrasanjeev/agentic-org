@@ -32,12 +32,17 @@ from core.commerce.c6z_runtime_vertical import (
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
     build_shopify_connector_evidence,
+    generate_protocol_adapter_payloads,
+    prepare_purchase_or_mandate_handoff,
     resolve_env,
     resolve_shopify_credentials,
+    select_protocol_adapter_payload,
     send_grantex_authority_request,
     shopify_webhook_idempotency_key,
     verify_plural_pine_mandate_capability,
     verify_shopify_webhook_hmac,
+    verify_telegram_webhook_secret,
+    verify_whatsapp_webhook_signature,
 )
 from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
@@ -63,19 +68,24 @@ WHATSAPP_BRIDGE_ENV_VARS: tuple[str, ...] = (
     "WHATSAPP_BUSINESS_ACCESS_TOKEN",
     "WHATSAPP_BUSINESS_PHONE_NUMBER_ID",
     "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+    "WHATSAPP_APP_SECRET",
 )
-TELEGRAM_BRIDGE_ENV_VARS: tuple[str, ...] = ("TELEGRAM_BOT_TOKEN",)
+TELEGRAM_BRIDGE_ENV_VARS: tuple[str, ...] = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET_TOKEN")
 
 
 class SellerOnboardingPacketCreate(BaseModel):
     merchant_id: str = Field(min_length=1)
     seller_agent_id: str = Field(min_length=1)
     merchant_display_name: str = Field(min_length=1)
+    shopify_shop_domain: str | None = None
     public_brand_profile: dict[str, Any] = Field(default_factory=dict)
     commerce_categories: list[str] = Field(min_length=1)
     requested_grantex_authority_scope: dict[str, Any] = Field(default_factory=dict)
     artifact_cache_scope: dict[str, Any] = Field(default_factory=dict)
     source_freshness_policy: dict[str, Any] = Field(default_factory=dict)
+    permitted_sync_actions: list[str] = Field(default_factory=list)
+    channel_capability_preferences: dict[str, bool] = Field(default_factory=dict)
+    payment_mandate_rail_preference: str = "plural_pine_p3p"
     connector_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -132,6 +142,18 @@ class MandateCapabilityRequest(BaseModel):
     seller_agent_id: str | None = None
     buyer_agent_id: str | None = None
     capability_type: str = "mandate_capability"
+
+
+class PurchasePreparationRequest(BaseModel):
+    merchant_id: str = Field(min_length=1)
+    seller_agent_id: str = Field(min_length=1)
+    buyer_agent_id: str | None = None
+    product_ref_or_query: str = Field(min_length=1)
+    variant_id: str | None = None
+    quantity: int = Field(default=1, ge=1, le=100)
+    idempotency_key: str | None = None
+    grantex_available: bool = True
+    live_execution_approved: bool = False
 
 
 @router.post("/seller-agents/onboarding-packets")
@@ -435,6 +457,39 @@ async def receive_shopify_product_webhook(
     verified = verify_shopify_webhook_hmac(raw_body, hmac_header, os.environ["SHOPIFY_WEBHOOK_SECRET"])
     if not verified:
         raise HTTPException(status_code=401, detail="Shopify webhook HMAC verification failed")
+    stale_packets_marked = 0
+    if shop_domain:
+        normalized_shop = _normalize_shopify_domain_for_api(shop_domain)
+        async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+            result = await session.execute(
+                select(ConnectorConfig).where(ConnectorConfig.tenant_id == _tenant_uuid(tenant_id))
+            )
+            connector_rows = result.scalars().all()
+            merchant_ids = {
+                str((row.config or {}).get("merchant_id"))
+                for row in connector_rows
+                if (row.config or {}).get("shop_domain") == normalized_shop and (row.config or {}).get("merchant_id")
+            }
+            for merchant_id in merchant_ids:
+                packets = (
+                    await session.scalars(
+                        select(C6ZSellerOnboardingPacketRow).where(
+                            C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
+                            C6ZSellerOnboardingPacketRow.merchant_id == merchant_id,
+                            C6ZSellerOnboardingPacketRow.status.in_(
+                                (
+                                    "sync_ready",
+                                    "synced",
+                                    "authority_requested",
+                                    "artifacts_cached",
+                                )
+                            ),
+                        )
+                    )
+                ).all()
+                for packet in packets:
+                    packet.status = "cache_refresh_needed"
+                    stale_packets_marked += 1
     return {
         "status": "webhook_verified",
         "tenant_id": tenant_id,
@@ -445,6 +500,8 @@ async def receive_shopify_product_webhook(
             raw_body=raw_body,
         ),
         "hmac_verified": True,
+        "stale_packets_marked": stale_packets_marked,
+        "next_action": "POST /api/v1/commerce/runtime/seller-agents/shopify/sync",
         "raw_payload_stored": False,
         "allowed_to_execute": False,
     }
@@ -659,12 +716,20 @@ async def get_buyer_surface_bridge_matrix() -> dict[str, Any]:
     audit_event="commerce.runtime.bridge.whatsapp.webhook",
 )
 async def receive_whatsapp_bridge_webhook(
+    request: Request,
     payload: dict[str, Any],
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     env_resolution = resolve_env(WHATSAPP_BRIDGE_ENV_VARS)
     if not env_resolution.ready:
         return _blocked_bridge("whatsapp", env_resolution.missing)
+    raw_body = await request.body()
+    if not verify_whatsapp_webhook_signature(
+        raw_body,
+        request.headers.get("x-hub-signature-256", ""),
+        os.environ["WHATSAPP_APP_SECRET"],
+    ):
+        raise HTTPException(status_code=401, detail="WhatsApp webhook signature verification failed")
     body = _bridge_body_from_webhook_payload(payload, channel="whatsapp")
     return await _bridge_answer(body, tenant_id, default_channel="whatsapp")
 
@@ -679,12 +744,18 @@ async def receive_whatsapp_bridge_webhook(
     audit_event="commerce.runtime.bridge.telegram.webhook",
 )
 async def receive_telegram_bridge_webhook(
+    request: Request,
     payload: dict[str, Any],
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     env_resolution = resolve_env(TELEGRAM_BRIDGE_ENV_VARS)
     if not env_resolution.ready:
         return _blocked_bridge("telegram", env_resolution.missing)
+    if not verify_telegram_webhook_secret(
+        request.headers.get("x-telegram-bot-api-secret-token"),
+        os.environ["TELEGRAM_WEBHOOK_SECRET_TOKEN"],
+    ):
+        raise HTTPException(status_code=401, detail="Telegram webhook secret token verification failed")
     body = _bridge_body_from_webhook_payload(payload, channel="telegram")
     return await _bridge_answer(body, tenant_id, default_channel="telegram")
 
@@ -720,6 +791,111 @@ async def verify_plural_pine_capability(
         "evidence": evidence.__dict__,
         "env_required": list(PLURAL_PINE_ENV_VARS),
         "stored": evidence.external_validation_performed,
+    }
+
+
+@router.get("/protocol-adapters")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.protocol_adapters.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.protocol_adapters.read",
+)
+async def get_protocol_adapter_payloads(
+    merchant_id: str,
+    seller_agent_id: str,
+    buyer_agent_id: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    cache_records, products, _capabilities = await _load_runtime_scope(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        buyer_agent_id=buyer_agent_id,
+    )
+    return generate_protocol_adapter_payloads(
+        cache_records=cache_records,
+        products=products,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        buyer_agent_id=buyer_agent_id,
+        now_iso=_now_iso(),
+    )
+
+
+@router.get("/protocol-adapters/{surface}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.protocol_adapters.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.protocol_adapter.surface.read",
+)
+async def get_protocol_adapter_surface(
+    surface: str,
+    merchant_id: str,
+    seller_agent_id: str,
+    buyer_agent_id: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    payloads = await get_protocol_adapter_payloads(
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        buyer_agent_id=buyer_agent_id,
+        tenant_id=tenant_id,
+    )
+    try:
+        return select_protocol_adapter_payload(payloads, surface)
+    except C6ZRuntimeValidationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/purchase/prepare")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.purchase.prepare",
+    rate_limit="commerce-runtime-write",
+    idempotency="buyer-merchant-product-variant-quantity",
+    audit_event="commerce.runtime.purchase.prepare",
+)
+async def prepare_purchase_handoff(
+    body: PurchasePreparationRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    cache_records, products, capabilities = await _load_runtime_scope(
+        tenant_id=tenant_id,
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+    )
+    live_execution_env_enabled = os.environ.get("PLURAL_PINE_LIVE_EXECUTION_ENABLED", "").strip().lower() == "true"
+    result = prepare_purchase_or_mandate_handoff(
+        cache_records=cache_records,
+        products=products,
+        capability_evidence=capabilities,
+        tenant_id=tenant_id,
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+        product_ref_or_query=body.product_ref_or_query,
+        variant_id=body.variant_id,
+        quantity=body.quantity,
+        now_iso=_now_iso(),
+        idempotency_key=body.idempotency_key,
+        grantex_available=body.grantex_available,
+        live_execution_enabled=body.live_execution_approved and live_execution_env_enabled,
+    )
+    return {
+        **result.__dict__,
+        "live_execution_requested": body.live_execution_approved,
+        "live_execution_env_enabled": live_execution_env_enabled,
+        "raw_provider_payload_stored": False,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
     }
 
 
@@ -812,6 +988,61 @@ async def _answer_buyer_question_for_scope(
     )
 
 
+async def _load_runtime_scope(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    buyer_agent_id: str | None,
+) -> tuple[list[Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        repo = DurableOacpArtifactCacheRepository(session)
+        cache_records = await repo.list_for_scope(
+            OacpArtifactCacheRepositoryQuery(
+                tenant_id=tenant_id,
+                merchant_id=merchant_id,
+                seller_agent_id=seller_agent_id,
+                buyer_agent_id=buyer_agent_id,
+            )
+        )
+        if not cache_records and buyer_agent_id:
+            cache_records = await repo.list_for_scope(
+                OacpArtifactCacheRepositoryQuery(
+                    tenant_id=tenant_id,
+                    merchant_id=merchant_id,
+                    seller_agent_id=seller_agent_id,
+                    buyer_agent_id=None,
+                )
+            )
+        evidence_query = select(C6ZConnectorEvidenceRow).where(
+            C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+            C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+        )
+        capability_query = select(C6ZProviderCapabilityEvidenceRow).where(
+            C6ZProviderCapabilityEvidenceRow.tenant_id == tenant_id,
+            C6ZProviderCapabilityEvidenceRow.merchant_id == merchant_id,
+        )
+        if seller_agent_id:
+            evidence_query = evidence_query.where(C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id)
+            capability_query = capability_query.where(
+                C6ZProviderCapabilityEvidenceRow.seller_agent_id == seller_agent_id
+            )
+        if buyer_agent_id:
+            capability_query = capability_query.where(
+                (C6ZProviderCapabilityEvidenceRow.buyer_agent_id == buyer_agent_id)
+                | (C6ZProviderCapabilityEvidenceRow.buyer_agent_id.is_(None))
+            )
+        evidence_rows = (await session.scalars(evidence_query.order_by(C6ZConnectorEvidenceRow.synced_at.desc()))).all()
+        capability_rows = (
+            await session.scalars(capability_query.order_by(C6ZProviderCapabilityEvidenceRow.checked_at.desc()))
+        ).all()
+        products: list[dict[str, Any]] = []
+        for evidence_row in evidence_rows:
+            products.extend([dict(product) for product in list(evidence_row.products or [])])
+        capabilities = [_row_to_capability_summary(row) for row in capability_rows]
+    return list(cache_records), products, capabilities
+
+
 async def _bridge_answer(
     body: BridgeAskRequest,
     tenant_id: str,
@@ -900,6 +1131,18 @@ def _openapi_bridge_schema() -> dict[str, Any]:
                         "no_public_discovery_enablement": True,
                     },
                 }
+            },
+            "/api/v1/commerce/runtime/protocol-adapters/{surface}": {
+                "get": {
+                    "operationId": "getProtocolAdapterPayload",
+                    "summary": "Fetch a buyer-safe protocol adapter payload generated from cached OACP artifacts.",
+                }
+            },
+            "/api/v1/commerce/runtime/purchase/prepare": {
+                "post": {
+                    "operationId": "preparePurchaseHandoff",
+                    "summary": "Prepare a non-executing purchase or mandate handoff with blocker details.",
+                }
             }
         },
         "allowed_to_execute": False,
@@ -915,6 +1158,8 @@ def _commerce_a2a_agent_card() -> dict[str, Any]:
             "seller_product_question_answering_from_cached_oacp_artifacts",
             "seller_product_snapshot_listing",
             "source_freshness_labeling",
+            "protocol_adapter_payload_read",
+            "prepared_purchase_handoff_without_payment_execution",
             "final_commitment_refusal",
         ],
         "unsupported_capabilities": [
@@ -935,6 +1180,12 @@ def _commerce_a2a_agent_card() -> dict[str, Any]:
 
 
 def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) -> dict[str, Any]:
+    connector_metadata = dict(body.connector_metadata)
+    if body.shopify_shop_domain and not connector_metadata.get("shop_domain"):
+        connector_metadata["shop_domain"] = body.shopify_shop_domain
+    connector_metadata.setdefault("permitted_sync_actions", body.permitted_sync_actions or None)
+    connector_metadata.setdefault("channel_capability_preferences", body.channel_capability_preferences or None)
+    connector_metadata.setdefault("payment_mandate_rail_preference", body.payment_mandate_rail_preference)
     return build_seller_onboarding_packet(
         tenant_id=tenant_id,
         merchant_id=body.merchant_id,
@@ -961,7 +1212,7 @@ def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) 
         artifact_cache_scope=body.artifact_cache_scope
         or {"tenant_id": tenant_id, "merchant_id": body.merchant_id, "seller_agent_id": body.seller_agent_id},
         source_freshness_policy=body.source_freshness_policy or {"max_age_seconds": 900},
-        connector_metadata=body.connector_metadata,
+        connector_metadata=connector_metadata,
     )
 
 
@@ -1280,6 +1531,7 @@ def _apply_capability(
 
 
 def _row_to_packet(row: C6ZSellerOnboardingPacketRow) -> dict[str, Any]:
+    connector_metadata = row.connector_metadata_redacted or {}
     return {
         "packet_id": row.packet_id,
         "tenant_id": row.tenant_id,
@@ -1293,7 +1545,13 @@ def _row_to_packet(row: C6ZSellerOnboardingPacketRow) -> dict[str, Any]:
         "requested_grantex_authority_scope": row.requested_grantex_authority_scope or {},
         "artifact_cache_scope": row.artifact_cache_scope or {},
         "source_freshness_policy": row.source_freshness_policy or {},
-        "connector_metadata_redacted": row.connector_metadata_redacted or {},
+        "connector_metadata_redacted": connector_metadata,
+        "shopify_shop_domain": connector_metadata.get("shop_domain"),
+        "permitted_sync_actions": connector_metadata.get("permitted_sync_actions") or [],
+        "channel_capability_preferences": connector_metadata.get("channel_capability_preferences") or {},
+        "payment_mandate_rail_preference": (
+            connector_metadata.get("payment_mandate_rail_preference") or "plural_pine_p3p"
+        ),
         "status": row.status,
         "no_payment_execution": row.no_payment_execution,
         "no_public_discovery_enablement": row.no_public_discovery_enablement,
@@ -1322,6 +1580,30 @@ def _row_to_evidence(row: C6ZConnectorEvidenceRow) -> dict[str, Any]:
         "raw_payload_stored": row.raw_payload_stored,
         "no_payment_execution": row.no_payment_execution,
         "no_public_discovery_enablement": row.no_public_discovery_enablement,
+        "allowed_to_execute": row.allowed_to_execute,
+        "non_authoritative_for_transaction": row.non_authoritative_for_transaction,
+    }
+
+
+def _row_to_capability_summary(row: C6ZProviderCapabilityEvidenceRow) -> dict[str, Any]:
+    return {
+        "evidence_id": row.evidence_id,
+        "tenant_id": row.tenant_id,
+        "merchant_id": row.merchant_id,
+        "seller_agent_id": row.seller_agent_id,
+        "buyer_agent_id": row.buyer_agent_id,
+        "provider": row.provider,
+        "capability_type": row.capability_type,
+        "result_status": row.result_status,
+        "checked_at": row.checked_at.isoformat().replace("+00:00", "Z"),
+        "expires_at": row.expires_at.isoformat().replace("+00:00", "Z"),
+        "redacted_evidence_ref": row.redacted_evidence_ref,
+        "provider_environment": row.provider_environment,
+        "external_validation_performed": row.external_validation_performed,
+        "missing_env_vars": row.missing_env_vars or [],
+        "raw_payload_stored": row.raw_payload_stored,
+        "no_payment_execution": row.no_payment_execution,
+        "no_live_provider_enablement": row.no_live_provider_enablement,
         "allowed_to_execute": row.allowed_to_execute,
         "non_authoritative_for_transaction": row.non_authoritative_for_transaction,
     }

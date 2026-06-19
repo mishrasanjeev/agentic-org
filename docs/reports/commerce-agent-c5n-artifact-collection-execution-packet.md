@@ -1,6 +1,6 @@
 # Commerce Agent C5N Artifact Collection Execution Packet
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: human-facing AgenticOrg dependency artifact collection packet before
 any future public commerce discovery proposal

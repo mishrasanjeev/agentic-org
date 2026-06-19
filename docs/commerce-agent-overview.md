@@ -21,9 +21,9 @@ that file as the product source of truth and this repo's docs as the buyer-agent
 execution companion.
 
 For a plain-language buyer and seller walkthrough, read
-`docs/oacp-end-user-flow.md`. It explains what a buyer does, what a seller does
-in AgenticOrg, and how Grantex-issued artifacts support non-binding commerce
-answers.
+`docs/oacp-end-to-end-flow.md`. It explains how a Shopify merchant onboards,
+how AgenticOrg syncs read-only catalog evidence, how Grantex-issued artifacts
+support buyer answers, and where purchase handoff remains provider-owned.
 
 ## Current Posture
 
@@ -39,9 +39,11 @@ answers.
 | C6X1-C6X3 OACP cache foundation | Verifier/runtime planning, fail-closed cache evaluator, repository port, and in-memory adapter for non-binding preview/prepare behavior. |
 | C6X4 durable OACP cache | SQL-backed durable cache records scoped by buyer agent, seller agent, tenant, and merchant with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, RLS, and tenant-safe indexes. |
 | C6X5 cache maintenance planner | Deterministic local planner that classifies durable cache records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. No scheduler and no side effects. |
-| C6Z runtime vertical | Implemented in this branch: onboarding, encrypted Shopify connector setup, read-only sync, Grantex authority handoff, 11-family artifact cache, buyer answer, bridges, and Plural/Pine capability metadata. Production closure remains blocked by Shopify token `401 Unauthorized`/credential availability and Grantex tenant-token mapping/`tenant_not_provisioned` until the vertical is rerun with valid external credentials. |
-| Payment execution | Blocked. AgenticOrg may verify provider-owned mandate capability only through separately approved verifier flows. |
-| Live checkout/payments/Plural | Blocked. |
+| OACP runtime vertical | Implemented: onboarding, encrypted Shopify connector setup, read-only Admin GraphQL sync, Shopify webhook verification, Grantex authority handoff, 11-family artifact cache, buyer answer, protocol adapters, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge contracts, and Plural/Pine capability metadata. |
+| Protocol adapters | Runtime endpoints generate Schema.org Product/Offer JSON-LD, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI compatibility payloads from cached OACP artifacts. No external certification or publication claim. |
+| Purchase preparation | Implemented as a non-executing handoff boundary. It checks OACP freshness, price/inventory snapshots, policy, buyer/session scope, and Plural/Pine capability evidence, then returns a prepared handoff or exact blocker. |
+| Payment execution | Blocked unless separate merchant/provider/legal/security/ops approvals and production flags exist. AgenticOrg does not create checkout, order, payment, mandate, inventory hold, refund, return, or shipment records. |
+| Live checkout/payments/Plural | Provider-owned and approval-gated; no success is faked when provider credentials or approvals are missing. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
 
 ## Architecture
@@ -85,6 +87,11 @@ C6X5 adds a planner over existing durable records. It can recommend
 `source_refresh_needed`, `human_review_required`, or `blocked_unsafe`.
 It does not refresh, evict, purge, schedule, call Grantex live, call providers,
 call merchant private APIs, or write a maintenance log.
+
+The current runtime vertical sits above that cache foundation. Shopify sync,
+Grantex authority request, artifact cache intake, protocol-adapter serving,
+buyer Q&A, bridge routes, and Plural/Pine capability verification are live code
+paths. They remain non-executing for checkout/payment/order/mandate behavior.
 
 The cache path fails closed for missing identity, missing scope, mismatched
 scope, invalid timestamps, expired records, stale freshness, revoked or

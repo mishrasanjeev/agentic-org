@@ -26,9 +26,13 @@ from core.commerce.c6z_runtime_vertical import (
     build_seller_onboarding_packet,
     build_shopify_connector_evidence,
     contains_private_or_executable_value,
+    generate_protocol_adapter_payloads,
+    prepare_purchase_or_mandate_handoff,
     summarize_capability_evidence,
     verify_plural_pine_mandate_capability,
     verify_shopify_webhook_hmac,
+    verify_telegram_webhook_secret,
+    verify_whatsapp_webhook_signature,
 )
 from core.commerce.oacp_artifacts import OacpPersistentArtifactCacheRecord
 
@@ -63,6 +67,7 @@ def _shopify_product() -> dict:
         "descriptionHtml": "Heavy canvas tote",
         "vendor": "Demo Brand",
         "productType": "Bags",
+        "status": "ACTIVE",
         "updatedAt": _iso(_now()),
         "media": {
             "nodes": [
@@ -121,13 +126,15 @@ def _grantex_artifact() -> dict:
 def _cache_record(
     *,
     expires_delta: timedelta = timedelta(minutes=5),
+    generated_delta: timedelta = timedelta(minutes=1),
     revoked: bool = False,
+    artifact_type: str = "catalog_snapshot",
 ) -> OacpPersistentArtifactCacheRecord:
     now = _now()
     return OacpPersistentArtifactCacheRecord(
-        cache_record_id="cache_c6z_catalog",
-        artifact_id="artifact_c6z_catalog",
-        artifact_type="catalog_snapshot",
+        cache_record_id=f"cache_c6z_{artifact_type}",
+        artifact_id=f"artifact_c6z_{artifact_type}",
+        artifact_type=artifact_type,
         authority="grantex.internal.oacp.authority",
         issuer="grantex.internal.oacp.authority",
         scope_kind="seller_agent",
@@ -137,13 +144,13 @@ def _cache_record(
         buyer_agent_id=None,
         source_refs=("agenticorg:shopify:evidence:abc:redacted",),
         evidence_refs=("agenticorg:shopify:evidence:abc:redacted",),
-        generated_at=_iso(now - timedelta(minutes=1)),
-        cached_at=_iso(now - timedelta(minutes=1)),
+        generated_at=_iso(now - generated_delta),
+        cached_at=_iso(now - generated_delta),
         expires_at=_iso(now + expires_delta),
         freshness_status="fresh",
         revocation_snapshot_status="revoked" if revoked else "fresh",
         revocation_snapshot_observed_at=_iso(now - timedelta(seconds=10)),
-        ttl_policy_seconds=max(1, int((expires_delta + timedelta(minutes=1)).total_seconds())),
+        ttl_policy_seconds=max(1, int((expires_delta + generated_delta).total_seconds())),
         risk_tier="low",
         blocked_capabilities=("checkout", "payment", "order", "mandate"),
         unsupported_capabilities=("execution", "public_discovery", "live_provider"),
@@ -165,6 +172,10 @@ def test_onboarding_packet_is_read_only_and_rejects_secret_metadata() -> None:
     assert packet["no_payment_execution"] is True
     assert packet["no_public_discovery_enablement"] is True
     assert packet["allowed_to_execute"] is False
+    assert packet["artifact_cache_scope"]["tenant_id"] == packet["tenant_id"]
+    assert "read_products" in packet["permitted_sync_actions"]
+    assert packet["channel_capability_preferences"]["web"] is True
+    assert packet["payment_mandate_rail_preference"] == "plural_pine_p3p"
     assert "SHOPIFY_ADMIN_ACCESS_TOKEN" not in str(packet)
 
     with pytest.raises(C6ZRuntimeValidationError):
@@ -297,6 +308,7 @@ def test_shopify_evidence_normalizes_products_without_raw_payloads() -> None:
     assert evidence["product_count"] == 1
     assert evidence["variant_count"] == 1
     assert evidence["raw_payload_stored"] is False
+    assert evidence["products"][0]["status"] == "ACTIVE"
     assert evidence["products"][0]["variants"][0]["sku"] == "TOTE-1"
     assert "shpat_" not in str(evidence)
     assert contains_private_or_executable_value(evidence) is False
@@ -547,8 +559,143 @@ def test_bridge_contract_wraps_buyer_answer_without_execution_authority() -> Non
     assert bridge.channel == "openapi"
     assert bridge.allowed_to_execute is False
     assert bridge.non_authoritative_for_transaction is True
-    assert bridge.artifact_refs == ("artifact_c6z_catalog",)
+    assert bridge.artifact_refs == ("artifact_c6z_catalog_snapshot",)
     assert bridge.suggested_next_safe_action == "continue_buyer_safe_product_questions"
+
+
+def test_protocol_adapter_payloads_are_generated_from_cached_artifacts() -> None:
+    evidence = build_shopify_connector_evidence(
+        packet=_packet(),
+        products=[_shopify_product()],
+        synced_at=_iso(_now() - timedelta(seconds=10)),
+        source_observed_at=_iso(_now() - timedelta(seconds=10)),
+        currency="INR",
+    )
+    cache_records = [
+        _cache_record(
+            expires_delta=timedelta(seconds=50),
+            generated_delta=timedelta(seconds=5),
+            artifact_type=artifact_type,
+        )
+        for artifact_type in (
+            "catalog_snapshot",
+            "price",
+            "inventory",
+            "policy",
+            "mandate_capability",
+            "protocol_adapter",
+        )
+    ]
+
+    payloads = generate_protocol_adapter_payloads(
+        cache_records=cache_records,
+        products=evidence["products"],
+        merchant_id="merchant_1",
+        seller_agent_id="seller_agent_1",
+        buyer_agent_id="buyer_agent_1",
+        now_iso=_iso(_now()),
+    )
+
+    assert payloads["status"] == "adapter_payloads_ready"
+    assert set(payloads["surfaces"]) == {
+        "schema_org_product_offer_jsonld",
+        "ucp_style_capability_profile",
+        "acp_style_commerce_interaction_profile",
+        "ap2_style_mandate_payment_evidence_profile",
+        "a2a_agent_card_task_metadata",
+        "mcp_tool_resource_metadata",
+        "openapi_buyer_safe_bridge_schema",
+    }
+    schema_graph = payloads["surfaces"]["schema_org_product_offer_jsonld"]["@graph"]
+    assert schema_graph[0]["name"] == "Canvas Tote"
+    assert schema_graph[0]["offers"][0]["price"] == "1299.00"
+    assert payloads["generated_from_artifact_ids"]
+    assert payloads["allowed_to_execute"] is False
+    assert payloads["no_payment_execution"] is True
+    assert contains_private_or_executable_value(payloads) is False
+
+
+def test_purchase_preparation_requires_fresh_oacp_and_plural_pine_evidence() -> None:
+    evidence = build_shopify_connector_evidence(
+        packet=_packet(),
+        products=[_shopify_product()],
+        synced_at=_iso(_now() - timedelta(seconds=10)),
+        source_observed_at=_iso(_now() - timedelta(seconds=10)),
+        currency="INR",
+    )
+    cache_records = [
+        _cache_record(
+            expires_delta=timedelta(seconds=50),
+            generated_delta=timedelta(seconds=5),
+            artifact_type=artifact_type,
+        )
+        for artifact_type in (
+            "catalog_snapshot",
+            "price",
+            "inventory",
+            "policy",
+            "mandate_capability",
+            "protocol_adapter",
+        )
+    ]
+    missing_capability = prepare_purchase_or_mandate_handoff(
+        cache_records=cache_records,
+        products=evidence["products"],
+        capability_evidence=[],
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        seller_agent_id="seller_agent_1",
+        buyer_agent_id="buyer_agent_1",
+        product_ref_or_query="Canvas Tote",
+        variant_id=None,
+        quantity=1,
+        now_iso=_iso(_now()),
+    )
+
+    assert missing_capability.status == "blocked"
+    assert missing_capability.blocker["code"] == "plural_pine_capability_missing_or_stale"
+    assert "PLURAL_PINE_CLIENT_ID" in missing_capability.blocker["required_config"]
+
+    prepared = prepare_purchase_or_mandate_handoff(
+        cache_records=cache_records,
+        products=evidence["products"],
+        capability_evidence=[
+            {
+                "result_status": "available",
+                "checked_at": _iso(_now() - timedelta(seconds=30)),
+                "expires_at": _iso(_now() + timedelta(minutes=5)),
+                "redacted_evidence_ref": "provider:plural_pine:capability:abc:redacted",
+                "provider_environment": "sandbox",
+                "raw_payload_stored": False,
+            }
+        ],
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        seller_agent_id="seller_agent_1",
+        buyer_agent_id="buyer_agent_1",
+        product_ref_or_query="Canvas Tote",
+        variant_id=None,
+        quantity=1,
+        now_iso=_iso(_now()),
+    )
+
+    assert prepared.status == "prepared_handoff_blocked_live_execution_disabled"
+    assert prepared.prepared_handoff["provider"] == "plural_pine"
+    assert prepared.prepared_handoff["no_payment_execution"] is True
+    assert prepared.blocker["code"] == "live_provider_execution_not_enabled"
+    assert prepared.allowed_to_execute is False
+    assert "provider:plural_pine:capability:abc:redacted" in str(prepared)
+
+
+def test_whatsapp_and_telegram_webhook_signature_helpers() -> None:
+    raw_body = b'{"message":{"text":"Show Canvas Tote"}}'
+    app_secret = "wa-app-secret"
+    digest = hmac.new(app_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+
+    assert verify_whatsapp_webhook_signature(raw_body, f"sha256={digest}", app_secret) is True
+    assert verify_whatsapp_webhook_signature(raw_body, "sha256=bad", app_secret) is False
+    assert verify_telegram_webhook_secret("telegram-secret", "telegram-secret") is True
+    assert verify_telegram_webhook_secret("bad", "telegram-secret") is False
 
 
 def test_buyer_answer_fails_closed_for_expired_or_revoked_cache() -> None:
@@ -723,6 +870,9 @@ def test_c6z_buyer_surface_bridge_routes_are_non_executing() -> None:
         "/bridges/surfaces",
         "/bridges/whatsapp/webhook",
         "/bridges/telegram/webhook",
+        "/protocol-adapters",
+        "/protocol-adapters/{surface}",
+        "/purchase/prepare",
     ):
         assert route in source
     assert '"allowed_to_execute": True' not in source
@@ -736,7 +886,9 @@ def test_c6z_buyer_surface_bridge_matrix_names_first_launch_surfaces() -> None:
             "WHATSAPP_BUSINESS_ACCESS_TOKEN": "fixture-whatsapp-token",
             "WHATSAPP_BUSINESS_PHONE_NUMBER_ID": "fixture-phone-id",
             "WHATSAPP_WEBHOOK_VERIFY_TOKEN": "fixture-verify-token",
+            "WHATSAPP_APP_SECRET": "fixture-whatsapp-app-secret",
             "TELEGRAM_BOT_TOKEN": "fixture-telegram-token",
+            "TELEGRAM_WEBHOOK_SECRET_TOKEN": "fixture-telegram-webhook-secret",
         }
     )
 
