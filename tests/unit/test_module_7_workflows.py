@@ -251,11 +251,11 @@ def test_tc_wf_005_waiting_hitl_step_keeps_completed_at_null() -> None:
     here would make the step look done in dashboards (and
     silently fail to wait for approval)."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-    # The conditional `if step_status != "waiting_hitl" else None`
-    # is the contract.
+    # The shared persistence helper keeps waiting HITL rows visibly open.
     assert 'step_status != "waiting_hitl"' in src
-    # Before that line we set completed_at conditionally.
-    assert "completed_at=(" in src and "else None" in src
+    assert "row.completed_at = (" in src
+    assert "_step_completed_at(step_status, row.completed_at)" in src
+    assert "else None" in src
 
 
 def test_tc_wf_005_hitl_step_creates_queue_entry_with_documented_title() -> None:
@@ -264,7 +264,7 @@ def test_tc_wf_005_hitl_step_creates_queue_entry_with_documented_title() -> None
     waiting" — and the trigger_type='workflow_step' so HITL
     handlers know to resume the workflow on approval."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-    assert 'if step_status == "waiting_hitl":' in src
+    assert 'if created and step_status == "waiting_hitl":' in src
     assert 'trigger_type="workflow_step"' in src
     assert 'title=f"Approval required: {step_def.get(\'title\', step_id)}"' in src
 
@@ -275,7 +275,9 @@ def test_tc_wf_005_hitl_step_assignee_role_resolved_with_fallback() -> None:
     so an under-specified workflow still routes the approval
     to someone."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-    hitl_section = src.split('if step_status == "waiting_hitl":', 1)[1][:1500]
+    hitl_section = src.split('if created and step_status == "waiting_hitl":', 1)[1][
+        :1500
+    ]
     assert 'step_result.get(' in hitl_section
     assert '"assignee_role"' in hitl_section
     assert 'step_def.get("assignee_role", "admin")' in hitl_section
@@ -285,7 +287,9 @@ def test_tc_wf_005_hitl_step_priority_pulled_from_step_def_with_default() -> Non
     """Step priority defaults to 'normal' if the step doesn't
     set it — high/urgent must be opt-in."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-    hitl_section = src.split('if step_status == "waiting_hitl":', 1)[1][:1500]
+    hitl_section = src.split('if created and step_status == "waiting_hitl":', 1)[1][
+        :1500
+    ]
     assert 'priority=step_def.get("priority", "normal")' in hitl_section
 
 
@@ -294,5 +298,7 @@ def test_tc_wf_005_hitl_timeout_default_is_four_hours() -> None:
     default so a refactor can't silently make approvals
     stale-forever (they'd silently block workflows)."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-    hitl_section = src.split('if step_status == "waiting_hitl":', 1)[1][:1500]
+    hitl_section = src.split('if created and step_status == "waiting_hitl":', 1)[1][
+        :1500
+    ]
     assert 'timeout_h = step_def.get("timeout_hours", 4)' in hitl_section
