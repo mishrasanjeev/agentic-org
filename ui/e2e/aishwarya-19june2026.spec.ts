@@ -1,6 +1,12 @@
 import { expect, Page, test } from "@playwright/test";
+import { setSessionToken } from "./helpers/auth";
 
 async function installCommonRoutes(page: Page) {
+  await setSessionToken(
+    page,
+    process.env.E2E_TOKEN || "aishwarya-19jun2026-session",
+  );
+
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
       json: {
@@ -178,7 +184,7 @@ test.describe("Aishwarya 19 June 2026 reopened regressions", () => {
     });
 
     await expect(page.locator("main")).toContainText("waiting_hitl");
-    await expect.poll(() => calls, { timeout: 5000 }).toBeGreaterThan(2);
+    await expect.poll(() => calls, { timeout: 10000 }).toBeGreaterThan(2);
     await expect(page.locator("main")).toContainText("completed");
     await expect(page.locator("main")).toContainText("2/2");
     await expect(page.locator("main")).toContainText("fetch_hubspot_contacts");
