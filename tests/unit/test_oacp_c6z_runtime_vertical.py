@@ -20,6 +20,7 @@ from core.commerce.c6z_runtime_vertical import (
     C6ZRuntimeValidationError,
     answer_product_question_from_cache,
     build_bridge_contract_response,
+    build_buyer_surface_bridge_matrix,
     build_cache_record_from_grantex_artifact,
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
@@ -719,9 +720,42 @@ def test_c6z_buyer_surface_bridge_routes_are_non_executing() -> None:
         "/bridges/openapi/ask",
         "/bridges/openapi/schema",
         "/bridges/a2a/agent-card",
+        "/bridges/surfaces",
         "/bridges/whatsapp/webhook",
         "/bridges/telegram/webhook",
     ):
         assert route in source
     assert '"allowed_to_execute": True' not in source
     assert '"public_discovery_enabled": True' not in source
+
+
+def test_c6z_buyer_surface_bridge_matrix_names_first_launch_surfaces() -> None:
+    matrix = build_buyer_surface_bridge_matrix(
+        env={
+            "AGENTICORG_API_KEY": "fixture-api-key",
+            "WHATSAPP_BUSINESS_ACCESS_TOKEN": "fixture-whatsapp-token",
+            "WHATSAPP_BUSINESS_PHONE_NUMBER_ID": "fixture-phone-id",
+            "WHATSAPP_WEBHOOK_VERIFY_TOKEN": "fixture-verify-token",
+            "TELEGRAM_BOT_TOKEN": "fixture-telegram-token",
+        }
+    )
+
+    surfaces = {item["surface"]: item for item in matrix["surfaces"]}
+    assert set(surfaces) == {"web", "chatgpt", "claude", "gemini", "perplexity", "whatsapp", "telegram"}
+    assert surfaces["chatgpt"]["bridge_kind"] == "mcp_or_openapi_action"
+    assert surfaces["claude"]["primary_endpoint"] == "agenticorg-mcp-server seller.* tools"
+    assert surfaces["gemini"]["fallback_endpoint"] == "/api/v1/commerce/runtime/bridges/a2a/agent-card"
+    assert surfaces["whatsapp"]["status"] == "bridge_ready"
+    assert all(item["allowed_to_execute"] is False for item in surfaces.values())
+    assert all(item["non_authoritative_for_transaction"] is True for item in surfaces.values())
+
+
+def test_c6z_buyer_surface_bridge_matrix_blocks_missing_channel_config() -> None:
+    matrix = build_buyer_surface_bridge_matrix(env={})
+    surfaces = {item["surface"]: item for item in matrix["surfaces"]}
+
+    assert surfaces["web"]["status"] == "bridge_ready"
+    assert surfaces["whatsapp"]["status"] == "blocked_missing_channel_config"
+    assert "WHATSAPP_BUSINESS_ACCESS_TOKEN" in surfaces["whatsapp"]["missing_env_vars"]
+    assert surfaces["telegram"]["status"] == "blocked_missing_channel_config"
+    assert surfaces["chatgpt"]["external_approval_required"] is True

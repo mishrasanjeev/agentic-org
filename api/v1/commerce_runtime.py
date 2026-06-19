@@ -27,6 +27,7 @@ from core.commerce.c6z_runtime_vertical import (
     ShopifyCredentials,
     answer_product_question_from_cache,
     build_bridge_contract_response,
+    build_buyer_surface_bridge_matrix,
     build_cache_record_from_grantex_artifact,
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
@@ -633,6 +634,19 @@ async def get_openapi_bridge_schema() -> dict[str, Any]:
 )
 async def get_commerce_a2a_agent_card() -> dict[str, Any]:
     return _commerce_a2a_agent_card()
+
+
+@router.get("/bridges/surfaces")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.bridges.surfaces.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.bridge.surfaces",
+)
+async def get_buyer_surface_bridge_matrix() -> dict[str, Any]:
+    return build_buyer_surface_bridge_matrix()
 
 
 @router.post("/bridges/whatsapp/webhook")
