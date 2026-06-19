@@ -196,6 +196,10 @@ def _contract_row(rows: list[dict], connector_key: str) -> dict:
     return next(row for row in rows if row["connector_key"] == connector_key)
 
 
+def _setup_row(rows: list[dict], connector_key: str) -> dict:
+    return next(row for row in rows if row["key"] == connector_key)
+
+
 def _workflow_config() -> dict:
     return {
         "mode": "shadow",
@@ -257,6 +261,41 @@ def test_hubspot_private_app_without_persisted_scopes_is_read_ready() -> None:
     ]
 
 
+def test_hubspot_healthy_private_app_partial_scopes_do_not_poison_setup() -> None:
+    configs = _base_configs()
+    configs[0].config["granted_scopes"] = ["crm.objects.contacts.read"]
+
+    setup = build_marketing_connector_setup(configs, now=NOW)
+    hubspot = _setup_row(setup, "hubspot")
+
+    assert hubspot["health_status"] == "healthy"
+    assert hubspot["cta_state"] == "none"
+    assert hubspot["missing_scopes"] == []
+    assert hubspot["non_blocking_scope_gaps"] == [
+        "crm.objects.deals.read",
+        "automation",
+    ]
+
+
+def test_hubspot_healthy_private_app_partial_scopes_with_tools_is_read_ready() -> None:
+    configs = _base_configs()
+    configs[0].config["granted_scopes"] = ["crm.objects.contacts.read"]
+    configs[0].config["tool_functions"] = [
+        "list_contacts",
+        "search_contacts",
+        "list_deals",
+    ]
+
+    hubspot = _contract_row(_contracts(configs), "hubspot")
+
+    assert hubspot["contract_state"] == "healthy"
+    assert hubspot["read_ready"] is True
+    assert hubspot["read_status"] == "ready"
+    assert hubspot["missing_read_scopes"] == []
+    assert hubspot["missing_write_scopes"] == ["automation"]
+    assert hubspot["write_status"] == "missing_scope"
+
+
 def test_missing_write_scope_blocks_write_workflow_readiness() -> None:
     configs = _base_configs()
     configs[1].config["marketing_connector_contract"] = _contract(
@@ -286,6 +325,7 @@ def test_missing_write_scope_state_does_not_block_read_contract() -> None:
 
     assert google_ads["read_ready"] is True
     assert google_ads["read_status"] == "ready"
+    assert google_ads["contract_state"] == "healthy"
     assert google_ads["write_ready"] is False
     assert google_ads["write_status"] == "missing_scope"
     assert google_ads["missing_read_scopes"] == []

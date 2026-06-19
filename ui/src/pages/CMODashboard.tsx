@@ -1732,7 +1732,6 @@ export default function CMODashboard() {
                     const writeCapabilities = row.write_capabilities.length > 0
                       ? row.write_capabilities.join(", ")
                       : t("cmoConnectorContracts.noWrites", "No write capability");
-                    const missingScopes = [...row.missing_read_scopes, ...row.missing_write_scopes];
                     return (
                       <tr key={row.connector_key} className="border-b align-top last:border-0">
                         <td className="py-2 pr-4">
@@ -1768,6 +1767,11 @@ export default function CMODashboard() {
                               {row.read_scope_evidence.join(" ")}
                             </div>
                           )}
+                          {row.missing_read_scopes.length > 0 && (
+                            <div className="mt-1 max-w-[260px] text-xs text-amber-700">
+                              {t("cmoConnectorContracts.missingReadScopes", "Missing read scopes")}: {row.missing_read_scopes.join(", ")}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 pr-4">
                           <Badge variant={contractStatusVariant(row.write_status)}>
@@ -1776,9 +1780,9 @@ export default function CMODashboard() {
                           <div className="mt-1 max-w-[260px] text-xs text-muted-foreground">
                             {writeCapabilities}
                           </div>
-                          {missingScopes.length > 0 && (
+                          {row.missing_write_scopes.length > 0 && (
                             <div className="mt-1 max-w-[260px] text-xs text-muted-foreground">
-                              {t("cmoConnectorContracts.missingScopes", "Missing")}: {missingScopes.join(", ")}
+                              {t("cmoConnectorContracts.missingWriteScopes", "Missing write scopes")}: {row.missing_write_scopes.join(", ")}
                             </div>
                           )}
                         </td>

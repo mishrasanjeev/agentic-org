@@ -650,7 +650,23 @@ def _contract_state(
         return "connector_disabled"
     if auth_status == "expired" or _contains_any(status_text, AUTH_EXPIRED_MARKERS):
         return "auth_expired"
-    if missing_read_scopes or _contains_any(status_text, MISSING_SCOPE_MARKERS):
+    explicit_scope_failure = _contains_any(
+        " ".join(
+            str(part or "")
+            for part in (
+                contract.get("degraded_mode_reason"),
+                contract.get("blocking_reason"),
+                contract.get("last_error"),
+                setup_row.get("detail"),
+            )
+        ).lower(),
+        MISSING_SCOPE_MARKERS,
+    )
+    if missing_read_scopes or explicit_scope_failure:
+        return "missing_scope"
+    if raw in {"missing_scope", "insufficient_scope"} and missing_write_scopes:
+        return "healthy"
+    if raw in {"missing_scope", "insufficient_scope"}:
         return "missing_scope"
     if _contains_any(status_text, RATE_LIMIT_MARKERS):
         return "rate_limited"
@@ -668,9 +684,9 @@ def _contract_state(
         return "stale_data"
     if raw in CONTRACT_STATES:
         return raw
-    if missing_write_scopes:
-        return "missing_scope"
     if raw in {"healthy", "ok", "ready"}:
+        return "healthy"
+    if missing_write_scopes:
         return "healthy"
     return "degraded"
 
@@ -1250,10 +1266,28 @@ def _hubspot_private_app_read_scope_gap_is_non_blocking(
     if health_values.isdisjoint({"healthy", "ok", "ready", "valid"}):
         return False
 
-    # If a scope payload exists and proves some read scopes are actually
-    # missing, keep the stricter blocker. The override is only for private-app
-    # or legacy configs with no persisted read-scope evidence at all.
-    return not set(granted_scopes).intersection(set(HUBSPOT_CRM_READ_SCOPES))
+    read_scope_evidence = set(granted_scopes).intersection(set(HUBSPOT_CRM_READ_SCOPES))
+    if read_scope_evidence:
+        return _hubspot_crm_read_tools_registered(contract, config)
+    return True
+
+
+def _hubspot_crm_read_tools_registered(
+    contract: dict[str, Any],
+    config: dict[str, Any],
+) -> bool:
+    tools: set[str] = set()
+    for key in (
+        "tool_functions",
+        "registered_tools",
+        "available_tools",
+        "tools",
+        "crm_read_tools",
+    ):
+        tools.update(_tool_name_from_value(tool) for tool in _list_from_value(contract.get(key)))
+        tools.update(_tool_name_from_value(tool) for tool in _list_from_value(config.get(key)))
+    tools.discard("")
+    return all(tool in tools for tool in HUBSPOT_CRM_READ_TOOLS)
 
 
 def _tool_name_from_value(tool: Any) -> str:

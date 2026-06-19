@@ -21,6 +21,8 @@ from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigg
 
 router = APIRouter()
 _log = structlog.get_logger()
+PAUSED_WORKFLOW_STATUSES = {"waiting_hitl", "waiting_delay", "waiting_event"}
+TERMINAL_WORKFLOW_STATUSES = {"completed", "failed", "timed_out", "cancelled"}
 
 
 # ── NL-to-Workflow schemas ──────────────────────────────────────────────────
@@ -56,7 +58,58 @@ def _wf_to_dict(wf: WorkflowDefinition) -> dict:
     }
 
 
+def _step_error_payload(error: object) -> dict | None:
+    if not error:
+        return None
+    if isinstance(error, dict):
+        return error
+    return {"message": str(error)}
+
+
+def _step_error_message(error: object) -> str | None:
+    payload = _step_error_payload(error)
+    if not payload:
+        return None
+    message = payload.get("message") or payload.get("error")
+    if message:
+        return str(message)
+    code = payload.get("code")
+    return str(code) if code else None
+
+
+def _step_error_code(error: object) -> str | None:
+    payload = _step_error_payload(error)
+    if not payload:
+        return None
+    code = payload.get("code") or payload.get("error")
+    return str(code) if code else None
+
+
+def _step_result_error(step_result: dict) -> dict | None:
+    error = step_result.get("error")
+    if not error:
+        return None
+    if isinstance(error, dict):
+        return error
+    return {"message": str(error)}
+
+
+def _run_steps_completed(state: dict) -> int:
+    raw = state.get("steps_completed")
+    if isinstance(raw, int):
+        return raw
+    return len(state.get("step_results", {}))
+
+
+def _run_steps_total(state: dict, fallback: int | None) -> int | None:
+    raw = state.get("steps_total")
+    if isinstance(raw, int):
+        return raw
+    return fallback
+
+
 def _step_to_dict(step: StepExecution) -> dict:
+    error_payload = _step_error_payload(step.error)
     return {
         "id": str(step.id),
         "step_id": step.step_id,
@@ -66,7 +119,10 @@ def _step_to_dict(step: StepExecution) -> dict:
         "input": step.input,
         "output": step.output,
         "confidence": float(step.confidence) if step.confidence is not None else None,
-        "error": step.error,
+        "error": error_payload,
+        "error_message": _step_error_message(error_payload),
+        "error_code": _step_error_code(error_payload),
+        "error_details": error_payload.get("details") if isinstance(error_payload, dict) else None,
         "retry_count": step.retry_count,
         "latency_ms": step.latency_ms,
         "started_at": step.started_at.isoformat() if step.started_at else None,
@@ -106,6 +162,77 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
         return _uuid.UUID(company_id)
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, "Invalid company_id format") from exc
+
+
+def _step_agent_id(step_def: dict) -> _uuid.UUID | None:
+    raw_agent = step_def.get("agent_id")
+    if not raw_agent:
+        return None
+    try:
+        return _uuid.UUID(str(raw_agent))
+    except (ValueError, TypeError):
+        return None
+
+
+def _step_completed_at(step_status: str, existing: datetime | None) -> datetime | None:
+    if step_status != "waiting_hitl" and step_status not in {
+        "pending",
+        "running",
+        "waiting_delay",
+        "waiting_event",
+    }:
+        return existing or datetime.now(UTC)
+    if step_status in PAUSED_WORKFLOW_STATUSES or step_status in {"pending", "running"}:
+        return None
+    return existing
+
+
+async def _upsert_step_execution(
+    session,
+    *,
+    tenant_id: _uuid.UUID,
+    workflow_run_id: _uuid.UUID,
+    step_id: str,
+    step_result: dict,
+    step_def: dict,
+) -> tuple[StepExecution, bool]:
+    """Persist the latest engine result for a workflow step."""
+    result = await session.execute(
+        select(StepExecution).where(
+            StepExecution.workflow_run_id == workflow_run_id,
+            StepExecution.step_id == step_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    created = row is None
+    now = datetime.now(UTC)
+    step_status = str(step_result.get("status") or "completed")
+
+    if row is None:
+        row = StepExecution(
+            tenant_id=tenant_id,
+            workflow_run_id=workflow_run_id,
+            step_id=step_id,
+            step_type=step_def.get("type", "agent"),
+            started_at=now,
+        )
+        session.add(row)
+
+    row.step_type = step_def.get("type", row.step_type or "agent")
+    row.agent_id = _step_agent_id(step_def)
+    row.status = step_status
+    row.input = step_result.get("input") or step_def.get("inputs") or step_def.get("params")
+    row.output = step_result.get("output")
+    row.confidence = step_result.get("confidence")
+    row.error = _step_result_error(step_result)
+    row.completed_at = (
+        _step_completed_at(step_status, row.completed_at)
+        if step_status != "waiting_hitl"
+        else None
+    )
+    if row.started_at is None:
+        row.started_at = now
+    return row, created
 
 
 # ── POST /workflows/generate ─────────────────────────────────────────────────
@@ -431,7 +558,6 @@ async def _execute_workflow_bg(
             db_run.context = {**(db_run.context or {}), "_engine_run_id": engine_run_id}
 
         steps_def = {s["id"]: s for s in definition.get("steps", [])}
-        synced_steps: set[str] = set()
 
         while True:
             await engine.execute_next(engine_run_id)
@@ -449,48 +575,21 @@ async def _execute_workflow_bg(
                 ).scalar_one()
 
                 for step_id, step_result in state.get("step_results", {}).items():
-                    if step_id in synced_steps:
-                        continue
-
                     step_def = steps_def.get(step_id, {})
-                    agent_id = None
-                    raw_agent = step_def.get("agent_id")
-                    if raw_agent:
-                        try:
-                            agent_id = _uuid.UUID(str(raw_agent))
-                        except (ValueError, TypeError):
-                            agent_id = None
-
-                    step_status = step_result.get("status", "completed")
-                    session.add(
-                        StepExecution(
-                            tenant_id=tenant_id,
-                            workflow_run_id=run_id,
-                            step_id=step_id,
-                            step_type=step_def.get("type", "agent"),
-                            agent_id=agent_id,
-                            status=step_status,
-                            output=step_result.get("output"),
-                            confidence=step_result.get("confidence"),
-                            error=(
-                                {"message": step_result["error"]}
-                                if step_result.get("error")
-                                else None
-                            ),
-                            started_at=datetime.now(UTC),
-                            completed_at=(
-                                datetime.now(UTC)
-                                if step_status != "waiting_hitl"
-                                else None
-                            ),
-                        )
+                    step_row, created = await _upsert_step_execution(
+                        session,
+                        tenant_id=tenant_id,
+                        workflow_run_id=run_id,
+                        step_id=step_id,
+                        step_result=step_result,
+                        step_def=step_def,
                     )
-                    synced_steps.add(step_id)
+                    step_status = step_row.status
 
                     # Create HITLQueue entry for approval steps
-                    if step_status == "waiting_hitl":
+                    if created and step_status == "waiting_hitl":
                         timeout_h = step_def.get("timeout_hours", 4)
-                        hitl_agent_id = agent_id
+                        hitl_agent_id = step_row.agent_id
                         if not hitl_agent_id:
                             hitl_agent_id = (
                                 await session.execute(
@@ -526,20 +625,15 @@ async def _execute_workflow_bg(
                                 )
                             )
 
-                db_run.steps_completed = len(synced_steps)
+                db_run.steps_completed = _run_steps_completed(state)
+                db_run.steps_total = _run_steps_total(state, db_run.steps_total)
                 db_run.status = state.get("status", "running")
-                if state.get("status") in ("completed", "failed", "timed_out"):
+                if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
                     db_run.completed_at = datetime.now(UTC)
                 if state.get("status") == "completed":
                     db_run.result = state.get("step_results")
 
-            if state.get("status") in (
-                "completed",
-                "failed",
-                "waiting_hitl",
-                "timed_out",
-                "cancelled",
-            ):
+            if state.get("status") in TERMINAL_WORKFLOW_STATUSES | PAUSED_WORKFLOW_STATUSES:
                 break
 
     # enterprise-gate: broad-except-ok reason=background-workflow-boundary-marks-db-run-failed

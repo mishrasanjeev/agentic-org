@@ -211,3 +211,96 @@ async def test_no_false_success_failed_step_fails_workflow_in_engine(monkeypatch
         result["step_results"]["notify_step"]["error"]["code"]
         == "notify_side_effect_not_configured"
     )
+
+
+@pytest.mark.asyncio
+async def test_connector_tool_alias_executes_hubspot_contacts_in_workflow(monkeypatch):
+    from core.langgraph import tool_adapter
+    from workflows.step_types import execute_step
+
+    captured: dict[str, object] = {}
+
+    async def fake_execute_connector_tool(connector, tool, params, config):
+        captured.update(
+            {
+                "connector": connector,
+                "tool": tool,
+                "params": params,
+                "config": config,
+            }
+        )
+        return {"contacts": [{"id": "1", "email": "qa@example.com"}]}
+
+    monkeypatch.setattr(tool_adapter, "_execute_connector_tool", fake_execute_connector_tool)
+
+    result = await execute_step(
+        {
+            "id": "fetch_hubspot_contacts",
+            "type": "agent",
+            "inputs": {"limit": 5},
+            "connector_config": {"access_token": "pat-test"},
+        },
+        {"tenant_id": "22222222-2222-2222-2222-222222222222"},
+    )
+
+    assert result["status"] == "completed"
+    assert result["output"]["contacts"][0]["email"] == "qa@example.com"
+    assert captured == {
+        "connector": "hubspot",
+        "tool": "list_contacts",
+        "params": {"limit": 5},
+        "config": {"access_token": "pat-test"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_connector_tool_failure_returns_structured_step_error(monkeypatch):
+    from core.langgraph import tool_adapter
+    from workflows.step_types import execute_step
+
+    async def fake_execute_connector_tool(*_args, **_kwargs):
+        return {
+            "error": "insufficient_scope",
+            "message": "HubSpot returned 403 insufficient scope",
+            "http_status": 403,
+        }
+
+    monkeypatch.setattr(tool_adapter, "_execute_connector_tool", fake_execute_connector_tool)
+
+    result = await execute_step(
+        {
+            "id": "fetch_hubspot_contacts",
+            "type": "agent",
+            "inputs": {"limit": 5},
+            "connector_config": {"access_token": "pat-test"},
+        },
+        {"tenant_id": "22222222-2222-2222-2222-222222222222"},
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["code"] == "connector_tool_execution_failed"
+    assert result["error"]["message"] == "HubSpot returned 403 insufficient scope"
+    assert result["error"]["details"]["connector"] == "hubspot"
+    assert result["error"]["details"]["tool"] == "list_contacts"
+    assert result["error"]["details"]["http_status"] == 403
+
+
+def test_connector_tool_step_type_is_valid_workflow_parser_input() -> None:
+    from workflows.parser import WorkflowParser
+
+    parsed = WorkflowParser().parse(
+        {
+            "name": "HubSpot contact fetch",
+            "steps": [
+                {
+                    "id": "fetch_contacts",
+                    "type": "connector_tool",
+                    "connector": "hubspot",
+                    "tool": "list_contacts",
+                    "inputs": {"limit": 10},
+                }
+            ],
+        }
+    )
+
+    assert parsed["steps"][0]["type"] == "connector_tool"

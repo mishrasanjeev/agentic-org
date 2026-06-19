@@ -94,6 +94,43 @@ class NotifySideEffectNotConfiguredError(WorkflowStepError):
         )
 
 
+class ConnectorToolConfigError(WorkflowStepError):
+    def __init__(self, *, step_id: str, connector: str | None, tool: str | None) -> None:
+        super().__init__(
+            "connector_tool_config_missing",
+            "Connector tool step is missing connector or tool configuration.",
+            {"step_id": step_id, "connector": connector, "tool": tool},
+        )
+
+
+class ConnectorToolExecutionError(WorkflowStepError):
+    def __init__(
+        self,
+        *,
+        step_id: str,
+        connector: str,
+        tool: str,
+        result: dict[str, Any],
+    ) -> None:
+        message = str(
+            result.get("message")
+            or result.get("error")
+            or f"{connector}.{tool} failed."
+        )
+        super().__init__(
+            "connector_tool_execution_failed",
+            message,
+            {
+                "step_id": step_id,
+                "connector": connector,
+                "tool": tool,
+                "provider_error": result.get("error"),
+                "http_status": result.get("http_status"),
+                "error_class": result.get("error_class"),
+            },
+        )
+
+
 class ExternalWriteConfirmationMissingError(WorkflowStepError):
     def __init__(
         self,
