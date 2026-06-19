@@ -185,7 +185,13 @@ async def _resume_workflow_bg(
     decision: dict,
 ) -> None:
     """Resume a workflow after HITL decision and sync remaining results to DB."""
-    from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
+    from api.v1.workflows import (
+        TERMINAL_WORKFLOW_STATUSES,
+        _run_steps_completed,
+        _run_steps_total,
+        _upsert_step_execution,
+    )
+    from core.models.workflow import WorkflowDefinition, WorkflowRun
     from workflows.engine import WorkflowEngine
     from workflows.state_store import WorkflowStateStore
 
@@ -217,7 +223,9 @@ async def _resume_workflow_bg(
 
     try:
         # Resume executes all remaining steps (or pauses at next HITL)
-        await engine.resume_from_hitl(engine_run_id, decision)
+        resume_result = await engine.resume_from_hitl(engine_run_id, decision)
+        if isinstance(resume_result, dict) and resume_result.get("error"):
+            raise RuntimeError(str(resume_result["error"]))
 
         state = await state_store.load(engine_run_id)
         if not state:
@@ -226,15 +234,6 @@ async def _resume_workflow_bg(
         steps_def = {s["id"]: s for s in definition.get("steps", [])}
 
         async with get_tenant_session(tenant_id) as session:
-            existing = (
-                await session.execute(
-                    select(StepExecution.step_id).where(
-                        StepExecution.workflow_run_id == workflow_run_id
-                    )
-                )
-            ).scalars().all()
-            synced_steps = set(existing)
-
             db_run = (
                 await session.execute(
                     select(WorkflowRun).where(WorkflowRun.id == workflow_run_id)
@@ -242,55 +241,55 @@ async def _resume_workflow_bg(
             ).scalar_one()
 
             for step_id, step_result in state.get("step_results", {}).items():
-                if step_id in synced_steps:
-                    # Update existing step if status changed (e.g. waiting_hitl → completed)
-                    existing_step = (
-                        await session.execute(
-                            select(StepExecution).where(
-                                StepExecution.workflow_run_id == workflow_run_id,
-                                StepExecution.step_id == step_id,
+                step_def = steps_def.get(step_id, {})
+                step_row, created = await _upsert_step_execution(
+                    session,
+                    tenant_id=tenant_id,
+                    workflow_run_id=workflow_run_id,
+                    step_id=step_id,
+                    step_result=step_result,
+                    step_def=step_def,
+                )
+
+                if created and step_row.status == "waiting_hitl":
+                    timeout_h = step_def.get("timeout_hours", 4)
+                    hitl_agent_id = step_row.agent_id
+                    if not hitl_agent_id:
+                        hitl_agent_id = (
+                            await session.execute(
+                                select(Agent.id).where(Agent.tenant_id == tenant_id).limit(1)
+                            )
+                        ).scalar_one_or_none()
+                    if hitl_agent_id:
+                        session.add(
+                            HITLQueue(
+                                tenant_id=tenant_id,
+                                workflow_run_id=workflow_run_id,
+                                agent_id=hitl_agent_id,
+                                title=f"Approval required: {step_def.get('title', step_id)}",
+                                trigger_type="workflow_step",
+                                priority=step_def.get("priority", "normal"),
+                                assignee_role=step_result.get(
+                                    "assignee_role",
+                                    step_def.get("assignee_role", "admin"),
+                                ),
+                                decision_options=step_def.get(
+                                    "decision_options",
+                                    {"options": ["approve", "reject"]},
+                                ),
+                                context={
+                                    "workflow_run_id": str(workflow_run_id),
+                                    "step_id": step_id,
+                                    "engine_run_id": engine_run_id,
+                                },
+                                expires_at=datetime.now(UTC) + timedelta(hours=timeout_h),
                             )
                         )
-                    ).scalar_one_or_none()
-                    if existing_step and existing_step.status != step_result.get("status"):
-                        existing_step.status = step_result.get("status", "completed")
-                        existing_step.output = step_result.get("output")
-                        existing_step.completed_at = datetime.now(UTC)
-                    continue
 
-                step_def = steps_def.get(step_id, {})
-                agent_id = None
-                raw_agent = step_def.get("agent_id")
-                if raw_agent:
-                    try:
-                        agent_id = _uuid.UUID(str(raw_agent))
-                    except (ValueError, TypeError):
-                        pass
-
-                session.add(
-                    StepExecution(
-                        tenant_id=tenant_id,
-                        workflow_run_id=workflow_run_id,
-                        step_id=step_id,
-                        step_type=step_def.get("type", "agent"),
-                        agent_id=agent_id,
-                        status=step_result.get("status", "completed"),
-                        output=step_result.get("output"),
-                        confidence=step_result.get("confidence"),
-                        error=(
-                            {"message": step_result["error"]}
-                            if step_result.get("error")
-                            else None
-                        ),
-                        started_at=datetime.now(UTC),
-                        completed_at=datetime.now(UTC),
-                    )
-                )
-                synced_steps.add(step_id)
-
-            db_run.steps_completed = len(synced_steps)
+            db_run.steps_completed = _run_steps_completed(state)
+            db_run.steps_total = _run_steps_total(state, db_run.steps_total)
             db_run.status = state.get("status", "running")
-            if state.get("status") in ("completed", "failed", "timed_out"):
+            if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
                 db_run.completed_at = datetime.now(UTC)
             if state.get("status") == "completed":
                 db_run.result = state.get("step_results")

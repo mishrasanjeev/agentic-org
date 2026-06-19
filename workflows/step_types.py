@@ -18,6 +18,8 @@ from workflows.parallel_executor import execute_parallel
 from workflows.step_results import (
     ALLOWED_STEP_STATUSES,
     AgentExecutionError,
+    ConnectorToolConfigError,
+    ConnectorToolExecutionError,
     ExternalWriteConfirmationMissingError,
     MissingAgentConfigError,
     MissingLLMProviderConfigError,
@@ -56,6 +58,14 @@ MARKETING_WRITE_ACTION_HINTS = (
     "start_nurture",
     "update_crm",
 )
+CONNECTOR_TOOL_ALIASES: dict[str, tuple[str, str]] = {
+    "fetch_hubspot_contacts": ("hubspot", "list_contacts"),
+    "get_hubspot_contacts": ("hubspot", "list_contacts"),
+    "list_hubspot_contacts": ("hubspot", "list_contacts"),
+    "fetch_hubspot_deals": ("hubspot", "list_deals"),
+    "get_hubspot_deals": ("hubspot", "list_deals"),
+    "list_hubspot_deals": ("hubspot", "list_deals"),
+}
 
 
 def _env_flag(name: str) -> bool:
@@ -165,6 +175,45 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
     }
 
 
+async def _load_workflow_connector_config(connector_name: str, tenant_id: str) -> dict[str, Any]:
+    if not connector_name or not tenant_id:
+        return {}
+    try:
+        tenant_uuid = uuid.UUID(str(tenant_id))
+    except (TypeError, ValueError):
+        return {}
+
+    import json as _json
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.connector_config import ConnectorConfig
+
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(
+            select(ConnectorConfig).where(
+                ConnectorConfig.tenant_id == tenant_uuid,
+                ConnectorConfig.connector_name == connector_name,
+            )
+        )
+        row = result.scalar_one_or_none()
+    if row is None:
+        return {}
+
+    config = dict(row.config or {})
+    creds = row.credentials_encrypted or {}
+    if isinstance(creds, str):
+        creds = _json.loads(creds)
+    if isinstance(creds, dict) and "_encrypted" in creds:
+        from core.crypto import decrypt_for_tenant
+
+        creds = _json.loads(decrypt_for_tenant(creds["_encrypted"]))
+    if isinstance(creds, dict):
+        config.update(creds)
+    return config
+
+
 def _normalize_key(value: Any) -> str:
     return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
 
@@ -227,6 +276,51 @@ def _connector_key(step: dict, output: dict[str, Any]) -> str | None:
         or output.get("connector")
     )
     return str(value).strip().lower() if value else None
+
+
+def _connector_tool_ref_from_step(
+    step: dict,
+    *,
+    allow_action_tool: bool = True,
+) -> tuple[str | None, str | None]:
+    connector = step.get("connector") or step.get("connector_key")
+    tool = step.get("tool") or step.get("tool_name")
+    action = step.get("action")
+    agent = step.get("agent") or step.get("agent_type")
+    step_id = step.get("id")
+
+    for value in (tool, action, agent, step_id):
+        normalized = _normalize_key(value)
+        if normalized in CONNECTOR_TOOL_ALIASES:
+            return CONNECTOR_TOOL_ALIASES[normalized]
+
+    for value in (tool, action):
+        if isinstance(value, str) and ":" in value and not value.startswith("tool:"):
+            maybe_connector, maybe_tool = value.split(":", 1)
+            return _normalize_key(maybe_connector), maybe_tool.strip()
+
+    if connector and tool:
+        return _normalize_key(connector), str(tool).strip()
+    if allow_action_tool and connector and action:
+        return _normalize_key(connector), str(action).strip()
+    return None, None
+
+
+def _connector_step_inputs(step: dict, state: dict) -> dict[str, Any]:
+    raw = step.get("params", step.get("arguments", step.get("inputs", {})))
+    if not isinstance(raw, dict):
+        return {}
+    inputs = dict(raw)
+    context = state.get("context") if isinstance(state.get("context"), dict) else {}
+    trigger = state.get("trigger_payload") if isinstance(state.get("trigger_payload"), dict) else {}
+    for key, value in list(inputs.items()):
+        if isinstance(value, str) and value.startswith("$"):
+            lookup = value[1:]
+            if lookup in context:
+                inputs[key] = context[lookup]
+            elif lookup in trigger:
+                inputs[key] = trigger[lookup]
+    return inputs
 
 
 def _connector_contracts_from_state(state: dict) -> list[dict[str, Any]]:
@@ -313,6 +407,13 @@ def _external_write_failure(
 
 async def execute_step(step: dict, state: dict) -> dict[str, Any]:
     step_type = step.get("type", "agent")
+    if step_type == "agent" and any(key in step for key in ("tool", "tool_name")):
+        return await _execute_connector_tool_step(step, state)
+    if step_type == "agent" and _connector_tool_ref_from_step(
+        step,
+        allow_action_tool=False,
+    ) != (None, None):
+        return await _execute_connector_tool_step(step, state)
     handlers = {
         "agent": _execute_agent,
         "condition": _execute_condition,
@@ -320,6 +421,7 @@ async def execute_step(step: dict, state: dict) -> dict[str, Any]:
         "parallel": _execute_parallel,
         "loop": _execute_loop,
         "transform": _execute_transform,
+        "connector_tool": _execute_connector_tool_step,
         "notify": _execute_notify,
         "sub_workflow": _execute_sub_workflow,
         "wait": _execute_wait,
@@ -334,6 +436,56 @@ async def _execute_collaboration(step: dict, state: dict) -> dict[str, Any]:
     from workflows.collaboration import execute_collaboration_step
 
     return await execute_collaboration_step(step, state)
+
+
+async def _execute_connector_tool_step(step: dict, state: dict) -> dict[str, Any]:
+    connector, tool = _connector_tool_ref_from_step(step)
+    if not connector or not tool:
+        return failure_result(
+            step_id=str(step.get("id", "")),
+            step_type="connector_tool",
+            failure=ConnectorToolConfigError(
+                step_id=str(step.get("id", "")),
+                connector=connector,
+                tool=tool,
+            ),
+        )
+
+    config = step.get("connector_config")
+    if not isinstance(config, dict):
+        state_config = _state_lookup(state, "connector_config", f"{connector}_connector_config")
+        config = state_config if isinstance(state_config, dict) else {}
+    if not config:
+        config = await _load_workflow_connector_config(connector, str(state.get("tenant_id") or ""))
+
+    from core.langgraph.tool_adapter import _execute_connector_tool
+
+    result = await _execute_connector_tool(
+        connector,
+        tool,
+        _connector_step_inputs(step, state),
+        config,
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return failure_result(
+            step_id=str(step.get("id", "")),
+            step_type="connector_tool",
+            failure=ConnectorToolExecutionError(
+                step_id=str(step.get("id", "")),
+                connector=connector,
+                tool=tool,
+                result=result,
+            ),
+            output=result,
+        )
+    return {
+        "step_id": step["id"],
+        "type": "connector_tool",
+        "status": "completed",
+        "output": result,
+        "connector": connector,
+        "tool": tool,
+    }
 
 
 async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:

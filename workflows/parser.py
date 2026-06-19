@@ -15,6 +15,7 @@ class WorkflowParser:
         "parallel",
         "loop",
         "transform",
+        "connector_tool",
         "notify",
         "sub_workflow",
         "wait",

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import re
+from datetime import date
 from typing import Any
 
 import structlog
@@ -9,6 +12,61 @@ import structlog
 from connectors.framework.base_connector import BaseConnector
 
 logger = structlog.get_logger()
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(?P<key>start[_\s-]?date|end[_\s-]?date|aggregated[_\s-]?by)\s*[:=]\s*(?P<value>[A-Za-z0-9_-]+)"
+)
+
+
+def _flatten_stats_params(params: dict[str, Any]) -> dict[str, Any]:
+    flattened = dict(params or {})
+    for wrapper_key in ("kwargs", "params", "arguments", "input"):
+        nested = flattened.get(wrapper_key)
+        if isinstance(nested, dict):
+            flattened.update(nested)
+        elif isinstance(nested, str) and nested.strip():
+            text = nested.strip()
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                flattened.update(parsed)
+            else:
+                flattened.update(_parse_stats_text(text))
+    for text_key in ("query", "prompt", "text"):
+        text_value = flattened.get(text_key)
+        if isinstance(text_value, str):
+            flattened.update(_parse_stats_text(text_value))
+    return flattened
+
+
+def _parse_stats_text(text: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for match in _DATE_ASSIGNMENT_RE.finditer(text):
+        key = match.group("key").lower().replace(" ", "_").replace("-", "_")
+        parsed[key] = match.group("value")
+    return parsed
+
+
+def _first_value(params: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        value = params.get(name)
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+def _normalize_date(value: Any) -> str:
+    text = str(value or "").strip()
+    if not _DATE_RE.match(text):
+        return ""
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return ""
+    return text
 
 
 class SendgridConnector(BaseConnector):
@@ -162,13 +220,27 @@ class SendgridConnector(BaseConnector):
             end_date: End date (YYYY-MM-DD, defaults to today)
             aggregated_by: Aggregation period — "day", "week", or "month"
         """
-        start_date = params.get("start_date", "")
+        params = _flatten_stats_params(params)
+        start_date = _normalize_date(
+            _first_value(params, "start_date", "startDate", "date_from", "from_date", "from")
+        )
         if not start_date:
-            return {"error": "start_date is required"}
+            return {
+                "error": "start_date is required and should be a YYYY-MM-DD formatted date",
+                "expected_format": "YYYY-MM-DD",
+            }
 
         query_params: dict[str, Any] = {"start_date": start_date}
-        if params.get("end_date"):
-            query_params["end_date"] = params["end_date"]
+        if _first_value(params, "end_date", "endDate", "date_to", "to_date", "to"):
+            end_date = _normalize_date(
+                _first_value(params, "end_date", "endDate", "date_to", "to_date", "to")
+            )
+            if not end_date:
+                return {
+                    "error": "end_date should be a YYYY-MM-DD formatted date",
+                    "expected_format": "YYYY-MM-DD",
+                }
+            query_params["end_date"] = end_date
         if params.get("aggregated_by"):
             query_params["aggregated_by"] = params["aggregated_by"]
 

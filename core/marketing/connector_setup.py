@@ -24,6 +24,11 @@ INSUFFICIENT_SCOPE_MARKERS = ("insufficient_scope", "missing_scope", "forbidden"
 MALFORMED_PAYLOAD_MARKERS = ("malformed_payload", "malformed payload", "invalid_payload", "schema_error")
 QUOTA_EXHAUSTED_MARKERS = ("quota_exhausted", "quota exhausted", "quota", "limit exhausted")
 CONNECTOR_DISABLED_MARKERS = ("connector_disabled", "connector disabled", "disabled", "inactive")
+HUBSPOT_PRIVATE_APP_SCOPE_GAPS = {
+    "crm.objects.contacts.read",
+    "crm.objects.deals.read",
+    "automation",
+}
 
 
 @dataclass(frozen=True)
@@ -236,6 +241,7 @@ def _build_row(
     missing_scopes = _missing_scopes(requirement.required_scopes, granted_scopes)
     contract_payload = _contract_payload(config_payload)
     contract_state = _contract_state_from_payload(contract_payload, last_sync_at, now)
+    non_blocking_scope_gaps: list[str] = []
 
     if status in UNCONFIGURED_STATUSES or not has_credentials:
         return _missing_row(requirement)
@@ -256,6 +262,18 @@ def _build_row(
         or _contains_any(status_text, INSUFFICIENT_SCOPE_MARKERS)
     ) and not missing_scopes:
         missing_scopes = list(requirement.required_scopes)
+
+    if _hubspot_private_app_scope_gap_is_non_blocking(
+        requirement=requirement,
+        missing_scopes=missing_scopes,
+        status=status,
+        health_status_raw=health_status_raw,
+        status_text=status_text,
+        contract_payload=contract_payload,
+        contract_state=contract_state,
+    ):
+        non_blocking_scope_gaps = list(missing_scopes)
+        missing_scopes = []
 
     if contract_state == "missing_scope" or _contains_any(status_text, INSUFFICIENT_SCOPE_MARKERS) or missing_scopes:
         health_status = "insufficient_scope"
@@ -331,6 +349,7 @@ def _build_row(
         "data_coverage_status": data_coverage_status,
         "cta_state": cta_state,
         "missing_scopes": missing_scopes,
+        "non_blocking_scope_gaps": non_blocking_scope_gaps,
         "granted_scopes": granted_scopes,
         "detail": detail,
     }
@@ -351,6 +370,7 @@ def _missing_row(requirement: MarketingConnectorRequirement) -> dict[str, Any]:
         "data_coverage_status": "missing",
         "cta_state": "setup",
         "missing_scopes": list(requirement.required_scopes),
+        "non_blocking_scope_gaps": [],
         "granted_scopes": [],
         "detail": "Connector is missing; configure it before treating CMO data as production-ready.",
     }
@@ -485,6 +505,40 @@ def _missing_scopes(required: tuple[str, ...], granted: list[str]) -> list[str]:
         return []
     granted_set = set(granted)
     return [scope for scope in required if scope not in granted_set]
+
+
+def _hubspot_private_app_scope_gap_is_non_blocking(
+    *,
+    requirement: MarketingConnectorRequirement,
+    missing_scopes: list[str],
+    status: str,
+    health_status_raw: str,
+    status_text: str,
+    contract_payload: dict[str, Any],
+    contract_state: str,
+) -> bool:
+    """Treat healthy HubSpot CRM access as setup proof despite scope text gaps."""
+
+    if requirement.key != "hubspot" or not missing_scopes:
+        return False
+    if not set(missing_scopes).issubset(HUBSPOT_PRIVATE_APP_SCOPE_GAPS):
+        return False
+    if status not in CONFIGURED_STATUSES and status:
+        return False
+    if health_status_raw not in HEALTHY_STATUSES:
+        return False
+    explicit_scope_failure = " ".join(
+        str(part or "")
+        for part in (
+            status_text,
+            contract_payload.get("degraded_mode_reason"),
+            contract_payload.get("blocking_reason"),
+            contract_payload.get("last_error"),
+        )
+    ).lower()
+    if contract_state == "missing_scope" or _contains_any(explicit_scope_failure, INSUFFICIENT_SCOPE_MARKERS):
+        return False
+    return True
 
 
 def _contains_any(value: str, markers: tuple[str, ...]) -> bool:
