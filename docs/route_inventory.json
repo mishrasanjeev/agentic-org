@@ -950,7 +950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "approvals.decide",
-    "source_line": 328,
+    "source_line": 327,
     "tenant_required": true
   },
   {
@@ -5685,7 +5685,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.list",
-    "source_line": 229,
+    "source_line": 356,
     "tenant_required": true
   },
   {
@@ -5703,7 +5703,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 315,
+    "source_line": 442,
     "tenant_required": true
   },
   {
@@ -5721,7 +5721,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "workflows.generate",
-    "source_line": 121,
+    "source_line": 248,
     "tenant_required": true
   },
   {
@@ -5739,7 +5739,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.read",
-    "source_line": 696,
+    "source_line": 790,
     "tenant_required": true
   },
   {
@@ -5757,7 +5757,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-control",
     "scope": "workflows.runs.cancel",
-    "source_line": 786,
+    "source_line": 880,
     "tenant_required": true
   },
   {
@@ -5775,7 +5775,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.replan-history",
-    "source_line": 742,
+    "source_line": 836,
     "tenant_required": true
   },
   {
@@ -5793,7 +5793,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.templates.read",
-    "source_line": 204,
+    "source_line": 331,
     "tenant_required": false
   },
   {
@@ -5811,7 +5811,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 377,
+    "source_line": 504,
     "tenant_required": true
   },
   {
@@ -5829,7 +5829,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.read",
-    "source_line": 288,
+    "source_line": 415,
     "tenant_required": true
   },
   {
@@ -5847,7 +5847,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 889,
+    "source_line": 983,
     "tenant_required": true
   },
   {
@@ -5865,7 +5865,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-execution",
     "scope": "workflows.run",
-    "source_line": 598,
+    "source_line": 692,
     "tenant_required": true
   },
   {
