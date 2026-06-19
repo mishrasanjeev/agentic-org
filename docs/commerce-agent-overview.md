@@ -155,17 +155,19 @@ The operational flow is:
 ## Buyer Agent Launch Surfaces
 
 The buyer agent must be easy to start from the places buyers already chat. The
-current implementation does not yet make every surface launch-ready; this is a
-tracked PRD gap.
+runtime now exposes a concrete surface matrix at
+`GET /api/v1/commerce/runtime/bridges/surfaces`. The matrix names each first
+surface, the bridge kind, the endpoint or MCP package, required channel
+configuration, and whether external platform approval is still required.
 
 | Surface | Intended launch model | Current readiness posture |
 | --- | --- | --- |
-| ChatGPT | MCP seller tools backed by cached OACP artifacts. | MCP tools exist; marketplace/app approval is not claimed. |
-| Claude | MCP seller tools backed by cached OACP artifacts. | MCP tools exist; client approval is not claimed. |
-| Gemini | AgenticOrg OpenAPI/function bridge. | Runtime route/schema exists; native channel approval is not claimed. |
-| Perplexity/OpenAI Actions-style clients | AgenticOrg OpenAPI/function bridge. | Runtime route/schema exists; external marketplace approval is not claimed. |
-| WhatsApp | WhatsApp Business Platform webhook adapter. | Route and config checklist exist; live sending is blocked without credentials. |
-| Telegram | Telegram Bot API webhook adapter. | Route and config checklist exist; live sending is blocked without credentials. |
+| ChatGPT | MCP seller tools with OpenAPI fallback, backed by cached OACP artifacts. | `agenticorg-mcp-server` seller tools and OpenAPI bridge exist; external ChatGPT approval/config is not claimed. |
+| Claude | MCP seller tools backed by cached OACP artifacts. | `agenticorg-mcp-server` seller tools exist; client setup/approval is not claimed. |
+| Gemini | OpenAPI/function bridge with A2A fallback. | Runtime schema and A2A card exist; native Gemini approval/config is not claimed. |
+| Perplexity/OpenAI Actions-style clients | Hosted OpenAPI answer/action bridge. | Runtime schema and ask route exist; external platform approval is not claimed. |
+| WhatsApp | WhatsApp Business Platform webhook adapter. | Runtime route exists; live sending is blocked without configured WhatsApp credentials and app approval. |
+| Telegram | Telegram Bot API webhook adapter. | Runtime route exists; live sending is blocked without configured bot token and webhook setup. |
 | Web/mobile | AgenticOrg-hosted buyer-agent session or embedded merchant widget. | Runtime route exists. |
 
 Every channel must create or resume a buyer-agent session, use OACP artifacts or
@@ -205,7 +207,9 @@ the cross-repo OACP runtime closing these gaps:
 - Refund/return request workflow before any refund execution.
 - Live provider approval, webhook signature verification, reconciliation, and
   rollback readiness.
-- UCP/ACP/schema.org adapter generation from one canonical Grantex model.
+- UCP/ACP/schema.org adapter generation from one canonical Grantex model into
+  non-certifying compatibility payloads; external publication and conformance
+  remain separate approval steps.
 - Order, fulfillment, delivery/pickup, cancellation, support, return, refund,
   settlement, and payout surfaces that agents can read without inventing facts.
 - Product/landing copy that explains "agentic commerce readiness" without

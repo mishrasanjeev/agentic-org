@@ -82,6 +82,75 @@ C6Z_CAPABILITY_STATUSES: tuple[str, ...] = (
     "blocked_missing_credentials",
     "blocked_provider_error",
 )
+C6Z_BUYER_SURFACE_BRIDGES: tuple[dict[str, Any], ...] = (
+    {
+        "surface": "web",
+        "buyer_surface_label": "AgenticOrg web session",
+        "bridge_kind": "web_session",
+        "primary_endpoint": "/api/v1/commerce/runtime/bridges/web/ask",
+        "fallback_endpoint": "/api/v1/commerce/runtime/buyer-sessions/ask",
+        "required_env_vars": (),
+        "external_approval_required": False,
+    },
+    {
+        "surface": "chatgpt",
+        "buyer_surface_label": "ChatGPT-style agent surface",
+        "bridge_kind": "mcp_or_openapi_action",
+        "primary_endpoint": "agenticorg-mcp-server seller.* tools",
+        "fallback_endpoint": "/api/v1/commerce/runtime/bridges/openapi/ask",
+        "required_env_vars": ("AGENTICORG_API_KEY",),
+        "external_approval_required": True,
+    },
+    {
+        "surface": "claude",
+        "buyer_surface_label": "Claude / Claude Code MCP surface",
+        "bridge_kind": "mcp_stdio_or_remote",
+        "primary_endpoint": "agenticorg-mcp-server seller.* tools",
+        "fallback_endpoint": "/api/v1/commerce/runtime/bridges/openapi/ask",
+        "required_env_vars": ("AGENTICORG_API_KEY",),
+        "external_approval_required": True,
+    },
+    {
+        "surface": "gemini",
+        "buyer_surface_label": "Gemini-style function/A2A surface",
+        "bridge_kind": "openapi_function_or_a2a",
+        "primary_endpoint": "/api/v1/commerce/runtime/bridges/openapi/schema",
+        "fallback_endpoint": "/api/v1/commerce/runtime/bridges/a2a/agent-card",
+        "required_env_vars": ("AGENTICORG_API_KEY",),
+        "external_approval_required": True,
+    },
+    {
+        "surface": "perplexity",
+        "buyer_surface_label": "Perplexity-style answer/action surface",
+        "bridge_kind": "openapi_hosted_answer",
+        "primary_endpoint": "/api/v1/commerce/runtime/bridges/openapi/schema",
+        "fallback_endpoint": "/api/v1/commerce/runtime/bridges/openapi/ask",
+        "required_env_vars": ("AGENTICORG_API_KEY",),
+        "external_approval_required": True,
+    },
+    {
+        "surface": "whatsapp",
+        "buyer_surface_label": "WhatsApp Business Platform",
+        "bridge_kind": "webhook_channel",
+        "primary_endpoint": "/api/v1/commerce/runtime/bridges/whatsapp/webhook",
+        "fallback_endpoint": "/api/v1/commerce/runtime/bridges/web/ask",
+        "required_env_vars": (
+            "WHATSAPP_BUSINESS_ACCESS_TOKEN",
+            "WHATSAPP_BUSINESS_PHONE_NUMBER_ID",
+            "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+        ),
+        "external_approval_required": True,
+    },
+    {
+        "surface": "telegram",
+        "buyer_surface_label": "Telegram Bot API",
+        "bridge_kind": "webhook_channel",
+        "primary_endpoint": "/api/v1/commerce/runtime/bridges/telegram/webhook",
+        "fallback_endpoint": "/api/v1/commerce/runtime/bridges/web/ask",
+        "required_env_vars": ("TELEGRAM_BOT_TOKEN",),
+        "external_approval_required": True,
+    },
+)
 
 PRIVATE_KEY_MARKERS: tuple[str, ...] = (
     "access_token",
@@ -205,6 +274,63 @@ def resolve_env(required: Sequence[str], env: Mapping[str, str] | None = None) -
     source = os.environ if env is None else env
     missing = tuple(name for name in required if not str(source.get(name, "")).strip())
     return C6ZEnvResolution(required=tuple(required), missing=missing)
+
+
+def build_buyer_surface_bridge_matrix(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Return the concrete first-channel bridge contract for OACP commerce.
+
+    This is runtime metadata for operators and channel clients. It does not
+    create marketplace approvals, publish public discovery, or enable checkout.
+    """
+
+    source = os.environ if env is None else env
+    surfaces: list[dict[str, Any]] = []
+    for item in C6Z_BUYER_SURFACE_BRIDGES:
+        required_env_vars = tuple(str(name) for name in item["required_env_vars"])
+        missing_env_vars = tuple(name for name in required_env_vars if not str(source.get(name, "")).strip())
+        surfaces.append(
+            {
+                "surface": item["surface"],
+                "buyer_surface_label": item["buyer_surface_label"],
+                "bridge_kind": item["bridge_kind"],
+                "primary_endpoint": item["primary_endpoint"],
+                "fallback_endpoint": item["fallback_endpoint"],
+                "status": "bridge_ready" if not missing_env_vars else "blocked_missing_channel_config",
+                "required_env_vars": required_env_vars,
+                "missing_env_vars": missing_env_vars,
+                "external_approval_required": bool(item["external_approval_required"]),
+                "supported_actions": (
+                    "seller_product_question_answering",
+                    "catalog_snapshot_listing",
+                    "source_freshness_labeling",
+                    "prepared_handoff_explanation",
+                ),
+                "unsupported_actions": (
+                    "checkout_execution",
+                    "payment_execution",
+                    "order_creation",
+                    "inventory_hold_execution",
+                    "mandate_creation",
+                    "refund_execution",
+                    "return_execution",
+                    "shipping_execution",
+                    "public_discovery_publication",
+                ),
+                "allowed_to_execute": False,
+                "non_authoritative_for_transaction": True,
+                "no_payment_execution": True,
+                "no_public_discovery_enablement": True,
+            }
+        )
+    return {
+        "status": "surface_bridge_matrix_ready",
+        "surfaces": surfaces,
+        "schema_endpoint": "/api/v1/commerce/runtime/bridges/openapi/schema",
+        "a2a_agent_card_endpoint": "/api/v1/commerce/runtime/bridges/a2a/agent-card",
+        "mcp_package": "agenticorg-mcp-server",
+        "allowed_to_execute": False,
+        "non_authoritative_for_transaction": True,
+    }
 
 
 def resolve_shopify_credentials(env: Mapping[str, str] | None = None) -> ShopifyCredentials:

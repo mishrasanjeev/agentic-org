@@ -219,6 +219,7 @@ The C6Z runtime closure adds these AgenticOrg-owned paths:
 | Artifact cache | `POST /api/v1/commerce/runtime/artifacts/cache` | Validates artifacts before storing cache records. |
 | Buyer answer | `POST /api/v1/commerce/runtime/buyer-sessions/ask` | Answers from cache with source/freshness labels. |
 | Bridge adapters | `/bridges/web`, `/bridges/openapi`, `/bridges/a2a`, `/bridges/whatsapp`, `/bridges/telegram` | One common non-executing bridge contract. |
+| Bridge surface matrix | `GET /api/v1/commerce/runtime/bridges/surfaces` | Lists web, ChatGPT-style, Claude, Gemini-style, Perplexity-style, WhatsApp, and Telegram bridge readiness plus required channel config. |
 | Plural/Pine capability | `POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify` | Capability metadata only; no mandate or payment execution. |
 
 ## Historical Commerce Alias Requirements
