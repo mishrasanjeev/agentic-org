@@ -311,8 +311,10 @@ def _connector_step_inputs(step: dict, state: dict) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {}
     inputs = dict(raw)
-    context = state.get("context") if isinstance(state.get("context"), dict) else {}
-    trigger = state.get("trigger_payload") if isinstance(state.get("trigger_payload"), dict) else {}
+    context_raw = state.get("context")
+    context: dict[Any, Any] = context_raw if isinstance(context_raw, dict) else {}
+    trigger_raw = state.get("trigger_payload")
+    trigger: dict[Any, Any] = trigger_raw if isinstance(trigger_raw, dict) else {}
     for key, value in list(inputs.items()):
         if isinstance(value, str) and value.startswith("$"):
             lookup = value[1:]
