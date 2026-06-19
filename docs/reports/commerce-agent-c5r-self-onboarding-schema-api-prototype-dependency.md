@@ -1,6 +1,6 @@
 # Commerce Agent C5R Self-Onboarding Schema/API Prototype Dependency
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: local-only AgenticOrg schema/API dependency prototype proposal for
 future merchant self-onboarding metadata

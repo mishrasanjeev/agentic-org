@@ -1,6 +1,8 @@
 # Commerce Agent OACP Final Launch Evidence
 
-Status: local internal runtime demo complete; production C6Z launch remains blocked by external Shopify credential and Grantex tenant-token provisioning.
+Status: superseded by the 2026-06-19 runtime vertical work. This file is
+historical evidence for the 2026-06-18 production blocker run; current operator
+steps live in `docs/runbooks/oacp-shopify-merchant-onboarding.md`.
 
 Evidence date: 2026-06-18.
 
@@ -42,14 +44,18 @@ Blocking evidence:
 - Direct status-only Shopify GraphQL probe with the mounted AgenticOrg C6Z Shopify token also returned `401`.
 - Grantex C6Z authority called with AgenticOrg's configured internal token returned `422 tenant_not_provisioned`.
 
-Follow-up implementation in this PR adds the AgenticOrg-owned merchant connector path that was missing from the original closure run:
+Follow-up implementation after this historical run added the AgenticOrg-owned merchant connector path and the broader runtime vertical:
 
 - `POST /commerce/runtime/seller-agents/connectors/shopify/credentials` stores a merchant-scoped Shopify credential in tenant-aware encrypted `ConnectorConfig` storage.
 - The endpoint accepts either a direct Admin API token or Shopify OAuth code exchange material, validates read-only product access, and returns only redacted status.
 - Shopify sync now prefers the encrypted merchant connector config before falling back to legacy process environment variables.
 - The Commerce Runtime UI exposes the connector setup and status path without rendering credential values.
+- Runtime endpoints now generate Schema.org/UCP-style/ACP-style/AP2-style/A2A/MCP/OpenAPI adapter payloads from cached OACP artifacts.
+- Purchase preparation now checks OACP freshness, price/inventory, policy scope, buyer/session scope, and Pine Labs Plural/P3P capability evidence, then returns a prepared handoff or exact blocker.
 
-This removes the single global Shopify token dependency after merge/deploy, but does not by itself make the production vertical complete. The merchant credential still has to be valid in Shopify, and Grantex tenant-token provisioning must still be fixed.
+This removed the single global Shopify token dependency. A merchant still needs
+valid Shopify access and a Grantex tenant-allowlisted service token before a
+real production merchant vertical can complete.
 
 Because Shopify sync did not produce connector evidence and the configured Grantex token is not mapped, the run did not complete:
 

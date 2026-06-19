@@ -141,9 +141,9 @@ Regular transaction:
 | Demo and evals | `demos/commerce_sales_agent_demo.py`, golden commerce evals, no-provider-call regression tests, real-staging and hosted smoke tests. | Strong demo/smoke foundation. |
 | Public discovery gate | Commerce metadata is fail-closed behind `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED`. | Safe posture. |
 | Docs-only CI guard | `.github/workflows/deploy.yml` classifies docs-only changes and skips cloud auth/build/push/deploy-adjacent jobs. | Correct for future planning docs merges. |
-| Merchant education docs | C5O-C5X docs cover self-onboarding, architecture, API/data model proposals, UI wireframes, validator, review workflow, rollout automation, demo merchant, and launch rehearsal. | Good planning foundation; runtime implementation still pending. |
-| OACP consumer foundation | C6W3-C6Z helper/tests/docs and runtime paths consume artifact schemas, adapter previews, commitment boundaries, prepared envelopes, response reconciliations, eligibility packets, dry-run verifier results, C6Z authority responses, cached seller facts, buyer answer sources, MCP bridge facts, and Plural/Pine capability metadata. | Internal only; the 2026-06-18 production vertical is blocked by Shopify token and Grantex tenant-token provisioning issues; no execution, public protocol publication, certification, or production readiness. |
-| OACP cache foundation | C6X1-C6X5 add cache verifier/runtime planning, fail-closed cache evaluation, repository boundary, durable SQL-backed cache records, and local maintenance planning. | Internal only; planner/cache do not call Grantex live, providers, merchant private APIs, checkout, payments, schedulers, or queues. |
+| Merchant education docs | C5O-C5X docs cover self-onboarding, architecture, API/data model proposals, UI wireframes, validator, review workflow, rollout automation, demo merchant, and launch rehearsal. | Superseded for runtime setup by `docs/runbooks/oacp-shopify-merchant-onboarding.md` and `docs/oacp-end-to-end-flow.md`. |
+| OACP runtime vertical | Seller onboarding, merchant-scoped encrypted Shopify credential setup, read-only Shopify Admin GraphQL sync, Shopify webhook verification, Grantex C6Z authority request/cache intake, buyer answers, protocol adapters, bridge readiness, Plural/Pine capability verification, and prepared purchase handoff/blocker behavior are implemented. | Non-executing: no checkout, payment, order, mandate creation, inventory hold, public publication, or external certification claim. Live provider flow remains approval- and flag-gated. |
+| OACP cache foundation | C6X1-C6X5 add cache verifier/runtime planning, fail-closed cache evaluation, repository boundary, durable SQL-backed cache records, and local maintenance planning. | The cache is now used by the runtime vertical; maintenance planner side effects remain separate and non-executing. |
 
 ### 2.1 Current OACP Status Through C6X5 And C6Z Runtime Extension
 
@@ -153,6 +153,11 @@ durable SQL-backed cache records, and deterministic maintenance planning. C6X5
 does not refresh, evict, purge, schedule, call Grantex live, call providers,
 call merchant private APIs, create checkout/payment/order/mandate objects, or
 claim public discovery readiness.
+
+The current runtime vertical now does call Grantex authority endpoints when
+configured, cache returned artifacts, generate protocol adapter payloads, route
+buyer bridge questions, verify Plural/Pine capability metadata, and prepare a
+non-executing purchase handoff or blocker.
 
 ### 2.2 Current OACP Status Through C6Z
 
@@ -423,7 +428,7 @@ Before AgenticOrg can participate in a real merchant pilot:
 ## 10. Public Landing Page And Blog Plan
 
 If product/web owners update the AgenticOrg landing page later, use safe
-positioning like this. This PRD update is planning only and does not publish
+positioning like this. This older PRD section is historical and did not publish
 runtime UI.
 
 > AgenticOrg runs seller and buyer AI agents for commerce workflows. Seller

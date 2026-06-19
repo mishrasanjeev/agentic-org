@@ -1,6 +1,6 @@
 # Commerce Agent C5K Real Merchant Readiness Plan
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: AgenticOrg bridge from C5I/C5J synthetic smoke success to a future real
 named Grantex merchant approval intake

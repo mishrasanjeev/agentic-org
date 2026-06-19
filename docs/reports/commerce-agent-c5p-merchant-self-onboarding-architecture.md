@@ -1,6 +1,6 @@
 # Commerce Agent C5P Merchant Self-Onboarding Architecture
 
-Status: planning only
+Status: historical planning artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md.
 Date: 2026-05-26
 Scope: future AgenticOrg dependency architecture for merchant self-onboarding
 and read-only Commerce discovery

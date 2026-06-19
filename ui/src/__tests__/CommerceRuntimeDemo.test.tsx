@@ -10,6 +10,9 @@ const apiMock = vi.hoisted(() => ({
   requestGrantexAuthority: vi.fn(),
   cacheArtifacts: vi.fn(),
   askBuyerQuestion: vi.fn(),
+  getBridgeSurfaces: vi.fn(),
+  getProtocolAdapters: vi.fn(),
+  preparePurchase: vi.fn(),
   listProducts: vi.fn(),
   verifyPluralPineCapability: vi.fn(),
 }));
@@ -127,5 +130,67 @@ describe("CommerceRuntimeDemo", () => {
 
     expect(await screen.findByText("Shopify sync blocked")).toBeInTheDocument();
     expect(screen.queryByText(/access_token|client_secret|password/i)).not.toBeInTheDocument();
+  });
+
+  it("shows bridge readiness, protocol adapters, and safe purchase-prep blockers", async () => {
+    apiMock.getBridgeSurfaces.mockResolvedValueOnce({
+      data: {
+        surfaces: [
+          { surface: "web", status: "bridge_ready" },
+          { surface: "telegram", status: "config_missing" },
+        ],
+      },
+    });
+    apiMock.getProtocolAdapters.mockResolvedValueOnce({
+      data: {
+        status: "adapter_payloads_ready",
+        source_label: "Source: Shopify via Grantex artifact",
+        freshness_label: "Freshness: synced 1m ago",
+      },
+    });
+    apiMock.listProducts.mockResolvedValueOnce({
+      data: {
+        products: [
+          {
+            product_ref: "shopify:product:1",
+            title: "Canvas Tote",
+          },
+        ],
+      },
+    });
+    apiMock.preparePurchase.mockResolvedValueOnce({
+      data: {
+        status: "blocked",
+        source_label: "Source: Shopify via Grantex artifact",
+        freshness_label: "Freshness: synced 1m ago",
+        blocker: {
+          code: "plural_pine_capability_missing_or_stale",
+          action: "Configure PLURAL_PINE_CLIENT_ID and rerun capability verification.",
+        },
+      },
+    });
+
+    render(<CommerceRuntimeDemo />);
+    fireEvent.click(screen.getByRole("button", { name: /channels/i }));
+    expect(await screen.findByText("1 channel configs missing")).toBeInTheDocument();
+    expect(screen.getByText("1/2 ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /adapters/i }));
+    await waitFor(() => expect(apiMock.getProtocolAdapters).toHaveBeenCalledWith(expect.objectContaining({
+      buyer_agent_id: "buyer_agent_demo",
+      merchant_id: "merchant_demo",
+      seller_agent_id: "seller_agent_demo",
+    })));
+    expect((await screen.findAllByText("adapter_payloads_ready")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /products/i }));
+    expect(await screen.findByText("Canvas Tote")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /prepare/i }));
+    await waitFor(() => expect(apiMock.preparePurchase).toHaveBeenCalledWith(expect.objectContaining({
+      live_execution_approved: false,
+      product_ref_or_query: "shopify:product:1",
+    })));
+    expect(await screen.findByText(/plural_pine_capability_missing_or_stale/i)).toBeInTheDocument();
+    expect(screen.queryByText(/capture payment|payment successful|order created/i)).not.toBeInTheDocument();
   });
 });

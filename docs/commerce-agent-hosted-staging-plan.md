@@ -1,6 +1,6 @@
 # AgenticOrg Commerce Sales Agent Hosted Staging Plan
 
-Status: planning only for M9. Do not deploy from this document during M9.
+Status: historical M9 staging artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md. Do not deploy from this historical document.
 
 This plan defines how AgenticOrg should run the Commerce Sales Agent against Grantex Commerce V1 hosted staging. Commerce must go through Grantex APIs and MCP tools only. It must not call Stripe, Plural, Pine, or provider credential paths directly.
 

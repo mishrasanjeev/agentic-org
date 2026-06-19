@@ -38,7 +38,7 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 | `cart_create` alias | `done` | Requires idempotency key and maps to `cart.create`. | Hosted staging evidence pending. |
 | `consent_request` alias | `done` | Calls `/v1/commerce/passports/consent-requests`. | Hosted staging consent UX and delivery pending. |
 | `consent_exchange` alias | `done` | Calls `/v1/commerce/passports/exchange`. | Hosted staging approval flow pending. |
-| `buyer_discovery_preview` alias | `done` | Calls `/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview` with GET only. | Sandbox preview-only; no public discovery, checkout/payment, provider, or handoff request endpoint is exposed. |
+| `buyer_discovery_preview` alias | `done` | Calls `/v1/commerce/merchants/{merchant_id}/agenticorg-buyer-discovery-preview` with GET only. | Sandbox historical-preview; no public discovery, checkout/payment, provider, or handoff request endpoint is exposed. |
 | `payment_create_intent` alias | `done` | Requires idempotency key, local guardrail pass, then maps to `payment.create_intent`. | Hosted staging evidence pending. |
 | `checkout_create` alias | `done` | Requires idempotency key, local guardrail pass, then maps to `checkout.create`. | Hosted staging evidence pending. |
 | `payment_get_status` alias | `done` | Maps to `payment.get_status`. | Hosted staging evidence pending. |
@@ -122,4 +122,4 @@ The PRD calls for AgenticOrg commerce agents beyond the current Sales Agent. Cur
 
 ### Broader Commerce Agent Pack Planning
 
-`Task: Commerce Agent Pack planning only - map the broader AgenticOrg Commerce Agent Pack against Grantex-owned source-of-truth APIs. Do not implement provider calls. Define catalog enrichment, offer, support, reconciliation, and store operations agent requirements, and mark each as blocked until corresponding Grantex catalog/offers/order/reconciliation/POS contracts exist. Add regression tests that keep all commerce payment-affecting work on Grantex tools only.`
+`Task: Historical Commerce Agent Pack planning artifact - map the broader AgenticOrg Commerce Agent Pack against Grantex-owned source-of-truth APIs. Do not implement provider calls. Define catalog enrichment, offer, support, reconciliation, and store operations agent requirements, and mark each as blocked until corresponding Grantex catalog/offers/order/reconciliation/POS contracts exist. Add regression tests that keep all commerce payment-affecting work on Grantex tools only.`

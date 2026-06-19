@@ -210,6 +210,11 @@ export const commerceRuntimeApi = {
   requestGrantexAuthority: (data: any) => api.post("/commerce/runtime/authority/grantex/request", data),
   cacheArtifacts: (data: any) => api.post("/commerce/runtime/artifacts/cache", data),
   askBuyerQuestion: (data: any) => api.post("/commerce/runtime/buyer-sessions/ask", data),
+  getBridgeSurfaces: () => api.get("/commerce/runtime/bridges/surfaces"),
+  getProtocolAdapters: (params: any) => api.get("/commerce/runtime/protocol-adapters", { params }),
+  getProtocolAdapterSurface: (surface: string, params: any) =>
+    api.get(`/commerce/runtime/protocol-adapters/${surface}`, { params }),
+  preparePurchase: (data: any) => api.post("/commerce/runtime/purchase/prepare", data),
   listProducts: (params: any) => api.get("/commerce/runtime/products", { params }),
   verifyPluralPineCapability: (data: any) =>
     api.post("/commerce/runtime/providers/plural-pine/mandate-capability/verify", data),

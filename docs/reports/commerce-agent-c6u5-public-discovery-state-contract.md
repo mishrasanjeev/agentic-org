@@ -53,7 +53,7 @@ State mismatch refuses public discovery. Missing state refuses public discovery.
 Allowed:
 
 - "Public discovery is not enabled for this merchant."
-- "This is an internal sandbox preview only."
+- "This is an internal sandbox historical preview state."
 - "Grantex and AgenticOrg discovery state is not aligned, so discovery remains hidden."
 
 Unsafe:

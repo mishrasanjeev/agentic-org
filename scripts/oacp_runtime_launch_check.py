@@ -25,6 +25,8 @@ from core.commerce.c6z_runtime_vertical import (  # noqa: E402
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
     build_shopify_connector_evidence,
+    generate_protocol_adapter_payloads,
+    prepare_purchase_or_mandate_handoff,
     resolve_env,
     resolve_shopify_credentials,
     send_grantex_authority_request,
@@ -50,6 +52,7 @@ def _sample_product(now_iso: str) -> dict[str, Any]:
         "descriptionHtml": "Read-only launch evidence product snapshot.",
         "vendor": "AgenticOrg Evidence",
         "productType": "Bags",
+        "status": "ACTIVE",
         "updatedAt": now_iso,
         "media": {"nodes": []},
         "variants": {
@@ -72,11 +75,30 @@ def _sample_product(now_iso: str) -> dict[str, Any]:
 
 def _local_artifacts(payload: dict[str, Any], now_iso: str) -> list[dict[str, Any]]:
     issued = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
-    expires = (issued + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
     request = payload["request"]
     evidence = payload["connector_evidence"]
+    family_type = {
+        "merchant_profile": "merchant_capability",
+        "seller_agent_card": "seller_agent_capability",
+        "connector_evidence": "protocol_adapter",
+        "catalog_snapshot": "catalog_snapshot",
+        "offer_price_snapshot": "price",
+        "inventory_snapshot": "inventory",
+        "policy_scope": "policy",
+        "public_discovery_state": "public_discovery",
+        "mandate_capability": "mandate_capability",
+        "protocol_adapter": "protocol_adapter",
+        "authority_request_status": "protocol_adapter",
+    }
+    family_ttl = {
+        "offer_price_snapshot": 5 * 60,
+        "inventory_snapshot": 60,
+        "mandate_capability": 2 * 60,
+        "public_discovery_state": 15 * 60,
+    }
     artifacts = []
     for family in C6Z_ARTIFACT_FAMILIES:
+        expires = (issued + timedelta(seconds=family_ttl.get(family, 5 * 60))).isoformat().replace("+00:00", "Z")
         artifact_id = f"local-c6z:{family}:{request['tenant_id']}:{request['merchant_id']}:{request['seller_agent_id']}"
         artifact_payload = {
             "artifact_family": family,
@@ -96,7 +118,7 @@ def _local_artifacts(payload: dict[str, Any], now_iso: str) -> list[dict[str, An
                 "artifact_family": family,
                 "envelope": {
                     "artifact_id": artifact_id,
-                    "artifact_type": "protocol_adapter" if family == "protocol_adapter" else "catalog_snapshot",
+                    "artifact_type": family_type[family],
                     "issuer": "local_contract_fixture_not_grantex_production",
                     "issued_at": now_iso,
                     "expires_at": expires,
@@ -198,6 +220,28 @@ async def main() -> None:
         seller_agent_id=SELLER_AGENT_ID,
         buyer_agent_id=BUYER_AGENT_ID,
     )
+    adapter_payloads = generate_protocol_adapter_payloads(
+        cache_records=cache_records,
+        products=evidence["products"],
+        merchant_id=MERCHANT_ID,
+        seller_agent_id=SELLER_AGENT_ID,
+        buyer_agent_id=BUYER_AGENT_ID,
+        now_iso=now_iso,
+    )
+    purchase = prepare_purchase_or_mandate_handoff(
+        cache_records=cache_records,
+        products=evidence["products"],
+        capability_evidence=[capability.__dict__],
+        tenant_id=TENANT_ID,
+        merchant_id=MERCHANT_ID,
+        seller_agent_id=SELLER_AGENT_ID,
+        buyer_agent_id=BUYER_AGENT_ID,
+        product_ref_or_query="OACP Launch Sample Tote",
+        variant_id=None,
+        quantity=1,
+        now_iso=now_iso,
+        grantex_available=False,
+    )
 
     summary = {
         "generated_at": now_iso,
@@ -227,8 +271,13 @@ async def main() -> None:
         "mcp_tool_smoke_result": "covered_by_npm_prefix_mcp_server_test",
         "bridge_channel": bridge.channel,
         "bridge_artifact_ref_count": len(bridge.artifact_refs),
+        "protocol_adapter_status": adapter_payloads["status"],
+        "protocol_adapter_surfaces": adapter_payloads["surface_names"],
         "plural_pine_capability_status": capability.result_status,
         "plural_pine_redacted_evidence_ref": capability.redacted_evidence_ref,
+        "purchase_prepare_status": purchase.status,
+        "purchase_prepare_blocker": purchase.blocker,
+        "purchase_idempotency_key": purchase.idempotency_key,
         "shopify_external_check": await _maybe_shopify_check(),
         "grantex_external_check": await _maybe_grantex_check(authority_payload),
         "public_discovery_flag": False,
