@@ -19,7 +19,9 @@ class WhatsappConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         self._phone_number_id = self.config.get("phone_number_id", "")
 
     def _register_tools(self):

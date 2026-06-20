@@ -85,7 +85,7 @@ class TestTallyHealthCheckBridge:
         405 every time because Tally only accepts POST. TallyConnector
         must override and send an XML POST instead."""
         connector = TallyConnector({
-            "bridge_url": "http://bridge.test/api",
+            "bridge_url": "https://example.com/api",
             "bridge_id": "bid-1",
             "bridge_token": "tok-1",
         })
@@ -133,7 +133,7 @@ class TestTallyHealthCheckBridge:
     @pytest.mark.asyncio
     async def test_bridge_http_error_surfaces_durable_request_metadata(self) -> None:
         connector = TallyConnector({
-            "bridge_url": "http://bridge.test/api",
+            "bridge_url": "https://example.com/api",
             "bridge_id": "bid-1",
             "bridge_token": "tok-1",
         })

@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import base64
 from typing import Any
+from urllib.parse import urlparse
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 
 class ZendeskConnector(BaseConnector):
@@ -18,6 +20,21 @@ class ZendeskConnector(BaseConnector):
     auth_type = "api_token"
     base_url = "https://org.zendesk.com/api/v2"
     rate_limit_rpm = 200
+
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        raw_base_url = str(safe_config.pop("base_url", "") or "")
+        subdomain = safe_config.get("subdomain") or safe_config.get("domain")
+        if not subdomain and raw_base_url:
+            parsed = urlparse(raw_base_url)
+            host = (parsed.hostname or "").rstrip(".").lower()
+            if host.endswith(".zendesk.com"):
+                subdomain = host.removesuffix(".zendesk.com")
+        if subdomain:
+            safe_subdomain = require_dns_label(subdomain, "Zendesk subdomain")
+            safe_config["subdomain"] = safe_subdomain
+            self.base_url = f"https://{safe_subdomain}.zendesk.com/api/v2"
+        super().__init__(safe_config)
 
     def _register_tools(self):
         self._tool_registry["create_ticket"] = self.create_ticket

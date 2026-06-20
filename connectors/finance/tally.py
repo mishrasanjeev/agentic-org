@@ -24,6 +24,11 @@ from defusedxml.ElementTree import ParseError as XMLParseError
 from defusedxml.ElementTree import fromstring as xml_fromstring
 
 from connectors.framework.base_connector import BaseConnector
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+)
 
 logger = structlog.get_logger()
 
@@ -236,7 +241,7 @@ class TallyConnector(BaseConnector):
     """Tally connector with optional bridge routing for remote instances.
 
     Config options:
-        bridge_url:   Cloud bridge endpoint (e.g. http://localhost:8000/api/v1/bridge/route/tally).
+        bridge_url:   Public HTTPS cloud bridge endpoint.
                       When set, XML requests are tunneled through the bridge to the
                       CA's local Tally instead of hitting localhost directly.
         bridge_id:    Bridge identifier (required when bridge_url is set).
@@ -251,10 +256,16 @@ class TallyConnector(BaseConnector):
 
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        self._bridge_url = self.config.get("bridge_url", "")
+        self._bridge_url = str(self.config.get("bridge_url", "") or "").strip()
         self._bridge_id = self.config.get("bridge_id", "")
         self._bridge_token = self.config.get("bridge_token", "")
         self._use_bridge = bool(self._bridge_url and self._bridge_id)
+
+    async def connect(self) -> None:
+        if self._use_bridge:
+            await self._authenticate()
+            return
+        await super().connect()
 
     def _register_tools(self):
         self._tool_registry["post_voucher"] = self.post_voucher
@@ -344,6 +355,19 @@ class TallyConnector(BaseConnector):
         import httpx
 
         request_id = str(uuid.uuid4())
+        try:
+            validate_public_url(
+                self._bridge_url,
+                allowed_schemes=("https",),
+                require_dns=True,
+            )
+        except EgressValidationError as exc:
+            raise TallyBridgeError(
+                "Tally bridge_url must be a public HTTPS endpoint.",
+                detail=str(exc),
+                request_id=request_id,
+                error_category="unsafe_bridge_url",
+            ) from exc
         payload = {
             "request_id": request_id,
             "bridge_id": self._bridge_id,
@@ -359,7 +383,10 @@ class TallyConnector(BaseConnector):
         )
 
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(
+                timeout=30,
+                transport=build_pinned_async_transport(require_dns=True),
+            ) as client:
                 resp = await client.post(
                     self._bridge_url,
                     json=payload,

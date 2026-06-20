@@ -18,6 +18,11 @@ import httpx
 import structlog
 
 from core.ai_providers.resolver import ProviderNotConfigured, get_provider_credential
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -26,8 +31,11 @@ _PROBE_TIMEOUT_S = 10.0
 
 async def _probe_openai(credential: str, base_url: str | None = None) -> dict[str, Any]:
     """OpenAI + OpenAI-compatible: GET /v1/models (lists available models)."""
-    url = f"{(base_url or 'https://api.openai.com').rstrip('/')}/v1/models"
-    async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S) as client:
+    url = _openai_models_url(base_url)
+    async with httpx.AsyncClient(
+        timeout=_PROBE_TIMEOUT_S,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
         start = time.time()
         resp = await client.get(url, headers={"Authorization": f"Bearer {credential}"})
         latency_ms = int((time.time() - start) * 1000)
@@ -44,7 +52,10 @@ async def _probe_openai(credential: str, base_url: str | None = None) -> dict[st
 async def _probe_anthropic(credential: str) -> dict[str, Any]:
     """Anthropic: HEAD /v1/messages fails cheap on bad key (401)."""
     url = "https://api.anthropic.com/v1/messages"
-    async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(
+        timeout=_PROBE_TIMEOUT_S,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
         start = time.time()
         # POST with an empty body — Anthropic returns 400 for missing
         # required fields when auth is valid, 401 when auth is bad.
@@ -74,7 +85,10 @@ async def _probe_anthropic(credential: str) -> dict[str, Any]:
 async def _probe_gemini(credential: str) -> dict[str, Any]:
     """Gemini: GET /v1beta/models?key=..."""
     url = "https://generativelanguage.googleapis.com/v1beta/models"
-    async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(
+        timeout=_PROBE_TIMEOUT_S,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
         start = time.time()
         resp = await client.get(url, params={"key": credential})
         latency_ms = int((time.time() - start) * 1000)
@@ -91,7 +105,10 @@ async def _probe_gemini(credential: str) -> dict[str, Any]:
 async def _probe_voyage(credential: str) -> dict[str, Any]:
     """Voyage embedding: a minimal embed call against the cheapest model."""
     url = "https://api.voyageai.com/v1/embeddings"
-    async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(
+        timeout=_PROBE_TIMEOUT_S,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
         start = time.time()
         resp = await client.post(
             url,
@@ -112,7 +129,10 @@ async def _probe_voyage(credential: str) -> dict[str, Any]:
 async def _probe_cohere(credential: str) -> dict[str, Any]:
     """Cohere: GET /v1/models."""
     url = "https://api.cohere.ai/v1/models"
-    async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(
+        timeout=_PROBE_TIMEOUT_S,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
         start = time.time()
         resp = await client.get(url, headers={"Authorization": f"Bearer {credential}"})
         latency_ms = int((time.time() - start) * 1000)
@@ -138,6 +158,26 @@ def _classify_http_error(status_code: int) -> str:
     if 500 <= status_code < 600:
         return f"Provider returned {status_code}: upstream is unhealthy."
     return f"Provider returned unexpected status {status_code}."
+
+
+def _openai_models_url(base_url: str | None) -> str:
+    endpoint = (base_url or "https://api.openai.com").rstrip("/")
+    validated = validate_public_url(f"{endpoint}/v1/models", allowed_schemes=("https",), require_dns=True)
+    return validated.url
+
+
+def _validate_openai_probe_base(provider: str, base_url: str | None) -> str | None:
+    clean = str(base_url or "").strip().rstrip("/")
+    if provider == "openai":
+        if clean and clean != "https://api.openai.com":
+            raise ValueError("OpenAI provider probes may only target api.openai.com")
+        return "https://api.openai.com"
+    if provider in {"openai_compatible", "azure_openai"}:
+        if not clean:
+            raise ValueError(f"{provider} requires provider_config.base_url")
+        validate_public_url(clean, allowed_schemes=("https",), require_dns=True)
+        return clean
+    return clean or None
 
 
 async def probe_provider(
@@ -167,9 +207,9 @@ async def probe_provider(
 
     try:
         if provider == "openai":
-            return await _probe_openai(secret, base_url)
+            return await _probe_openai(secret, _validate_openai_probe_base(provider, base_url))
         if provider == "openai_compatible":
-            return await _probe_openai(secret, base_url)
+            return await _probe_openai(secret, _validate_openai_probe_base(provider, base_url))
         if provider == "azure_openai":
             # Azure shape needs endpoint + deployment; require base_url
             if not base_url:
@@ -180,7 +220,7 @@ async def probe_provider(
                         "(your Azure resource endpoint)."
                     ),
                 }
-            return await _probe_openai(secret, base_url)
+            return await _probe_openai(secret, _validate_openai_probe_base(provider, base_url))
         if provider == "anthropic":
             return await _probe_anthropic(secret)
         if provider == "gemini":
@@ -199,6 +239,10 @@ async def probe_provider(
         }
     except TimeoutError:
         return {"ok": False, "error": f"Probe timed out after {_PROBE_TIMEOUT_S}s."}
+    except EgressValidationError:
+        return {"ok": False, "error": "EgressValidationError"}
+    except ValueError:
+        return {"ok": False, "error": "ValueError"}
     # enterprise-gate: broad-except-ok reason=provider-health-probe-failure-returns-unhealthy-error
     except Exception as exc:
         logger.warning(

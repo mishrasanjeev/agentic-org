@@ -54,7 +54,7 @@ def _make_provider() -> OIDCProvider:
     return OIDCProvider(
         provider_key="okta_test",
         config={
-            "issuer": "https://example.okta.com",
+            "issuer": "https://example.com",
             "client_id": "client-abc",
             "client_secret": "shhh",
             "redirect_uri": "https://app.example.com/api/v1/auth/sso/okta_test/callback",
@@ -69,10 +69,10 @@ class TestOIDCProviderAuthorize:
         provider = _make_provider()
 
         discovery_doc = {
-            "issuer": "https://example.okta.com",
-            "authorization_endpoint": "https://example.okta.com/oauth2/v1/authorize",
-            "token_endpoint": "https://example.okta.com/oauth2/v1/token",
-            "jwks_uri": "https://example.okta.com/oauth2/v1/keys",
+            "issuer": "https://example.com",
+            "authorization_endpoint": "https://example.com/oauth2/v1/authorize",
+            "token_endpoint": "https://example.com/oauth2/v1/token",
+            "jwks_uri": "https://example.com/oauth2/v1/keys",
         }
         jwks_doc = {"keys": []}
 
@@ -94,7 +94,7 @@ class TestOIDCProviderAuthorize:
     async def test_build_authorize_url_includes_pkce_and_state(self):
         provider = _make_provider()
         provider._discovery = {
-            "authorization_endpoint": "https://example.okta.com/oauth2/v1/authorize",
+            "authorization_endpoint": "https://example.com/oauth2/v1/authorize",
         }
         verifier, challenge = new_pkce_pair()
         state = new_state()
@@ -102,7 +102,7 @@ class TestOIDCProviderAuthorize:
 
         url = provider.build_authorize_url(state, nonce, challenge)
 
-        assert url.startswith("https://example.okta.com/oauth2/v1/authorize?")
+        assert url.startswith("https://example.com/oauth2/v1/authorize?")
         assert "client_id=client-abc" in url
         assert "response_type=code" in url
         assert f"state={state}" in url
@@ -128,9 +128,9 @@ class TestOIDCCodeExchange:
     async def test_exchange_code_calls_token_endpoint_and_verifies_id_token(self):
         provider = _make_provider()
         provider._discovery = {
-            "token_endpoint": "https://example.okta.com/oauth2/v1/token",
-            "jwks_uri": "https://example.okta.com/oauth2/v1/keys",
-            "issuer": "https://example.okta.com",
+            "token_endpoint": "https://example.com/oauth2/v1/token",
+            "jwks_uri": "https://example.com/oauth2/v1/keys",
+            "issuer": "https://example.com",
         }
 
         # We replace _verify_id_token entirely so we don't need real
@@ -165,7 +165,7 @@ class TestOIDCCodeExchange:
 
         # Verify the POST body had grant_type=authorization_code
         call = client_ctx.post.await_args
-        assert call.args[0] == "https://example.okta.com/oauth2/v1/token"
+        assert call.args[0] == "https://example.com/oauth2/v1/token"
         body = call.kwargs["data"]
         assert body["grant_type"] == "authorization_code"
         assert body["code"] == "auth-code-xyz"
@@ -175,7 +175,7 @@ class TestOIDCCodeExchange:
     async def test_exchange_code_rejects_missing_id_token(self):
         provider = _make_provider()
         provider._discovery = {
-            "token_endpoint": "https://example.okta.com/oauth2/v1/token",
+            "token_endpoint": "https://example.com/oauth2/v1/token",
         }
         with patch("httpx.AsyncClient") as mock_client_cls:
             client_ctx = mock_client_cls.return_value.__aenter__.return_value

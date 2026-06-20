@@ -675,14 +675,33 @@ async def create_portal(
     idempotency="read-only-provider-order-status",
     audit_event="billing.order_status.read",
 )
-async def check_order_status(body: OrderStatusRequest) -> dict[str, Any]:
+async def check_order_status(
+    body: OrderStatusRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
     """Check the status of a Plural payment order."""
     import asyncio
 
-    from core.billing.pinelabs_client import get_order_status
+    from core.billing.pinelabs_client import get_order_status, lookup_order_details_by_order_id
 
     try:
-        return await asyncio.to_thread(get_order_status, body.order_id)
+        order_details = await asyncio.to_thread(lookup_order_details_by_order_id, body.order_id)
+        if not order_details or order_details.get("tenant_id") != tenant_id:
+            raise HTTPException(status_code=404, detail="Billing order not found")
+        provider_status = await asyncio.to_thread(get_order_status, body.order_id)
+        if str(provider_status.get("order_id") or body.order_id) != body.order_id:
+            raise HTTPException(status_code=502, detail="Plural returned a mismatched order_id")
+        expected_ref = str(order_details.get("merchant_order_reference") or "")
+        provider_ref = str(provider_status.get("merchant_order_reference") or "")
+        if expected_ref and provider_ref and expected_ref != provider_ref:
+            raise HTTPException(status_code=502, detail="Plural returned a mismatched merchant reference")
+        return {
+            **provider_status,
+            "tenant_id": tenant_id,
+            "plan": order_details.get("plan", ""),
+        }
+    except HTTPException:
+        raise
     # enterprise-gate: broad-except-ok reason=plural-status-provider-error-mapped-to-502-no-success
     except Exception as exc:
         logger.exception("plural_status_error", order_id=body.order_id)

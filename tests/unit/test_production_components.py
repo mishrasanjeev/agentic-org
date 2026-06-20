@@ -145,7 +145,7 @@ class TestTallyConnectorBridgeRouting:
         from connectors.finance.tally import TallyConnector
 
         connector = TallyConnector(config={
-            "bridge_url": "http://cloud/api/v1/bridge/route/tally",
+            "bridge_url": "https://example.com/api/v1/bridge/route/tally",
             "bridge_id": "bridge-123",
             "bridge_token": "token-456",
         })
@@ -169,7 +169,7 @@ class TestTallyConnectorBridgeRouting:
         from connectors.finance.tally import TallyConnector
 
         connector = TallyConnector(config={
-            "bridge_url": "http://cloud/api/v1/bridge/route/tally",
+            "bridge_url": "https://example.com/api/v1/bridge/route/tally",
             "bridge_id": "bridge-123",
             "bridge_token": "token-456",
         })
@@ -191,7 +191,7 @@ class TestTallyConnectorBridgeRouting:
         from connectors.finance.tally import TallyConnector
 
         connector = TallyConnector(config={
-            "bridge_url": "http://cloud/api/v1/bridge/route/tally",
+            "bridge_url": "https://example.com/api/v1/bridge/route/tally",
             "bridge_id": "bridge-123",
             "bridge_token": "token-456",
         })

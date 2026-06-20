@@ -575,7 +575,7 @@ async def _upsert_oauth_connector(
     # Region-aware API base — Zoho .in / .com / .eu etc.
     region_urls = spec.urls_for({**user_fields, **extra_config})
     fallback_base = region_urls.get("api_base_url") or defaults["base_url"]
-    base_url = payload.get("base_url") or fallback_base
+    base_url = fallback_base
     _assert_public_base_url(base_url or "")
 
     credentials: dict[str, Any] = {

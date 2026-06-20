@@ -248,7 +248,7 @@ async def sso_callback(
     # Redirect to UI with token in fragment (so it never hits server logs)
     ui_base = settings.ui_base_url if hasattr(settings, "ui_base_url") else ""
     target = return_to or "/"
-    if not target.startswith("/"):
+    if not target.startswith("/") or target.startswith("//"):
         target = "/"
     return RedirectResponse(
         f"{ui_base}{target}#token={token}",
@@ -328,6 +328,14 @@ async def upsert_config(
     tenant_id: str = Depends(get_current_tenant),
 ) -> SSOConfigOut:
     tid = uuid.UUID(tenant_id)
+    if body.provider_type == "oidc":
+        try:
+            OIDCProvider(body.provider_key, body.config)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="OIDC config must use an HTTPS public issuer and required OIDC fields",
+            ) from exc
     async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(SSOConfig).where(

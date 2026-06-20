@@ -4,13 +4,31 @@ from __future__ import annotations
 
 import base64
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
 
 from connectors.framework.base_connector import BaseConnector
+from core.security.egress import EgressValidationError, validate_public_url
 
 logger = structlog.get_logger()
+
+
+def _wordpress_api_base_url(site: Any) -> str:
+    text = str(site or "").strip().rstrip("/")
+    if not text:
+        return ""
+    candidate = text if "://" in text else f"https://{text}"
+    parsed = urlparse(candidate)
+    host = (parsed.hostname or "").rstrip(".").lower()
+    port = f":{parsed.port}" if parsed.port else ""
+    origin = f"{parsed.scheme.lower()}://{host}{port}"
+    try:
+        validate_public_url(origin, allowed_schemes=("https",), require_dns=False)
+    except EgressValidationError as exc:
+        raise ValueError("WordPress site must be a public HTTPS host") from exc
+    return f"{origin}/wp-json/wp/v2"
 
 
 class WordpressConnector(BaseConnector):
@@ -32,14 +50,14 @@ class WordpressConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        raw_base_url = safe_config.pop("base_url", "")
+        if not safe_config.get("site") and raw_base_url:
+            safe_config["site"] = raw_base_url
+        super().__init__(safe_config)
         site = self.config.get("site", "")
         if not self.base_url and site:
-            # Strip protocol if present, then build canonical URL
-            clean_site = site.rstrip("/")
-            if not clean_site.startswith("http"):
-                clean_site = f"https://{clean_site}"
-            self.base_url = f"{clean_site}/wp-json/wp/v2"
+            self.base_url = _wordpress_api_base_url(site)
 
     # ── Tool registration ──────────────────────────────────────────────
 
@@ -94,13 +112,7 @@ class WordpressConnector(BaseConnector):
                 raise
             logger.info("wordpress_401_retry", tool=tool_name)
             await self._authenticate()
-            if self._client:
-                await self._client.aclose()
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout_ms / 1000,
-                headers=self._auth_headers,
-            )
+            await self._rebuild_http_client()
             return await super().execute_tool(tool_name, params)
 
     # ── Health check ───────────────────────────────────────────────────

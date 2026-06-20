@@ -28,6 +28,11 @@ from core.commerce.oacp_artifacts import (
     PersistentCacheActionIntent,
     evaluate_oacp_persistent_artifact_cache_record,
 )
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+)
 
 SHOPIFY_ENV_VARS: tuple[str, ...] = (
     "SHOPIFY_SHOP_DOMAIN",
@@ -564,9 +569,20 @@ class ShopifyAdminGraphQLClient:
         if max_pages < 1 or max_pages > 20:
             raise C6ZRuntimeValidationError("max_pages must be between 1 and 20")
 
+        try:
+            validate_public_url(
+                self.graphql_url,
+                allowed_schemes=("https",),
+                allowed_domains=("myshopify.com",),
+                require_dns=self._transport is None,
+            )
+        except EgressValidationError as exc:
+            raise C6ZRuntimeValidationError("unsafe Shopify Admin API endpoint") from exc
+
         products: list[dict[str, Any]] = []
         after_cursor: str | None = None
-        async with httpx.AsyncClient(timeout=self._timeout_seconds, transport=self._transport) as client:
+        transport = self._transport or build_pinned_async_transport(require_dns=True)
+        async with httpx.AsyncClient(timeout=self._timeout_seconds, transport=transport) as client:
             for _ in range(max_pages):
                 payload: dict[str, Any] = {
                     "query": SHOPIFY_PRODUCTS_QUERY,
@@ -835,9 +851,14 @@ def build_grantex_authority_request_payload(
     *,
     onboarding_packet: Mapping[str, Any],
     connector_evidence: Mapping[str, Any],
+    expected_tenant_id: str | None = None,
 ) -> dict[str, Any]:
     validate_seller_onboarding_packet(onboarding_packet)
     validate_connector_evidence(connector_evidence)
+    if expected_tenant_id is not None and str(onboarding_packet["tenant_id"]) != str(
+        expected_tenant_id
+    ):
+        raise C6ZRuntimeValidationError("authenticated tenant scope mismatch")
     if connector_evidence["tenant_id"] != onboarding_packet["tenant_id"]:
         raise C6ZRuntimeValidationError("tenant scope mismatch")
     if connector_evidence["merchant_id"] != onboarding_packet["merchant_id"]:
@@ -922,7 +943,15 @@ async def send_grantex_authority_request(
             "non_authoritative_for_transaction": True,
         }
     base_url = source["GRANTEX_COMMERCE_BASE_URL"].rstrip("/")
-    async with httpx.AsyncClient(timeout=20.0, transport=transport) as client:
+    try:
+        validate_public_url(
+            f"{base_url}/v1/commerce/oacp/c6z/authority-requests",
+            require_dns=transport is None,
+        )
+    except EgressValidationError as exc:
+        raise C6ZRuntimeValidationError("unsafe Grantex authority endpoint") from exc
+    client_transport = transport or build_pinned_async_transport(require_dns=True)
+    async with httpx.AsyncClient(timeout=20.0, transport=client_transport) as client:
         response = await client.post(
             f"{base_url}/v1/commerce/oacp/c6z/authority-requests",
             json=payload,
@@ -1577,12 +1606,23 @@ async def verify_plural_pine_mandate_capability(
     }
     explicit_capability_url = str(source.get("PLURAL_PINE_CAPABILITY_URL", "") or "").strip()
     try:
-        async with httpx.AsyncClient(timeout=20.0, transport=transport) as client:
+        client_transport = transport or build_pinned_async_transport(require_dns=True)
+        async with httpx.AsyncClient(timeout=20.0, transport=client_transport) as client:
             if explicit_capability_url:
+                validate_public_url(
+                    explicit_capability_url,
+                    allowed_schemes=("https",),
+                    require_dns=transport is None,
+                )
                 response = await client.post(explicit_capability_url, json=payload, headers=headers)
                 response.raise_for_status()
                 body = response.json()
             else:
+                validate_public_url(
+                    f"{_plural_pine_base_url(source)}/auth/v1/token",
+                    allowed_schemes=("https",),
+                    require_dns=transport is None,
+                )
                 response = await client.post(
                     f"{_plural_pine_base_url(source)}/auth/v1/token",
                     json={
@@ -1681,11 +1721,29 @@ def contains_private_or_executable_value(value: Any) -> bool:
 
 
 def _normalize_shopify_domain(value: str) -> str:
-    domain = value.strip().replace("https://", "").replace("http://", "").rstrip("/")
+    domain = value.strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/")
     if not domain:
         raise C6ZRuntimeValidationError("Shopify shop domain is required")
-    if "/" in domain or " " in domain:
+    if "/" in domain or " " in domain or ":" in domain:
         raise C6ZRuntimeValidationError("Shopify shop domain must be a host name")
+    labels = domain.split(".")
+    if (
+        len(labels) != 3
+        or labels[1:] != ["myshopify", "com"]
+        or not all(labels)
+        or labels[0].startswith("-")
+        or labels[0].endswith("-")
+    ):
+        raise C6ZRuntimeValidationError("Shopify shop domain must be a public *.myshopify.com host")
+    try:
+        validate_public_url(
+            f"https://{domain}",
+            allowed_schemes=("https",),
+            require_dns=False,
+            allowed_domains=("myshopify.com",),
+        )
+    except EgressValidationError as exc:
+        raise C6ZRuntimeValidationError("Shopify shop domain must be a public *.myshopify.com host") from exc
     return domain
 
 

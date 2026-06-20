@@ -378,13 +378,7 @@ class ZohoBooksConnector(BaseConnector):
                 raise self._runtime_error_from_http_status(exc) from exc
             logger.info("zoho_books_401_retry", tool=tool_name)
             await self._authenticate()
-            if self._client:
-                await self._client.aclose()
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout_ms / 1000,
-                headers=self._auth_headers,
-            )
+            await self._rebuild_http_client()
             try:
                 return await super().execute_tool(tool_name, params)
             except httpx.HTTPStatusError as retry_exc:

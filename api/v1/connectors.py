@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
-import socket
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,6 +21,7 @@ from core.database import get_tenant_session
 from core.marketing.connector_contracts import evaluate_hubspot_crm_read_contract
 from core.models.connector import Connector
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
+from core.security.egress import EgressValidationError, validate_public_url
 
 _log = logging.getLogger(__name__)
 
@@ -34,6 +33,32 @@ _CMO_SECRET_KEY_MARKERS = (
     "credential",
     "api_key",
     "authorization",
+)
+_CONNECTOR_RETARGET_KEYS = (
+    "api_base_url",
+    "base_url",
+    "bridge_url",
+    "domain",
+    "host",
+    "instance",
+    "org",
+    "site",
+    "subdomain",
+)
+_CONNECTOR_CREDENTIAL_ROTATION_KEYS = (
+    "access_token",
+    "api_key",
+    "api_token",
+    "app_password",
+    "auth_token",
+    "bot_token",
+    "bridge_token",
+    "client_secret",
+    "password",
+    "refresh_token",
+    "secret",
+    "secret_key",
+    "token",
 )
 _CMO_PLACEHOLDER_MARKERS = (
     "REAL_",
@@ -151,6 +176,16 @@ _ZOHO_TOKEN_URLS = {
     "au": "https://accounts.zoho.com.au/oauth/v2/token",
     "jp": "https://accounts.zoho.jp/oauth/v2/token",
 }
+_CONNECTOR_CANONICAL_TOKEN_URLS = {
+    "ga4": "https://oauth2.googleapis.com/token",
+    "gmail": "https://oauth2.googleapis.com/token",
+    "google_ads": "https://oauth2.googleapis.com/token",
+    "google_calendar": "https://oauth2.googleapis.com/token",
+    "youtube": "https://oauth2.googleapis.com/token",
+    "hubspot": "https://api.hubapi.com/oauth/v1/token",
+    "quickbooks": "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+    "banking_aa": "https://aa.finvu.in/api/v1/oauth2/token",
+}
 _ZOHO_REGION_HOSTS = {
     "in": ("zohoapis.in", "books.zoho.in", "accounts.zoho.in"),
     "eu": ("zohoapis.eu", "accounts.zoho.eu"),
@@ -240,6 +275,24 @@ def _clean_auth_config(auth_config: dict[str, Any] | None) -> dict[str, Any]:
             cleaned[str(key)] = stripped
         else:
             cleaned[str(key)] = value
+    return cleaned
+
+
+def _canonical_connector_token_url(name: str, auth_config: dict[str, Any] | None) -> str | None:
+    connector_name = str(name or "").strip().lower().replace("-", "_")
+    if connector_name == "zoho_books":
+        return _ZOHO_TOKEN_URLS[_infer_zoho_region(None, auth_config or {})]
+    return _CONNECTOR_CANONICAL_TOKEN_URLS.get(connector_name)
+
+
+def _canonicalize_connector_secret_urls(name: str, auth_config: dict[str, Any]) -> dict[str, Any]:
+    cleaned = dict(auth_config)
+    cleaned.pop("token_url", None)
+    cleaned.pop("base_url", None)
+    cleaned.pop("api_base_url", None)
+    canonical_token_url = _canonical_connector_token_url(name, cleaned)
+    if canonical_token_url and cleaned:
+        cleaned["token_url"] = canonical_token_url
     return cleaned
 
 
@@ -576,62 +629,31 @@ async def _connector_config_credentials(
 
 
 def _assert_public_base_url(base_url: str) -> None:
-    """Reject connector base_urls that resolve to private/reserved ranges.
+    """Reject connector base_urls that can become server-side SSRF targets.
 
     SECURITY_AUDIT-2026-04-19 MEDIUM-12: admins could previously set any
     base_url on a connector, turning connector test/health flows into an
     SSRF primitive against the cluster's internal network (including
     169.254.169.254 cloud metadata).
 
-    Unresolvable hosts are allowed through (DNS may be environment-
-    specific — CI cannot prove a production host is bad); only explicit
-    resolution to a private/reserved range is blocked.
+    Runtime connector requests repeat this check before attaching
+    credentials so stale DNS and rebinding are blocked in strict runtimes.
     """
     if not base_url:
         return
-    parsed = urlparse(base_url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(400, f"Connector base_url must be http(s): got '{parsed.scheme}'")
-    host = parsed.hostname or ""
-    if not host:
-        raise HTTPException(400, "Connector base_url is missing a host")
-
-    # Reject bare IPs in private/reserved ranges without needing DNS.
     try:
-        literal_ip: ipaddress._BaseAddress | None = ipaddress.ip_address(host)
-    except ValueError:
-        literal_ip = None
-    candidates: list[str] = []
-    if literal_ip is not None:
-        candidates.append(str(literal_ip))
-    else:
-        try:
-            infos = socket.getaddrinfo(host, None)
-            candidates = [info[4][0] for info in infos]
-        except socket.gaierror:
-            # Unresolvable — httpx will error on the real call. Don't
-            # block registration purely on a transient DNS miss.
-            return
-    for addr in candidates:
-        try:
-            ip = ipaddress.ip_address(addr)
-        except ValueError:
-            continue
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise HTTPException(
-                403,
-                f"Connector base_url '{host}' resolves to a blocked "
-                f"address ({ip}). Private, loopback, link-local, "
-                "multicast, reserved, and unspecified ranges are not "
-                "allowed.",
-            )
+        validate_public_url(base_url, allowed_schemes=("https",), require_dns=True)
+    except EgressValidationError as exc:
+        if exc.reason == "scheme":
+            parsed = urlparse(base_url)
+            raise HTTPException(400, f"Connector base_url must be https: got '{parsed.scheme}'") from exc
+        if exc.reason == "missing_host":
+            raise HTTPException(400, "Connector base_url is missing a host") from exc
+        raise HTTPException(
+            403,
+            "Connector base_url must be a public HTTPS host. Private, loopback, link-local, multicast, "
+            "reserved, unspecified, and direct-IP destinations are not allowed.",
+        ) from exc
 
 router = APIRouter(dependencies=[require_tenant_admin])
 
@@ -977,6 +999,8 @@ async def register_connector(
             "connector_registration_validated",
             extra={"connector": "zoho_books"},
         )
+    else:
+        secret_fields = _canonicalize_connector_secret_urls(body.name, secret_fields)
 
     async with get_tenant_session(tid) as session:
         connector = Connector(
@@ -1438,10 +1462,35 @@ async def update_connector(
         # (new wins on collision), re-encrypt. Callers that genuinely
         # want to replace all creds still can — they just have to send
         # every key they intend to keep.
-        new_secrets = body.model_dump(exclude_none=True).get("auth_config")
+        raw_new_secrets = body.model_dump(exclude_none=True).get("auth_config")
+        new_secrets = (
+            _canonicalize_connector_secret_urls(
+                connector.name,
+                _clean_auth_config(raw_new_secrets),
+            )
+            if raw_new_secrets
+            else None
+        )
         credential_surface_changed = bool(new_secrets) or any(
             field in updates for field in ("base_url", "auth_type")
         )
+        raw_secret_keys = (
+            {str(key).strip().lower() for key in raw_new_secrets or {}}
+            if isinstance(raw_new_secrets, dict)
+            else set()
+        )
+        retarget_requested = "base_url" in updates or bool(
+            raw_secret_keys.intersection(_CONNECTOR_RETARGET_KEYS)
+        )
+        new_secret_keys = {str(key).strip().lower() for key in new_secrets or {}}
+        credential_rotated = bool(
+            new_secret_keys.intersection(_CONNECTOR_CREDENTIAL_ROTATION_KEYS)
+        )
+        if retarget_requested and not credential_rotated:
+            raise HTTPException(
+                status_code=400,
+                detail="Changing connector endpoint/host requires rotating credentials in the same request",
+            )
         if new_secrets:
             from core.crypto import encrypt_for_tenant
             from core.crypto.tenant_secrets import decrypt_for_tenant
@@ -1455,8 +1504,10 @@ async def update_connector(
             )
             cc = cc_result.scalar_one_or_none()
 
+            # Endpoint/host changes are a credential boundary. Do not carry
+            # old encrypted provider credentials to a new destination.
             merged_secrets: dict = {}
-            if cc and cc.credentials_encrypted:
+            if not retarget_requested and cc and cc.credentials_encrypted:
                 enc = cc.credentials_encrypted.get("_encrypted") if isinstance(cc.credentials_encrypted, dict) else None
                 if isinstance(enc, str) and enc:
                     # Codex PR #305 review (P1): if the stored blob

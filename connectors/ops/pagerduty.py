@@ -18,6 +18,11 @@ class PagerdutyConnector(BaseConnector):
     base_url = "https://api.pagerduty.com"
     rate_limit_rpm = 100
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
+
     def _register_tools(self):
         self._tool_registry["create_incident"] = self.create_incident
         self._tool_registry["acknowledge_incident"] = self.acknowledge_incident

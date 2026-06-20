@@ -9,6 +9,7 @@ import httpx
 import structlog
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 logger = structlog.get_logger()
 
@@ -31,7 +32,9 @@ class MailchimpConnector(BaseConnector):
     rate_limit_rpm = 100
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         self._api_key: str = self.config.get("api_key", "")
         if not self.base_url:
             dc = self.config.get("dc", "")
@@ -39,6 +42,7 @@ class MailchimpConnector(BaseConnector):
                 # Extract data center from API key suffix (e.g. "abc123-us21" -> "us21")
                 dc = self._api_key.rsplit("-", 1)[-1]
             if dc:
+                dc = require_dns_label(dc, "Mailchimp data center")
                 self.base_url = f"https://{dc}.api.mailchimp.com/3.0"
 
     # ── Tool registration ──────────────────────────────────────────────
@@ -85,13 +89,7 @@ class MailchimpConnector(BaseConnector):
                 raise
             logger.info("mailchimp_401_retry", tool=tool_name)
             await self._authenticate()
-            if self._client:
-                await self._client.aclose()
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout_ms / 1000,
-                headers=self._auth_headers,
-            )
+            await self._rebuild_http_client()
             return await super().execute_tool(tool_name, params)
 
     # ── Health check ───────────────────────────────────────────────────

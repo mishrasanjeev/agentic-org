@@ -83,6 +83,8 @@ PLAN_AMOUNT_INR: dict[str, int] = {
 # runtimes fail closed if Redis is unavailable.
 # enterprise-gate: process-local-ok reason=relaxed-env-only-plural-order-map-fallback
 _order_map: dict[str, Any] = {}
+# enterprise-gate: process-local-ok reason=relaxed-env-only-plural-order-id-map-fallback
+_order_id_map: dict[str, Any] = {}
 _MAPPING_TTL = 86400  # 24 hours
 
 
@@ -108,24 +110,33 @@ def store_order_mapping(
     import json as _json
 
     entry = {"order_id": order_id, "tenant_id": tenant_id, "plan": plan}
+    order_id_entry = {**entry, "merchant_order_reference": merchant_ref}
 
     redis = _redis_client()
     if redis is None:
         if _strict_order_mapping():
             raise RuntimeError("Plural order mapping requires Redis in strict runtime")
         _order_map[merchant_ref] = entry
+        if order_id:
+            _order_id_map[order_id] = order_id_entry
         return
 
     try:
         redis.setex(f"plural:order:{merchant_ref}", _MAPPING_TTL, _json.dumps(entry))
+        if order_id:
+            redis.setex(f"plural:order-id:{order_id}", _MAPPING_TTL, _json.dumps(order_id_entry))
         if not _strict_order_mapping():
             _order_map[merchant_ref] = entry
+            if order_id:
+                _order_id_map[order_id] = order_id_entry
     # enterprise-gate: broad-except-ok reason=payment-order-mapping-write-fails-closed-in-strict-runtime
     except Exception as exc:
         if _strict_order_mapping():
             raise RuntimeError("Plural order mapping Redis write failed in strict runtime") from exc
         logger.debug("plural_order_mapping_redis_failed")
         _order_map[merchant_ref] = entry
+        if order_id:
+            _order_id_map[order_id] = order_id_entry
 
 
 def lookup_order_id(merchant_ref: str) -> str:
@@ -159,6 +170,35 @@ def lookup_order_details(merchant_ref: str) -> dict[str, str]:
     if _strict_order_mapping():
         return {}
     entry = _order_map.get(merchant_ref, {})
+    return entry if isinstance(entry, dict) else {}
+
+
+def lookup_order_details_by_order_id(order_id: str) -> dict[str, str]:
+    """Look up full order details by Plural order_id."""
+    import json as _json
+
+    redis = _redis_client()
+    if redis is None:
+        if _strict_order_mapping():
+            raise RuntimeError("Plural order mapping lookup requires Redis in strict runtime")
+        entry = _order_id_map.get(order_id, {})
+        return entry if isinstance(entry, dict) else {}
+
+    try:
+        raw = redis.get(f"plural:order-id:{order_id}")
+        if raw:
+            if isinstance(raw, bytes):
+                raw = raw.decode()
+            return _json.loads(raw)
+    # enterprise-gate: broad-except-ok reason=payment-order-id-mapping-read-fails-closed-in-strict-runtime
+    except Exception as exc:
+        if _strict_order_mapping():
+            raise RuntimeError("Plural order-id mapping Redis read failed in strict runtime") from exc
+        logger.debug("plural_order_id_lookup_redis_failed")
+
+    if _strict_order_mapping():
+        return {}
+    entry = _order_id_map.get(order_id, {})
     return entry if isinstance(entry, dict) else {}
 
 

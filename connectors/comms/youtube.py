@@ -20,6 +20,11 @@ class YouTubeConnector(BaseConnector):
     base_url = "https://www.googleapis.com/youtube/v3"
     rate_limit_rpm = 200
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
+
     def _register_tools(self):
         self._tool_registry["list_videos"] = self.list_videos
         self._tool_registry["get_video_stats"] = self.get_video_stats

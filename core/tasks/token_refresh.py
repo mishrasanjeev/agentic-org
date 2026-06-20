@@ -24,6 +24,44 @@ from core.tasks.celery_app import app
 
 logger = structlog.get_logger()
 
+_ZOHO_TOKEN_URLS = {
+    "in": "https://accounts.zoho.in/oauth/v2/token",
+    "us": "https://accounts.zoho.com/oauth/v2/token",
+    "eu": "https://accounts.zoho.eu/oauth/v2/token",
+    "au": "https://accounts.zoho.com.au/oauth/v2/token",
+    "jp": "https://accounts.zoho.jp/oauth/v2/token",
+}
+_CONNECTOR_CANONICAL_TOKEN_URLS = {
+    "ga4": "https://oauth2.googleapis.com/token",
+    "gmail": "https://oauth2.googleapis.com/token",
+    "google_ads": "https://oauth2.googleapis.com/token",
+    "google_calendar": "https://oauth2.googleapis.com/token",
+    "youtube": "https://oauth2.googleapis.com/token",
+    "hubspot": "https://api.hubapi.com/oauth/v1/token",
+    "quickbooks": "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+    "banking_aa": "https://aa.finvu.in/api/v1/oauth2/token",
+}
+
+
+def _canonical_refresh_token_url(connector_name: str, creds: dict) -> str | None:
+    name = str(connector_name or "").strip().lower().replace("-", "_")
+    if name == "zoho_books":
+        region = str(creds.get("region") or "in").strip().lower().replace(".", "")
+        aliases = {
+            "india": "in",
+            "in_dc": "in",
+            "global": "us",
+            "us_dc": "us",
+            "europe": "eu",
+            "eu_dc": "eu",
+            "australia": "au",
+            "au_dc": "au",
+            "japan": "jp",
+            "jp_dc": "jp",
+        }
+        return _ZOHO_TOKEN_URLS.get(aliases.get(region, region), _ZOHO_TOKEN_URLS["in"])
+    return _CONNECTOR_CANONICAL_TOKEN_URLS.get(name)
+
 
 @app.task(name="core.tasks.token_refresh.refresh_expiring_tokens")
 def refresh_expiring_tokens() -> dict:
@@ -69,7 +107,7 @@ async def _refresh_all() -> dict:
                 creds = {**(cc.config or {}), **creds}
 
             refresh_token = creds.get("refresh_token", "")
-            token_url = creds.get("token_url", "")
+            token_url = _canonical_refresh_token_url(cc.connector_name, creds)
             client_id = creds.get("client_id", "")
             client_secret = creds.get("client_secret", "")
             expires_at_str = creds.get("expires_at", "")

@@ -341,6 +341,24 @@ def test_grantex_authority_payload_matches_issuer_contract() -> None:
     assert payload["connector_evidence"]["no_public_discovery_enablement"] is True
 
 
+def test_grantex_authority_payload_enforces_authenticated_tenant_scope() -> None:
+    packet = _packet()
+    evidence = build_shopify_connector_evidence(
+        packet=packet,
+        products=[_shopify_product()],
+        synced_at=_iso(_now()),
+        source_observed_at=_iso(_now()),
+        currency="INR",
+    )
+
+    with pytest.raises(C6ZRuntimeValidationError, match="authenticated tenant"):
+        build_grantex_authority_request_payload(
+            onboarding_packet=packet,
+            connector_evidence=evidence,
+            expected_tenant_id="22222222-2222-2222-2222-222222222222",
+        )
+
+
 @pytest.mark.asyncio
 async def test_onboarding_packet_read_enforces_tenant_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
     @asynccontextmanager
@@ -356,6 +374,32 @@ async def test_onboarding_packet_read_enforces_tenant_boundary(monkeypatch: pyte
     with pytest.raises(HTTPException) as exc_info:
         await commerce_runtime_api.get_seller_onboarding_packet(
             "packet_1",
+            tenant_id="11111111-1111-1111-1111-111111111111",
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_grantex_authority_request_enforces_tenant_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @asynccontextmanager
+    async def fake_session(_tenant_id):
+        class FakeSession:
+            async def get(self, _model, _row_id):
+                return SimpleNamespace(tenant_id="22222222-2222-2222-2222-222222222222")
+
+        yield FakeSession()
+
+    monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await commerce_runtime_api.request_grantex_authority_artifacts(
+            commerce_runtime_api.GrantexAuthorityRequest(
+                packet_id="packet_1",
+                evidence_id="evidence_1",
+            ),
             tenant_id="11111111-1111-1111-1111-111111111111",
         )
 

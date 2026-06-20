@@ -24,6 +24,7 @@ from connectors.finance.aa_consent_types import (
     ConsentStatus,
     FIDataSession,
 )
+from core.security.egress import EgressValidationError, validate_public_url
 
 logger = structlog.get_logger()
 
@@ -39,7 +40,17 @@ class AAConsentManager:
         callback_url: str = "",
         fiu_id: str = "",
     ):
-        self.base_url = base_url.rstrip("/")
+        cleaned_base_url = base_url.rstrip("/")
+        try:
+            validate_public_url(
+                cleaned_base_url,
+                allowed_schemes=("https",),
+                allowed_hosts=("aa.finvu.in",),
+                require_dns=False,
+            )
+        except EgressValidationError as exc:
+            raise ValueError("AA consent base_url must be the official Finvu HTTPS API host") from exc
+        self.base_url = cleaned_base_url
         self.client_id = client_id
         self.client_secret = client_secret
         self.callback_url = callback_url

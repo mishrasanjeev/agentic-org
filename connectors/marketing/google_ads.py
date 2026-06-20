@@ -23,7 +23,9 @@ class GoogleAdsConnector(BaseConnector):
     rate_limit_rpm = 200
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         self._customer_id = self._normalize_customer_id(
             self.config.get("customer_id", "")
         )

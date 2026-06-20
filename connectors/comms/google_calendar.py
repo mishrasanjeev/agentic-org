@@ -20,6 +20,11 @@ class GoogleCalendarConnector(BaseConnector):
     base_url = "https://www.googleapis.com/calendar/v3"
     rate_limit_rpm = 100
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
+
     def _register_tools(self):
         self._tool_registry["create_event"] = self.create_event
         self._tool_registry["list_events"] = self.list_events
