@@ -16,10 +16,11 @@ class TestConnectorErrorHandling:
     async def test_http_500_raises(self, mock_server_url):
         """HTTP 500 from external service raises an error."""
         connector = await make_connector("stripe", mock_server_url)
-        # Override base_url to error path
+        transport = httpx.MockTransport(lambda request: httpx.Response(500, request=request))
         connector._client = httpx.AsyncClient(
-            base_url=f"{mock_server_url}/error/500",
+            base_url="https://api.stripe.com",
             timeout=10.0,
+            transport=transport,
         )
         with pytest.raises(httpx.HTTPStatusError):
             await connector.execute_tool("create_payment_intent", {"amount": 1000, "currency": "usd"})
@@ -27,9 +28,11 @@ class TestConnectorErrorHandling:
     async def test_http_429_raises(self, mock_server_url):
         """HTTP 429 rate limit from external service raises an error."""
         connector = await make_connector("hubspot", mock_server_url)
+        transport = httpx.MockTransport(lambda request: httpx.Response(429, request=request))
         connector._client = httpx.AsyncClient(
-            base_url=f"{mock_server_url}/error/429",
+            base_url="https://api.hubapi.com",
             timeout=10.0,
+            transport=transport,
         )
         with pytest.raises(httpx.HTTPStatusError):
             await connector.execute_tool("create_contact", {"email": "test@test.com"})

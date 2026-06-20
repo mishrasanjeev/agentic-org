@@ -32,6 +32,7 @@ from core.models.tenant_ai_credential import (
     STATUS_ALLOWLIST,
     TenantAICredential,
 )
+from core.security.egress import EgressValidationError, validate_public_url
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +40,17 @@ router = APIRouter(
     prefix="/tenant-ai-credentials",
     tags=["Tenant AI Credentials"],
     dependencies=[require_tenant_admin],
+)
+
+_PROVIDER_CONFIG_SECRET_MARKERS = (
+    "api_key",
+    "authorization",
+    "bearer",
+    "client_secret",
+    "credential",
+    "password",
+    "secret",
+    "token",
 )
 
 
@@ -192,6 +204,7 @@ async def create_credential(
     from core.crypto.tenant_secrets import encrypt_for_tenant
 
     tid = _uuid.UUID(tenant_id)
+    provider_config = _validate_provider_config(body.provider, body.provider_config)
     prefix, suffix = mask_token(body.api_key)
     ciphertext = await encrypt_for_tenant(body.api_key, tid)
 
@@ -205,7 +218,7 @@ async def create_credential(
         display_prefix=prefix,
         display_suffix=suffix,
         label=body.label,
-        provider_config=body.provider_config,
+        provider_config=provider_config,
     )
     async with get_tenant_session(tid) as session:
         session.add(row)
@@ -317,7 +330,15 @@ async def update_credential(
         if body.label is not None:
             row.label = body.label
         if body.provider_config is not None:
-            row.provider_config = body.provider_config
+            next_provider_config = _validate_provider_config(row.provider, body.provider_config)
+            current_base_url = str((row.provider_config or {}).get("base_url") or "")
+            next_base_url = str((next_provider_config or {}).get("base_url") or "")
+            if current_base_url != next_base_url and body.api_key is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Changing provider_config.base_url requires rotating api_key in the same request",
+                )
+            row.provider_config = next_provider_config
         if body.status is not None:
             row.status = body.status
 
@@ -491,3 +512,53 @@ def _audit(
         )
     except (RuntimeError, TypeError, ValueError) as exc:
         logger.debug("audit_emit_failed", error=str(exc))
+
+
+def _validate_provider_config(provider: str, config: dict[str, Any] | None) -> dict[str, Any] | None:
+    if config is None:
+        return None
+    sanitized = dict(config)
+    for key in sanitized:
+        normalized = str(key).lower().replace("-", "_")
+        if any(marker in normalized for marker in _PROVIDER_CONFIG_SECRET_MARKERS):
+            raise HTTPException(
+                status_code=400,
+                detail="provider_config must not contain secrets or credential material",
+            )
+
+    base_url = str(sanitized.get("base_url") or "").strip()
+    if provider == "openai":
+        if base_url and base_url.rstrip("/") != "https://api.openai.com":
+            raise HTTPException(
+                status_code=400,
+                detail="OpenAI credentials may only use https://api.openai.com as provider_config.base_url",
+            )
+        if base_url:
+            sanitized["base_url"] = "https://api.openai.com"
+        return sanitized or None
+
+    if provider in {"openai_compatible", "azure_openai"}:
+        if not base_url:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{provider} requires provider_config.base_url",
+            )
+        try:
+            validated = validate_public_url(base_url, allowed_schemes=("https",), require_dns=True)
+        except EgressValidationError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{provider} provider_config.base_url must be an HTTPS public endpoint",
+            ) from exc
+        sanitized["base_url"] = _normalized_provider_base_url(base_url, validated.scheme)
+    return sanitized or None
+
+
+def _normalized_provider_base_url(base_url: str, scheme: str) -> str:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(base_url)
+    host = (parsed.hostname or "").rstrip(".").lower()
+    port = f":{parsed.port}" if parsed.port else ""
+    path = parsed.path.rstrip("/")
+    return f"{scheme}://{host}{port}{path}"

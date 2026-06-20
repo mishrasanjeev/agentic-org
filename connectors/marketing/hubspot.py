@@ -105,6 +105,11 @@ class HubspotConnector(BaseConnector):
         "get_campaign_analytics",
     ]
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
+
     def _register_tools(self):
         # Contacts
         self._tool_registry["list_contacts"] = self.list_contacts
@@ -203,13 +208,7 @@ class HubspotConnector(BaseConnector):
             logger.info("hubspot_401_retry", tool=tool_name)
             await self._authenticate()
             # Re-create client with fresh headers
-            if self._client:
-                await self._client.aclose()
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout_ms / 1000,
-                headers=self._auth_headers,
-            )
+            await self._rebuild_http_client()
             return await super().execute_tool(tool_name, params)
 
     def _properties_param(self, value: Any, default: str) -> str:

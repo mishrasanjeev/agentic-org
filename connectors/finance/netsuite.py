@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -10,6 +11,8 @@ import structlog
 from connectors.framework.base_connector import BaseConnector
 
 logger = structlog.get_logger()
+
+_NETSUITE_ACCOUNT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 
 
 class NetsuiteConnector(BaseConnector):
@@ -30,11 +33,15 @@ class NetsuiteConnector(BaseConnector):
     rate_limit_rpm = 200
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         self._account_id: str = self.config.get("account_id", "")
         if not self.base_url and self._account_id:
             # NetSuite REST API base: account ID with underscores replacing dots
             safe_id = self._account_id.lower().replace(".", "_")
+            if not _NETSUITE_ACCOUNT_RE.fullmatch(safe_id):
+                raise ValueError("NetSuite account_id must be a provider account label")
             self.base_url = (
                 f"https://{safe_id}.suitetalk.api.netsuite.com"
                 f"/services/rest/record/v1"
@@ -81,13 +88,7 @@ class NetsuiteConnector(BaseConnector):
                 raise
             logger.info("netsuite_401_retry", tool=tool_name)
             await self._authenticate()
-            if self._client:
-                await self._client.aclose()
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout_ms / 1000,
-                headers=self._auth_headers,
-            )
+            await self._rebuild_http_client()
             return await super().execute_tool(tool_name, params)
 
     # ── Health check ───────────────────────────────────────────────────

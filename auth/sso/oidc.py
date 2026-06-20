@@ -24,12 +24,18 @@ import secrets
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
 from authlib.jose import JsonWebKey, jwt
 
 from core.http_retry import retry_http_async
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+)
 
 logger = structlog.get_logger()
 
@@ -57,7 +63,8 @@ class OIDCProvider:
 
     def __init__(self, provider_key: str, config: dict[str, Any]) -> None:
         self.provider_key = provider_key
-        self.issuer = config["issuer"].rstrip("/")
+        self.issuer = self._validate_issuer(config["issuer"])
+        self._issuer_host = urlparse(self.issuer).hostname or ""
         self.client_id = config["client_id"]
         self.client_secret = config.get("client_secret", "")
         self.redirect_uri = config["redirect_uri"]
@@ -71,10 +78,15 @@ class OIDCProvider:
         if self._discovery is not None:
             return self._discovery
         url = f"{self.issuer}/.well-known/openid-configuration"
-        async with httpx.AsyncClient(timeout=10) as client:
+        self._validate_provider_endpoint(url, "discovery_url")
+        async with httpx.AsyncClient(
+            timeout=10,
+            transport=build_pinned_async_transport(require_dns=True),
+        ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             self._discovery = resp.json()
+        self._validate_discovery_document(self._discovery)
         return self._discovery
 
     @retry_http_async(max_attempts=3)
@@ -83,7 +95,11 @@ class OIDCProvider:
         if self._jwks is not None and time.time() - self._jwks_fetched_at < 600:
             return self._jwks
         disc = await self._discover()
-        async with httpx.AsyncClient(timeout=10) as client:
+        self._validate_provider_endpoint(str(disc["jwks_uri"]), "jwks_uri")
+        async with httpx.AsyncClient(
+            timeout=10,
+            transport=build_pinned_async_transport(require_dns=True),
+        ) as client:
             resp = await client.get(disc["jwks_uri"])
             resp.raise_for_status()
             self._jwks = resp.json()
@@ -99,6 +115,7 @@ class OIDCProvider:
         # await .prepare() first.
         disc = self._discovery or {}
         base = disc.get("authorization_endpoint") or f"{self.issuer}/authorize"
+        self._validate_provider_endpoint(str(base), "authorization_endpoint", require_dns=False)
         import urllib.parse
 
         params = {
@@ -125,8 +142,12 @@ class OIDCProvider:
         """Exchange the authorization code for tokens + verify ID token."""
         disc = await self._discover()
         token_endpoint = disc["token_endpoint"]
+        self._validate_provider_endpoint(str(token_endpoint), "token_endpoint")
 
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(
+            timeout=15,
+            transport=build_pinned_async_transport(require_dns=True),
+        ) as client:
             resp = await client.post(
                 token_endpoint,
                 data={
@@ -175,6 +196,39 @@ class OIDCProvider:
             raise ValueError("OIDC nonce mismatch — possible replay attack")
 
         return dict(claims)
+
+    def _validate_issuer(self, issuer: str) -> str:
+        value = str(issuer or "").strip().rstrip("/")
+        try:
+            validate_public_url(value, allowed_schemes=("https",), require_dns=False)
+        except EgressValidationError as exc:
+            raise ValueError("OIDC issuer must be an HTTPS public URL") from exc
+        return value
+
+    def _validate_provider_endpoint(
+        self,
+        url: str,
+        field: str,
+        *,
+        require_dns: bool | None = None,
+    ) -> str:
+        try:
+            validate_public_url(
+                str(url or "").strip(),
+                allowed_schemes=("https",),
+                require_dns=require_dns,
+                allowed_hosts=(self._issuer_host,),
+            )
+        except EgressValidationError as exc:
+            raise ValueError(f"OIDC {field} must stay on the configured issuer host") from exc
+        return str(url)
+
+    def _validate_discovery_document(self, discovery: dict[str, Any]) -> None:
+        discovered_issuer = str(discovery.get("issuer") or "").rstrip("/")
+        if discovered_issuer != self.issuer:
+            raise ValueError("OIDC discovery issuer mismatch")
+        for field in ("authorization_endpoint", "token_endpoint", "jwks_uri"):
+            self._validate_provider_endpoint(str(discovery.get(field) or ""), field, require_dns=False)
 
 
 # ── PKCE helpers ──────────────────────────────────────────────────

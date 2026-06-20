@@ -6,6 +6,7 @@ import base64
 from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 
 class JiraConnector(BaseConnector):
@@ -16,10 +17,14 @@ class JiraConnector(BaseConnector):
     rate_limit_rpm = 300
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         # Allow tenant-specific Jira domain
-        domain = (config or {}).get("domain", "")
+        domain = self.config.get("domain", "")
         if domain:
+            domain = require_dns_label(domain, "Jira domain")
+            self.config["domain"] = domain
             self.base_url = f"https://{domain}.atlassian.net"
 
     def _register_tools(self):

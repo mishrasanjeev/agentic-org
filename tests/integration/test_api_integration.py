@@ -320,10 +320,10 @@ class TestConnectorRegistration:
         return {
             "name": f"oracle-fusion-{uuid.uuid4().hex[:8]}",
             "category": "erp",
-            "base_url": "https://oracle.example.com/api/v1",
+            "base_url": "https://www.oracle.com/api/v1",
             "auth_type": "oauth2",
             "auth_config": {
-                "token_url": "https://oracle.example.com/oauth/token",
+                "token_url": "https://www.oracle.com/oauth/token",
                 "grant_type": "client_credentials",
             },
             "secret_ref": "vault://secrets/oracle-fusion-creds",
@@ -627,7 +627,7 @@ class TestFullPipeline:
             json={
                 "name": "tally-prime-test",
                 "category": "accounting",
-                "base_url": "https://tally.example.com/api",
+                "base_url": "https://tallysolutions.com/api",
                 "auth_type": "api_key",
                 "auth_config": {"header": "X-API-Key"},
                 "secret_ref": "vault://secrets/tally-key",

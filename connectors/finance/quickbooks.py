@@ -22,7 +22,9 @@ class QuickbooksConnector(BaseConnector):
     rate_limit_rpm = 500
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         self._realm_id: str = self.config.get("realm_id", "")
 
     def _register_tools(self):
@@ -169,13 +171,7 @@ class QuickbooksConnector(BaseConnector):
                 raise
             logger.info("quickbooks_401_retry", tool=tool_name)
             await self._authenticate()
-            if self._client:
-                await self._client.aclose()
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout_ms / 1000,
-                headers=self._auth_headers,
-            )
+            await self._rebuild_http_client()
             return await super().execute_tool(tool_name, params)
 
     def _company_path(self, suffix: str) -> str:

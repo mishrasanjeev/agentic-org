@@ -54,7 +54,9 @@ class SalesforceConnector(BaseConnector):
     ]
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         self._instance_url = ""
 
     def _register_tools(self):

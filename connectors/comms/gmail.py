@@ -20,6 +20,11 @@ class GmailConnector(BaseConnector):
     base_url = "https://gmail.googleapis.com/gmail/v1"
     rate_limit_rpm = 250
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
+
     def _register_tools(self):
         self._tool_registry["send_email"] = self.send_email
         self._tool_registry["read_inbox"] = self.read_inbox

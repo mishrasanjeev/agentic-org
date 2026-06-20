@@ -7,8 +7,10 @@ group management, access logging, and MFA operations.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 
 class OktaConnector(BaseConnector):
@@ -17,6 +19,21 @@ class OktaConnector(BaseConnector):
     auth_type = "scim_oauth2"
     base_url = "https://org.okta.com/api/v1"
     rate_limit_rpm = 300
+
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        raw_base_url = str(safe_config.pop("base_url", "") or "")
+        org = safe_config.get("org") or safe_config.get("domain")
+        if not org and raw_base_url:
+            parsed = urlparse(raw_base_url)
+            host = (parsed.hostname or "").rstrip(".").lower()
+            if host.endswith(".okta.com"):
+                org = host.removesuffix(".okta.com")
+        if org:
+            safe_org = require_dns_label(org, "Okta org")
+            safe_config["org"] = safe_org
+            self.base_url = f"https://{safe_org}.okta.com/api/v1"
+        super().__init__(safe_config)
 
     def _register_tools(self):
         self._tool_registry["provision_user"] = self.provision_user

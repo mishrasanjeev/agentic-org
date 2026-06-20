@@ -18,6 +18,11 @@ class SlackConnector(BaseConnector):
     base_url = "https://slack.com/api"
     rate_limit_rpm = 100
 
+    def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
+
     def _register_tools(self):
         self._tool_registry["send_message"] = self.send_message
         self._tool_registry["create_channel"] = self.create_channel

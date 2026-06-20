@@ -10,6 +10,12 @@ import httpx
 import structlog
 from defusedxml.ElementTree import fromstring as xml_fromstring
 
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+)
+
 logger = structlog.get_logger()
 
 # Lazy-loaded Secret Manager client (one per process)
@@ -30,6 +36,23 @@ def _get_sm_client():
 _GCP_SECRET_RE = re.compile(
     r"^gcp://projects/(?P<project>[^/]+)/secrets/(?P<secret>[^/]+)/versions/(?P<version>[^/]+)$"
 )
+
+
+class _GuardedAsyncClient(httpx.AsyncClient):
+    """httpx client that validates the final request URL before network egress."""
+
+    def __init__(self, *args: Any, connector_name: str, require_dns: bool, **kwargs: Any) -> None:
+        self._connector_name = connector_name
+        self._require_dns = require_dns
+        super().__init__(*args, **kwargs)
+
+    async def send(self, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
+        _validate_connector_egress_url(
+            str(request.url),
+            connector_name=self._connector_name,
+            require_dns=self._require_dns,
+        )
+        return await super().send(request, *args, **kwargs)
 
 
 class BaseConnector(abc.ABC):
@@ -93,26 +116,8 @@ class BaseConnector(abc.ABC):
                 "connector_skip_auth_no_credentials",
                 connector=self.name,
             )
-
-        # Foundation #7 PR-D: hermetic-CI seam. When the env flag
-        # is set, route every connector HTTP call through the
-        # fake-connectors MockTransport so PR CI never touches a
-        # real third-party API. See docs/hermetic_test_doubles.md.
-        from core.test_doubles import fake_connectors  # noqa: PLC0415 — lazy keeps prod cold-path lean
-
-        transport = (
-            fake_connectors.build_transport()
-            if fake_connectors.is_active()
-            else None
-        )
-
         # Create client with whatever auth headers were set (may be empty)
-        self._client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=self.timeout_ms / 1000,
-            headers=self._auth_headers,
-            transport=transport,
-        )
+        self._client = self._build_http_client()
 
     async def disconnect(self) -> None:
         if self._client:
@@ -267,9 +272,38 @@ class BaseConnector(abc.ABC):
         """Perform authentication. Must set self._auth_headers.
         Use self._get_secret(key) to retrieve credentials — never hardcode tokens."""
 
+    def _connector_transport_and_dns(self) -> tuple[Any, bool]:
+        # Foundation #7 PR-D: hermetic-CI seam. When the env flag
+        # is set, route every connector HTTP call through the
+        # fake-connectors MockTransport so PR CI never touches a
+        # real third-party API. See docs/hermetic_test_doubles.md.
+        from core.test_doubles import fake_connectors  # noqa: PLC0415 - lazy keeps prod cold-path lean
+
+        if fake_connectors.is_active():
+            return fake_connectors.build_transport(), False
+        return build_pinned_async_transport(require_dns=True), True
+
+    def _build_http_client(self) -> httpx.AsyncClient:
+        transport, require_dns = self._connector_transport_and_dns()
+        self._validate_connector_egress_url(self.base_url or "", require_dns=require_dns)
+        return _GuardedAsyncClient(
+            base_url=self.base_url,
+            timeout=self.timeout_ms / 1000,
+            headers=self._auth_headers,
+            transport=transport,
+            connector_name=self.name,
+            require_dns=require_dns,
+        )
+
+    async def _rebuild_http_client(self) -> None:
+        if self._client:
+            await self._client.aclose()
+        self._client = self._build_http_client()
+
     async def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("GET", path)
         resp = await self._client.get(path, params=params)
         resp.raise_for_status()
         return resp.json()
@@ -277,6 +311,7 @@ class BaseConnector(abc.ABC):
     async def _post(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("POST", path)
         resp = await self._client.post(path, json=data)
         resp.raise_for_status()
         return resp.json()
@@ -288,6 +323,7 @@ class BaseConnector(abc.ABC):
         """
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("POST", path)
         resp = await self._client.post(path, data=data)
         resp.raise_for_status()
         return resp.json()
@@ -301,6 +337,7 @@ class BaseConnector(abc.ABC):
             raise RuntimeError("Connector not connected")
         params = params or {}
         params.setdefault("$format", "json")
+        self._validate_request_url("GET", path)
         resp = await self._client.get(path, params=params)
         resp.raise_for_status()
         body = resp.json()
@@ -319,6 +356,7 @@ class BaseConnector(abc.ABC):
         """
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("POST", "")
         resp = await self._client.post(
             "",
             content=xml_body.encode("utf-8"),
@@ -330,6 +368,7 @@ class BaseConnector(abc.ABC):
     async def _put(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("PUT", path)
         resp = await self._client.put(path, json=data)
         resp.raise_for_status()
         return resp.json()
@@ -337,6 +376,7 @@ class BaseConnector(abc.ABC):
     async def _patch(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("PATCH", path)
         resp = await self._client.patch(path, json=data)
         resp.raise_for_status()
         return resp.json()
@@ -344,6 +384,33 @@ class BaseConnector(abc.ABC):
     async def _delete(self, path: str) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
+        self._validate_request_url("DELETE", path)
         resp = await self._client.delete(path)
         resp.raise_for_status()
         return resp.json()
+
+    def _validate_request_url(self, method: str, path: str) -> None:
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        if not isinstance(self._client, httpx.AsyncClient):
+            return
+        request = self._client.build_request(method, path)
+        _, require_dns = self._connector_transport_and_dns()
+        self._validate_connector_egress_url(str(request.url), require_dns=require_dns)
+
+    def _validate_connector_egress_url(self, url: str, *, require_dns: bool = True) -> None:
+        _validate_connector_egress_url(url, connector_name=self.name, require_dns=require_dns)
+
+
+def _validate_connector_egress_url(url: str, *, connector_name: str, require_dns: bool) -> None:
+    if not url:
+        return
+    try:
+        validate_public_url(url, allowed_schemes=("https",), require_dns=require_dns)
+    except EgressValidationError as exc:
+        logger.warning(
+            "connector_egress_blocked",
+            connector=connector_name,
+            reason=exc.reason,
+        )
+        raise ValueError("Connector egress URL must be a public http(s) endpoint") from exc

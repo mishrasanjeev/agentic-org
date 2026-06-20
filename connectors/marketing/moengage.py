@@ -11,6 +11,7 @@ import base64
 from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 
 class MoEngageConnector(BaseConnector):
@@ -21,11 +22,12 @@ class MoEngageConnector(BaseConnector):
     rate_limit_rpm = 200
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
+        super().__init__(safe_config)
         # MoEngage datacenter: api-01, api-02, api-03, etc.
-        datacenter = self.config.get("datacenter", "01")
-        if "base_url" not in self.config:
-            self.base_url = f"https://api-{datacenter}.moengage.com/v1"
+        datacenter = require_dns_label(self.config.get("datacenter", "01"), "MoEngage datacenter")
+        self.base_url = f"https://api-{datacenter}.moengage.com/v1"
 
     def _register_tools(self):
         self._tool_registry["create_campaign"] = self.create_campaign

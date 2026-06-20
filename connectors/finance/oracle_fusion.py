@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 
 from connectors.framework.base_connector import BaseConnector
+from connectors.framework.url_security import require_dns_label
 
 logger = structlog.get_logger()
 
@@ -23,14 +24,15 @@ class OracleFusionConnector(BaseConnector):
     rate_limit_rpm = 500
 
     def __init__(self, config: dict[str, Any] | None = None):
+        safe_config = dict(config or {})
+        safe_config.pop("base_url", None)
         # Build instance-specific base_url before super().__init__ reads it
-        if config and "instance" in config and "base_url" not in config:
-            instance = config["instance"]
-            config = dict(config)
-            config["base_url"] = (
+        if safe_config.get("instance"):
+            instance = require_dns_label(safe_config["instance"], "Oracle Fusion instance")
+            safe_config["base_url"] = (
                 f"https://{instance}.oraclecloud.com/fscmRestApi/resources/{_API_VERSION}"
             )
-        super().__init__(config)
+        super().__init__(safe_config)
 
     def _register_tools(self):
         self._tool_registry["post_journal_entry"] = self.post_journal_entry

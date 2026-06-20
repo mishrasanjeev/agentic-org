@@ -42,6 +42,7 @@ def test_pinelabs_order_mapping_fails_closed_in_strict_runtime(monkeypatch) -> N
     from core.billing import pinelabs_client
 
     pinelabs_client._order_map.clear()
+    pinelabs_client._order_id_map.clear()
     monkeypatch.setattr(pinelabs_client.settings, "env", "production")
     monkeypatch.setattr(pinelabs_client, "_redis_client", lambda: None)
 
@@ -57,6 +58,7 @@ def test_pinelabs_order_mapping_relaxed_runtime_uses_memory_fallback(monkeypatch
     from core.billing import pinelabs_client
 
     pinelabs_client._order_map.clear()
+    pinelabs_client._order_id_map.clear()
     monkeypatch.setattr(pinelabs_client.settings, "env", "development")
     monkeypatch.setattr(pinelabs_client, "_redis_client", lambda: None)
 
@@ -67,7 +69,14 @@ def test_pinelabs_order_mapping_relaxed_runtime_uses_memory_fallback(monkeypatch
         "tenant_id": "tenant-2",
         "plan": "enterprise",
     }
+    assert pinelabs_client.lookup_order_details_by_order_id("order-2") == {
+        "merchant_order_reference": "merchant-2",
+        "order_id": "order-2",
+        "tenant_id": "tenant-2",
+        "plan": "enterprise",
+    }
     pinelabs_client._order_map.clear()
+    pinelabs_client._order_id_map.clear()
 
 
 def test_chat_sessions_fail_closed_in_strict_runtime_without_redis(monkeypatch) -> None:

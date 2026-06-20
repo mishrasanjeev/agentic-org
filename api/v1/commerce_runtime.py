@@ -57,6 +57,11 @@ from core.models.commerce_c6z_runtime import (
     C6ZSellerOnboardingPacketRow,
 )
 from core.models.connector_config import ConnectorConfig
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+)
 
 router = APIRouter(
     prefix="/commerce/runtime",
@@ -525,11 +530,14 @@ async def request_grantex_authority_artifacts(
         evidence_row = await session.get(C6ZConnectorEvidenceRow, body.evidence_id)
         if packet_row is None or evidence_row is None:
             raise HTTPException(404, "C6Z packet or connector evidence not found")
+        if packet_row.tenant_id != tenant_id or evidence_row.tenant_id != tenant_id:
+            raise HTTPException(404, "C6Z packet or connector evidence not found")
         packet = _row_to_packet(packet_row)
         evidence = _row_to_evidence(evidence_row)
         payload = build_grantex_authority_request_payload(
             onboarding_packet=packet,
             connector_evidence=evidence,
+            expected_tenant_id=tenant_id,
         )
         env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
         if not env_resolution.ready:
@@ -1281,9 +1289,22 @@ async def _exchange_shopify_oauth_code(body: ShopifyConnectorCredentialRequest) 
     if body.redirect_uri:
         form["redirect_uri"] = body.redirect_uri.strip()
     shop_domain = _normalize_shopify_domain_for_api(body.shop_domain)
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    token_url = f"https://{shop_domain}/admin/oauth/access_token"
+    try:
+        validate_public_url(
+            token_url,
+            allowed_schemes=("https",),
+            allowed_domains=("myshopify.com",),
+            require_dns=True,
+        )
+    except EgressValidationError as exc:
+        raise HTTPException(status_code=400, detail="Shopify OAuth token endpoint is not allowed") from exc
+    async with httpx.AsyncClient(
+        timeout=20.0,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
         response = await client.post(
-            f"https://{shop_domain}/admin/oauth/access_token",
+            token_url,
             data=form,
             headers={"Accept": "application/json"},
         )
@@ -1424,8 +1445,32 @@ def _shopify_connector_config_name(merchant_id: str) -> str:
 def _normalize_shopify_domain_for_api(value: Any) -> str:
     text = str(value or "").strip().lower()
     text = text.removeprefix("https://").removeprefix("http://").strip("/")
-    if not text or "/" in text or "." not in text:
+    if not text or "/" in text or "." not in text or ":" in text:
         raise HTTPException(status_code=400, detail="Shopify shop_domain must be a host name")
+    labels = text.split(".")
+    if (
+        len(labels) != 3
+        or labels[1:] != ["myshopify", "com"]
+        or not all(labels)
+        or labels[0].startswith("-")
+        or labels[0].endswith("-")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Shopify shop_domain must be a public *.myshopify.com host",
+        )
+    try:
+        validate_public_url(
+            f"https://{text}",
+            allowed_schemes=("https",),
+            require_dns=False,
+            allowed_domains=("myshopify.com",),
+        )
+    except EgressValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Shopify shop_domain must be a public *.myshopify.com host",
+        ) from exc
     return text
 
 
