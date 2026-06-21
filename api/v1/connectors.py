@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from api.deps import get_current_tenant, require_tenant_admin
+from api.deps import get_current_tenant, require_scope, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.marketing.connector_contracts import evaluate_hubspot_crm_read_contract
@@ -655,7 +655,7 @@ def _assert_public_base_url(base_url: str) -> None:
             "reserved, unspecified, and direct-IP destinations are not allowed.",
         ) from exc
 
-router = APIRouter(dependencies=[require_tenant_admin])
+router = APIRouter()
 
 
 def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None = None) -> dict:
@@ -697,7 +697,7 @@ def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None =
 
 
 # ── GET /connectors/registry ────────────────────────────────────────────────
-@router.get("/connectors/registry")
+@router.get("/connectors/registry", dependencies=[require_scope("connectors.registry.read")])
 @route_meta(
     auth_required=True,
     tenant_required=False,
@@ -757,7 +757,7 @@ async def list_registry_connectors(category: str | None = None):
     return {"items": items, "total": len(items)}
 
 
-@router.get("/connectors/contracts/marketing")
+@router.get("/connectors/contracts/marketing", dependencies=[require_scope("connectors.contracts.read")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -813,7 +813,7 @@ async def marketing_connector_contracts(
 
 
 # ── GET /tools — Function-level tool names ─────────────────────────────────
-@router.get("/tools")
+@router.get("/tools", dependencies=[require_scope("connectors.tools.read")])
 @route_meta(
     auth_required=True,
     tenant_required=False,
@@ -890,7 +890,7 @@ async def list_tools(
 
 
 # ── GET /connectors ─────────────────────────────────────────────────────────
-@router.get("/connectors")
+@router.get("/connectors", dependencies=[require_scope("connectors.read")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -959,7 +959,7 @@ async def list_connectors(
 
 
 # ── POST /connectors ────────────────────────────────────────────────────────
-@router.post("/connectors", status_code=201)
+@router.post("/connectors", status_code=201, dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1124,7 +1124,7 @@ async def register_connector(
     return _connector_to_dict(connector, bool(secret_fields))
 
 
-@router.get("/connectors/cmo-vendor-sandbox")
+@router.get("/connectors/cmo-vendor-sandbox", dependencies=[require_scope("connectors.read")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1185,11 +1185,14 @@ async def get_cmo_vendor_sandbox_connectors(
     }
 
 
-@router.post("/connectors/cmo-vendor-sandbox")
+@router.post(
+    "/connectors/cmo-vendor-sandbox",
+    dependencies=[require_scope("connectors.cmo_vendor_sandbox.write")],
+)
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="connectors.create",
+    scope="connectors.cmo_vendor_sandbox.write",
     rate_limit="admin-mutating",
     idempotency="tenant-cmo-vendor-sandbox-upsert",
     audit_event="connectors.cmo_vendor_sandbox.upsert",
@@ -1366,7 +1369,7 @@ async def upsert_cmo_vendor_sandbox_connectors(
 
 
 # ── GET /connectors/{conn_id} ────────────────────────────────────────────────
-@router.get("/connectors/{conn_id}")
+@router.get("/connectors/{conn_id}", dependencies=[require_scope("connectors.read")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1405,7 +1408,7 @@ async def get_connector(
 
 
 # ── PUT /connectors/{conn_id} ──────────────────────────────────────────────
-@router.put("/connectors/{conn_id}")
+@router.put("/connectors/{conn_id}", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1647,7 +1650,7 @@ async def update_connector(
 # audit history. Hard delete is intentionally not supported — a
 # deleted connector can be restored via PUT /connectors/{id}
 # (status=active).
-@router.delete("/connectors/{conn_id}", status_code=200)
+@router.delete("/connectors/{conn_id}", status_code=200, dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1680,7 +1683,7 @@ async def delete_connector(
 
 
 # ── GET /connectors/{conn_id}/health ─────────────────────────────────────────
-@router.get("/connectors/{conn_id}/health")
+@router.get("/connectors/{conn_id}/health", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1735,7 +1738,7 @@ async def connector_health(
     }
 
 
-@router.post("/connectors/{conn_id}/test")
+@router.post("/connectors/{conn_id}/test", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
