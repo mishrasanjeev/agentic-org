@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import text
 
-from core.config import settings
+from core.config import redis_socket_timeout_kwargs, settings
 from core.database import async_session_factory
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,11 @@ async def _get_redis():
     try:
         from redis.asyncio import from_url
 
-        client = from_url(settings.redis_url, decode_responses=True)
+        client = from_url(
+            settings.redis_url,
+            decode_responses=True,
+            **redis_socket_timeout_kwargs(),
+        )
         await client.ping()
         return client
     # enterprise-gate: broad-except-ok reason=kpi-redis-unavailable-degrades-to-postgres-cache

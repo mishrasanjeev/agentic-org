@@ -361,6 +361,8 @@ def _ui_gate(label: str, command: list[str]) -> CheckResult:
             cwd=ui,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=600,
         )
     except subprocess.TimeoutExpired:
@@ -369,11 +371,13 @@ def _ui_gate(label: str, command: list[str]) -> CheckResult:
         )
     if res.returncode == 0:
         return CheckResult(name=label, passed=True, message="OK")
+    stdout = res.stdout or ""
+    stderr = res.stderr or ""
     return CheckResult(
         name=label,
         passed=False,
         message=f"{label} exited {res.returncode}",
-        details={"stdout": res.stdout[-2000:], "stderr": res.stderr[-2000:]},
+        details={"stdout": stdout[-2000:], "stderr": stderr[-2000:]},
     )
 
 
