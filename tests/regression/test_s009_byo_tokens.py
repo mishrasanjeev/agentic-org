@@ -295,6 +295,7 @@ def test_no_direct_provider_env_reads_outside_resolver() -> None:
         "ui/",
         "node_modules/",
         ".git/",
+        ".claude/",
     )
     patterns = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_GEMINI_API_KEY")
     offenders: set[str] = set()

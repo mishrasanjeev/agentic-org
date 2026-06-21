@@ -30,6 +30,46 @@ def app():
     return _app
 
 
+async def _fake_kpi_response(tenant_id: str, role: str, company_id: str) -> dict:
+    base = {
+        "agent_count": 0,
+        "total_tasks_30d": 0,
+        "success_rate": 0,
+        "hitl_interventions": 0,
+        "total_cost_usd": 0,
+        "domain_breakdown": [],
+        "demo": True,
+        "stale": True,
+        "source": "test_fixture",
+        "company_id": company_id,
+    }
+    if role == "cfo":
+        base.update(
+            {
+                "cash_runway_months": 14.2,
+                "dso_days": 42,
+                "dpo_days": 35,
+                "burn_rate": 1250000,
+                "ar_aging": {"0_30": 120000, "31_60": 45000, "61_90": 10000, "90_plus": 5000},
+                "bank_balances": [{"bank": "Demo Bank", "balance": 2500000}],
+                "tax_calendar": [],
+                "monthly_pl": [{"month": "2026-06", "revenue": 1000000, "expenses": 800000}],
+            }
+        )
+    elif role == "cmo":
+        base.update(
+            {
+                "cac": 1200,
+                "mqls": 42,
+                "pipeline_value": 7500000,
+                "roas_by_channel": {"Google Ads": 3.2},
+                "email_performance": {"open_rate": 0.41, "click_rate": 0.09},
+                "website_traffic": {"sessions": 12000, "users": 8300},
+            }
+        )
+    return base
+
+
 @pytest.fixture
 def client(app):
     """TestClient with auth middleware bypassed via mocked validate_token."""
@@ -53,14 +93,21 @@ def client(app):
             "agenticorg:scopes": admin_scopes,
         }
 
-    with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
-        with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
-                with TestClient(app, raise_server_exceptions=False) as c:
-                    # Add a Bearer token header so middleware doesn't reject outright
-                    c.headers["Authorization"] = "Bearer fake-test-token"
-                    c._test_tenant_id = test_tenant_id
-                    yield c
+    async def _noop_auth_failure(*_args, **_kwargs):
+        return None
+
+    with patch("auth.grantex_middleware.is_ip_blocked", return_value=False):
+        with patch("auth.grantex_middleware.record_auth_failure", side_effect=_noop_auth_failure):
+            with patch("auth.grantex_middleware.clear_auth_failures", side_effect=_noop_auth_failure):
+                with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
+                    with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
+                        with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
+                            with patch("api.v1.kpis._build_kpi_response", side_effect=_fake_kpi_response):
+                                with TestClient(app, raise_server_exceptions=False) as c:
+                                    # Add a Bearer token header so middleware doesn't reject outright
+                                    c.headers["Authorization"] = "Bearer fake-test-token"
+                                    c._test_tenant_id = test_tenant_id
+                                    yield c
 
     app.dependency_overrides.pop(get_current_tenant, None)
 

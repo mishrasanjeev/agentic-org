@@ -47,7 +47,10 @@ backfill Cloud Run revisions to skip the download on subsequent boots.
 
 from __future__ import annotations
 
+import hashlib
+import math
 import os
+import re
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -104,6 +107,16 @@ _MODEL_DIMS: dict[str, int] = {
 
 def _configured_model_name() -> str:
     return os.getenv("AGENTICORG_EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL
+
+
+def _env_truthy(name: str) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _use_fake_embeddings() -> bool:
+    """Return True for the hermetic test embedding backend."""
+    return _env_truthy("AGENTICORG_TEST_FAKE_EMBEDDINGS")
 
 
 EMBEDDING_MODEL_NAME = _configured_model_name()
@@ -163,6 +176,54 @@ _model_lock = threading.Lock()
 _model: TextEmbedding | None = None
 
 
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+_FAKE_CONCEPTS: dict[str, tuple[str, ...]] = {
+    "annual": ("compliance", "filing"),
+    "compliance": ("compliance",),
+    "date": ("deadline", "schedule"),
+    "due": ("deadline", "schedule", "compliance"),
+    "filing": ("compliance", "filing"),
+    "gst": ("gst", "indirect_tax", "compliance", "filing"),
+    "gstr": ("gst", "indirect_tax", "compliance", "filing"),
+    "itc": ("gst", "input_tax_credit", "indirect_tax"),
+    "mgt": ("roc", "compliance", "filing"),
+    "month": ("deadline", "schedule"),
+    "quarterly": ("deadline", "schedule", "compliance"),
+    "reconciliation": ("matching", "compliance"),
+    "return": ("compliance", "filing"),
+    "roc": ("roc", "compliance", "filing"),
+    "summary": ("reporting", "filing"),
+    "tax": ("tax", "compliance"),
+    "tds": ("tds", "tax", "compliance", "filing"),
+}
+
+
+def _fake_embedding_terms(text: str) -> list[str]:
+    terms: list[str] = []
+    for token in _TOKEN_RE.findall(text.lower()):
+        base = "gstr" if token.startswith("gstr") else token
+        terms.append(base)
+        terms.extend(_FAKE_CONCEPTS.get(base, ()))
+    return terms
+
+
+def _fake_embedding(text: str) -> list[float]:
+    """Deterministic 384-dim bag-of-concepts embedding for hermetic tests."""
+    vector = [0.0] * EMBEDDING_DIM
+    for term in _fake_embedding_terms(text):
+        digest = hashlib.blake2b(term.encode("utf-8"), digest_size=4).digest()
+        idx = int.from_bytes(digest, "big") % EMBEDDING_DIM
+        vector[idx] += 1.0
+    norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+    return [float(value / norm) for value in vector]
+
+
+def _fake_embed(texts: list[str]) -> list[list[float]]:
+    return [_fake_embedding(text) for text in texts]
+
+
 def _get_model() -> TextEmbedding:
     """Return a singleton TextEmbedding for the configured default."""
     global _model
@@ -196,6 +257,8 @@ def embed(texts: list[str]) -> list[list[float]]:
         return []
     if rag_use_bge_m3():
         return embed_bge_m3(texts)
+    if _use_fake_embeddings():
+        return _fake_embed(texts)
     model = _get_model()
     vectors = [v.tolist() for v in model.embed(texts)]
     return vectors

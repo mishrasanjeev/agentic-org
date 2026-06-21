@@ -37,6 +37,43 @@ def app():
     return _app
 
 
+async def _fake_kpi_response(tenant_id: str, role: str, company_id: str) -> dict:
+    """Hermetic KPI payload for API error tests.
+
+    These tests exercise request validation/auth/error envelopes. The real KPI
+    builder intentionally talks to Redis/Postgres, which belongs in integration
+    coverage and can block a no-infra unit run.
+    """
+    base = {
+        "agent_count": 0,
+        "total_tasks_30d": 0,
+        "success_rate": 0,
+        "hitl_interventions": 0,
+        "total_cost_usd": 0,
+        "domain_breakdown": [],
+        "demo": True,
+        "stale": True,
+        "source": "test_fixture",
+        "company_id": company_id,
+    }
+    if role == "cfo":
+        base.update(
+            {
+                "cash_runway_months": 0,
+                "dso_days": 0,
+                "dpo_days": 0,
+                "burn_rate": 0,
+                "ar_aging": {"0_30": 0, "31_60": 0, "61_90": 0, "90_plus": 0},
+                "bank_balances": [],
+                "tax_calendar": [],
+                "monthly_pl": [],
+            }
+        )
+    elif role == "cmo":
+        base.update({"cac": 0, "mqls": 0, "roas": 0})
+    return base
+
+
 @pytest.fixture
 def auth_client(app):
     """TestClient with auth middleware bypassed (authenticated)."""
@@ -58,13 +95,20 @@ def auth_client(app):
             "agenticorg:scopes": admin_scopes,
         }
 
-    with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
-        with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
-            with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
-                with TestClient(app, raise_server_exceptions=False) as c:
-                    c.headers["Authorization"] = "Bearer fake-test-token"
-                    c._test_tenant_id = test_tenant_id
-                    yield c
+    async def _noop_auth_failure(*_args, **_kwargs):
+        return None
+
+    with patch("auth.grantex_middleware.is_ip_blocked", return_value=False):
+        with patch("auth.grantex_middleware.record_auth_failure", side_effect=_noop_auth_failure):
+            with patch("auth.grantex_middleware.clear_auth_failures", side_effect=_noop_auth_failure):
+                with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
+                    with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
+                        with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
+                            with patch("api.v1.kpis._build_kpi_response", side_effect=_fake_kpi_response):
+                                with TestClient(app, raise_server_exceptions=False) as c:
+                                    c.headers["Authorization"] = "Bearer fake-test-token"
+                                    c._test_tenant_id = test_tenant_id
+                                    yield c
 
     app.dependency_overrides.pop(get_current_tenant, None)
 
@@ -78,8 +122,13 @@ def noauth_client(app):
 
     app.router.lifespan_context = _test_lifespan
 
-    with TestClient(app, raise_server_exceptions=False) as c:
-        yield c
+    async def _noop_auth_failure(*_args, **_kwargs):
+        return None
+
+    with patch("auth.grantex_middleware.is_ip_blocked", return_value=False):
+        with patch("auth.grantex_middleware.record_auth_failure", side_effect=_noop_auth_failure):
+            with TestClient(app, raise_server_exceptions=False) as c:
+                yield c
 
 
 # ═══════════════════════════════════════════════════════════════════════════
