@@ -2265,7 +2265,17 @@ class TestRBAC:
         from core.rbac import _DOMAIN_ROLE_SCOPES, ROLE_SCOPES
 
         for role in ["cfo", "chro", "cmo", "coo"]:
-            assert ROLE_SCOPES[role] == _DOMAIN_ROLE_SCOPES
+            assert set(_DOMAIN_ROLE_SCOPES) <= set(ROLE_SCOPES[role])
+
+    def test_cmo_has_cmo_setup_scopes_without_admin(self):
+        from core.rbac import get_scopes_for_role
+
+        scopes = get_scopes_for_role("cmo")
+        assert "connectors.read" in scopes
+        assert "connectors.cmo_vendor_sandbox.write" in scopes
+        assert "report_schedules.read" in scopes
+        assert "report_schedules.write" in scopes
+        assert "agenticorg:admin" not in scopes
 
 
 # =============================================================================

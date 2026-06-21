@@ -19,12 +19,22 @@ _DOMAIN_ROLE_SCOPES = [
     "approvals:read",
     "approvals:write",
     "audit:read",
+    "connectors.read",
+    "connectors.contracts.read",
+    "connectors.registry.read",
+    "connectors.tools.read",
+    "report_schedules.read",
+    "report_schedules.write",
+    "report_schedules.run",
 ]
 
 ROLE_SCOPES: dict[str, list[str]] = {
     "cfo": _DOMAIN_ROLE_SCOPES,
     "chro": _DOMAIN_ROLE_SCOPES,
-    "cmo": _DOMAIN_ROLE_SCOPES,
+    "cmo": [
+        *_DOMAIN_ROLE_SCOPES,
+        "connectors.cmo_vendor_sandbox.write",
+    ],
     "coo": _DOMAIN_ROLE_SCOPES,
     "admin": ["agenticorg:admin"],
     "auditor": ["audit:read"],

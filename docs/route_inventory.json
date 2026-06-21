@@ -3020,8 +3020,8 @@
     "path": "/api/v1/connectors/cmo-vendor-sandbox",
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
-    "scope": "connectors.create",
-    "source_line": 1197,
+    "scope": "connectors.cmo_vendor_sandbox.write",
+    "source_line": 1200,
     "tenant_required": true
   },
   {
@@ -3165,7 +3165,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1659,
+    "source_line": 1662,
     "tenant_required": true
   },
   {
@@ -3183,7 +3183,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1378,
+    "source_line": 1381,
     "tenant_required": true
   },
   {
@@ -3201,7 +3201,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 1417,
+    "source_line": 1420,
     "tenant_required": true
   },
   {
@@ -3219,7 +3219,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1692,
+    "source_line": 1695,
     "tenant_required": true
   },
   {
@@ -3237,7 +3237,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1747,
+    "source_line": 1750,
     "tenant_required": true
   },
   {
@@ -4731,7 +4731,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-read",
     "scope": "report_schedules.sensitive.list",
-    "source_line": 388,
+    "source_line": 420,
     "tenant_required": true
   },
   {
@@ -4749,7 +4749,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-write",
     "scope": "report_schedules.write",
-    "source_line": 494,
+    "source_line": 533,
     "tenant_required": true
   },
   {
@@ -4767,7 +4767,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-write",
     "scope": "report_schedules.write",
-    "source_line": 675,
+    "source_line": 728,
     "tenant_required": true
   },
   {
@@ -4785,7 +4785,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-write",
     "scope": "report_schedules.write",
-    "source_line": 602,
+    "source_line": 647,
     "tenant_required": true
   },
   {
@@ -4803,7 +4803,7 @@
     "public_exempt_reason": null,
     "rate_limit": "manual-report-trigger",
     "scope": "report_schedules.external_action.run",
-    "source_line": 705,
+    "source_line": 763,
     "tenant_required": true
   },
   {

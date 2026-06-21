@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.deps import get_current_tenant, require_tenant_admin
+from api.deps import get_current_tenant, get_current_user, require_scope
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.report_schedule import ReportSchedule
@@ -110,7 +110,35 @@ def _cron_field_ok(token: str, lo: int, hi: int) -> bool:
             return False
     return True
 
-router = APIRouter(dependencies=[require_tenant_admin])
+router = APIRouter()
+
+_REPORT_TYPES_BY_ROLE: dict[str, set[str]] = {
+    "cfo": {"cfo_daily", "aging_report", "pnl_report"},
+    "cmo": {"cmo_weekly", "campaign_report"},
+}
+
+
+def _is_admin_claims(claims: dict[str, Any]) -> bool:
+    scopes = claims.get("grantex:scopes") or []
+    return any(str(scope).startswith("agenticorg:admin") for scope in scopes)
+
+
+def _allowed_report_types(claims: dict[str, Any]) -> set[str] | None:
+    if _is_admin_claims(claims):
+        return None
+    role = str(claims.get("role") or "").strip().lower()
+    return set(_REPORT_TYPES_BY_ROLE.get(role, set()))
+
+
+def _assert_report_type_allowed(report_type: str, claims: dict[str, Any]) -> None:
+    allowed = _allowed_report_types(claims)
+    if allowed is None:
+        return
+    if report_type not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="Report type is outside this role's domain",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +404,11 @@ def _parse_schedule_id(schedule_id: str) -> _uuid.UUID:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/report-schedules", response_model=list[ReportScheduleResponse])
+@router.get(
+    "/report-schedules",
+    response_model=list[ReportScheduleResponse],
+    dependencies=[require_scope("report_schedules.read")],
+)
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -388,6 +420,7 @@ def _parse_schedule_id(schedule_id: str) -> _uuid.UUID:
 async def list_report_schedules(
     company_id: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
+    current_user: dict = Depends(get_current_user),
 ) -> list[ReportScheduleResponse]:
     """List report schedules for the current tenant.
 
@@ -415,6 +448,11 @@ async def list_report_schedules(
     try:
         async with get_tenant_session(tid) as session:
             query = select(ReportSchedule).where(ReportSchedule.tenant_id == tid)
+            allowed_report_types = _allowed_report_types(current_user)
+            if allowed_report_types is not None:
+                if not allowed_report_types:
+                    return []
+                query = query.where(ReportSchedule.report_type.in_(allowed_report_types))
             if company_uuid is not None:
                 # Return the company's own schedules *and* tenant-wide
                 # schedules (company_id IS NULL) so a company user doesn't
@@ -482,6 +520,7 @@ async def list_report_schedules(
     "/report-schedules",
     response_model=ReportScheduleResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[require_scope("report_schedules.write")],
 )
 @route_meta(
     auth_required=True,
@@ -494,6 +533,7 @@ async def list_report_schedules(
 async def create_report_schedule(
     body: ReportScheduleCreate,
     tenant_id: str = Depends(get_current_tenant),
+    current_user: dict = Depends(get_current_user),
 ) -> ReportScheduleResponse:
     """Create a new report schedule.
 
@@ -507,6 +547,7 @@ async def create_report_schedule(
     re-raised so FastAPI keeps its own mapping.
     """
     try:
+        _assert_report_type_allowed(body.report_type, current_user)
         tid = _uuid.UUID(tenant_id)
         schedule_id = _uuid.uuid4()
         channels_data = [ch.model_dump() for ch in body.delivery_channels]
@@ -590,7 +631,11 @@ async def create_report_schedule(
         ) from exc
 
 
-@router.patch("/report-schedules/{schedule_id}", response_model=ReportScheduleResponse)
+@router.patch(
+    "/report-schedules/{schedule_id}",
+    response_model=ReportScheduleResponse,
+    dependencies=[require_scope("report_schedules.write")],
+)
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -603,6 +648,7 @@ async def update_report_schedule(
     schedule_id: str,
     body: ReportScheduleUpdate,
     tenant_id: str = Depends(get_current_tenant),
+    current_user: dict = Depends(get_current_user),
 ) -> ReportScheduleResponse:
     """Update an existing report schedule (partial update)."""
     tid = _uuid.UUID(tenant_id)
@@ -618,10 +664,12 @@ async def update_report_schedule(
         row = result.scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Schedule not found")
+        _assert_report_type_allowed(row.report_type, current_user)
 
         updates = body.model_dump(exclude_unset=True)
 
         if "report_type" in updates:
+            _assert_report_type_allowed(updates["report_type"], current_user)
             row.report_type = updates["report_type"]
             row.name = updates["report_type"]
 
@@ -663,7 +711,12 @@ async def update_report_schedule(
         return _to_response(row)
 
 
-@router.delete("/report-schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/report-schedules/{schedule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[require_scope("report_schedules.write")],
+)
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -675,6 +728,7 @@ async def update_report_schedule(
 async def delete_report_schedule(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
+    current_user: dict = Depends(get_current_user),
 ) -> None:
     """Delete a report schedule."""
     tid = _uuid.UUID(tenant_id)
@@ -690,10 +744,14 @@ async def delete_report_schedule(
         row = result.scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Schedule not found")
+        _assert_report_type_allowed(row.report_type, current_user)
         await session.delete(row)
 
 
-@router.post("/report-schedules/{schedule_id}/run-now")
+@router.post(
+    "/report-schedules/{schedule_id}/run-now",
+    dependencies=[require_scope("report_schedules.run")],
+)
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -705,6 +763,7 @@ async def delete_report_schedule(
 async def run_report_now(
     schedule_id: str,
     tenant_id: str = Depends(get_current_tenant),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Trigger immediate generation for a schedule (ignores cron timing)."""
     tid = _uuid.UUID(tenant_id)
@@ -720,6 +779,7 @@ async def run_report_now(
         row = result.scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Schedule not found")
+        _assert_report_type_allowed(row.report_type, current_user)
 
         config: dict[str, Any] = row.config or {}
 
