@@ -16,10 +16,10 @@ def test_landing_page_reflects_oacp_protocol_without_milestone_section() -> None
 
     for expected in (
         "Open Agentic Commerce Protocol",
-        "A trust layer for seller and buyer agents.",
-        "source-backed merchant facts",
-        "Explore the full OACP model",
-        "No public protocol publication",
+        "Buyer and seller AI-agent runtime for OACP commerce.",
+        "source-backed artifacts",
+        "Explore the OACP flow",
+        "does not claim universal purchase support",
     ):
         assert expected in landing
 
@@ -88,7 +88,8 @@ def test_readme_and_deploy_docs_describe_current_cloud_run_path() -> None:
 
     assert "Latest Mainline Status (2026-06-19)" in readme
     assert "OACP Shopify runtime vertical" in readme
-    assert "Durable cache storage" in readme
+    assert "OACP Seller And Buyer Commerce Runtime" in readme
+    assert "durable public-safe refs" in readme
     assert "maintenance planner" in readme
     assert "Cloud Run manual helper" in readme
     assert "GKE Production" not in readme

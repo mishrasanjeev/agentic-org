@@ -1,5 +1,9 @@
 # OACP Buyer Bridge Developer Guide
 
+Canonical runtime docs: `docs/oacp/README.md` and
+`docs/oacp/end-user-flow.md`. This page is retained as a developer bridge note
+and should follow the current OACP owner split.
+
 All buyer bridges call the same artifact-backed answer path. They must show
 source/freshness labels and refuse unsupported final commitments unless required
 OACP and provider evidence exists.

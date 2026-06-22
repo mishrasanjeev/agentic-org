@@ -1,5 +1,9 @@
 # Commerce Sales Agent Overview
 
+Supersession note: use `docs/oacp/README.md` and
+`docs/oacp/end-user-flow.md` for the current OACP runtime split. This page is
+retained for historical/contextual Commerce Sales Agent detail.
+
 The AgenticOrg Commerce Sales Agent is the buyer and seller AI-agent runtime for
 OACP commerce. It helps merchants prepare seller agents and connector workflows,
 helps buyers inspect artifact-grounded discovery previews, and consumes

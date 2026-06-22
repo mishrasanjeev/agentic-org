@@ -140,24 +140,24 @@ const INDIA_CONNECTORS = [
 
 const OACP_SECTION_POINTS = [
   {
-    label: "Source",
-    title: "Facts Come From Merchant Systems",
-    desc: "Catalog, price, availability, policy, and support facts stay grounded in approved merchant sources and public-safe evidence references.",
+    label: "Seller",
+    title: "Shopify Seller Commerce Agent Onboarding",
+    desc: "Merchants create a Seller Commerce Agent, connect Shopify read-only, and request Grantex authority artifacts through AgenticOrg runtime APIs.",
   },
   {
-    label: "Authority",
-    title: "Grantex Signs The OACP Artifacts",
-    desc: "Grantex remains the protocol, policy, trust, and canonical artifact authority; AgenticOrg consumes those artifacts in buyer and seller agent flows.",
+    label: "Cache",
+    title: "OACP Cache With Freshness Labels",
+    desc: "Buyer agents answer from cached OACP artifacts with source, TTL, freshness, revocation posture, risk, and blocked-capability labels.",
   },
   {
-    label: "Runtime",
-    title: "Agents Show Freshness Before Action",
-    desc: "Buyer agents use scoped OACP artifacts, source labels, freshness, revocation posture, and risk boundaries before answering or preparing a handoff.",
+    label: "Surfaces",
+    title: "Web, MCP, OpenAPI, A2A, WhatsApp, Telegram",
+    desc: "ChatGPT/Claude-style MCP, Gemini/Perplexity-style OpenAPI, A2A, web, WhatsApp, and Telegram share one artifact-backed answer path.",
   },
   {
-    label: "Boundary",
-    title: "Commitment Remains Gated",
-    desc: "Checkout, payment, provider rails, and merchant private APIs stay blocked unless a separate approved rollout verifies that exact path.",
+    label: "Provider",
+    title: "Plural/Pine Capability Verification",
+    desc: "AgenticOrg verifies provider-owned mandate capability metadata without storing raw payment secrets or claiming payment/order success.",
   },
 ];
 
@@ -557,9 +557,9 @@ export default function Landing() {
               <div className="inline-flex items-center gap-2 bg-cyan-50 border border-cyan-100 text-cyan-700 rounded-full px-4 py-1.5 text-sm font-medium mb-5">
                 Open Agentic Commerce Protocol
               </div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">A trust layer for seller and buyer agents.</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Buyer and seller AI-agent runtime for OACP commerce.</h2>
               <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-                OACP gives commerce agents a common way to reason over source-backed merchant facts, artifact freshness, revocation posture, and commitment boundaries before they answer, prepare, or refuse a buyer request.
+                AgenticOrg runs Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, channel bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the OACP trust, policy, and artifact authority.
               </p>
             </div>
           </FadeIn>
@@ -582,14 +582,28 @@ export default function Landing() {
                 <div className="rounded-xl border border-slate-200 bg-slate-900 px-6 py-6 text-white">
                   <p className="text-sm uppercase tracking-[0.18em] text-cyan-300 font-semibold mb-3">Protocol posture</p>
                   <p className="text-slate-300 leading-relaxed">
-                    AgenticOrg uses OACP artifacts for grounded discovery and prepared handoff behavior. No public protocol publication, live checkout, payment execution, live provider rails, merchant private API execution, or commerce production readiness is claimed from this landing-page section.
+                    AgenticOrg uses OACP artifacts for grounded discovery and prepared handoff behavior. Final payment and order execution require approved merchant, provider, and channel paths; this landing-page section does not claim universal purchase support.
                   </p>
-                  <Link
-                    to="/open-agentic-commerce-protocol"
-                    className="mt-5 inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors"
-                  >
-                    Explore the full OACP model
-                  </Link>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <Link
+                      to="/open-agentic-commerce-protocol"
+                      className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors"
+                    >
+                      Explore the OACP flow
+                    </Link>
+                    <a
+                      href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/shopify-merchant-onboarding.md"
+                      className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+                    >
+                      Merchant onboarding guide
+                    </a>
+                    <a
+                      href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/end-user-flow.md"
+                      className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+                    >
+                      End-user flow
+                    </a>
+                  </div>
                 </div>
               </div>
             </FadeIn>
@@ -605,11 +619,11 @@ export default function Landing() {
                 <div className="grid sm:grid-cols-3 gap-3">
                   {[
                     ["Merchant systems", "Catalog, inventory, policy, order truth"],
-                    ["Seller agent", "Connector setup and merchant preview"],
+                    ["Seller Commerce Agent", "Shopify onboarding and merchant preview"],
                     ["Grantex authority", "Signed OACP artifacts and policy"],
                     ["OACP cache", "Scoped refs, TTL, freshness, revocation"],
                     ["Buyer agent", "Answers, compares, prepares, or refuses"],
-                    ["Channels", "ChatGPT, Claude, web, mobile, MCP"],
+                    ["Channels", "Web, MCP, OpenAPI, A2A, WhatsApp, Telegram"],
                   ].map(([title, detail], i) => (
                     <div key={title} className="relative rounded-xl border border-white/10 bg-white/10 p-4">
                       <div className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-950">
