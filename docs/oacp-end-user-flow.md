@@ -1,5 +1,10 @@
 # OACP End-User Flow
 
+Supersession note: the canonical AgenticOrg OACP runtime docs now live in
+`docs/oacp/README.md`, with the canonical flow at
+`docs/oacp/end-user-flow.md`. This root-level page is retained as
+historical/contextual detail.
+
 Status: current runtime closure guide, updated 2026-06-19.
 
 OACP in AgenticOrg is the runtime path for seller and buyer agents. The current

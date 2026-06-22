@@ -28,40 +28,34 @@
 
 ---
 
-## Commerce Sales Agent
+## OACP Seller And Buyer Commerce Runtime
 
-AgenticOrg includes a Commerce Sales Agent that talks to Grantex Commerce V1 through Grantex-only tools. It is designed for consent-first product discovery, cart drafting, Commerce Passport handling, provider-neutral payment intent handoff, checkout handoff, and payment status polling without calling payment providers directly.
+AgenticOrg owns the Seller Commerce Agent and buyer-agent runtime for OACP-backed commerce. It runs merchant onboarding, Shopify connector custody, read-only Shopify sync, buyer sessions, channel bridges, artifact cache, protocol adapter consumption, and Pine Labs Plural/P3P capability verification.
 
-> Commerce production readiness is not final. AgenticOrg production MCP/A2A commerce metadata may be visible, but Grantex production Commerce V1 discovery remains disabled/fail-closed and live checkout, live payments, and live Plural are not enabled.
+Grantex owns OACP trust authority, protocol/policy governance, canonical signed/internal artifacts, artifact verification, and protocol adapter authority. Shopify and merchant systems remain the source of record. Pine Labs Plural/P3P owns mandate and payment rail execution.
 
 ```mermaid
 flowchart LR
-  user[User question] --> agent[Commerce Sales Agent]
-  agent --> tools[grantex_commerce:* tools]
-  tools --> grantex[Grantex Commerce REST/MCP]
-  grantex --> catalog[Catalog and inventory]
-  grantex --> consent[Consent and Commerce Passport]
-  grantex --> payment[Provider-neutral payment control]
-  payment --> mock[Mock provider smoke evidence]
-  payment -. blocked .-> live[Live provider / Plural gate]
+  merchant[Shopify merchant] --> agentic[AgenticOrg Seller Commerce Agent]
+  agentic --> shopify[Read-only Shopify sync]
+  shopify --> grantex[Grantex OACP authority]
+  grantex --> cache[AgenticOrg OACP cache]
+  cache --> buyer[Buyer agent and channels]
+  buyer --> provider[Pine Labs Plural/P3P capability check]
 ```
 
 | Area | Current posture |
 | --- | --- |
-| Default runtime mode | Mock mode remains the default for local demo use. |
-| Real-staging mode | Explicitly gated and only valid against approved Grantex staging or exact temporary smoke URLs. |
-| Hosted discovery smoke | API-only C3 smoke verified liveness, health, MCP tools, and A2A discovery. |
-| Provider boundary | No direct Stripe, Plural, Pine, or provider credential commerce path. |
-| Production discovery caveat | AgenticOrg commerce metadata should stay gated or explicitly reviewed until Grantex read-only discovery is approved. |
-| OACP runtime vertical | Seller onboarding, Shopify read-only sync, Grantex authority request/cache, protocol adapters, buyer bridges, and Plural/Pine capability verification. |
-| Durable cache storage | C6X4 stores public-safe source/evidence refs with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, tenant-safe indexes, and RLS. |
-| Protocol adapters | Runtime endpoints generate Schema.org JSON-LD, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads from cached OACP artifacts. Compatibility mapping only; no external certification claim. |
-| Buyer channels | Web, MCP/OpenAPI/A2A contracts, WhatsApp, and Telegram route to the same cache-backed answer/refusal logic. |
-| Live checkout/payments | Blocked unless separate merchant, provider, legal, security, ops, and production flag approvals exist; current AgenticOrg runtime prepares handoff or safe blocker only. |
+| Seller onboarding | Implemented through OACP onboarding packets and runtime APIs. |
+| Shopify connector | Implemented for credential custody, status, read-only sync, and product webhook verification. |
+| Grantex authority request | Implemented for C6Z OACP authority payloads and allowlisted Grantex artifact issuance. |
+| OACP cache | Implemented for public-safe refs, TTL, freshness, revocation posture, risk tier, and non-enablement flags. |
+| Buyer channels | Web, MCP/OpenAPI/A2A metadata, WhatsApp, and Telegram routes use the same cache-backed answer/refusal path. |
+| Protocol adapters | Schema.org, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads are compatibility mappings derived from cached OACP artifacts. |
+| Plural/Pine capability | Implemented as provider-owned capability verification with redacted evidence refs. |
+| Payment/order execution | Not performed by OACP artifacts. Current runtime prepares a handoff or returns a safe blocker; success must come from merchant/provider systems. |
 
-Read more in `docs/oacp-end-to-end-flow.md`, `docs/runbooks/oacp-shopify-merchant-onboarding.md`, `docs/commerce-agent-bridges-guide.md`, `docs/commerce-agent-overview.md`, and `docs/commerce-agent-developer-guide.md`.
-
-Key tool aliases: `grantex_commerce:merchant_get_profile`, `grantex_commerce:catalog_search`, `grantex_commerce:catalog_get_item`, `grantex_commerce:inventory_check`, `grantex_commerce:cart_create`, `grantex_commerce:consent_request`, `grantex_commerce:consent_exchange`, `grantex_commerce:payment_create_intent`, `grantex_commerce:checkout_create`, and `grantex_commerce:payment_get_status`.
+Read the canonical docs in `docs/oacp/README.md`, starting with `docs/oacp/end-user-flow.md` and `docs/oacp/truth-inventory.md`. Older Commerce Sales Agent docs and reports remain historical/contextual where they describe earlier Grantex Commerce V1 tool paths.
 
 ## What Is AgenticOrg?
 

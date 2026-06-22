@@ -1,5 +1,9 @@
 # Shopify Merchant OACP Onboarding Runbook
 
+Canonical runtime docs: `docs/oacp/README.md` and
+`docs/oacp/end-user-flow.md`. This runbook is retained for operator continuity
+and should follow the current OACP owner split.
+
 ## Owner Split
 
 | Area | Owner |

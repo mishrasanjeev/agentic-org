@@ -1,19 +1,46 @@
-# How OACP Artifacts Keep Buyer Agents Honest
+# Why OACP Keeps Buyer Agents Honest
+
+## Summary
+
+OACP keeps buyer agents honest by making source, freshness, scope, revocation posture, risk tier, and non-execution flags mandatory runtime inputs.
+
+## Target Audience
+
+Buyer-agent builders, safety teams, and support operators.
+
+## Architecture Diagram
 
 ```mermaid
 flowchart TD
-  source[Shopify source facts] --> evidence[Redacted connector evidence]
-  evidence --> artifact[Grantex signed OACP artifact]
+  shopify[Shopify facts] --> evidence[Redacted evidence]
+  evidence --> artifact[Grantex OACP artifact]
   artifact --> cache[AgenticOrg cache evaluator]
-  cache --> answer[Buyer answer]
-  cache --> refusal[Safe blocker]
+  cache --> decision{Answer, refresh, prepare, refuse}
+  decision --> answer[Grounded answer]
+  decision --> refuse[Safe blocker]
 ```
 
-Buyer agents are useful only when they stop guessing. OACP artifacts carry
-scope, source refs, TTL, freshness, revocation posture, verifier state, and
-non-execution flags. AgenticOrg checks those fields before answering.
+## End-To-End Flow
 
-If evidence is stale, missing, revoked, or outside scope, the agent refuses or
-asks for a refresh. That is the point: a blocked answer is better than a made-up
-price, stock promise, or checkout claim.
+The buyer asks a question. AgenticOrg loads scoped cache records, checks artifact TTL and source freshness, filters private or executable fields, and returns either a grounded answer, a refresh instruction, a prepared handoff, or a blocker.
 
+## What Is Implemented Now
+
+The runtime builds cache records from Grantex artifacts, answers from cache, generates source labels, blocks stale/missing artifacts, and refuses purchase preparation when required artifacts or Plural/Pine capability evidence are missing.
+
+## What Requires External Approval Or Config
+
+Channel rollout, merchant source approval, provider capability configuration, and any future execution path.
+
+## Failure Modes
+
+- Cache record expired.
+- Buyer asks for payment or order success.
+- Source refs are missing.
+- Provider capability evidence is stale.
+
+## Safe User Wording Examples
+
+- "I can answer from the current merchant snapshot."
+- "I cannot confirm payment from cached artifacts."
+- "This request needs refreshed source evidence."

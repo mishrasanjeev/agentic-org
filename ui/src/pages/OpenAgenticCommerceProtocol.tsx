@@ -11,7 +11,7 @@ const FLOW_NODES = [
   {
     title: "Seller commerce agent",
     eyebrow: "Merchant setup",
-    copy: "AgenticOrg helps the merchant connect systems, preview what agents can see, and prepare review packets.",
+    copy: "AgenticOrg creates the Seller Commerce Agent, stores Shopify connector custody, and prepares Grantex authority requests.",
     tone: "border-emerald-300/40 bg-emerald-300/10 text-emerald-50",
   },
   {
@@ -35,7 +35,7 @@ const FLOW_NODES = [
   {
     title: "Buyer channels",
     eyebrow: "User surface",
-    copy: "ChatGPT, Claude, web, mobile, MCP clients, and future channel bridges receive grounded answers or refusals.",
+    copy: "Web, MCP, OpenAPI, A2A, WhatsApp, and Telegram receive grounded answers or refusals from the same cache path.",
     tone: "border-rose-300/40 bg-rose-300/10 text-rose-50",
   },
 ];
@@ -97,11 +97,13 @@ const DECISIONS = [
 ];
 
 const SURFACES = [
-  ["Seller agent", "Merchant setup, connector custody, preview, gap review, Grantex authority request"],
-  ["Buyer agent", "Read-only discovery, grounded comparison, prepared-only handoff, refusal copy"],
-  ["MCP", "Tool surface for approved clients that need a protocol-backed commerce agent entry point"],
-  ["Web/mobile", "First controlled buyer-agent channel for artifact-backed discovery and review"],
-  ["Provider rails", "Mandates and payment execution remain provider-owned and separately approved"],
+  ["Seller Commerce Agent", "Merchant onboarding, Shopify connector custody, preview, gap review, and Grantex authority request"],
+  ["Buyer agent", "Read-only discovery, grounded comparison, prepared-only handoff, and refusal copy"],
+  ["MCP", "ChatGPT/Claude-style tool surface backed by the same artifact cache"],
+  ["OpenAPI", "Gemini/Perplexity-style schema and ask route with source/freshness labels"],
+  ["A2A", "Agent card and task metadata for agent-to-agent discovery"],
+  ["WhatsApp and Telegram", "Webhook bridges that require configured secrets before accepting messages"],
+  ["Plural/Pine verifier", "Provider-owned mandate capability evidence without raw payment secret storage"],
   ["Audit", "Source refs, freshness, policy blockers, risk tier, and non-execution posture stay reviewable"],
 ];
 
@@ -170,10 +172,10 @@ export default function OpenAgenticCommerceProtocol() {
                 Open Agentic Commerce Protocol
               </div>
               <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
-                Seller and buyer agents need commerce facts they can trust.
+                Buyer and seller AI agents need commerce facts they can trust.
               </h1>
               <p className="mt-6 text-lg text-slate-300 leading-relaxed max-w-2xl">
-                OACP is the trust model AgenticOrg uses to consume Grantex-authorized commerce artifacts, show source and freshness, prepare non-executing handoffs, and refuse unsafe requests instead of inventing merchant facts.
+                AgenticOrg runs Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="#flow" className="inline-flex justify-center rounded-lg bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors">
@@ -181,6 +183,9 @@ export default function OpenAgenticCommerceProtocol() {
                 </a>
                 <a href="#boundaries" className="inline-flex justify-center rounded-lg border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors">
                   See what stays blocked
+                </a>
+                <a href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/shopify-merchant-onboarding.md" className="inline-flex justify-center rounded-lg border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors">
+                  Merchant guide
                 </a>
               </div>
             </div>
@@ -297,17 +302,20 @@ export default function OpenAgenticCommerceProtocol() {
         <section className="py-20 bg-white">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Next step</p>
-            <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-slate-950">See a concrete MCP-backed OACP preview.</h2>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-slate-950">Read the runtime docs and MCP-backed preview.</h2>
             <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-              The workflow example shows how a third-party client asks AgenticOrg to run a commerce agent, how OACP artifacts are evaluated, and how the result stays prepared-only or refused.
+              The runtime docs explain Shopify onboarding, artifact cache behavior, buyer surfaces, Plural/Pine capability checks, and purchase handoff blockers. The workflow example shows how an MCP client reaches the same guarded path.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
               <Link to="/integration-workflow" className="inline-flex justify-center rounded-lg bg-slate-950 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors">
                 Open the MCP workflow
               </Link>
-              <Link to="/" className="inline-flex justify-center rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition-colors">
-                Back to landing page
-              </Link>
+              <a href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/end-user-flow.md" className="inline-flex justify-center rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition-colors">
+                End-user flow
+              </a>
+              <a href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/runtime-operations-runbook.md" className="inline-flex justify-center rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition-colors">
+                Runtime runbook
+              </a>
             </div>
           </div>
         </section>

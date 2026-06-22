@@ -1,5 +1,10 @@
 # OACP End-To-End Flow
 
+Supersession note: the canonical AgenticOrg OACP runtime docs now live in
+`docs/oacp/README.md`, with the canonical flow at
+`docs/oacp/end-user-flow.md`. This page is retained as historical/contextual
+runtime detail and should not override the current owner split.
+
 AgenticOrg owns the buyer/seller agent runtime. Grantex owns OACP trust,
 protocol policy, canonical artifacts, signing, and verification. Shopify stays
 the merchant source of record. Pine Labs Plural/P3P owns mandate and payment
