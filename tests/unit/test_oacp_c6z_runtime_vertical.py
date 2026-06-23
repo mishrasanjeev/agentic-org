@@ -823,6 +823,18 @@ def test_offline_pos_handoff_packet_uses_purchase_prep_without_payment_execution
         )
 
 
+def test_offline_pos_handoff_blocker_uses_public_safe_message() -> None:
+    blocker = commerce_runtime_api._offline_pos_handoff_blocker()
+    body = json.dumps(blocker).lower()
+
+    assert blocker["code"] == "offline_pos_handoff_packet_blocked"
+    assert "could not be created" in blocker["action"]
+    assert "traceback" not in body
+    assert "file " not in body
+    assert "secret" not in body
+    assert "token" not in body
+
+
 def test_offline_pos_confirmation_reconciles_without_fake_payment_success() -> None:
     packet = {
         "packet_id": "offline_pos_handoff_1",
