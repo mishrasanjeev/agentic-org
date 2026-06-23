@@ -90,7 +90,7 @@ dependencies = [
     "pywebpush>=2.0.0",
     "authlib>=1.7.2",
     "reportlab>=4.5.1",
-    "google-cloud-kms>=3.13.0",
+    "google-cloud-kms>=3.14.0",
     "fastembed>=0.8.0",
     # SECURITY 2026-06-13: Pillow is transitively required by fastembed.
     # Keep the patched floor direct so dependency resolution cannot drift
