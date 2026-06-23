@@ -651,7 +651,7 @@ def test_core_execution_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 76
+    assert len(routes) == 77
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -702,6 +702,7 @@ def test_core_execution_sensitive_routes_are_marked_in_scope() -> None:
         ("GET", "/api/v1/agents/{agent_id}/budget"),
         ("GET", "/api/v1/companies/{company_id}/credentials"),
         ("POST", "/api/v1/knowledge/search"),
+        ("GET", "/api/v1/workflows/{wf_id}/runs"),
         ("GET", "/api/v1/workflows/runs/{run_id}"),
     }
     assert sensitive_routes <= set(by_method_path)
